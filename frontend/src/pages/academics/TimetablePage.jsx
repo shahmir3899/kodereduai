@@ -34,7 +34,7 @@ const isSlotApplicable = (slot, day) => {
 export default function TimetablePage() {
   const queryClient = useQueryClient()
   const { activeAcademicYear } = useAcademicYear()
-  const { isTeacher } = useAuth()
+  const { isTeacher, isSchoolAdmin } = useAuth()
   const [selectedClassId, setSelectedClassId] = useState('')
   const [showSlotsModal, setShowSlotsModal] = useState(false)
   const [editingCell, setEditingCell] = useState(null)
@@ -127,9 +127,13 @@ export default function TimetablePage() {
     enabled: !!resolvedSelectedClassId,
   })
 
+  // Staff directory is admin-only on the backend (HR lockdown) — only fetch it
+  // when the viewer can actually edit the timetable (cell assignment, substitute
+  // search), otherwise this 403s and fires a global error toast for no reason.
   const { data: staffData } = useQuery({
     queryKey: ['hrStaffActive'],
     queryFn: () => hrApi.getStaff({ employment_status: 'ACTIVE', page_size: 500 }),
+    enabled: isSchoolAdmin,
   })
 
   // Quality score query
@@ -558,7 +562,7 @@ export default function TimetablePage() {
               {downloadingPdf ? 'Downloading...' : 'Download PDF'}
             </button>
           )}
-          {selectedClassId && classSubjects.length > 0 && (
+          {isSchoolAdmin && selectedClassId && classSubjects.length > 0 && (
             <button
               onClick={() => setShowAutoGenConfirm(true)}
               disabled={autoGenTask.isSubmitting}
@@ -572,13 +576,15 @@ export default function TimetablePage() {
               ) : 'AI Generate'}
             </button>
           )}
-          <button
-            onClick={() => { setShowSubstituteModal(true); setSubstituteData(null) }}
-            className="px-3 py-2 text-sm bg-amber-50 text-amber-700 rounded-lg hover:bg-amber-100"
-          >
-            Find Substitute
-          </button>
-          {selectedClassId && hasChanges && (
+          {isSchoolAdmin && (
+            <button
+              onClick={() => { setShowSubstituteModal(true); setSubstituteData(null) }}
+              className="px-3 py-2 text-sm bg-amber-50 text-amber-700 rounded-lg hover:bg-amber-100"
+            >
+              Find Substitute
+            </button>
+          )}
+          {isSchoolAdmin && selectedClassId && hasChanges && (
             <button
               onClick={handleSaveAll}
               disabled={saving}
@@ -703,9 +709,11 @@ export default function TimetablePage() {
                               ? 'bg-gray-50'
                               : isBreak
                               ? 'bg-gray-100 text-gray-400'
-                              : 'cursor-pointer hover:bg-primary-50'
+                              : isSchoolAdmin
+                              ? 'cursor-pointer hover:bg-primary-50'
+                              : ''
                           }`}
-                          onClick={() => !isBreak && !notApplicable && openCellEditor(day, slot)}
+                          onClick={() => isSchoolAdmin && !isBreak && !notApplicable && openCellEditor(day, slot)}
                         >
                           {notApplicable ? (
                             <span className="text-gray-200 text-xs">&mdash;</span>
@@ -753,9 +761,9 @@ export default function TimetablePage() {
                         <div
                           key={slot.id}
                           className={`flex items-center justify-between p-2 rounded-lg ${
-                            notApplicable ? 'bg-gray-50 opacity-40' : isBreak ? 'bg-gray-100' : 'bg-gray-50 cursor-pointer hover:bg-primary-50'
+                            notApplicable ? 'bg-gray-50 opacity-40' : isBreak ? 'bg-gray-100' : isSchoolAdmin ? 'bg-gray-50 cursor-pointer hover:bg-primary-50' : 'bg-gray-50'
                           }`}
-                          onClick={() => !isBreak && !notApplicable && openCellEditor(day, slot)}
+                          onClick={() => isSchoolAdmin && !isBreak && !notApplicable && openCellEditor(day, slot)}
                         >
                           <div>
                             <div className="text-xs font-medium text-gray-700">{slot.name}</div>
@@ -1118,24 +1126,26 @@ export default function TimetablePage() {
                             </span>
                           )}
                         </div>
-                        <div className="flex gap-1">
-                          <button
-                            onClick={() => {
-                              setSlotForm({
-                                name: s.name, slot_type: s.slot_type,
-                                start_time: s.start_time?.slice(0, 5), end_time: s.end_time?.slice(0, 5),
-                                order: s.order,
-                                applicable_days: s.applicable_days || [...DAYS],
-                              })
-                              setEditSlotId(s.id)
-                            }}
-                            className="text-xs text-primary-600 hover:underline"
-                          >Edit</button>
-                          <button
-                            onClick={() => setConfirmDeleteSlotId(s.id)}
-                            className="text-xs text-red-600 hover:underline"
-                          >Delete</button>
-                        </div>
+                        {isSchoolAdmin && (
+                          <div className="flex gap-1">
+                            <button
+                              onClick={() => {
+                                setSlotForm({
+                                  name: s.name, slot_type: s.slot_type,
+                                  start_time: s.start_time?.slice(0, 5), end_time: s.end_time?.slice(0, 5),
+                                  order: s.order,
+                                  applicable_days: s.applicable_days || [...DAYS],
+                                })
+                                setEditSlotId(s.id)
+                              }}
+                              className="text-xs text-primary-600 hover:underline"
+                            >Edit</button>
+                            <button
+                              onClick={() => setConfirmDeleteSlotId(s.id)}
+                              className="text-xs text-red-600 hover:underline"
+                            >Delete</button>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
@@ -1144,6 +1154,7 @@ export default function TimetablePage() {
             )}
 
             {/* Intelligent Suggest Slots Section */}
+            {isSchoolAdmin && (
             <div className="border-t border-gray-200 pt-4 mb-4">
               <button
                 onClick={() => { setShowAISuggest(p => !p); setSuggestedSlots(null); setSuggestError(''); setShortDays([]); setShortDayCutoff('') }}
@@ -1344,7 +1355,9 @@ export default function TimetablePage() {
                 </div>
               )}
             </div>
+            )}
 
+            {isSchoolAdmin && (
             <div className="border-t border-gray-200 pt-4">
               <h3 className="text-sm font-medium text-gray-700 mb-3">{editSlotId ? 'Edit Slot' : 'Add New Slot'}</h3>
 
@@ -1450,6 +1463,7 @@ export default function TimetablePage() {
                 </div>
               </form>
             </div>
+            )}
           </div>
         </div>
       )}

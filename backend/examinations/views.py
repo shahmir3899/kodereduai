@@ -532,7 +532,11 @@ def _build_date_sheet_grid(group, school_id):
 class ExamGroupViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet):
     required_module = 'examinations'
     queryset = ExamGroup.objects.all()
-    permission_classes = [IsAuthenticated, IsSchoolAdmin, HasSchoolAccess]
+    # Read (list/retrieve, date-sheet GET, both date-sheet downloads) open to
+    # every authenticated role -- matches ExamViewSet/ExamTypeViewSet. Writes
+    # (create/update/delete, date-sheet PATCH, publish/announce/bulk actions,
+    # all POST) stay admin-only via the same IsSchoolAdminOrReadOnly check.
+    permission_classes = [IsAuthenticated, IsSchoolAdminOrReadOnly, HasSchoolAccess]
 
     def get_serializer_class(self):
         if self.action in ('create', 'update', 'partial_update'):

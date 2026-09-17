@@ -54,7 +54,7 @@ function getMonthMeta(year, month) {
 export default function AcademicCalendarPage() {
   const queryClient = useQueryClient()
   const { activeAcademicYear, terms } = useAcademicYear()
-  const { activeSchool } = useAuth()
+  const { activeSchool, isSchoolAdmin } = useAuth()
   const { showSuccess, showError } = useToast()
   const { sessionClasses } = useSessionClasses(activeAcademicYear?.id, activeSchool?.id)
   const classSelectorScope = getClassSelectorScope(activeAcademicYear?.id)
@@ -304,12 +304,13 @@ export default function AcademicCalendarPage() {
       const hasEntries = (dayInfo?.entries || []).length > 0
       if (hasEntries) {
         openDayDetailsModal(dateKey)
-      } else {
+      } else if (isSchoolAdmin) {
         closeDayDetailsModal()
         openAddModalForDates(dateKey, dateKey)
       }
       return
     }
+    if (!isSchoolAdmin) return
     if (!rangeAnchorDate) {
       setRangeAnchorDate(dateKey)
       setRangeHoverDate(dateKey)
@@ -510,6 +511,7 @@ export default function AcademicCalendarPage() {
           <h1 className="text-2xl font-bold text-gray-900">Academic Calendar</h1>
           <p className="text-sm text-gray-600">Large calendar view for sessions, terms, off-days and school events.</p>
         </div>
+        {isSchoolAdmin && (
         <div className="flex flex-wrap items-center gap-2">
           <button className="btn-primary px-4 py-2 text-sm" onClick={openAddModal}>+ Add Event / Off Day</button>
           <button
@@ -519,6 +521,7 @@ export default function AcademicCalendarPage() {
             {!isRangeSelecting ? 'Select Date Range' : (!rangeAnchorDate ? 'Pick Start Date' : 'Pick End Date')}
           </button>
         </div>
+        )}
       </div>
 
       <div className="card p-4 sm:p-5">
@@ -646,6 +649,7 @@ export default function AcademicCalendarPage() {
                         <p className="text-xs text-gray-600 mt-0.5">{entry.start_date} to {entry.end_date}</p>
                         <p className="text-xs text-gray-600 mt-0.5">{entry.scope === 'CLASS' ? 'Specific Classes' : 'Whole School'}</p>
                       </div>
+                      {isSchoolAdmin && (
                       <div className="flex items-center gap-2">
                         <button
                           type="button"
@@ -662,12 +666,14 @@ export default function AcademicCalendarPage() {
                           Delete
                         </button>
                       </div>
+                      )}
                     </div>
                   </div>
                 ))
               )}
             </div>
 
+            {isSchoolAdmin && (
             <div className="flex justify-end gap-2 pt-4">
               <button
                 type="button"
@@ -680,6 +686,7 @@ export default function AcademicCalendarPage() {
                 Add Event / Off Day
               </button>
             </div>
+            )}
           </div>
         </div>
       )}
@@ -717,6 +724,7 @@ export default function AcademicCalendarPage() {
                       <p className="text-xs text-gray-600 mt-0.5">{entry.start_date} to {entry.end_date}</p>
                       <p className="text-xs text-gray-600 mt-0.5">{entry.scope === 'CLASS' ? 'Class Specific' : 'Whole School'}</p>
                     </div>
+                    {isSchoolAdmin && (<>
                     <button
                       onClick={() => openEditModal(entry)}
                       className="text-xs text-blue-600 hover:text-blue-700 mr-3"
@@ -729,6 +737,7 @@ export default function AcademicCalendarPage() {
                     >
                       Delete
                     </button>
+                    </>)}
                   </div>
                 </div>
               ))}
@@ -754,7 +763,7 @@ export default function AcademicCalendarPage() {
         )}
       </div>
 
-      {showModal && (
+      {isSchoolAdmin && showModal && (
         <div className="fixed inset-0 bg-black/40 z-[60] flex items-center justify-center p-4" onClick={closeModal}>
           <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[92vh] overflow-y-auto p-6" onClick={(e) => e.stopPropagation()}>
             <h3 className="text-lg font-semibold text-gray-900 mb-4">

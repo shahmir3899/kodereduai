@@ -297,9 +297,36 @@ function ManagerRestrictedRoute({ children }) {
   return children
 }
 
-// Guard: finance access by role
-function FinanceRoute({ collectOnly = false, children }) {
+// Guard: blocks STAFF only -- the mirror of ManagerRestrictedRoute above, for
+// routes the nav hides specifically via `!isStaff` (the whole Academics
+// nav group is "not Staff's business" per Layout.jsx) rather than the
+// broader `!isStaffLevel`.
+function StaffRestrictedRoute({ children }) {
   const { effectiveRole } = useAuth()
+  if (effectiveRole === 'STAFF') {
+    return (
+      <AccessRestrictedRedirect
+        to="/dashboard"
+        title="Access Restricted"
+        message="This page is not available for the Staff role."
+      />
+    )
+  }
+  return children
+}
+
+// Guard: finance access by role
+function FinanceRoute({ collectOnly = false, adminOnly = false, children }) {
+  const { effectiveRole } = useAuth()
+  if (adminOnly && effectiveRole !== 'SCHOOL_ADMIN' && effectiveRole !== 'PRINCIPAL') {
+    return (
+      <AccessRestrictedRedirect
+        to="/dashboard"
+        title="Finance Access Limited"
+        message="This page is available only to School Admin and Principal roles."
+      />
+    )
+  }
   if (!canAccessFinanceRoute(effectiveRole, { collectOnly })) {
     return (
       <AccessRestrictedRedirect
@@ -360,28 +387,26 @@ function AssessmentManageRoute({ children }) {
 
 function AssessmentAccessRoute({ children }) {
   const { effectiveRole } = useAuth()
-  if (effectiveRole !== 'SCHOOL_ADMIN' && effectiveRole !== 'PRINCIPAL' && effectiveRole !== 'TEACHER' && effectiveRole !== 'SUPER_ADMIN' && effectiveRole !== 'MANAGER') {
+  if (effectiveRole !== 'SCHOOL_ADMIN' && effectiveRole !== 'PRINCIPAL' && effectiveRole !== 'TEACHER' && effectiveRole !== 'SUPER_ADMIN') {
     return (
       <AccessRestrictedRedirect
         to="/dashboard"
         title="Assessment Access Limited"
-        message="This page is available only to teachers, managers, and school admins."
+        message="This page is available only to teachers and school admins."
       />
     )
   }
   return children
 }
 
-function AdminPrincipalRoute({ children }) {
+function AdminPrincipalRoute({
+  children,
+  title = 'Access Restricted',
+  message = 'This page is available only to School Admin and Principal roles.',
+}) {
   const { effectiveRole } = useAuth()
   if (effectiveRole !== 'SCHOOL_ADMIN' && effectiveRole !== 'PRINCIPAL') {
-    return (
-      <AccessRestrictedRedirect
-        to="/dashboard"
-        title="Analytics Access Limited"
-        message="This analytics page is available only to School Admin and Principal roles."
-      />
-    )
+    return <AccessRestrictedRedirect to="/dashboard" title={title} message={message} />
   }
   return children
 }
@@ -453,8 +478,8 @@ function App() {
             {/* CaptureReviewPage (OCR register) removed 2026-05-13 — /attendance now redirects to manual-entry */}
             <Route path="attendance" element={<Navigate to="/attendance/manual-entry" replace />} />
             <Route path="attendance/review/:id" element={<Navigate to="/attendance/manual-entry" replace />} />
-            <Route path="attendance/register" element={<SchoolRoute><ModuleRoute module="attendance"><ManagerRestrictedRoute><AttendanceRecordsPage /></ManagerRestrictedRoute></ModuleRoute></SchoolRoute>} />
-            <Route path="attendance/manual-entry" element={<SchoolRoute><ModuleRoute module="attendance"><ManagerRestrictedRoute><ManualEntryPage /></ManagerRestrictedRoute></ModuleRoute></SchoolRoute>} />
+            <Route path="attendance/register" element={<SchoolRoute><ModuleRoute module="attendance"><ManagerRestrictedRoute><StaffRestrictedRoute><AttendanceRecordsPage /></StaffRestrictedRoute></ManagerRestrictedRoute></ModuleRoute></SchoolRoute>} />
+            <Route path="attendance/manual-entry" element={<SchoolRoute><ModuleRoute module="attendance"><ManagerRestrictedRoute><StaffRestrictedRoute><ManualEntryPage /></StaffRestrictedRoute></ManagerRestrictedRoute></ModuleRoute></SchoolRoute>} />
             <Route path="attendance/anomalies" element={<SchoolRoute><ModuleRoute module="attendance"><ManagerRestrictedRoute><AnomaliesPage /></ManagerRestrictedRoute></ModuleRoute></SchoolRoute>} />
             <Route path="attendance/at-risk" element={<SchoolRoute><ModuleRoute module="attendance"><AdminPrincipalRoute><AtRiskStudentsPage /></AdminPrincipalRoute></ModuleRoute></SchoolRoute>} />
 
@@ -462,9 +487,9 @@ function App() {
                 capture are both unconditionally available to every school (confirmed
                 product decision) — no enable/disable gate for either, just normal
                 auth/school-scoping like every other module. */}
-            <Route path="face-attendance" element={<SchoolRoute><FaceAttendancePage /></SchoolRoute>} />
-            <Route path="face-attendance/review/:sessionId" element={<SchoolRoute><FaceReviewPage /></SchoolRoute>} />
-            <Route path="face-attendance/enrollment" element={<SchoolRoute><FaceEnrollmentPage /></SchoolRoute>} />
+            <Route path="face-attendance" element={<SchoolRoute><ManagerRestrictedRoute><StaffRestrictedRoute><FaceAttendancePage /></StaffRestrictedRoute></ManagerRestrictedRoute></SchoolRoute>} />
+            <Route path="face-attendance/review/:sessionId" element={<SchoolRoute><ManagerRestrictedRoute><StaffRestrictedRoute><FaceReviewPage /></StaffRestrictedRoute></ManagerRestrictedRoute></SchoolRoute>} />
+            <Route path="face-attendance/enrollment" element={<SchoolRoute><ManagerRestrictedRoute><StaffRestrictedRoute><FaceEnrollmentPage /></StaffRestrictedRoute></ManagerRestrictedRoute></SchoolRoute>} />
 
             {/* Old standalone Live Mobile route — Mobile Capture is now a tab on the
                 main page, not a disconnected page. Redirect rather than remove so
@@ -476,7 +501,7 @@ function App() {
                 doc §10 backlog). No AdminPrincipalRoute: it calls the same enroll/
                 embedding path, gated by CanConfirmAttendance (admin OR teacher), not
                 admin-only. */}
-            <Route path="face-attendance/bulk-enrollment" element={<SchoolRoute><FaceBulkEnrollmentPage /></SchoolRoute>} />
+            <Route path="face-attendance/bulk-enrollment" element={<SchoolRoute><ManagerRestrictedRoute><StaffRestrictedRoute><FaceBulkEnrollmentPage /></StaffRestrictedRoute></ManagerRestrictedRoute></SchoolRoute>} />
 
             {/* Face Attendance — Fixed Camera capture, fixed on-prem camera. Admin-only
                 management pages (matches IsSchoolAdmin backend gate) — no enable/disable
@@ -497,28 +522,30 @@ function App() {
             <Route path="students/risk-score" element={<SchoolRoute><ModuleRoute module="students"><AdminPrincipalRoute><StudentRiskScorePage /></AdminPrincipalRoute></ModuleRoute></SchoolRoute>} />
             <Route path="classes" element={<SchoolRoute><ModuleRoute module="students"><ManagementRoute teacherAllowed><ClassesGradesPage /></ManagementRoute></ModuleRoute></SchoolRoute>} />
 
-            {/* HR routes */}
-            <Route path="hr" element={<SchoolRoute><ModuleRoute module="hr"><ManagerRestrictedRoute><HRDashboardPage /></ManagerRestrictedRoute></ModuleRoute></SchoolRoute>} />
-            <Route path="hr/staff" element={<SchoolRoute><ModuleRoute module="hr"><ManagerRestrictedRoute><StaffDirectoryPage /></ManagerRestrictedRoute></ModuleRoute></SchoolRoute>} />
-            <Route path="hr/staff/new" element={<SchoolRoute><ModuleRoute module="hr"><ManagerRestrictedRoute><StaffFormPage /></ManagerRestrictedRoute></ModuleRoute></SchoolRoute>} />
-            <Route path="hr/staff/:id/edit" element={<SchoolRoute><ModuleRoute module="hr"><ManagerRestrictedRoute><StaffFormPage /></ManagerRestrictedRoute></ModuleRoute></SchoolRoute>} />
-            <Route path="hr/departments" element={<SchoolRoute><ModuleRoute module="hr"><ManagerRestrictedRoute><DepartmentsPage /></ManagerRestrictedRoute></ModuleRoute></SchoolRoute>} />
-            <Route path="hr/salary" element={<SchoolRoute><ModuleRoute module="hr"><ManagerRestrictedRoute><SalaryManagementPage /></ManagerRestrictedRoute></ModuleRoute></SchoolRoute>} />
-            <Route path="hr/payroll" element={<SchoolRoute><ModuleRoute module="hr"><ManagerRestrictedRoute><PayrollPage /></ManagerRestrictedRoute></ModuleRoute></SchoolRoute>} />
-            {/* hr/leave, hr/attendance, hr/self-service stay unguarded for Manager —
+            {/* HR routes -- admin-only (matches nav's !isStaffLevel: only SCHOOL_ADMIN/
+                PRINCIPAL see these links, so STAFF/TEACHER/MANAGER/ACCOUNTANT/DRIVER
+                all need blocking here, not just MANAGER). */}
+            <Route path="hr" element={<SchoolRoute><ModuleRoute module="hr"><AdminPrincipalRoute><HRDashboardPage /></AdminPrincipalRoute></ModuleRoute></SchoolRoute>} />
+            <Route path="hr/staff" element={<SchoolRoute><ModuleRoute module="hr"><AdminPrincipalRoute><StaffDirectoryPage /></AdminPrincipalRoute></ModuleRoute></SchoolRoute>} />
+            <Route path="hr/staff/new" element={<SchoolRoute><ModuleRoute module="hr"><AdminPrincipalRoute><StaffFormPage /></AdminPrincipalRoute></ModuleRoute></SchoolRoute>} />
+            <Route path="hr/staff/:id/edit" element={<SchoolRoute><ModuleRoute module="hr"><AdminPrincipalRoute><StaffFormPage /></AdminPrincipalRoute></ModuleRoute></SchoolRoute>} />
+            <Route path="hr/departments" element={<SchoolRoute><ModuleRoute module="hr"><AdminPrincipalRoute><DepartmentsPage /></AdminPrincipalRoute></ModuleRoute></SchoolRoute>} />
+            <Route path="hr/salary" element={<SchoolRoute><ModuleRoute module="hr"><AdminPrincipalRoute><SalaryManagementPage /></AdminPrincipalRoute></ModuleRoute></SchoolRoute>} />
+            <Route path="hr/payroll" element={<SchoolRoute><ModuleRoute module="hr"><AdminPrincipalRoute><PayrollPage /></AdminPrincipalRoute></ModuleRoute></SchoolRoute>} />
+            {/* hr/leave, hr/attendance, hr/self-service stay unguarded --
                 self-service tier (own leave/attendance/payslip only, enforced backend-side) */}
             <Route path="hr/leave" element={<SchoolRoute><ModuleRoute module="hr"><LeaveManagementPage /></ModuleRoute></SchoolRoute>} />
             <Route path="hr/attendance" element={<SchoolRoute><ModuleRoute module="hr"><StaffAttendancePage /></ModuleRoute></SchoolRoute>} />
             <Route path="hr/self-service" element={<SchoolRoute><ModuleRoute module="hr"><SelfServicePage /></ModuleRoute></SchoolRoute>} />
-            <Route path="hr/appraisals" element={<SchoolRoute><ModuleRoute module="hr"><ManagerRestrictedRoute><PerformanceAppraisalPage /></ManagerRestrictedRoute></ModuleRoute></SchoolRoute>} />
-            <Route path="hr/documents" element={<SchoolRoute><ModuleRoute module="hr"><ManagerRestrictedRoute><StaffDocumentsPage /></ManagerRestrictedRoute></ModuleRoute></SchoolRoute>} />
-            <Route path="hr/letters" element={<SchoolRoute><ModuleRoute module="hr"><ManagerRestrictedRoute><LetterComposerPage /></ManagerRestrictedRoute></ModuleRoute></SchoolRoute>} />
-            <Route path="hr/risk" element={<SchoolRoute><ModuleRoute module="hr"><ManagerRestrictedRoute><StaffRiskPage /></ManagerRestrictedRoute></ModuleRoute></SchoolRoute>} />
+            <Route path="hr/appraisals" element={<SchoolRoute><ModuleRoute module="hr"><AdminPrincipalRoute><PerformanceAppraisalPage /></AdminPrincipalRoute></ModuleRoute></SchoolRoute>} />
+            <Route path="hr/documents" element={<SchoolRoute><ModuleRoute module="hr"><AdminPrincipalRoute><StaffDocumentsPage /></AdminPrincipalRoute></ModuleRoute></SchoolRoute>} />
+            <Route path="hr/letters" element={<SchoolRoute><ModuleRoute module="hr"><AdminPrincipalRoute><LetterComposerPage /></AdminPrincipalRoute></ModuleRoute></SchoolRoute>} />
+            <Route path="hr/risk" element={<SchoolRoute><ModuleRoute module="hr"><AdminPrincipalRoute><StaffRiskPage /></AdminPrincipalRoute></ModuleRoute></SchoolRoute>} />
 
             {/* Academics routes */}
             <Route path="academics/subjects" element={<SchoolRoute><ModuleRoute module="academics"><ManagementRoute><SubjectsPage /></ManagementRoute></ModuleRoute></SchoolRoute>} />
-            <Route path="academics/timetable" element={<SchoolRoute><ModuleRoute module="academics"><TimetableRoute /></ModuleRoute></SchoolRoute>} />
-            <Route path="academics/exam-schedule" element={<SchoolRoute><ModuleRoute module="examinations"><TeacherExamSchedule /></ModuleRoute></SchoolRoute>} />
+            <Route path="academics/timetable" element={<SchoolRoute><ModuleRoute module="academics"><StaffRestrictedRoute><TimetableRoute /></StaffRestrictedRoute></ModuleRoute></SchoolRoute>} />
+            <Route path="academics/exam-schedule" element={<SchoolRoute><ModuleRoute module="examinations"><StaffRestrictedRoute><TeacherExamSchedule /></StaffRestrictedRoute></ModuleRoute></SchoolRoute>} />
             <Route path="academics/analytics" element={<SchoolRoute><ModuleRoute module="academics"><AdminPrincipalRoute><AcademicsAnalyticsPage /></AdminPrincipalRoute></ModuleRoute></SchoolRoute>} />
             <Route path="academics/academic-risk" element={<SchoolRoute><ModuleRoute module="examinations"><AdminPrincipalRoute><AcademicRiskPage /></AdminPrincipalRoute></ModuleRoute></SchoolRoute>} />
             <Route path="academics/calendar" element={<SchoolRoute><ModuleRoute module="academics"><ManagementRoute><AcademicCalendarPage /></ManagementRoute></ModuleRoute></SchoolRoute>} />
@@ -527,18 +554,21 @@ function App() {
             <Route path="assessments" element={<SchoolRoute><ModuleRoute module="examinations"><AssessmentAccessRoute><AssessmentsPage /></AssessmentAccessRoute></ModuleRoute></SchoolRoute>} />
             <Route path="academics/exam-types" element={<SchoolRoute><ModuleRoute module="examinations"><AssessmentManageRoute><ExamTypesPage /></AssessmentManageRoute></ModuleRoute></SchoolRoute>} />
             <Route path="academics/exams" element={<SchoolRoute><ModuleRoute module="examinations"><AssessmentManageRoute><ExamsPage /></AssessmentManageRoute></ModuleRoute></SchoolRoute>} />
-            <Route path="academics/marks-entry" element={<SchoolRoute><ModuleRoute module="examinations"><MarksEntryPage /></ModuleRoute></SchoolRoute>} />
-            <Route path="academics/results" element={<SchoolRoute><ModuleRoute module="examinations"><ResultsPage /></ModuleRoute></SchoolRoute>} />
-            <Route path="academics/report-cards" element={<SchoolRoute><ModuleRoute module="examinations"><ReportCardPage /></ModuleRoute></SchoolRoute>} />
-            <Route path="academics/grade-scale" element={<SchoolRoute><ModuleRoute module="examinations"><AssessmentManageRoute><GradeScalePage /></AssessmentManageRoute></ModuleRoute></SchoolRoute>} />
+            <Route path="academics/marks-entry" element={<SchoolRoute><ModuleRoute module="examinations"><AssessmentAccessRoute><MarksEntryPage /></AssessmentAccessRoute></ModuleRoute></SchoolRoute>} />
+            <Route path="academics/results" element={<SchoolRoute><ModuleRoute module="examinations"><StaffRestrictedRoute><ResultsPage /></StaffRestrictedRoute></ModuleRoute></SchoolRoute>} />
+            <Route path="academics/report-cards" element={<SchoolRoute><ModuleRoute module="examinations"><StaffRestrictedRoute><ReportCardPage /></StaffRestrictedRoute></ModuleRoute></SchoolRoute>} />
+            {/* Grade Scale: admin-only (matches nav's isSchoolAdminNav) -- backend
+                (IsSchoolAdmin, no read fallback) already enforces this, AssessmentManageRoute
+                was too loose (only blocked TEACHER/STAFF, let MANAGER/ACCOUNTANT/DRIVER through). */}
+            <Route path="academics/grade-scale" element={<SchoolRoute><ModuleRoute module="examinations"><AdminPrincipalRoute><GradeScalePage /></AdminPrincipalRoute></ModuleRoute></SchoolRoute>} />
             <Route path="academics/paper-builder" element={<SchoolRoute><CapabilityRoute module="examinations" capability="paper_builder"><PaperBuilderRoute><QuestionPaperBuilderPage /></PaperBuilderRoute></CapabilityRoute></SchoolRoute>} />
             <Route path="academics/papers" element={<SchoolRoute><CapabilityRoute module="examinations" capability="paper_builder"><PaperBuilderRoute><ExamPapersPage /></PaperBuilderRoute></CapabilityRoute></SchoolRoute>} />
             <Route path="examinations/papers/:paperId" element={<SchoolRoute><CapabilityRoute module="examinations" capability="paper_builder"><PaperBuilderRoute><QuestionPaperBuilderPage /></PaperBuilderRoute></CapabilityRoute></SchoolRoute>} />
             <Route path="academics/papers/:paperId/responses" element={<SchoolRoute><ModuleRoute module="examinations"><StudentResponsePage /></ModuleRoute></SchoolRoute>} />
             <Route path="academics/worksheets" element={<SchoolRoute><CapabilityRoute module="examinations" capability="paper_builder"><PaperBuilderRoute><WorksheetsPage /></PaperBuilderRoute></CapabilityRoute></SchoolRoute>} />
             <Route path="academics/worksheets/:worksheetId" element={<SchoolRoute><CapabilityRoute module="examinations" capability="paper_builder"><PaperBuilderRoute><WorksheetBuilderPage /></PaperBuilderRoute></CapabilityRoute></SchoolRoute>} />
-            <Route path="academics/curriculum-coverage" element={<SchoolRoute><ModuleRoute module="examinations"><ManagerRestrictedRoute><CurriculumCoveragePage /></ManagerRestrictedRoute></ModuleRoute></SchoolRoute>} />
-            <Route path="academics/questions" element={<SchoolRoute><ModuleRoute module="examinations"><QuestionsPage /></ModuleRoute></SchoolRoute>} />
+            <Route path="academics/curriculum-coverage" element={<SchoolRoute><ModuleRoute module="examinations"><ManagerRestrictedRoute><StaffRestrictedRoute><CurriculumCoveragePage /></StaffRestrictedRoute></ManagerRestrictedRoute></ModuleRoute></SchoolRoute>} />
+            <Route path="academics/questions" element={<SchoolRoute><ModuleRoute module="examinations"><StaffRestrictedRoute><QuestionsPage /></StaffRestrictedRoute></ModuleRoute></SchoolRoute>} />
 
             {/* Classes (legacy /grades redirects) */}
             <Route path="grades" element={<Navigate to="/classes" replace />} />
@@ -556,12 +586,12 @@ function App() {
             <Route path="finance" element={<SchoolRoute><ModuleRoute module="finance"><FinanceRoute><FinanceDashboardPage /></FinanceRoute></ModuleRoute></SchoolRoute>} />
             <Route path="finance/fees" element={<SchoolRoute><ModuleRoute module="finance"><FinanceRoute><FeeOverviewPage /></FinanceRoute></ModuleRoute></SchoolRoute>} />
             <Route path="finance/fees/collect" element={<SchoolRoute><ModuleRoute module="finance"><FinanceRoute collectOnly><FeeCollectPage /></FinanceRoute></ModuleRoute></SchoolRoute>} />
-            <Route path="finance/fees/setup" element={<SchoolRoute><ModuleRoute module="finance"><FinanceRoute><FeeSetupPage /></FinanceRoute></ModuleRoute></SchoolRoute>} />
+            <Route path="finance/fees/setup" element={<SchoolRoute><ModuleRoute module="finance"><FinanceRoute adminOnly><FeeSetupPage /></FinanceRoute></ModuleRoute></SchoolRoute>} />
             <Route path="finance/income" element={<SchoolRoute><ModuleRoute module="finance"><FinanceRoute><OtherIncomePage /></FinanceRoute></ModuleRoute></SchoolRoute>} />
             <Route path="finance/accounts" element={<SchoolRoute><ModuleRoute module="finance"><FinanceRoute><AccountsPage /></FinanceRoute></ModuleRoute></SchoolRoute>} />
             <Route path="finance/expenses" element={<SchoolRoute><ModuleRoute module="finance"><FinanceRoute><ExpensesPage /></FinanceRoute></ModuleRoute></SchoolRoute>} />
             <Route path="finance/reports" element={<Navigate to="/finance" replace />} />
-            <Route path="finance/discounts" element={<SchoolRoute><ModuleRoute module="finance"><FinanceRoute><DiscountsPage /></FinanceRoute></ModuleRoute></SchoolRoute>} />
+            <Route path="finance/discounts" element={<SchoolRoute><ModuleRoute module="finance"><FinanceRoute adminOnly><DiscountsPage /></FinanceRoute></ModuleRoute></SchoolRoute>} />
             {/* PaymentGatewayPage route removed 2026-05-13 — payment gateway integration discontinued */}
 
             {/* Parent Portal routes */}
@@ -579,10 +609,10 @@ function App() {
             <Route path="parent/payment-result" element={<ParentRoute><PaymentResultPage /></ParentRoute>} />
 
             {/* LMS routes */}
-            <Route path="academics/curriculum" element={<SchoolRoute><ModuleRoute module="lms"><CurriculumPage /></ModuleRoute></SchoolRoute>} />
-            <Route path="academics/lesson-plans" element={<SchoolRoute><ModuleRoute module="lms"><ManagerRestrictedRoute><LessonPlansPage /></ManagerRestrictedRoute></ModuleRoute></SchoolRoute>} />
-            <Route path="academics/assignments" element={<SchoolRoute><ModuleRoute module="lms"><AssignmentsPage /></ModuleRoute></SchoolRoute>} />
-            <Route path="academics/assignments/:id/submissions" element={<SchoolRoute><ModuleRoute module="lms"><SubmissionReviewPage /></ModuleRoute></SchoolRoute>} />
+            <Route path="academics/curriculum" element={<SchoolRoute><ModuleRoute module="lms"><StaffRestrictedRoute><CurriculumPage /></StaffRestrictedRoute></ModuleRoute></SchoolRoute>} />
+            <Route path="academics/lesson-plans" element={<SchoolRoute><ModuleRoute module="lms"><ManagerRestrictedRoute><StaffRestrictedRoute><LessonPlansPage /></StaffRestrictedRoute></ManagerRestrictedRoute></ModuleRoute></SchoolRoute>} />
+            <Route path="academics/assignments" element={<SchoolRoute><ModuleRoute module="lms"><StaffRestrictedRoute><AssignmentsPage /></StaffRestrictedRoute></ModuleRoute></SchoolRoute>} />
+            <Route path="academics/assignments/:id/submissions" element={<SchoolRoute><ModuleRoute module="lms"><StaffRestrictedRoute><SubmissionReviewPage /></StaffRestrictedRoute></ModuleRoute></SchoolRoute>} />
 
             {/* Student Portal routes */}
             <Route path="student/dashboard" element={<StudentRoute><StudentDashboard /></StudentRoute>} />
@@ -598,23 +628,23 @@ function App() {
             <Route path="student/study-helper" element={<StudentRoute><StudentStudyHelper /></StudentRoute>} />
 
             {/* Hostel routes */}
-            <Route path="hostel" element={<SchoolRoute><ModuleRoute module="hostel"><HostelDashboard /></ModuleRoute></SchoolRoute>} />
-            <Route path="hostel/rooms" element={<SchoolRoute><ModuleRoute module="hostel"><HostelRoomsPage /></ModuleRoute></SchoolRoute>} />
-            <Route path="hostel/allocations" element={<SchoolRoute><ModuleRoute module="hostel"><HostelAllocationsPage /></ModuleRoute></SchoolRoute>} />
-            <Route path="hostel/gate-passes" element={<SchoolRoute><ModuleRoute module="hostel"><GatePassesPage /></ModuleRoute></SchoolRoute>} />
+            <Route path="hostel" element={<SchoolRoute><ModuleRoute module="hostel"><ManagerRestrictedRoute><HostelDashboard /></ManagerRestrictedRoute></ModuleRoute></SchoolRoute>} />
+            <Route path="hostel/rooms" element={<SchoolRoute><ModuleRoute module="hostel"><ManagerRestrictedRoute><HostelRoomsPage /></ManagerRestrictedRoute></ModuleRoute></SchoolRoute>} />
+            <Route path="hostel/allocations" element={<SchoolRoute><ModuleRoute module="hostel"><ManagerRestrictedRoute><HostelAllocationsPage /></ManagerRestrictedRoute></ModuleRoute></SchoolRoute>} />
+            <Route path="hostel/gate-passes" element={<SchoolRoute><ModuleRoute module="hostel"><ManagerRestrictedRoute><GatePassesPage /></ManagerRestrictedRoute></ModuleRoute></SchoolRoute>} />
 
             {/* Transport routes */}
-            <Route path="transport" element={<SchoolRoute><ModuleRoute module="transport"><TransportDashboard /></ModuleRoute></SchoolRoute>} />
-            <Route path="transport/routes" element={<SchoolRoute><ModuleRoute module="transport"><RoutesPage /></ModuleRoute></SchoolRoute>} />
-            <Route path="transport/vehicles" element={<SchoolRoute><ModuleRoute module="transport"><VehiclesPage /></ModuleRoute></SchoolRoute>} />
-            <Route path="transport/assignments" element={<SchoolRoute><ModuleRoute module="transport"><TransportAssignmentsPage /></ModuleRoute></SchoolRoute>} />
-            <Route path="transport/attendance" element={<SchoolRoute><ModuleRoute module="transport"><TransportAttendancePage /></ModuleRoute></SchoolRoute>} />
+            <Route path="transport" element={<SchoolRoute><ModuleRoute module="transport"><ManagerRestrictedRoute><TransportDashboard /></ManagerRestrictedRoute></ModuleRoute></SchoolRoute>} />
+            <Route path="transport/routes" element={<SchoolRoute><ModuleRoute module="transport"><ManagerRestrictedRoute><RoutesPage /></ManagerRestrictedRoute></ModuleRoute></SchoolRoute>} />
+            <Route path="transport/vehicles" element={<SchoolRoute><ModuleRoute module="transport"><ManagerRestrictedRoute><VehiclesPage /></ManagerRestrictedRoute></ModuleRoute></SchoolRoute>} />
+            <Route path="transport/assignments" element={<SchoolRoute><ModuleRoute module="transport"><ManagerRestrictedRoute><TransportAssignmentsPage /></ManagerRestrictedRoute></ModuleRoute></SchoolRoute>} />
+            <Route path="transport/attendance" element={<SchoolRoute><ModuleRoute module="transport"><ManagerRestrictedRoute><TransportAttendancePage /></ManagerRestrictedRoute></ModuleRoute></SchoolRoute>} />
 
             {/* Library routes */}
-            <Route path="library" element={<SchoolRoute><ModuleRoute module="library"><LibraryDashboard /></ModuleRoute></SchoolRoute>} />
-            <Route path="library/catalog" element={<SchoolRoute><ModuleRoute module="library"><BookCatalogPage /></ModuleRoute></SchoolRoute>} />
-            <Route path="library/issues" element={<SchoolRoute><ModuleRoute module="library"><BookIssuePage /></ModuleRoute></SchoolRoute>} />
-            <Route path="library/overdue" element={<SchoolRoute><ModuleRoute module="library"><OverdueBooksPage /></ModuleRoute></SchoolRoute>} />
+            <Route path="library" element={<SchoolRoute><ModuleRoute module="library"><ManagerRestrictedRoute><LibraryDashboard /></ManagerRestrictedRoute></ModuleRoute></SchoolRoute>} />
+            <Route path="library/catalog" element={<SchoolRoute><ModuleRoute module="library"><ManagerRestrictedRoute><BookCatalogPage /></ManagerRestrictedRoute></ModuleRoute></SchoolRoute>} />
+            <Route path="library/issues" element={<SchoolRoute><ModuleRoute module="library"><ManagerRestrictedRoute><BookIssuePage /></ManagerRestrictedRoute></ModuleRoute></SchoolRoute>} />
+            <Route path="library/overdue" element={<SchoolRoute><ModuleRoute module="library"><ManagerRestrictedRoute><OverdueBooksPage /></ManagerRestrictedRoute></ModuleRoute></SchoolRoute>} />
 
             {/* Inventory routes */}
             <Route path="inventory" element={<SchoolRoute><ModuleRoute module="inventory"><InventoryRoute><InventoryDashboard /></InventoryRoute></ModuleRoute></SchoolRoute>} />
@@ -624,10 +654,11 @@ function App() {
             <Route path="inventory/reorder-prediction" element={<SchoolRoute><ModuleRoute module="inventory"><InventoryRoute><ReorderPredictionPage /></InventoryRoute></ModuleRoute></SchoolRoute>} />
 
             {/* Admissions routes */}
-            <Route path="admissions" element={<SchoolRoute><ModuleRoute module="admissions"><EnquiriesPage /></ModuleRoute></SchoolRoute>} />
-            <Route path="admissions/new" element={<SchoolRoute><ModuleRoute module="admissions"><EnquiryForm /></ModuleRoute></SchoolRoute>} />
-            <Route path="admissions/:id/edit" element={<SchoolRoute><ModuleRoute module="admissions"><EnquiryForm /></ModuleRoute></SchoolRoute>} />
-            <Route path="admissions/conversion-likelihood" element={<SchoolRoute><ModuleRoute module="admissions"><ConversionLikelihoodPage /></ModuleRoute></SchoolRoute>} />
+            {/* Admissions -- admin-only, matches nav's !isStaffLevel */}
+            <Route path="admissions" element={<SchoolRoute><ModuleRoute module="admissions"><AdminPrincipalRoute><EnquiriesPage /></AdminPrincipalRoute></ModuleRoute></SchoolRoute>} />
+            <Route path="admissions/new" element={<SchoolRoute><ModuleRoute module="admissions"><AdminPrincipalRoute><EnquiryForm /></AdminPrincipalRoute></ModuleRoute></SchoolRoute>} />
+            <Route path="admissions/:id/edit" element={<SchoolRoute><ModuleRoute module="admissions"><AdminPrincipalRoute><EnquiryForm /></AdminPrincipalRoute></ModuleRoute></SchoolRoute>} />
+            <Route path="admissions/conversion-likelihood" element={<SchoolRoute><ModuleRoute module="admissions"><AdminPrincipalRoute><ConversionLikelihoodPage /></AdminPrincipalRoute></ModuleRoute></SchoolRoute>} />
 
             {/* Super Admin routes */}
             <Route

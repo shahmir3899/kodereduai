@@ -600,7 +600,7 @@ export function AuthProvider({ children }) {
           ['pendingReviews', activeAcademicYearId],
           () => attendanceApi.getPendingReviews({ ...(activeAcademicYearId && { academic_year: activeAcademicYearId }) }),
           2 * 60 * 1000,
-          'A',
+          'B',
         )
       }
       if (isModuleAvailable({ moduleKey: 'admissions', enabledModules, isSuperAdmin })) {

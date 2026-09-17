@@ -30,9 +30,9 @@ window.addEventListener('vite:preloadError', (event) => {
 // Clear the one-time reload guard after successful boot.
 sessionStorage.removeItem(VITE_PRELOAD_RELOAD_KEY)
 
-const QUERY_STALE_TIME_MS = Number(import.meta.env.VITE_QUERY_STALE_TIME_MS || 30 * 1000)
-const QUERY_GC_TIME_MS = Number(import.meta.env.VITE_QUERY_GC_TIME_MS || 5 * 60 * 1000)
-const QUERY_REFETCH_ON_FOCUS = String(import.meta.env.VITE_QUERY_REFETCH_ON_WINDOW_FOCUS || 'true').toLowerCase() === 'true'
+const QUERY_STALE_TIME_MS = Number(import.meta.env.VITE_QUERY_STALE_TIME_MS || 2 * 60 * 1000)
+const QUERY_GC_TIME_MS = Number(import.meta.env.VITE_QUERY_GC_TIME_MS || 10 * 60 * 1000)
+const QUERY_REFETCH_ON_FOCUS = String(import.meta.env.VITE_QUERY_REFETCH_ON_WINDOW_FOCUS || 'false').toLowerCase() === 'true'
 const QUERY_RETRY_COUNT = Number(import.meta.env.VITE_QUERY_RETRY_COUNT || 1)
 
 const queryClient = new QueryClient({

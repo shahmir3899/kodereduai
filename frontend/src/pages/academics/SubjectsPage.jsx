@@ -508,7 +508,7 @@ export default function SubjectsPage() {
       {tab === 'subjects' && (
         <>
           {/* Quick Add Section */}
-          {!isTeacher && (
+          {isSchoolAdmin && (
           <div className="card mb-4">
             <button
               onClick={() => setShowQuickAdd(p => !p)}
@@ -592,7 +592,7 @@ export default function SubjectsPage() {
               onChange={e => setSearch(e.target.value)}
               className="input w-full sm:w-60"
             />
-            {!isTeacher && <button onClick={openCreateSubject} className="btn-primary text-sm px-4 py-2 whitespace-nowrap">
+            {isSchoolAdmin && <button onClick={openCreateSubject} className="btn-primary text-sm px-4 py-2 whitespace-nowrap">
               + Add Subject
             </button>}
           </div>
@@ -659,7 +659,7 @@ export default function SubjectsPage() {
                   {s.description && (
                     <p className="text-xs text-gray-500 mt-1 line-clamp-2">{s.description}</p>
                   )}
-                  {!isTeacher && <div className="flex gap-2 mt-3 pt-2 border-t border-gray-100">
+                  {isSchoolAdmin && <div className="flex gap-2 mt-3 pt-2 border-t border-gray-100">
                     <button onClick={() => openEditSubject(s)} className="text-xs text-primary-600 hover:underline">Edit</button>
                     <button
                       onClick={async () => {
@@ -675,7 +675,7 @@ export default function SubjectsPage() {
           )}
 
           {/* Subject Modal */}
-          {!isTeacher && showSubjectModal && (
+          {isSchoolAdmin && showSubjectModal && (
             <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[60] p-4" onClick={closeSubjectModal}>
               <div className="bg-white rounded-xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto p-6" onClick={e => e.stopPropagation()}>
                 <div className="flex items-center justify-between mb-4">

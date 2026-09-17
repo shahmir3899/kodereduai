@@ -399,6 +399,10 @@ export default function Layout() {
   const previousPendingIdsRef = useRef(new Set())
   const isTeacher = effectiveRole === 'TEACHER'
   const isStaff = effectiveRole === 'STAFF'
+  // Grade Scale is admin-only on the backend with no read fallback (IsSchoolAdmin,
+  // not IsSchoolAdminOrReadOnly) — non-admins get a 403 even viewing it, so it's
+  // hidden here rather than shown as a dead link.
+  const isSchoolAdminNav = isSuperAdmin || isPrincipal || effectiveRole === 'SCHOOL_ADMIN'
 
   useEffect(() => {
     let alive = true
@@ -554,9 +558,12 @@ export default function Layout() {
           ...(!isTeacher ? [{ name: 'Exam Types', href: '/academics/exam-types', icon: FolderIcon }] : []),
           ...(!isTeacher ? [{ name: 'Exams', href: '/academics/exams', icon: ClipboardIcon }] : []),
           ...(isTeacher ? [{ name: 'Exam Schedule', href: '/academics/exam-schedule', icon: CalendarIcon }] : []),
-          { name: 'Assessments', href: '/assessments', icon: DocumentIcon },
-          { name: 'Marks Entry', href: '/academics/marks-entry', icon: DocumentIcon },
-          ...(!isTeacher ? [{ name: 'Grade Scale', href: '/academics/grade-scale', icon: SettingsIcon }] : []),
+          // Matches AssessmentAccessRoute's allow-list (SCHOOL_ADMIN/PRINCIPAL/
+          // TEACHER/SUPER_ADMIN) -- keeps ACCOUNTANT/DRIVER from seeing a link
+          // that immediately redirects them away.
+          ...(isSchoolAdminNav || isTeacher ? [{ name: 'Assessments', href: '/assessments', icon: DocumentIcon }] : []),
+          ...(isSchoolAdminNav || isTeacher ? [{ name: 'Marks Entry', href: '/academics/marks-entry', icon: DocumentIcon }] : []),
+          ...(isSchoolAdminNav ? [{ name: 'Grade Scale', href: '/academics/grade-scale', icon: SettingsIcon }] : []),
           { name: 'Results', href: '/academics/results', icon: ChartIcon },
           { name: 'Report Cards', href: '/academics/report-cards', icon: ReportIcon },
         ] : []),
@@ -573,9 +580,14 @@ export default function Layout() {
       children: [
         ...(isModuleEnabled('examinations') ? [
           { name: 'Question Bank', href: '/academics/questions', icon: PencilIcon },
-          { name: 'Paper Builder', href: '/academics/paper-builder', icon: PencilIcon },
-          { name: 'Question Papers', href: '/academics/papers', icon: DocumentIcon },
-          { name: 'Worksheets', href: '/academics/worksheets', icon: DocumentIcon },
+          // Paper Builder/Question Papers/Worksheets match PaperBuilderRoute's
+          // allow-list (SCHOOL_ADMIN/PRINCIPAL/TEACHER/MANAGER) -- keeps
+          // ACCOUNTANT/DRIVER from seeing links that redirect them away.
+          ...(isSchoolAdminNav || isTeacher || isManager ? [
+            { name: 'Paper Builder', href: '/academics/paper-builder', icon: PencilIcon },
+            { name: 'Question Papers', href: '/academics/papers', icon: DocumentIcon },
+            { name: 'Worksheets', href: '/academics/worksheets', icon: DocumentIcon },
+          ] : []),
         ] : []),
         ...(isModuleEnabled('lms') ? [
           { name: 'Curriculum', href: '/academics/curriculum', icon: BookOpenIcon },
@@ -768,7 +780,7 @@ export default function Layout() {
     ...(!isStaffLevel
       ? [{ type: 'item', name: 'Settings', href: '/settings', icon: CogIcon }]
       : []),
-  ], [isModuleEnabled, isStaffLevel, isManager, isTeacher, isStaff, hasInventoryAssignments])
+  ], [isModuleEnabled, isStaffLevel, isManager, isTeacher, isStaff, isSchoolAdminNav, hasInventoryAssignments])
 
   // SuperAdmin only sees the Admin Panel link — no school-internal nav
   const visibleNavGroups = isSuperAdmin ? [] : (isParent ? parentNavGroups : (isStudent ? studentNavGroups : navigationGroups))

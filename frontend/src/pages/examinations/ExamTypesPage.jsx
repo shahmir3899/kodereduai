@@ -5,11 +5,13 @@ import { useConfirmModal } from '../../components/ConfirmModal'
 import Spinner from '../../components/ui/Spinner'
 import Badge from '../../components/ui/Badge'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
+import { useAuth } from '../../contexts/AuthContext'
 
 const EMPTY_FORM = { name: '', weight: '100.00' }
 
 export default function ExamTypesPage() {
   const queryClient = useQueryClient()
+  const { isSchoolAdmin } = useAuth()
   const { confirm, ConfirmModalRoot } = useConfirmModal()
   const [showModal, setShowModal] = useState(false)
   const [editId, setEditId] = useState(null)
@@ -62,7 +64,7 @@ export default function ExamTypesPage() {
           <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Exam Types</h1>
           <p className="text-sm text-gray-600">Define exam categories like Mid-Term, Final, Unit Test</p>
         </div>
-        <button onClick={openCreate} className="btn-primary text-sm px-4 py-2">+ Add Exam Type</button>
+        {isSchoolAdmin && <button onClick={openCreate} className="btn-primary text-sm px-4 py-2">+ Add Exam Type</button>}
       </div>
 
       {isLoading ? (
@@ -103,19 +105,21 @@ export default function ExamTypesPage() {
                 <Badge tone="info">{item.weight}%</Badge>
               </div>
               <p className="text-xs text-gray-500">Weight: {item.weight}% toward the overall grade</p>
-              <div className="flex gap-2 mt-3 pt-2 border-t border-gray-100">
-                <button onClick={() => openEdit(item)} className="text-xs text-primary-600 hover:underline">Edit</button>
-                <button
-                  onClick={async () => { const ok = await confirm({ title: 'Delete Exam Type', message: `Delete "${item.name}"?` }); if (ok) deleteMut.mutate(item.id) }}
-                  className="text-xs text-red-600 hover:underline"
-                >Delete</button>
-              </div>
+              {isSchoolAdmin && (
+                <div className="flex gap-2 mt-3 pt-2 border-t border-gray-100">
+                  <button onClick={() => openEdit(item)} className="text-xs text-primary-600 hover:underline">Edit</button>
+                  <button
+                    onClick={async () => { const ok = await confirm({ title: 'Delete Exam Type', message: `Delete "${item.name}"?` }); if (ok) deleteMut.mutate(item.id) }}
+                    className="text-xs text-red-600 hover:underline"
+                  >Delete</button>
+                </div>
+              )}
             </div>
           ))}
         </div>
       )}
 
-      {showModal && (
+      {isSchoolAdmin && showModal && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[60] p-4" onClick={closeModal}>
           <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">

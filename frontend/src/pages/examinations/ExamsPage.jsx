@@ -137,7 +137,7 @@ export function buildSubjectPoolByExam(subjects) {
 // different component type and remounted, silently resetting viewMode back to
 // its default mid-edit. Exported (not just module-scoped) so it can be tested
 // directly without mounting all of ExamsPage's other queries/contexts.
-export function DateSheetModal({ groupId, onClose: closeDateSheet, queryClient, setListError }) {
+export function DateSheetModal({ groupId, onClose: closeDateSheet, queryClient, setListError, canEdit = true }) {
   useEscapeKey(closeDateSheet)
   const [localRows, setLocalRows] = useState([])
   const [saving, setSaving] = useState(new Set())
@@ -424,7 +424,7 @@ export function DateSheetModal({ groupId, onClose: closeDateSheet, queryClient, 
                   </tr>
                 ) : calendarDates.map((date, dateIdx) => {
                   const openUpward = dateIdx >= Math.floor(calendarDates.length / 2)
-                  const rowIsRemovable = isDateRowRemovable(date)
+                  const rowIsRemovable = canEdit && isDateRowRemovable(date)
                   const rowIsSaving = savingRows.has(date)
                   return (
                     <tr key={date} className="hover:bg-gray-50">
@@ -464,8 +464,8 @@ export function DateSheetModal({ groupId, onClose: closeDateSheet, queryClient, 
                             <button
                               type="button"
                               aria-label={`${date} - ${col.label}`}
-                              onClick={() => setOpenCell(isOpen ? null : cellKey)}
-                              disabled={isSaving}
+                              onClick={() => canEdit && setOpenCell(isOpen ? null : cellKey)}
+                              disabled={isSaving || !canEdit}
                               className={`w-full min-h-[30px] text-left rounded border px-2 py-1 flex flex-wrap gap-1 items-center text-xs ${isOpen ? 'border-primary-500 ring-1 ring-primary-200 bg-primary-50' : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'}`}
                             >
                               {isSaving ? (
@@ -521,7 +521,7 @@ export function DateSheetModal({ groupId, onClose: closeDateSheet, queryClient, 
               </tbody>
             </table>
 
-            {calendarDates.length > 0 && (
+            {canEdit && calendarDates.length > 0 && (
               <button
                 type="button"
                 onClick={handleAddDateRow}
@@ -574,19 +574,19 @@ export function DateSheetModal({ groupId, onClose: closeDateSheet, queryClient, 
                         <input type="date" value={row.exam_date}
                           onChange={e => handleChange(row.exam_subject_id, 'exam_date', e.target.value)}
                           onBlur={() => handleSave(row)}
-                          className="input text-sm py-1 w-full" disabled={isSaving} />
+                          className="input text-sm py-1 w-full" disabled={isSaving || !canEdit} />
                       </td>
                       <td className="px-3 py-2">
                         <input type="time" value={row.start_time}
                           onChange={e => handleChange(row.exam_subject_id, 'start_time', e.target.value)}
                           onBlur={() => handleSave(row)}
-                          className="input text-sm py-1 w-full" disabled={isSaving} />
+                          className="input text-sm py-1 w-full" disabled={isSaving || !canEdit} />
                       </td>
                       <td className="px-3 py-2">
                         <input type="time" value={row.end_time}
                           onChange={e => handleChange(row.exam_subject_id, 'end_time', e.target.value)}
                           onBlur={() => handleSave(row)}
-                          className="input text-sm py-1 w-full" disabled={isSaving} />
+                          className="input text-sm py-1 w-full" disabled={isSaving || !canEdit} />
                       </td>
                       <td className="px-3 py-2 text-center">
                         {isSaving && <Spinner size="h-3 w-3" className="mx-auto" />}
@@ -608,7 +608,7 @@ export default function ExamsPage() {
   const { confirm, ConfirmModalRoot } = useConfirmModal()
   const { showSuccess, showWarning } = useToast()
   const { activeAcademicYear, currentTerm } = useAcademicYear()
-  const { activeSchool } = useAuth()
+  const { activeSchool, isSchoolAdmin } = useAuth()
   const getDefaultForm = () => createEmptyForm(activeAcademicYear?.id, currentTerm?.id)
 
   // UI state
@@ -1163,7 +1163,7 @@ export default function ExamsPage() {
           <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Exams & Tests</h1>
           <p className="text-sm text-gray-600">Create and manage exams and tests</p>
         </div>
-        {activeTab === 'exams' ? (
+        {isSchoolAdmin && (activeTab === 'exams' ? (
           <button
             onClick={() => setShowWizard(true)}
             onMouseEnter={prefetchWizardData}
@@ -1176,7 +1176,7 @@ export default function ExamsPage() {
           <button onClick={() => setShowBulkTestModal(true)} className="btn-primary text-sm px-4 py-2">
             + Create Test
           </button>
-        )}
+        ))}
       </div>
 
       {/* Year Filter + Status Filter + Tabs */}
@@ -1226,13 +1226,15 @@ export default function ExamsPage() {
           {activeTab === 'exams' && (
             groups.length > 0 ? (
             <div>
-              <div className="flex items-center justify-between mb-2">
-                <p className="text-xs text-gray-500">{selectedGroupIds.size > 0 ? `${selectedGroupIds.size} selected` : ''}</p>
-                <div className="flex gap-2">
-                  <button type="button" onClick={() => setSelectedGroupIds(new Set(groups.map(g => g.id)))} className="text-xs text-blue-600 hover:underline">Select All</button>
-                  <button type="button" onClick={() => setSelectedGroupIds(new Set())} className="text-xs text-gray-500 hover:underline">Clear</button>
+              {isSchoolAdmin && (
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-xs text-gray-500">{selectedGroupIds.size > 0 ? `${selectedGroupIds.size} selected` : ''}</p>
+                  <div className="flex gap-2">
+                    <button type="button" onClick={() => setSelectedGroupIds(new Set(groups.map(g => g.id)))} className="text-xs text-blue-600 hover:underline">Select All</button>
+                    <button type="button" onClick={() => setSelectedGroupIds(new Set())} className="text-xs text-gray-500 hover:underline">Clear</button>
+                  </div>
                 </div>
-              </div>
+              )}
               <div className="space-y-3">
                 {groups.map(group => {
                   const isExpanded = expandedGroupId === group.id
@@ -1257,14 +1259,16 @@ export default function ExamsPage() {
                         className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-gray-50"
                         onClick={() => toggleGroup(group.id)}
                       >
-                        <input
-                          type="checkbox"
-                          checked={selectedGroupIds.has(group.id)}
-                          onChange={() => toggleGroupSelected(group.id)}
-                          onClick={e => e.stopPropagation()}
-                          className="rounded border-gray-300 flex-shrink-0"
-                          aria-label={`Select ${group.name}`}
-                        />
+                        {isSchoolAdmin && (
+                          <input
+                            type="checkbox"
+                            checked={selectedGroupIds.has(group.id)}
+                            onChange={() => toggleGroupSelected(group.id)}
+                            onClick={e => e.stopPropagation()}
+                            className="rounded border-gray-300 flex-shrink-0"
+                            aria-label={`Select ${group.name}`}
+                          />
+                        )}
                         <svg className={`w-4 h-4 text-gray-400 transition-transform ${isExpanded ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                         </svg>
@@ -1286,7 +1290,8 @@ export default function ExamsPage() {
                             {group.end_date && ` — ${group.end_date}`}
                           </p>
                         </div>
-                        {/* Group actions */}
+                        {/* Group actions -- Date Sheet is read/download (safe for every
+                            role); the rest are writes and stay admin-only. */}
                         <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
                           <button
                             onClick={() => setDateSheetGroupId(group.id)}
@@ -1297,6 +1302,7 @@ export default function ExamsPage() {
                           >
                             Date Sheet
                           </button>
+                          {isSchoolAdmin && (<>
                           <button
                             onClick={async () => { const ok = await confirm({ title: 'Publish Exam Schedule', message: 'Make this group\'s exam dates visible to students, parents, and teachers for their own classes? They will be notified of the exam dates (not results).', variant: 'warning', confirmLabel: 'Publish Schedule' }); if (ok) publishScheduleAllMut.mutate(group.id) }}
                             className="text-xs px-2 py-1 text-blue-600 hover:bg-blue-50 rounded disabled:opacity-40 disabled:pointer-events-none"
@@ -1340,6 +1346,7 @@ export default function ExamsPage() {
                           >
                             {isDeletingGroup(group.id) ? 'Deleting...' : 'Delete'}
                           </button>
+                          </>)}
                         </div>
                       </div>
 
@@ -1376,6 +1383,7 @@ export default function ExamsPage() {
                                           </span>
                                         </td>
                                         <td className="px-4 py-2 text-right">
+                                          {isSchoolAdmin && (<>
                                           <button onClick={() => openEdit(exam)} className="text-xs text-primary-600 hover:underline mr-2">Edit</button>
                                           {exam.is_active ? (
                                             <>
@@ -1415,6 +1423,7 @@ export default function ExamsPage() {
                                             className="text-xs text-red-600 hover:underline disabled:opacity-50"
                                             disabled={isDeletingExam(exam.id)}
                                           >{isDeletingExam(exam.id) ? 'Deleting...' : 'Delete'}</button>
+                                          </>)}
                                         </td>
                                       </tr>
                                     ))}
@@ -1434,6 +1443,7 @@ export default function ExamsPage() {
                                         </span>
                                       </p>
                                     </div>
+                                    {isSchoolAdmin && (
                                     <div className="flex gap-2">
                                       <button onClick={() => openEdit(exam)} className="text-xs text-primary-600 hover:underline">Edit</button>
                                       {exam.is_active ? null : (
@@ -1445,6 +1455,7 @@ export default function ExamsPage() {
                                         disabled={isDeletingExam(exam.id)}
                                       >{isDeletingExam(exam.id) ? 'Deleting...' : 'Delete'}</button>
                                     </div>
+                                    )}
                                   </div>
                                 ))}
                               </div>
@@ -1481,14 +1492,16 @@ export default function ExamsPage() {
                   <span className="font-semibold">Tip:</span> Use the Exam Wizard for guided setup with date sheets.
                 </p>
               </div>
-              <button
-                onClick={() => setShowWizard(true)}
-                onMouseEnter={prefetchWizardData}
-                onFocus={prefetchWizardData}
-                className="btn-primary text-sm px-4 py-2 mt-3"
-              >
-                + Create Exam
-              </button>
+              {isSchoolAdmin && (
+                <button
+                  onClick={() => setShowWizard(true)}
+                  onMouseEnter={prefetchWizardData}
+                  onFocus={prefetchWizardData}
+                  className="btn-primary text-sm px-4 py-2 mt-3"
+                >
+                  + Create Exam
+                </button>
+              )}
             </div>
             )
           )}
@@ -1504,13 +1517,15 @@ export default function ExamsPage() {
                   <thead>
                     <tr className="bg-gray-50 text-xs text-gray-500 uppercase">
                       <th className="px-4 py-3 text-center w-10">
-                        <input
-                          type="checkbox"
-                          checked={standaloneExams.length > 0 && selectedExamIds.size === standaloneExams.length}
-                          ref={el => { if (el) el.indeterminate = selectedExamIds.size > 0 && selectedExamIds.size < standaloneExams.length }}
-                          onChange={e => toggleAllExamsSelected(e.target.checked)}
-                          className="rounded border-gray-300"
-                        />
+                        {isSchoolAdmin && (
+                          <input
+                            type="checkbox"
+                            checked={standaloneExams.length > 0 && selectedExamIds.size === standaloneExams.length}
+                            ref={el => { if (el) el.indeterminate = selectedExamIds.size > 0 && selectedExamIds.size < standaloneExams.length }}
+                            onChange={e => toggleAllExamsSelected(e.target.checked)}
+                            className="rounded border-gray-300"
+                          />
+                        )}
                       </th>
                       <th className="px-4 py-3 text-left">Exam Name</th>
                       <th className="px-4 py-3 text-left">Type</th>
@@ -1526,13 +1541,15 @@ export default function ExamsPage() {
                     {standaloneExams.map(exam => (
                       <tr key={exam.id} className={exam.is_active ? 'hover:bg-gray-50' : 'bg-gray-50 text-gray-400 opacity-75'}>
                         <td className="px-4 py-2 text-center">
-                          <input
-                            type="checkbox"
-                            checked={selectedExamIds.has(exam.id)}
-                            onChange={() => toggleExamSelected(exam.id)}
-                            className="rounded border-gray-300"
-                            aria-label={`Select ${exam.name}`}
-                          />
+                          {isSchoolAdmin && (
+                            <input
+                              type="checkbox"
+                              checked={selectedExamIds.has(exam.id)}
+                              onChange={() => toggleExamSelected(exam.id)}
+                              className="rounded border-gray-300"
+                              aria-label={`Select ${exam.name}`}
+                            />
+                          )}
                         </td>
                         <td className="px-4 py-2 text-sm font-medium text-gray-900">{exam.name}</td>
                         <td className="px-4 py-2 text-sm text-gray-600">{exam.exam_type_name}</td>
@@ -1560,6 +1577,7 @@ export default function ExamsPage() {
                           </span>
                         </td>
                         <td className="px-4 py-2 text-right">
+                          {isSchoolAdmin && (<>
                           <button onClick={() => openEdit(exam)} className="text-xs text-primary-600 hover:underline mr-2">Edit</button>
                           {exam.is_active ? (
                             <>
@@ -1599,6 +1617,7 @@ export default function ExamsPage() {
                             className="text-xs text-red-600 hover:underline disabled:opacity-50"
                             disabled={isDeletingExam(exam.id)}
                           >{isDeletingExam(exam.id) ? 'Deleting...' : 'Delete'}</button>
+                          </>)}
                         </td>
                       </tr>
                     ))}
@@ -1612,13 +1631,15 @@ export default function ExamsPage() {
                   <div key={exam.id} className={`card ${exam.is_active ? '' : 'opacity-75'}`}>
                     <div className="flex items-start justify-between mb-2">
                       <div className="flex items-start gap-2">
-                        <input
-                          type="checkbox"
-                          checked={selectedExamIds.has(exam.id)}
-                          onChange={() => toggleExamSelected(exam.id)}
-                          className="rounded border-gray-300 mt-1"
-                          aria-label={`Select ${exam.name}`}
-                        />
+                        {isSchoolAdmin && (
+                          <input
+                            type="checkbox"
+                            checked={selectedExamIds.has(exam.id)}
+                            onChange={() => toggleExamSelected(exam.id)}
+                            className="rounded border-gray-300 mt-1"
+                            aria-label={`Select ${exam.name}`}
+                          />
+                        )}
                         <div>
                           <p className="font-medium text-gray-900 text-sm">{exam.name}</p>
                           <p className="text-xs text-gray-500">{exam.exam_type_name} · {getExamClassLabel(exam)}</p>
@@ -1635,6 +1656,7 @@ export default function ExamsPage() {
                         <>{exam.subjects_count} subjects</>
                       )}
                     </p>
+                    {isSchoolAdmin && (
                     <div className="flex gap-2">
                       <button onClick={() => openEdit(exam)} className="text-xs text-primary-600 hover:underline">Edit</button>
                       {exam.is_active ? (
@@ -1664,6 +1686,7 @@ export default function ExamsPage() {
                         disabled={isDeletingExam(exam.id)}
                       >{isDeletingExam(exam.id) ? 'Deleting...' : 'Delete'}</button>
                     </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -1687,9 +1710,11 @@ export default function ExamsPage() {
                 </div>
               </div>
               <p className="text-sm text-gray-500 mt-3">No tests yet. Tests are quick assessments — no wizard needed.</p>
-              <button onClick={() => setShowBulkTestModal(true)} className="btn-primary text-sm px-4 py-2 mt-3">
-                + Create Test
-              </button>
+              {isSchoolAdmin && (
+                <button onClick={() => setShowBulkTestModal(true)} className="btn-primary text-sm px-4 py-2 mt-3">
+                  + Create Test
+                </button>
+              )}
             </div>
             )
           )}
@@ -1697,7 +1722,7 @@ export default function ExamsPage() {
       )}
 
       {/* ── Wizard Modal ── */}
-      {showWizard && (
+      {isSchoolAdmin && showWizard && (
         <ExamWizard
           onClose={() => setShowWizard(false)}
           onSuccess={() => {
@@ -1708,7 +1733,7 @@ export default function ExamsPage() {
         />
       )}
 
-      {showBulkTestModal && (
+      {isSchoolAdmin && showBulkTestModal && (
         <BulkTestModal
           onClose={() => setShowBulkTestModal(false)}
           onSuccess={() => {
@@ -1725,6 +1750,7 @@ export default function ExamsPage() {
           onClose={() => setDateSheetGroupId(null)}
           queryClient={queryClient}
           setListError={setListError}
+          canEdit={isSchoolAdmin}
         />
       )}
 
@@ -1759,7 +1785,7 @@ export default function ExamsPage() {
       )}
 
       {/* ── Quick Create / Edit Modal ── */}
-      {showModal && (
+      {isSchoolAdmin && showModal && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[60] p-4" onClick={closeModal}>
           <div className="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-6" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
