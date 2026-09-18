@@ -603,6 +603,83 @@ export function DateSheetModal({ groupId, onClose: closeDateSheet, queryClient, 
   )
 }
 
+// Read-only detail view for a single class exam / test -- reuses the same
+// ExamSubject data the Edit modal edits, but display-only, so admins (and
+// any other role that can reach this page) can check what's actually saved
+// without opening the editable form.
+function ExamViewModal({ exam, examClassLabel, onClose }) {
+  useEscapeKey(onClose)
+
+  const { data: subjectsRes, isLoading } = useQuery({
+    queryKey: ['viewExamSubjects', exam.id],
+    queryFn: () => examinationsApi.getExamSubjects({ exam: exam.id, page_size: 9999 }),
+  })
+  const subjects = subjectsRes?.data?.results || subjectsRes?.data || []
+
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[60] p-4" onClick={onClose}>
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-6" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold text-gray-900">{exam.name}</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl">&times;</button>
+        </div>
+
+        <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm mb-4">
+          <div><dt className="text-gray-500">Class</dt><dd className="font-medium text-gray-900">{examClassLabel}</dd></div>
+          <div><dt className="text-gray-500">Exam Type</dt><dd className="font-medium text-gray-900">{exam.exam_type_name}</dd></div>
+          <div><dt className="text-gray-500">Academic Year</dt><dd className="font-medium text-gray-900">{exam.academic_year_name}</dd></div>
+          <div><dt className="text-gray-500">Term</dt><dd className="font-medium text-gray-900">{exam.term_name || '—'}</dd></div>
+          <div><dt className="text-gray-500">Status</dt><dd className="font-medium text-gray-900">{exam.is_active ? exam.status.replace('_', ' ') : 'Inactive'}</dd></div>
+          <div><dt className="text-gray-500">Schedule</dt><dd className="font-medium text-gray-900">{exam.schedule_published_at ? 'Published' : 'Not published'}</dd></div>
+          <div><dt className="text-gray-500">Start Date</dt><dd className="font-medium text-gray-900">{exam.start_date || '—'}</dd></div>
+          <div><dt className="text-gray-500">End Date</dt><dd className="font-medium text-gray-900">{exam.end_date || '—'}</dd></div>
+        </dl>
+
+        <h3 className="text-sm font-medium text-gray-700 mb-2">Subjects</h3>
+        {isLoading ? (
+          <div className="text-center py-4"><Spinner size="sm" className="mx-auto" /></div>
+        ) : subjects.length === 0 ? (
+          <p className="text-xs text-gray-500">No subjects on this {exam.exam_group ? 'exam' : 'test'}.</p>
+        ) : (
+          <div className="border border-gray-200 rounded-lg overflow-x-auto">
+            <table className="min-w-full text-sm">
+              <thead>
+                <tr className="bg-gray-50 text-xs text-gray-500 uppercase">
+                  <th className="px-3 py-2 text-left">Subject</th>
+                  <th className="px-3 py-2 text-left">Total</th>
+                  <th className="px-3 py-2 text-left">Passing</th>
+                  <th className="px-3 py-2 text-left">Date</th>
+                  <th className="px-3 py-2 text-left">Start</th>
+                  <th className="px-3 py-2 text-left">End</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {subjects.map(s => (
+                  <tr key={s.id}>
+                    <td className="px-3 py-2 whitespace-nowrap font-medium text-gray-900">
+                      {s.subject_name}
+                      {s.subject_code && <span className="text-xs text-gray-400 ml-1">({s.subject_code})</span>}
+                    </td>
+                    <td className="px-3 py-2">{s.total_marks}</td>
+                    <td className="px-3 py-2">{s.passing_marks}</td>
+                    <td className="px-3 py-2">{s.exam_date || '—'}</td>
+                    <td className="px-3 py-2">{s.start_time ? s.start_time.slice(0, 5) : '—'}</td>
+                    <td className="px-3 py-2">{s.end_time ? s.end_time.slice(0, 5) : '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        <div className="flex justify-end pt-4">
+          <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">Close</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function ExamsPage() {
   const queryClient = useQueryClient()
   const { confirm, ConfirmModalRoot } = useConfirmModal()
@@ -624,6 +701,7 @@ export default function ExamsPage() {
   const [listError, setListError] = useState(null)
   const [expandedGroupId, setExpandedGroupId] = useState(null)
   const [dateSheetGroupId, setDateSheetGroupId] = useState(null)
+  const [viewExam, setViewExam] = useState(null)
   const [yearFilter, setYearFilter] = useState('')
   const [activeTab, setActiveTab] = useState('exams') // 'exams' | 'tests'
   const [examStatusFilter, setExamStatusFilter] = useState('active') // 'active' | 'inactive' | 'all'
@@ -821,7 +899,7 @@ export default function ExamsPage() {
   const examTypes = examTypesRes?.data?.results || examTypesRes?.data || []
 
   useEffect(() => {
-    if (!showModal || !editId || activeTab !== 'tests') {
+    if (!showModal || !editId) {
       setTestScheduleRows([])
       return
     }
@@ -831,12 +909,14 @@ export default function ExamsPage() {
         id: row.id,
         subject_name: row.subject_name,
         subject_code: row.subject_code,
+        total_marks: row.total_marks ?? '',
+        passing_marks: row.passing_marks ?? '',
         exam_date: row.exam_date || '',
         start_time: row.start_time || '',
         end_time: row.end_time || '',
       })),
     )
-  }, [testScheduleRes, showModal, editId, activeTab])
+  }, [testScheduleRes, showModal, editId])
 
   // ── Mutations ──
 
@@ -964,6 +1044,7 @@ export default function ExamsPage() {
   // ── Modal helpers (Quick Create / Edit) ──
 
   const openCreate = () => { setForm(getDefaultForm()); setEditId(null); setErrors({}); setSelectedSubjects([]); setTestScheduleRows([]); setShowModal(true) }
+  const openView = (item) => setViewExam(item)
   const openEdit = (item) => {
     const mappedClassObj = classSelectorScope === 'session'
       ? (sessionClassIdByYearMaster[`${item.academic_year}:${item.class_obj}`] || sessionClassIdByMaster[String(item.class_obj)] || '')
@@ -980,6 +1061,25 @@ export default function ExamsPage() {
   const closeModal = () => { setShowModal(false); setEditId(null); setForm(getDefaultForm()); setErrors({}); setSelectedSubjects([]); setTestScheduleRows([]) }
 
   useEscapeKey(closeModal, showModal)
+
+  const handleRemoveExamSubject = async (row) => {
+    const ok = await confirm({
+      title: 'Remove Subject',
+      message: `Remove "${row.subject_name}" from this exam? Any marks already entered for it will also be deleted.`,
+      variant: 'warning',
+      confirmLabel: 'Remove',
+    })
+    if (!ok) return
+    try {
+      await examinationsApi.deleteExamSubject(row.id)
+      setTestScheduleRows(prev => prev.filter(r => r.id !== row.id))
+      queryClient.invalidateQueries({ queryKey: ['testScheduleRows', editId] })
+      queryClient.invalidateQueries({ queryKey: ['exams'] })
+      queryClient.invalidateQueries({ queryKey: ['examGroups'] })
+    } catch (err) {
+      setErrors({ detail: err.response?.data?.detail || 'Failed to remove subject.' })
+    }
+  }
 
   // Find editing exam in either standalone list or inside group exams
   const editingExam = useMemo(() => {
@@ -1035,18 +1135,20 @@ export default function ExamsPage() {
           }
         }
         await examinationsApi.updateExam(editId, payload)
-        if (isTestEdit) {
-          for (const row of testScheduleRows) {
-            await examinationsApi.updateExamSubject(row.id, {
-              exam_date: row.exam_date || null,
-              start_time: row.start_time || null,
-              end_time: row.end_time || null,
-            })
+        for (const row of testScheduleRows) {
+          const subjectPayload = {
+            exam_date: row.exam_date || null,
+            start_time: row.start_time || null,
+            end_time: row.end_time || null,
           }
+          if (row.total_marks !== '') subjectPayload.total_marks = parseFloat(row.total_marks)
+          if (row.passing_marks !== '') subjectPayload.passing_marks = parseFloat(row.passing_marks)
+          await examinationsApi.updateExamSubject(row.id, subjectPayload)
         }
         queryClient.invalidateQueries({ queryKey: ['exams'] })
         queryClient.invalidateQueries({ queryKey: ['examGroups'] })
         queryClient.invalidateQueries({ queryKey: ['testScheduleRows', editId] })
+        showSuccess(isTestEdit ? 'Test updated.' : 'Exam updated.')
         closeModal()
       } catch (err) {
         const errData = err.response?.data || {}
@@ -1073,6 +1175,7 @@ export default function ExamsPage() {
       const payload = { ...form, class_obj: resolvedFormClassObj, term: form.term || null }
       await examinationsApi.createExam(payload)
       queryClient.invalidateQueries({ queryKey: ['exams'] })
+      showSuccess('Test created.')
       closeModal()
     } catch (err) {
       const errData = err.response?.data || {}
@@ -1156,7 +1259,7 @@ export default function ExamsPage() {
   }
 
   return (
-    <div>
+    <div className="pb-24">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6 gap-4">
         <div>
@@ -1253,10 +1356,10 @@ export default function ExamsPage() {
                   const examsPendingMarks = exams.filter(e => e.status !== 'PUBLISHED' && !e.marks_entry_complete)
                   const canAnnounceResults = resultsState !== 'all' && examsPendingMarks.length === 0
                   return (
-                    <div key={group.id} className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                    <div key={group.id} className={`bg-white rounded-xl shadow-sm border border-gray-200 ${isExpanded ? '' : 'overflow-hidden'}`}>
                       {/* Group Header */}
                       <div
-                        className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-gray-50"
+                        className="flex flex-wrap items-center gap-3 px-4 py-3 cursor-pointer hover:bg-gray-50"
                         onClick={() => toggleGroup(group.id)}
                       >
                         {isSchoolAdmin && (
@@ -1292,7 +1395,7 @@ export default function ExamsPage() {
                         </div>
                         {/* Group actions -- Date Sheet is read/download (safe for every
                             role); the rest are writes and stay admin-only. */}
-                        <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
+                        <div className="flex items-center gap-1 flex-wrap w-full sm:w-auto" onClick={e => e.stopPropagation()}>
                           <button
                             onClick={() => setDateSheetGroupId(group.id)}
                             onMouseEnter={() => prefetchDateSheet(group.id)}
@@ -1383,6 +1486,7 @@ export default function ExamsPage() {
                                           </span>
                                         </td>
                                         <td className="px-4 py-2 text-right">
+                                          <button onClick={() => openView(exam)} className="text-xs text-gray-600 hover:underline mr-2">View</button>
                                           {isSchoolAdmin && (<>
                                           <button onClick={() => openEdit(exam)} className="text-xs text-primary-600 hover:underline mr-2">Edit</button>
                                           {exam.is_active ? (
@@ -1443,8 +1547,9 @@ export default function ExamsPage() {
                                         </span>
                                       </p>
                                     </div>
-                                    {isSchoolAdmin && (
                                     <div className="flex gap-2">
+                                      <button onClick={() => openView(exam)} className="text-xs text-gray-600 hover:underline">View</button>
+                                      {isSchoolAdmin && (<>
                                       <button onClick={() => openEdit(exam)} className="text-xs text-primary-600 hover:underline">Edit</button>
                                       {exam.is_active ? null : (
                                         <button onClick={async () => { const ok = await confirm({ title: 'Reactivate Exam', message: `Reactivate "${exam.name}"?`, variant: 'primary', confirmLabel: 'Reactivate' }); if (ok) reactivateMut.mutate(exam.id) }} className="text-xs text-blue-600 hover:underline">Reactivate</button>
@@ -1454,8 +1559,8 @@ export default function ExamsPage() {
                                         className="text-xs text-red-600 hover:underline disabled:opacity-50"
                                         disabled={isDeletingExam(exam.id)}
                                       >{isDeletingExam(exam.id) ? 'Deleting...' : 'Delete'}</button>
+                                      </>)}
                                     </div>
-                                    )}
                                   </div>
                                 ))}
                               </div>
@@ -1577,6 +1682,7 @@ export default function ExamsPage() {
                           </span>
                         </td>
                         <td className="px-4 py-2 text-right">
+                          <button onClick={() => openView(exam)} className="text-xs text-gray-600 hover:underline mr-2">View</button>
                           {isSchoolAdmin && (<>
                           <button onClick={() => openEdit(exam)} className="text-xs text-primary-600 hover:underline mr-2">Edit</button>
                           {exam.is_active ? (
@@ -1656,8 +1762,9 @@ export default function ExamsPage() {
                         <>{exam.subjects_count} subjects</>
                       )}
                     </p>
-                    {isSchoolAdmin && (
                     <div className="flex gap-2">
+                      <button onClick={() => openView(exam)} className="text-xs text-gray-600 hover:underline">View</button>
+                      {isSchoolAdmin && (<>
                       <button onClick={() => openEdit(exam)} className="text-xs text-primary-600 hover:underline">Edit</button>
                       {exam.is_active ? (
                         <>
@@ -1685,8 +1792,8 @@ export default function ExamsPage() {
                         className="text-xs text-red-600 hover:underline disabled:opacity-50"
                         disabled={isDeletingExam(exam.id)}
                       >{isDeletingExam(exam.id) ? 'Deleting...' : 'Delete'}</button>
+                      </>)}
                     </div>
-                    )}
                   </div>
                 ))}
               </div>
@@ -1751,6 +1858,15 @@ export default function ExamsPage() {
           queryClient={queryClient}
           setListError={setListError}
           canEdit={isSchoolAdmin}
+        />
+      )}
+
+      {/* ── View Modal ── */}
+      {viewExam && (
+        <ExamViewModal
+          exam={viewExam}
+          examClassLabel={getExamClassLabel(viewExam)}
+          onClose={() => setViewExam(null)}
         />
       )}
 
@@ -1896,13 +2012,13 @@ export default function ExamsPage() {
                           )}
                         </div>
                       </div>
-                    ) : (
+                    ) : editId ? null : (
                       <div className="flex items-center gap-2 p-3 bg-green-50 border border-green-200 rounded-lg">
                         <svg className="w-4 h-4 text-green-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                         </svg>
                         <span className="text-sm text-green-700">
-                          {classSubjects.length} subject{classSubjects.length !== 1 ? 's' : ''} {editId ? 'on this exam' : 'assigned'}
+                          {classSubjects.length} subject{classSubjects.length !== 1 ? 's' : ''} assigned
                           <span className="text-green-600 text-xs ml-1">
                             ({classSubjects.map(cs => cs.subject_name).join(', ')})
                           </span>
@@ -1952,73 +2068,101 @@ export default function ExamsPage() {
                 </div>
               )}
 
-              <div className="grid grid-cols-2 gap-3">
-                {activeTab === 'tests' && editId ? (
-                  <div className="col-span-2">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Test Schedule (Per Subject)</label>
-                    {testScheduleRows.length === 0 ? (
-                      <p className="text-xs text-gray-500">No subject rows found for this test.</p>
-                    ) : (
-                      <div className="border border-gray-200 rounded-lg overflow-hidden">
-                        <table className="min-w-full text-sm">
-                          <thead>
-                            <tr className="bg-gray-50 text-xs text-gray-500 uppercase">
-                              <th className="px-3 py-2 text-left">Subject</th>
-                              <th className="px-3 py-2 text-left">Date</th>
-                              <th className="px-3 py-2 text-left">Start</th>
-                              <th className="px-3 py-2 text-left">End</th>
+              {editId && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Subjects on this {activeTab === 'tests' ? 'test' : 'exam'}</label>
+                  {testScheduleRows.length === 0 ? (
+                    <p className="text-xs text-gray-500">No subjects found for this {activeTab === 'tests' ? 'test' : 'exam'}.</p>
+                  ) : (
+                    <div className="border border-gray-200 rounded-lg overflow-x-auto">
+                      <table className="min-w-full text-sm">
+                        <thead>
+                          <tr className="bg-gray-50 text-xs text-gray-500 uppercase">
+                            <th className="px-3 py-2 text-left">Subject</th>
+                            <th className="px-3 py-2 text-left w-20">Total</th>
+                            <th className="px-3 py-2 text-left w-20">Passing</th>
+                            <th className="px-3 py-2 text-left">Date</th>
+                            <th className="px-3 py-2 text-left">Start</th>
+                            <th className="px-3 py-2 text-left">End</th>
+                            <th className="px-3 py-2 w-8"></th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100">
+                          {testScheduleRows.map((row) => (
+                            <tr key={row.id}>
+                              <td className="px-3 py-2 whitespace-nowrap">
+                                <span className="font-medium text-gray-900">{row.subject_name}</span>
+                                {row.subject_code && <span className="text-xs text-gray-400 ml-1">({row.subject_code})</span>}
+                              </td>
+                              <td className="px-3 py-2">
+                                <input
+                                  type="number" min="0" step="0.01"
+                                  value={row.total_marks}
+                                  onChange={(e) => setTestScheduleRows(prev => prev.map(item => item.id === row.id ? { ...item, total_marks: e.target.value } : item))}
+                                  className="input w-20"
+                                />
+                              </td>
+                              <td className="px-3 py-2">
+                                <input
+                                  type="number" min="0" step="0.01"
+                                  value={row.passing_marks}
+                                  onChange={(e) => setTestScheduleRows(prev => prev.map(item => item.id === row.id ? { ...item, passing_marks: e.target.value } : item))}
+                                  className="input w-20"
+                                />
+                              </td>
+                              <td className="px-3 py-2">
+                                <input
+                                  type="date"
+                                  value={row.exam_date}
+                                  onChange={(e) => setTestScheduleRows(prev => prev.map(item => item.id === row.id ? { ...item, exam_date: e.target.value } : item))}
+                                  className="input w-full"
+                                />
+                              </td>
+                              <td className="px-3 py-2">
+                                <input
+                                  type="time"
+                                  value={row.start_time}
+                                  onChange={(e) => setTestScheduleRows(prev => prev.map(item => item.id === row.id ? { ...item, start_time: e.target.value } : item))}
+                                  className="input w-full"
+                                />
+                              </td>
+                              <td className="px-3 py-2">
+                                <input
+                                  type="time"
+                                  value={row.end_time}
+                                  onChange={(e) => setTestScheduleRows(prev => prev.map(item => item.id === row.id ? { ...item, end_time: e.target.value } : item))}
+                                  className="input w-full"
+                                />
+                              </td>
+                              <td className="px-3 py-2 text-center">
+                                <button
+                                  type="button"
+                                  title="Remove subject from exam"
+                                  aria-label={`Remove ${row.subject_name}`}
+                                  onClick={() => handleRemoveExamSubject(row)}
+                                  className="text-gray-300 hover:text-red-500 leading-none"
+                                >
+                                  &times;
+                                </button>
+                              </td>
                             </tr>
-                          </thead>
-                          <tbody className="divide-y divide-gray-100">
-                            {testScheduleRows.map((row) => (
-                              <tr key={row.id}>
-                                <td className="px-3 py-2">
-                                  <span className="font-medium text-gray-900">{row.subject_name}</span>
-                                  {row.subject_code && <span className="text-xs text-gray-400 ml-1">({row.subject_code})</span>}
-                                </td>
-                                <td className="px-3 py-2">
-                                  <input
-                                    type="date"
-                                    value={row.exam_date}
-                                    onChange={(e) => setTestScheduleRows(prev => prev.map(item => item.id === row.id ? { ...item, exam_date: e.target.value } : item))}
-                                    className="input w-full"
-                                  />
-                                </td>
-                                <td className="px-3 py-2">
-                                  <input
-                                    type="time"
-                                    value={row.start_time}
-                                    onChange={(e) => setTestScheduleRows(prev => prev.map(item => item.id === row.id ? { ...item, start_time: e.target.value } : item))}
-                                    className="input w-full"
-                                  />
-                                </td>
-                                <td className="px-3 py-2">
-                                  <input
-                                    type="time"
-                                    value={row.end_time}
-                                    onChange={(e) => setTestScheduleRows(prev => prev.map(item => item.id === row.id ? { ...item, end_time: e.target.value } : item))}
-                                    className="input w-full"
-                                  />
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
-                      <input type="date" value={form.start_date} onChange={e => setForm(p => ({ ...p, start_date: e.target.value }))} className="input w-full" />
+                          ))}
+                        </tbody>
+                      </table>
                     </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">End Date</label>
-                      <input type="date" value={form.end_date} onChange={e => setForm(p => ({ ...p, end_date: e.target.value }))} className="input w-full" />
-                    </div>
-                  </>
-                )}
+                  )}
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
+                  <input type="date" value={form.start_date} onChange={e => setForm(p => ({ ...p, start_date: e.target.value }))} className="input w-full" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">End Date</label>
+                  <input type="date" value={form.end_date} onChange={e => setForm(p => ({ ...p, end_date: e.target.value }))} className="input w-full" />
+                </div>
               </div>
               {editId && (
                 <div>
