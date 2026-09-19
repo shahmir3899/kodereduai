@@ -757,6 +757,9 @@ export const examinationsApi = {
 
   // Report Card
   getReportCard: (params) => api.get('/api/examinations/report-card/', { params }),
+  saveReportCardMeta: (data) => api.post('/api/examinations/report-card/meta/', data),
+  getReportCardBulkMeta: (params) => api.get('/api/examinations/report-card/meta/bulk/', { params }),
+  saveReportCardBulkMeta: (data) => api.post('/api/examinations/report-card/meta/bulk/', data),
 
   // Student Term Assessment (skills/behaviour ratings + remarks)
   getStudentTermAssessment: (params) => api.get('/api/examinations/student-term-assessment/', { params }),
@@ -768,6 +771,15 @@ export const examinationsApi = {
   // AI Comments
   generateComments: (examId, force = false) =>
     api.post(`/api/examinations/exams/${examId}/generate-comments/`, { force }),
+  // Generation runs in the background: generateComments returns 202 + job state;
+  // poll getCommentJob for real progress.
+  getCommentJob: (examId) => api.get(`/api/examinations/exams/${examId}/comment-job/`),
+  cancelCommentJob: (examId) => api.post(`/api/examinations/exams/${examId}/cancel-comment-job/`),
+  // subjectId omitted/null targets the student's overall comment
+  editComment: (examId, { studentId, subjectId = null, comment }) =>
+    api.post(`/api/examinations/exams/${examId}/edit-comment/`, { student_id: studentId, subject_id: subjectId, comment }),
+  regenerateComment: (examId, { studentId, subjectId = null }) =>
+    api.post(`/api/examinations/exams/${examId}/regenerate-comment/`, { student_id: studentId, subject_id: subjectId }),
 
   // Academic Risk Predictor
   getAcademicRisk: (params) => api.get('/api/examinations/academic-risk/', { params }),

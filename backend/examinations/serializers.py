@@ -109,7 +109,7 @@ class ExamTypeSerializer(serializers.ModelSerializer):
     class Meta:
         model = ExamType
         fields = [
-            'id', 'school', 'name', 'weight',
+            'id', 'school', 'name', 'weight', 'is_final',
             'is_active', 'created_at', 'updated_at',
         ]
         read_only_fields = ['id', 'school', 'created_at', 'updated_at']
@@ -118,7 +118,7 @@ class ExamTypeSerializer(serializers.ModelSerializer):
 class ExamTypeCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = ExamType
-        fields = ['name', 'weight']
+        fields = ['name', 'weight', 'is_final']
 
     def validate_name(self, value):
         school_id = self.context.get('school_id')

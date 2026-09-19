@@ -19,7 +19,9 @@ export async function exportReportCardPDF({ report, schoolData, format = 'enhanc
   const render = RENDERERS[format] || RENDERERS.enhanced
   const data = await buildReportData({ report, schoolData })
 
-  const doc = new jsPDF()
+  // compress: without it jsPDF stores images as raw pixels, so a 2500px logo alone
+  // made each report card ~25 MB. Lossless, so image resolution is unchanged.
+  const doc = new jsPDF({ compress: true })
   render(doc, data)
 
   const safeName = (report.student_name || 'Student').replace(/[^a-zA-Z0-9]/g, '_')

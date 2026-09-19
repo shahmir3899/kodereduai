@@ -68,6 +68,11 @@ class TermSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'school', 'created_at', 'updated_at']
 
 
+def _fmt_day(value):
+    """14 Sep 2026 - the same style the term form shows next to its date pickers."""
+    return f"{value.day} {value.strftime('%b %Y')}"
+
+
 class TermCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Term
@@ -92,9 +97,15 @@ class TermCreateSerializer(serializers.ModelSerializer):
             errors['end_date'] = 'End date must be after start date.'
 
         if academic_year and start_date and start_date < academic_year.start_date:
-            errors['start_date'] = 'Term start date cannot be before the academic year start date.'
+            errors['start_date'] = (
+                'Term start date cannot be before the academic year start date '
+                f'({_fmt_day(academic_year.start_date)}).'
+            )
         if academic_year and end_date and end_date > academic_year.end_date:
-            errors['end_date'] = 'Term end date cannot be after the academic year end date.'
+            errors['end_date'] = (
+                'Term end date cannot be after the academic year end date '
+                f'({_fmt_day(academic_year.end_date)}).'
+            )
 
         if not name:
             errors['name'] = 'Name is required.'
@@ -134,9 +145,11 @@ class TermCreateSerializer(serializers.ModelSerializer):
             )
             if self.instance:
                 overlap_qs = overlap_qs.exclude(pk=self.instance.pk)
-            if overlap_qs.exists():
+            clash = overlap_qs.order_by('start_date').first()
+            if clash:
                 errors['non_field_errors'] = [
-                    'Term date range overlaps with an existing term in this academic year.'
+                    f'Term date range overlaps with {clash.name} '
+                    f'({_fmt_day(clash.start_date)} - {_fmt_day(clash.end_date)}) in this academic year.'
                 ]
 
         if errors:

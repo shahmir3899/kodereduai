@@ -89,3 +89,39 @@ def build_off_day_date_set(school_id, date_from, date_to, class_id=None, class_i
             off_dates.add(cursor)
         cursor += timedelta(days=1)
     return off_dates
+
+
+def build_student_off_day_set(school_id, date_from, date_to, class_id=None):
+    """Sundays plus student-affecting OFF_DAY entries in [date_from, date_to], in one query.
+
+    build_off_day_date_set() costs several queries per day, which is far too slow
+    for a term-long window on every report-card load.
+    """
+    off_dates = set()
+    if date_from > date_to:
+        return off_dates
+
+    cursor = date_from
+    while cursor <= date_to:
+        if cursor.weekday() == 6:
+            off_dates.add(cursor)
+        cursor += timedelta(days=1)
+
+    entries = SchoolCalendarEntry.objects.filter(
+        school_id=school_id,
+        is_active=True,
+        entry_kind=SchoolCalendarEntry.EntryKind.OFF_DAY,
+        affects_students=True,
+        start_date__lte=date_to,
+        end_date__gte=date_from,
+    ).prefetch_related('classes')
+    for entry in entries:
+        if entry.scope == SchoolCalendarEntry.Scope.CLASS and (
+            not class_id or class_id not in {c.id for c in entry.classes.all()}
+        ):
+            continue
+        start = max(entry.start_date, date_from)
+        end = min(entry.end_date, date_to)
+        for i in range((end - start).days + 1):
+            off_dates.add(start + timedelta(days=i))
+    return off_dates

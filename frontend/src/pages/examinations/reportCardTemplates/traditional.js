@@ -1,6 +1,8 @@
 import autoTable from 'jspdf-autotable'
 import { drawStarRow, MONTH_NAMES } from './stars'
 import { drawPhotoBox } from './photoBox'
+import { formatIssueDate } from '../reportCardData'
+import { drawGradeKey, positionText, rowsWithComments } from './common'
 
 const INK = [23, 50, 79]      // frame / header navy
 const GOLD = [138, 109, 31]   // section labels
@@ -66,12 +68,13 @@ export function renderTraditional(doc, data) {
   y += 12
 
   // --- Student info box + photo ---
-  const photoSize = 24
-  const infoTableWidth = innerW - photoSize - 6
+  const photoSize = 22
+  const infoTableWidth = innerW - photoSize - 8
   const infoRows = [
     ['Student', data.studentName, 'Class / Section', data.className],
     ['Roll No.', data.rollNumber, 'Guardian', data.guardianName || '—'],
     ['Academic Year', data.academicYear, 'Term', data.termName || '—'],
+    ['Date of Issue', { content: formatIssueDate(data.issueDate), colSpan: 3, styles: { fontStyle: 'bold', textColor: INK } }],
   ]
   autoTable(doc, {
     startY: y,
@@ -87,23 +90,24 @@ export function renderTraditional(doc, data) {
       3: { cellWidth: infoTableWidth * 0.3 },
     },
   })
-  drawPhotoBox(doc, innerX + infoTableWidth + 6, y, photoSize, data.photo, { borderColor: INK })
-  y = doc.lastAutoTable.finalY + 8
+  const photo = drawPhotoBox(doc, innerX + infoTableWidth + 6, y + 1, photoSize, data.photo, { frameColor: INK, accentColor: GOLD })
+  y = Math.max(doc.lastAutoTable.finalY, y + 1 + photo.height + 1.5) + 8
 
   // --- Marks table ---
   if (data.subjects.length) {
+    const rows = rowsWithComments(data.subjects, s => [
+      s.subject_name,
+      s.total_marks,
+      s.is_absent ? 'Absent' : (s.marks_obtained ?? '-'),
+      s.percentage != null ? Number(s.percentage).toFixed(1) : '-',
+      s.grade || '-',
+    ], 5, { lineWidth: { top: 0, right: 0.3, bottom: 0.3, left: 0.3 } })
     autoTable(doc, {
       startY: y,
       margin: { left: innerX, right: pageWidth - innerX - innerW },
       tableWidth: innerW,
       head: [['Subject', 'Max Marks', 'Obtained', '%', 'Grade']],
-      body: data.subjects.map(s => [
-        s.subject_name,
-        s.total_marks,
-        s.is_absent ? 'Absent' : (s.marks_obtained ?? '-'),
-        s.percentage != null ? Number(s.percentage).toFixed(1) : '-',
-        s.grade || '-',
-      ]),
+      body: rows.body,
       foot: data.summary ? [[
         { content: 'Total', styles: { fontStyle: 'bold' } },
         data.summary.total_marks || '-',
@@ -117,16 +121,17 @@ export function renderTraditional(doc, data) {
       footStyles: { fillColor: [244, 236, 214], textColor: 20, fontStyle: 'bold' },
       columnStyles: { 0: { halign: 'left', cellWidth: innerW * 0.34, fontStyle: 'bold' } },
     })
-    y = doc.lastAutoTable.finalY + 8
+    y = drawGradeKey(doc, data, innerX, doc.lastAutoTable.finalY + 5, innerW) + 4
   }
 
   // --- Attendance / position boxes ---
   const boxes = []
-  if (data.attendance && data.attendance.total > 0) {
-    boxes.push(['Attendance', `${data.attendance.present} / ${data.attendance.total} days (${data.attendance.percentage}%)`])
+  if (data.attendance && data.attendance.working_days > 0) {
+    const a = data.attendance
+    boxes.push(['Attendance', `${a.present} / ${a.working_days} days${a.percentage != null ? ` (${a.percentage}%)` : ''}`])
   }
   if (data.summary?.rank) {
-    boxes.push(['Position', data.classSize ? `${data.summary.rank} of ${data.classSize}` : `${data.summary.rank}`])
+    boxes.push(['Position', positionText(data.summary.rank, data.classSize)])
   }
   if (boxes.length) {
     const colW = innerW / boxes.length
@@ -181,6 +186,24 @@ export function renderTraditional(doc, data) {
     drawColumn(skills, innerX + 5, y + 10)
     drawColumn(behaviour, innerX + colWidth + 2, y + 10)
     y += sectionHeight + 6
+  }
+
+  // --- Overall performance comment (AI/template/edited, from the Results page) ---
+  if (data.overallComment) {
+    doc.setFontSize(9)
+    const commentLines = doc.splitTextToSize(data.overallComment, innerW - 10)
+    const commentHeight = Math.max(16, 9 + commentLines.length * 4.4)
+    doc.setDrawColor(...INK)
+    doc.setLineWidth(0.4)
+    doc.rect(innerX, y, innerW, commentHeight)
+    doc.setFontSize(7)
+    doc.setTextColor(...GOLD)
+    doc.text('OVERALL PERFORMANCE', innerX + 5, y + 6)
+    doc.setFontSize(9)
+    doc.setTextColor(30)
+    doc.text(commentLines, innerX + 5, y + 11.5)
+    doc.setTextColor(0)
+    y += commentHeight + 6
   }
 
   // --- Remarks box ---

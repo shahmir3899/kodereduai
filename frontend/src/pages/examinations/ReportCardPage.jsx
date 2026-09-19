@@ -1,23 +1,77 @@
-import { useState, useEffect } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useState, useEffect, useMemo } from 'react'
+import { Link } from 'react-router-dom'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { examinationsApi, sessionsApi, schoolsApi } from '../../services/api'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
+import { useAuth } from '../../contexts/AuthContext'
+import { DEFAULT_SIGNATURE_LABELS, formatIssueDate } from './reportCardData'
+import BulkReportCardModal from './BulkReportCardModal'
+import MarksTable from './ReportCardMarksTable'
+import { ExamPicker, StudentPicker } from './ReportCardFilters'
+import { MONTH_NAMES } from './reportCardTemplates/stars'
 import { exportReportCardPDF } from './reportCardExport'
 import ClassSelector from '../../components/ClassSelector'
 import { useSessionClasses } from '../../hooks/useSessionClasses'
 import useTeacherScopedClasses from '../../hooks/useTeacherScopedClasses'
-import { buildSessionOrMasterClassParams, getClassSelectorScope } from '../../utils/classScope'
+import { buildSessionOrMasterClassParams, getClassSelectorScope, resolveClassIdToMasterClassId } from '../../utils/classScope'
 import Spinner from '../../components/ui/Spinner'
+
+const PROMOTION_OPTIONS = [
+  { value: 'NOT_APPLICABLE', label: 'Not Applicable' },
+  { value: 'PROMOTED', label: 'Promoted' },
+  { value: 'NOT_PROMOTED', label: 'Not Promoted' },
+]
+
+const PODIUM = {
+  1: { label: 'First Position', cls: 'bg-amber-50 border-amber-400 text-amber-800', icon: '\u{1F3C6}' },
+  2: { label: 'Second Position', cls: 'bg-slate-50 border-slate-400 text-slate-700', icon: '\u{1F948}' },
+  3: { label: 'Third Position', cls: 'bg-orange-50 border-orange-400 text-orange-800', icon: '\u{1F949}' },
+}
+
+// One inline-editable text block; saves on an explicit Save so a stray keystroke never fires a request.
+function EditableText({ value, onSave, saving, multiline = false, placeholder, maxLength = 800 }) {
+  const [draft, setDraft] = useState(value || '')
+  useEffect(() => { setDraft(value || '') }, [value])
+  const dirty = draft.trim() !== (value || '').trim()
+  const Field = multiline ? 'textarea' : 'input'
+  return (
+    <div className="flex items-start gap-2">
+      <Field
+        value={draft}
+        onChange={e => setDraft(e.target.value)}
+        maxLength={maxLength}
+        rows={multiline ? 3 : undefined}
+        placeholder={placeholder}
+        className="input w-full text-sm"
+      />
+      {dirty && (
+        <button
+          onClick={() => onSave(draft.trim())}
+          disabled={saving}
+          className="px-2.5 py-1.5 bg-primary-600 text-white rounded-lg text-xs hover:bg-primary-700 disabled:opacity-50"
+        >
+          {saving ? '...' : 'Save'}
+        </button>
+      )}
+    </div>
+  )
+}
 
 export default function ReportCardPage() {
   const { activeAcademicYear } = useAcademicYear()
-  const [mode, setMode] = useState('current')
+  const { isSchoolAdmin, isManager, isTeacher } = useAuth()
+  const queryClient = useQueryClient()
+  // The server is the real gate (teachers only for classes they are class teacher of); this just hides the toggle.
+  const canEdit = isSchoolAdmin || isManager || isTeacher
+  const [editMode, setEditMode] = useState(false)
+  const [editError, setEditError] = useState('')
+  const [showBulk, setShowBulk] = useState(false)
   const [classId, setClassId] = useState('')
   const [studentId, setStudentId] = useState('')
   const [enrollmentId, setEnrollmentId] = useState('')
   const [yearId, setYearId] = useState('')
-  const [termId, setTermId] = useState('')
-  const [search, setSearch] = useState('')
+  // Exams on the card, oldest first as the picker lists them; the newest is the main exam.
+  const [examIds, setExamIds] = useState([])
   const [downloading, setDownloading] = useState(false)
   const [pdfFormat, setPdfFormat] = useState(() => {
     try {
@@ -55,12 +109,10 @@ export default function ReportCardPage() {
     masterKey: 'class_id',
   })
 
-  // In current mode, keep academic year synced with the global selector.
+  // Default the session to the global academic-year selector; any other year is a historical pick.
   useEffect(() => {
-    if (mode === 'current' && activeAcademicYear?.id) {
-      setYearId(String(activeAcademicYear.id))
-    }
-  }, [activeAcademicYear?.id, mode])
+    if (!yearId && activeAcademicYear?.id) setYearId(String(activeAcademicYear.id))
+  }, [activeAcademicYear?.id, yearId])
 
   // Queries
   const { data: yearsRes } = useQuery({
@@ -68,11 +120,29 @@ export default function ReportCardPage() {
     queryFn: () => sessionsApi.getAcademicYears({ page_size: 9999 }),
   })
 
-  const { data: termsRes } = useQuery({
-    queryKey: ['terms', yearId],
-    queryFn: () => sessionsApi.getTerms({ academic_year: yearId, page_size: 9999 }),
-    enabled: !!yearId,
+  const masterClassId = resolveClassIdToMasterClassId(classId, yearId, sessionClasses)
+  const { data: examsRes } = useQuery({
+    queryKey: ['reportCardExams', masterClassId, yearId],
+    queryFn: () => examinationsApi.getExams({ class_obj: masterClassId, academic_year: yearId, page_size: 9999 }),
+    enabled: !!masterClassId && !!yearId,
   })
+  const exams = useMemo(() => {
+    const list = examsRes?.data?.results || examsRes?.data || []
+    const when = (e) => e.end_date || e.start_date || ''
+    return [...list].sort((a, b) => when(a).localeCompare(when(b)) || a.id - b.id)
+  }, [examsRes])
+
+  // Default to the latest exam (the common single-exam card) and drop ticks that no longer apply.
+  useEffect(() => {
+    if (!exams.length) {
+      if (examIds.length) setExamIds([])
+      return
+    }
+    const valid = examIds.filter(id => exams.some(e => String(e.id) === id))
+    if (valid.length !== examIds.length || valid.length === 0) {
+      setExamIds(valid.length ? valid : [String(exams[exams.length - 1].id)])
+    }
+  }, [exams, examIds])
 
   const { data: enrollmentsRes } = useQuery({
     queryKey: ['reportCardEnrollmentsByClass', classId, yearId, enrollmentClassParams.session_class_id],
@@ -85,14 +155,14 @@ export default function ReportCardPage() {
   })
 
   const { data: reportRes, isLoading: reportLoading } = useQuery({
-    queryKey: ['reportCard', studentId, enrollmentId, yearId, termId],
+    queryKey: ['reportCard', studentId, enrollmentId, yearId, examIds.join(',')],
     queryFn: () => examinationsApi.getReportCard({
       student_id: studentId,
       enrollment_id: enrollmentId || undefined,
       academic_year_id: yearId,
-      term_id: termId || undefined,
+      exam_ids: examIds.join(','),
     }),
-    enabled: !!studentId && !!yearId,
+    enabled: !!studentId && !!yearId && examIds.length > 0,
   })
 
   const { data: schoolRes } = useQuery({
@@ -102,26 +172,18 @@ export default function ReportCardPage() {
 
 
   const years = yearsRes?.data?.results || yearsRes?.data || []
-  const terms = termsRes?.data?.results || termsRes?.data || []
   const enrollments = enrollmentsRes?.data?.results || enrollmentsRes?.data || []
-  const students = enrollments
-    .filter(e => !search || (e.student_name || '').toLowerCase().includes(search.toLowerCase()))
+  const students = [...enrollments]
     .sort((a, b) => String(a.roll_number || '').localeCompare(String(b.roll_number || ''), undefined, { numeric: true, sensitivity: 'base' }))
   const report = reportRes?.data || null
   const schoolData = schoolRes?.data
 
-  const handleModeChange = (newMode) => {
-    setMode(newMode)
+  const handleYearChange = (value) => {
+    setYearId(value)
     setClassId('')
     setStudentId('')
     setEnrollmentId('')
-    setTermId('')
-    setSearch('')
-    if (newMode === 'historical') {
-      setYearId('')
-    } else if (activeAcademicYear?.id) {
-      setYearId(String(activeAcademicYear.id))
-    }
+    setExamIds([])
   }
 
   const handleStudentChange = (value) => {
@@ -129,6 +191,32 @@ export default function ReportCardPage() {
     const selectedEnrollment = enrollments.find(e => String(e.id) === String(value))
     setStudentId(selectedEnrollment ? String(selectedEnrollment.student) : '')
   }
+
+  const refreshReport = () => queryClient.invalidateQueries({ queryKey: ['reportCard'] })
+  const onEditError = (err) => setEditError(
+    err.response?.data?.detail
+    || Object.values(err.response?.data || {}).flat().join(' ')
+    || 'Could not save.',
+  )
+
+  const metaMut = useMutation({
+    mutationFn: (fields) => examinationsApi.saveReportCardMeta({
+      student_id: studentId,
+      academic_year_id: yearId,
+      exam_ids: examIds,
+      ...fields,
+    }),
+    onSuccess: () => { setEditError(''); refreshReport() },
+    onError: onEditError,
+  })
+
+  const commentMut = useMutation({
+    mutationFn: ({ examId, subjectId, comment }) => examinationsApi.editComment(examId, {
+      studentId: Number(studentId), subjectId, comment,
+    }),
+    onSuccess: () => { setEditError(''); refreshReport() },
+    onError: onEditError,
+  })
 
   const handleDownloadPDF = async () => {
     if (!report) return
@@ -149,14 +237,29 @@ export default function ReportCardPage() {
         <p className="text-sm text-gray-600">View individual student report cards</p>
       </div>
 
-      {/* Selection */}
+      {canEdit && classId && yearId && students.length > 0 && (
+        <div className="flex justify-end mb-2">
+          <button
+            onClick={() => setShowBulk(true)}
+            className="px-3 py-1.5 rounded-lg text-sm border border-gray-300 text-gray-700 hover:bg-gray-50"
+          >
+            Class bulk edit ({students.length})
+          </button>
+        </div>
+      )}
+
+      {/* Selection: session + class + exams + student */}
       <div className="card mb-4">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">Mode</label>
-            <select value={mode} onChange={e => handleModeChange(e.target.value)} className="input w-full text-sm">
-              <option value="current">Current Session</option>
-              <option value="historical">Historical Session</option>
+            <label className="block text-xs font-medium text-gray-500 mb-1">Session *</label>
+            <select value={yearId} onChange={e => handleYearChange(e.target.value)} className="input w-full text-sm">
+              <option value="">Select session...</option>
+              {years.map(y => (
+                <option key={y.id} value={y.id}>
+                  {y.name}{String(y.id) === String(activeAcademicYear?.id) ? ' (current)' : ''}
+                </option>
+              ))}
             </select>
           </div>
           <div>
@@ -167,7 +270,7 @@ export default function ReportCardPage() {
                 setClassId(e.target.value)
                 setStudentId('')
                 setEnrollmentId('')
-                setSearch('')
+                setExamIds([])
               }}
               className="input w-full text-sm"
               placeholder="Select class..."
@@ -178,36 +281,17 @@ export default function ReportCardPage() {
             />
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">Search Student</label>
-            <input
-              type="text"
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              className="input w-full text-sm"
-              placeholder="Search by name..."
+            <label className="block text-xs font-medium text-gray-500 mb-1">Exams</label>
+            <ExamPicker exams={exams} selected={examIds} onChange={setExamIds} disabled={!classId || !yearId} />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1">Student</label>
+            <StudentPicker
+              students={students}
+              value={enrollmentId}
+              onChange={handleStudentChange}
               disabled={!classId || !yearId}
             />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">Student (Enrollment)</label>
-            <select value={enrollmentId} onChange={e => handleStudentChange(e.target.value)} className="input w-full text-sm" disabled={!classId || !yearId}>
-              <option value="">{classId && yearId ? 'Select student...' : 'Select class and year first'}</option>
-              {students.map(e => <option key={e.id} value={e.id}>{e.student_name} ({e.roll_number})</option>)}
-            </select>
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">Academic Year *</label>
-            <select value={yearId} onChange={e => { setYearId(e.target.value); setTermId('') }} className="input w-full text-sm">
-              <option value="">Select year...</option>
-              {years.map(y => <option key={y.id} value={y.id}>{y.name}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">Term</label>
-            <select value={termId} onChange={e => setTermId(e.target.value)} className="input w-full text-sm" disabled={!yearId}>
-              <option value="">All Terms</option>
-              {terms.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-            </select>
           </div>
         </div>
       </div>
@@ -249,6 +333,16 @@ export default function ReportCardPage() {
                 </button>
               ))}
             </div>
+            {canEdit && (
+              <button
+                onClick={() => { setEditMode(v => !v); setEditError('') }}
+                className={`px-3 py-1.5 rounded-lg text-sm border transition-colors ${
+                  editMode ? 'bg-primary-50 border-primary-300 text-primary-700' : 'border-gray-300 text-gray-600 hover:bg-gray-50'
+                }`}
+              >
+                {editMode ? 'Done editing' : 'Edit details'}
+              </button>
+            )}
             <button
               onClick={handleDownloadPDF}
               disabled={downloading}
@@ -267,13 +361,24 @@ export default function ReportCardPage() {
             </div>
           )}
 
+          {editError && (
+            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">{editError}</div>
+          )}
+
           {/* Header */}
           <div className="text-center border-b border-gray-200 pb-4 mb-4">
             <h2 className="text-lg font-bold text-gray-900">{report.school_name || 'Report Card'}</h2>
             <p className="text-sm text-gray-600 mt-1">
               {report.academic_year_name && `Academic Year: ${report.academic_year_name}`}
-              {report.term_name && ` | Term: ${report.term_name}`}
+              {report.exam_display && ` | ${report.exam_display}`}
             </p>
+            {report.earlier_exam_names?.length > 0 && (
+              <p className="text-xs text-gray-500 mt-1">
+                {report.weighted
+                  ? `Weighted result across: ${[...report.earlier_exam_names, report.main_exam?.name].filter(Boolean).join(', ')}`
+                  : `Result is from ${report.main_exam?.name}. Earlier exams shown for reference: ${report.earlier_exam_names.join(', ')}`}
+              </p>
+            )}
           </div>
 
           {/* Student Info */}
@@ -298,75 +403,165 @@ export default function ReportCardPage() {
             )}
           </div>
 
-          {/* Marks Table */}
-          {report.subjects && report.subjects.length > 0 ? (
-            <div className="overflow-x-auto mb-4">
-              <table className="min-w-full text-sm">
-                <thead>
-                  <tr className="bg-gray-50 text-xs text-gray-500 uppercase">
-                    <th className="px-3 py-2 text-left">Subject</th>
-                    <th className="px-3 py-2 text-center">Total</th>
-                    <th className="px-3 py-2 text-center">Obtained</th>
-                    <th className="px-3 py-2 text-center">%</th>
-                    <th className="px-3 py-2 text-center">Grade</th>
-                    <th className="px-3 py-2 text-center">Status</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {report.subjects.map((s, idx) => (
-                    <tr key={idx} className={s.is_pass === false ? 'bg-red-50/30' : ''}>
-                      <td className="px-3 py-2 font-medium text-gray-900">{s.subject_name}</td>
-                      <td className="px-3 py-2 text-center text-gray-600">{s.total_marks}</td>
-                      <td className="px-3 py-2 text-center font-medium">
-                        {s.is_absent ? <span className="text-red-500">Absent</span> : s.marks_obtained ?? '—'}
-                      </td>
-                      <td className="px-3 py-2 text-center">
-                        {s.percentage != null ? `${Number(s.percentage).toFixed(1)}%` : '—'}
-                      </td>
-                      <td className="px-3 py-2 text-center">
-                        {s.grade ? (
-                          <span className="px-1.5 py-0.5 bg-primary-100 text-primary-700 rounded text-xs font-medium">{s.grade}</span>
-                        ) : '—'}
-                      </td>
-                      <td className="px-3 py-2 text-center">
-                        {s.is_pass === true ? (
-                          <span className="text-green-600 text-xs font-medium">Pass</span>
-                        ) : s.is_pass === false ? (
-                          <span className="text-red-600 text-xs font-medium">Fail</span>
-                        ) : '—'}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-                {/* Summary row */}
-                {report.summary && (
-                  <tfoot>
-                    <tr className="bg-gray-50 font-medium">
-                      <td className="px-3 py-2">Total</td>
-                      <td className="px-3 py-2 text-center">{report.summary.total_marks}</td>
-                      <td className="px-3 py-2 text-center">{report.summary.obtained_marks}</td>
-                      <td className="px-3 py-2 text-center">
-                        {report.summary.percentage != null ? `${Number(report.summary.percentage).toFixed(1)}%` : '—'}
-                      </td>
-                      <td className="px-3 py-2 text-center">
-                        {report.summary.grade && (
-                          <span className="px-1.5 py-0.5 bg-primary-100 text-primary-700 rounded text-xs font-medium">{report.summary.grade}</span>
-                        )}
-                      </td>
-                      <td className="px-3 py-2 text-center">
-                        {report.summary.overall_pass === true ? (
-                          <span className="text-green-600 text-xs font-medium">Pass</span>
-                        ) : report.summary.overall_pass === false ? (
-                          <span className="text-red-600 text-xs font-medium">Fail</span>
-                        ) : '—'}
-                      </td>
-                    </tr>
-                  </tfoot>
-                )}
-              </table>
+          {/* Podium (top 3) */}
+          {PODIUM[report.summary?.rank] && (
+            <div className={`mb-4 p-4 border-2 rounded-xl flex items-center gap-4 ${PODIUM[report.summary.rank].cls}`}>
+              <span className="text-4xl" aria-hidden="true">{PODIUM[report.summary.rank].icon}</span>
+              <div>
+                <p className="text-lg font-bold tracking-wide uppercase">{PODIUM[report.summary.rank].label}</p>
+                <p className="text-sm opacity-80">
+                  Congratulations! {report.class_name}
+                  {report.summary.percentage != null && ` \u00b7 ${Number(report.summary.percentage).toFixed(1)}%`}
+                </p>
+              </div>
             </div>
-          ) : (
-            <p className="text-center text-gray-500 text-sm py-4">No subject marks available.</p>
+          )}
+
+          {/* Attendance (computed with OFF days excluded, so there is deliberately no manual override) */}
+          {report.attendance?.working_days > 0 && (() => {
+            const a = report.attendance
+            const pct = (n) => `${(n / a.working_days) * 100}%`
+            return (
+              <div className="mb-4 p-3 bg-gray-50 rounded-lg">
+                <div className="flex items-baseline justify-between gap-2 flex-wrap">
+                  <div>
+                    <p className="text-xs text-gray-500 uppercase">Attendance</p>
+                    <p className="text-lg font-bold text-green-700">
+                      {a.present} / {a.working_days} days
+                      {a.percentage != null && <span className="text-sm font-medium"> ({a.percentage}%)</span>}
+                    </p>
+                  </div>
+                  {a.from && a.to && (
+                    <p className="text-xs text-gray-500">{formatIssueDate(a.from)} – {formatIssueDate(a.to)}</p>
+                  )}
+                </div>
+                <div className="flex h-2 rounded-full overflow-hidden bg-gray-200 my-2">
+                  <div className="bg-green-500" style={{ width: pct(a.present) }} />
+                  <div className="bg-red-500" style={{ width: pct(a.absent) }} />
+                  <div className="bg-amber-400" style={{ width: pct(a.leave) }} />
+                </div>
+                <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-600">
+                  <span><span className="inline-block w-2 h-2 rounded-full bg-green-500 mr-1" />Present: {a.present}</span>
+                  <span><span className="inline-block w-2 h-2 rounded-full bg-red-500 mr-1" />Absent: {a.absent}</span>
+                  <span><span className="inline-block w-2 h-2 rounded-full bg-amber-400 mr-1" />Leave: {a.leave}</span>
+                  {a.not_marked > 0 && (
+                    <span><span className="inline-block w-2 h-2 rounded-full bg-gray-400 mr-1" />Not marked: {a.not_marked}</span>
+                  )}
+                </div>
+                {a.not_marked > 0 && (
+                  <p className={`text-xs mt-2 ${a.suspect ? 'text-amber-700' : 'text-gray-500'}`}>
+                    {a.suspect
+                      ? `Attendance was not recorded on ${a.not_marked} of ${a.working_days} working days. Check the attendance register before issuing this card.`
+                      : `Percentage hidden: ${a.not_marked} working ${a.not_marked === 1 ? 'day has' : 'days have'} no attendance recorded.`}
+                  </p>
+                )}
+              </div>
+            )
+          })()}
+
+          {/* Marks Table */}
+          <MarksTable report={report} />
+
+          {/* Skills & behaviour from the monthly assessment (read-only here; rated on the Assessments page) */}
+          {report.conduct_assessment && (
+            <div className="mb-4 p-3 border border-gray-100 rounded-lg">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-xs font-semibold text-gray-500 uppercase">
+                  Skills &amp; Behaviour
+                  {report.conduct_assessment.month ? ` — ${MONTH_NAMES[report.conduct_assessment.month - 1]}` : ''}
+                </p>
+                <Link to="/assessments" className="text-xs text-primary-600 hover:underline">Edit on Assessments page</Link>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1">
+                {[...(report.conduct_assessment.skills || []), ...(report.conduct_assessment.behaviour || [])].map(item => (
+                  <div key={item.field} className="flex items-center justify-between text-sm">
+                    <span className="text-gray-600">{item.label}</span>
+                    <span className="text-amber-500 tracking-tight" aria-label={`${item.rating || 0} of 5`}>
+                      {'★'.repeat(item.rating || 0)}<span className="text-gray-300">{'★'.repeat(5 - (item.rating || 0))}</span>
+                    </span>
+                  </div>
+                ))}
+              </div>
+              {(report.conduct_assessment.teacher_remark || report.conduct_assessment.principal_remark) && (
+                <div className="mt-3 pt-2 border-t border-gray-100 space-y-1 text-sm text-gray-700">
+                  {report.conduct_assessment.teacher_remark && (
+                    <p><span className="text-[10px] font-semibold text-indigo-600 uppercase mr-2">Class teacher</span><span className="italic">{report.conduct_assessment.teacher_remark}</span></p>
+                  )}
+                  {report.conduct_assessment.principal_remark && (
+                    <p><span className="text-[10px] font-semibold text-indigo-600 uppercase mr-2">Principal</span><span className="italic">{report.conduct_assessment.principal_remark}</span></p>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Promotion (final exam only) */}
+          {report.promotion_applicable && (editMode || report.promotion_status !== 'NOT_APPLICABLE') && (
+            <div className={`mb-4 p-3 rounded-lg border flex items-center justify-between gap-3 ${
+              report.promotion_status === 'PROMOTED' ? 'bg-green-50 border-green-200'
+                : report.promotion_status === 'NOT_PROMOTED' ? 'bg-red-50 border-red-200' : 'bg-gray-50 border-gray-200'
+            }`}>
+              <span className="text-xs font-semibold text-gray-500 uppercase">Promotion status</span>
+              {editMode ? (
+                <select
+                  value={report.promotion_status}
+                  onChange={e => metaMut.mutate({ promotion_status: e.target.value })}
+                  disabled={metaMut.isPending}
+                  className="input text-sm"
+                >
+                  {PROMOTION_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
+              ) : (
+                <span className={`text-sm font-bold uppercase ${report.promotion_status === 'PROMOTED' ? 'text-green-700' : 'text-red-700'}`}>
+                  {report.promotion_status === 'PROMOTED' ? 'Promoted' : 'Not Promoted'}
+                </span>
+              )}
+            </div>
+          )}
+
+          {/* Comments: read-only for viewers, inline-editable in edit mode (same store as the Results page) */}
+          {editMode ? (
+            <div className="mb-4 p-3 bg-indigo-50/60 border border-indigo-100 rounded-lg space-y-3">
+              <div>
+                <p className="text-[10px] font-semibold text-indigo-600 uppercase mb-1">Overall comment</p>
+                {report.overall_comment_exam_id ? (
+                  <EditableText
+                    multiline
+                    value={report.overall_comment}
+                    saving={commentMut.isPending}
+                    placeholder="Overall performance comment"
+                    onSave={(comment) => commentMut.mutate({ examId: report.overall_comment_exam_id, subjectId: null, comment })}
+                  />
+                ) : <p className="text-xs text-gray-400">No exam to attach a comment to yet.</p>}
+              </div>
+              {report.subjects?.filter(s => s.comment_exam_id).map(s => (
+                <div key={s.subject_id}>
+                  <p className="text-[10px] font-semibold text-gray-600 uppercase mb-1">{s.subject_name}</p>
+                  <EditableText
+                    multiline
+                    value={s.comment}
+                    saving={commentMut.isPending}
+                    placeholder={`Comment for ${s.subject_name}`}
+                    onSave={(comment) => commentMut.mutate({ examId: s.comment_exam_id, subjectId: s.subject_id, comment })}
+                  />
+                </div>
+              ))}
+            </div>
+          ) : (report.overall_comment || report.subjects?.some(s => s.comment)) && (
+            <div className="mb-4 p-3 bg-indigo-50/60 border border-indigo-100 rounded-lg space-y-1.5">
+              {report.overall_comment && (
+                <p className="text-sm text-gray-700">
+                  <span className="text-[10px] font-semibold text-indigo-600 uppercase mr-2">Overall</span>
+                  <span className="italic">{report.overall_comment}</span>
+                </p>
+              )}
+              {report.subjects?.filter(s => s.comment).map((s, i) => (
+                <p key={i} className="text-xs text-gray-600">
+                  <span className="font-medium text-gray-700">{s.subject_name}:</span>{' '}
+                  <span className="italic">{s.comment}</span>
+                </p>
+              ))}
+            </div>
           )}
 
           {/* Position */}
@@ -380,7 +575,56 @@ export default function ReportCardPage() {
               </div>
             </div>
           )}
+
+          {/* Issue date + signature captions (the same fields the PDF prints) */}
+          <div className="mt-6 pt-4 border-t border-gray-200">
+            <div className="flex items-center gap-2 mb-4 text-sm text-gray-600">
+              <span>Date of issue:</span>
+              {editMode ? (
+                <input
+                  type="date"
+                  value={report.issue_date || new Date().toISOString().slice(0, 10)}
+                  onChange={e => e.target.value && metaMut.mutate({ issue_date: e.target.value })}
+                  className="input text-sm"
+                />
+              ) : (
+                <span className="font-medium text-gray-800">
+                  {formatIssueDate(report.issue_date || new Date().toISOString().slice(0, 10))}
+                </span>
+              )}
+            </div>
+            <div className="grid grid-cols-3 gap-4 text-center">
+              {['class_teacher', 'principal', 'parent'].map(key => {
+                const label = report.signature_labels?.[key] || DEFAULT_SIGNATURE_LABELS[key]
+                return (
+                  <div key={key}>
+                    <div className="border-b border-gray-300 h-8 mb-1" />
+                    {editMode ? (
+                      <EditableText
+                        value={label}
+                        maxLength={40}
+                        saving={metaMut.isPending}
+                        onSave={(text) => metaMut.mutate({
+                          signature_labels: { ...(report.signature_labels || {}), [key]: text },
+                        })}
+                      />
+                    ) : (
+                      <p className="text-[11px] uppercase text-gray-500">{label}</p>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          </div>
         </div>
+      )}
+      {showBulk && (
+        <BulkReportCardModal
+          students={students.map(e => ({ studentId: e.student, name: e.student_name, roll: e.roll_number }))}
+          yearId={yearId}
+          examIds={examIds}
+          onClose={() => setShowBulk(false)}
+        />
       )}
     </div>
   )

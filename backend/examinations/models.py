@@ -21,6 +21,10 @@ class ExamType(models.Model):
         default=100.00,
         help_text="Weightage percentage for GPA calculation",
     )
+    is_final = models.BooleanField(
+        default=False,
+        help_text="Only a final exam decides promotion; report cards show/edit promotion status only for these.",
+    )
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -219,6 +223,35 @@ class ExamSubject(models.Model):
         return f"{self.exam.name} - {self.subject.name}"
 
 
+class StudentExamComment(models.Model):
+    """Overall report-card comment for one student in one exam."""
+
+    class Source(models.TextChoices):
+        AI = 'AI', 'AI'
+        FALLBACK = 'FALLBACK', 'Template'
+        EDITED = 'EDITED', 'Edited'
+
+    school = models.ForeignKey(
+        'schools.School', on_delete=models.CASCADE, related_name='student_exam_comments',
+    )
+    exam = models.ForeignKey(Exam, on_delete=models.CASCADE, related_name='student_comments')
+    student = models.ForeignKey(
+        'students.Student', on_delete=models.CASCADE, related_name='exam_comments',
+    )
+    comment = models.TextField(blank=True, default='')
+    source = models.CharField(max_length=10, choices=Source.choices, default=Source.AI)
+    generated_at = models.DateTimeField(null=True, blank=True)
+    ai_model = models.CharField(max_length=60, null=True, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ('exam', 'student')
+        indexes = [models.Index(fields=['school', 'exam'])]
+
+    def __str__(self):
+        return f"{self.student_id} - {self.exam_id}: {self.source}"
+
+
 class StudentMark(models.Model):
     """Individual student marks for a subject in an exam."""
 
@@ -263,6 +296,16 @@ class StudentMark(models.Model):
         null=True,
         blank=True,
         help_text="When the AI comment was generated"
+    )
+    # Nullable on purpose: keeps the migration backward-compatible with code that
+    # doesn't know about this column yet (rolling deploy).
+    ai_comment_source = models.CharField(
+        max_length=10, null=True, blank=True,
+        help_text="AI / FALLBACK / EDITED; EDITED comments are never overwritten by regeneration",
+    )
+    ai_model = models.CharField(
+        max_length=60, null=True, blank=True,
+        help_text="Model that wrote the comment (blank for template/edited comments)",
     )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -1338,3 +1381,60 @@ class StudentTermAssessment(models.Model):
 
     def __str__(self):
         return f"Assessment for {self.student.name} - {self.academic_year}"
+
+
+class ReportCardPromotion(models.Model):
+    """Promotion decision printed on the report card of a final exam.
+
+    Kept off StudentEnrollment on purpose: the Master/Session Class rollout still
+    owns that table, and this is a report-card decision, not an enrollment state.
+    """
+
+    class Status(models.TextChoices):
+        PROMOTED = 'PROMOTED', 'Promoted'
+        NOT_PROMOTED = 'NOT_PROMOTED', 'Not Promoted'
+        NOT_APPLICABLE = 'NOT_APPLICABLE', 'Not Applicable'
+
+    school = models.ForeignKey('schools.School', on_delete=models.CASCADE, related_name='report_card_promotions')
+    student = models.ForeignKey('students.Student', on_delete=models.CASCADE, related_name='report_card_promotions')
+    academic_year = models.ForeignKey(
+        'academic_sessions.AcademicYear', on_delete=models.CASCADE, related_name='report_card_promotions',
+    )
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.NOT_APPLICABLE)
+    updated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='+',
+    )
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ('student', 'academic_year')
+
+
+class ReportCardOverride(models.Model):
+    """Hand-set print details for one student's report card (issue date, signature captions).
+
+    Marks, rank, class average and attendance are always computed - never stored here.
+    """
+
+    school = models.ForeignKey('schools.School', on_delete=models.CASCADE, related_name='report_card_overrides')
+    student = models.ForeignKey('students.Student', on_delete=models.CASCADE, related_name='report_card_overrides')
+    academic_year = models.ForeignKey(
+        'academic_sessions.AcademicYear', on_delete=models.CASCADE, related_name='report_card_overrides',
+    )
+    # Details belong to the card's main (last) exam. `term` is the pre-0036 key, kept only
+    # so rows that had no exam to map to are not lost.
+    exam = models.ForeignKey(
+        'examinations.Exam', on_delete=models.CASCADE, null=True, blank=True, related_name='report_card_overrides',
+    )
+    term = models.ForeignKey(
+        'academic_sessions.Term', on_delete=models.CASCADE, null=True, blank=True, related_name='report_card_overrides',
+    )
+    issue_date = models.DateField(null=True, blank=True)
+    signature_labels = models.JSONField(default=dict, blank=True)
+    updated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='+',
+    )
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ('student', 'exam')

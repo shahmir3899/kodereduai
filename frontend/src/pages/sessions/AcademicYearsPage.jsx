@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useRef, useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { sessionsApi } from '../../services/api'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
@@ -8,6 +8,7 @@ import SessionSetupWizard from './SessionSetupWizard'
 import Spinner from '../../components/ui/Spinner'
 import Badge from '../../components/ui/Badge'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
+import { formatDay, nextTermDefaults } from './termDefaults'
 
 const EMPTY_YEAR = { name: '', start_date: '', end_date: '' }
 const EMPTY_TERM = { academic_year: '', name: '', term_type: 'TERM', order: 1, start_date: '', end_date: '' }
@@ -69,6 +70,25 @@ export default function AcademicYearsPage() {
   const years = yearsRes?.data?.results || yearsRes?.data || []
   const terms = termsRes?.data?.results || termsRes?.data || []
   const summary = summaryRes?.data || null
+
+  // The term form works against the year picked in the modal, which may differ from the
+  // list filter above, so it loads that year's terms itself.
+  const termFormYear = years.find(y => y.id === termForm.academic_year) || null
+  const { data: formYearTermsRes } = useQuery({
+    queryKey: ['terms', 'formDefaults', termForm.academic_year],
+    queryFn: () => sessionsApi.getTerms({ academic_year: termForm.academic_year, page_size: 9999 }),
+    enabled: showTermModal && !editTermId && !!termForm.academic_year,
+  })
+  // Suggest the next order and start date once per year picked in the create form; typing
+  // afterwards is never overwritten.
+  const defaultedYearRef = useRef(null)
+  useEffect(() => {
+    if (!showTermModal || editTermId) { defaultedYearRef.current = null; return }
+    if (!termFormYear || !formYearTermsRes || defaultedYearRef.current === termFormYear.id) return
+    defaultedYearRef.current = termFormYear.id
+    const yearTerms = formYearTermsRes.data?.results || formYearTermsRes.data || []
+    setTermForm(p => ({ ...p, ...nextTermDefaults(termFormYear, yearTerms) }))
+  }, [showTermModal, editTermId, termFormYear, formYearTermsRes])
 
   // Sync expanded year with activeAcademicYear from dropdown
   useEffect(() => {
@@ -610,12 +630,17 @@ export default function AcademicYearsPage() {
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Start Date *</label>
-                    <input type="date" value={termForm.start_date} onChange={e => setTermForm(p => ({ ...p, start_date: e.target.value }))} className="input w-full" required />
+                    <input type="date" value={termForm.start_date} min={termFormYear?.start_date} max={termFormYear?.end_date} onChange={e => setTermForm(p => ({ ...p, start_date: e.target.value }))} className="input w-full" required />
+                    {termFormYear && (
+                      <p className="text-xs text-gray-500 mt-1">
+                        {termFormYear.name} runs {formatDay(termFormYear.start_date)} – {formatDay(termFormYear.end_date)}
+                      </p>
+                    )}
                     {termErrors.start_date && <p className="text-xs text-red-600 mt-1">{termErrors.start_date}</p>}
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">End Date *</label>
-                    <input type="date" value={termForm.end_date} onChange={e => setTermForm(p => ({ ...p, end_date: e.target.value }))} className="input w-full" required />
+                    <input type="date" value={termForm.end_date} min={termFormYear?.start_date} max={termFormYear?.end_date} onChange={e => setTermForm(p => ({ ...p, end_date: e.target.value }))} className="input w-full" required />
                     {termErrors.end_date && <p className="text-xs text-red-600 mt-1">{termErrors.end_date}</p>}
                   </div>
                   <div className="flex justify-end gap-3 pt-2">

@@ -545,6 +545,21 @@ class SchoolViewSet(TenantQuerySetMixin, viewsets.ReadOnlyModelViewSet):
         if 'weighted_average_enabled' in new_data:
             exam_config['weighted_average_enabled'] = bool(new_data['weighted_average_enabled'])
 
+        # AI report-card comment settings.
+        if 'comment_tone' in new_data:
+            if new_data['comment_tone'] not in ('warm', 'formal', 'brief'):
+                return Response({'error': 'Invalid comment tone.'}, status=status.HTTP_400_BAD_REQUEST)
+            exam_config['comment_tone'] = new_data['comment_tone']
+        if 'comment_length' in new_data:
+            if new_data['comment_length'] not in ('short', 'standard', 'detailed'):
+                return Response({'error': 'Invalid comment length.'}, status=status.HTTP_400_BAD_REQUEST)
+            exam_config['comment_length'] = new_data['comment_length']
+        if 'comment_phrases' in new_data:
+            phrases = str(new_data['comment_phrases'] or '').strip()
+            if len(phrases) > 300:
+                return Response({'error': 'School guidance must be 300 characters or fewer.'}, status=status.HTTP_400_BAD_REQUEST)
+            exam_config['comment_phrases'] = phrases
+
         school.exam_config = exam_config
         school.save(update_fields=['exam_config', 'updated_at'])
 

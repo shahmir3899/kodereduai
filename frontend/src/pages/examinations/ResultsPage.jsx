@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { examinationsApi } from '../../services/api'
 import ClassSelector from '../../components/ClassSelector'
@@ -8,6 +8,159 @@ import useTeacherScopedClasses from '../../hooks/useTeacherScopedClasses'
 import { getClassSelectorScope, getResolvedMasterClassId } from '../../utils/classScope'
 import Spinner from '../../components/ui/Spinner'
 import Badge from '../../components/ui/Badge'
+
+const formatDuration = (seconds) => (
+  seconds >= 60 ? `${Math.floor(seconds / 60)} min ${Math.round(seconds % 60)} s` : `${Math.round(seconds)} s`
+)
+
+// Windows-copy style bar: real progress from the server, the fill glides between updates.
+function CommentProgressBar({ job, onCancel, cancelling }) {
+  const { current = 0, total = 0, elapsed_seconds: elapsed = 0, cancel_requested: stopping } = job
+  const pct = total > 0 ? Math.min(100, Math.round((current / total) * 100)) : 0
+  const eta = current > 0 && total > current ? (elapsed / current) * (total - current) : null
+  return (
+    <div className="mt-3">
+      <div className="flex items-center justify-between gap-2 text-xs text-indigo-900 mb-1">
+        <span className="font-medium">
+          {stopping ? 'Stopping after the current students...' : total === 0 ? 'Preparing...' : `Generating comments: ${current} of ${total} students`}
+        </span>
+        <span className="text-indigo-700">
+          {total > 0 ? `${pct}%` : ''}{eta != null ? ` · about ${formatDuration(eta)} left` : ''}
+        </span>
+      </div>
+      <div className="h-2.5 rounded-full bg-indigo-100 overflow-hidden">
+        <div
+          className={`h-full rounded-full bg-indigo-600 transition-[width] duration-1000 ease-linear ${total === 0 ? 'w-1/3 animate-pulse' : ''}`}
+          style={total > 0 ? { width: `${pct}%` } : undefined}
+        />
+      </div>
+      <div className="flex items-center justify-between mt-1.5 text-[11px] text-indigo-600">
+        <span>Elapsed {formatDuration(elapsed)}. Comments already written are kept if you stop.</span>
+        <button
+          type="button"
+          onClick={onCancel}
+          disabled={cancelling || stopping}
+          className="px-2 py-0.5 border border-indigo-300 rounded text-indigo-700 hover:bg-indigo-100 disabled:opacity-50"
+        >
+          Cancel
+        </button>
+      </div>
+    </div>
+  )
+}
+
+const SOURCE_LABELS = { AI: 'AI', FALLBACK: 'Template', EDITED: 'Edited' }
+const SOURCE_STYLES = {
+  AI: 'bg-indigo-100 text-indigo-700',
+  FALLBACK: 'bg-gray-100 text-gray-600',
+  EDITED: 'bg-emerald-100 text-emerald-700',
+}
+
+// One editable comment line (overall or per subject): view, edit in place, regenerate.
+function CommentRow({ label, text, source, at, model, onSave, onRegenerate }) {
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+
+  const run = async (fn) => {
+    setBusy(true)
+    setError('')
+    try {
+      await fn()
+      setEditing(false)
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Could not save. You may not have access to this class or subject.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="text-xs">
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className="font-medium text-gray-700">{label}</span>
+        {source && SOURCE_LABELS[source] && (
+          <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${SOURCE_STYLES[source]}`}>{SOURCE_LABELS[source]}</span>
+        )}
+        {text && !source && (
+          <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-100 text-amber-700" title="Written before comment sources were tracked, so it cannot be told whether it came from the AI or the template. Regenerate to get a labelled one.">Older</span>
+        )}
+        {text && at && (
+          <span className="text-[10px] text-gray-400">
+            {source === 'EDITED' ? 'edited' : 'generated'} {new Date(at).toLocaleString(undefined, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+            {source === 'AI' && model ? ` · ${model}` : ''}
+          </span>
+        )}
+        {!editing && (
+          <span className="ml-auto flex gap-3">
+            <button type="button" disabled={busy} onClick={() => { setDraft(text || ''); setEditing(true) }} className="text-indigo-600 hover:underline disabled:opacity-50">
+              {text ? 'Edit' : 'Write'}
+            </button>
+            <button type="button" disabled={busy} onClick={() => run(onRegenerate)} className="text-gray-500 hover:underline disabled:opacity-50">
+              {busy ? 'Working...' : 'Regenerate'}
+            </button>
+          </span>
+        )}
+      </div>
+      {editing ? (
+        <div className="mt-1">
+          <textarea
+            value={draft}
+            onChange={e => setDraft(e.target.value)}
+            rows={3}
+            maxLength={800}
+            className="input w-full text-xs"
+          />
+          <div className="flex gap-2 mt-1">
+            <button type="button" disabled={busy} onClick={() => run(() => onSave(draft))} className="px-2 py-1 bg-indigo-600 text-white rounded disabled:opacity-50">Save</button>
+            <button type="button" disabled={busy} onClick={() => setEditing(false)} className="px-2 py-1 text-gray-600 hover:bg-gray-100 rounded">Cancel</button>
+          </div>
+        </div>
+      ) : (
+        <p className={`mt-0.5 ${text ? 'text-gray-600 italic' : 'text-gray-400'}`}>{text || 'No comment yet.'}</p>
+      )}
+      {error && <p className="mt-1 text-red-600">{error}</p>}
+    </div>
+  )
+}
+
+// Overall + per-subject comments for one student in one exam.
+function CommentsPanel({ examId, student, onChanged }) {
+  const save = (subjectId) => async (comment) => {
+    await examinationsApi.editComment(examId, { studentId: student.student_id, subjectId, comment })
+    onChanged()
+  }
+  const regenerate = (subjectId) => async () => {
+    await examinationsApi.regenerateComment(examId, { studentId: student.student_id, subjectId })
+    onChanged()
+  }
+  return (
+    <div className="space-y-2.5">
+      <CommentRow
+        label="Overall"
+        text={student.overall_comment}
+        source={student.overall_comment_source}
+        at={student.overall_comment_at}
+        model={student.overall_comment_model}
+        onSave={save(null)}
+        onRegenerate={regenerate(null)}
+      />
+      {student.marks?.filter(m => m.marks_obtained != null && !m.is_absent).map(m => (
+        <CommentRow
+          key={m.subject_id}
+          label={m.subject_name}
+          text={m.ai_comment}
+          source={m.comment_source}
+          at={m.comment_at}
+          model={m.comment_model}
+          onSave={save(m.subject_id)}
+          onRegenerate={regenerate(m.subject_id)}
+        />
+      ))}
+    </div>
+  )
+}
 
 export default function ResultsPage() {
   const queryClient = useQueryClient()
@@ -59,13 +212,54 @@ export default function ResultsPage() {
   // AI comment generation
   const generateCommentsMut = useMutation({
     mutationFn: ({ examId, force }) => examinationsApi.generateComments(examId, force),
-    onSuccess: (res) => {
-      const d = res.data
-      setCommentMsg(`Generated ${d.generated} comments (${d.skipped} skipped, ${d.errors} errors).`)
-      queryClient.invalidateQueries(['examResults', selectedExamId])
-    },
-    onError: () => setCommentMsg('Failed to generate comments.'),
+    onSuccess: (res) => queryClient.setQueryData(['commentJob', selectedExamId], res),
+    onError: () => setCommentMsg('Failed to start comment generation.'),
   })
+  const cancelJobMut = useMutation({
+    mutationFn: () => examinationsApi.cancelCommentJob(selectedExamId),
+    onSuccess: (res) => queryClient.setQueryData(['commentJob', selectedExamId], res),
+  })
+
+  // The run happens on the server in the background; this reattaches to it after a
+  // page reload and follows it with one small request per second while it is active.
+  const isActive = (status) => status === 'PENDING' || status === 'IN_PROGRESS'
+  const { data: jobRes } = useQuery({
+    queryKey: ['commentJob', selectedExamId],
+    queryFn: () => examinationsApi.getCommentJob(selectedExamId),
+    enabled: !!selectedExamId,
+    refetchInterval: (query) => (isActive(query.state.data?.data?.status) ? 1000 : false),
+  })
+  const job = jobRes?.data
+  const jobActive = isActive(job?.status)
+
+  const prevJob = useRef({ id: null, active: false })
+  useEffect(() => {
+    if (!job) return
+    const justFinished = prevJob.current.id === job.task_id && prevJob.current.active && !jobActive
+    if (justFinished) {
+      queryClient.invalidateQueries({ queryKey: ['examResults', selectedExamId] })
+      if (job.status === 'FAILED') {
+        setCommentMsg(job.error || 'Comment generation failed.')
+      } else {
+        const d = job.result || {}
+        const written = (d.generated || 0) + (d.overall_generated || 0)
+        const templated = (d.fallback_used || 0) + (d.overall_fallback || 0)
+        const parts = []
+        if (written === 0 && d.skipped > 0 && !d.cancelled) {
+          parts.push(`Nothing new to write: all ${d.skipped} subject comments already exist. Use Regenerate All to rewrite them`)
+        } else {
+          parts.push(`${d.cancelled ? 'Stopped. Saved' : 'Wrote'} ${d.generated || 0} subject comments and ${d.overall_generated || 0} overall comments`)
+          if (templated > 0) parts.push(`${templated} of them used the standard template because the AI reply failed or was rejected`)
+          if (d.skipped > 0) parts.push(`${d.skipped} subject comments already existed and were kept`)
+        }
+        if (d.incomplete > 0) parts.push(`${d.incomplete} students skipped: marks incomplete`)
+        setCommentMsg(`${parts.join('. ')}.`)
+      }
+    }
+    prevJob.current = { id: job.task_id, active: jobActive }
+  }, [job?.task_id, job?.status]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const refreshResults = () => queryClient.invalidateQueries({ queryKey: ['examResults', selectedExamId] })
 
   const exams = examsRes?.data?.results || examsRes?.data || []
   const results = resultsRes?.data?.results || resultsRes?.data || []
@@ -139,21 +333,24 @@ export default function ResultsPage() {
             <div className="flex items-center gap-2 flex-shrink-0">
               <button
                 onClick={() => { setCommentMsg(''); generateCommentsMut.mutate({ examId: selectedExamId, force: false }) }}
-                disabled={generateCommentsMut.isPending}
+                disabled={generateCommentsMut.isPending || jobActive}
                 className="px-3 py-1.5 text-xs bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 whitespace-nowrap"
               >
-                {generateCommentsMut.isPending ? 'Generating...' : 'Generate Comments'}
+                {generateCommentsMut.isPending || jobActive ? 'Generating...' : 'Generate Comments'}
               </button>
               <button
                 onClick={() => { setCommentMsg(''); generateCommentsMut.mutate({ examId: selectedExamId, force: true }) }}
-                disabled={generateCommentsMut.isPending}
+                disabled={generateCommentsMut.isPending || jobActive}
                 className="px-3 py-1.5 text-xs text-indigo-700 border border-indigo-300 rounded-lg hover:bg-indigo-100 disabled:opacity-50 whitespace-nowrap"
-                title="Regenerate all comments, including previously generated ones"
+                title="Regenerate all generated comments (comments you edited by hand are kept)"
               >
                 Regenerate All
               </button>
             </div>
           </div>
+          {jobActive && (
+            <CommentProgressBar job={job} onCancel={() => cancelJobMut.mutate()} cancelling={cancelJobMut.isPending} />
+          )}
           {commentMsg && (
             <p className="mt-2 text-xs text-indigo-800 bg-indigo-100 rounded px-2 py-1">{commentMsg}</p>
           )}
@@ -267,7 +464,7 @@ export default function ResultsPage() {
                   </thead>
                   <tbody className="divide-y divide-gray-100">
                     {results.map((r, idx) => {
-                      const hasComments = r.marks?.some(m => m.ai_comment)
+                      const hasComments = !r.is_incomplete
                       const isExpanded = expandedStudent === r.student_id
                       return (
                         <React.Fragment key={idx}>
@@ -316,15 +513,8 @@ export default function ResultsPage() {
                           {isExpanded && (
                             <tr>
                               <td colSpan={8} className="bg-indigo-50/50 px-6 py-3">
-                                <p className="text-[10px] font-medium text-indigo-600 uppercase mb-1.5">AI Comments</p>
-                                <div className="space-y-1.5">
-                                  {r.marks?.filter(m => m.ai_comment).map((m, mi) => (
-                                    <div key={mi} className="flex gap-2">
-                                      <span className="text-xs font-medium text-gray-700 min-w-[80px]">{m.subject_name}:</span>
-                                      <span className="text-xs text-gray-600 italic">{m.ai_comment}</span>
-                                    </div>
-                                  ))}
-                                </div>
+                                <p className="text-[10px] font-medium text-indigo-600 uppercase mb-1.5">Comments</p>
+                                <CommentsPanel examId={selectedExamId} student={r} onChanged={refreshResults} />
                               </td>
                             </tr>
                           )}
@@ -338,7 +528,7 @@ export default function ResultsPage() {
               {/* Mobile */}
               <div className="md:hidden space-y-2">
                 {results.map((r, idx) => {
-                  const hasComments = r.marks?.some(m => m.ai_comment)
+                  const hasComments = !r.is_incomplete
                   const isExpanded = expandedStudent === r.student_id
                   return (
                     <div
@@ -379,16 +569,9 @@ export default function ResultsPage() {
                         {r.grade && <span className="px-1.5 py-0.5 bg-primary-100 text-primary-700 rounded text-xs">{r.grade}</span>}
                       </div>
                       {isExpanded && (
-                        <div className="mt-2 pt-2 border-t border-indigo-100">
-                          <p className="text-[10px] font-medium text-indigo-600 uppercase mb-1">AI Comments</p>
-                          <div className="space-y-1">
-                            {r.marks?.filter(m => m.ai_comment).map((m, mi) => (
-                              <p key={mi} className="text-xs text-gray-600">
-                                <span className="font-medium text-gray-700">{m.subject_name}:</span>{' '}
-                                <span className="italic">{m.ai_comment}</span>
-                              </p>
-                            ))}
-                          </div>
+                        <div className="mt-2 pt-2 border-t border-indigo-100" onClick={e => e.stopPropagation()}>
+                          <p className="text-[10px] font-medium text-indigo-600 uppercase mb-1">Comments</p>
+                          <CommentsPanel examId={selectedExamId} student={r} onChanged={refreshResults} />
                         </div>
                       )}
                     </div>

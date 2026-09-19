@@ -310,7 +310,11 @@ export default function AssessmentsPage() {
         if (form[fieldName] !== '') ratings[label] = Number(form[fieldName])
       }
       const remarkType = field === 'principal_remark' ? 'principal' : 'teacher'
-      const res = await examinationsApi.aiSuggestAssessmentRemark({ ratings, remark_type: remarkType })
+      const res = await examinationsApi.aiSuggestAssessmentRemark({
+        ratings,
+        remark_type: remarkType,
+        teacher_remark: remarkType === 'principal' ? form.teacher_remark || '' : undefined,
+      })
       const { remark, fallback } = res?.data || {}
       if (remark) {
         setField(row.student, field, remark)

@@ -2217,6 +2217,279 @@ class TestResultsAndReportCard:
 # LEVEL G: CROSS-CUTTING TESTS
 # ==================================================================
 
+    # ---- Report card details: attendance, class average, promotion, print details ----
+
+    def _report(self, d, api, env, term_key='term_1'):
+        """Legacy call shape: no exam_ids, so the card is the term's latest exam."""
+        return api.get(
+            f'/api/examinations/report-card/?student_id={env["student_1"].id}'
+            f'&academic_year_id={d["academic_year"].id}&term_id={d[term_key].id}',
+            d['tokens']['admin'], d['SID_A'],
+        )
+
+    def _report_exams(self, d, api, env, exam_ids):
+        return api.get(
+            f'/api/examinations/report-card/?student_id={env["student_1"].id}'
+            f'&academic_year_id={d["academic_year"].id}&exam_ids={",".join(str(i) for i in exam_ids)}',
+            d['tokens']['admin'], d['SID_A'],
+        )
+
+    def _add_final_math(self, d, env, marks):
+        """Give the final exam a Maths paper (100 marks) with the given {student: marks}."""
+        from examinations.models import ExamSubject, StudentMark
+        es, _ = ExamSubject.objects.update_or_create(
+            school=d['school_a'], exam_id=env['exam_final_id'], subject=d['subj_math'],
+            defaults={'total_marks': Decimal('100'), 'passing_marks': Decimal('33')},
+        )
+        for student, value in marks.items():
+            StudentMark.objects.update_or_create(
+                school=d['school_a'], exam_subject=es, student=student,
+                defaults={'marks_obtained': Decimal(str(value)), 'is_absent': False},
+            )
+
+    def test_f10_attendance_detail_excludes_off_days(self, exam_prereqs, api):
+        """F10: attendance breaks down P/A/L/not-marked over working days only."""
+        from datetime import date, timedelta
+        from attendance.models import AttendanceRecord
+        from academic_sessions.models import SchoolCalendarEntry
+        d = exam_prereqs
+        env = self._setup_full_env(d, api)
+        student = env['student_1']
+        for day, st in [
+            (date(2025, 4, 7), 'PRESENT'), (date(2025, 4, 8), 'ABSENT'), (date(2025, 4, 9), 'LEAVE'),
+            (date(2025, 4, 6), 'PRESENT'),   # Sunday - must be ignored
+            (date(2025, 4, 10), 'PRESENT'),  # calendar OFF day - must be ignored
+        ]:
+            AttendanceRecord.objects.create(school=d['school_a'], student=student, date=day, status=st)
+        SchoolCalendarEntry.objects.create(
+            school=d['school_a'], academic_year=d['academic_year'], name='Holiday',
+            entry_kind='OFF_DAY', off_day_type='OTHER',
+            start_date=date(2025, 4, 10), end_date=date(2025, 4, 10),
+        )
+        att = self._report(d, api, env).json()['attendance']
+        start, end = date(2025, 4, 1), date(2025, 9, 30)
+        days = [start + timedelta(days=i) for i in range((end - start).days + 1)]
+        expected_working = len([x for x in days if x.weekday() != 6]) - 1
+        assert (att['present'], att['absent'], att['leave']) == (1, 1, 1)
+        assert att['working_days'] == expected_working
+        assert att['not_marked'] == expected_working - 3
+        # Unmarked working days exist, so no percentage is shown, and the gap is flagged.
+        assert att['percentage'] is None
+        assert att['suspect'] is True
+        assert (att['from'], att['to']) == ('2025-04-01', '2025-09-30')   # the term's own dates
+
+    def test_f11_subject_class_average(self, exam_prereqs, api):
+        """F11: each subject row carries the class average of classmates who sat it."""
+        d = exam_prereqs
+        env = self._setup_full_env(d, api)
+        subjects = self._report(d, api, env).json()['subjects']
+        assert subjects and all('class_avg' in s for s in subjects)
+        math = next(s for s in subjects if s['subject_name'].endswith('Mathematics'))
+        # 85, 45, 30 count; the fourth classmate is absent and must not drag the average down.
+        assert math['class_avg'] == 53.33
+
+    def test_f12_promotion_gated_to_final_exam(self, exam_prereqs, api):
+        """F12: promotion is not applicable on a non-final card and can only be set on a final one."""
+        d = exam_prereqs
+        env = self._setup_full_env(d, api)
+        token, sid = d['tokens']['admin'], d['SID_A']
+        payload = {
+            'student_id': env['student_1'].id, 'academic_year_id': d['academic_year'].id,
+            'promotion_status': 'PROMOTED',
+        }
+        report = self._report(d, api, env).json()
+        assert report['promotion_applicable'] is False
+        assert report['promotion_status'] == 'NOT_APPLICABLE'
+        mid = api.post('/api/examinations/report-card/meta/', {**payload, 'exam_ids': [env['exam_mid_id']]}, token, sid)
+        assert mid.status_code == 400
+
+        ExamType.objects.filter(school=d['school_a'], name=f'{P6}Final Exam').update(is_final=True)
+        final = api.post('/api/examinations/report-card/meta/', {**payload, 'exam_ids': [env['exam_final_id']]}, token, sid)
+        assert final.status_code == 200
+        final_report = self._report(d, api, env, 'term_2').json()
+        assert final_report['promotion_applicable'] is True
+        assert final_report['promotion_status'] == 'PROMOTED'
+
+    def test_f13_print_details_roundtrip_and_teacher_scope(self, exam_prereqs, api):
+        """F13: issue date + captions are saved per main exam; a non-class-teacher is refused."""
+        d = exam_prereqs
+        env = self._setup_full_env(d, api)
+        payload = {
+            'student_id': env['student_1'].id, 'academic_year_id': d['academic_year'].id,
+            'exam_ids': [env['exam_mid_id']], 'issue_date': '2026-04-01',
+            'signature_labels': {'principal': 'Head Teacher'},
+        }
+        resp = api.post('/api/examinations/report-card/meta/', payload, d['tokens']['admin'], d['SID_A'])
+        assert resp.status_code == 200, resp.content[:200]
+        report = self._report(d, api, env).json()
+        assert report['issue_date'] == '2026-04-01'
+        assert report['signature_labels'] == {'principal': 'Head Teacher'}
+        # Per exam: the final exam's card has none of it.
+        other = self._report(d, api, env, 'term_2').json()
+        assert other['issue_date'] is None
+        resp = api.post('/api/examinations/report-card/meta/', payload, d['tokens']['teacher'], d['SID_A'])
+        assert resp.status_code == 403
+        bad = api.post('/api/examinations/report-card/meta/', {**payload, 'issue_date': 'nope'},
+                       d['tokens']['admin'], d['SID_A'])
+        assert bad.status_code == 400
+
+    def test_f14_bulk_meta_class_wide(self, exam_prereqs, api):
+        """F14: one call sets promotion per student and an issue date/captions for the class;
+        overwrite=False leaves existing values alone; a teacher who isn't class teacher is refused."""
+        d = exam_prereqs
+        env = self._setup_full_env(d, api)
+        token, sid = d['tokens']['admin'], d['SID_A']
+        ExamType.objects.filter(school=d['school_a'], name=f'{P6}Final Exam').update(is_final=True)
+        s1, s2 = d['class_1_students'][0], d['class_1_students'][1]
+        url = '/api/examinations/report-card/meta/bulk/'
+        exam_ids = [env['exam_mid_id'], env['exam_final_id']]
+        payload = {
+            'academic_year_id': d['academic_year'].id, 'exam_ids': exam_ids,
+            'student_ids': [s1.id, s2.id],
+            'promotions': {str(s1.id): 'PROMOTED', str(s2.id): 'NOT_PROMOTED'},
+            'issue_date': '2026-04-01', 'signature_labels': {'principal': 'Head Teacher'},
+        }
+        resp = api.post(url, payload, token, sid)
+        assert resp.status_code == 200, resp.content[:200]
+
+        query = f'{url}?academic_year_id={d["academic_year"].id}&exam_ids={env["exam_mid_id"]},{env["exam_final_id"]}'
+        roster = api.get(f'{query}&student_ids={s1.id},{s2.id}', token, sid).json()
+        assert roster['main_exam']['id'] == env['exam_final_id']
+        assert roster['students'][str(s1.id)]['promotion_status'] == 'PROMOTED'
+        assert roster['students'][str(s2.id)]['promotion_status'] == 'NOT_PROMOTED'
+        assert roster['students'][str(s1.id)]['promotion_applicable'] is True
+        assert roster['students'][str(s2.id)]['issue_date'] == '2026-04-01'
+
+        # overwrite=False keeps what is already there
+        again = api.post(url, {**payload, 'overwrite': False, 'issue_date': '2026-05-05',
+                               'promotions': {str(s1.id): 'NOT_PROMOTED'}}, token, sid)
+        assert again.status_code == 200
+        roster = api.get(f'{query}&student_ids={s1.id}', token, sid).json()
+        assert roster['students'][str(s1.id)]['promotion_status'] == 'PROMOTED'
+        assert roster['students'][str(s1.id)]['issue_date'] == '2026-04-01'
+
+        assert api.post(url, payload, d['tokens']['teacher'], sid).status_code == 403
+
+    def test_f15_bulk_meta_rejects_promotion_without_final_exam(self, exam_prereqs, api):
+        """F15: bulk promotion is refused when the main exam is not a final one."""
+        d = exam_prereqs
+        env = self._setup_full_env(d, api)
+        s1 = d['class_1_students'][0]
+        resp = api.post('/api/examinations/report-card/meta/bulk/', {
+            'academic_year_id': d['academic_year'].id, 'exam_ids': [env['exam_mid_id']],
+            'student_ids': [s1.id], 'promotions': {str(s1.id): 'PROMOTED'},
+        }, d['tokens']['admin'], d['SID_A'])
+        assert resp.status_code == 400
+
+    def test_f16_multi_exam_card_is_main_exam_only_when_weighting_off(self, exam_prereqs, api):
+        """F16: with several exams the LAST one drives marks, position and class average;
+        earlier exams are only history columns."""
+        d = exam_prereqs
+        env = self._setup_full_env(d, api)
+        s1, s2, s3, s4 = d['class_1_students'][:4]
+        self._add_final_math(d, env, {s1: 60, s2: 90, s3: 10, s4: 50})
+
+        data = self._report_exams(d, api, env, [env['exam_mid_id'], env['exam_final_id']]).json()
+        assert data['main_exam']['id'] == env['exam_final_id']
+        assert data['exam_display'] == data['main_exam']['name']
+        assert len(data['earlier_exam_names']) == 1
+        assert data['weighted'] is False
+        assert [e['is_main'] for e in data['exams']] == [False, True]
+        math = next(s for s in data['subjects'] if s['subject_name'].endswith('Mathematics'))
+        assert math['marks_obtained'] == 60.0            # final exam, not 85 (mid) and not 145 (sum)
+        assert math['total_marks'] == 100.0
+        assert math['class_avg'] == 52.5                 # mean of 60, 90, 10, 50
+        assert data['class_avg_unit'] == 'marks'
+        # The final exam also has an English paper the seed marked for s1 (95), so s1's total there
+        # is 155/200 and leads the class on the final exam alone.
+        assert data['summary']['obtained_marks'] == 155.0
+        assert data['summary']['rank'] == 1
+        assert data['summary']['calculation_mode'] == 'main_only'
+        # The earlier exam's mark is still there as history.
+        mid = next(e for e in data['exams'] if not e['is_main'])
+        assert any(m['marks_obtained'] == 85.0 for m in mid['marks'].values())
+
+        # No exam_ids = the latest exam only, never a combination.
+        latest = self._report(d, api, env, 'term_2').json()
+        assert latest['main_exam']['id'] == env['exam_final_id']
+        assert len(latest['exams']) == 1
+
+    def test_f17_weighted_result_blends_exams_by_type_weight(self, exam_prereqs, api):
+        """F17: with weighting ON the result is the exam-type-weighted blend (Mid 30, Final 70)."""
+        d = exam_prereqs
+        env = self._setup_full_env(d, api)
+        s1, s2, s3, s4 = d['class_1_students'][:4]
+        self._add_final_math(d, env, {s1: 60, s2: 90, s3: 10, s4: 50})
+        school = d['school_a']
+        school.exam_config = {**(school.exam_config or {}), 'weighted_average_enabled': True}
+        school.save(update_fields=['exam_config'])
+
+        data = self._report_exams(d, api, env, [env['exam_mid_id'], env['exam_final_id']]).json()
+        assert data['weighted'] is True
+        assert data['summary']['calculation_mode'] == 'weighted'
+        math = next(s for s in data['subjects'] if s['subject_name'].endswith('Mathematics'))
+        # s1: mid 85 x 30% + final 60 x 70% = 67.5, on the final exam's 60/100.
+        assert math['percentage'] == 67.5
+        assert math['marks_obtained'] == 60.0
+        # Classmates blend to 67.5, 63 (absent mid counts 0), 20.5, 44 -> mean 48.75, in percent.
+        assert math['class_avg'] == 48.75
+        assert data['class_avg_unit'] == 'percent'
+        assert [round(e['weight']) for e in data['exams']] == [30, 70]
+
+        # A single exam is never blended, even with weighting on.
+        single = self._report_exams(d, api, env, [env['exam_final_id']]).json()
+        assert single['weighted'] is False
+        assert single['summary']['percentage'] == 77.5   # the final exam's own 155/200
+
+    def test_f18_exam_selection_is_validated(self, exam_prereqs, api):
+        """F18: more than 4 exams, or an exam that is not this student's, is refused."""
+        d = exam_prereqs
+        env = self._setup_full_env(d, api)
+        assert self._report_exams(d, api, env, [1, 2, 3, 4, 5]).status_code == 400
+        assert self._report_exams(d, api, env, [env['exam_mid_id'], 999999]).status_code == 400
+
+
+    def test_f19_attendance_window_follows_the_ticked_exams(self, exam_prereqs, api):
+        """F19: several exams count attendance from the first term's start to the last term's end."""
+        d = exam_prereqs
+        env = self._setup_full_env(d, api)
+        att = self._report_exams(d, api, env, [env['exam_mid_id'], env['exam_final_id']]).json()['attendance']
+        assert (att['from'], att['to']) == ('2025-04-01', '2026-03-31')
+
+    def test_f20_percentage_only_when_every_working_day_is_recorded(self, exam_prereqs, api):
+        """F20: with nothing unmarked the percentage is present / working days and is shown."""
+        from datetime import date, timedelta
+        from attendance.models import AttendanceRecord
+        d = exam_prereqs
+        env = self._setup_full_env(d, api)
+        start, end = date(2025, 4, 1), date(2025, 9, 30)
+        days = [start + timedelta(days=i) for i in range((end - start).days + 1) if (start + timedelta(days=i)).weekday() != 6]
+        AttendanceRecord.objects.bulk_create([
+            AttendanceRecord(school=d['school_a'], student=env['student_1'], date=day,
+                             status='ABSENT' if i % 10 == 0 else 'PRESENT')
+            for i, day in enumerate(days)
+        ])
+        att = self._report(d, api, env).json()['attendance']
+        assert att['not_marked'] == 0 and att['suspect'] is False
+        assert att['working_days'] == len(days)
+        assert att['percentage'] == round(att['present'] / len(days) * 100, 2)
+
+    def test_f21_attendance_window_rules(self):
+        """F21: a term exam uses its term; a term-less (monthly) exam uses its calendar month."""
+        from datetime import date
+        from types import SimpleNamespace as NS
+        from examinations.views import _report_attendance_window
+        year = NS(start_date=date(2026, 9, 14), end_date=date(2027, 9, 22))
+        term = lambda a, b: NS(start_date=a, end_date=b)
+        first = NS(term=term(date(2026, 9, 14), date(2026, 9, 22)), start_date=date(2026, 9, 15), end_date=date(2026, 9, 20))
+        third = NS(term=term(date(2027, 3, 8), date(2027, 3, 16)), start_date=date(2027, 3, 9), end_date=date(2027, 3, 12))
+        monthly = NS(term=None, start_date=date(2026, 11, 10), end_date=date(2026, 11, 12))
+        assert _report_attendance_window([first], year) == (date(2026, 9, 14), date(2026, 9, 22))
+        assert _report_attendance_window([first, third], year) == (date(2026, 9, 14), date(2027, 3, 16))
+        assert _report_attendance_window([monthly], year) == (date(2026, 11, 1), date(2026, 11, 30))
+        assert _report_attendance_window([], year) == (year.start_date, year.end_date)
+
+
 @pytest.mark.django_db
 @pytest.mark.phase6
 class TestCrossCutting:

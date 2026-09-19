@@ -86,10 +86,20 @@ export default function SettingsPage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['currentSchool'] }),
   })
 
+  const [commentDraft, setCommentDraft] = useState(null)
   const examConfigMutation = useMutation({
     mutationFn: (data) => schoolsApi.updateExamConfig(data),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['currentSchool'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['currentSchool'] })
+      setCommentDraft(null)
+    },
   })
+  const commentSettings = {
+    comment_tone: commentDraft?.comment_tone ?? school?.exam_config?.comment_tone ?? 'warm',
+    comment_length: commentDraft?.comment_length ?? school?.exam_config?.comment_length ?? 'standard',
+    comment_phrases: commentDraft?.comment_phrases ?? school?.exam_config?.comment_phrases ?? '',
+  }
+  const updateCommentSetting = (key, value) => setCommentDraft(prev => ({ ...(prev || {}), [key]: value }))
 
   const [riskThresholdInput, setRiskThresholdInput] = useState(null)
   const attendanceConfigMutation = useMutation({
@@ -412,6 +422,57 @@ export default function SettingsPage() {
                     <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
                       school?.exam_config?.weighted_average_enabled ? 'translate-x-6' : 'translate-x-1'
                     }`} />
+                  </button>
+                </div>
+                <div className="mt-5 pt-4 border-t border-gray-100">
+                  <p className="text-sm font-medium text-gray-700">Report Card Comments (AI)</p>
+                  <p className="text-xs text-gray-500 mt-0.5 mb-3">
+                    How the automatic report card comments are written. Comments already generated are not changed; use Regenerate on the Results page.
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-500 mb-1">Tone</label>
+                      <select
+                        value={commentSettings.comment_tone}
+                        onChange={e => updateCommentSetting('comment_tone', e.target.value)}
+                        className="input w-full text-sm"
+                      >
+                        <option value="warm">Warm and encouraging</option>
+                        <option value="formal">Formal and professional</option>
+                        <option value="brief">Brief and factual</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-500 mb-1">Length (per subject)</label>
+                      <select
+                        value={commentSettings.comment_length}
+                        onChange={e => updateCommentSetting('comment_length', e.target.value)}
+                        className="input w-full text-sm"
+                      >
+                        <option value="short">Short (1 sentence)</option>
+                        <option value="standard">Standard (2 sentences)</option>
+                        <option value="detailed">Detailed (3 sentences)</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div className="mt-3">
+                    <label className="block text-xs font-medium text-gray-500 mb-1">School guidance (optional)</label>
+                    <textarea
+                      value={commentSettings.comment_phrases}
+                      onChange={e => updateCommentSetting('comment_phrases', e.target.value)}
+                      rows={2}
+                      maxLength={300}
+                      placeholder="e.g. Address parents as guardians. Use British spelling. End with a wish for the next term."
+                      className="input w-full text-sm"
+                    />
+                    <p className="text-[11px] text-gray-400 mt-0.5">{commentSettings.comment_phrases.length}/300 characters. The AI follows this as long as it does not break its accuracy rules.</p>
+                  </div>
+                  <button
+                    onClick={() => examConfigMutation.mutate(commentSettings)}
+                    disabled={!commentDraft || examConfigMutation.isPending}
+                    className="btn btn-primary text-sm mt-3 disabled:opacity-50"
+                  >
+                    {examConfigMutation.isPending ? 'Saving...' : 'Save Comment Settings'}
                   </button>
                 </div>
                 {examConfigMutation.isError && (

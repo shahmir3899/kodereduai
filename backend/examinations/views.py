@@ -8,6 +8,7 @@ from django.db import IntegrityError, transaction
 from django.db.models import Count, IntegerField, OuterRef, Q, Subquery
 from django.db.models.functions import Coalesce
 from django.http import HttpResponse
+from django.utils import timezone
 from pgvector.django import CosineDistance
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
@@ -27,7 +28,8 @@ from lms.models import Tag, QuestionTag
 from .models import (
     ExamType, ExamGroup, Exam, ExamSubject, StudentMark, GradeScale,
     Question, ExamPaper, PaperQuestion, StudentResponse, PaperUpload, PaperFeedback,
-    StudentTermAssessment, Worksheet, WorksheetItem, WorksheetUpload,
+    StudentTermAssessment, Worksheet, WorksheetItem, WorksheetUpload, StudentExamComment,
+    ReportCardPromotion, ReportCardOverride,
 )
 from .serializers import (
     ExamTypeSerializer, ExamTypeCreateSerializer,
@@ -50,6 +52,7 @@ from .serializers import (
     WorksheetUploadSerializer, WorksheetUploadCreateSerializer,
 )
 from .tasks import recompute_question_stats
+from .term_periods import attendance_summaries, report_attendance_window as _report_attendance_window
 
 logger = logging.getLogger(__name__)
 
@@ -1169,7 +1172,9 @@ class ExamViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet)
         return ExamSerializer
 
     def get_permissions(self):
-        if self.action in ('bulk_test_preview', 'bulk_test_apply'):
+        # edit/regenerate-comment enforce class/subject scope themselves (_comment_target),
+        # so teachers must get past the admin-only default here.
+        if self.action in ('bulk_test_preview', 'bulk_test_apply', 'edit_comment', 'regenerate_comment'):
             return [IsAuthenticated(), HasSchoolAccess()]
         return super().get_permissions()
 
@@ -1432,20 +1437,119 @@ class ExamViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet)
         if not school_id:
             return Response({'detail': 'No school selected.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        # If force=true, clear existing AI comments first
+        # If force=true, clear existing generated comments first -- but never ones a
+        # person has edited by hand.
         if force:
             StudentMark.objects.filter(
                 exam_subject__exam=exam,
                 school_id=school_id,
-            ).update(ai_comment='', ai_comment_generated_at=None)
+            ).exclude(ai_comment_source='EDITED').update(
+                ai_comment='', ai_comment_generated_at=None, ai_comment_source=None, ai_model=None,
+            )
+            StudentExamComment.objects.filter(
+                exam=exam, school_id=school_id,
+            ).exclude(source='EDITED').delete()
 
+        from . import comment_jobs
+        task, started = comment_jobs.start_job(exam, school_id, request.user)
+        return Response(
+            {**comment_jobs.job_payload(task), 'started': started},
+            status=status.HTTP_202_ACCEPTED,
+        )
+
+    @action(detail=True, methods=['get'], url_path='comment-job')
+    def comment_job(self, request, pk=None):
+        """Progress of the latest comment-generation run for this exam."""
+        from . import comment_jobs
+        exam = self.get_object()
+        task = comment_jobs.latest_job(exam.id, _resolve_school_id(request))
+        return Response(comment_jobs.job_payload(task))
+
+    @action(detail=True, methods=['post'], url_path='cancel-comment-job')
+    def cancel_comment_job(self, request, pk=None):
+        """Ask the running generation to stop after the students already in flight."""
+        from . import comment_jobs
+        exam = self.get_object()
+        task = comment_jobs.request_cancel(exam.id, _resolve_school_id(request))
+        return Response(comment_jobs.job_payload(task))
+
+    def _comment_target(self, request, exam):
+        """Resolve + authorise the comment being edited/regenerated.
+
+        subject_id omitted/null = the student's overall comment (class-teacher or
+        admin only); otherwise that subject's comment (class teacher or the assigned
+        subject teacher, same scope as marks entry). Returns (school_id, student_id,
+        subject_id, mark_or_None) or raises PermissionDenied / ValidationError.
+        """
+        school_id = _resolve_school_id(request)
+        student_id = request.data.get('student_id')
+        subject_id = request.data.get('subject_id') or None
+        if not student_id:
+            raise ValidationError({'detail': 'student_id is required.'})
+        student_id = int(student_id)
+        if subject_id is None:
+            role = get_effective_role(request)
+            allowed = role in ADMIN_ROLES or role == 'MANAGER' or (
+                role == 'TEACHER'
+                and _is_teacher_class_teacher_for_class(request, exam.class_obj_id, school_id=school_id)
+            )
+            if not allowed:
+                raise PermissionDenied('Only admins or the class teacher can change the overall comment.')
+            return school_id, student_id, None, None
+        subject_id = int(subject_id)
+        if not _can_manage_exam_scope(
+            request, class_id=exam.class_obj_id, subject_id=subject_id, school_id=school_id,
+        ):
+            raise PermissionDenied('You can only change comments for your own class and subject.')
+        mark = StudentMark.objects.filter(
+            exam_subject__exam=exam, exam_subject__subject_id=subject_id,
+            student_id=student_id, school_id=school_id,
+        ).first()
+        if not mark:
+            raise ValidationError({'detail': 'No marks found for that student and subject.'})
+        return school_id, student_id, subject_id, mark
+
+    @action(detail=True, methods=['post'], url_path='edit-comment')
+    def edit_comment(self, request, pk=None):
+        """Save a hand-edited subject or overall comment (source becomes EDITED, so
+        regeneration never overwrites it)."""
+        exam = self.get_object()
+        school_id, student_id, subject_id, mark = self._comment_target(request, exam)
+        text = (request.data.get('comment') or '').strip()
+        if len(text) > 800:
+            return Response({'detail': 'Comment is too long (800 characters max).'}, status=400)
+        now = timezone.now()
+        if subject_id is None:
+            StudentExamComment.objects.update_or_create(
+                exam=exam, student_id=student_id, school_id=school_id,
+                defaults={'comment': text, 'source': 'EDITED', 'generated_at': now, 'ai_model': None},
+            )
+        else:
+            mark.ai_comment = text
+            mark.ai_comment_source = 'EDITED' if text else None
+            mark.ai_comment_generated_at = now if text else None
+            mark.ai_model = None
+            mark.save(update_fields=['ai_comment', 'ai_comment_source', 'ai_comment_generated_at', 'ai_model'])
+        return Response({'saved': True, 'source': 'EDITED' if text else None})
+
+    @action(detail=True, methods=['post'], url_path='regenerate-comment')
+    def regenerate_comment(self, request, pk=None):
+        """Regenerate ONE comment (explicit request, so it may replace a hand edit)."""
+        exam = self.get_object()
+        school_id, student_id, subject_id, mark = self._comment_target(request, exam)
+        if subject_id is None:
+            StudentExamComment.objects.filter(exam=exam, student_id=student_id, school_id=school_id).delete()
+        else:
+            mark.ai_comment = ''
+            mark.ai_comment_source = None
+            mark.ai_comment_generated_at = None
+            mark.ai_model = None
+            mark.save(update_fields=['ai_comment', 'ai_comment_source', 'ai_comment_generated_at', 'ai_model'])
         from schools.models import School
-        school = School.objects.get(id=school_id)
-
         from .ai_comments_service import ReportCardCommentGenerator
-        generator = ReportCardCommentGenerator(school)
-        result = generator.generate_for_exam(exam.id)
-
+        result = ReportCardCommentGenerator(School.objects.get(id=school_id)).generate_for_exam(
+            exam.id, only_student_id=student_id,
+        )
         return Response(result)
 
     @action(detail=True, methods=['post'], url_path='populate-subjects')
@@ -1504,6 +1608,9 @@ class ExamViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet)
         marks_lookup = {
             (m.student_id, m.exam_subject_id): m for m in all_marks
         }
+        overall_comments = {
+            c.student_id: c for c in StudentExamComment.objects.filter(exam=exam, school_id=school_id)
+        }
 
         results = []
         for student in students:
@@ -1529,6 +1636,9 @@ class ExamViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet)
                     'is_absent': is_absent,
                     'is_pass': obtained is not None and obtained >= es.passing_marks,
                     'ai_comment': mark.ai_comment if mark else '',
+                    'comment_source': (mark.ai_comment_source or None) if mark else None,
+                    'comment_at': mark.ai_comment_generated_at.isoformat() if mark and mark.ai_comment_generated_at else None,
+                    'comment_model': (mark.ai_model or None) if mark else None,
                 })
 
                 if obtained is not None:
@@ -1554,6 +1664,13 @@ class ExamViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet)
                 'grade': grade_label,
                 'is_pass': all_pass,
                 'is_incomplete': is_incomplete,
+                'overall_comment': overall_comments[student.id].comment if student.id in overall_comments else '',
+                'overall_comment_source': overall_comments[student.id].source if student.id in overall_comments else None,
+                'overall_comment_model': overall_comments[student.id].ai_model if student.id in overall_comments else None,
+                'overall_comment_at': (
+                    overall_comments[student.id].generated_at.isoformat()
+                    if student.id in overall_comments and overall_comments[student.id].generated_at else None
+                ),
             })
 
         # Dense ranking: equal percentages share a rank and the next distinct score
@@ -2431,13 +2548,57 @@ class StudentTermAssessmentAIRemarkView(ModuleAccessMixin, APIView):
 
         from .ai_comments_service import generate_term_assessment_remark
 
-        remark, fallback = generate_term_assessment_remark(ratings, remark_type=remark_type)
+        from schools.models import School
+        remark, fallback = generate_term_assessment_remark(
+            ratings, remark_type=remark_type,
+            school=School.objects.filter(id=school_id).first(),
+            other_remark=request.data.get('teacher_remark') or '',
+        )
         if remark is None:
             return Response(
                 {'error': 'Rate at least one skill or behaviour before requesting an AI suggestion.'},
                 status=400,
             )
         return Response({'remark': remark, 'fallback': fallback})
+
+
+REPORT_CARD_MAX_EXAMS = 4
+
+
+def _exam_sort_key(exam):
+    """Oldest -> newest; the last exam is a report card's main exam."""
+    return (exam.end_date or exam.start_date or date.min, exam.start_date or date.min, exam.id)
+
+
+def _parse_exam_ids(value):
+    if value in (None, ''):
+        return []
+    if isinstance(value, str):
+        value = [x for x in value.split(',') if x.strip()]
+    return list(value)
+
+
+def _report_exams_for(school_id, class_obj_id, year_id, exam_ids, published_only=False):
+    """The exams on one report card, oldest first, validated against the student's class
+    and year. The last one is the main exam. Raises ValidationError on anything invalid."""
+    try:
+        ids = sorted({int(x) for x in exam_ids})
+    except (TypeError, ValueError):
+        raise ValidationError({'exam_ids': 'Must be a list of exam ids.'})
+    if not ids:
+        raise ValidationError({'exam_ids': 'Pick at least one exam.'})
+    if len(ids) > REPORT_CARD_MAX_EXAMS:
+        raise ValidationError({'exam_ids': f'A report card can combine at most {REPORT_CARD_MAX_EXAMS} exams.'})
+    qs = Exam.objects.filter(
+        school_id=school_id, class_obj_id=class_obj_id, academic_year_id=year_id,
+        is_active=True, pk__in=ids,
+    ).select_related('exam_type', 'academic_year', 'term')
+    if published_only:
+        qs = qs.filter(status=Exam.Status.PUBLISHED)
+    found = sorted(qs, key=_exam_sort_key)
+    if len(found) != len(ids):
+        raise ValidationError({'exam_ids': 'One or more exams are not available for this student.'})
+    return found
 
 
 class ReportCardView(ModuleAccessMixin, APIView):
@@ -2469,45 +2630,92 @@ class ReportCardView(ModuleAccessMixin, APIView):
     ]
 
     @staticmethod
-    def _compute_overall_stats(student_id, exams, es_by_exam, marks_by_key, use_weighted):
-        """Same weighted/simple aggregation as the main report, but keyed so it can be
-        run once per classmate for ranking as well as for the report's own student.
-        Returns {'obtained', 'possible', 'percentage'}, or None if the student has no
-        marks recorded at all for these exams (they're excluded from ranking, not
-        counted as last)."""
-        if use_weighted and exams.count() > 1:
-            exam_type_data = {}
-            for exam in exams:
-                et_id = exam.exam_type_id
-                if et_id not in exam_type_data:
-                    exam_type_data[et_id] = {'weight': exam.exam_type.weight, 'obtained': Decimal('0'), 'possible': Decimal('0')}
-                for es_item in es_by_exam.get(exam.id, []):
-                    mark = marks_by_key.get((student_id, es_item.id))
-                    if mark and mark.marks_obtained is not None and not mark.is_absent:
-                        exam_type_data[et_id]['obtained'] += mark.marks_obtained
-                    exam_type_data[et_id]['possible'] += es_item.total_marks
-            total_weight = sum(d['weight'] for d in exam_type_data.values() if d['possible'] > 0)
-            if total_weight <= 0:
+    def _compute_overall_stats(student_id, exams, es_by_exam, marks_by_key, weighted):
+        """A student's result on this card, keyed so it can run once per classmate for
+        ranking as well as for the report's own student. `exams` is oldest -> newest and
+        the last one is the main exam.
+
+        Not weighted: the main exam alone. Weighted: earlier exams count too, each by its
+        exam-type weight (normalised over the exams the student actually has marks for).
+        obtained/possible are always the main exam's; only percentage blends."""
+        main = exams[-1]
+
+        def exam_totals(exam):
+            obtained, possible, has_marks = Decimal('0'), Decimal('0'), False
+            for es_item in es_by_exam.get(exam.id, []):
+                mark = marks_by_key.get((student_id, es_item.id))
+                if mark is not None:
+                    has_marks = True
+                if mark and mark.marks_obtained is not None and not mark.is_absent:
+                    obtained += mark.marks_obtained
+                possible += es_item.total_marks
+            return obtained, possible, has_marks
+
+        main_obtained, main_possible, _ = exam_totals(main)
+        if not weighted:
+            if main_possible <= 0:
                 return None
-            weighted_sum = Decimal('0')
-            for data in exam_type_data.values():
-                if data['possible'] > 0:
-                    weighted_sum += (data['obtained'] / data['possible'] * 100) * (data['weight'] / total_weight)
-            obtained = sum((d['obtained'] for d in exam_type_data.values()), Decimal('0'))
-            possible = sum((d['possible'] for d in exam_type_data.values()), Decimal('0'))
-            return {'obtained': float(obtained), 'possible': float(possible), 'percentage': float(weighted_sum)}
-        else:
-            obtained = Decimal('0')
-            possible = Decimal('0')
-            for exam in exams:
-                for es_item in es_by_exam.get(exam.id, []):
+            return {
+                'obtained': float(main_obtained), 'possible': float(main_possible),
+                'percentage': float(main_obtained / main_possible * 100),
+            }
+
+        weighted_sum, total_weight = Decimal('0'), Decimal('0')
+        for exam in exams:
+            obtained, possible, has_marks = exam_totals(exam)
+            if not has_marks or possible <= 0:
+                continue
+            weight = exam.exam_type.weight
+            weighted_sum += (obtained / possible * 100) * weight
+            total_weight += weight
+        if total_weight <= 0:
+            return None
+        return {
+            'obtained': float(main_obtained), 'possible': float(main_possible),
+            'percentage': float(weighted_sum / total_weight),
+        }
+
+    @staticmethod
+    def _subject_result_pct(student_id, subj_id, exams, es_by_exam, marks_by_key, weighted):
+        """One subject's result %: the main exam's, or (weighted) the exam-type-weighted
+        blend across the exams where the student has a mark row for that subject."""
+
+        def pct_for(exam):
+            for es_item in es_by_exam.get(exam.id, []):
+                if es_item.subject_id == subj_id:
                     mark = marks_by_key.get((student_id, es_item.id))
-                    if mark and mark.marks_obtained is not None and not mark.is_absent:
-                        obtained += mark.marks_obtained
-                    possible += es_item.total_marks
-            if possible <= 0:
-                return None
-            return {'obtained': float(obtained), 'possible': float(possible), 'percentage': float(obtained / possible * 100)}
+                    got = mark.marks_obtained if mark and mark.marks_obtained is not None and not mark.is_absent else Decimal('0')
+                    return mark is not None, (got / es_item.total_marks * 100) if es_item.total_marks > 0 else None
+            return False, None
+
+        if not weighted:
+            _, pct = pct_for(exams[-1])
+            return float(pct) if pct is not None else None
+        weighted_sum, total_weight = Decimal('0'), Decimal('0')
+        for exam in exams:
+            has_mark, pct = pct_for(exam)
+            if not has_mark or pct is None:
+                continue
+            weighted_sum += pct * exam.exam_type.weight
+            total_weight += exam.exam_type.weight
+        return float(weighted_sum / total_weight) if total_weight > 0 else None
+
+    @staticmethod
+    def _print_details(student, enrollment, main_exam):
+        """Promotion status + hand-set print details for this report. Both follow the
+        main exam: promotion only applies when it is a final exam type (otherwise it is
+        always NOT_APPLICABLE and the card hides it)."""
+        applicable = bool(main_exam and main_exam.exam_type.is_final)
+        promotion = ReportCardPromotion.objects.filter(
+            student=student, academic_year_id=enrollment.academic_year_id,
+        ).first() if applicable else None
+        override = ReportCardOverride.objects.filter(student=student, exam=main_exam).first() if main_exam else None
+        return {
+            'promotion_applicable': applicable,
+            'promotion_status': promotion.status if promotion else ReportCardPromotion.Status.NOT_APPLICABLE,
+            'issue_date': override.issue_date.isoformat() if override and override.issue_date else None,
+            'signature_labels': override.signature_labels if override else {},
+        }
 
     def get(self, request):
         student_id = request.query_params.get('student_id')
@@ -2550,13 +2758,10 @@ class ReportCardView(ModuleAccessMixin, APIView):
                 status=404,
             )
 
-        # Get exams for the class captured in the selected enrollment/session.
-        exam_filter = {
-            'school_id': school_id,
-            'class_obj': enrollment.class_obj,
-            'is_active': True,
-            'academic_year_id': enrollment.academic_year_id,
-        }
+        # Exams on this card, oldest first. The last is the main exam: it alone drives
+        # totals, position and everything else printed as a result; earlier ones are shown
+        # as history (unless weighting is on, which blends them). Without exam_ids the card
+        # is the latest exam only (of term_id when given) - never a combination.
         # Staff can preview marks before results are announced (flagged is_draft below);
         # any other role only ever sees announced results.
         from users.models import User as _User
@@ -2564,14 +2769,23 @@ class ReportCardView(ModuleAccessMixin, APIView):
             _User.Role.SUPER_ADMIN, _User.Role.SCHOOL_ADMIN, _User.Role.PRINCIPAL,
             _User.Role.MANAGER, _User.Role.TEACHER, _User.Role.STAFF,
         }
-        if request.user.role not in staff_roles:
-            exam_filter['status'] = Exam.Status.PUBLISHED
-        if term_id:
-            exam_filter['term_id'] = term_id
-
-        exams = Exam.objects.filter(**exam_filter).select_related(
-            'exam_type', 'academic_year', 'term',
-        ).order_by('start_date')
+        published_only = request.user.role not in staff_roles
+        raw_exam_ids = _parse_exam_ids(request.query_params.get('exam_ids'))
+        if raw_exam_ids:
+            exams = _report_exams_for(
+                school_id, enrollment.class_obj_id, enrollment.academic_year_id, raw_exam_ids, published_only,
+            )
+        else:
+            fallback = Exam.objects.filter(
+                school_id=school_id, class_obj=enrollment.class_obj, is_active=True,
+                academic_year_id=enrollment.academic_year_id,
+            ).select_related('exam_type', 'academic_year', 'term')
+            if published_only:
+                fallback = fallback.filter(status=Exam.Status.PUBLISHED)
+            if term_id:
+                fallback = fallback.filter(term_id=term_id)
+            exams = sorted(fallback, key=_exam_sort_key)[-1:]
+        main_exam = exams[-1] if exams else None
 
         grade_scales = list(GradeScale.objects.filter(
             school_id=school_id, is_active=True,
@@ -2617,6 +2831,9 @@ class ReportCardView(ModuleAccessMixin, APIView):
                 'exam_name': exam.name,
                 'exam_type': exam.exam_type.name,
                 'term': exam.term.name if exam.term else None,
+                'weight': float(exam.exam_type.weight),
+                'is_main': exam.id == main_exam.id,
+                'end_date': (exam.end_date or exam.start_date).isoformat() if (exam.end_date or exam.start_date) else None,
                 'marks': exam_marks,
             })
 
@@ -2624,49 +2841,17 @@ class ReportCardView(ModuleAccessMixin, APIView):
         from schools.models import School
         school = School.objects.get(pk=school_id)
         use_weighted = (school.exam_config or {}).get('weighted_average_enabled', False)
+        # A single exam is always just that exam; only a multi-exam card can blend.
+        weighted_calc = use_weighted and len(exams) > 1
 
-        # Calculate overall totals
-        grand_total_obtained = Decimal('0')
-        grand_total_possible = Decimal('0')
+        class_students = list(Student.objects.filter(school_id=school_id, class_obj=enrollment.class_obj, is_active=True))
+        class_marks = StudentMark.objects.filter(exam_subject__in=all_exam_subjects, school_id=school_id)
+        marks_by_key = {(m.student_id, m.exam_subject_id): m for m in class_marks}
 
-        if use_weighted and exams.count() > 1:
-            # Weighted: group by exam_type, compute per-type percentage, apply weights
-            exam_type_data = {}
-            for exam in exams:
-                et_id = exam.exam_type_id
-                if et_id not in exam_type_data:
-                    exam_type_data[et_id] = {
-                        'weight': exam.exam_type.weight,
-                        'obtained': Decimal('0'),
-                        'possible': Decimal('0'),
-                    }
-                for es_item in es_by_exam.get(exam.id, []):
-                    mark = marks_lookup.get(es_item.id)
-                    if mark and mark.marks_obtained is not None and not mark.is_absent:
-                        exam_type_data[et_id]['obtained'] += mark.marks_obtained
-                    exam_type_data[et_id]['possible'] += es_item.total_marks
-
-            total_weight = sum(d['weight'] for d in exam_type_data.values() if d['possible'] > 0)
-            if total_weight > 0:
-                weighted_sum = Decimal('0')
-                for data in exam_type_data.values():
-                    if data['possible'] > 0:
-                        type_pct = data['obtained'] / data['possible'] * 100
-                        weighted_sum += type_pct * (data['weight'] / total_weight)
-                overall_pct = float(weighted_sum)
-            else:
-                overall_pct = 0
-
-            grand_total_obtained = sum((d['obtained'] for d in exam_type_data.values()), Decimal('0'))
-            grand_total_possible = sum((d['possible'] for d in exam_type_data.values()), Decimal('0'))
-        else:
-            # Simple average
-            for es_item in all_exam_subjects:
-                mark = marks_lookup.get(es_item.id)
-                if mark and mark.marks_obtained is not None and not mark.is_absent:
-                    grand_total_obtained += mark.marks_obtained
-                grand_total_possible += es_item.total_marks
-            overall_pct = float(grand_total_obtained / grand_total_possible * 100) if grand_total_possible > 0 else 0
+        own_stats = self._compute_overall_stats(student.id, exams, es_by_exam, marks_by_key, weighted_calc) if exams else None
+        grand_total_obtained = Decimal(str(own_stats['obtained'])) if own_stats else Decimal('0')
+        grand_total_possible = Decimal(str(own_stats['possible'])) if own_stats else Decimal('0')
+        overall_pct = own_stats['percentage'] if own_stats else 0
 
         overall_grade = '-'
         for gs in grade_scales:
@@ -2674,44 +2859,60 @@ class ReportCardView(ModuleAccessMixin, APIView):
                 overall_grade = gs.grade_label
                 break
 
-        # Build flattened subject-level summary for the frontend
+        # Subject rows come from the main exam; earlier exams only add their columns
+        # (exam_data above). Pass/fail is the main exam's own criteria.
+        main_es_by_subject = {es.subject_id: es for es in es_by_exam.get(main_exam.id, [])} if main_exam else {}
         subject_summaries = []
-        for subj_id, subj_name in all_subjects.items():
-            subj_total = Decimal('0')
+        for subj_id, es_item in main_es_by_subject.items():
+            mark = marks_lookup.get(es_item.id)
             subj_obtained = Decimal('0')
             subj_absent = False
             subj_pass = True
+            if mark and mark.marks_obtained is not None and not mark.is_absent:
+                subj_obtained = mark.marks_obtained
+                if mark.marks_obtained < es_item.passing_marks:
+                    subj_pass = False
+            else:
+                subj_pass = False
+                if mark and mark.is_absent:
+                    subj_absent = True
 
-            for exam in exams:
-                for es_item in es_by_exam.get(exam.id, []):
-                    if es_item.subject_id == subj_id:
-                        mark = marks_lookup.get(es_item.id)
-                        subj_total += es_item.total_marks
-                        if mark and mark.marks_obtained is not None and not mark.is_absent:
-                            subj_obtained += mark.marks_obtained
-                            if mark.marks_obtained < es_item.passing_marks:
-                                subj_pass = False
-                        else:
-                            subj_pass = False
-                            if mark and mark.is_absent:
-                                subj_absent = True
-
-            subj_pct = float(subj_obtained / subj_total * 100) if subj_total > 0 else 0
+            subj_pct = self._subject_result_pct(student.id, subj_id, exams, es_by_exam, marks_by_key, weighted_calc) or 0
             subj_grade = '-'
             for gs in grade_scales:
                 if float(gs.min_percentage) <= subj_pct <= float(gs.max_percentage):
                     subj_grade = gs.grade_label
                     break
 
+            # Class average: of the main exam's marks, or (weighted) of classmates' blended %.
+            # A missing/absent mark isn't a zero - it would drag the average down.
+            values = []
+            for classmate in class_students:
+                if weighted_calc:
+                    value = self._subject_result_pct(classmate.id, subj_id, exams, es_by_exam, marks_by_key, True)
+                else:
+                    cm = marks_by_key.get((classmate.id, es_item.id))
+                    value = float(cm.marks_obtained) if cm and cm.marks_obtained is not None and not cm.is_absent else None
+                if value is not None:
+                    values.append(value)
+
             subject_summaries.append({
-                'subject_name': subj_name,
-                'total_marks': float(subj_total),
+                'subject_id': subj_id,
+                'comment_exam_id': main_exam.id,
+                'subject_name': all_subjects[subj_id],
+                'total_marks': float(es_item.total_marks),
                 'marks_obtained': float(subj_obtained),
                 'percentage': round(subj_pct, 2),
                 'grade': subj_grade,
                 'is_pass': subj_pass,
                 'is_absent': subj_absent,
+                'comment': mark.ai_comment if mark and mark.ai_comment else '',
+                'class_avg': round(sum(values) / len(values), 2) if values else None,
             })
+
+        overall_comment_row = StudentExamComment.objects.filter(
+            exam=main_exam, student=student, school_id=school_id,
+        ).exclude(comment='').order_by('-updated_at').first() if main_exam else None
 
         from academic_sessions.utils import resolve_class_display_name, resolve_current_academic_year_id
 
@@ -2724,21 +2925,15 @@ class ReportCardView(ModuleAccessMixin, APIView):
             school_id, resolve_current_academic_year_id(school_id), student.class_obj,
         )
 
-        # Which exam(s) this report's marks actually came from - a term can hold several
-        # (Quiz/Midterm/Final), and without this a combined table looks like a single exam.
-        report_term = exams[0].term if exams and exams[0].term else None
+        # The card is named after its main exam; everything term-scoped (attendance,
+        # assessments) follows that exam's term.
+        report_term = main_exam.term if main_exam and main_exam.term else None
         if not report_term and term_id:
             from academic_sessions.models import Term
             report_term = Term.objects.filter(pk=term_id, school_id=school_id).first()
 
         exam_names = [e.name for e in exams]
-        if len(exam_names) == 1:
-            exam_display = exam_names[0]
-        elif len(exam_names) > 1:
-            mode_label = 'weighted' if (use_weighted and exams.count() > 1) else 'combined'
-            exam_display = f"{', '.join(exam_names)} ({mode_label})"
-        else:
-            exam_display = None
+        exam_display = main_exam.name if main_exam else None
 
         # Attendance and the monthly teacher assessment are both scoped to this term's
         # date range (or the whole academic year when no term filter was given).
@@ -2747,32 +2942,34 @@ class ReportCardView(ModuleAccessMixin, APIView):
         else:
             period_start, period_end = enrollment.academic_year.start_date, enrollment.academic_year.end_date
 
+        # Working days exclude Sundays and student-affecting OFF_DAY calendar entries,
+        # and stop at today so an in-progress term doesn't count future days as unmarked.
         from attendance.models import AttendanceRecord
-        attendance_qs = AttendanceRecord.objects.filter(
-            school_id=school_id, student=student, date__gte=period_start, date__lte=period_end,
-        )
-        attendance_total = attendance_qs.count()
-        attendance_present = attendance_qs.filter(status=AttendanceRecord.AttendanceStatus.PRESENT).count()
-        attendance = {
-            'present': attendance_present,
-            'total': attendance_total,
-            'percentage': round(attendance_present / attendance_total * 100, 2) if attendance_total else None,
-        }
+        from academic_sessions.calendar_rules import build_student_off_day_set
+        from .term_periods import attendance_period
+        # Assessments keep the wider whole-term window: a term stored as just its exam
+        # window would otherwise hide assessments entered in earlier months.
+        assess_start, assess_end = attendance_period(school_id, report_term, enrollment.academic_year)
+        # Attendance itself is strictly the term(s)/month of the ticked exams.
+        period_start_att, period_end_att = _report_attendance_window(exams, enrollment.academic_year)
+        attendance = None
+        if period_start_att and period_end_att:
+            attendance = attendance_summaries(
+                school_id, [student.id], period_start_att, period_end_att,
+                enrollment.class_obj_id,
+            ).get(student.id)
 
-        # Position (rank): the same aggregation run for every other student in this
-        # class - not a filtered subset - so the student with the highest total marks
-        # achieved is Position 1. Percentage is the tie-break / the ranking basis
-        # itself when the school uses weighted exam types (raw sums aren't comparable
-        # across differently-weighted components in that case).
-        class_students = Student.objects.filter(school_id=school_id, class_obj=enrollment.class_obj, is_active=True)
-        class_marks = StudentMark.objects.filter(exam_subject__in=all_exam_subjects, school_id=school_id)
-        marks_by_key = {(m.student_id, m.exam_subject_id): m for m in class_marks}
-        is_weighted_calc = use_weighted and exams.count() > 1
+        # Position (rank): the same calculation run for every other student in this
+        # class - not a filtered subset - so the student with the highest result is
+        # Position 1. Not weighted: the main exam's total marks. Weighted: the blended %
+        # (raw sums aren't comparable across differently-weighted exams).
+        is_weighted_calc = weighted_calc
         class_stats = []
-        for classmate in class_students:
-            stats = self._compute_overall_stats(classmate.id, exams, es_by_exam, marks_by_key, use_weighted)
+        for classmate in class_students if exams else []:
+            stats = self._compute_overall_stats(classmate.id, exams, es_by_exam, marks_by_key, weighted_calc)
             if stats is not None:
                 class_stats.append((classmate.id, stats))
+
         def _rank_key(stats):
             return round(stats['percentage'] if is_weighted_calc else stats['obtained'], 2)
 
@@ -2792,7 +2989,9 @@ class ReportCardView(ModuleAccessMixin, APIView):
 
         # Latest teacher-entered assessment (conduct ratings + remarks) whose month
         # falls inside this term - per product decision, "latest" wins over averaging.
-        term_months = self._months_in_range(period_start, period_end)
+        # Same whole-term window as attendance: a term stored as just its exam window
+        # (e.g. 14-22 Sept) would otherwise hide assessments entered for earlier months.
+        term_months = self._months_in_range(assess_start or period_start, assess_end or period_end)
         assessments = list(StudentTermAssessment.objects.filter(
             school_id=school_id, student=student, academic_year_id=enrollment.academic_year_id,
             month__in=term_months,
@@ -2834,13 +3033,21 @@ class ReportCardView(ModuleAccessMixin, APIView):
             'term_name': report_term.name if report_term else None,
             'exam_display': exam_display,
             'exam_names': exam_names,
+            'exam_ids': [e.id for e in exams],
+            'main_exam': {
+                'id': main_exam.id, 'name': main_exam.name, 'exam_type': main_exam.exam_type.name,
+                'is_final': main_exam.exam_type.is_final,
+            } if main_exam else None,
+            'earlier_exam_names': exam_names[:-1],
+            'weighted': weighted_calc,
+            'class_avg_unit': 'percent' if weighted_calc else 'marks',
             'is_draft': any(e.status != Exam.Status.PUBLISHED for e in exams),
             'guardian_name': student.guardian_name or student.parent_name or '',
             'photo_url': student.photo_url or '',
             'attendance': attendance,
             'class_size': class_size,
             'conduct_assessment': conduct_assessment,
-            'promotion_status': enrollment.get_status_display() if enrollment.status else None,
+            **self._print_details(student, enrollment, main_exam),
             'enrollment_info': {
                 'enrollment_id': enrollment.id,
                 'class_at_report_session': enrollment_class_name,
@@ -2856,6 +3063,8 @@ class ReportCardView(ModuleAccessMixin, APIView):
                 'school_name': student.school.name,
             },
             'subjects': subject_summaries,
+            'overall_comment': overall_comment_row.comment if overall_comment_row else '',
+            'overall_comment_exam_id': main_exam.id if main_exam else None,
             'exams': exam_data,
             'summary': {
                 'total_marks': float(grand_total_possible),
@@ -2866,7 +3075,7 @@ class ReportCardView(ModuleAccessMixin, APIView):
                 'grade': overall_grade,
                 'rank': rank,
                 'overall_pass': all(s['is_pass'] for s in subject_summaries) if subject_summaries else False,
-                'calculation_mode': 'weighted' if use_weighted and exams.count() > 1 else 'simple',
+                'calculation_mode': 'weighted' if weighted_calc else ('main_only' if len(exams) > 1 else 'simple'),
             },
             'grade_scales': [
                 {
@@ -2878,6 +3087,221 @@ class ReportCardView(ModuleAccessMixin, APIView):
                 for gs in grade_scales
             ],
         })
+
+
+class ReportCardMetaView(ModuleAccessMixin, APIView):
+    """Saves the hand-editable parts of a report card: promotion status (final exams
+    only), issue date and signature captions. All of it belongs to the card's main
+    (last) exam, so exam_ids is required. Admins/managers edit within their school; a
+    teacher only for students in a class they are class teacher of."""
+    required_module = 'examinations'
+    permission_classes = [IsAuthenticated, HasSchoolAccess]
+
+    SIGNATURE_KEYS = ('class_teacher', 'principal', 'parent')
+
+    def post(self, request):
+        from students.models import Student
+        from academic_sessions.models import StudentEnrollment
+        from datetime import date as _date
+
+        school_id = _resolve_school_id(request)
+        data = request.data
+        student_id, year_id = data.get('student_id'), data.get('academic_year_id')
+        if not student_id or not year_id:
+            raise ValidationError({'detail': 'student_id and academic_year_id are required.'})
+
+        student = Student.objects.filter(pk=student_id, school_id=school_id).first()
+        if not student:
+            return Response({'detail': 'Student not found.'}, status=404)
+        enrollment = StudentEnrollment.objects.filter(
+            school_id=school_id, student=student, academic_year_id=year_id,
+        ).order_by('-created_at').first()
+        if not enrollment:
+            return Response({'detail': 'No enrollment found for that student and year.'}, status=404)
+
+        role = get_effective_role(request)
+        allowed = role in ADMIN_ROLES or role == 'MANAGER' or (
+            role == 'TEACHER'
+            and _is_teacher_class_teacher_for_class(request, enrollment.class_obj_id, school_id=school_id)
+        )
+        if not allowed:
+            raise PermissionDenied('Only admins or the class teacher can edit report card details.')
+
+        main_exam = _report_exams_for(
+            school_id, enrollment.class_obj_id, year_id, _parse_exam_ids(data.get('exam_ids')),
+        )[-1]
+
+        with transaction.atomic():
+            if 'promotion_status' in data:
+                new_status = data['promotion_status']
+                if new_status not in ReportCardPromotion.Status.values:
+                    raise ValidationError({'promotion_status': 'Invalid status.'})
+                if not main_exam.exam_type.is_final and new_status != ReportCardPromotion.Status.NOT_APPLICABLE:
+                    raise ValidationError({'promotion_status': 'Promotion can only be set for a final exam.'})
+                ReportCardPromotion.objects.update_or_create(
+                    student=student, academic_year_id=year_id,
+                    defaults={'school_id': school_id, 'status': new_status, 'updated_by': request.user},
+                )
+
+            if 'issue_date' in data or 'signature_labels' in data:
+                override = ReportCardOverride.objects.filter(student=student, exam=main_exam).first() or ReportCardOverride(
+                    school_id=school_id, student=student, academic_year_id=year_id, exam=main_exam,
+                )
+                if 'issue_date' in data:
+                    raw = data['issue_date']
+                    try:
+                        override.issue_date = _date.fromisoformat(raw) if raw else None
+                    except (TypeError, ValueError):
+                        raise ValidationError({'issue_date': 'Use YYYY-MM-DD.'})
+                if 'signature_labels' in data:
+                    labels = data['signature_labels'] or {}
+                    if not isinstance(labels, dict):
+                        raise ValidationError({'signature_labels': 'Must be an object.'})
+                    override.signature_labels = {
+                        k: str(labels[k]).strip()[:40] for k in self.SIGNATURE_KEYS if labels.get(k)
+                    }
+                override.updated_by = request.user
+                override.save()
+        return Response({'saved': True})
+
+
+class ReportCardBulkMetaView(ModuleAccessMixin, APIView):
+    """Class-level version of ReportCardMetaView: promotion per student plus one issue date
+    and one set of signature captions applied to many students in a single save.
+
+    Takes explicit student_ids (the page already lists the class roster) and exam_ids
+    (the card's exams; the last is the main exam everything is stored against). Exams
+    belong to one class, so every student must be enrolled in that class. Authorisation
+    is checked against each student's own enrollment class, like the single endpoint."""
+    required_module = 'examinations'
+    permission_classes = [IsAuthenticated, HasSchoolAccess]
+
+    MAX_STUDENTS = 200
+
+    def _load(self, request, school_id, year_id, student_ids, exam_ids):
+        from academic_sessions.models import StudentEnrollment
+        if not year_id or not student_ids:
+            raise ValidationError({'detail': 'academic_year_id and student_ids are required.'})
+        try:
+            student_ids = sorted({int(x) for x in student_ids})
+        except (TypeError, ValueError):
+            raise ValidationError({'student_ids': 'Must be a list of ids.'})
+        if len(student_ids) > self.MAX_STUDENTS:
+            raise ValidationError({'student_ids': f'At most {self.MAX_STUDENTS} students per request.'})
+
+        enrollments = {}
+        for e in StudentEnrollment.objects.filter(
+            school_id=school_id, academic_year_id=year_id, student_id__in=student_ids,
+        ).order_by('created_at'):
+            enrollments[e.student_id] = e
+        missing = [sid for sid in student_ids if sid not in enrollments]
+        if missing:
+            raise ValidationError({'student_ids': f'No enrollment for students: {missing[:5]}.'})
+
+        class_ids = {e.class_obj_id for e in enrollments.values()}
+        if len(class_ids) != 1:
+            raise ValidationError({'student_ids': 'Bulk edit works on one class at a time.'})
+        class_id = next(iter(class_ids))
+
+        role = get_effective_role(request)
+        if not (role in ADMIN_ROLES or role == 'MANAGER'):
+            if role != 'TEACHER' or not _is_teacher_class_teacher_for_class(request, class_id, school_id=school_id):
+                raise PermissionDenied('Only admins or the class teacher can edit report card details.')
+
+        main_exam = _report_exams_for(school_id, class_id, year_id, _parse_exam_ids(exam_ids))[-1]
+        return student_ids, enrollments, main_exam
+
+    def get(self, request):
+        school_id = _resolve_school_id(request)
+        year_id = request.query_params.get('academic_year_id')
+        raw_ids = [x for x in (request.query_params.get('student_ids') or '').split(',') if x]
+        student_ids, enrollments, main_exam = self._load(
+            request, school_id, year_id, raw_ids, request.query_params.get('exam_ids'),
+        )
+        promotions = dict(ReportCardPromotion.objects.filter(
+            academic_year_id=year_id, student_id__in=student_ids,
+        ).values_list('student_id', 'status'))
+        issue_dates = dict(ReportCardOverride.objects.filter(
+            exam=main_exam, student_id__in=student_ids,
+        ).values_list('student_id', 'issue_date'))
+        applicable = main_exam.exam_type.is_final
+        return Response({
+            'main_exam': {'id': main_exam.id, 'name': main_exam.name},
+            'students': {
+                str(sid): {
+                    'promotion_applicable': applicable,
+                    'promotion_status': promotions.get(sid, ReportCardPromotion.Status.NOT_APPLICABLE),
+                    'issue_date': issue_dates[sid].isoformat() if issue_dates.get(sid) else None,
+                }
+                for sid in student_ids
+            },
+        })
+
+    def post(self, request):
+        from datetime import date as _date
+        school_id = _resolve_school_id(request)
+        data = request.data
+        year_id = data.get('academic_year_id')
+        student_ids, enrollments, main_exam = self._load(
+            request, school_id, year_id, data.get('student_ids'), data.get('exam_ids'),
+        )
+
+        promotions = data.get('promotions') or {}
+        if not isinstance(promotions, dict):
+            raise ValidationError({'promotions': 'Must be an object of student_id -> status.'})
+        for status_value in promotions.values():
+            if status_value not in ReportCardPromotion.Status.values:
+                raise ValidationError({'promotions': 'Invalid status.'})
+
+        issue_date = None
+        if data.get('issue_date'):
+            try:
+                issue_date = _date.fromisoformat(data['issue_date'])
+            except (TypeError, ValueError):
+                raise ValidationError({'issue_date': 'Use YYYY-MM-DD.'})
+
+        labels = None
+        if data.get('signature_labels'):
+            raw = data['signature_labels']
+            if not isinstance(raw, dict):
+                raise ValidationError({'signature_labels': 'Must be an object.'})
+            labels = {k: str(raw[k]).strip()[:40] for k in ReportCardMetaView.SIGNATURE_KEYS if raw.get(k)}
+
+        # overwrite=False only fills students that have nothing set yet.
+        overwrite = data.get('overwrite', True) is not False
+        is_final = main_exam.exam_type.is_final
+
+        with transaction.atomic():
+            for sid_raw, status_value in promotions.items():
+                sid = int(sid_raw)
+                if sid not in enrollments:
+                    raise ValidationError({'promotions': f'Student {sid} is not in this request.'})
+                if status_value != ReportCardPromotion.Status.NOT_APPLICABLE and not is_final:
+                    raise ValidationError({'promotions': 'Promotion can only be set for a final exam.'})
+                existing = ReportCardPromotion.objects.filter(student_id=sid, academic_year_id=year_id).first()
+                if existing and not overwrite and existing.status != ReportCardPromotion.Status.NOT_APPLICABLE:
+                    continue
+                ReportCardPromotion.objects.update_or_create(
+                    student_id=sid, academic_year_id=year_id,
+                    defaults={'school_id': school_id, 'status': status_value, 'updated_by': request.user},
+                )
+
+            if issue_date or labels:
+                for sid in student_ids:
+                    override = ReportCardOverride.objects.filter(student_id=sid, exam=main_exam).first() or ReportCardOverride(
+                        school_id=school_id, student_id=sid, academic_year_id=year_id, exam=main_exam,
+                    )
+                    if issue_date and (overwrite or not override.issue_date):
+                        override.issue_date = issue_date
+                    if labels:
+                        merged = dict(override.signature_labels or {})
+                        for key, value in labels.items():
+                            if overwrite or key not in merged:
+                                merged[key] = value
+                        override.signature_labels = merged
+                    override.updated_by = request.user
+                    override.save()
+        return Response({'saved': True, 'students': len(student_ids)})
 
 
 # ===========================================

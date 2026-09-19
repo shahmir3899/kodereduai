@@ -7,7 +7,7 @@ import Badge from '../../components/ui/Badge'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
 import { useAuth } from '../../contexts/AuthContext'
 
-const EMPTY_FORM = { name: '', weight: '100.00' }
+const EMPTY_FORM = { name: '', weight: '100.00', is_final: false }
 
 export default function ExamTypesPage() {
   const queryClient = useQueryClient()
@@ -44,7 +44,7 @@ export default function ExamTypesPage() {
 
   const openCreate = () => { setForm(EMPTY_FORM); setEditId(null); setErrors({}); setShowModal(true) }
   const openEdit = (item) => {
-    setForm({ name: item.name, weight: item.weight })
+    setForm({ name: item.name, weight: item.weight, is_final: !!item.is_final })
     setEditId(item.id); setErrors({}); setShowModal(true)
   }
   const closeModal = () => { setShowModal(false); setEditId(null); setForm(EMPTY_FORM); setErrors({}) }
@@ -102,7 +102,10 @@ export default function ExamTypesPage() {
             <div key={item.id} className="card">
               <div className="flex items-start justify-between mb-2">
                 <h3 className="font-semibold text-gray-900">{item.name}</h3>
-                <Badge tone="info">{item.weight}%</Badge>
+                <div className="flex items-center gap-1.5">
+                  {item.is_final && <Badge tone="success">Final</Badge>}
+                  <Badge tone="info">{item.weight}%</Badge>
+                </div>
               </div>
               <p className="text-xs text-gray-500">Weight: {item.weight}% toward the overall grade</p>
               {isSchoolAdmin && (
@@ -152,6 +155,17 @@ export default function ExamTypesPage() {
                 />
                 <p className="text-xs text-gray-400 mt-1">Weightage toward the overall grade (default 100%)</p>
               </div>
+              <label className="flex items-start gap-2 text-sm text-gray-700 cursor-pointer">
+                <input
+                  type="checkbox" checked={form.is_final}
+                  onChange={e => setForm(p => ({ ...p, is_final: e.target.checked }))}
+                  className="mt-0.5"
+                />
+                <span>
+                  Final exam
+                  <span className="block text-xs text-gray-400">Only final exams decide promotion; report cards show the Promoted / Not Promoted choice for these.</span>
+                </span>
+              </label>
               <div className="flex justify-end gap-3 pt-2">
                 <button type="button" onClick={closeModal} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">Cancel</button>
                 <button type="submit" disabled={createMut.isPending || updateMut.isPending} className="btn-primary px-4 py-2 text-sm disabled:opacity-50">
