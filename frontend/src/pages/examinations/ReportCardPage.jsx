@@ -261,6 +261,12 @@ export default function ReportCardPage() {
             </button>
           </div>
 
+          {report.is_draft && (
+            <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
+              <span className="font-semibold">Draft</span> — results have not been announced yet. Only staff can see this preview.
+            </div>
+          )}
+
           {/* Header */}
           <div className="text-center border-b border-gray-200 pb-4 mb-4">
             <h2 className="text-lg font-bold text-gray-900">{report.school_name || 'Report Card'}</h2>

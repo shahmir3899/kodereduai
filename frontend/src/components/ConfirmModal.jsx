@@ -47,7 +47,7 @@ function ConfirmModalUI({ show, title, message, variant = 'danger', confirmLabel
   if (!show) return null
   const v = VARIANTS[variant] || VARIANTS.danger
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4" onClick={onCancel}>
+    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4" onClick={onCancel}>
       <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl w-full max-w-sm p-6 animate-in fade-in" onClick={e => e.stopPropagation()}>
         <div className="flex items-center gap-3 mb-3">
           <div className={`w-10 h-10 rounded-full ${v.iconBg} flex items-center justify-center shrink-0`}>

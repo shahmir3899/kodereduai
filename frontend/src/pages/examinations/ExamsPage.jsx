@@ -603,6 +603,19 @@ export function DateSheetModal({ groupId, onClose: closeDateSheet, queryClient, 
   )
 }
 
+// Shows whether a schedule/results step is done for a group ("3/8" = partly done).
+function PublishBadge({ label, onText, offText, done, total, onClass }) {
+  if (total === 0) return null
+  const state = done === 0 ? 'none' : done === total ? 'all' : 'mixed'
+  const style = state === 'all' ? onClass : state === 'mixed' ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-500'
+  const text = state === 'all' ? onText : state === 'mixed' ? `${onText} for ${done}/${total} classes` : offText
+  return (
+    <span className={`px-2 py-0.5 rounded-full text-[11px] font-medium ${style}`}>
+      {label}: {text}
+    </span>
+  )
+}
+
 // Read-only detail view for a single class exam / test -- reuses the same
 // ExamSubject data the Edit modal edits, but display-only, so admins (and
 // any other role that can reach this page) can check what's actually saved
@@ -702,6 +715,7 @@ export default function ExamsPage() {
   const [expandedGroupId, setExpandedGroupId] = useState(null)
   const [dateSheetGroupId, setDateSheetGroupId] = useState(null)
   const [viewExam, setViewExam] = useState(null)
+  const [moreGroupId, setMoreGroupId] = useState(null)
   const [yearFilter, setYearFilter] = useState('')
   const [activeTab, setActiveTab] = useState('exams') // 'exams' | 'tests'
   const [examStatusFilter, setExamStatusFilter] = useState('active') // 'active' | 'inactive' | 'all'
@@ -885,11 +899,11 @@ export default function ExamsPage() {
   const [newSubjectTotalMarks, setNewSubjectTotalMarks] = useState('100')
   const [newSubjectPassingMarks, setNewSubjectPassingMarks] = useState('33')
   useEffect(() => {
-    // Default to "add everything" (opt-out via unchecking) whenever the exam
-    // being edited changes or the actual set of missing subjects changes --
-    // keyed on the id set (not the array reference) so a background refetch
+    // Start with nothing ticked (opt-in): a subject just removed from the exam
+    // reappears here as "missing", and pre-ticking it re-added it on Update.
+    // Keyed on the id set (not the array reference) so a background refetch
     // that returns the same subjects doesn't wipe an in-progress selection.
-    setSelectedMissingSubjectIds(missingClassSubjects.map(cs => cs.subject))
+    setSelectedMissingSubjectIds([])
     setNewSubjectTotalMarks('100')
     setNewSubjectPassingMarks('33')
   }, [editId, missingSubjectsKey])
@@ -1022,9 +1036,9 @@ export default function ExamsPage() {
       const publishedCount = res?.data?.published_count ?? 'all'
       if (skipped.length > 0) {
         const names = skipped.map(s => s.class_name).filter(Boolean).join(', ')
-        showWarning(`Announced results for ${publishedCount} exam(s). Skipped ${skipped.length} class(es) with marks not fully entered${names ? ` (${names})` : ''}.`)
+        showWarning(`Announced results for ${publishedCount} more class(es). Not announced yet: ${skipped.length} class(es) with marks not fully entered${names ? ` (${names})` : ''}.`)
       } else {
-        showSuccess(`Announced results for ${publishedCount} exam(s).`)
+        showSuccess(`Announced results for ${publishedCount} more class(es).`)
       }
     },
     onError: (err) => setListError(err.response?.data?.detail || 'Failed to announce results.'),
@@ -1073,6 +1087,7 @@ export default function ExamsPage() {
     try {
       await examinationsApi.deleteExamSubject(row.id)
       setTestScheduleRows(prev => prev.filter(r => r.id !== row.id))
+      showSuccess(`${row.subject_name} removed from this exam.`)
       queryClient.invalidateQueries({ queryKey: ['testScheduleRows', editId] })
       queryClient.invalidateQueries({ queryKey: ['exams'] })
       queryClient.invalidateQueries({ queryKey: ['examGroups'] })
@@ -1354,7 +1369,11 @@ export default function ExamsPage() {
                     : exams.every(e => e.status === 'PUBLISHED') ? 'all'
                     : exams.every(e => e.status !== 'PUBLISHED') ? 'none' : 'mixed'
                   const examsPendingMarks = exams.filter(e => e.status !== 'PUBLISHED' && !e.marks_entry_complete)
-                  const canAnnounceResults = resultsState !== 'all' && examsPendingMarks.length === 0
+                  const readyExams = exams.filter(e => e.status !== 'PUBLISHED' && e.marks_entry_complete)
+                  const announcedExams = exams.filter(e => e.status === 'PUBLISHED')
+                  // Announcing only needs one ready class -- the server announces the
+                  // ready ones and reports the rest as skipped.
+                  const canAnnounceResults = resultsState !== 'all' && readyExams.length > 0
                   return (
                     <div key={group.id} className={`bg-white rounded-xl shadow-sm border border-gray-200 ${isExpanded ? '' : 'overflow-hidden'}`}>
                       {/* Group Header */}
@@ -1392,6 +1411,36 @@ export default function ExamsPage() {
                             {group.start_date && ` · ${group.start_date}`}
                             {group.end_date && ` — ${group.end_date}`}
                           </p>
+                          <div className="flex flex-wrap gap-1.5 mt-1.5">
+                            <PublishBadge
+                              label="Schedule"
+                              onText="Published" offText="Not published"
+                              done={exams.filter(e => e.schedule_published_at).length}
+                              total={exams.length}
+                              onClass="bg-green-100 text-green-700"
+                            />
+                            <PublishBadge
+                              label="Results"
+                              onText="Announced" offText="Not announced"
+                              done={exams.filter(e => e.status === 'PUBLISHED').length}
+                              total={exams.length}
+                              onClass="bg-purple-100 text-purple-700"
+                            />
+                          </div>
+                          {resultsState === 'mixed' && (
+                            <div className="mt-2 p-2 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800">
+                              <span className="font-semibold">Results announced for {announcedExams.length} of {exams.length} classes.</span>
+                              {' '}Pending: {exams.filter(e => e.status !== 'PUBLISHED').map(getExamClassLabel).join(', ')}.
+                            </div>
+                          )}
+                          {resultsState !== 'all' && exams.length > 0 && (
+                            <p className={`text-xs mt-1 ${examsPendingMarks.length > 0 ? 'text-amber-700' : 'text-green-700'}`}>
+                              Marks complete: {exams.length - examsPendingMarks.length}/{exams.length} classes
+                              {examsPendingMarks.length > 0
+                                ? (readyExams.length > 0 ? ' — ready classes can be announced now' : ' — enter marks to announce results')
+                                : ' — ready to announce'}
+                            </p>
+                          )}
                         </div>
                         {/* Group actions -- Date Sheet is read/download (safe for every
                             role); the rest are writes and stay admin-only. */}
@@ -1406,49 +1455,69 @@ export default function ExamsPage() {
                             Date Sheet
                           </button>
                           {isSchoolAdmin && (<>
+                          {scheduleState !== 'all' && (
+                            <button
+                              onClick={async () => { const ok = await confirm({ title: 'Publish Exam Schedule', message: 'Make this group\'s exam dates visible to students, parents, and teachers for their own classes? They will be notified of the exam dates (not results).', variant: 'warning', confirmLabel: 'Publish Schedule' }); if (ok) publishScheduleAllMut.mutate(group.id) }}
+                              className="text-xs px-2 py-1 text-blue-600 hover:bg-blue-50 rounded disabled:opacity-40 disabled:cursor-not-allowed"
+                              disabled={publishScheduleAllMut.isPending}
+                            >
+                              {scheduleState === 'mixed' ? 'Publish Remaining Schedules' : 'Publish Schedule'}
+                            </button>
+                          )}
+                          {resultsState !== 'all' && (
+                            <button
+                              onClick={async () => {
+                                const skippedNames = examsPendingMarks.map(getExamClassLabel).join(', ')
+                                const message = examsPendingMarks.length > 0
+                                  ? `Announce results for ${readyExams.length} ready class(es)? Results will become visible for them. Not announced (marks incomplete): ${skippedNames}.`
+                                  : 'Announce results for all exams in this group? Results will become visible.'
+                                const ok = await confirm({ title: 'Announce Results', message, variant: 'warning', confirmLabel: 'Announce Results' })
+                                if (ok) announceResultsAllMut.mutate(group.id)
+                              }}
+                              className="text-xs px-2 py-1 text-green-600 hover:bg-green-50 rounded disabled:opacity-40 disabled:cursor-not-allowed"
+                              disabled={!canAnnounceResults || announceResultsAllMut.isPending}
+                            >
+                              {examsPendingMarks.length > 0 && readyExams.length > 0
+                                ? `Announce Ready Classes (${readyExams.length} of ${exams.length - announcedExams.length})`
+                                : 'Announce Results'}
+                            </button>
+                          )}
                           <button
-                            onClick={async () => { const ok = await confirm({ title: 'Publish Exam Schedule', message: 'Make this group\'s exam dates visible to students, parents, and teachers for their own classes? They will be notified of the exam dates (not results).', variant: 'warning', confirmLabel: 'Publish Schedule' }); if (ok) publishScheduleAllMut.mutate(group.id) }}
-                            className="text-xs px-2 py-1 text-blue-600 hover:bg-blue-50 rounded disabled:opacity-40 disabled:pointer-events-none"
-                            disabled={scheduleState === 'all' || publishScheduleAllMut.isPending}
-                            title={scheduleState === 'all' ? 'Schedule is already published for every class in this group' : 'Make exam dates visible to students/parents/teachers for their own class'}
+                            onClick={() => setMoreGroupId(prev => prev === group.id ? null : group.id)}
+                            className="text-xs px-2 py-1 text-gray-500 hover:bg-gray-100 rounded"
+                            aria-expanded={moreGroupId === group.id}
                           >
-                            Publish Schedule
+                            {moreGroupId === group.id ? 'Less' : 'More ⋯'}
                           </button>
-                          <button
-                            onClick={async () => { const ok = await confirm({ title: 'Unpublish Exam Schedule', message: 'Hide this group\'s exam dates from students, parents, and teachers again?' }); if (ok) unpublishScheduleAllMut.mutate(group.id) }}
-                            className="text-xs px-2 py-1 text-gray-500 hover:bg-gray-100 rounded disabled:opacity-40 disabled:pointer-events-none"
-                            disabled={scheduleState === 'none' || unpublishScheduleAllMut.isPending}
-                            title={scheduleState === 'none' ? 'Schedule is not published for any class in this group' : undefined}
-                          >
-                            Unpublish Schedule
-                          </button>
-                          <button
-                            onClick={async () => { const ok = await confirm({ title: 'Announce All Results', message: 'Announce results for all exams in this group? Results will become visible.', variant: 'warning', confirmLabel: 'Announce Results' }); if (ok) announceResultsAllMut.mutate(group.id) }}
-                            className="text-xs px-2 py-1 text-green-600 hover:bg-green-50 rounded disabled:opacity-40 disabled:pointer-events-none"
-                            disabled={!canAnnounceResults || announceResultsAllMut.isPending}
-                            title={
-                              resultsState === 'all' ? 'Results are already announced for every class in this group'
-                                : examsPendingMarks.length > 0 ? `${examsPendingMarks.length} class(es) still have marks not fully entered -- enter all marks before announcing`
-                                : undefined
-                            }
-                          >
-                            Announce Results
-                          </button>
-                          <button
-                            onClick={async () => { const ok = await confirm({ title: 'Unpublish Results', message: 'Withdraw announced results for all exams in this group? Results will no longer be visible.' }); if (ok) unpublishResultsAllMut.mutate(group.id) }}
-                            className="text-xs px-2 py-1 text-gray-500 hover:bg-gray-100 rounded disabled:opacity-40 disabled:pointer-events-none"
-                            disabled={resultsState === 'none' || unpublishResultsAllMut.isPending}
-                            title={resultsState === 'none' ? 'Results are not announced for any class in this group' : undefined}
-                          >
-                            Unpublish Results
-                          </button>
-                          <button
-                            onClick={async () => { const ok = await confirm({ title: 'Delete Exam Group', message: `Delete "${group.name}" and all its class exams?` }); if (ok) deleteGroupMut.mutate(group.id) }}
-                            className="text-xs px-2 py-1 text-red-600 hover:bg-red-50 rounded disabled:opacity-50"
-                            disabled={isDeletingGroup(group.id)}
-                          >
-                            {isDeletingGroup(group.id) ? 'Deleting...' : 'Delete'}
-                          </button>
+                          {moreGroupId === group.id && (
+                            <div className="flex items-center gap-1 flex-wrap w-full">
+                              {scheduleState !== 'none' && (
+                                <button
+                                  onClick={async () => { const ok = await confirm({ title: 'Unpublish Exam Schedule', message: 'Hide this group\'s exam dates from students, parents, and teachers again?' }); if (ok) unpublishScheduleAllMut.mutate(group.id) }}
+                                  className="text-xs px-2 py-1 text-gray-600 hover:bg-gray-100 rounded disabled:opacity-40 disabled:cursor-not-allowed"
+                                  disabled={unpublishScheduleAllMut.isPending}
+                                >
+                                  Unpublish Schedule
+                                </button>
+                              )}
+                              {resultsState !== 'none' && (
+                                <button
+                                  onClick={async () => { const ok = await confirm({ title: 'Unpublish Results', message: 'Withdraw announced results for all exams in this group? Results will no longer be visible.' }); if (ok) unpublishResultsAllMut.mutate(group.id) }}
+                                  className="text-xs px-2 py-1 text-gray-600 hover:bg-gray-100 rounded disabled:opacity-40 disabled:cursor-not-allowed"
+                                  disabled={unpublishResultsAllMut.isPending}
+                                >
+                                  Unpublish Results
+                                </button>
+                              )}
+                              <button
+                                onClick={async () => { const ok = await confirm({ title: 'Delete Exam Group', message: `Delete "${group.name}" and all its class exams?` }); if (ok) deleteGroupMut.mutate(group.id) }}
+                                className="text-xs px-2 py-1 text-red-600 hover:bg-red-50 rounded disabled:opacity-50"
+                                disabled={isDeletingGroup(group.id)}
+                              >
+                                {isDeletingGroup(group.id) ? 'Deleting...' : 'Delete'}
+                              </button>
+                            </div>
+                          )}
                           </>)}
                         </div>
                       </div>
@@ -1484,6 +1553,12 @@ export default function ExamsPage() {
                                           <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${exam.is_active ? (STATUS_STYLES[exam.status] || 'bg-gray-100') : 'bg-gray-100 text-gray-500'}`}>
                                             {exam.is_active ? exam.status.replace('_', ' ') : 'Inactive'}
                                           </span>
+                                          {exam.is_active && (
+                                            <div className="flex flex-wrap justify-center gap-1 mt-1">
+                                              <PublishBadge label="Schedule" onText="Published" offText="Not published" done={exam.schedule_published_at ? 1 : 0} total={1} onClass="bg-green-100 text-green-700" />
+                                              <PublishBadge label="Results" onText="Announced" offText="Not announced" done={exam.status === 'PUBLISHED' ? 1 : 0} total={1} onClass="bg-purple-100 text-purple-700" />
+                                            </div>
+                                          )}
                                         </td>
                                         <td className="px-4 py-2 text-right">
                                           <button onClick={() => openView(exam)} className="text-xs text-gray-600 hover:underline mr-2">View</button>
@@ -1537,7 +1612,7 @@ export default function ExamsPage() {
                               {/* Mobile */}
                               <div className="md:hidden divide-y divide-gray-100">
                                 {exams.map(exam => (
-                                  <div key={exam.id} className={`px-4 py-2 flex items-center justify-between ${exam.is_active ? '' : 'opacity-75'}`}>
+                                  <div key={exam.id} className={`px-4 py-2 flex items-center justify-between gap-3 ${exam.is_active ? '' : 'opacity-75'}`}>
                                     <div>
                                       <p className="text-sm font-medium text-gray-900">{getExamClassLabel(exam)}</p>
                                       <p className="text-xs text-gray-500">
@@ -1546,11 +1621,36 @@ export default function ExamsPage() {
                                           {exam.is_active ? exam.status.replace('_', ' ') : 'Inactive'}
                                         </span>
                                       </p>
+                                      {exam.is_active && (
+                                        <div className="flex flex-wrap gap-1 mt-1">
+                                          <PublishBadge label="Schedule" onText="Published" offText="Not published" done={exam.schedule_published_at ? 1 : 0} total={1} onClass="bg-green-100 text-green-700" />
+                                          <PublishBadge label="Results" onText="Announced" offText="Not announced" done={exam.status === 'PUBLISHED' ? 1 : 0} total={1} onClass="bg-purple-100 text-purple-700" />
+                                        </div>
+                                      )}
+                                      {exam.is_active && exam.status !== 'PUBLISHED' && !exam.marks_entry_complete && (
+                                        <p className="text-[11px] text-amber-700 mt-1">Marks {exam.marks_entered_count}/{exam.marks_expected_count} — not ready to announce</p>
+                                      )}
                                     </div>
-                                    <div className="flex gap-2">
+                                    <div className="flex gap-2 flex-wrap justify-end">
                                       <button onClick={() => openView(exam)} className="text-xs text-gray-600 hover:underline">View</button>
                                       {isSchoolAdmin && (<>
                                       <button onClick={() => openEdit(exam)} className="text-xs text-primary-600 hover:underline">Edit</button>
+                                      {exam.is_active && (<>
+                                        {exam.schedule_published_at ? (
+                                          <button onClick={async () => { const ok = await confirm({ title: 'Unpublish Exam Schedule', message: 'Hide this class\'s exam dates again?' }); if (ok) unpublishScheduleMut.mutate(exam.id) }} className="text-xs text-gray-500 hover:underline">Unpublish Schedule</button>
+                                        ) : (
+                                          <button onClick={async () => { const ok = await confirm({ title: 'Publish Exam Schedule', message: 'Make this class\'s exam dates visible to its students, parents, and teachers?', variant: 'warning', confirmLabel: 'Publish Schedule' }); if (ok) publishScheduleMut.mutate(exam.id) }} className="text-xs text-blue-600 hover:underline">Publish Schedule</button>
+                                        )}
+                                        {exam.status === 'PUBLISHED' ? (
+                                          <button onClick={async () => { const ok = await confirm({ title: 'Unpublish Results', message: 'Withdraw this exam\'s announced results?' }); if (ok) unpublishResultsMut.mutate(exam.id) }} className="text-xs text-gray-500 hover:underline">Unpublish Results</button>
+                                        ) : (
+                                          <button
+                                            onClick={async () => { const ok = await confirm({ title: 'Announce Results', message: 'Announce this exam\'s results? Results will become visible.', variant: 'warning', confirmLabel: 'Announce Results' }); if (ok) announceResultsMut.mutate(exam.id) }}
+                                            className="text-xs text-green-600 hover:underline disabled:opacity-40 disabled:cursor-not-allowed disabled:no-underline"
+                                            disabled={!exam.marks_entry_complete}
+                                          >Announce Results</button>
+                                        )}
+                                      </>)}
                                       {exam.is_active ? null : (
                                         <button onClick={async () => { const ok = await confirm({ title: 'Reactivate Exam', message: `Reactivate "${exam.name}"?`, variant: 'primary', confirmLabel: 'Reactivate' }); if (ok) reactivateMut.mutate(exam.id) }} className="text-xs text-blue-600 hover:underline">Reactivate</button>
                                       )}

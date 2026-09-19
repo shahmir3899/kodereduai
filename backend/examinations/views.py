@@ -1039,8 +1039,11 @@ class ExamGroupViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVie
         exams_qs = _annotate_marks_completion(exams_qs)
         exams = list(exams_qs)
 
-        ready = [exam for exam in exams if _marks_entry_complete(exam)]
-        skipped = [exam for exam in exams if not _marks_entry_complete(exam)]
+        # Already-announced classes are left alone: re-publishing them would re-send
+        # the results notification to their parents/students/teachers.
+        pending = [exam for exam in exams if exam.status != Exam.Status.PUBLISHED]
+        ready = [exam for exam in pending if _marks_entry_complete(exam)]
+        skipped = [exam for exam in pending if not _marks_entry_complete(exam)]
 
         Exam.objects.filter(id__in=[exam.id for exam in ready]).update(status=Exam.Status.PUBLISHED)
         for exam in ready:
@@ -1508,11 +1511,14 @@ class ExamViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet)
             total_obtained = Decimal('0')
             total_possible = Decimal('0')
             all_pass = True
+            is_incomplete = False
 
             for es in exam_subjects:
                 mark = marks_lookup.get((student.id, es.id))
                 obtained = mark.marks_obtained if mark and not mark.is_absent else None
                 is_absent = mark.is_absent if mark else False
+                if obtained is None and not is_absent:
+                    is_incomplete = True
 
                 marks_list.append({
                     'subject_id': es.subject_id,
@@ -1547,12 +1553,23 @@ class ExamViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet)
                 'percentage': round(percentage, 2),
                 'grade': grade_label,
                 'is_pass': all_pass,
+                'is_incomplete': is_incomplete,
             })
 
-        # Calculate ranks
-        results.sort(key=lambda x: x['percentage'], reverse=True)
-        for i, r in enumerate(results):
-            r['rank'] = i + 1
+        # Dense ranking: equal percentages share a rank and the next distinct score
+        # is rank+1 (1,1,1,2). Students with a subject not yet entered are left
+        # unranked so half-finished results can't take a top position.
+        results.sort(key=lambda x: (x['is_incomplete'], -x['percentage']))
+        prev_pct, current_rank = None, 0
+        for r in results:
+            if r['is_incomplete']:
+                r['rank'] = None
+                continue
+            pct = round(r['percentage'], 2)
+            if pct != prev_pct:
+                current_rank += 1
+                prev_pct = pct
+            r['rank'] = current_rank
 
         return Response({
             'exam': ExamSerializer(exam).data,
@@ -2538,9 +2555,17 @@ class ReportCardView(ModuleAccessMixin, APIView):
             'school_id': school_id,
             'class_obj': enrollment.class_obj,
             'is_active': True,
-            'status': Exam.Status.PUBLISHED,
             'academic_year_id': enrollment.academic_year_id,
         }
+        # Staff can preview marks before results are announced (flagged is_draft below);
+        # any other role only ever sees announced results.
+        from users.models import User as _User
+        staff_roles = {
+            _User.Role.SUPER_ADMIN, _User.Role.SCHOOL_ADMIN, _User.Role.PRINCIPAL,
+            _User.Role.MANAGER, _User.Role.TEACHER, _User.Role.STAFF,
+        }
+        if request.user.role not in staff_roles:
+            exam_filter['status'] = Exam.Status.PUBLISHED
         if term_id:
             exam_filter['term_id'] = term_id
 
@@ -2582,7 +2607,7 @@ class ReportCardView(ModuleAccessMixin, APIView):
                 mark = marks_lookup.get(es.id)
                 exam_marks[es.subject_id] = {
                     'total_marks': float(es.total_marks),
-                    'marks_obtained': float(mark.marks_obtained) if mark and mark.marks_obtained else None,
+                    'marks_obtained': float(mark.marks_obtained) if mark and mark.marks_obtained is not None else None,
                     'is_absent': mark.is_absent if mark else False,
                     'ai_comment': mark.ai_comment if mark else '',
                 }
@@ -2748,12 +2773,21 @@ class ReportCardView(ModuleAccessMixin, APIView):
             stats = self._compute_overall_stats(classmate.id, exams, es_by_exam, marks_by_key, use_weighted)
             if stats is not None:
                 class_stats.append((classmate.id, stats))
-        class_stats.sort(key=lambda item: item[1]['percentage'] if is_weighted_calc else item[1]['obtained'], reverse=True)
+        def _rank_key(stats):
+            return round(stats['percentage'] if is_weighted_calc else stats['obtained'], 2)
+
+        class_stats.sort(key=lambda item: _rank_key(item[1]), reverse=True)
+        # Dense ranking: tied students share a position and the next score is +1 (1,1,1,2).
         rank = None
         class_size = len(class_stats)
-        for idx, (sid, _stats) in enumerate(class_stats):
+        current_rank, prev_key = 0, None
+        for sid, stats in class_stats:
+            key = _rank_key(stats)
+            if key != prev_key:
+                current_rank += 1
+                prev_key = key
             if sid == student.id:
-                rank = idx + 1
+                rank = current_rank
                 break
 
         # Latest teacher-entered assessment (conduct ratings + remarks) whose month
@@ -2800,6 +2834,7 @@ class ReportCardView(ModuleAccessMixin, APIView):
             'term_name': report_term.name if report_term else None,
             'exam_display': exam_display,
             'exam_names': exam_names,
+            'is_draft': any(e.status != Exam.Status.PUBLISHED for e in exams),
             'guardian_name': student.guardian_name or student.parent_name or '',
             'photo_url': student.photo_url or '',
             'attendance': attendance,

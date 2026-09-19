@@ -56,12 +56,6 @@ export default function ResultsPage() {
     queryKey: 'myResultsClasses',
   })
 
-  const { data: summaryRes } = useQuery({
-    queryKey: ['classSummary', selectedExamId],
-    queryFn: () => examinationsApi.getClassSummary(selectedExamId),
-    enabled: !!selectedExamId,
-  })
-
   // AI comment generation
   const generateCommentsMut = useMutation({
     mutationFn: ({ examId, force }) => examinationsApi.generateComments(examId, force),
@@ -75,7 +69,28 @@ export default function ResultsPage() {
 
   const exams = examsRes?.data?.results || examsRes?.data || []
   const results = resultsRes?.data?.results || resultsRes?.data || []
-  const summary = summaryRes?.data || null
+  // The results endpoint only returns per-student rows, and its is_pass needs every
+  // subject passed -- so a student with any subject not yet entered is "incomplete",
+  // not failed. Summary cards are derived from the same rows for consistency.
+  const getStatus = (r) => {
+    if (r.marks?.some(m => m.marks_obtained == null && !m.is_absent)) return 'incomplete'
+    return r.is_pass ? 'pass' : 'fail'
+  }
+  const summary = results.length > 0 ? (() => {
+    const complete = results.filter(r => getStatus(r) !== 'incomplete')
+    const withMarks = results.filter(r => r.total_obtained > 0)
+    const toppers = results.filter(r => r.rank === 1)
+    return {
+      total_students: results.length,
+      pass_count: complete.filter(r => getStatus(r) === 'pass').length,
+      fail_count: complete.filter(r => getStatus(r) === 'fail').length,
+      incomplete_count: results.length - complete.length,
+      class_average: withMarks.length ? withMarks.reduce((s, r) => s + r.percentage, 0) / withMarks.length : null,
+      toppers: toppers.map(t => t.student_name),
+      topper_marks: toppers[0]?.total_obtained,
+      topper_percentage: toppers[0]?.percentage,
+    }
+  })() : null
   const hasAnyComments = results?.results?.some(r => r.marks?.some(m => m.ai_comment)) ||
     results?.some?.(r => r.marks?.some(m => m.ai_comment))
 
@@ -204,7 +219,7 @@ export default function ResultsPage() {
               </div>
               <div className="card text-center">
                 <p className="text-2xl font-bold text-red-600">{summary.fail_count || 0}</p>
-                <p className="text-xs text-gray-500">Failed</p>
+                <p className="text-xs text-gray-500">Failed{summary.incomplete_count > 0 ? ` · ${summary.incomplete_count} incomplete` : ''}</p>
               </div>
               <div className="card text-center">
                 <p className="text-2xl font-bold text-blue-600">{summary.class_average ? `${Number(summary.class_average).toFixed(1)}%` : '—'}</p>
@@ -214,16 +229,16 @@ export default function ResultsPage() {
           )}
 
           {/* Topper & Subject stats */}
-          {summary?.topper && (
+          {summary?.toppers?.length > 0 && (
             <div className="card mb-4 bg-yellow-50/50 border border-yellow-200">
               <div className="flex items-center gap-2">
                 <span className="text-yellow-600 text-lg">&#9733;</span>
                 <div>
                   <p className="text-sm font-medium text-gray-900">
-                    Class Topper: <strong>{summary.topper.student_name}</strong>
+                    Class Topper{summary.toppers.length > 1 ? 's' : ''}: <strong>{summary.toppers.join(', ')}</strong>
                   </p>
                   <p className="text-xs text-gray-600">
-                    Total: {summary.topper.total_marks} | Percentage: {Number(summary.topper.percentage).toFixed(1)}%
+                    Total: {summary.topper_marks} | Percentage: {Number(summary.topper_percentage).toFixed(1)}%
                   </p>
                 </div>
               </div>
@@ -257,16 +272,18 @@ export default function ResultsPage() {
                       return (
                         <React.Fragment key={idx}>
                           <tr
-                            className={`hover:bg-gray-50 ${r.is_pass === false ? 'bg-red-50/30' : ''} ${hasComments ? 'cursor-pointer' : ''}`}
+                            className={`hover:bg-gray-50 ${getStatus(r) === 'fail' ? 'bg-red-50/30' : ''} ${hasComments ? 'cursor-pointer' : ''}`}
                             onClick={() => hasComments && setExpandedStudent(isExpanded ? null : r.student_id)}
                           >
                             <td className="px-3 py-2 text-center">
-                              {idx < 3 ? (
+                              {r.rank == null ? (
+                                <span className="text-sm text-gray-400">—</span>
+                              ) : r.rank <= 3 ? (
                                 <span className={`inline-flex w-6 h-6 items-center justify-center rounded-full text-xs font-bold text-white ${
-                                  idx === 0 ? 'bg-yellow-500' : idx === 1 ? 'bg-gray-400' : 'bg-amber-600'
-                                }`}>{idx + 1}</span>
+                                  r.rank === 1 ? 'bg-yellow-500' : r.rank === 2 ? 'bg-gray-400' : 'bg-amber-600'
+                                }`}>{r.rank}</span>
                               ) : (
-                                <span className="text-sm text-gray-500">{idx + 1}</span>
+                                <span className="text-sm text-gray-500">{r.rank}</span>
                               )}
                             </td>
                             <td className="px-3 py-2 text-sm font-medium text-gray-900">
@@ -276,8 +293,8 @@ export default function ResultsPage() {
                               )}
                             </td>
                             <td className="px-3 py-2 text-sm font-mono text-gray-600">{r.roll_number}</td>
-                            <td className="px-3 py-2 text-sm text-center font-medium">{r.obtained_marks ?? '—'}</td>
-                            <td className="px-3 py-2 text-sm text-center text-gray-500">{r.total_marks ?? '—'}</td>
+                            <td className="px-3 py-2 text-sm text-center font-medium">{r.total_obtained ?? '—'}</td>
+                            <td className="px-3 py-2 text-sm text-center text-gray-500">{r.total_possible ?? '—'}</td>
                             <td className="px-3 py-2 text-sm text-center font-medium">
                               {r.percentage != null ? `${Number(r.percentage).toFixed(1)}%` : '—'}
                             </td>
@@ -287,12 +304,12 @@ export default function ResultsPage() {
                               ) : '—'}
                             </td>
                             <td className="px-3 py-2 text-center">
-                              {r.is_pass === true ? (
+                              {getStatus(r) === 'pass' ? (
                                 <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded-full text-xs">Pass</span>
-                              ) : r.is_pass === false ? (
+                              ) : getStatus(r) === 'fail' ? (
                                 <span className="px-2 py-0.5 bg-red-100 text-red-700 rounded-full text-xs">Fail</span>
                               ) : (
-                                <span className="text-xs text-gray-400">—</span>
+                                <span className="px-2 py-0.5 bg-amber-100 text-amber-700 rounded-full text-xs">Incomplete</span>
                               )}
                             </td>
                           </tr>
@@ -326,17 +343,19 @@ export default function ResultsPage() {
                   return (
                     <div
                       key={idx}
-                      className={`card ${r.is_pass === false ? 'border-red-200 bg-red-50/30' : ''} ${hasComments ? 'cursor-pointer' : ''}`}
+                      className={`card ${getStatus(r) === 'fail' ? 'border-red-200 bg-red-50/30' : ''} ${hasComments ? 'cursor-pointer' : ''}`}
                       onClick={() => hasComments && setExpandedStudent(isExpanded ? null : r.student_id)}
                     >
                       <div className="flex items-center justify-between mb-1">
                         <div className="flex items-center gap-2">
-                          {idx < 3 ? (
+                          {r.rank == null ? (
+                            <span className="text-sm text-gray-400">—</span>
+                          ) : r.rank <= 3 ? (
                             <span className={`inline-flex w-6 h-6 items-center justify-center rounded-full text-xs font-bold text-white ${
-                              idx === 0 ? 'bg-yellow-500' : idx === 1 ? 'bg-gray-400' : 'bg-amber-600'
-                            }`}>{idx + 1}</span>
+                              r.rank === 1 ? 'bg-yellow-500' : r.rank === 2 ? 'bg-gray-400' : 'bg-amber-600'
+                            }`}>{r.rank}</span>
                           ) : (
-                            <span className="text-sm text-gray-400">#{idx + 1}</span>
+                            <span className="text-sm text-gray-400">#{r.rank}</span>
                           )}
                           <div>
                             <p className="font-medium text-gray-900 text-sm">
@@ -346,14 +365,16 @@ export default function ResultsPage() {
                             <p className="text-xs text-gray-500">Roll: {r.roll_number}</p>
                           </div>
                         </div>
-                        {r.is_pass === true ? (
+                        {getStatus(r) === 'pass' ? (
                           <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded-full text-xs">Pass</span>
-                        ) : r.is_pass === false ? (
+                        ) : getStatus(r) === 'fail' ? (
                           <span className="px-2 py-0.5 bg-red-100 text-red-700 rounded-full text-xs">Fail</span>
-                        ) : null}
+                        ) : (
+                          <span className="px-2 py-0.5 bg-amber-100 text-amber-700 rounded-full text-xs">Incomplete</span>
+                        )}
                       </div>
                       <div className="flex items-center gap-3 text-xs text-gray-600">
-                        <span>Marks: {r.obtained_marks ?? '—'}/{r.total_marks ?? '—'}</span>
+                        <span>Marks: {r.total_obtained ?? '—'}/{r.total_possible ?? '—'}</span>
                         <span>{r.percentage != null ? `${Number(r.percentage).toFixed(1)}%` : ''}</span>
                         {r.grade && <span className="px-1.5 py-0.5 bg-primary-100 text-primary-700 rounded text-xs">{r.grade}</span>}
                       </div>
