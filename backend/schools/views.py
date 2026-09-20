@@ -9,7 +9,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 from django.apps import apps
-from django.core.cache import cache
+from core.cache_utils import cached_api
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.db.models import Count, Q
@@ -180,23 +180,15 @@ class SuperAdminSchoolViewSet(viewsets.ModelViewSet):
         return Response({'message': f'{count} school(s) reassigned.'})
 
     @action(detail=False, methods=['get'])
+    @cached_api('platform_stats', timeout=60, per_user=False)
     def platform_stats(self, request):
         """
         Platform-wide aggregate statistics for the SuperAdmin overview.
 
         Cached for 60s — this runs 6+ aggregate queries (including distinct-join
-        counts per school) on every Overview tab load; a short TTL absorbs
-        repeat tab-switches without making the dashboard show stale-by-more-
-        than-a-minute numbers. Not invalidated on write — the up-to-60s
-        staleness is fine for an overview stat, and avoids wiring cache-busting
-        into every school/user mutation.
+        counts per school) on every Overview tab load. Invalidated by
+        core/signals.py; the TTL covers bulk writes.
         """
-        # KEY_PREFIX='eduai' is already applied by the cache backend config, so no
-        # need to repeat it here.
-        cache_key = 'admin:platform_stats'
-        cached = cache.get(cache_key)
-        if cached is not None:
-            return Response(cached)
 
         from students.models import Student
         from users.models import User
@@ -247,10 +239,10 @@ class SuperAdminSchoolViewSet(viewsets.ModelViewSet):
             'previous_period_users': previous_period_users,
             'school_breakdown': school_breakdown,
         }
-        cache.set(cache_key, payload, 60)
         return Response(payload)
 
     @action(detail=False, methods=['get'])
+    @cached_api('demo_insights', timeout=60, per_user=False)
     def demo_insights(self, request):
         """
         Demo-funnel stats for the SuperAdmin overview: how many visitor
@@ -265,11 +257,6 @@ class SuperAdminSchoolViewSet(viewsets.ModelViewSet):
 
         Cached for 60s, same reasoning as platform_stats above.
         """
-        cache_key = 'admin:demo_insights'
-        cached = cache.get(cache_key)
-        if cached is not None:
-            return Response(cached)
-
         from django.conf import settings as dj_settings
         from brochure.models import DemoRequest
         from core.models import LoginEvent
@@ -306,7 +293,6 @@ class SuperAdminSchoolViewSet(viewsets.ModelViewSet):
                 logins_qs.order_by('-created_at').values('username', 'role', 'created_at')[:15]
             ),
         }
-        cache.set(cache_key, payload, 60)
         return Response(payload)
 
 

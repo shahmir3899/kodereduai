@@ -11,6 +11,7 @@ import { ThemeProvider } from '../../contexts/ThemeContext'
 import Portal from './Portal'
 import { createAppPersister, queryPersistOptions } from '../../queryPersistConfig'
 import '../../index.css'
+import { installFinanceQueryRules } from '../../financeQueryRules'
 
 const QUERY_STALE_TIME_MS = Number(import.meta.env.VITE_QUERY_STALE_TIME_MS || 30 * 1000)
 // Must be >= the persister's maxAge (queryPersistConfig.js), or a reference-data
@@ -33,6 +34,7 @@ const queryClient = new QueryClient({
     },
   },
 })
+installFinanceQueryRules(queryClient)
 
 // Set portal mode in localStorage when portal app loads
 localStorage.setItem('isPortalMode', 'true')

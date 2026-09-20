@@ -126,7 +126,7 @@ export default function FeeSetupPage() {
       ...(activeAcademicYear?.id && { academic_year: activeAcademicYear.id }),
     }),
     enabled: activeTab === 'discounts' && !!resolvedDiscClassId,
-    staleTime: 2 * 60_000,
+    staleTime: 0,
   })
 
   const { data: studentDiscountsData, isLoading: studentDiscountsLoading } = useQuery({
@@ -136,21 +136,21 @@ export default function FeeSetupPage() {
       ...(activeAcademicYear?.id && { academic_year: activeAcademicYear.id }),
     }),
     enabled: activeTab === 'discounts',
-    staleTime: 60_000,
+    staleTime: 0,
   })
 
   const { data: discountsListData } = useQuery({
     queryKey: ['disc-tab-discounts-list'],
     queryFn: () => discountApi.getDiscounts({ is_active: true, page_size: 9999 }),
     enabled: activeTab === 'discounts',
-    staleTime: 5 * 60_000,
+    staleTime: 0,
   })
 
   const { data: scholarshipsListData } = useQuery({
     queryKey: ['disc-tab-scholarships-list'],
     queryFn: () => discountApi.getScholarships({ is_active: true, page_size: 9999 }),
     enabled: activeTab === 'discounts',
-    staleTime: 5 * 60_000,
+    staleTime: 0,
   })
 
   const discStudents = discStudentsData?.data?.results || discStudentsData?.data || []
@@ -284,7 +284,7 @@ export default function FeeSetupPage() {
       ...(activeAcademicYear?.id && { academic_year: activeAcademicYear.id }),
     }),
     enabled: activeTab === 'generate' && !!resolvedSingleStructClassId && !!singleStructForm.feeType,
-    staleTime: 60_000,
+    staleTime: 0,
   })
   const singleStructStructures = singleStructStructuresData?.data?.results || singleStructStructuresData?.data || []
 

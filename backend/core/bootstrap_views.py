@@ -88,12 +88,9 @@ def _get_hr_section(school_id):
         school_id=school_id, is_active=True,
     ).count()
 
-    payroll_stats = Payslip.objects.filter(
-        school_id=school_id, month=today.month, year=today.year,
-    ).aggregate(
-        total=Sum('net_salary'),
-        pending_approvals=Count('id', filter=Q(status='DRAFT')),
-    )
+    pending_payroll_approvals = Payslip.objects.filter(
+        school_id=school_id, month=today.month, year=today.year, status='DRAFT',
+    ).count()
 
     leave_stats = LeaveApplication.objects.filter(school_id=school_id).aggregate(
         pending_leave_applications=Count('id', filter=Q(status='PENDING')),
@@ -115,8 +112,7 @@ def _get_hr_section(school_id):
         'active_staff': staff_counts.get('active_staff', 0),
         'total_departments': total_departments,
         'recent_joiners': staff_counts.get('recent_joiners', 0),
-        'total_payroll_this_month': str(payroll_stats.get('total') or Decimal('0')),
-        'pending_payroll_approvals': payroll_stats.get('pending_approvals') or 0,
+        'pending_payroll_approvals': pending_payroll_approvals,
         'pending_leave_applications': leave_stats.get('pending_leave_applications', 0),
         'staff_on_leave_today': leave_stats.get('staff_on_leave_today', 0),
         'attendance_present_today': attendance_stats.get('attendance_present', 0),

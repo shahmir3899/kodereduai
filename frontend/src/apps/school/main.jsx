@@ -11,6 +11,7 @@ import { ThemeProvider } from '../../contexts/ThemeContext'
 import SchoolApp from './SchoolApp'
 import { createAppPersister, queryPersistOptions } from '../../queryPersistConfig'
 import '../../index.css'
+import { installFinanceQueryRules } from '../../financeQueryRules'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -29,6 +30,7 @@ const queryClient = new QueryClient({
     },
   },
 })
+installFinanceQueryRules(queryClient)
 
 const persister = createAppPersister()
 

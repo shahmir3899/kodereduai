@@ -4,7 +4,6 @@ Inventory views for categories, vendors, items, assignments, transactions, and d
 
 from datetime import date
 
-from django.core.cache import cache
 from django.db.models import Sum, Count, Q, F
 from rest_framework import viewsets, status
 from rest_framework.decorators import action, api_view, permission_classes as perm_classes
@@ -336,13 +335,7 @@ class InventoryDashboardView(ModuleAccessMixin, APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # Cached for 60s, busted immediately on the relevant model changes
-        # via inventory/signals.py — see hr/views.py's dashboard_stats for
-        # the fuller rationale on this pattern.
-        cache_key = f'inventory:dashboard:{school_id}'
-        cached = cache.get(cache_key)
-        if cached is not None:
-            return Response(cached)
+        # Not cached: the payload includes total_value (stock valued at unit_price).
 
         items_qs = InventoryItem.objects.filter(school_id=school_id, is_active=True)
 
@@ -392,7 +385,6 @@ class InventoryDashboardView(ModuleAccessMixin, APIView):
             'recent_transactions': recent_transactions,
             'low_stock_items': low_stock_items,
         }
-        cache.set(cache_key, payload, 60)
         return Response(payload)
 
 

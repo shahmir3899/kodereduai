@@ -207,7 +207,7 @@ export default function FeeGenerationSurface({
 		queryKey: ['generate-preview', feeType, resolvedClassFilter, resolvedSessionClassFilter, selectedMonth, selectedYear, academicYearId, selectedAnnualCategories, selectedMonthlyCategories],
 		queryFn: () => financeApi.previewGeneration(previewParams),
 		enabled: previewEnabled,
-		staleTime: 30_000,
+		staleTime: 0,
 	})
 
 	const preview = previewData?.data

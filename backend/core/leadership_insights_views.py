@@ -12,7 +12,7 @@ dictates otherwise — consistent with other dashboard endpoints using date.toda
 from calendar import monthrange
 from datetime import date, timedelta
 
-from django.core.cache import cache
+from core.cache_utils import cached_api
 from django.db.models import Count
 from django.utils.dateparse import parse_date
 from rest_framework.permissions import IsAuthenticated
@@ -316,6 +316,7 @@ class LeadershipAcademicInsightsView(APIView):
 
     permission_classes = [IsAuthenticated, HasSchoolAccess]
 
+    @cached_api('leadership_insights', timeout=90)
     def get(self, request):
         role = get_effective_role(request)
         if role not in _LEAD_ROLES:
@@ -354,16 +355,12 @@ class LeadershipAcademicInsightsView(APIView):
         if not isinstance(enabled, dict):
             enabled = {}
 
-        cache_key = f'leadership-insights:{school_id}:{ay.id if ay else "none"}:{ref_date}'
-        payload = cache.get(cache_key)
-        if payload is None:
-            payload = build_leadership_academic_insights(
-                school_id=school_id,
-                academic_year=ay,
-                reference_date=ref_date,
-                enabled_modules=enabled,
-            )
-            cache.set(cache_key, payload, 90)
+        payload = build_leadership_academic_insights(
+            school_id=school_id,
+            academic_year=ay,
+            reference_date=ref_date,
+            enabled_modules=enabled,
+        )
 
         meta = {
             'school_id': school_id,

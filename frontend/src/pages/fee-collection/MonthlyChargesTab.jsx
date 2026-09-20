@@ -68,7 +68,7 @@ export default function MonthlyChargesTab() {
       ...(activeAcademicYear?.id && { academic_year: activeAcademicYear.id }),
     }),
     enabled: mode === 'student' && !!activeSchool?.id && !!resolvedStudentClassId,
-    staleTime: 60_000,
+    staleTime: 0,
   })
   const classStructures = structsData?.data?.results ?? structsData?.data ?? []
 

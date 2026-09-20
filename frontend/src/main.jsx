@@ -11,6 +11,7 @@ import { BackgroundTaskProvider } from './contexts/BackgroundTaskContext.jsx'
 import { schoolsApi } from './services/api'
 import './index.css'
 import Spinner from './components/ui/Spinner'
+import { installFinanceQueryRules } from './financeQueryRules'
 
 const VITE_PRELOAD_RELOAD_KEY = 'vite-preload-reloaded-once'
 
@@ -45,6 +46,7 @@ const queryClient = new QueryClient({
     },
   },
 })
+installFinanceQueryRules(queryClient)
 
 // Wrapper component to handle subdomain detection
 function AppWithSubdomain() {

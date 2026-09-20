@@ -194,7 +194,7 @@ export default function StudentProfilePage() {
     queryKey: ['studentFees', id],
     queryFn: () => studentsApi.getFeeLedger(id),
     enabled: tab === 'Fees',
-    staleTime: 5 * 60_000,
+    staleTime: 0,
     gcTime: 10 * 60_000,
   })
 

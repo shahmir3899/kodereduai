@@ -3,7 +3,7 @@ import logging
 import re
 from datetime import date
 from decimal import Decimal
-from django.core.cache import cache
+from core.cache_utils import cached_api
 from django.db import IntegrityError, transaction
 from django.db.models import Count, IntegerField, OuterRef, Q, Subquery
 from django.db.models.functions import Coalesce
@@ -2139,19 +2139,10 @@ class GradeScaleViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
             qs = qs.filter(is_active=True)
         return qs
 
+    @cached_api('grade_scales', timeout=180)
     def list(self, request, *args, **kwargs):
-        # Small, slow-changing reference list — cached per school+is_active,
-        # busted by examinations/signals.py on any GradeScale write.
-        school_id = _resolve_school_id(request)
-        is_active_param = request.query_params.get('is_active', 'true')
-        cache_key = f'grade-scales:list:{school_id}:{is_active_param}'
-        cached = cache.get(cache_key)
-        if cached is not None:
-            return Response(cached)
-        response = super().list(request, *args, **kwargs)
-        if response.status_code == 200:
-            cache.set(cache_key, response.data, 180)
-        return response
+        # Small, slow-changing reference list; invalidated by examinations/signals.py.
+        return super().list(request, *args, **kwargs)
 
     def perform_destroy(self, instance):
         instance.is_active = False

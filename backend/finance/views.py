@@ -12,7 +12,6 @@ from io import BytesIO
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 
-from django.core.cache import cache
 from django.db import transaction
 from django.db.models import Sum, Count, Q, Prefetch
 from rest_framework import viewsets, status
@@ -24,7 +23,6 @@ from django.http import FileResponse
 
 from core.permissions import IsSchoolAdmin, FinanceRoleAccessPermission, HasSchoolAccess, get_effective_role, ModuleAccessMixin, ADMIN_ROLES, _is_data_restricted_user, get_teacher_class_scope, get_teacher_session_class_scope, _get_session_class_student_ids
 from core.mixins import TenantQuerySetMixin, ensure_tenant_schools, ensure_tenant_school_id
-from .cache_utils import finance_cache_version
 from core.class_scope import resolve_class_scope
 from students.models import Student, Class
 from django.utils import timezone
@@ -1875,11 +1873,6 @@ class ExpenseViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
         date_from = request.query_params.get('date_from')
         date_to = request.query_params.get('date_to')
         is_restricted = _is_data_restricted_user(request)
-        version = finance_cache_version(school_id)
-        cache_key = f'finance:expense-category-summary:{version}:{school_id}:{date_from}:{date_to}:{is_restricted}'
-        cached = cache.get(cache_key)
-        if cached is not None:
-            return Response(cached)
 
         queryset = Expense.objects.filter(school_id=school_id).select_related('category')
 
@@ -1917,7 +1910,6 @@ class ExpenseViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
             'categories': result,
             'total': total,
         }
-        cache.set(cache_key, payload, 60)
         return Response(payload)
 
 
@@ -2239,11 +2231,6 @@ class AccountViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
 
         effective_role = get_effective_role(request)
         is_staff = _is_staff_user(request)
-        version = finance_cache_version(school_id)
-        cache_key = f'finance:balances:{version}:{school_id}:{date_from}:{date_to}:{effective_role}:{is_staff}'
-        cached = cache.get(cache_key)
-        if cached is not None:
-            return Response(cached)
 
         from schools.models import School
         try:
@@ -2285,10 +2272,6 @@ class AccountViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
             'date_from': date_from,
             'date_to': date_to,
         }
-        # Short TTL — balances are financial data, so we trade a little staleness
-        # (at most 60s) for avoiding the ~5-6 queries per account on every dashboard
-        # load; finance/signals.py busts this immediately on any relevant write.
-        cache.set(cache_key, payload, 60)
         return Response(payload)
 
     @action(detail=False, methods=['get'], url_path='ledger')
@@ -2817,20 +2800,7 @@ class AccountViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
         if not tenant_schools:
             return Response({'detail': 'No schools accessible.'}, status=400)
 
-        # Spans multiple schools, so (unlike balances() above) this doesn't use
-        # the per-school cache-version bump for exact invalidation — that would
-        # need coordinating a version per involved school. A flat 60s TTL is a
-        # simpler, deliberately-accepted staleness tradeoff for this cross-school
-        # aggregate view, which is hit far less often than the single-school one.
         is_principal_role = get_effective_role(request) == 'PRINCIPAL'
-        cache_key = (
-            'finance:balances-all:'
-            f'{"-".join(str(sid) for sid in sorted(tenant_schools))}:'
-            f'{date_from}:{date_to}:{is_principal_role}'
-        )
-        cached = cache.get(cache_key)
-        if cached is not None:
-            return Response(cached)
 
         schools = School.objects.filter(id__in=tenant_schools, is_active=True).order_by('name')
 
@@ -2888,7 +2858,6 @@ class AccountViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
             'date_from': date_from,
             'date_to': date_to,
         }
-        cache.set(cache_key, payload, 60)
         return Response(payload)
 
     @action(detail=False, methods=['post'], permission_classes=[IsAuthenticated, IsSchoolAdmin, HasSchoolAccess])
@@ -3314,11 +3283,6 @@ class FinanceReportsView(ModuleAccessMixin, APIView):
         date_to = request.query_params.get('date_to')
         is_staff = _is_staff_user(request)
 
-        version = finance_cache_version(school_id)
-        cache_key = f'finance:reports-summary:{version}:{school_id}:{date_from}:{date_to}:{is_staff}'
-        cached = cache.get(cache_key)
-        if cached is not None:
-            return Response(cached)
 
         # Income from fee payments
         fee_qs = FeePayment.objects.filter(school_id=school_id)
@@ -3365,7 +3329,6 @@ class FinanceReportsView(ModuleAccessMixin, APIView):
             'date_from': date_from,
             'date_to': date_to,
         }
-        cache.set(cache_key, payload, 60)
         return Response(payload)
 
     def _monthly_trend(self, request, school_id):

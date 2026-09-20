@@ -10,7 +10,7 @@ export function useOtherIncome({ month, year }) {
   const { data: accountsData } = useQuery({
     queryKey: ['accounts'],
     queryFn: () => financeApi.getAccounts({ page_size: 9999 }),
-    staleTime: 5 * 60_000,
+    staleTime: 0,
   })
 
   const { data: incomeCategoriesData } = useQuery({

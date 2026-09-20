@@ -78,13 +78,10 @@ export default function HRDashboardPage() {
           <p className="text-2xl font-bold text-purple-700">{stats.recent_joiners || 0}</p>
         </div>
         <div className="card">
-          <p className="text-xs text-gray-500 mb-1">Payroll This Month</p>
+          <p className="text-xs text-gray-500 mb-1">Payroll Approvals</p>
           <p className="text-2xl font-bold text-gray-900">
-            {parseFloat(stats.total_payroll_this_month || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+            {stats.pending_payroll_approvals || 0} <span className="text-sm font-normal text-gray-500">pending this month</span>
           </p>
-          {(stats.pending_payroll_approvals || 0) > 0 && (
-            <p className="text-xs text-yellow-600 mt-1">{stats.pending_payroll_approvals} pending approval</p>
-          )}
         </div>
         <div className="card">
           <p className="text-xs text-gray-500 mb-1">Leave Status</p>

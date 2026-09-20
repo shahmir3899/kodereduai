@@ -192,7 +192,7 @@ export function FeeStructureModal({ show, onClose, classList, bulkEffectiveFrom,
       ...(academicYearId && { academic_year: academicYearId }),
     }),
     enabled: show,
-    staleTime: 2 * 60_000,
+    staleTime: 0,
   })
 
   // Populate per-type fees when structures load
@@ -228,7 +228,7 @@ export function FeeStructureModal({ show, onClose, classList, bulkEffectiveFrom,
       ...(academicYearId && { academic_year: academicYearId }),
     }),
     enabled: show && structureMode === 'student' && !!resolvedStudentClassId,
-    staleTime: 60_000,
+    staleTime: 0,
   })
 
   // Build student fee grid from fetched data, merging any local edits
@@ -823,7 +823,7 @@ export function CreateSingleFeeModal({ show, onClose, onSubmit, isPending, error
       ...(form.fee_type === 'MONTHLY' && form.monthlyCategoryId && { monthly_category: form.monthlyCategoryId }),
     }),
     enabled: !!form.student && !!form.fee_type && !!selectedCategoryId,
-    staleTime: 60_000,
+    staleTime: 0,
   })
 
   // Auto-fill amount_due when resolved amount arrives
@@ -842,7 +842,7 @@ export function CreateSingleFeeModal({ show, onClose, onSubmit, isPending, error
       ...(form.fee_type === 'MONTHLY' && form.monthlyCategoryId && { monthly_category: form.monthlyCategoryId }),
     }),
     enabled: !!form.student && !!form.fee_type && !!form.year && !!selectedCategoryId,
-    staleTime: 10_000,
+    staleTime: 0,
   })
   const hasDuplicate = (dupCheck?.data?.results || dupCheck?.data || []).length > 0
 

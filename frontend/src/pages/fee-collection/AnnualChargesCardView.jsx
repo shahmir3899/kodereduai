@@ -68,7 +68,7 @@ export default function AnnualChargesCardView() {
       ...(activeAcademicYear?.id && { academic_year: activeAcademicYear.id }),
     }),
     enabled: !!activeAcademicYear?.id,
-    staleTime: 60_000,
+    staleTime: 0,
   })
 
   const allStructures = allStructuresData?.data?.results ?? allStructuresData?.data ?? []

@@ -1,7 +1,7 @@
 from calendar import monthrange
 from datetime import date, timedelta
 
-from django.core.cache import cache
+from core.cache_utils import cached_api
 from django.db.models import Count, Q, F
 from django.db import transaction
 from django.utils import timezone
@@ -88,18 +88,10 @@ class AcademicYearViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
         ).order_by('-start_date')
         return qs
 
+    @cached_api('academic_years', timeout=180)
     def list(self, request, *args, **kwargs):
-        # Small, slow-changing reference list — cached per school, busted by
-        # academic_sessions/signals.py on any AcademicYear write.
-        school_id = _resolve_school_id(request)
-        cache_key = f'academic-years:list:{school_id}'
-        cached = cache.get(cache_key)
-        if cached is not None:
-            return Response(cached)
-        response = super().list(request, *args, **kwargs)
-        if response.status_code == 200:
-            cache.set(cache_key, response.data, 180)
-        return response
+        # Small, slow-changing reference list; invalidated by academic_sessions/signals.py.
+        return super().list(request, *args, **kwargs)
 
     @action(detail=True, methods=['post'])
     def set_current(self, request, pk=None):
@@ -110,10 +102,6 @@ class AcademicYearViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
         ).exclude(pk=year.pk).update(is_current=False)
         year.is_current = True
         year.save()
-        # save() re-fires post_save (busts the cache via the signal below), but the
-        # .update() above on sibling years is a bulk queryset update and doesn't —
-        # bust explicitly so the list cache doesn't show a stale `is_current` flag.
-        cache.delete(f'academic-years:list:{year.school_id}')
         return Response(AcademicYearSerializer(year).data)
 
     @action(detail=False, methods=['get'])

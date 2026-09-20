@@ -77,7 +77,7 @@ export default function AnnualChargesStudentTab() {
       ...(activeAcademicYear?.id && { academic_year: activeAcademicYear.id }),
     }),
     enabled: !!resolvedStudentClassId,
-    staleTime: 60_000,
+    staleTime: 0,
   })
   const classStructures = structsData?.data?.results ?? structsData?.data ?? []
 

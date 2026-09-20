@@ -17,7 +17,7 @@ export function useFeeCollection({ month, year, classFilter, statusFilter, feeTy
   const { data: accountsData } = useQuery({
     queryKey: ['accounts'],
     queryFn: () => financeApi.getAccounts({ page_size: 9999 }),
-    staleTime: 5 * 60_000,
+    staleTime: 0,
   })
 
   const { data: classes } = useQuery({
@@ -253,7 +253,7 @@ export function useFeeCollection({ month, year, classFilter, statusFilter, feeTy
   const { data: summaryRes } = useQuery({
     queryKey: ['feeSummary', summaryParams],
     queryFn: () => financeApi.getFeeSummary(summaryParams),
-    staleTime: 30_000,
+    staleTime: 0,
   })
 
   const filteredSummaryData = summaryRes?.data || null

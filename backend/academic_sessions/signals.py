@@ -1,15 +1,9 @@
 """
-Cache invalidation for the AcademicYearViewSet list cache (see .list() override
-in academic_sessions/views.py) — same pattern as hostel/signals.py.
+Cache invalidation for the AcademicYearViewSet list cache (see .list() in
+academic_sessions/views.py). The list annotates term and enrollment counts, so
+those models bump the group too.
 """
-from django.db.models.signals import post_save, post_delete
-from django.dispatch import receiver
-from django.core.cache import cache
+from core.cache_utils import invalidate_group_on_change
+from academic_sessions.models import AcademicYear, Term, StudentEnrollment
 
-from academic_sessions.models import AcademicYear
-
-
-@receiver([post_save, post_delete], sender=AcademicYear)
-def _academic_year_changed(sender, instance, **kwargs):
-    if instance.school_id:
-        cache.delete(f'academic-years:list:{instance.school_id}')
+invalidate_group_on_change('academic_years', AcademicYear, Term, StudentEnrollment)

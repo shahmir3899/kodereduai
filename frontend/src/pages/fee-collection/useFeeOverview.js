@@ -30,7 +30,7 @@ export function useFeeOverview({
       ...(monthlyCategoryId && { monthly_category: monthlyCategoryId }),
       ...(academicYearId && { academic_year: academicYearId }),
     }),
-    staleTime: 30_000,
+    staleTime: 0,
   })
 
   // Individual payments — still needed for ClassBreakdown expansion rows

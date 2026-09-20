@@ -6,10 +6,9 @@ import logging
 import uuid
 from datetime import date, timedelta
 
-from decimal import Decimal
 
 from django.db import transaction
-from django.core.cache import cache
+from core.cache_utils import cached_api
 from django.db.models import Count, Q, Sum
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
@@ -685,25 +684,18 @@ class StaffMemberViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelV
         return Response({'next_employee_id': self._generate_next_employee_id(school_id)})
 
     @action(detail=False, methods=['get'])
+    @cached_api('hr_dashboard', timeout=60)
     def dashboard_stats(self, request):
         """
         HR dashboard summary stats.
 
         Cached for 60s — this runs 6+ aggregate queries across staff,
-        payslips, leave, and attendance on every dashboard load. Busted
-        immediately on the relevant model changes via hr/signals.py rather
-        than waiting out the TTL, so the 60s is just a staleness ceiling
-        (e.g. for writes outside the normal view layer), not the expected
-        update latency.
+        payslips, leave, and attendance on every dashboard load. Deliberately
+        excludes payroll amounts: money is never served from the cache.
         """
         school_id = _resolve_school_id(request)
         if not school_id:
             return Response({'detail': 'No school selected.'}, status=400)
-
-        cache_key = f'hr:dashboard_stats:{school_id}'
-        cached = cache.get(cache_key)
-        if cached is not None:
-            return Response(cached)
 
         staff_qs = StaffMember.objects.filter(school_id=school_id)
         today = date.today()
@@ -744,16 +736,10 @@ class StaffMemberViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelV
             school_id=school_id, is_active=True,
         ).count()
 
-        # Payroll stats (current month)
-        payslips_this_month = Payslip.objects.filter(
-            school_id=school_id, month=today.month, year=today.year,
-        )
-        payroll_stats = payslips_this_month.aggregate(
-            total=Sum('net_salary'),
-            pending_approvals=Count('id', filter=Q(status='DRAFT')),
-        )
-        total_payroll_this_month = payroll_stats['total'] or Decimal('0')
-        pending_payroll_approvals = payroll_stats['pending_approvals'] or 0
+        # Payroll approvals (current month) — a count only, no amounts
+        pending_payroll_approvals = Payslip.objects.filter(
+            school_id=school_id, month=today.month, year=today.year, status='DRAFT',
+        ).count()
 
         # Leave stats
         leave_stats = LeaveApplication.objects.filter(
@@ -783,14 +769,12 @@ class StaffMemberViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelV
             'department_breakdown': department_breakdown,
             'status_breakdown': status_breakdown,
             'type_breakdown': type_breakdown,
-            'total_payroll_this_month': str(total_payroll_this_month),
             'pending_payroll_approvals': pending_payroll_approvals,
             'pending_leave_applications': leave_stats.get('pending_leave_applications', 0),
             'staff_on_leave_today': leave_stats.get('staff_on_leave_today', 0),
             'attendance_present_today': attendance_stats.get('attendance_present', 0),
             'attendance_marked_today': attendance_stats.get('attendance_marked', 0),
         }
-        cache.set(cache_key, payload, 60)
         return Response(payload)
 
 

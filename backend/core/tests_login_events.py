@@ -69,10 +69,10 @@ class TestDemoInsightsEndpoint:
         assert resp.status_code == 403
 
     def test_aggregates_emails_and_logins_for_demo_school(self, seed_data, api):
-        from django.core.cache import cache
+        from core.cache_utils import bump_group
         from brochure.models import DemoRequest
 
-        cache.delete('admin:demo_insights')
+        bump_group('demo_insights')
         self._make_super_admin()
         super_token = api.login('PYTEST_super_demo_insights')
         # seed_data's own setup logins (to populate its `tokens` dict) would

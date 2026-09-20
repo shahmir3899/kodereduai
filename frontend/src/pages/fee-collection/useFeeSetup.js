@@ -20,7 +20,7 @@ export function useFeeSetup({ academicYearId, feeType, studentClassId, structure
   const { data: accountsData } = useQuery({
     queryKey: ['accounts'],
     queryFn: () => financeApi.getAccounts({ page_size: 9999 }),
-    staleTime: 5 * 60_000,
+    staleTime: 0,
   })
 
   // All fee structures (no fee_type filter) so each tab has its own data
@@ -30,7 +30,7 @@ export function useFeeSetup({ academicYearId, feeType, studentClassId, structure
       page_size: 9999,
       ...(academicYearId && { academic_year: academicYearId }),
     }),
-    staleTime: 2 * 60_000,
+    staleTime: 0,
   })
 
   // Student mode queries
@@ -51,7 +51,7 @@ export function useFeeSetup({ academicYearId, feeType, studentClassId, structure
       ...(academicYearId && { academic_year: academicYearId }),
     }),
     enabled: structureMode === 'student' && !!studentClassId,
-    staleTime: 60_000,
+    staleTime: 0,
   })
 
   // Mutations
