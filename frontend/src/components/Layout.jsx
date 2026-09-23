@@ -831,6 +831,16 @@ export default function Layout() {
           )}
         </div>
 
+        {/* Academic year switcher: the top bar hides this below sm to avoid
+            crowding the school name, so mobile gets it here instead, where
+            there's full-width room. lg:hidden because from lg up the sidebar
+            is always open and the top bar's own switcher is visible. */}
+        {!isSuperAdmin && (
+          <div className="lg:hidden px-3 pt-3 flex-shrink-0">
+            <AcademicYearSwitcher disabled={!isSessionAwarePage} align="left" />
+          </div>
+        )}
+
         {/* Navigation */}
         <nav className="mt-4 px-3 overflow-y-auto flex-1 min-h-0">
           {visibleNavGroups.map((item) =>

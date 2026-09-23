@@ -343,12 +343,40 @@ def trigger_exam_result(student, exam):
     return sent_log
 
 
+def _students_for_exam(exam):
+    """Students to notify for this exam: scoped to the exam's own academic year
+    via StudentEnrollment, not the student's current class_obj/is_active
+    snapshot -- which drifts once a student is later promoted or graduates
+    (a student who has since graduated would otherwise still get pinged about
+    a class they've left, since their raw class_obj/is_active never update on
+    graduation by design -- see examinations.views._class_roster for the same
+    fix on the exam results/report card side).
+    Falls back to the current class roster when the exam's academic year has
+    no enrollment rows at all (legacy data predating StudentEnrollment).
+    """
+    from students.models import Student
+    from academic_sessions.models import StudentEnrollment
+
+    enrolled_ids = list(StudentEnrollment.objects.filter(
+        school=exam.school,
+        academic_year_id=exam.academic_year_id,
+        class_obj=exam.class_obj,
+        is_active=True,
+    ).values_list('student_id', flat=True))
+
+    if enrolled_ids:
+        return Student.objects.filter(id__in=enrolled_ids).select_related('user_profile__user')
+
+    return Student.objects.filter(
+        school=exam.school, class_obj=exam.class_obj, is_active=True,
+    ).select_related('user_profile__user')
+
+
 def trigger_exam_result_published(exam):
     """
     Notify admins, principals, assigned class teachers, parents, and students
     when an exam is published.
     """
-    from students.models import Student
     from academics.models import ClassTeacherAssignment
     from .engine import NotificationEngine
 
@@ -423,11 +451,7 @@ def trigger_exam_result_published(exam):
         sent += 1
 
     # Parents + students in this class
-    students = Student.objects.filter(
-        school=school,
-        class_obj=exam.class_obj,
-        is_active=True,
-    ).select_related('user_profile__user')
+    students = _students_for_exam(exam)
     for student in students:
         for parent_user in get_parent_users_for_student(student):
             if _daily_notification_already_sent(
@@ -495,7 +519,6 @@ def trigger_exam_schedule_published(exam):
     teacher -- a subject teacher needs to know their own exam dates too.
     """
     from academics.models import ClassTeacherAssignment, ClassSubject
-    from students.models import Student
     from .engine import NotificationEngine
 
     school = exam.school
@@ -551,9 +574,7 @@ def trigger_exam_schedule_published(exam):
         )
         sent += 1
 
-    students = Student.objects.filter(
-        school=school, class_obj=exam.class_obj, is_active=True,
-    ).select_related('user_profile__user')
+    students = _students_for_exam(exam)
     for student in students:
         for parent_user in get_parent_users_for_student(student):
             if _daily_notification_already_sent(
@@ -1135,6 +1156,7 @@ def trigger_assignment_due_soon(school, window_hours=48):
     skipped — there's nothing for the student to be "behind" on.
     """
     from datetime import timedelta
+    from academic_sessions.models import StudentEnrollment
     from lms.models import Assignment, AssignmentSubmission
     from students.models import Student
     from .engine import NotificationEngine
@@ -1170,9 +1192,29 @@ def trigger_assignment_due_soon(school, window_hours=48):
             .filter(assignment=assignment)
             .values_list('student_id', flat=True)
         )
+        # Scoped to the assignment's own academic year via StudentEnrollment when
+        # known, not the student's current class_obj/is_active snapshot -- which
+        # drifts once a student is later promoted or graduates (same pattern as
+        # examinations.views._class_roster). Falls back to the raw class roster
+        # when the assignment has no academic_year, or that (class, year) has no
+        # enrollment rows at all (legacy data predating StudentEnrollment).
+        enrolled_ids = []
+        if assignment.academic_year_id:
+            enrolled_ids = list(StudentEnrollment.objects.filter(
+                school=school,
+                academic_year_id=assignment.academic_year_id,
+                class_obj=assignment.class_obj,
+                is_active=True,
+            ).values_list('student_id', flat=True))
+
+        if enrolled_ids:
+            student_qs = Student.objects.filter(id__in=enrolled_ids)
+        else:
+            student_qs = Student.objects.filter(
+                school=school, class_obj=assignment.class_obj, is_active=True,
+            )
         students = (
-            Student.objects
-            .filter(school=school, class_obj=assignment.class_obj, is_active=True)
+            student_qs
             .exclude(id__in=submitted_student_ids)
             .select_related('user_profile__user')
         )

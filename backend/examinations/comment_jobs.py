@@ -125,8 +125,13 @@ def _run(task_id, exam_id, school_id):
             )
     except Exception as exc:
         logger.exception('Comment generation job failed for exam %s', exam_id)
+        message = (
+            f'Comment generation hit an unexpected error and stopped: '
+            f'{type(exc).__name__} — {str(exc)[:200]}. '
+            'No comments were lost; press Generate again to retry.'
+        )
         tasks.update(
-            status=BackgroundTask.Status.FAILED, error_message=str(exc)[:500],
+            status=BackgroundTask.Status.FAILED, error_message=message[:500],
             completed_at=timezone.now(),
         )
     finally:

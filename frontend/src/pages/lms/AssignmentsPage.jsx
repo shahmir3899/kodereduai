@@ -113,7 +113,7 @@ export default function AssignmentsPage() {
     })
     return map
   }, [sessionClasses])
-  const { classifyScope } = useTeacherScopeLookup({ academicYearId: activeAcademicYear?.id })
+  const { classifyScope, isTeacherEnabled } = useTeacherScopeLookup({ academicYearId: activeAcademicYear?.id })
   const canCreateAssignments = isSchoolAdmin || isPrincipal
   const canCreateDailyDiary = isSchoolAdmin || isPrincipal || isTeacher
 
@@ -709,7 +709,9 @@ export default function AssignmentsPage() {
                     { label: 'Delete', tone: 'danger', onClick: () => setDeleteConfirm(a) },
                   ]}
                 >
-                  <TeacherScopeBadge scope={classifyScope({ classId: a.class_obj, subjectId: a.subject })} />
+                  {isTeacherEnabled && (
+                    <TeacherScopeBadge scope={classifyScope({ classId: a.class_obj, subjectId: a.subject })} />
+                  )}
                 </RecordCard>
               ))}
             </CardGrid>
@@ -752,9 +754,11 @@ export default function AssignmentsPage() {
                     <tr key={a.id} className="hover:bg-gray-50">
                       <td className="px-4 py-3 text-sm font-medium text-gray-900 max-w-[180px] truncate">
                         <div className="truncate">{a.title}</div>
-                        <div className="mt-1">
-                          <TeacherScopeBadge scope={classifyScope({ classId: a.class_obj, subjectId: a.subject })} />
-                        </div>
+                        {isTeacherEnabled && (
+                          <div className="mt-1">
+                            <TeacherScopeBadge scope={classifyScope({ classId: a.class_obj, subjectId: a.subject })} />
+                          </div>
+                        )}
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-500">
                         {a.class_name || '--'}

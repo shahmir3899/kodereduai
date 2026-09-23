@@ -37,7 +37,7 @@ export default function MarksEntryPage() {
     autoSelectFirst: true,
     queryKey: 'myMarksEntryClasses',
   })
-  const { classifyScope } = useTeacherScopeLookup({ academicYearId: yearFilter || undefined })
+  const { classifyScope, isTeacherEnabled } = useTeacherScopeLookup({ academicYearId: yearFilter || undefined })
 
   // Sync year filter with global session switcher
   useEffect(() => {
@@ -393,7 +393,9 @@ export default function MarksEntryPage() {
         )}
         {selectedSubject && (
           <div className="mt-3 pt-3 border-t border-gray-200 flex flex-wrap items-center gap-4 text-xs text-gray-600">
-            <TeacherScopeBadge scope={classifyScope({ classId: selectedExam?.class_obj, subjectId: selectedSubject?.subject })} />
+            {isTeacherEnabled && (
+              <TeacherScopeBadge scope={classifyScope({ classId: selectedExam?.class_obj, subjectId: selectedSubject?.subject })} />
+            )}
             <span>Total Marks: <strong>{selectedSubject.total_marks}</strong></span>
             <span>Passing: <strong>{selectedSubject.passing_marks}</strong></span>
             {selectedSubject.exam_date && <span>Date: <strong>{selectedSubject.exam_date}</strong></span>}
@@ -530,7 +532,9 @@ export default function MarksEntryPage() {
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2 flex-wrap">
               <p className="text-sm text-gray-600">{marksData.length} students</p>
-              <TeacherScopeBadge scope={classifyScope({ classId: selectedExam?.class_obj, subjectId: selectedSubject?.subject })} />
+              {isTeacherEnabled && (
+                <TeacherScopeBadge scope={classifyScope({ classId: selectedExam?.class_obj, subjectId: selectedSubject?.subject })} />
+              )}
             </div>
             <div className="flex items-center gap-3">
               {saveMsg && (

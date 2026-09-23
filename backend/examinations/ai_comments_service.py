@@ -207,7 +207,7 @@ class ReportCardCommentGenerator:
             ).get(id=exam_id, school=self.school)
         except Exam.DoesNotExist:
             return {'generated': 0, 'errors': 0, 'total': 0, 'skipped': 0,
-                    'error': 'Exam not found'}
+                    'error': 'Exam not found. It may have been deleted, or you may not have access to it in this school.'}
 
         grade_scales = list(GradeScale.objects.filter(
             school=self.school, is_active=True,
@@ -223,7 +223,8 @@ class ReportCardCommentGenerator:
 
         if not any(m.marks_obtained is not None and not m.is_absent for m in all_marks):
             return {'generated': 0, 'errors': 0, 'total': 0, 'skipped': 0,
-                    'error': 'No marks entered yet'}
+                    'error': 'No marks have been entered for this exam yet. Enter marks for at least one '
+                             'student before generating comments.'}
 
         existing_overall = {
             c.student_id: c for c in StudentExamComment.objects.filter(exam=exam, school=self.school)
