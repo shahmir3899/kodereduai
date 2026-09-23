@@ -213,6 +213,19 @@ def _is_teacher_class_teacher_for_class(request, class_id, school_id=None):
     return class_id in scope.get('full_class_ids', set())
 
 
+def _assert_can_bulk_generate_comments(request, exam, school_id):
+    """Bulk generation touches every subject on the exam, so (unlike per-subject
+    edit/regenerate) a subject teacher isn't enough -- only the class teacher or
+    an admin role may trigger it."""
+    role = get_effective_role(request)
+    allowed = role in ADMIN_ROLES or role == 'MANAGER' or (
+        role == 'TEACHER'
+        and _is_teacher_class_teacher_for_class(request, exam.class_obj_id, school_id=school_id)
+    )
+    if not allowed:
+        raise PermissionDenied('Only admins or the class teacher can generate comments for this exam.')
+
+
 def _can_manage_exam_scope(request, class_id=None, subject_id=None, school_id=None):
     """Return True when role is allowed to write exam-related data (papers, marks, ...)
     scoped to a given (class, subject) pair.
@@ -1172,9 +1185,13 @@ class ExamViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet)
         return ExamSerializer
 
     def get_permissions(self):
-        # edit/regenerate-comment enforce class/subject scope themselves (_comment_target),
+        # edit/regenerate-comment and the bulk comment-generation actions enforce
+        # class/subject scope themselves (_comment_target / _assert_can_bulk_generate_comments),
         # so teachers must get past the admin-only default here.
-        if self.action in ('bulk_test_preview', 'bulk_test_apply', 'edit_comment', 'regenerate_comment'):
+        if self.action in (
+            'bulk_test_preview', 'bulk_test_apply', 'edit_comment', 'regenerate_comment',
+            'generate_comments', 'comment_job', 'cancel_comment_job',
+        ):
             return [IsAuthenticated(), HasSchoolAccess()]
         return super().get_permissions()
 
@@ -1436,6 +1453,7 @@ class ExamViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet)
 
         if not school_id:
             return Response({'detail': 'No school selected.'}, status=status.HTTP_400_BAD_REQUEST)
+        _assert_can_bulk_generate_comments(request, exam, school_id)
 
         # If force=true, clear existing generated comments first -- but never ones a
         # person has edited by hand.
@@ -1470,7 +1488,9 @@ class ExamViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet)
         """Ask the running generation to stop after the students already in flight."""
         from . import comment_jobs
         exam = self.get_object()
-        task = comment_jobs.request_cancel(exam.id, _resolve_school_id(request))
+        school_id = _resolve_school_id(request)
+        _assert_can_bulk_generate_comments(request, exam, school_id)
+        task = comment_jobs.request_cancel(exam.id, school_id)
         return Response(comment_jobs.job_payload(task))
 
     def _comment_target(self, request, exam):
