@@ -250,7 +250,7 @@ def _can_manage_exam_scope(request, class_id=None, subject_id=None, school_id=No
     )
 
 
-def _class_roster(school_id, class_obj_id, academic_year_id):
+def _class_roster(school_id, class_obj_id, academic_year_id, as_of_date=None):
     """Students to show for a given (class, academic year) -- shared by the exam
     results/class-summary endpoints and the single-student report card's
     classmate stats (rank, class average).
@@ -262,19 +262,24 @@ def _class_roster(school_id, class_obj_id, academic_year_id):
     from years before that, depending on their current is_active state;
     enrollment is the source of truth for "who was in this class, this year").
 
+    `as_of_date` (typically the exam's own date) applies month-precision for a
+    withdrawn/transferred student via enrollment_covers_month(): still included
+    for their departure month and every month before, excluded after. Omit it
+    to fall back to a plain is_active check (whole-year, no month cutoff) --
+    used when there's no meaningful date to anchor to.
+
     Falls back to the current class roster when this (class, year) has no
     enrollment rows at all (legacy data predating StudentEnrollment).
     Returns (students, {student_id: that year's roll_number}).
     """
     from students.models import Student
     from academic_sessions.models import StudentEnrollment
+    from academic_sessions.utils import enrollment_covers_month
 
-    enrollments = list(StudentEnrollment.objects.filter(
-        school_id=school_id,
-        academic_year_id=academic_year_id,
-        class_obj_id=class_obj_id,
-        is_active=True,
-    ).select_related('student'))
+    enrollment_filter = Q(school_id=school_id, academic_year_id=academic_year_id, class_obj_id=class_obj_id)
+    enrollment_filter &= enrollment_covers_month(as_of_date.year, as_of_date.month) if as_of_date else Q(is_active=True)
+
+    enrollments = list(StudentEnrollment.objects.filter(enrollment_filter).select_related('student'))
 
     if enrollments:
         roll_by_student = {e.student_id: e.roll_number for e in enrollments}
@@ -288,8 +293,12 @@ def _class_roster(school_id, class_obj_id, academic_year_id):
 
 
 def _exam_roster(school_id, exam):
-    """_class_roster() for an Exam's own (class, academic year)."""
-    return _class_roster(school_id, exam.class_obj_id, exam.academic_year_id)
+    """_class_roster() for an Exam's own (class, academic year), anchored to
+    the exam's own date for month-precision withdrawn/transferred handling."""
+    return _class_roster(
+        school_id, exam.class_obj_id, exam.academic_year_id,
+        as_of_date=exam.start_date or exam.end_date,
+    )
 
 
 def _short_academic_year_name(name):
@@ -2887,7 +2896,10 @@ class ReportCardView(ModuleAccessMixin, APIView):
         # A single exam is always just that exam; only a multi-exam card can blend.
         weighted_calc = use_weighted and len(exams) > 1
 
-        class_students, _roll_by_student = _class_roster(school_id, enrollment.class_obj_id, enrollment.academic_year_id)
+        class_students, _roll_by_student = _class_roster(
+            school_id, enrollment.class_obj_id, enrollment.academic_year_id,
+            as_of_date=(main_exam.start_date or main_exam.end_date) if main_exam else None,
+        )
         class_marks = StudentMark.objects.filter(exam_subject__in=all_exam_subjects, school_id=school_id)
         marks_by_key = {(m.student_id, m.exam_subject_id): m for m in class_marks}
 

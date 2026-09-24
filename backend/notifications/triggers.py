@@ -353,16 +353,18 @@ def _students_for_exam(exam):
     fix on the exam results/report card side).
     Falls back to the current class roster when the exam's academic year has
     no enrollment rows at all (legacy data predating StudentEnrollment).
+    A withdrawn/transferred student is still notified for their departure
+    month and earlier, not after (see academic_sessions.utils.enrollment_covers_month).
     """
     from students.models import Student
     from academic_sessions.models import StudentEnrollment
+    from academic_sessions.utils import enrollment_covers_month
 
-    enrolled_ids = list(StudentEnrollment.objects.filter(
-        school=exam.school,
-        academic_year_id=exam.academic_year_id,
-        class_obj=exam.class_obj,
-        is_active=True,
-    ).values_list('student_id', flat=True))
+    exam_date = exam.start_date or exam.end_date
+    enrollment_filter = Q(school=exam.school, academic_year_id=exam.academic_year_id, class_obj=exam.class_obj)
+    enrollment_filter &= enrollment_covers_month(exam_date.year, exam_date.month) if exam_date else Q(is_active=True)
+
+    enrolled_ids = list(StudentEnrollment.objects.filter(enrollment_filter).values_list('student_id', flat=True))
 
     if enrolled_ids:
         return Student.objects.filter(id__in=enrolled_ids).select_related('user_profile__user')
@@ -1200,12 +1202,12 @@ def trigger_assignment_due_soon(school, window_hours=48):
         # enrollment rows at all (legacy data predating StudentEnrollment).
         enrolled_ids = []
         if assignment.academic_year_id:
-            enrolled_ids = list(StudentEnrollment.objects.filter(
-                school=school,
-                academic_year_id=assignment.academic_year_id,
-                class_obj=assignment.class_obj,
-                is_active=True,
-            ).values_list('student_id', flat=True))
+            from academic_sessions.utils import enrollment_covers_month
+
+            enrollment_filter = Q(
+                school=school, academic_year_id=assignment.academic_year_id, class_obj=assignment.class_obj,
+            ) & enrollment_covers_month(assignment.due_date.year, assignment.due_date.month)
+            enrolled_ids = list(StudentEnrollment.objects.filter(enrollment_filter).values_list('student_id', flat=True))
 
         if enrolled_ids:
             student_qs = Student.objects.filter(id__in=enrolled_ids)

@@ -100,7 +100,24 @@
               newUrl.searchParams.set('subdomain', validSubdomain);
               window.history.replaceState({}, '', newUrl);
             } else {
-              appToLoad = 'portal'; // Default to portal for local dev
+              // Per-developer convenience (VITE_DEV_DEFAULT_SUBDOMAIN in .env,
+              // gitignored): skip the Admin Portal and go straight to this
+              // school when nothing else says otherwise. Empty by default, so
+              // teammates without it set keep the original portal-first behavior.
+              const devDefaultSubdomain = '%VITE_DEV_DEFAULT_SUBDOMAIN%';
+              if (devDefaultSubdomain && !devDefaultSubdomain.includes('%')) {
+                appToLoad = 'school';
+                detectedSubdomain = devDefaultSubdomain;
+                localStorage.setItem('dev_subdomain', devDefaultSubdomain);
+                // The school app re-derives its subdomain from the URL itself,
+                // not from this script's variables -- must be in the URL before
+                // it loads (same as the saved-localStorage branch above).
+                const newUrl = new URL(window.location.href);
+                newUrl.searchParams.set('subdomain', devDefaultSubdomain);
+                window.history.replaceState({}, '', newUrl);
+              } else {
+                appToLoad = 'portal'; // Default to portal for local dev
+              }
             }
             }
           }

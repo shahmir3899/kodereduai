@@ -174,6 +174,15 @@ class StudentCreateSerializer(serializers.ModelSerializer):
         return attrs
 
 
+
+# Statuses that mean "no longer on the current roster" -- SUSPENDED and REPEAT
+# are deliberately excluded (temporary / still enrolled). GRADUATED is handled
+# by the promotion flow (academic_sessions), not here, so it's excluded too:
+# that flow already leaves the graduating year's enrollment alone and simply
+# never creates a new one, which is the correct shape for "completed successfully".
+DEPARTED_STATUSES = {'WITHDRAWN', 'TRANSFERRED'}
+
+
 class StudentUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Student
@@ -187,6 +196,55 @@ class StudentUpdateSerializer(serializers.ModelSerializer):
             'emergency_contact',
             'is_active', 'status', 'status_date', 'status_reason',
         ]
+
+    def update(self, instance, validated_data):
+        previous_status = instance.status
+        student = super().update(instance, validated_data)
+        new_status = student.status
+
+        if new_status == previous_status:
+            return student
+
+        # A student's Student.is_active/class_obj deliberately stay untouched here
+        # (see the exam-results/report-card investigation: flipping those hides
+        # the student from their own PAST sessions, not just the current one).
+        # What actually needs to change is the CURRENT year's enrollment -- the
+        # same mechanism that already makes a graduate correctly disappear from
+        # this year's rosters while staying visible in their own history.
+        went_departed = new_status in DEPARTED_STATUSES and previous_status not in DEPARTED_STATUSES
+        came_back = new_status == 'ACTIVE' and previous_status in DEPARTED_STATUSES
+        if not (went_departed or came_back):
+            return student
+
+        from academic_sessions.models import AcademicYear, StudentEnrollment
+
+        current_year = AcademicYear.objects.filter(school=student.school, is_current=True).first()
+        if not current_year:
+            return student
+
+        enrollment = StudentEnrollment.objects.filter(
+            school=student.school, student=student, academic_year=current_year,
+        ).first()
+        if not enrollment:
+            return student
+
+        if went_departed:
+            from django.utils import timezone
+
+            enrollment.is_active = False
+            enrollment.status = new_status
+            # Falls back to today when no effective date was given, so the
+            # enrollment_covers_month() cutoff still lands somewhere sensible
+            # (a null left_date would exclude every month, including this one).
+            enrollment.left_date = student.status_date or timezone.now().date()
+            enrollment.save(update_fields=['is_active', 'status', 'left_date', 'updated_at'])
+        elif came_back:
+            enrollment.is_active = True
+            enrollment.status = 'ACTIVE'
+            enrollment.left_date = None
+            enrollment.save(update_fields=['is_active', 'status', 'left_date', 'updated_at'])
+
+        return student
 
     def validate(self, attrs):
         student = self.instance

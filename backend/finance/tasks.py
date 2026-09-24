@@ -7,6 +7,7 @@ import time
 from decimal import Decimal
 
 from celery import shared_task
+from django.db.models import Q
 from django.utils import timezone
 
 from .generation_planner import plan_scope_records
@@ -95,19 +96,24 @@ def generate_monthly_fees_task(
             mark_task_success(task_id, result_data=result_data)
             return result_data
 
-        # Fetch students (filtered by enrollment if academic year provided)
+        # Fetch students (filtered by enrollment if academic year provided).
+        # enrollment_covers_month, not a bare is_active check: a student who
+        # withdrew/transferred mid-year is still billed for their departure
+        # month and earlier, not after (same cutoff exams/attendance use).
+        from academic_sessions.utils import enrollment_covers_month
+
         student_qs = Student.objects.filter(school_id=school_id, is_active=True)
         if session_class_id:
             student_qs = student_qs.filter(
-                enrollments__session_class_id=int(session_class_id),
-                enrollments__is_active=True,
+                Q(enrollments__session_class_id=int(session_class_id))
+                & enrollment_covers_month(year, month, prefix='enrollments'),
             )
             if academic_year_id:
                 student_qs = student_qs.filter(enrollments__academic_year_id=academic_year_id)
         elif academic_year_id:
             student_qs = student_qs.filter(
-                enrollments__academic_year_id=academic_year_id,
-                enrollments__is_active=True,
+                Q(enrollments__academic_year_id=academic_year_id)
+                & enrollment_covers_month(year, month, prefix='enrollments'),
             )
             if class_id:
                 student_qs = student_qs.filter(enrollments__class_obj_id=int(class_id))

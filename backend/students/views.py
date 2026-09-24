@@ -183,6 +183,11 @@ class StudentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
 
         class_id = self.request.query_params.get('class_id')
         session_class_id = self.request.query_params.get('session_class_id')
+        # Tracks whether the session_class_id branch below already scoped the
+        # roster with month-precision, so the later academic_year block (which
+        # re-filters by a bare enrollments__is_active) doesn't cancel it out by
+        # re-demanding a still-active enrollment for the whole year.
+        session_roster_month_scoped = False
         if session_class_id:
             from academic_sessions.models import SessionClass
             session_class = SessionClass.objects.filter(
@@ -191,11 +196,28 @@ class StudentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
             ).first()
             if not session_class or not session_class.class_obj_id:
                 return queryset.none()
-            queryset = queryset.filter(
-                enrollments__academic_year_id=session_class.academic_year_id,
-                enrollments__session_class_id=session_class.id,
-                enrollments__is_active=True,
-            ).distinct()
+            # as_of_year/as_of_month (optional): callers with a specific month in view
+            # (the attendance register, so far) opt into enrollment_covers_month's
+            # month-precision instead of a bare is_active check, so a withdrawn/
+            # transferred student still appears for their departure month and
+            # earlier. Omit them to keep the plain whole-year snapshot every other
+            # caller of this endpoint (the Students page, etc.) already relies on.
+            as_of_year = self.request.query_params.get('as_of_year')
+            as_of_month = self.request.query_params.get('as_of_month')
+            if as_of_year and as_of_month:
+                from academic_sessions.utils import enrollment_covers_month
+                roster_filter = Q(
+                    enrollments__academic_year_id=session_class.academic_year_id,
+                    enrollments__session_class_id=session_class.id,
+                ) & enrollment_covers_month(int(as_of_year), int(as_of_month), prefix='enrollments')
+                session_roster_month_scoped = True
+            else:
+                roster_filter = Q(
+                    enrollments__academic_year_id=session_class.academic_year_id,
+                    enrollments__session_class_id=session_class.id,
+                    enrollments__is_active=True,
+                )
+            queryset = queryset.filter(roster_filter).distinct()
         elif class_id:
             queryset = queryset.filter(class_obj_id=class_id)
 
@@ -226,8 +248,11 @@ class StudentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
             # detail fetch (retrieve) must still resolve even if the student has no
             # active enrollment for the requested year (e.g. withdrawn/transferred),
             # it just won't get historical enrollment-scoped fields overridden.
-            if self.action == 'list':
-                # Use a JOIN to filter enrolled students (much faster than IN subquery)
+            if self.action == 'list' and not session_roster_month_scoped:
+                # Use a JOIN to filter enrolled students (much faster than IN subquery).
+                # Skipped when session_class_id already scoped the roster with
+                # month-precision above -- re-applying a bare is_active check here
+                # would cancel that out for a withdrawn/transferred student.
                 queryset = queryset.filter(
                     enrollments__academic_year_id=academic_year,
                     enrollments__is_active=enrollment_active_filter,

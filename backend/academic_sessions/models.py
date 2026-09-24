@@ -293,6 +293,13 @@ class StudentEnrollment(models.Model):
         default=Status.ACTIVE,
     )
     is_active = models.BooleanField(default=True)
+    left_date = models.DateField(
+        null=True, blank=True,
+        help_text='Set when status becomes WITHDRAWN/TRANSFERRED. Month-precision cutoff: '
+                   'the enrollment is treated as covering every month up to and including '
+                   'left_date\'s month (see academic_sessions.utils.enrollment_covers_month). '
+                   'Cleared if the student is reactivated.',
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

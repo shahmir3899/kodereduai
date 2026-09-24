@@ -831,19 +831,27 @@ class AttendanceRecordViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.R
             )
             .values('student_id', 'date', 'status')
         )
+        # enrollment_covers_month (anchored to date_from's month, which is the
+        # month this register view is always browsing) instead of a bare
+        # is_active check -- otherwise a withdrawn/transferred student's own
+        # already-marked records from before they left would disappear from
+        # the register too, not just future ones.
+        from academic_sessions.utils import enrollment_covers_month
+        month_cutoff = enrollment_covers_month(
+            int(date_from[:4]), int(date_from[5:7]), prefix='student__enrollments',
+        )
+
         if session_class_id:
             # Scope to the actual section — class_obj_id alone would pool every
             # section that shares this master class.
             records = records.filter(
-                student__enrollments__session_class_id=session_class_id,
-                student__enrollments__is_active=True,
+                Q(student__enrollments__session_class_id=session_class_id) & month_cutoff,
                 academic_year_id=academic_year_id,
             )
         elif academic_year_id:
             records = records.filter(
-                student__enrollments__academic_year_id=academic_year_id,
-                student__enrollments__class_obj_id=class_id,
-                student__enrollments__is_active=True,
+                Q(student__enrollments__academic_year_id=academic_year_id,
+                  student__enrollments__class_obj_id=class_id) & month_cutoff,
                 academic_year_id=academic_year_id,
             )
         else:
@@ -907,7 +915,12 @@ class AttendanceRecordViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.R
         # onto whichever SessionClass happened to be picked last — bucket by the
         # student's own active enrollment instead so sections stay separate.
         from academic_sessions.models import StudentEnrollment
-        enroll_qs = StudentEnrollment.objects.filter(school_id=school_id, is_active=True)
+        from academic_sessions.utils import enrollment_covers_month
+        # enrollment_covers_month (not a bare is_active check): a withdrawn/
+        # transferred student's records for their departure month and earlier
+        # still need to resolve to their real session class, not fall through
+        # to the "__unknown__" bucket below.
+        enroll_qs = StudentEnrollment.objects.filter(Q(school_id=school_id) & enrollment_covers_month(year, month))
         if academic_year_id:
             enroll_qs = enroll_qs.filter(academic_year_id=academic_year_id)
         student_to_sc = {

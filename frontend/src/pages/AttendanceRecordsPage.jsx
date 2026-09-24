@@ -44,11 +44,16 @@ export default function AttendanceRecordsPage() {
     queryKey: 'teacherAttendanceRegisterClasses',
   })
 
-  // Fetch all enrolled students for the selected class (from DB)
+  // Fetch all enrolled students for the selected class (from DB).
+  // as_of_year/as_of_month: month-precision opt-in, so a withdrawn/transferred
+  // student still shows for their departure month and earlier, not just past
+  // students dropped whole-year the moment they leave.
   const { data: studentsData } = useQuery({
-    queryKey: ['students', classId, activeAcademicYear?.id],
+    queryKey: ['students', classId, activeAcademicYear?.id, year, month],
     queryFn: () => studentsApi.getStudents({
       ...(activeAcademicYear?.id ? { session_class_id: classId, academic_year: activeAcademicYear.id } : { class_id: classId }),
+      as_of_year: year,
+      as_of_month: month + 1,
       page_size: 500,
     }),
     enabled: !!classId,

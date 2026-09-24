@@ -90,3 +90,30 @@ def resolve_current_academic_year_id(school_id):
         school_id=school_id, is_current=True, is_active=True,
     ).only('id').first()
     return academic_year.id if academic_year else None
+
+
+def enrollment_covers_month(year, month, prefix=''):
+    """Q filter: true when a StudentEnrollment was in effect for any part of
+    (year, month) -- either still active, or departed (WITHDRAWN/TRANSFERRED,
+    is_active=False) on or after that month's first day.
+
+    Month-precision, not day-precision: a student who left partway through a
+    month is still counted for that whole month (matches how fees are billed
+    monthly and how the attendance register is browsed monthly) and excluded
+    from every month after. Shared by exam rostering, fee generation/reporting,
+    and the attendance register so the three stay in sync -- see the
+    "withdrawn student" investigation for why a bare is_active check alone
+    (whole-year, not month-precise) isn't enough for these three.
+
+    `prefix` lets this be used against a queryset whose base model isn't
+    StudentEnrollment itself, e.g. AttendanceRecord filtered via
+    `student__enrollments` -- pass prefix='student__enrollments' so the field
+    lookups become `student__enrollments__is_active` etc. Leave it blank when
+    filtering a StudentEnrollment queryset directly.
+    """
+    from datetime import date
+    from django.db.models import Q
+
+    month_start = date(year, month, 1)
+    field = f'{prefix}__' if prefix else ''
+    return Q(**{f'{field}is_active': True}) | Q(**{f'{field}left_date__gte': month_start})
