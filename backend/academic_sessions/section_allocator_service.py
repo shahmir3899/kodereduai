@@ -199,6 +199,9 @@ class SectionAllocatorService:
         """
         from students.models import Class, Student
         from academic_sessions.models import StudentEnrollment
+        from academic_sessions.enrollment_service import (
+            current_academic_year_id, ensure_session_class, move_student,
+        )
 
         if not class_id:
             return {'success': False, 'error': 'class_id is required.'}
@@ -207,6 +210,10 @@ class SectionAllocatorService:
             source_class = Class.objects.get(id=class_id, school_id=self.school_id)
         except Class.DoesNotExist:
             return {'success': False, 'error': 'Class not found.'}
+
+        # Without a year the enrollment lookup below matched nothing and only
+        # the Student snapshot moved, so fall back to the current year.
+        year_id = academic_year_id or current_academic_year_id(self.school_id)
 
         source_name = source_class.name
         grade_level = source_class.grade_level
@@ -237,26 +244,40 @@ class SectionAllocatorService:
                     class_obj.is_active = True
                     class_obj.save(update_fields=['is_active', 'updated_at'])
 
+            # Placement is per section: without a SessionClass for the new
+            # section, enrollments kept pointing at the old combined section and
+            # section-scoped rosters (exams, fees) still listed the students there.
+            session_class = None
+            if year_id:
+                try:
+                    session_class = ensure_session_class(
+                        school_id=self.school_id,
+                        academic_year_id=year_id,
+                        class_obj=class_obj,
+                    )
+                except ValueError as e:
+                    for student_info in section_data.get('students', []):
+                        errors.append({'student_id': student_info['student_id'], 'error': str(e)})
+                    continue
+
             # Move students to this class
             for student_info in section_data.get('students', []):
                 student_id = student_info['student_id']
                 try:
-                    # Update enrollment
                     enrollment = StudentEnrollment.objects.filter(
                         school_id=self.school_id,
                         student_id=student_id,
-                        academic_year_id=academic_year_id,
+                        academic_year_id=year_id,
                         is_active=True,
                     ).first()
 
                     if enrollment:
-                        enrollment.class_obj = class_obj
-                        enrollment.save(update_fields=['class_obj', 'updated_at'])
-
-                    # Also update student's current class_obj
-                    Student.objects.filter(
-                        id=student_id, school_id=self.school_id,
-                    ).update(class_obj=class_obj)
+                        move_student(enrollment, session_class=session_class, class_obj=class_obj)
+                    else:
+                        # Legacy students with no enrollment only have the snapshot.
+                        Student.objects.filter(
+                            id=student_id, school_id=self.school_id,
+                        ).update(class_obj=class_obj)
 
                     students_moved += 1
                 except Exception as e:

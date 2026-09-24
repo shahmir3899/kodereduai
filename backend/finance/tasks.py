@@ -7,7 +7,6 @@ import time
 from decimal import Decimal
 
 from celery import shared_task
-from django.db.models import Q
 from django.utils import timezone
 
 from .generation_planner import plan_scope_records
@@ -96,30 +95,22 @@ def generate_monthly_fees_task(
             mark_task_success(task_id, result_data=result_data)
             return result_data
 
-        # Fetch students (filtered by enrollment if academic year provided).
-        # enrollment_covers_month, not a bare is_active check: a student who
-        # withdrew/transferred mid-year is still billed for their departure
-        # month and earlier, not after (same cutoff exams/attendance use).
-        from academic_sessions.utils import enrollment_covers_month
+        # Fetch students by that month's enrollment. The month cutoff (not a
+        # bare is_active check) keeps billing a student who withdrew mid-year
+        # for their departure month and earlier, not after (same cutoff
+        # exams/attendance use).
+        from academic_sessions.roster import filter_students_in_scope
 
-        student_qs = Student.objects.filter(school_id=school_id, is_active=True)
-        if session_class_id:
-            student_qs = student_qs.filter(
-                Q(enrollments__session_class_id=int(session_class_id))
-                & enrollment_covers_month(year, month, prefix='enrollments'),
-            )
-            if academic_year_id:
-                student_qs = student_qs.filter(enrollments__academic_year_id=academic_year_id)
-        elif academic_year_id:
-            student_qs = student_qs.filter(
-                Q(enrollments__academic_year_id=academic_year_id)
-                & enrollment_covers_month(year, month, prefix='enrollments'),
-            )
-            if class_id:
-                student_qs = student_qs.filter(enrollments__class_obj_id=int(class_id))
-        elif class_id:
-            student_qs = student_qs.filter(class_obj_id=int(class_id))
-        students = list(student_qs.distinct())
+        student_qs = filter_students_in_scope(
+            Student.objects.filter(school_id=school_id, is_active=True),
+            school_id,
+            academic_year_id=academic_year_id,
+            session_class_id=session_class_id,
+            class_obj_id=class_id,
+            year=year,
+            month=month,
+        )
+        students = list(student_qs)
         student_ids = [s.id for s in students]
 
         enrollment_by_student = {}
@@ -365,24 +356,16 @@ def generate_annual_fees_task(
             mark_task_success(task_id, result_data=result_data)
             return result_data
 
-        student_qs = Student.objects.filter(school_id=school_id, is_active=True)
-        if session_class_id:
-            student_qs = student_qs.filter(
-                enrollments__session_class_id=int(session_class_id),
-                enrollments__is_active=True,
-            )
-            if academic_year_id:
-                student_qs = student_qs.filter(enrollments__academic_year_id=academic_year_id)
-        elif academic_year_id:
-            student_qs = student_qs.filter(
-                enrollments__academic_year_id=academic_year_id,
-                enrollments__is_active=True,
-            )
-            if class_id:
-                student_qs = student_qs.filter(enrollments__class_obj_id=class_id)
-        elif class_id:
-            student_qs = student_qs.filter(class_obj_id=class_id)
-        students = list(student_qs.distinct())
+        from academic_sessions.roster import filter_students_in_scope
+
+        student_qs = filter_students_in_scope(
+            Student.objects.filter(school_id=school_id, is_active=True),
+            school_id,
+            academic_year_id=academic_year_id,
+            session_class_id=session_class_id,
+            class_obj_id=class_id,
+        )
+        students = list(student_qs)
         student_ids = [s.id for s in students]
 
         enrollment_by_student = {}
@@ -578,17 +561,20 @@ def generate_onetime_fees_task(
 
         t0 = time.monotonic()
 
+        from academic_sessions.roster import filter_students_in_scope
+
         student_qs = Student.objects.filter(school_id=school_id, is_active=True)
         if student_ids:
             student_qs = student_qs.filter(id__in=student_ids)
-        elif class_id:
-            student_qs = student_qs.filter(class_obj_id=class_id)
-        if academic_year_id:
-            student_qs = student_qs.filter(
-                enrollments__academic_year_id=academic_year_id,
-                enrollments__is_active=True,
-            )
-        students = list(student_qs.distinct())
+        # Class scope comes from that year's enrollment, not the Student.class_obj
+        # snapshot, which is the student's *current* class.
+        student_qs = filter_students_in_scope(
+            student_qs,
+            school_id,
+            academic_year_id=academic_year_id,
+            class_obj_id=None if student_ids else class_id,
+        )
+        students = list(student_qs)
 
         total = len(students) * len(fee_types)
         update_task_progress(task_id, current=0, total=total)

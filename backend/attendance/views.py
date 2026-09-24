@@ -437,20 +437,15 @@ class AttendanceUploadViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.M
 
         # Get all students enrolled in the class for this upload's academic year
         if upload.academic_year_id:
-            enrollment_filters = {
-                'enrollments__academic_year_id': upload.academic_year_id,
-                'enrollments__is_active': True,
-            }
-            if upload.session_class_id:
-                enrollment_filters['enrollments__session_class_id'] = upload.session_class_id
-            else:
-                enrollment_filters['enrollments__class_obj_id'] = upload.class_obj_id
+            from academic_sessions.roster import filter_students_in_scope
 
-            all_students = Student.objects.filter(
-                school=upload.school,
-                is_active=True,
-                **enrollment_filters,
-            ).distinct()
+            all_students = filter_students_in_scope(
+                Student.objects.filter(school=upload.school, is_active=True),
+                upload.school_id,
+                academic_year_id=upload.academic_year_id,
+                session_class_id=upload.session_class_id,
+                class_obj_id=upload.class_obj_id,
+            )
         else:
             all_students = Student.objects.filter(
                 school=upload.school,
@@ -751,22 +746,27 @@ class AttendanceRecordViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.R
         if academic_year_id and session_class_year_id and str(academic_year_id) != str(session_class_year_id):
             return queryset.none()
 
-        if session_class_id:
-            # Scope to the actual section — class_obj_id alone would pool every
-            # section that shares this master class (e.g. "Class 2 - A"/"Class 2 - B").
-            queryset = queryset.filter(
-                student__enrollments__session_class_id=session_class_id,
-                student__enrollments__is_active=True,
+        if (session_class_id or class_id) and active_school_id:
+            # Section first (class_obj_id alone pools every section sharing the
+            # master class); inactive enrollments stay in so a withdrawn
+            # student's earlier records still list.
+            from academic_sessions.roster import enrollments_in_scope
+
+            enrollments = enrollments_in_scope(
+                active_school_id,
+                academic_year_id=academic_year_id,
+                session_class_id=session_class_id,
+                class_obj_id=class_id,
+                include_inactive=True,
             )
-        elif class_id:
-            if academic_year_id:
-                queryset = queryset.filter(
-                    student__enrollments__academic_year_id=academic_year_id,
-                    student__enrollments__class_obj_id=class_id,
-                    student__enrollments__is_active=True,
-                )
-            else:
+            if enrollments is None:
                 queryset = queryset.filter(student__class_obj_id=class_id)
+            else:
+                queryset = queryset.filter(student_id__in=enrollments.values('student_id'))
+        elif session_class_id:
+            queryset = queryset.filter(student__enrollments__session_class_id=session_class_id).distinct()
+        elif class_id:
+            queryset = queryset.filter(student__class_obj_id=class_id)
 
         # Filter by date (exact or range)
         date = self.request.query_params.get('date')
@@ -831,31 +831,26 @@ class AttendanceRecordViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.R
             )
             .values('student_id', 'date', 'status')
         )
-        # enrollment_covers_month (anchored to date_from's month, which is the
-        # month this register view is always browsing) instead of a bare
-        # is_active check -- otherwise a withdrawn/transferred student's own
-        # already-marked records from before they left would disappear from
-        # the register too, not just future ones.
-        from academic_sessions.utils import enrollment_covers_month
-        month_cutoff = enrollment_covers_month(
-            int(date_from[:4]), int(date_from[5:7]), prefix='student__enrollments',
-        )
+        # Month cutoff anchored to date_from's month (the month this register
+        # view is always browsing) instead of a bare is_active check --
+        # otherwise a withdrawn/transferred student's own already-marked records
+        # from before they left would disappear from the register too.
+        from academic_sessions.roster import enrollments_in_scope
 
-        if session_class_id:
-            # Scope to the actual section — class_obj_id alone would pool every
-            # section that shares this master class.
-            records = records.filter(
-                Q(student__enrollments__session_class_id=session_class_id) & month_cutoff,
-                academic_year_id=academic_year_id,
-            )
-        elif academic_year_id:
-            records = records.filter(
-                Q(student__enrollments__academic_year_id=academic_year_id,
-                  student__enrollments__class_obj_id=class_id) & month_cutoff,
-                academic_year_id=academic_year_id,
-            )
-        else:
+        enrollments = enrollments_in_scope(
+            active_school_id,
+            academic_year_id=academic_year_id,
+            session_class_id=session_class_id,
+            class_obj_id=class_id,
+            year=int(date_from[:4]),
+            month=int(date_from[5:7]),
+        )
+        if enrollments is None:
             records = records.filter(student__class_obj_id=class_id)
+        else:
+            records = records.filter(student_id__in=enrollments.values('student_id'))
+            if academic_year_id:
+                records = records.filter(academic_year_id=academic_year_id)
         return Response(list(records))
 
     @action(detail=False, methods=['get'])
@@ -1180,23 +1175,20 @@ class AttendanceRecordViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.R
         date_from = date(year, month, 1)
         date_to = date(year, month, last_day)
 
-        # Get enrolled students for the class
-        students_qs = Student.objects.filter(school_id=school_id, is_active=True)
-        if session_class_id:
-            # Scope to the actual section — class_obj_id alone would pool every
-            # section that shares this master class (duplicate roll numbers).
-            students_qs = students_qs.filter(
-                enrollments__session_class_id=session_class_id,
-                enrollments__is_active=True,
-            )
-        elif academic_year_id:
-            students_qs = students_qs.filter(
-                enrollments__academic_year_id=academic_year_id,
-                enrollments__class_obj_id=class_id,
-                enrollments__is_active=True,
-            )
-        else:
-            students_qs = students_qs.filter(class_obj_id=class_id)
+        # Students of the section (class_obj_id alone would pool every section
+        # sharing this master class -- duplicate roll numbers), with the same
+        # month cutoff as register_data so the PDF matches the register page.
+        from academic_sessions.roster import filter_students_in_scope
+
+        students_qs = filter_students_in_scope(
+            Student.objects.filter(school_id=school_id, is_active=True),
+            school_id,
+            academic_year_id=academic_year_id,
+            session_class_id=session_class_id,
+            class_obj_id=class_id,
+            year=year,
+            month=month,
+        )
 
         students = students_qs.order_by('roll_number').values('id', 'name', 'roll_number')
         student_ids = [s['id'] for s in students]
@@ -1680,12 +1672,16 @@ class AttendanceRecordViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.R
 
         # Validate all student_ids belong to this class and academic year (when available)
         if academic_year:
+            # Section-scoped when a section was given: validating by master
+            # class alone let section A's entry mark section B's students.
+            from academic_sessions.roster import enrollments_in_scope
+
             valid_student_ids = set(
-                StudentEnrollment.objects.filter(
-                    school_id=school_id,
-                    academic_year=academic_year,
+                enrollments_in_scope(
+                    school_id,
+                    academic_year_id=academic_year.id,
+                    session_class_id=session_class.id if session_class else None,
                     class_obj_id=class_id,
-                    is_active=True,
                 ).values_list('student_id', flat=True)
             )
         else:

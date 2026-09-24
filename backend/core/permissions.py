@@ -129,6 +129,37 @@ def get_teacher_session_class_scope(request, school_id=None, academic_year_id=No
     return set(queryset.values_list('session_class_id', flat=True).distinct())
 
 
+def get_teacher_master_only_class_scope(request, school_id=None, academic_year_id=None):
+    """Master class IDs from class-teacher assignments that have NO section.
+
+    The master-class fallback for section-scoped views must come from these
+    legacy assignments only. get_teacher_class_scope() also resolves
+    section assignments to their master class, so OR-ing it with the section
+    scope let a Class 2-A teacher see every section of Class 2.
+    """
+    user = request.user
+    if not user.is_authenticated:
+        return set()
+
+    school_id = school_id or ensure_tenant_school_id(request) or user.school_id
+    if not school_id:
+        return set()
+
+    academic_year_id = academic_year_id or _resolve_scope_academic_year_id(request, school_id)
+
+    from academics.models import ClassTeacherAssignment
+    queryset = ClassTeacherAssignment.objects.filter(
+        school_id=school_id,
+        teacher__user=user,
+        is_active=True,
+        session_class__isnull=True,
+    )
+    if academic_year_id:
+        queryset = queryset.filter(
+            Q(academic_year_id=academic_year_id) | Q(academic_year__isnull=True)
+        )
+    return set(queryset.values_list('class_obj_id', flat=True).distinct())
+
 
 def get_teacher_subject_scope(request, school_id=None, academic_year_id=None):
     """Return subject-teacher scope as class_ids and class->subject map."""

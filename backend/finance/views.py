@@ -13,7 +13,8 @@ import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 
 from django.db import transaction
-from django.db.models import Sum, Count, Q, Prefetch
+from django.db.models import Sum, Count, Q, Prefetch, F, IntegerField, OuterRef, Subquery
+from django.db.models.functions import Coalesce
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -21,7 +22,7 @@ from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 from django.http import FileResponse
 
-from core.permissions import IsSchoolAdmin, FinanceRoleAccessPermission, HasSchoolAccess, get_effective_role, ModuleAccessMixin, ADMIN_ROLES, _is_data_restricted_user, get_teacher_class_scope, get_teacher_session_class_scope, _get_session_class_student_ids
+from core.permissions import IsSchoolAdmin, FinanceRoleAccessPermission, HasSchoolAccess, get_effective_role, ModuleAccessMixin, ADMIN_ROLES, _is_data_restricted_user, get_teacher_class_scope, get_teacher_master_only_class_scope, get_teacher_session_class_scope, _get_session_class_student_ids
 from core.mixins import TenantQuerySetMixin, ensure_tenant_schools, ensure_tenant_school_id
 from core.class_scope import resolve_class_scope
 from students.models import Student, Class
@@ -115,22 +116,26 @@ def _get_staff_visible_accounts(school_id):
     )
 
 
-def _filter_students_by_scope(queryset, class_id=None, academic_year_id=None, session_class_id=None):
-    """Apply class/year scope consistently for student selections in finance flows."""
-    if session_class_id:
-        queryset = queryset.filter(enrollments__session_class_id=session_class_id, enrollments__is_active=True)
-        if academic_year_id:
-            queryset = queryset.filter(enrollments__academic_year_id=academic_year_id)
-    elif academic_year_id:
-        queryset = queryset.filter(
-            enrollments__academic_year_id=academic_year_id,
-            enrollments__is_active=True,
-        )
-        if class_id:
-            queryset = queryset.filter(enrollments__class_obj_id=class_id)
-    elif class_id:
-        queryset = queryset.filter(class_obj_id=class_id)
-    return queryset.distinct()
+def _filter_students_by_scope(queryset, school_id, class_id=None, academic_year_id=None,
+                              session_class_id=None, year=None, month=None):
+    """Apply class/year scope consistently for student selections in finance flows.
+
+    Delegates to academic_sessions.roster: the old chained enrollment filters
+    matched a student's enrollment from *any* year for the class condition, so
+    generating fees for "Class 1, 2026-27" also reached last year's Class 1
+    cohort (now in Class 2), and delete_recreate could reset their paid rows.
+    """
+    from academic_sessions.roster import filter_students_in_scope
+
+    return filter_students_in_scope(
+        queryset,
+        school_id,
+        academic_year_id=academic_year_id,
+        session_class_id=session_class_id,
+        class_obj_id=class_id,
+        year=year,
+        month=month,
+    )
 
 
 def _get_previous_month_balance(school_id, student_id, month, year, monthly_category_id):
@@ -460,12 +465,14 @@ class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
             if school_id:
                 session_ids = get_teacher_session_class_scope(self.request, school_id=school_id)
                 if session_ids:
-                    # Section-scoped: only students enrolled in assigned sessions
+                    # Section-scoped: students enrolled in assigned sections, plus
+                    # master classes only from assignments that have no section
+                    # (all class-teacher classes would re-open every section).
                     enrolled_ids = _get_session_class_student_ids(session_ids)
-                    teacher_classes = get_teacher_class_scope(self.request, school_id=school_id)
+                    legacy_classes = get_teacher_master_only_class_scope(self.request, school_id=school_id)
                     queryset = queryset.filter(
                         Q(student_id__in=enrolled_ids) |
-                        Q(student__class_obj_id__in=teacher_classes)
+                        Q(student__class_obj_id__in=legacy_classes)
                     )
                 else:
                     teacher_classes = get_teacher_class_scope(self.request, school_id=school_id)
@@ -491,16 +498,33 @@ class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
                 queryset = queryset.filter(month=month)
         if year:
             queryset = queryset.filter(year=year)
-        if class_id:
+        if (class_id or session_class_id) and school_id:
+            # Scope by that year's enrollment only. Filtering class_id on the
+            # Student.class_obj snapshot (the student's *current* class) hid a
+            # past year's rows once students were promoted -- e.g. 2025-26
+            # Playgroup showed 0 of 60 records. Inactive enrollments stay in, so
+            # a withdrawn student's earlier fee rows still list.
+            from academic_sessions.roster import enrollments_in_scope
+
+            enrollments = enrollments_in_scope(
+                school_id,
+                academic_year_id=academic_year,
+                session_class_id=session_class_id,
+                class_obj_id=class_id,
+                include_inactive=True,
+            )
+            if enrollments is None:
+                queryset = queryset.filter(student__class_obj_id=class_id)
+            else:
+                queryset = queryset.filter(student_id__in=enrollments.values('student_id'))
+        elif session_class_id:
+            # No single school to scope by (super admin across schools): the
+            # section already pins school and year.
+            queryset = queryset.filter(
+                student__enrollments__session_class_id=session_class_id,
+            ).distinct()
+        elif class_id:
             queryset = queryset.filter(student__class_obj_id=class_id)
-        if session_class_id:
-            enrollment_filter = {
-                'student__enrollments__session_class_id': session_class_id,
-                'student__enrollments__is_active': True,
-            }
-            if academic_year:
-                enrollment_filter['student__enrollments__academic_year_id'] = academic_year
-            queryset = queryset.filter(**enrollment_filter).distinct()
         if fee_status:
             queryset = queryset.filter(status=fee_status.upper())
         if student_id:
@@ -802,15 +826,20 @@ class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
         if not school_id:
             return Response({'detail': 'No school context.'}, status=400)
 
+        month = int(month_param) if fee_type == 'MONTHLY' else 0
+        year = int(year_param)
+
+        # Same month cutoff as generate_monthly_fees_task, so the preview
+        # counts exactly the students the task will bill.
         students = _filter_students_by_scope(
             Student.objects.filter(school_id=school_id, is_active=True),
+            school_id,
             class_id=class_id,
             academic_year_id=academic_year_id,
             session_class_id=session_class_id,
+            year=year if month else None,
+            month=month or None,
         ).select_related('class_obj')
-
-        month = int(month_param) if fee_type == 'MONTHLY' else 0
-        year = int(year_param)
 
         # Parse annual category IDs for ANNUAL preview
         cat_ids = []
@@ -891,9 +920,12 @@ class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
 
         student_qs = _filter_students_by_scope(
             Student.objects.filter(school_id=school_id, is_active=True),
+            school_id,
             class_id=class_id,
             academic_year_id=academic_year_id,
             session_class_id=session_class_id,
+            year=year,
+            month=month,
         )
         student_count = student_qs.count()
 
@@ -963,6 +995,7 @@ class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
             students = students.filter(id__in=student_ids)
         students = _filter_students_by_scope(
             students,
+            school_id,
             class_id=None if student_ids else class_id,
             academic_year_id=academic_year_id,
         )
@@ -1070,6 +1103,7 @@ class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
         )
         students = _filter_students_by_scope(
             students,
+            school_id,
             class_id=class_id,
             academic_year_id=academic_year_id,
             session_class_id=session_class_id,
@@ -1259,14 +1293,60 @@ class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
         status_counts = payments.values('status').annotate(count=Count('id'))
         counts = {item['status']: item['count'] for item in status_counts}
 
-        # Per-class breakdown
-        by_class = payments.values(
-            'student__class_obj__id', 'student__class_obj__name'
-        ).annotate(
-            total_due=Sum('amount_due'),
-            total_collected=Sum('amount_paid'),
-            count=Count('id'),
-        ).order_by('student__class_obj__name')
+        # Per-class breakdown, by the section each student was in for the
+        # payment's own academic year (same rule fee_summary uses). Grouping on
+        # Student.class_obj put a past year's totals under the class students
+        # were promoted into. Students with no enrollment that year fall back to
+        # the snapshot class.
+        from academic_sessions.models import SessionClass, StudentEnrollment
+
+        year_enrollment = StudentEnrollment.objects.filter(
+            student_id=OuterRef('student_id'),
+            academic_year_id=OuterRef('academic_year_id'),
+        ).order_by('-is_active', '-updated_at', '-id')
+        by_class_rows = list(
+            payments.order_by()
+            .annotate(
+                placement_session_class_id=Subquery(year_enrollment.values('session_class_id')[:1]),
+                placement_class_id=Coalesce(
+                    Subquery(year_enrollment.values('class_obj_id')[:1]),
+                    F('student__class_obj_id'),
+                    output_field=IntegerField(),
+                ),
+            )
+            .values('placement_session_class_id', 'placement_class_id')
+            .annotate(
+                total_due=Sum('amount_due'),
+                total_collected=Sum('amount_paid'),
+                count=Count('id'),
+            )
+        )
+        section_labels = {
+            sc.id: sc.label
+            for sc in SessionClass.objects.filter(
+                id__in={r['placement_session_class_id'] for r in by_class_rows if r['placement_session_class_id']},
+            )
+        }
+        class_names = dict(Class.objects.filter(
+            id__in={r['placement_class_id'] for r in by_class_rows if r['placement_class_id']},
+        ).values_list('id', 'name'))
+        by_class = sorted(
+            (
+                {
+                    'class_id': r['placement_class_id'],
+                    'session_class_id': r['placement_session_class_id'],
+                    'class_name': (
+                        section_labels.get(r['placement_session_class_id'])
+                        or class_names.get(r['placement_class_id'])
+                    ),
+                    'total_due': r['total_due'],
+                    'total_collected': r['total_collected'],
+                    'count': r['count'],
+                }
+                for r in by_class_rows
+            ),
+            key=lambda item: item['class_name'] or '',
+        )
 
         # Per-category breakdown (monthly categories)
         by_category = payments.filter(
@@ -1289,16 +1369,7 @@ class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
             'partial_count': counts.get('PARTIAL', 0),
             'unpaid_count': counts.get('UNPAID', 0),
             'advance_count': counts.get('ADVANCE', 0),
-            'by_class': [
-                {
-                    'class_id': item['student__class_obj__id'],
-                    'class_name': item['student__class_obj__name'],
-                    'total_due': item['total_due'],
-                    'total_collected': item['total_collected'],
-                    'count': item['count'],
-                }
-                for item in by_class
-            ],
+            'by_class': by_class,
             'by_category': [
                 {
                     'category_id': item['monthly_category__id'],
@@ -3717,12 +3788,18 @@ class StudentDiscountViewSet(ModuleAccessMixin, viewsets.ModelViewSet):
         if not AcademicYear.objects.filter(id=academic_year_id, school_id=school_id).exists():
             return Response({'detail': 'Academic year not found for your school.'}, status=400)
 
-        # Build student queryset
-        students_qs = Student.objects.filter(school_id=school_id, is_active=True)
-        if class_id:
-            students_qs = students_qs.filter(class_obj_id=class_id)
-        elif grade_level is not None:
-            students_qs = students_qs.filter(class_obj__grade_level=grade_level)
+        # Build student queryset from the chosen year's enrollment: the discount
+        # is for that year, and Student.class_obj is only the current class.
+        from academic_sessions.roster import enrollments_in_scope
+
+        enrollments = enrollments_in_scope(
+            school_id, academic_year_id=academic_year_id, class_obj_id=class_id or None,
+        )
+        if not class_id:
+            enrollments = enrollments.filter(class_obj__grade_level=grade_level)
+        students_qs = Student.objects.filter(
+            school_id=school_id, is_active=True, id__in=enrollments.values('student_id'),
+        )
 
         now = tz.now()
 

@@ -121,6 +121,14 @@ def trigger_fee_pending_in_app(school, month, year):
     if not pending_payments.exists():
         return 0
 
+    # Group by the section each student was in for the payment's own year:
+    # the Student.class_obj snapshot pooled every section of a master class
+    # into one "Class 2" total.
+    from academic_sessions.roster import placement_group, placements_for
+
+    pending_payments = list(pending_payments)
+    placements = placements_for(school.id, ((p.student_id, p.academic_year_id) for p in pending_payments))
+
     class_totals = {}
     student_totals = {}
     student_by_id = {}
@@ -131,8 +139,11 @@ def trigger_fee_pending_in_app(school, month, year):
         balance = max(due - paid, 0)
         if balance <= 0:
             continue
-        class_totals.setdefault(student.class_obj_id, {'class_name': student.class_obj.name, 'amount': 0.0})
-        class_totals[student.class_obj_id]['amount'] += balance
+        key, label, master_id = placement_group(
+            placements.get((student.id, payment.academic_year_id)), student,
+        )
+        class_totals.setdefault(key, {'class_name': label, 'class_obj_id': master_id, 'amount': 0.0})
+        class_totals[key]['amount'] += balance
         student_totals[student.id] = student_totals.get(student.id, 0.0) + balance
         student_by_id[student.id] = student
 
@@ -200,11 +211,12 @@ def trigger_fee_pending_in_app(school, month, year):
             if assignment.session_class.section:
                 class_name = f"{class_name} - {assignment.session_class.section}"
         else:
-            payload = class_totals.get(assignment.class_obj_id)
-            if not payload:
+            # Assignment without a section covers the whole master class.
+            groups = [p for p in class_totals.values() if p['class_obj_id'] == assignment.class_obj_id]
+            if not groups:
                 continue
-            class_name = payload['class_name']
-            amount = payload['amount']
+            class_name = assignment.class_obj.name if assignment.class_obj else groups[0]['class_name']
+            amount = sum(p['amount'] for p in groups)
 
         amount_label = f"{amount:,.0f}"
         title = f"Fee Pending — {class_name}"
@@ -1040,8 +1052,16 @@ def trigger_fee_overdue_in_app(school, as_of=None):
         .select_related('student', 'student__class_obj')
     )
 
-    # class_totals / student_totals keyed by (id, month, year) so different
-    # overdue periods for the same class/student are reported separately.
+    # class_totals / student_totals keyed by (group, month, year) so different
+    # overdue periods for the same class/student are reported separately. The
+    # group is the section the student was in for the payment's own year: the
+    # Student.class_obj snapshot put last year's dues under this year's class
+    # and pooled every section of a master class.
+    from academic_sessions.roster import placement_group, placements_for
+
+    candidates = list(candidates)
+    placements = placements_for(school.id, ((p.student_id, p.academic_year_id) for p in candidates))
+
     class_totals = {}
     student_totals = {}
     student_by_id = {}
@@ -1053,8 +1073,11 @@ def trigger_fee_overdue_in_app(school, as_of=None):
         balance = max(float(payment.amount_due or 0) - float(payment.amount_paid or 0), 0)
         if balance <= 0:
             continue
-        key = (student.class_obj_id, payment.month, payment.year)
-        class_totals.setdefault(key, {'class_name': student.class_obj.name, 'amount': 0.0})
+        group, label, master_id = placement_group(
+            placements.get((student.id, payment.academic_year_id)), student,
+        )
+        key = (group, payment.month, payment.year)
+        class_totals.setdefault(key, {'class_name': label, 'class_obj_id': master_id, 'amount': 0.0})
         class_totals[key]['amount'] += balance
         skey = (student.id, payment.month, payment.year)
         student_totals[skey] = student_totals.get(skey, 0.0) + balance
@@ -1093,8 +1116,13 @@ def trigger_fee_overdue_in_app(school, as_of=None):
         teacher_user = getattr(getattr(assignment, 'teacher', None), 'user', None)
         if not teacher_user or not assignment.class_obj_id:
             continue
-        for (class_id, month, year), payload in class_totals.items():
-            if class_id != assignment.class_obj_id:
+        for (group, month, year), payload in class_totals.items():
+            # A section teacher only gets their own section's total; an
+            # assignment without a section covers the master class.
+            if assignment.session_class_id:
+                if group != ('section', assignment.session_class_id):
+                    continue
+            elif payload['class_obj_id'] != assignment.class_obj_id:
                 continue
             class_name = payload['class_name']
             amount_label = f"{payload['amount']:,.0f}"

@@ -206,7 +206,7 @@ class FeePaymentSerializer(serializers.ModelSerializer):
     session_class_name = serializers.SerializerMethodField()
     session_class_section = serializers.SerializerMethodField()
     session_class_label = serializers.SerializerMethodField()
-    class_obj_id = serializers.IntegerField(source='student.class_obj.id', read_only=True, default=None)
+    class_obj_id = serializers.SerializerMethodField()
     collected_by_name = serializers.CharField(source='collected_by.username', read_only=True, default=None)
     account_name = serializers.CharField(source='account.name', read_only=True, default=None)
     academic_year_name = serializers.CharField(source='academic_year.name', read_only=True, default=None)
@@ -265,6 +265,18 @@ class FeePaymentSerializer(serializers.ModelSerializer):
         if session_class.section:
             return f"{session_class.display_name} - {session_class.section}"
         return session_class.display_name
+
+    def get_class_obj_id(self, obj):
+        """Master class for the payment's own year, not the student's current one.
+
+        The fee page filters rows client-side by this id; taking it from the
+        Student.class_obj snapshot (e.g. Nursery after promotion) hid every
+        2025-26 Playgroup row when that class was selected.
+        """
+        enrollment = self._get_active_enrollment(obj)
+        if enrollment and enrollment.class_obj_id:
+            return enrollment.class_obj_id
+        return obj.student.class_obj_id if obj.student else None
 
     def get_session_class_id(self, obj):
         session_class = self._get_session_class(obj)

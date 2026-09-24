@@ -83,7 +83,9 @@ class FeeDefaultersReportGenerator(BaseReportGenerator):
             school=self.school,
             month=month,
             year=year,
-            status__in=['PENDING', 'PARTIAL'],
+            # UNPAID, not 'PENDING': there is no PENDING status, so fully
+            # unpaid students never reached the defaulters list.
+            status__in=[FeePayment.PaymentStatus.UNPAID, FeePayment.PaymentStatus.PARTIAL],
         )
         if academic_year_id:
             defaulters = defaulters.filter(academic_year_id=academic_year_id)

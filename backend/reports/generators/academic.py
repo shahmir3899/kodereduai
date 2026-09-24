@@ -38,7 +38,7 @@ class ClassResultReportGenerator(BaseReportGenerator):
                 if sid not in student_totals:
                     if mark.enrollment_id:
                         if mark.enrollment.session_class_id and mark.enrollment.session_class:
-                            class_name = mark.enrollment.session_class.display_name
+                            class_name = mark.enrollment.session_class.label
                         elif mark.enrollment.class_obj_id and mark.enrollment.class_obj:
                             class_name = mark.enrollment.class_obj.name
                         else:

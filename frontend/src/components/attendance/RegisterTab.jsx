@@ -4,6 +4,7 @@ import { attendanceApi, sessionsApi } from '../../services/api'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
 import ClassSelector from '../ClassSelector'
 import Spinner from '../ui/Spinner'
+import useResetStaleClassFilter from '../../hooks/useResetStaleClassFilter'
 
 function getDaysInMonth(year, month) {
   return new Date(year, month + 1, 0).getDate()
@@ -30,7 +31,7 @@ export default function RegisterTab() {
 
   const { activeAcademicYear } = useAcademicYear()
 
-  const { data: sessionClassesRes } = useQuery({
+  const { data: sessionClassesRes, isLoading: sessionClassesLoading } = useQuery({
     queryKey: ['registerSessionClasses', activeAcademicYear?.id],
     queryFn: () => sessionsApi.getSessionClasses({
       academic_year: activeAcademicYear?.id,
@@ -40,6 +41,8 @@ export default function RegisterTab() {
     enabled: !!activeAcademicYear?.id,
   })
   const sessionClasses = sessionClassesRes?.data?.results || sessionClassesRes?.data || []
+  // A section picked in another academic year isn't a section of this one.
+  useResetStaleClassFilter(classId, setClassId, activeAcademicYear?.id ? sessionClasses : null, sessionClassesLoading)
 
   const { data: enrollmentData } = useQuery({
     queryKey: ['enrollments-by-class', classId, activeAcademicYear?.id],

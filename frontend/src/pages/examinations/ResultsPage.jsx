@@ -5,8 +5,9 @@ import ClassSelector from '../../components/ClassSelector'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
 import { useSessionClasses } from '../../hooks/useSessionClasses'
 import useTeacherScopedClasses from '../../hooks/useTeacherScopedClasses'
-import { getClassSelectorScope, getResolvedMasterClassId } from '../../utils/classScope'
+import { getClassSelectorScope, getResolvedMasterClassId, resolveSessionClassId } from '../../utils/classScope'
 import Spinner from '../../components/ui/Spinner'
+import useResetStaleClassFilter from '../../hooks/useResetStaleClassFilter'
 import Badge from '../../components/ui/Badge'
 
 const formatDuration = (seconds) => (
@@ -171,9 +172,13 @@ export default function ResultsPage() {
   const [expandedStudent, setExpandedStudent] = useState(null)
   const [commentMsg, setCommentMsg] = useState('')
 
-  const { sessionClasses } = useSessionClasses(yearFilter)
+  const { sessionClasses, isLoading: sessionClassesLoading } = useSessionClasses(yearFilter)
   const classSelectorScope = getClassSelectorScope(yearFilter)
   const resolvedClassFilter = getResolvedMasterClassId(classFilter, yearFilter, sessionClasses)
+  // Exams are per master class; the section narrows ranks/averages to the
+  // chosen section instead of pooling every section of that class.
+  const selectedSessionClassId = resolveSessionClassId(classFilter, yearFilter, sessionClasses)
+  useResetStaleClassFilter(classFilter, setClassFilter, yearFilter ? sessionClasses : null, sessionClassesLoading)
 
   // Sync year filter with global session switcher
   useEffect(() => {
@@ -192,8 +197,11 @@ export default function ResultsPage() {
   })
 
   const { data: resultsRes, isLoading: resultsLoading } = useQuery({
-    queryKey: ['examResults', selectedExamId],
-    queryFn: () => examinationsApi.getExamResults(selectedExamId),
+    queryKey: ['examResults', selectedExamId, selectedSessionClassId],
+    queryFn: () => examinationsApi.getExamResults(
+      selectedExamId,
+      selectedSessionClassId ? { session_class_id: selectedSessionClassId } : undefined,
+    ),
     enabled: !!selectedExamId,
   })
 

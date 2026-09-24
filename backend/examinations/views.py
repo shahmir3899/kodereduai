@@ -250,7 +250,7 @@ def _can_manage_exam_scope(request, class_id=None, subject_id=None, school_id=No
     )
 
 
-def _class_roster(school_id, class_obj_id, academic_year_id, as_of_date=None):
+def _class_roster(school_id, class_obj_id, academic_year_id, as_of_date=None, session_class_id=None):
     """Students to show for a given (class, academic year) -- shared by the exam
     results/class-summary endpoints and the single-student report card's
     classmate stats (rank, class average).
@@ -268,20 +268,30 @@ def _class_roster(school_id, class_obj_id, academic_year_id, as_of_date=None):
     to fall back to a plain is_active check (whole-year, no month cutoff) --
     used when there's no meaningful date to anchor to.
 
+    `session_class_id` narrows the roster to one section. Exams are keyed by
+    master class, so without it two sections sharing a master class (e.g.
+    "Class 2 - A"/"Class 2 - B") were ranked and averaged as one class.
+
     Falls back to the current class roster when this (class, year) has no
     enrollment rows at all (legacy data predating StudentEnrollment).
     Returns (students, {student_id: that year's roll_number}).
     """
     from students.models import Student
-    from academic_sessions.models import StudentEnrollment
-    from academic_sessions.utils import enrollment_covers_month
+    from academic_sessions.roster import enrollments_in_scope
 
-    enrollment_filter = Q(school_id=school_id, academic_year_id=academic_year_id, class_obj_id=class_obj_id)
-    enrollment_filter &= enrollment_covers_month(as_of_date.year, as_of_date.month) if as_of_date else Q(is_active=True)
+    enrollment_qs = enrollments_in_scope(
+        school_id,
+        academic_year_id=academic_year_id,
+        session_class_id=session_class_id,
+        class_obj_id=class_obj_id,
+        year=as_of_date.year if as_of_date else None,
+        month=as_of_date.month if as_of_date else None,
+    )
+    enrollments = list(enrollment_qs.select_related('student')) if enrollment_qs is not None else []
 
-    enrollments = list(StudentEnrollment.objects.filter(enrollment_filter).select_related('student'))
-
-    if enrollments:
+    if enrollments or session_class_id:
+        # An empty section is an empty roster: the legacy fallback below is
+        # master-class wide and would list every section's students.
         roll_by_student = {e.student_id: e.roll_number for e in enrollments}
         students = sorted((e.student for e in enrollments), key=lambda s: roll_by_student[s.id])
         return students, roll_by_student
@@ -292,13 +302,39 @@ def _class_roster(school_id, class_obj_id, academic_year_id, as_of_date=None):
     return students, {s.id: s.roll_number for s in students}
 
 
-def _exam_roster(school_id, exam):
+def _exam_roster(school_id, exam, session_class_id=None):
     """_class_roster() for an Exam's own (class, academic year), anchored to
     the exam's own date for month-precision withdrawn/transferred handling."""
     return _class_roster(
         school_id, exam.class_obj_id, exam.academic_year_id,
         as_of_date=exam.start_date or exam.end_date,
+        session_class_id=session_class_id,
     )
+
+
+def _exam_section_param(request, school_id, exam):
+    """Validated `session_class_id` query param for an exam's results, or None.
+
+    Exam has no section of its own yet, so the caller names one; it must be a
+    section of this exam's master class in this exam's year.
+    """
+    raw = request.query_params.get('session_class_id')
+    if not raw:
+        return None
+    from academic_sessions.models import SessionClass
+
+    try:
+        section_id = int(raw)
+    except (TypeError, ValueError):
+        raise ValidationError({'session_class_id': 'Must be an integer.'})
+    if not SessionClass.objects.filter(
+        id=section_id,
+        school_id=school_id,
+        academic_year_id=exam.academic_year_id,
+        class_obj_id=exam.class_obj_id,
+    ).exists():
+        raise ValidationError({'session_class_id': "Not a section of this exam's class and year."})
+    return section_id
 
 
 def _short_academic_year_name(name):
@@ -1661,7 +1697,9 @@ class ExamViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet)
         school_id = _resolve_school_id(request)
         exam_subjects = exam.exam_subjects.filter(is_active=True).select_related('subject')
 
-        students, roll_by_student = _exam_roster(school_id, exam)
+        students, roll_by_student = _exam_roster(
+            school_id, exam, session_class_id=_exam_section_param(request, school_id, exam),
+        )
 
         grade_scales = list(GradeScale.objects.filter(
             school_id=school_id, is_active=True,
@@ -1767,7 +1805,9 @@ class ExamViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet)
         school_id = _resolve_school_id(request)
         exam_subjects = exam.exam_subjects.filter(is_active=True).select_related('subject')
 
-        students, _roll_by_student = _exam_roster(school_id, exam)
+        students, _roll_by_student = _exam_roster(
+            school_id, exam, session_class_id=_exam_section_param(request, school_id, exam),
+        )
 
         # Prefetch all marks for this exam in one query
         all_marks = StudentMark.objects.filter(
@@ -2896,9 +2936,11 @@ class ReportCardView(ModuleAccessMixin, APIView):
         # A single exam is always just that exam; only a multi-exam card can blend.
         weighted_calc = use_weighted and len(exams) > 1
 
+        # Rank and class average are among the student's own section.
         class_students, _roll_by_student = _class_roster(
             school_id, enrollment.class_obj_id, enrollment.academic_year_id,
             as_of_date=(main_exam.start_date or main_exam.end_date) if main_exam else None,
+            session_class_id=enrollment.session_class_id,
         )
         class_marks = StudentMark.objects.filter(exam_subject__in=all_exam_subjects, school_id=school_id)
         marks_by_key = {(m.student_id, m.exam_subject_id): m for m in class_marks}

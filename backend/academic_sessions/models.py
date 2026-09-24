@@ -1,4 +1,8 @@
+import logging
+
 from django.db import models
+
+logger = logging.getLogger(__name__)
 
 
 class AcademicYear(models.Model):
@@ -325,6 +329,27 @@ class StudentEnrollment(models.Model):
                 name='unique_roll_per_legacy_class_enrollment',
             ),
         ]
+
+    def save(self, *args, **kwargs):
+        # Placement is per section, so session_class wins: re-derive class_obj
+        # from it on every save. Writers that changed class_obj alone left the
+        # two disagreeing, and section-scoped rosters showed the student in the
+        # old class. queryset.update()/bulk_create() bypass this guard; use
+        # academic_sessions.enrollment_service.move_student for moves.
+        if self.session_class_id:
+            master_id = self.session_class.class_obj_id
+            if master_id and master_id != self.class_obj_id:
+                if self.class_obj_id:
+                    logger.warning(
+                        'StudentEnrollment %s: class_obj %s disagrees with session_class %s '
+                        '(master %s); keeping the session_class placement.',
+                        self.pk, self.class_obj_id, self.session_class_id, master_id,
+                    )
+                self.class_obj_id = master_id
+                update_fields = kwargs.get('update_fields')
+                if update_fields is not None and 'class_obj' not in update_fields:
+                    kwargs['update_fields'] = [*update_fields, 'class_obj']
+        super().save(*args, **kwargs)
 
     def __str__(self):
         class_label = self.session_class.label if self.session_class_id else self.class_obj.name

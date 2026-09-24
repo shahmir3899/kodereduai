@@ -20,7 +20,8 @@ from core.permissions import (
     IsSchoolAdmin, CanViewStudentRecords, HasSchoolAccess, ModuleAccessMixin,
     IsStudent, IsStudentOrAdmin, CanManageStudentPhoto, CanEditStudentRecord,
     CanCreateStudentAccount, get_effective_role, ADMIN_ROLES, ROLE_HIERARCHY,
-    get_teacher_combined_scope, get_teacher_session_class_scope, _get_session_class_student_ids,
+    get_teacher_combined_scope, get_teacher_master_only_class_scope, get_teacher_session_class_scope,
+    _get_session_class_student_ids,
 )
 from core.mixins import TenantQuerySetMixin, ensure_tenant_schools, ensure_tenant_school_id
 from .models import Class, Student, StudentDocument, StudentProfile, StudentInvite
@@ -173,9 +174,13 @@ class StudentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
             if session_ids:
                 # Section-scoped: filter students by those enrolled in teacher's assigned sessions
                 enrolled_student_ids = _get_session_class_student_ids(session_ids)
+                # Master-class fallback only for assignments without a section;
+                # full_class_ids also holds the masters of section assignments,
+                # which re-opened every section of those classes.
+                legacy_class_ids = get_teacher_master_only_class_scope(self.request, school_id=active_school_id)
                 queryset = queryset.filter(
                     Q(id__in=enrolled_student_ids) |
-                    Q(class_obj_id__in=scope['full_class_ids'])  # Fallback: full class access
+                    Q(class_obj_id__in=legacy_class_ids)
                 )
             else:
                 # No session assignments: use master class scope
@@ -295,17 +300,17 @@ class StudentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
             student = serializer.save()
 
         # Auto-create enrollment for the current academic year
-        from academic_sessions.models import AcademicYear, StudentEnrollment, SessionClass
+        from academic_sessions.models import AcademicYear, StudentEnrollment
+        from academic_sessions.enrollment_service import resolve_session_class
         current_year = AcademicYear.objects.filter(
             school_id=student.school_id, is_current=True,
         ).first()
         if current_year:
-            session_class = SessionClass.objects.filter(
+            session_class = resolve_session_class(
                 school_id=student.school_id,
                 academic_year_id=current_year.id,
                 class_obj_id=student.class_obj_id,
-                is_active=True,
-            ).first()
+            )
             StudentEnrollment.objects.get_or_create(
                 school_id=student.school_id,
                 student=student,
@@ -323,6 +328,7 @@ class StudentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
 
         # Sync enrollment for the current academic year
         from academic_sessions.models import AcademicYear, StudentEnrollment
+        from academic_sessions.enrollment_service import move_student, resolve_session_class
         current_year = AcademicYear.objects.filter(
             school_id=student.school_id, is_current=True,
         ).first()
@@ -333,15 +339,23 @@ class StudentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
                 academic_year=current_year,
             ).first()
             if enrollment:
-                enrollment.roll_number = student.roll_number
-                enrollment.class_obj = student.class_obj
-                enrollment.save(update_fields=['roll_number', 'class_obj', 'updated_at'])
+                move_student(
+                    enrollment,
+                    class_obj=student.class_obj,
+                    roll_number=student.roll_number,
+                    sync_student=False,
+                )
             else:
                 StudentEnrollment.objects.create(
                     school_id=student.school_id,
                     student=student,
                     academic_year=current_year,
                     class_obj=student.class_obj,
+                    session_class=resolve_session_class(
+                        school_id=student.school_id,
+                        academic_year_id=current_year.id,
+                        class_obj_id=student.class_obj_id,
+                    ),
                     roll_number=student.roll_number,
                     status='ACTIVE',
                 )
@@ -359,8 +373,9 @@ class StudentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
         serializer.is_valid(raise_exception=True)
         payload = serializer.validated_data
 
-        from academic_sessions.models import StudentEnrollment, AcademicYear, PromotionOperation, PromotionEvent
+        from academic_sessions.models import StudentEnrollment, PromotionOperation, PromotionEvent
         from academic_sessions.roll_allocator_service import RollAllocatorService
+        from academic_sessions.enrollment_service import move_student, resolve_session_class
 
         academic_year = payload['academic_year_obj']
         target_class = payload['target_class_obj']
@@ -378,6 +393,16 @@ class StudentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        if target_session_class is None:
+            # Caller sent only a master class; resolve the section up front so
+            # roll allocation and the audit event see the same placement.
+            target_session_class = resolve_session_class(
+                school_id=school_id,
+                academic_year_id=academic_year.id,
+                class_obj_id=target_class.id,
+                prefer_id=enrollment.session_class_id,
+            )
+
         allocator = RollAllocatorService(
             school_id=school_id,
             academic_year_id=academic_year.id,
@@ -393,19 +418,12 @@ class StudentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
         old_class_id = enrollment.class_obj_id
         old_roll = enrollment.roll_number
 
-        enrollment.class_obj = target_class
-        enrollment.session_class = target_session_class
-        enrollment.roll_number = resolved_roll
-        enrollment.save(update_fields=['class_obj', 'session_class', 'roll_number', 'updated_at'])
-
-        current_year = AcademicYear.objects.filter(
-            school_id=school_id,
-            is_current=True,
-        ).first()
-        if current_year and current_year.id == academic_year.id:
-            student.class_obj = target_class
-            student.roll_number = resolved_roll
-            student.save(update_fields=['class_obj', 'roll_number', 'updated_at'])
+        move_student(
+            enrollment,
+            session_class=target_session_class,
+            class_obj=target_class,
+            roll_number=resolved_roll,
+        )
 
         operation = PromotionOperation.objects.create(
             school_id=school_id,
@@ -1057,16 +1075,19 @@ class StudentDashboardView(APIView):
             total_paid=Sum('amount_paid'),
         )
 
+        from academic_sessions.roster import current_year_q, placement_scope
+        class_obj_id, year_id = placement_scope(student)
+
         # Upcoming assignments
         upcoming_assignments = []
         try:
             from lms.models import Assignment
             assignments = Assignment.objects.filter(
-                class_obj=student.class_obj,
+                class_obj_id=class_obj_id,
                 school=student.school,
                 status='PUBLISHED',
                 due_date__gte=timezone.now(),
-            ).select_related('subject').order_by('due_date')[:5]
+            ).filter(current_year_q(year_id)).select_related('subject').order_by('due_date')[:5]
             upcoming_assignments = [
                 {
                     'id': a.id,
@@ -1087,7 +1108,7 @@ class StudentDashboardView(APIView):
             day_map = {0: 'MON', 1: 'TUE', 2: 'WED', 3: 'THU', 4: 'FRI', 5: 'SAT', 6: 'SUN'}
             today = day_map.get(timezone.now().weekday(), 'MON')
             entries = TimetableEntry.objects.filter(
-                class_obj=student.class_obj,
+                class_obj_id=class_obj_id,
                 school=student.school,
                 day=today,
             ).select_related('slot', 'subject', 'teacher').order_by('slot__order')
@@ -1190,9 +1211,11 @@ class StudentTimetableView(APIView):
             return Response({'error': 'No student profile linked.'}, status=404)
 
         from academics.models import TimetableEntry, TimetableSlot
+        from academic_sessions.roster import current_year_q, placement_scope
+        class_obj_id, _year_id = placement_scope(student)
         slots = TimetableSlot.objects.filter(school=student.school).order_by('order')
         entries = TimetableEntry.objects.filter(
-            class_obj=student.class_obj,
+            class_obj_id=class_obj_id,
             school=student.school,
         ).select_related('slot', 'subject', 'teacher')
 
@@ -1305,12 +1328,14 @@ class StudentExamScheduleView(APIView):
             return Response({'error': 'No student profile linked.'}, status=404)
 
         from examinations.models import Exam
+        from academic_sessions.roster import current_year_q, placement_scope
+        class_obj_id, year_id = placement_scope(student)
         exams = Exam.objects.filter(
             school=student.school,
-            class_obj=student.class_obj,
+            class_obj_id=class_obj_id,
             is_active=True,
             schedule_published_at__isnull=False,
-        ).select_related('exam_type', 'exam_group').order_by('start_date').prefetch_related(
+        ).filter(current_year_q(year_id)).select_related('exam_type', 'exam_group').order_by('start_date').prefetch_related(
             'exam_subjects__subject',
         )
 
@@ -1390,12 +1415,14 @@ class StudentAssignmentsView(APIView):
 
         try:
             from lms.models import Assignment, AssignmentSubmission
+            from academic_sessions.roster import current_year_q, placement_scope
+            class_obj_id, year_id = placement_scope(student)
             assignments = Assignment.objects.filter(
-                class_obj=student.class_obj,
+                class_obj_id=class_obj_id,
                 school=student.school,
                 status__in=['PUBLISHED', 'CLOSED'],
                 is_active=True,
-            ).select_related('subject', 'teacher').order_by('-due_date')
+            ).filter(current_year_q(year_id)).select_related('subject', 'teacher').order_by('-due_date')
 
             data = []
             for a in assignments:
@@ -1437,9 +1464,11 @@ class StudentAssignmentsView(APIView):
 
         try:
             from lms.models import Assignment, AssignmentSubmission
-            assignment = Assignment.objects.get(
+            from academic_sessions.roster import current_year_q, placement_scope
+            class_obj_id, year_id = placement_scope(student)
+            assignment = Assignment.objects.filter(current_year_q(year_id)).get(
                 id=assignment_id,
-                class_obj=student.class_obj,
+                class_obj_id=class_obj_id,
                 school=student.school,
                 status='PUBLISHED',
             )

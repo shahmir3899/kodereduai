@@ -332,9 +332,11 @@ class ChildTimetableView(APIView):
             )
 
         from academics.models import TimetableEntry
+        from academic_sessions.roster import placement_scope
 
+        class_obj_id, _year_id = placement_scope(student)
         entries = TimetableEntry.objects.filter(
-            class_obj=student.class_obj,
+            class_obj_id=class_obj_id,
         ).select_related(
             'slot', 'subject', 'teacher',
         ).order_by('day', 'slot__order')
@@ -471,12 +473,17 @@ class ChildExamScheduleView(APIView):
             )
 
         from examinations.models import Exam
+        from academic_sessions.roster import current_year_q, placement_scope
+
+        # This year's exams only: the same master class also has last year's
+        # (a previous cohort's) published schedules.
+        class_obj_id, year_id = placement_scope(student)
         exams = Exam.objects.filter(
             school=student.school,
-            class_obj=student.class_obj,
+            class_obj_id=class_obj_id,
             is_active=True,
             schedule_published_at__isnull=False,
-        ).select_related('exam_type', 'exam_group').order_by('start_date').prefetch_related(
+        ).filter(current_year_q(year_id)).select_related('exam_type', 'exam_group').order_by('start_date').prefetch_related(
             'exam_subjects__subject',
         )
 

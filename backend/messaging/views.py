@@ -279,19 +279,10 @@ class MessagingViewSet(viewsets.ViewSet):
                 staff_member = None
 
             if staff_member:
-                # Classes this teacher teaches
-                taught_class_ids = ClassSubject.objects.filter(
-                    teacher=staff_member,
-                    school_id=school_id,
-                    is_active=True,
-                ).values_list('class_obj_id', flat=True).distinct()
-
-                # Students in those classes
-                students = Student.objects.filter(
-                    class_obj_id__in=taught_class_ids,
-                    school_id=school_id,
-                    is_active=True,
-                ).select_related('class_obj')
+                # Students in the sections this teacher teaches this year.
+                # Scoping by master class (and the Student.class_obj snapshot)
+                # let a Class 2-A teacher message Class 2-B families.
+                students, label_by_student = _students_taught_by(staff_member, school_id)
 
                 # Parents of those students
                 parent_links = ParentChild.objects.filter(
@@ -312,7 +303,7 @@ class MessagingViewSet(viewsets.ViewSet):
                                 'department': None,
                                 'student_id': link.student_id,
                                 'student_name': link.student.name,
-                                'class_name': link.student.class_obj.name if link.student.class_obj else None,
+                                'class_name': label_by_student.get(link.student_id),
                             })
 
                 # Students with user accounts
@@ -328,7 +319,7 @@ class MessagingViewSet(viewsets.ViewSet):
                         'department': None,
                         'student_id': sp.student_id,
                         'student_name': sp.student.name,
-                        'class_name': sp.student.class_obj.name if sp.student.class_obj else None,
+                        'class_name': label_by_student.get(sp.student_id),
                     })
 
             # Teachers can also message admins
@@ -385,10 +376,10 @@ class MessagingViewSet(viewsets.ViewSet):
             for link in child_links:
                 if not link.student.class_obj:
                     continue
-                class_subjects = ClassSubject.objects.filter(
-                    class_obj=link.student.class_obj,
-                    school_id=school_id,
-                    is_active=True,
+                # Teachers of the child's own section, not every section of
+                # the master class.
+                class_subjects, class_label = _class_subjects_for_student(link.student, school_id)
+                class_subjects = class_subjects.filter(
                     teacher__isnull=False,
                     teacher__user__isnull=False,
                 ).select_related('teacher', 'teacher__user')
@@ -404,7 +395,7 @@ class MessagingViewSet(viewsets.ViewSet):
                             'department': None,
                             'student_id': link.student_id,
                             'student_name': link.student.name,
-                            'class_name': link.student.class_obj.name,
+                            'class_name': class_label,
                         })
 
         return Response(recipients)
@@ -443,12 +434,59 @@ def _teacher_has_student_access(user, student_id, school_id):
     if not student:
         return False
 
-    return ClassSubject.objects.filter(
-        teacher=staff_member,
-        class_obj=student.class_obj,
+    class_subjects, _label = _class_subjects_for_student(student, school_id)
+    return class_subjects.filter(teacher=staff_member).exists()
+
+
+def _class_subjects_for_student(student, school_id):
+    """(ClassSubject queryset, class label) for the student's current section.
+
+    Falls back to the master class for schools without academic years or a
+    student with no enrollment this year.
+    """
+    from academic_sessions.roster import current_placement
+
+    qs = ClassSubject.objects.filter(school_id=school_id, is_active=True)
+    placement = current_placement(student)
+    if placement and placement.session_class_id:
+        return qs.filter(session_class_id=placement.session_class_id), placement.session_class.label
+    if placement:
+        return (
+            qs.filter(class_obj_id=placement.class_obj_id, academic_year_id=placement.academic_year_id),
+            placement.class_obj.name,
+        )
+    return qs.filter(class_obj_id=student.class_obj_id), (student.class_obj.name if student.class_obj else None)
+
+
+def _students_taught_by(staff_member, school_id):
+    """(active students in the teacher's current-year sections, {student_id: section label})."""
+    from academic_sessions.models import StudentEnrollment
+    from academic_sessions.utils import resolve_current_academic_year_id
+
+    year_id = resolve_current_academic_year_id(school_id)
+    taught = ClassSubject.objects.filter(teacher=staff_member, school_id=school_id, is_active=True)
+    if not year_id:
+        students = Student.objects.filter(
+            class_obj_id__in=taught.values('class_obj_id'), school_id=school_id, is_active=True,
+        ).select_related('class_obj')
+        return students, {s.id: s.class_obj.name if s.class_obj else None for s in students}
+
+    taught = taught.filter(academic_year_id=year_id)
+    section_ids = [sid for sid in taught.values_list('session_class_id', flat=True) if sid]
+    master_only_ids = list(taught.filter(session_class__isnull=True).values_list('class_obj_id', flat=True))
+    enrollments = StudentEnrollment.objects.filter(
+        Q(session_class_id__in=section_ids)
+        | Q(session_class__isnull=True, class_obj_id__in=master_only_ids),
         school_id=school_id,
+        academic_year_id=year_id,
         is_active=True,
-    ).exists()
+    ).select_related('session_class', 'class_obj')
+    label_by_student = {
+        e.student_id: e.session_class.label if e.session_class_id else e.class_obj.name
+        for e in enrollments
+    }
+    students = Student.objects.filter(id__in=label_by_student, school_id=school_id, is_active=True)
+    return students, label_by_student
 
 
 def _find_existing_thread(user_id, recipient_user_id, student_id, school_id):

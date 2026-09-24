@@ -55,19 +55,23 @@ class BaseReportGenerator:
 
         from academic_sessions.models import StudentEnrollment
 
+        # Inactive rows included (active preferred, applied last): a student
+        # who withdrew mid-year still belongs under their class for the months
+        # they were enrolled, not under the snapshot fallback.
         enrollment_qs = StudentEnrollment.objects.filter(
             school_id=self.school.id,
             academic_year_id=academic_year_id,
-            is_active=True,
             student_id__in=student_ids,
-        ).select_related('class_obj', 'session_class')
+        ).select_related('class_obj', 'session_class').order_by('is_active', 'updated_at', 'id')
         return {enrollment.student_id: enrollment for enrollment in enrollment_qs}
 
     def _resolve_class_name(self, student, enrollment_map):
         enrollment = enrollment_map.get(student.id)
         if enrollment:
             if enrollment.session_class_id and enrollment.session_class:
-                return enrollment.session_class.display_name
+                # label, not display_name: display_name has no section, so
+                # "Class 2 - A" and "Class 2 - B" merged into one "Class 2" row.
+                return enrollment.session_class.label
             if enrollment.class_obj_id and enrollment.class_obj:
                 return enrollment.class_obj.name
         return student.class_obj.name if student.class_obj else 'Unknown'

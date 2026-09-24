@@ -712,8 +712,8 @@ export const examinationsApi = {
   announceExamResults: (id) => api.post(`/api/examinations/exams/${id}/announce-results/`),
   unpublishExamResults: (id) => api.post(`/api/examinations/exams/${id}/unpublish-results/`),
   populateExamSubjects: (id) => api.post(`/api/examinations/exams/${id}/populate-subjects/`),
-  getExamResults: (id) => api.get(`/api/examinations/exams/${id}/results/`),
-  getClassSummary: (id) => api.get(`/api/examinations/exams/${id}/class_summary/`),
+  getExamResults: (id, params) => api.get(`/api/examinations/exams/${id}/results/`, { params }),
+  getClassSummary: (id, params) => api.get(`/api/examinations/exams/${id}/class_summary/`, { params }),
 
   // Exam Groups
   getExamGroups: (params) => api.get('/api/examinations/exam-groups/', { params }),

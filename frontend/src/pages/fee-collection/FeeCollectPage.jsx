@@ -21,6 +21,7 @@ import {
   resolveClassIdToMasterClassId,
 } from '../../utils/classScope'
 import Button from '../../components/ui/Button'
+import useResetStaleClassFilter from '../../hooks/useResetStaleClassFilter'
 
 export default function FeeCollectPage() {
   const { user, activeSchool, effectiveRole, isSchoolAdmin, isAccountant, isPrincipal, isSuperAdmin } = useAuth()
@@ -46,7 +47,7 @@ export default function FeeCollectPage() {
   const [feeTypeFilter, setFeeTypeFilter] = useState('MONTHLY')
   const [annualCategoryFilter, setAnnualCategoryFilter] = useState('')
   const [monthlyCategoryFilter, setMonthlyCategoryFilter] = useState('')
-  const { sessionClasses } = useSessionClasses(activeAcademicYear?.id)
+  const { sessionClasses, isLoading: sessionClassesLoading } = useSessionClasses(activeAcademicYear?.id)
   const classSelectorScope = getClassSelectorScope(activeAcademicYear?.id)
   const resolvedClassFilter = resolveClassIdToMasterClassId(classFilter, activeAcademicYear?.id, sessionClasses)
   const selectedSessionClassId = resolveSessionClassId(classFilter, activeAcademicYear?.id, sessionClasses)
@@ -91,6 +92,8 @@ export default function FeeCollectPage() {
     })
     return buildSessionClassOptions(scopedSessionClasses)
   }, [activeAcademicYear?.id, data.classList, sessionClasses])
+
+  useResetStaleClassFilter(classFilter, setClassFilter, classFilterOptions, sessionClassesLoading)
 
   const selectedClassLabel = useMemo(() => {
     if (!classFilter) return 'All Classes'

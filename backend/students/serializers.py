@@ -431,6 +431,7 @@ class StudentBulkCreateSerializer(serializers.Serializer):
         students_data = validated_data['students']
 
         from academic_sessions.models import AcademicYear, StudentEnrollment
+        from academic_sessions.enrollment_service import resolve_session_class
         current_year = AcademicYear.objects.filter(
             school_id=school_id, is_current=True,
         ).first()
@@ -477,6 +478,11 @@ class StudentBulkCreateSerializer(serializers.Serializer):
                             student=student,
                             academic_year=current_year,
                             class_obj_id=class_id,
+                            session_class=resolve_session_class(
+                                school_id=school_id,
+                                academic_year_id=current_year.id,
+                                class_obj_id=class_id,
+                            ),
                             roll_number=roll,
                             status='ACTIVE',
                         )
