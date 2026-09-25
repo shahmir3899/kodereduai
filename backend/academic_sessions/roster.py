@@ -30,8 +30,10 @@ def enrollments_in_scope(school_id, *, academic_year_id=None, session_class_id=N
       status: for listing records already created (a withdrawn student's fee
       rows from before they left), not for choosing whom to bill.
 
-    Returns None when there's no year to scope by (school without academic
-    years), so the caller can fall back to the legacy snapshot.
+    Returns None when there's no enrollment data to scope by -- no year at all,
+    or a year with no enrollment rows in the school (legacy data, e.g. a year
+    before enrollments were tracked) -- so the caller can fall back to the
+    Student.class_obj snapshot instead of silently matching nobody.
     """
     qs = StudentEnrollment.objects.filter(school_id=school_id)
     if session_class_id:
@@ -43,6 +45,8 @@ def enrollments_in_scope(school_id, *, academic_year_id=None, session_class_id=N
         if not academic_year_id:
             return None
         qs = qs.filter(academic_year_id=academic_year_id)
+        if not qs.exists():
+            return None
         if class_obj_id:
             qs = qs.filter(class_obj_id=class_obj_id)
 
@@ -123,6 +127,17 @@ def placement_group(enrollment, student):
         return ('class', enrollment.class_obj_id), enrollment.class_obj.name, enrollment.class_obj_id
     class_obj = student.class_obj
     return ('class', student.class_obj_id), (class_obj.name if class_obj else ''), student.class_obj_id
+
+
+def own_section_q(student, field='session_class'):
+    """Q for class content (exams, ...) a student should see: whole-class rows
+    plus their current section's own rows, never a sibling section's."""
+    placement = current_placement(student)
+    section_id = placement.session_class_id if placement else None
+    q = Q(**{f'{field}__isnull': True})
+    if section_id:
+        q |= Q(**{f'{field}_id': section_id})
+    return q
 
 
 def current_year_q(year_id, field='academic_year'):

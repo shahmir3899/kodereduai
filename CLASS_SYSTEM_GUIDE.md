@@ -394,6 +394,20 @@ are Phase 2 and have not been started.
     (Open Question 3: `SELECT COUNT(*) FROM academic_sessions_studentenrollment WHERE
     session_class_id IS NULL AND is_active`, plus the equivalent for `ClassTeacherAssignment`) before
     deciding whether a corrective backfill script is worth writing.
+12. **Decided (2026-09-25): `FeeStructure` stays per master class.** Sections of one class pay the
+    same fees; exceptions use per-student FeeStructure overrides. Fee generation, collection,
+    lists, totals and reports are already per section (they resolve each student's section from
+    StudentEnrollment for the payment's year). If a school ever needs different prices per
+    section, add a nullable `session_class` FK (null = whole class, section row wins).
+11. **Deferred by decision (2026-09-25): face attendance + attendance anomalies stay master-class
+    only for now.** `FaceAttendanceSession`, `FaceCaptureDevice`, `FaceLiveDetectionEvent`
+    (`backend/face_attendance/models.py`) and `AttendanceAnomaly` (`backend/attendance/models.py`)
+    key on `class_obj` only. They had 0 rows when this was decided, so adding a section was
+    deferred until the school starts using face attendance / anomaly alerts. **Before enabling
+    either feature for a school that splits a class into sections**, add a nullable
+    `session_class` FK (null = whole class) and scope the roster through
+    `academic_sessions.roster.enrollments_in_scope(session_class_id=...)` — otherwise a "Class 2"
+    photo session or camera treats 2-A and 2-B students as one class.
 
 ---
 

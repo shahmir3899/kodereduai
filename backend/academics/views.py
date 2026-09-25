@@ -26,6 +26,7 @@ from core.permissions import (
 from core.mixins import TenantQuerySetMixin, ensure_tenant_schools, ensure_tenant_school_id
 from core.class_scope import resolve_class_scope
 from .models import Subject, ClassSubject, ClassTeacherAssignment, TimetableSlot, TimetableEntry
+from .timetable_scope import section_timetable
 from .serializers import (
     SubjectSerializer, SubjectCreateSerializer, SubjectBulkCreateSerializer,
     ClassSubjectSerializer, ClassSubjectCreateSerializer,
@@ -719,7 +720,7 @@ class TimetableEntryViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Mod
 
         queryset = TimetableEntry.objects.select_related(
             'school', 'class_obj', 'slot', 'subject', 'teacher',
-            'academic_year',
+            'academic_year', 'session_class',
         )
         queryset = annotate_session_class_display(queryset)
         if _is_school_header_rejected(self.request):
@@ -738,8 +739,15 @@ class TimetableEntryViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Mod
         if scope['invalid']:
             return queryset.none()
         class_obj = scope['class_obj_id'] or None
-        if class_obj:
-            queryset = queryset.filter(class_obj_id=class_obj)
+        if scope['session_class_id']:
+            # Section view: its overrides layered on the class's shared entries.
+            queryset = section_timetable(
+                queryset.filter(class_obj_id=class_obj), scope['session_class_id'],
+            )
+        elif class_obj:
+            # Class view: the shared timetable only; section overrides would
+            # otherwise show up as duplicates at the same day/slot.
+            queryset = queryset.filter(class_obj_id=class_obj, session_class__isnull=True)
 
         day = self.request.query_params.get('day')
         if day:
@@ -774,6 +782,7 @@ class TimetableEntryViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Mod
         class_id = request.query_params.get('class_id')
         if not class_id:
             return Response({'detail': 'class_id query param required.'}, status=400)
+        # get_queryset() layers section overrides when session_class_id is passed.
         entries = self.get_queryset().filter(class_obj_id=class_id)
         serializer = TimetableEntrySerializer(entries, many=True)
 
@@ -784,8 +793,10 @@ class TimetableEntryViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Mod
                 grid[day] = []
             grid[day].append(entry)
 
+        session_class_id = request.query_params.get('session_class_id')
         return Response({
             'class_id': int(class_id),
+            'session_class_id': int(session_class_id) if session_class_id else None,
             'grid': grid,
             'entries': serializer.data,
         })
@@ -813,6 +824,12 @@ class TimetableEntryViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Mod
             return Response({'detail': 'Class not found.'}, status=404)
 
         class_name = f"{cls.name} - {cls.section}" if cls.section else cls.name
+        session_class_id = request.query_params.get('session_class_id')
+        if session_class_id:
+            from academic_sessions.models import SessionClass
+            section = SessionClass.objects.filter(id=session_class_id, class_obj_id=cls.id).first()
+            if section:
+                class_name = section.label
 
         slots = list(TimetableSlot.objects.filter(
             school_id=cls.school_id, slot_type__in=[TimetableSlot.SlotType.PERIOD, TimetableSlot.SlotType.BREAK,
@@ -875,6 +892,16 @@ class TimetableEntryViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Mod
         if not class_id or not day:
             return Response({'detail': 'class_obj and day are required.'}, status=400)
 
+        # With a section: save that section's override for the day. Without:
+        # save the shared day, leaving any section overrides in place.
+        session_class_id = request.data.get('session_class') or None
+        if session_class_id:
+            from academic_sessions.models import SessionClass
+            if not SessionClass.objects.filter(
+                id=session_class_id, school_id=school_id, class_obj_id=class_id,
+            ).exists():
+                return Response({'detail': 'Section does not belong to this class.'}, status=400)
+
         # Auto-resolve academic year
         academic_year_id = request.data.get('academic_year')
         if not academic_year_id:
@@ -884,6 +911,15 @@ class TimetableEntryViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Mod
                 school_id=sid, is_current=True, is_active=True,
             ).first()
             academic_year_id = ay.id if ay else None
+
+        # The rows this save replaces; everything else counts for conflicts
+        # (a shared entry still applies to sections without an override).
+        replaced = TimetableEntry.objects.filter(
+            school_id=school_id,
+            class_obj_id=class_id,
+            session_class_id=session_class_id,
+            day=day.upper(),
+        )
 
         # Validate teacher conflicts
         errors = []
@@ -896,7 +932,7 @@ class TimetableEntryViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Mod
                     teacher_id=teacher_id,
                     day=day.upper(),
                     slot_id=slot_id,
-                ).exclude(class_obj_id=class_id)
+                ).exclude(id__in=replaced.values('id'))
                 if conflict.exists():
                     c = conflict.first()
                     errors.append(
@@ -907,12 +943,8 @@ class TimetableEntryViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Mod
         if errors:
             return Response({'detail': errors}, status=400)
 
-        # Delete existing entries for this class+day, then create new
-        TimetableEntry.objects.filter(
-            school_id=school_id,
-            class_obj_id=class_id,
-            day=day.upper(),
-        ).delete()
+        # Replace this class's shared day (or this section's override day).
+        replaced.delete()
 
         # Build slot lookup for applicability check
         slot_ids = [e.get('slot') for e in entries_data if e.get('slot')]
@@ -933,6 +965,7 @@ class TimetableEntryViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Mod
                 TimetableEntry.objects.create(
                     school_id=school_id,
                     class_obj_id=class_id,
+                    session_class_id=session_class_id,
                     academic_year_id=academic_year_id,
                     day=day.upper(),
                     slot_id=slot_id,
@@ -951,6 +984,40 @@ class TimetableEntryViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Mod
             'message': msg,
         })
 
+    @action(detail=False, methods=['post'])
+    def split_for_sections(self, request):
+        """Copy a class's shared timetable into each of its sections as their
+        own entries and drop the shared ones. Expects: { class_obj: id }"""
+        from academic_sessions.utils import resolve_current_academic_year_id
+        from .timetable_scope import split_shared_timetable
+
+        school_id = _resolve_school_id(request)
+        class_id = request.data.get('class_obj')
+        if not school_id or not class_id:
+            return Response({'detail': 'class_obj is required.'}, status=400)
+        academic_year_id = request.data.get('academic_year') or resolve_current_academic_year_id(school_id)
+        if not academic_year_id:
+            return Response({'detail': 'No current academic year.'}, status=400)
+        try:
+            result = split_shared_timetable(school_id, int(class_id), int(academic_year_id))
+        except ValueError as e:
+            return Response({'detail': str(e)}, status=400)
+        return Response(result)
+
+    @action(detail=False, methods=['post'])
+    def clear_section_day(self, request):
+        """Drop a section's override for one day so it follows the shared timetable again.
+        Expects: { session_class: id, day: 'MON' }"""
+        school_id = _resolve_school_id(request)
+        session_class_id = request.data.get('session_class')
+        day = request.data.get('day')
+        if not school_id or not session_class_id or not day:
+            return Response({'detail': 'session_class and day are required.'}, status=400)
+        deleted, _ = TimetableEntry.objects.filter(
+            school_id=school_id, session_class_id=session_class_id, day=day.upper(),
+        ).delete()
+        return Response({'deleted': deleted})
+
     @action(detail=False, methods=['get'])
     def teacher_conflicts(self, request):
         """Check if a teacher has conflicts at a given day+slot."""
@@ -959,6 +1026,7 @@ class TimetableEntryViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Mod
         day = request.query_params.get('day')
         slot_id = request.query_params.get('slot')
         exclude_class = request.query_params.get('exclude_class')
+        exclude_session_class = request.query_params.get('exclude_session_class')
 
         if not all([school_id, teacher_id, day, slot_id]):
             return Response({'detail': 'teacher, day, and slot params required.'}, status=400)
@@ -970,8 +1038,11 @@ class TimetableEntryViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Mod
             slot_id=slot_id,
         ).select_related('class_obj', 'subject')
 
-        if exclude_class:
-            conflicts = conflicts.exclude(class_obj_id=exclude_class)
+        if exclude_session_class:
+            # Editing a section: only its own override rows are being replaced.
+            conflicts = conflicts.exclude(session_class_id=exclude_session_class)
+        elif exclude_class:
+            conflicts = conflicts.exclude(class_obj_id=exclude_class, session_class__isnull=True)
 
         return Response({
             'has_conflict': conflicts.exists(),

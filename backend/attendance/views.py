@@ -1671,19 +1671,20 @@ class AttendanceRecordViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.R
             ).first()
 
         # Validate all student_ids belong to this class and academic year (when available)
+        enrollments = None
         if academic_year:
             # Section-scoped when a section was given: validating by master
             # class alone let section A's entry mark section B's students.
             from academic_sessions.roster import enrollments_in_scope
 
-            valid_student_ids = set(
-                enrollments_in_scope(
-                    school_id,
-                    academic_year_id=academic_year.id,
-                    session_class_id=session_class.id if session_class else None,
-                    class_obj_id=class_id,
-                ).values_list('student_id', flat=True)
+            enrollments = enrollments_in_scope(
+                school_id,
+                academic_year_id=academic_year.id,
+                session_class_id=session_class.id if session_class else None,
+                class_obj_id=class_id,
             )
+        if enrollments is not None:
+            valid_student_ids = set(enrollments.values_list('student_id', flat=True))
         else:
             valid_student_ids = set(
                 Student.objects.filter(

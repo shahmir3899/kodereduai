@@ -113,6 +113,15 @@ export default function AssignmentsPage() {
     })
     return map
   }, [sessionClasses])
+  // A section of a class split into several sections gets section-only
+  // assignments; the only section of a class keeps whole-class assignments.
+  const splitSectionId = (sessionClassId) => {
+    if (classSelectorScope !== 'session' || !sessionClassId) return null
+    const sc = sessionClasses.find((c) => String(c.id) === String(sessionClassId))
+    if (!sc?.class_obj) return null
+    const siblings = sessionClasses.filter((c) => String(c.class_obj) === String(sc.class_obj))
+    return siblings.length > 1 ? parseInt(sessionClassId, 10) : null
+  }
   const { classifyScope, isTeacherEnabled } = useTeacherScopeLookup({ academicYearId: activeAcademicYear?.id })
   const canCreateAssignments = isSchoolAdmin || isPrincipal
   const canCreateDailyDiary = isSchoolAdmin || isPrincipal || isTeacher
@@ -167,10 +176,12 @@ export default function AssignmentsPage() {
   // -- Data fetching --
 
   const { data: assignmentsData, isLoading } = useQuery({
-    queryKey: ['assignments', resolvedFilterClass, filterSubject, filterStatus, filterType, activeAcademicYear?.id],
+    queryKey: ['assignments', resolvedFilterClass, filterClass, filterSubject, filterStatus, filterType, activeAcademicYear?.id],
     queryFn: () =>
       lmsApi.getAssignments({
         ...(resolvedFilterClass && { class_obj: resolvedFilterClass }),
+        // Whole-class assignments plus this section's own, not a sibling's.
+        ...(classSelectorScope === 'session' && filterClass && { session_class_id: filterClass }),
         ...(filterSubject && { subject: filterSubject }),
         ...(filterStatus && { status: filterStatus }),
         ...(filterType && { assignment_type: filterType }),
@@ -312,13 +323,14 @@ export default function AssignmentsPage() {
   })
 
   const bulkDiaryMutation = useMutation({
-    mutationFn: async ({ classId, entries, diaryDate }) => {
+    mutationFn: async ({ classId, sessionClassId, entries, diaryDate }) => {
       const normalizedDate = (diaryDate || '').trim() || defaultDiaryDateString()
 
       const payloads = entries.map(({ subject, details }) => {
         const trimmed = details.trim()
         return {
           class_obj: parseInt(classId, 10),
+          session_class: sessionClassId,
           subject: parseInt(subject.id, 10),
           title: `${subject.name} Diary - ${normalizedDate}`,
           description: trimmed,
@@ -361,7 +373,9 @@ export default function AssignmentsPage() {
 
   const openEditModal = (assignment) => {
     const mappedClassObj = classSelectorScope === 'session'
-      ? (sessionClassIdByMaster[String(assignment.class_obj)] || '')
+      ? (assignment.session_class
+        ? String(assignment.session_class)
+        : (sessionClassIdByMaster[String(assignment.class_obj)] || ''))
       : (assignment.class_obj ? String(assignment.class_obj) : '')
 
     setEditingAssignment(assignment)
@@ -436,6 +450,7 @@ export default function AssignmentsPage() {
     const payload = {
       ...form,
       class_obj: parseInt(resolvedFormClassObj),
+      session_class: splitSectionId(form.class_obj),
       subject: parseInt(form.subject),
       teacher: form.teacher ? parseInt(form.teacher) : null,
       total_marks: parseInt(form.total_marks) || 100,
@@ -476,6 +491,7 @@ export default function AssignmentsPage() {
 
     bulkDiaryMutation.mutate({
       classId: resolvedBulkDiaryClassObj,
+      sessionClassId: splitSectionId(bulkDiaryForm.class_obj),
       entries,
       diaryDate: bulkDiaryForm.diary_date.trim(),
     })

@@ -109,6 +109,13 @@ export default function TimetablePage() {
   })
 
   const resolvedSelectedClassId = getResolvedMasterClassId(selectedClassId, activeAcademicYear?.id, sessionClasses)
+  // A class split into sections (e.g. Class 2 - A / B) edits the chosen
+  // section's overrides; a single-section class edits the shared timetable.
+  const sectionsOfClass = useMemo(
+    () => sessionClasses.filter(sc => resolvedSelectedClassId && String(sc.class_obj) === String(resolvedSelectedClassId)),
+    [sessionClasses, resolvedSelectedClassId],
+  )
+  const editingSectionId = sectionsOfClass.length > 1 ? selectedClassId : ''
 
   const { data: slotsData, isLoading: slotsLoading } = useQuery({
     queryKey: ['timetableSlots'],
@@ -116,14 +123,19 @@ export default function TimetablePage() {
   })
 
   const { data: timetableData, isLoading: ttLoading } = useQuery({
-    queryKey: ['timetable', selectedClassId, resolvedSelectedClassId],
-    queryFn: () => academicsApi.getTimetableByClass(resolvedSelectedClassId),
+    queryKey: ['timetable', selectedClassId, resolvedSelectedClassId, editingSectionId],
+    queryFn: () => academicsApi.getTimetableByClass(resolvedSelectedClassId, editingSectionId),
     enabled: !!resolvedSelectedClassId,
   })
 
   const { data: classSubjectsData } = useQuery({
-    queryKey: ['classSubjectsByClass', selectedClassId, resolvedSelectedClassId],
-    queryFn: () => academicsApi.getClassSubjectsByClass(resolvedSelectedClassId),
+    // Subject-teacher pairings are per section; the master class alone mixed in
+    // the other sections' (and other years') pairings.
+    queryKey: ['classSubjectsByClass', selectedClassId, resolvedSelectedClassId, activeAcademicYear?.id],
+    queryFn: () => academicsApi.getClassSubjectsByClass(
+      resolvedSelectedClassId,
+      activeAcademicYear?.id ? selectedClassId : undefined,
+    ),
     enabled: !!resolvedSelectedClassId,
   })
 
@@ -187,6 +199,57 @@ export default function TimetablePage() {
       setHasChanges(false)
     }
   }, [timetableData])
+
+  const sectionOverrideDays = useMemo(() => {
+    const days = new Set((timetableData?.data?.entries || []).filter(e => e.is_section_override).map(e => e.day))
+    return DAYS.filter(d => days.has(d))
+  }, [timetableData])
+  const hasSharedEntries = (timetableData?.data?.entries || []).some(e => !e.is_section_override)
+
+  const [showSplitConfirm, setShowSplitConfirm] = useState(false)
+  const [splitting, setSplitting] = useState(false)
+  useEscapeKey(() => { if (!splitting) setShowSplitConfirm(false) }, showSplitConfirm)
+  const handleSplitForSections = async () => {
+    setSplitting(true)
+    try {
+      const res = await academicsApi.splitTimetableForSections({ class_obj: parseInt(resolvedSelectedClassId) })
+      const { sections, created, teacher_clashes: clashes } = res.data
+      setSaveMsg(
+        `Each section now has its own timetable (${sections.join(', ')}; ${created} entries). `
+        + (clashes
+          ? `${clashes} period${clashes === 1 ? '' : 's'} have the same teacher in more than one section; give each section its own teacher there before saving those days.`
+          : 'No teacher is double-booked.'),
+      )
+      queryClient.invalidateQueries({ queryKey: ['timetable'] })
+    } catch (err) {
+      setSaveMsg(err.response?.data?.detail || 'Failed to give each section its own timetable.')
+    }
+    setSplitting(false)
+    setShowSplitConfirm(false)
+  }
+
+  const handleResetSectionDay = async (day) => {
+    if (!editingSectionId) return
+    try {
+      await academicsApi.clearSectionTimetableDay({ session_class: parseInt(editingSectionId), day })
+      setSaveMsg(`${DAY_LABELS_FULL[day]} now follows the shared timetable for ${selectedClassName}.`)
+      queryClient.invalidateQueries({ queryKey: ['timetable', selectedClassId, resolvedSelectedClassId] })
+    } catch {
+      setSaveMsg('Failed to reset the day to the shared timetable.')
+    }
+  }
+
+  const isDayChanged = (day, periodSlots) => {
+    const loaded = {}
+    ;(timetableData?.data?.grid?.[day] || []).forEach(e => { loaded[e.slot] = e })
+    return periodSlots.some(s => {
+      const cell = localGrid[`${day}-${s.id}`] || {}
+      const orig = loaded[s.id] || {}
+      return (cell.subject || null) !== (orig.subject || null)
+        || (cell.teacher || null) !== (orig.teacher || null)
+        || (cell.room || '') !== (orig.room || '')
+    })
+  }
 
   // Reset grid when class changes
   useEffect(() => {
@@ -269,7 +332,9 @@ export default function TimetablePage() {
           teacher: teacherId,
           day: editingCell.day,
           slot: editingCell.slotId,
-          exclude_class: resolvedSelectedClassId,
+          ...(editingSectionId
+            ? { exclude_session_class: editingSectionId }
+            : { exclude_class: resolvedSelectedClassId }),
         })
         if (res.data.has_conflict) {
           setConflictInfo(res.data)
@@ -363,10 +428,14 @@ export default function TimetablePage() {
 
       const hasEntries = entries.some(e => e.subject || e.teacher)
       if (!hasEntries && !timetableData?.data?.grid?.[day]?.length) continue
+      // A section only overrides the days actually changed; saving an
+      // unchanged day would copy the shared day into section-only entries.
+      if (editingSectionId && !isDayChanged(day, periodSlots)) continue
 
       try {
         await academicsApi.bulkSaveTimetable({
           class_obj: parseInt(resolvedSelectedClassId),
+          ...(editingSectionId && { session_class: parseInt(editingSectionId) }),
           day,
           entries,
         })
@@ -417,7 +486,7 @@ export default function TimetablePage() {
     if (!resolvedSelectedClassId) return
     setDownloadingPdf(true)
     try {
-      const res = await academicsApi.downloadTimetablePdf(resolvedSelectedClassId)
+      const res = await academicsApi.downloadTimetablePdf(resolvedSelectedClassId, editingSectionId)
       const url = window.URL.createObjectURL(new Blob([res.data]))
       const a = document.createElement('a')
       a.href = url
@@ -595,6 +664,49 @@ export default function TimetablePage() {
           )}
         </div>
       </div>
+
+      {editingSectionId && !hasSharedEntries && sectionOverrideDays.length > 0 && (
+        <div className="mb-4 p-3 rounded-lg text-sm bg-blue-50 text-blue-800">
+          {selectedClassName} has its own timetable. Changes here apply to {selectedClassName} only.
+        </div>
+      )}
+
+      {editingSectionId && hasSharedEntries && (
+        <div className="mb-4 p-3 rounded-lg text-sm bg-blue-50 text-blue-800">
+          <p>
+            {selectedClassName} shares its timetable with the other sections of this class.
+            Days you change here apply to {selectedClassName} only; every other day follows the shared timetable.
+          </p>
+          {isSchoolAdmin && (
+            <button
+              type="button"
+              onClick={() => setShowSplitConfirm(true)}
+              className="mt-2 px-3 py-1.5 text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+            >
+              Give each section its own timetable
+            </button>
+          )}
+          {sectionOverrideDays.length > 0 && (
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <span className="text-blue-700">Section-only days:</span>
+              {sectionOverrideDays.map(day => (
+                <span key={day} className="inline-flex items-center gap-1 px-2 py-0.5 bg-white border border-blue-200 rounded">
+                  {DAY_LABELS_FULL[day]}
+                  {isSchoolAdmin && (
+                    <button
+                      type="button"
+                      onClick={() => handleResetSectionDay(day)}
+                      className="text-xs text-blue-600 hover:underline"
+                    >
+                      Reset to shared
+                    </button>
+                  )}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {saveMsg && (
         <div className={`mb-4 p-3 rounded-lg text-sm ${saveMsg.includes('Failed') || (saveMsg.includes(':') && !saveMsg.includes('successfully') && !saveMsg.includes('score')) ? 'bg-red-50 text-red-700' : saveMsg.includes('AI generated') ? 'bg-indigo-50 text-indigo-700' : 'bg-green-50 text-green-700'}`}>
@@ -905,6 +1017,29 @@ export default function TimetablePage() {
                 <button onClick={() => setEditingCell(null)} className="px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">Cancel</button>
                 <button onClick={saveCellEdit} className="btn-primary px-3 py-1.5 text-sm">Set</button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Give-each-section-its-own-timetable Confirm Modal */}
+      {showSplitConfirm && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[60] p-4" onClick={() => !splitting && setShowSplitConfirm(false)}>
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6" onClick={e => e.stopPropagation()}>
+            <h3 className="text-sm font-semibold text-gray-900 mb-2">Give each section its own timetable</h3>
+            <p className="text-xs text-gray-600 mb-2">
+              The shared timetable of this class will be copied into every section as that section's own
+              timetable, and the shared one will be removed. After this, each section is edited separately.
+            </p>
+            <p className="text-xs text-gray-600 mb-4">
+              Periods where the shared timetable has a teacher will then show that teacher in every section at
+              the same time; you will need to assign a different teacher in one of them.
+            </p>
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setShowSplitConfirm(false)} disabled={splitting} className="px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded-lg disabled:opacity-50">Cancel</button>
+              <button onClick={handleSplitForSections} disabled={splitting} className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50">
+                {splitting ? 'Copying...' : 'Give each section its own'}
+              </button>
             </div>
           </div>
         </div>

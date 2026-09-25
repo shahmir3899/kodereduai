@@ -1075,7 +1075,7 @@ class StudentDashboardView(APIView):
             total_paid=Sum('amount_paid'),
         )
 
-        from academic_sessions.roster import current_year_q, placement_scope
+        from academic_sessions.roster import current_year_q, own_section_q, placement_scope
         class_obj_id, year_id = placement_scope(student)
 
         # Upcoming assignments
@@ -1087,7 +1087,7 @@ class StudentDashboardView(APIView):
                 school=student.school,
                 status='PUBLISHED',
                 due_date__gte=timezone.now(),
-            ).filter(current_year_q(year_id)).select_related('subject').order_by('due_date')[:5]
+            ).filter(current_year_q(year_id)).filter(own_section_q(student)).select_related('subject').order_by('due_date')[:5]
             upcoming_assignments = [
                 {
                     'id': a.id,
@@ -1104,12 +1104,10 @@ class StudentDashboardView(APIView):
         # Today's timetable
         today_timetable = []
         try:
-            from academics.models import TimetableEntry
+            from academics.timetable_scope import student_timetable
             day_map = {0: 'MON', 1: 'TUE', 2: 'WED', 3: 'THU', 4: 'FRI', 5: 'SAT', 6: 'SUN'}
             today = day_map.get(timezone.now().weekday(), 'MON')
-            entries = TimetableEntry.objects.filter(
-                class_obj_id=class_obj_id,
-                school=student.school,
+            entries = student_timetable(student).filter(
                 day=today,
             ).select_related('slot', 'subject', 'teacher').order_by('slot__order')
             today_timetable = [
@@ -1210,14 +1208,11 @@ class StudentTimetableView(APIView):
         if not student:
             return Response({'error': 'No student profile linked.'}, status=404)
 
-        from academics.models import TimetableEntry, TimetableSlot
-        from academic_sessions.roster import current_year_q, placement_scope
-        class_obj_id, _year_id = placement_scope(student)
+        from academics.models import TimetableSlot
+        from academics.timetable_scope import student_timetable
         slots = TimetableSlot.objects.filter(school=student.school).order_by('order')
-        entries = TimetableEntry.objects.filter(
-            class_obj_id=class_obj_id,
-            school=student.school,
-        ).select_related('slot', 'subject', 'teacher')
+        # The student's section timetable: its overrides over the class's shared entries.
+        entries = student_timetable(student).select_related('slot', 'subject', 'teacher')
 
         slot_data = [
             {'id': s.id, 'name': s.name, 'start_time': str(s.start_time), 'end_time': str(s.end_time), 'slot_type': s.slot_type, 'order': s.order, 'applicable_days': s.applicable_days}
@@ -1328,14 +1323,14 @@ class StudentExamScheduleView(APIView):
             return Response({'error': 'No student profile linked.'}, status=404)
 
         from examinations.models import Exam
-        from academic_sessions.roster import current_year_q, placement_scope
+        from academic_sessions.roster import current_year_q, own_section_q, placement_scope
         class_obj_id, year_id = placement_scope(student)
         exams = Exam.objects.filter(
             school=student.school,
             class_obj_id=class_obj_id,
             is_active=True,
             schedule_published_at__isnull=False,
-        ).filter(current_year_q(year_id)).select_related('exam_type', 'exam_group').order_by('start_date').prefetch_related(
+        ).filter(current_year_q(year_id)).filter(own_section_q(student)).select_related('exam_type', 'exam_group').order_by('start_date').prefetch_related(
             'exam_subjects__subject',
         )
 
@@ -1415,14 +1410,14 @@ class StudentAssignmentsView(APIView):
 
         try:
             from lms.models import Assignment, AssignmentSubmission
-            from academic_sessions.roster import current_year_q, placement_scope
+            from academic_sessions.roster import current_year_q, own_section_q, placement_scope
             class_obj_id, year_id = placement_scope(student)
             assignments = Assignment.objects.filter(
                 class_obj_id=class_obj_id,
                 school=student.school,
                 status__in=['PUBLISHED', 'CLOSED'],
                 is_active=True,
-            ).filter(current_year_q(year_id)).select_related('subject', 'teacher').order_by('-due_date')
+            ).filter(current_year_q(year_id)).filter(own_section_q(student)).select_related('subject', 'teacher').order_by('-due_date')
 
             data = []
             for a in assignments:
@@ -1464,9 +1459,9 @@ class StudentAssignmentsView(APIView):
 
         try:
             from lms.models import Assignment, AssignmentSubmission
-            from academic_sessions.roster import current_year_q, placement_scope
+            from academic_sessions.roster import current_year_q, own_section_q, placement_scope
             class_obj_id, year_id = placement_scope(student)
-            assignment = Assignment.objects.filter(current_year_q(year_id)).get(
+            assignment = Assignment.objects.filter(current_year_q(year_id)).filter(own_section_q(student)).get(
                 id=assignment_id,
                 class_obj_id=class_obj_id,
                 school=student.school,

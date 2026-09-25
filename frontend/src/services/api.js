@@ -561,8 +561,10 @@ export const academicsApi = {
   bulkAssignSubjects: (data) => api.post('/api/academics/class-subjects/bulk-assign/', data),
   updateClassSubject: (id, data) => api.patch(`/api/academics/class-subjects/${id}/`, data),
   deleteClassSubject: (id) => api.delete(`/api/academics/class-subjects/${id}/`),
-  getClassSubjectsByClass: (classId) =>
-    api.get('/api/academics/class-subjects/by_class/', { params: { class_id: classId } }),
+  getClassSubjectsByClass: (classId, sessionClassId) =>
+    api.get('/api/academics/class-subjects/by_class/', {
+      params: { class_id: classId, ...(sessionClassId && { session_class: sessionClassId }) },
+    }),
   getMySubjectAssignments: (params) => api.get('/api/academics/class-subjects/my_subject_assignments/', { params }),
 
   // Class-Teacher Assignments
@@ -583,11 +585,18 @@ export const academicsApi = {
   // Timetable Entries
   getTimetableEntries: (params) => api.get('/api/academics/timetable-entries/', { params }),
   getMyTimetable: (params) => api.get('/api/academics/timetable-entries/my_timetable/', { params }),
-  getTimetableByClass: (classId) =>
-    api.get('/api/academics/timetable-entries/by_class/', { params: { class_id: classId } }),
+  getTimetableByClass: (classId, sessionClassId) =>
+    api.get('/api/academics/timetable-entries/by_class/', {
+      params: { class_id: classId, ...(sessionClassId && { session_class_id: sessionClassId }) },
+    }),
   bulkSaveTimetable: (data) => api.post('/api/academics/timetable-entries/bulk_save/', data),
-  downloadTimetablePdf: (classId) =>
-    api.get('/api/academics/timetable-entries/download-pdf/', { params: { class_id: classId }, responseType: 'blob' }),
+  clearSectionTimetableDay: (data) => api.post('/api/academics/timetable-entries/clear_section_day/', data),
+  splitTimetableForSections: (data) => api.post('/api/academics/timetable-entries/split_for_sections/', data),
+  downloadTimetablePdf: (classId, sessionClassId) =>
+    api.get('/api/academics/timetable-entries/download-pdf/', {
+      params: { class_id: classId, ...(sessionClassId && { session_class_id: sessionClassId }) },
+      responseType: 'blob',
+    }),
   checkTeacherConflicts: (params) =>
     api.get('/api/academics/timetable-entries/teacher_conflicts/', { params }),
 

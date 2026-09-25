@@ -189,10 +189,12 @@ export default function ResultsPage() {
 
   // Queries
   const { data: examsRes } = useQuery({
-    queryKey: ['exams', yearFilter, classFilter, resolvedClassFilter],
+    queryKey: ['exams', yearFilter, classFilter, resolvedClassFilter, selectedSessionClassId],
     queryFn: () => examinationsApi.getExams({
       academic_year: yearFilter || undefined,
       class_obj: resolvedClassFilter || undefined,
+      // Whole-class exams plus this section's own, not a sibling section's.
+      session_class_id: selectedSessionClassId || undefined,
     }),
   })
 

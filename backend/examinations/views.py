@@ -5,7 +5,7 @@ from datetime import date
 from decimal import Decimal
 from core.cache_utils import cached_api
 from django.db import IntegrityError, transaction
-from django.db.models import Count, IntegerField, OuterRef, Q, Subquery
+from django.db.models import Case, Count, IntegerField, OuterRef, Q, Subquery, When
 from django.db.models.functions import Coalesce
 from django.http import HttpResponse
 from django.utils import timezone
@@ -95,12 +95,22 @@ def _annotate_marks_completion(qs):
     """
     from academic_sessions.models import StudentEnrollment
 
-    enrolled_subquery = StudentEnrollment.objects.filter(
+    class_enrolled = StudentEnrollment.objects.filter(
         school_id=OuterRef('school_id'),
         class_obj_id=OuterRef('class_obj_id'),
         academic_year_id=OuterRef('academic_year_id'),
         is_active=True,
     ).order_by().values('class_obj_id').annotate(c=Count('id')).values('c')
+    # A section exam expects marks only from its section's students.
+    section_enrolled = StudentEnrollment.objects.filter(
+        session_class_id=OuterRef('session_class_id'),
+        is_active=True,
+    ).order_by().values('session_class_id').annotate(c=Count('id')).values('c')
+    enrolled_subquery = Case(
+        When(session_class__isnull=True, then=Subquery(class_enrolled[:1], output_field=IntegerField())),
+        default=Subquery(section_enrolled[:1], output_field=IntegerField()),
+        output_field=IntegerField(),
+    )
 
     entered_subquery = StudentMark.objects.filter(
         exam_subject__exam_id=OuterRef('pk'),
@@ -110,9 +120,7 @@ def _annotate_marks_completion(qs):
     ).order_by().values('exam_subject__exam_id').annotate(c=Count('id')).values('c')
 
     return qs.annotate(
-        enrolled_count=Coalesce(
-            Subquery(enrolled_subquery[:1], output_field=IntegerField()), 0,
-        ),
+        enrolled_count=Coalesce(enrolled_subquery, 0),
         marks_entered_count=Coalesce(
             Subquery(entered_subquery[:1], output_field=IntegerField()), 0,
         ),
@@ -142,6 +150,21 @@ def _apply_teacher_exam_scope(qs, request, class_field='class_obj_id', subject_f
     all_class_ids = scope['all_class_ids']
     full_class_ids = scope['full_class_ids']
     session_ids = scope.get('full_session_class_ids', set())
+
+    # A section-only exam belongs to that section's teachers (class teacher or
+    # subject teacher of the section); class-level scope alone let a 2-B
+    # teacher see and mark a 2-A exam. Whole-class exams are unaffected.
+    from academics.models import ClassSubject
+
+    teacher_sections = set(session_ids) | set(
+        ClassSubject.objects.filter(
+            school_id=school_id, teacher__user=request.user, is_active=True, session_class__isnull=False,
+        ).values_list('session_class_id', flat=True)
+    )
+    section_field = class_field[:-len('class_obj_id')] + 'session_class'
+    qs = qs.filter(
+        Q(**{f'{section_field}__isnull': True}) | Q(**{f'{section_field}_id__in': teacher_sections})
+    )
 
     # For class-level entities (Exam), visibility is union of full class scope and subject assignment classes.
     if not subject_field:
@@ -302,13 +325,32 @@ def _class_roster(school_id, class_obj_id, academic_year_id, as_of_date=None, se
     return students, {s.id: s.roll_number for s in students}
 
 
+def _exam_class_subjects(exam):
+    """ClassSubject rows that define an exam's subjects.
+
+    A section exam takes its section's subjects. A whole-class exam takes the
+    class's subjects for the exam's year (every section's). The auto-fill used
+    to filter by class_obj alone, mixing in other years' and, for split classes,
+    every section's pairings (CLASS_SYSTEM_GUIDE.md issue 3).
+    """
+    from academics.models import ClassSubject
+
+    qs = ClassSubject.objects.filter(school_id=exam.school_id, is_active=True).select_related('subject')
+    if exam.session_class_id:
+        return qs.filter(session_class_id=exam.session_class_id)
+    return qs.filter(class_obj_id=exam.class_obj_id).filter(
+        Q(academic_year_id=exam.academic_year_id) | Q(academic_year__isnull=True)
+    )
+
+
 def _exam_roster(school_id, exam, session_class_id=None):
     """_class_roster() for an Exam's own (class, academic year), anchored to
-    the exam's own date for month-precision withdrawn/transferred handling."""
+    the exam's own date for month-precision withdrawn/transferred handling.
+    A section exam is always its section's roster."""
     return _class_roster(
         school_id, exam.class_obj_id, exam.academic_year_id,
         as_of_date=exam.start_date or exam.end_date,
-        session_class_id=session_class_id,
+        session_class_id=exam.session_class_id or session_class_id,
     )
 
 
@@ -318,6 +360,8 @@ def _exam_section_param(request, school_id, exam):
     Exam has no section of its own yet, so the caller names one; it must be a
     section of this exam's master class in this exam's year.
     """
+    if exam.session_class_id:
+        return exam.session_class_id
     raw = request.query_params.get('session_class_id')
     if not raw:
         return None
@@ -729,6 +773,10 @@ class ExamGroupViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVie
         from academics.models import ClassSubject
         from students.models import Class
 
+        from academic_sessions.models import SessionClass
+
+        # Targets: whole classes (class_ids) and sections (session_class_ids).
+        # `key` matches the class_subjects / date_sheet entries the client sent.
         class_ids = data['class_ids']
         valid_classes = list(Class.objects.filter(
             school_id=school_id, id__in=class_ids, is_active=True,
@@ -738,25 +786,62 @@ class ExamGroupViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVie
                 {'detail': 'One or more class IDs are invalid.'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        targets = [
+            {'key': ('class', cls.id), 'class_obj': cls, 'session_class': None, 'label': cls.name}
+            for cls in valid_classes
+        ]
+
+        section_ids = data['session_class_ids']
+        sections = list(SessionClass.objects.filter(
+            school_id=school_id, academic_year_id=data['academic_year'], id__in=section_ids,
+            is_active=True, class_obj__isnull=False,
+        ).select_related('class_obj'))
+        if len(sections) != len(section_ids):
+            return Response(
+                {'detail': 'One or more sections are invalid for this academic year.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        sections_per_class = {
+            row['class_obj_id']: row['n']
+            for row in SessionClass.objects.filter(
+                school_id=school_id, academic_year_id=data['academic_year'], is_active=True,
+                class_obj_id__in={sc.class_obj_id for sc in sections},
+            ).values('class_obj_id').annotate(n=Count('id'))
+        }
+        for sc in sections:
+            # Only a class split into sections gets section-only exams; the
+            # only section of a class gets an ordinary whole-class exam.
+            split = sections_per_class.get(sc.class_obj_id, 1) > 1
+            targets.append({
+                'key': ('section', sc.id), 'class_obj': sc.class_obj,
+                'session_class': sc if split else None, 'label': sc.label,
+            })
 
         # Check for conflicts (only active exams block new creation). Scoped to
         # the academic year (not just term) since a master class's id is
         # reused across years -- without this, two unrelated years' exams for
-        # the same class/type with a blank term could look like a conflict.
+        # the same class/type with a blank term could look like a conflict. A
+        # whole-class exam already covers each of its sections.
         conflicts = []
-        for cls in valid_classes:
+        for target in targets:
             existing = Exam.objects.filter(
                 school_id=school_id,
                 academic_year_id=data['academic_year'],
                 exam_type_id=data['exam_type'],
-                class_obj=cls,
+                class_obj=target['class_obj'],
                 term_id=data.get('term'),
                 is_active=True,
-            ).first()
+            )
+            if target['session_class'] is not None:
+                existing = existing.filter(
+                    Q(session_class__isnull=True) | Q(session_class=target['session_class'])
+                )
+            existing = existing.first()
             if existing:
                 conflicts.append({
-                    'class_id': cls.id,
-                    'class_name': cls.name,
+                    'class_id': target['class_obj'].id,
+                    'session_class_id': target['session_class'].id if target['session_class'] else None,
+                    'class_name': target['label'],
                     'existing_exam': existing.name,
                 })
         if conflicts:
@@ -792,10 +877,15 @@ class ExamGroupViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVie
         date_sheet_list = data.get('date_sheet', [])
         date_sheet_map = {}
         for entry in date_sheet_list:
-            class_id = entry.get('class_id')
             subject_id = entry.get('subject_id')
-            if class_id and subject_id:
-                date_sheet_map[(int(class_id), int(subject_id))] = {
+            if entry.get('session_class_id'):
+                key = ('section', int(entry['session_class_id']))
+            elif entry.get('class_id'):
+                key = ('class', int(entry['class_id']))
+            else:
+                continue
+            if subject_id:
+                date_sheet_map[(key, int(subject_id))] = {
                     'exam_date': entry.get('exam_date'),
                     'start_time': entry.get('start_time'),
                     'end_time': entry.get('end_time'),
@@ -818,44 +908,44 @@ class ExamGroupViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVie
                 )
 
                 created_exams = []
-                for cls in valid_classes:
+                for target in targets:
                     exam = Exam.objects.create(
                         school_id=school_id,
                         academic_year_id=data['academic_year'],
                         term_id=data.get('term'),
                         exam_type_id=data['exam_type'],
-                        class_obj=cls,
+                        class_obj=target['class_obj'],
+                        session_class=target['session_class'],
                         exam_group=group,
-                        name=f"{data['name']} - {cls.name}",
+                        name=f"{data['name']} - {target['label']}",
                         start_date=data.get('start_date'),
                         end_date=data.get('end_date'),
                         status=Exam.Status.SCHEDULED,
                     )
-                    created_exams.append(exam)
+                    created_exams.append((target['key'], exam))
 
-                # Per-class subject restriction. A class present here is filtered to
-                # exactly its listed subject_ids -- including an empty list, which
-                # deliberately yields zero ExamSubjects for that class rather than
-                # falling back. A class absent entirely (older clients) keeps every
-                # ClassSubject assigned to it.
-                subject_restriction_by_class = {
-                    entry['class_id']: entry.get('subject_ids') or []
-                    for entry in (data.get('class_subjects') or [])
-                }
+                # Per-class/section subject restriction. A target present here is
+                # filtered to exactly its listed subject_ids -- including an empty
+                # list, which deliberately yields zero ExamSubjects rather than
+                # falling back. A target absent entirely (older clients) keeps
+                # every subject assigned to it.
+                subject_restriction = {}
+                for entry in (data.get('class_subjects') or []):
+                    if entry.get('session_class_id'):
+                        subject_restriction[('section', entry['session_class_id'])] = entry.get('subject_ids') or []
+                    elif entry.get('class_id'):
+                        subject_restriction[('class', entry['class_id'])] = entry.get('subject_ids') or []
 
                 all_exam_subjects = []
-                for exam in created_exams:
-                    class_subjects = ClassSubject.objects.filter(
-                        school_id=school_id,
-                        class_obj=exam.class_obj,
-                        is_active=True,
-                    ).select_related('subject')
-                    if exam.class_obj_id in subject_restriction_by_class:
-                        class_subjects = class_subjects.filter(
-                            subject_id__in=subject_restriction_by_class[exam.class_obj_id]
-                        )
+                for key, exam in created_exams:
+                    class_subjects = _exam_class_subjects(exam)
+                    if key[0] == 'section' and exam.session_class_id is None:
+                        # The only section of its class: its own pairings.
+                        class_subjects = class_subjects.filter(session_class_id=key[1])
+                    if key in subject_restriction:
+                        class_subjects = class_subjects.filter(subject_id__in=subject_restriction[key])
                     for cs in class_subjects:
-                        slot = date_sheet_map.get((exam.class_obj_id, cs.subject_id), {})
+                        slot = date_sheet_map.get((key, cs.subject_id), {})
                         all_exam_subjects.append(ExamSubject(
                             school_id=school_id,
                             exam=exam,
@@ -1315,6 +1405,10 @@ class ExamViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet)
         class_obj = scope['class_obj_id']
         if class_obj:
             qs = qs.filter(class_obj_id=class_obj)
+        if scope['session_class_id']:
+            # A section sees whole-class exams plus its own section exams,
+            # not a sibling section's.
+            qs = qs.filter(Q(session_class__isnull=True) | Q(session_class_id=scope['session_class_id']))
         exam_type = self.request.query_params.get('exam_type')
         if exam_type:
             qs = qs.filter(exam_type_id=exam_type)
@@ -1340,13 +1434,8 @@ class ExamViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet)
     def perform_create(self, serializer):
         super().perform_create(serializer)
         exam = serializer.instance
-        # Auto-create ExamSubject entries from the class's assigned subjects
-        from academics.models import ClassSubject
-        class_subjects = ClassSubject.objects.filter(
-            school_id=exam.school_id,
-            class_obj=exam.class_obj,
-            is_active=True,
-        ).select_related('subject')
+        # Auto-create ExamSubject entries from the class's (or section's) subjects
+        class_subjects = _exam_class_subjects(exam)
         exam_subjects = [
             ExamSubject(
                 school_id=exam.school_id,
@@ -1665,12 +1754,7 @@ class ExamViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet)
         exam = self.get_object()
         school_id = _resolve_school_id(request)
 
-        from academics.models import ClassSubject
-        class_subjects = ClassSubject.objects.filter(
-            school_id=school_id,
-            class_obj=exam.class_obj,
-            is_active=True,
-        ).select_related('subject')
+        class_subjects = _exam_class_subjects(exam)
 
         existing_subject_ids = set(
             exam.exam_subjects.filter(is_active=True).values_list('subject_id', flat=True)
@@ -2670,9 +2754,11 @@ def _parse_exam_ids(value):
     return list(value)
 
 
-def _report_exams_for(school_id, class_obj_id, year_id, exam_ids, published_only=False):
+def _report_exams_for(school_id, class_obj_id, year_id, exam_ids, published_only=False,
+                      session_class_id=None):
     """The exams on one report card, oldest first, validated against the student's class
-    and year. The last one is the main exam. Raises ValidationError on anything invalid."""
+    and year. The last one is the main exam. Raises ValidationError on anything invalid.
+    With session_class_id, a sibling section's section-only exams are not available."""
     try:
         ids = sorted({int(x) for x in exam_ids})
     except (TypeError, ValueError):
@@ -2685,6 +2771,8 @@ def _report_exams_for(school_id, class_obj_id, year_id, exam_ids, published_only
         school_id=school_id, class_obj_id=class_obj_id, academic_year_id=year_id,
         is_active=True, pk__in=ids,
     ).select_related('exam_type', 'academic_year', 'term')
+    if session_class_id:
+        qs = qs.filter(Q(session_class__isnull=True) | Q(session_class_id=session_class_id))
     if published_only:
         qs = qs.filter(status=Exam.Status.PUBLISHED)
     found = sorted(qs, key=_exam_sort_key)
@@ -2866,11 +2954,14 @@ class ReportCardView(ModuleAccessMixin, APIView):
         if raw_exam_ids:
             exams = _report_exams_for(
                 school_id, enrollment.class_obj_id, enrollment.academic_year_id, raw_exam_ids, published_only,
+                session_class_id=enrollment.session_class_id,
             )
         else:
             fallback = Exam.objects.filter(
                 school_id=school_id, class_obj=enrollment.class_obj, is_active=True,
                 academic_year_id=enrollment.academic_year_id,
+            ).filter(
+                Q(session_class__isnull=True) | Q(session_class_id=enrollment.session_class_id)
             ).select_related('exam_type', 'academic_year', 'term')
             if published_only:
                 fallback = fallback.filter(status=Exam.Status.PUBLISHED)
@@ -3226,6 +3317,7 @@ class ReportCardMetaView(ModuleAccessMixin, APIView):
 
         main_exam = _report_exams_for(
             school_id, enrollment.class_obj_id, year_id, _parse_exam_ids(data.get('exam_ids')),
+            session_class_id=enrollment.session_class_id,
         )[-1]
 
         with transaction.atomic():
@@ -3305,7 +3397,11 @@ class ReportCardBulkMetaView(ModuleAccessMixin, APIView):
             if role != 'TEACHER' or not _is_teacher_class_teacher_for_class(request, class_id, school_id=school_id):
                 raise PermissionDenied('Only admins or the class teacher can edit report card details.')
 
-        main_exam = _report_exams_for(school_id, class_id, year_id, _parse_exam_ids(exam_ids))[-1]
+        section_ids = {e.session_class_id for e in enrollments.values()}
+        main_exam = _report_exams_for(
+            school_id, class_id, year_id, _parse_exam_ids(exam_ids),
+            session_class_id=next(iter(section_ids)) if len(section_ids) == 1 else None,
+        )[-1]
         return student_ids, enrollments, main_exam
 
     def get(self, request):

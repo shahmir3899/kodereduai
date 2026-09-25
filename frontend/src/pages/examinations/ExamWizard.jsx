@@ -96,7 +96,25 @@ export default function ExamWizard({ onClose, onSuccess }) {
     return (classesFromHook || EMPTY_ARRAY).filter(c => classObjIds.has(c.id))
   }, [classesFromHook, sessionClasses])
 
-  const classes = wizardData.academic_year ? classesInSelectedYear : (classesFromHook || EMPTY_ARRAY)
+  // In a year with sections the wizard's units are sections, not master
+  // classes: each section gets its own exam with its own subjects and date
+  // sheet (a class with one section still gets an ordinary whole-class exam
+  // server-side). Schools without sections keep the master-class list.
+  const sectionMode = !!wizardData.academic_year && sessionClasses.some(sc => sc.class_obj)
+  const sectionUnits = useMemo(() => sessionClasses
+    .filter(sc => sc.class_obj)
+    .map(sc => ({
+      id: sc.id,
+      name: sc.display_name,
+      section: sc.section,
+      label: sc.label || (sc.section ? `${sc.display_name} - ${sc.section}` : sc.display_name),
+      grade_level: sc.grade_level,
+    })), [sessionClasses])
+  const classes = sectionMode
+    ? sectionUnits
+    : (wizardData.academic_year ? classesInSelectedYear : (classesFromHook || EMPTY_ARRAY))
+  // Which unit a ClassSubject row belongs to: its section, or its master class.
+  const unitOf = (cs) => (sectionMode ? cs.session_class : cs.class_obj)
   const allClassSubjects = allClassSubjectsRes?.data?.results || allClassSubjectsRes?.data || EMPTY_ARRAY
   const selectedClasses = classes.filter(c => wizardData.class_ids.includes(c.id))
 
@@ -114,6 +132,7 @@ export default function ExamWizard({ onClose, onSuccess }) {
   }, [sessionClasses])
 
   const classLabel = (cls) => {
+    if (sectionMode) return cls.label
     const name = sessionDisplayNameByClassObj[cls.id] || cls.name
     return cls.section ? `${name} - ${cls.section}` : name
   }
@@ -134,10 +153,11 @@ export default function ExamWizard({ onClose, onSuccess }) {
   const subjectCountMap = useMemo(() => {
     const counts = {}
     allClassSubjects.forEach(cs => {
-      counts[cs.class_obj] = (counts[cs.class_obj] || 0) + 1
+      const unit = unitOf(cs)
+      counts[unit] = (counts[unit] || 0) + 1
     })
     return counts
-  }, [allClassSubjects])
+  }, [allClassSubjects, sectionMode])
 
   // Highest subject count among selected classes — the class with the most
   // subjects sets how many distinct exam days the date range needs, assuming
@@ -153,12 +173,13 @@ export default function ExamWizard({ onClose, onSuccess }) {
   const classSubjectsMap = useMemo(() => {
     const map = {}
     allClassSubjects.forEach(cs => {
-      if (!map[cs.class_obj]) map[cs.class_obj] = []
-      map[cs.class_obj].push({ id: cs.subject, name: cs.subject_name, code: cs.subject_code || '' })
+      const unit = unitOf(cs)
+      if (!map[unit]) map[unit] = []
+      map[unit].push({ id: cs.subject, name: cs.subject_name, code: cs.subject_code || '' })
     })
     Object.values(map).forEach(list => list.sort((a, b) => a.name.localeCompare(b.name)))
     return map
-  }, [allClassSubjects])
+  }, [allClassSubjects, sectionMode])
 
   // Default a newly-selected class's subjects to "all available" the first
   // time it's checked. Only fills in classes missing an entry, so a manual
@@ -186,14 +207,15 @@ export default function ExamWizard({ onClose, onSuccess }) {
     classes.forEach(c => { selectedClassMap[c.id] = c })
     const rows = []
     allClassSubjects
-      .filter(cs => wizardData.class_ids.includes(cs.class_obj)
-        && (wizardData.subject_ids_by_class[cs.class_obj] || []).includes(cs.subject))
+      .filter(cs => wizardData.class_ids.includes(unitOf(cs))
+        && (wizardData.subject_ids_by_class[unitOf(cs)] || []).includes(cs.subject))
       .forEach(cs => {
-        const cls = selectedClassMap[cs.class_obj]
+        const unit = unitOf(cs)
+        const cls = selectedClassMap[unit]
         if (!cls) return
         rows.push({
-          key: `${cs.class_obj}_${cs.subject}`,
-          classId: cs.class_obj,
+          key: `${unit}_${cs.subject}`,
+          classId: unit,
           className: classLabel(cls),
           subjectId: cs.subject,
           subjectName: cs.subject_name,
@@ -205,7 +227,7 @@ export default function ExamWizard({ onClose, onSuccess }) {
       return s !== 0 ? s : a.className.localeCompare(b.className)
     })
     return rows
-  }, [allClassSubjects, wizardData.class_ids, wizardData.subject_ids_by_class, classes, sessionDisplayNameByClassObj])
+  }, [allClassSubjects, wizardData.class_ids, wizardData.subject_ids_by_class, classes, sessionDisplayNameByClassObj, sectionMode])
 
   // Subjects available per class (for the Step 3 per-cell picker).
   const subjectsByClass = useMemo(() => {
@@ -473,9 +495,9 @@ export default function ExamWizard({ onClose, onSuccess }) {
     const dateSheetList = Object.entries(wizardData.date_sheet)
       .filter(([, val]) => val.exam_date)
       .map(([key, val]) => {
-        const [class_id, subject_id] = key.split('_').map(Number)
+        const [unit_id, subject_id] = key.split('_').map(Number)
         return {
-          class_id,
+          ...(sectionMode ? { session_class_id: unit_id } : { class_id: unit_id }),
           subject_id,
           exam_date: val.exam_date || null,
           start_time: val.start_time || null,
@@ -489,10 +511,12 @@ export default function ExamWizard({ onClose, onSuccess }) {
       name: wizardData.name,
       start_date: wizardData.start_date || null,
       end_date: wizardData.end_date || null,
-      class_ids: wizardData.class_ids,
-      class_subjects: wizardData.class_ids.map(classId => ({
-        class_id: classId,
-        subject_ids: wizardData.subject_ids_by_class[classId] || [],
+      ...(sectionMode
+        ? { session_class_ids: wizardData.class_ids }
+        : { class_ids: wizardData.class_ids }),
+      class_subjects: wizardData.class_ids.map(unitId => ({
+        ...(sectionMode ? { session_class_id: unitId } : { class_id: unitId }),
+        subject_ids: wizardData.subject_ids_by_class[unitId] || [],
       })),
       default_total_marks: parseFloat(wizardData.default_total_marks) || 100,
       default_passing_marks: parseFloat(wizardData.default_passing_marks) || 33,

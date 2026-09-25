@@ -393,3 +393,40 @@ def seed_data(api_client, db):
         'face_session': face_session,
         'face_detections': face_detections,
     }
+
+
+@pytest.fixture
+def seed_sections(seed_data):
+    """Class_1A split into sections A and B that share one master class.
+
+    The per-section case: master-class scoping pooled both sections. Section A
+    gets students[0:2], section B students[2:4] (all of Class_1A), enrolled for
+    the seed academic year with their roll numbers.
+    """
+    from academic_sessions.models import SessionClass, StudentEnrollment
+
+    school, year = seed_data['school_a'], seed_data['academic_year']
+    master = seed_data['classes'][0]
+
+    def section(letter):
+        return SessionClass.objects.create(
+            school=school, academic_year=year, class_obj=master,
+            display_name=master.name, section=letter, grade_level=master.grade_level,
+        )
+
+    section_a, section_b = section('A'), section('B')
+    a_students, b_students = seed_data['students'][0:2], seed_data['students'][2:4]
+    for sc, group in ((section_a, a_students), (section_b, b_students)):
+        for student in group:
+            StudentEnrollment.objects.create(
+                school=school, student=student, academic_year=year,
+                class_obj=master, session_class=sc, roll_number=student.roll_number,
+                status='ACTIVE', is_active=True,
+            )
+    return {
+        'master': master,
+        'section_a': section_a,
+        'section_b': section_b,
+        'a_students': a_students,
+        'b_students': b_students,
+    }

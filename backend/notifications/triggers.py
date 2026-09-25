@@ -355,6 +355,12 @@ def trigger_exam_result(student, exam):
     return sent_log
 
 
+def _exam_section_q(exam):
+    """Narrow a section exam's audience (enrollments, class/subject teachers)
+    to its section; whole-class exams keep the whole class."""
+    return Q(session_class_id=exam.session_class_id) if exam.session_class_id else Q()
+
+
 def _students_for_exam(exam):
     """Students to notify for this exam: scoped to the exam's own academic year
     via StudentEnrollment, not the student's current class_obj/is_active
@@ -374,11 +380,12 @@ def _students_for_exam(exam):
 
     exam_date = exam.start_date or exam.end_date
     enrollment_filter = Q(school=exam.school, academic_year_id=exam.academic_year_id, class_obj=exam.class_obj)
+    enrollment_filter &= _exam_section_q(exam)
     enrollment_filter &= enrollment_covers_month(exam_date.year, exam_date.month) if exam_date else Q(is_active=True)
 
     enrolled_ids = list(StudentEnrollment.objects.filter(enrollment_filter).values_list('student_id', flat=True))
 
-    if enrolled_ids:
+    if enrolled_ids or exam.session_class_id:
         return Student.objects.filter(id__in=enrolled_ids).select_related('user_profile__user')
 
     return Student.objects.filter(
@@ -435,6 +442,7 @@ def trigger_exam_result_published(exam):
     teacher_assignments = (
         ClassTeacherAssignment.objects
         .filter(school=school, class_obj=exam.class_obj, is_active=True)
+        .filter(_exam_section_q(exam))
         .filter(Q(academic_year__isnull=True) | Q(academic_year_id=exam.academic_year_id))
         .select_related('teacher__user')
     )
@@ -559,6 +567,7 @@ def trigger_exam_schedule_published(exam):
     for assignment in (
         ClassTeacherAssignment.objects
         .filter(school=school, class_obj=exam.class_obj, is_active=True)
+        .filter(_exam_section_q(exam))
         .filter(academic_year_filter)
         .select_related('teacher__user')
     ):
@@ -568,6 +577,7 @@ def trigger_exam_schedule_published(exam):
     for class_subject in (
         ClassSubject.objects
         .filter(school=school, class_obj=exam.class_obj, is_active=True, teacher__isnull=False)
+        .filter(_exam_section_q(exam))
         .filter(academic_year_filter)
         .select_related('teacher__user')
     ):
@@ -1235,9 +1245,12 @@ def trigger_assignment_due_soon(school, window_hours=48):
             enrollment_filter = Q(
                 school=school, academic_year_id=assignment.academic_year_id, class_obj=assignment.class_obj,
             ) & enrollment_covers_month(assignment.due_date.year, assignment.due_date.month)
+            if assignment.session_class_id:
+                # A section-only assignment reminds only that section.
+                enrollment_filter &= Q(session_class_id=assignment.session_class_id)
             enrolled_ids = list(StudentEnrollment.objects.filter(enrollment_filter).values_list('student_id', flat=True))
 
-        if enrolled_ids:
+        if enrolled_ids or assignment.session_class_id:
             student_qs = Student.objects.filter(id__in=enrolled_ids)
         else:
             student_qs = Student.objects.filter(

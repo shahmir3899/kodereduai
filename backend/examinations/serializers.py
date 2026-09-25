@@ -146,6 +146,8 @@ class ExamSerializer(serializers.ModelSerializer):
     marks_entry_complete = serializers.SerializerMethodField()
 
     def get_class_name(self, obj):
+        if obj.session_class_id:
+            return obj.session_class.label
         session_name = getattr(obj, 'session_display_name', None)
         if session_name:
             section = getattr(obj, 'session_display_section', None)
@@ -167,7 +169,7 @@ class ExamSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'school', 'academic_year', 'academic_year_name',
             'term', 'term_name', 'exam_type', 'exam_type_name',
-            'class_obj', 'class_name', 'exam_group', 'exam_group_name',
+            'class_obj', 'session_class', 'class_name', 'exam_group', 'exam_group_name',
             'name', 'start_date', 'end_date', 'status', 'schedule_published_at',
             'subjects_count', 'marks_entered_count', 'marks_expected_count',
             'marks_entry_complete', 'is_active', 'created_at', 'updated_at',
@@ -462,8 +464,10 @@ class ExamGroupCreateSerializer(serializers.ModelSerializer):
 
 
 class ClassSubjectSelectionSerializer(serializers.Serializer):
-    """One class's subject restriction within ExamGroupWizardCreateSerializer.class_subjects."""
-    class_id = serializers.IntegerField()
+    """One class's (or section's) subject restriction within
+    ExamGroupWizardCreateSerializer.class_subjects -- class_id or session_class_id."""
+    class_id = serializers.IntegerField(required=False)
+    session_class_id = serializers.IntegerField(required=False)
     subject_ids = serializers.ListField(
         child=serializers.IntegerField(), required=False, default=list,
     )
@@ -479,7 +483,13 @@ class ExamGroupWizardCreateSerializer(serializers.Serializer):
     start_date = serializers.DateField(required=False, allow_null=True)
     end_date = serializers.DateField(required=False, allow_null=True)
     class_ids = serializers.ListField(
-        child=serializers.IntegerField(), min_length=1,
+        child=serializers.IntegerField(), required=False, default=list,
+    )
+    session_class_ids = serializers.ListField(
+        child=serializers.IntegerField(), required=False, default=list,
+        help_text="Sections to create exams for. A section of a class split into several "
+                  "sections gets its own section-only exam; the only section of a class "
+                  "gets an ordinary whole-class exam.",
     )
     class_subjects = serializers.ListField(
         child=ClassSubjectSelectionSerializer(),
@@ -500,10 +510,12 @@ class ExamGroupWizardCreateSerializer(serializers.Serializer):
         child=serializers.DictField(),
         required=False,
         default=list,
-        help_text="List of {class_id, subject_id, exam_date, start_time, end_time} entries",
+        help_text="List of {class_id | session_class_id, subject_id, exam_date, start_time, end_time} entries",
     )
 
     def validate(self, data):
+        if not data.get('class_ids') and not data.get('session_class_ids'):
+            raise serializers.ValidationError({'class_ids': 'Select at least one class.'})
         if data.get('start_date') and data.get('end_date'):
             if data['start_date'] > data['end_date']:
                 raise serializers.ValidationError(

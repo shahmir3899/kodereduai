@@ -29,6 +29,11 @@ class FaceAttendanceSession(models.Model):
     3. Celery task detects faces, matches → status = NEEDS_REVIEW
     4. Teacher reviews and confirms → status = CONFIRMED
     5. AttendanceRecords created (source=FACE_CAMERA)
+
+    Scoped by master class only (as are FaceCaptureDevice and
+    FaceLiveDetectionEvent): adding a section was deferred while face
+    attendance is unused. Before enabling it where a class is split into
+    sections, see CLASS_SYSTEM_GUIDE.md §4 item 11.
     """
 
     class Status(models.TextChoices):

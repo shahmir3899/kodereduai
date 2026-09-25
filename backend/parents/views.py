@@ -331,13 +331,10 @@ class ChildTimetableView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        from academics.models import TimetableEntry
-        from academic_sessions.roster import placement_scope
+        from academics.timetable_scope import student_timetable
 
-        class_obj_id, _year_id = placement_scope(student)
-        entries = TimetableEntry.objects.filter(
-            class_obj_id=class_obj_id,
-        ).select_related(
+        # The child's section timetable: its overrides over the class's shared entries.
+        entries = student_timetable(student).select_related(
             'slot', 'subject', 'teacher',
         ).order_by('day', 'slot__order')
 
@@ -473,7 +470,7 @@ class ChildExamScheduleView(APIView):
             )
 
         from examinations.models import Exam
-        from academic_sessions.roster import current_year_q, placement_scope
+        from academic_sessions.roster import current_year_q, own_section_q, placement_scope
 
         # This year's exams only: the same master class also has last year's
         # (a previous cohort's) published schedules.
@@ -483,7 +480,7 @@ class ChildExamScheduleView(APIView):
             class_obj_id=class_obj_id,
             is_active=True,
             schedule_published_at__isnull=False,
-        ).filter(current_year_q(year_id)).select_related('exam_type', 'exam_group').order_by('start_date').prefetch_related(
+        ).filter(current_year_q(year_id)).filter(own_section_q(student)).select_related('exam_type', 'exam_group').order_by('start_date').prefetch_related(
             'exam_subjects__subject',
         )
 

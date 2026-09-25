@@ -792,6 +792,14 @@ class Assignment(models.Model):
         related_name='assignments',
         verbose_name='Class',
     )
+    session_class = models.ForeignKey(
+        'academic_sessions.SessionClass',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='assignments',
+        help_text='Set for a section-only assignment. Null = every section of class_obj.',
+    )
     subject = models.ForeignKey(
         'academics.Subject',
         on_delete=models.CASCADE,

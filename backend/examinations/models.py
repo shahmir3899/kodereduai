@@ -92,15 +92,12 @@ class ExamGroup(models.Model):
 
 
 class Exam(models.Model):
-    """A specific exam instance for a class.
+    """A specific exam instance for a class, or for one section of it.
 
-    Deliberately Master-Class-scoped only (no session_class field): an exam's
-    schedule/paper is assumed to apply uniformly across every section of the
-    grade. Known caveat (see CLASS_SYSTEM_GUIDE.md): ExamViewSet.perform_create's
-    auto-fill of ExamSubject from ClassSubject filters by class_obj alone, which
-    can pull in the union of every section's subject/teacher pairings if sections
-    of this class have different ClassSubject.session_class assignments. Adding a
-    session_class field here is tracked as a Phase 2 schema change, not done yet.
+    session_class null = the exam covers every section of class_obj (all exams
+    created before sections existed). Set = a section-only exam: its roster,
+    ranks and subjects (from that section's ClassSubject rows) are the
+    section's alone.
     """
 
     class Status(models.TextChoices):
@@ -137,6 +134,14 @@ class Exam(models.Model):
         on_delete=models.CASCADE,
         related_name='exams',
     )
+    session_class = models.ForeignKey(
+        'academic_sessions.SessionClass',
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='exams',
+        help_text='Set for a section-only exam. Null = every section of class_obj.',
+    )
     exam_group = models.ForeignKey(
         ExamGroup,
         on_delete=models.SET_NULL,
@@ -169,11 +174,18 @@ class Exam(models.Model):
             models.Index(fields=['school', 'academic_year']),
             models.Index(fields=['school', 'class_obj']),
         ]
+        # One exam per group per whole class, and one per group per section:
+        # a split class gets one exam per section in the same group.
         constraints = [
             models.UniqueConstraint(
                 fields=['school', 'exam_group', 'class_obj'],
-                condition=models.Q(exam_group__isnull=False),
+                condition=models.Q(exam_group__isnull=False, session_class__isnull=True),
                 name='exam_group_class_unique',
+            ),
+            models.UniqueConstraint(
+                fields=['school', 'exam_group', 'session_class'],
+                condition=models.Q(exam_group__isnull=False, session_class__isnull=False),
+                name='exam_group_section_unique',
             ),
         ]
 

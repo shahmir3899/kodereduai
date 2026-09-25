@@ -226,6 +226,17 @@ class TimetableEntry(models.Model):
         related_name='timetable_entries',
         verbose_name='Class',
     )
+    session_class = models.ForeignKey(
+        'academic_sessions.SessionClass',
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='timetable_entries',
+        help_text=(
+            'Set for a section-only entry that overrides the shared (class-wide) '
+            'entry at the same day/slot. Null = shared by every section of class_obj.'
+        ),
+    )
     day = models.CharField(max_length=3, choices=Day.choices)
     slot = models.ForeignKey(
         TimetableSlot,
@@ -252,11 +263,26 @@ class TimetableEntry(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        unique_together = ('school', 'class_obj', 'day', 'slot')
         ordering = ['day', 'slot__order']
         indexes = [
             models.Index(fields=['teacher', 'day', 'slot']),
             models.Index(fields=['school', 'class_obj', 'day']),
+            models.Index(fields=['school', 'session_class', 'day']),
+        ]
+        # Per class: one shared entry per day/slot (unchanged), plus at most one
+        # section override per day/slot. Per section, not per class_obj: two
+        # sections of one master class could never have different timetables.
+        constraints = [
+            models.UniqueConstraint(
+                fields=['school', 'class_obj', 'day', 'slot'],
+                condition=models.Q(session_class__isnull=True),
+                name='unique_shared_timetable_slot',
+            ),
+            models.UniqueConstraint(
+                fields=['school', 'session_class', 'day', 'slot'],
+                condition=models.Q(session_class__isnull=False),
+                name='unique_section_timetable_slot',
+            ),
         ]
 
     def __str__(self):

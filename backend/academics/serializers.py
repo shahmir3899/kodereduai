@@ -354,6 +354,7 @@ class TimetableEntrySerializer(serializers.ModelSerializer):
         source='subject.code', read_only=True, default=None
     )
     teacher_name = serializers.SerializerMethodField()
+    is_section_override = serializers.SerializerMethodField()
     day_display = serializers.CharField(source='get_day_display', read_only=True)
     academic_year_name = serializers.CharField(
         source='academic_year.name', read_only=True, default=None,
@@ -362,7 +363,7 @@ class TimetableEntrySerializer(serializers.ModelSerializer):
     class Meta:
         model = TimetableEntry
         fields = [
-            'id', 'school', 'class_obj', 'class_name',
+            'id', 'school', 'class_obj', 'class_name', 'session_class', 'is_section_override',
             'day', 'day_display',
             'slot', 'slot_name', 'slot_order', 'slot_type',
             'slot_start_time', 'slot_end_time', 'slot_applicable_days',
@@ -376,7 +377,12 @@ class TimetableEntrySerializer(serializers.ModelSerializer):
     def get_teacher_name(self, obj):
         return obj.teacher.full_name if obj.teacher else None
 
+    def get_is_section_override(self, obj):
+        return obj.session_class_id is not None
+
     def get_class_name(self, obj):
+        if obj.session_class_id:
+            return obj.session_class.label
         session_name = getattr(obj, 'session_display_name', None)
         if session_name:
             section = getattr(obj, 'session_display_section', None)
@@ -387,7 +393,7 @@ class TimetableEntrySerializer(serializers.ModelSerializer):
 class TimetableEntryCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = TimetableEntry
-        fields = ['class_obj', 'day', 'slot', 'subject', 'teacher', 'room']
+        fields = ['class_obj', 'session_class', 'day', 'slot', 'subject', 'teacher', 'room']
 
     def validate(self, data):
         school_id = self.context.get('school_id')
@@ -401,11 +407,19 @@ class TimetableEntryCreateSerializer(serializers.ModelSerializer):
                 f'Applicable days: {slot.applicable_days}'
             )
 
-        # Check unique_together
+        session_class = data.get('session_class')
+        class_obj = data.get('class_obj') or getattr(self.instance, 'class_obj', None)
+        if session_class and session_class.class_obj_id != getattr(class_obj, 'id', None):
+            raise serializers.ValidationError(
+                {'session_class': 'Section does not belong to the selected class.'}
+            )
+
+        # One shared entry per class/day/slot, and one override per section/day/slot.
         if school_id:
             qs = TimetableEntry.objects.filter(
                 school_id=school_id,
                 class_obj=data.get('class_obj'),
+                session_class=session_class,
                 day=data.get('day'),
                 slot=data.get('slot'),
             )

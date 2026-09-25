@@ -94,8 +94,11 @@ def _apply_teacher_dual_scope(
     section-level isolation when the teacher has session-class assignments: the
     teacher then sees only their assigned sections' rows, plus legacy rows with
     no session_class set (which apply to every section of the master class).
-    Leave it unset for models with no session_class field (Book, Chapter, Topic,
-    Assignment, Submission) — behavior for those is unchanged.
+    Leave it unset for models with no session_class field (Book, Chapter, Topic)
+    — behavior for those is unchanged. With it set, a section-only row is also
+    hidden from teachers of other sections even when their subject assignment
+    matches the master class (subject scope is class-level, so a 2-B subject
+    teacher otherwise saw 2-A's rows).
     """
     role = get_effective_role(request)
     if role != 'TEACHER':
@@ -128,7 +131,21 @@ def _apply_teacher_dual_scope(
     if not predicates:
         return queryset.none()
 
-    return queryset.filter(predicates)
+    queryset = queryset.filter(predicates)
+    if session_class_field:
+        from academics.models import ClassSubject
+
+        teacher_sections = set(session_ids) | set(
+            ClassSubject.objects.filter(
+                school_id=school_id, teacher__user=request.user, is_active=True,
+                session_class__isnull=False,
+            ).values_list('session_class_id', flat=True)
+        )
+        section_path = session_class_field[:-len('_id')] if session_class_field.endswith('_id') else session_class_field
+        queryset = queryset.filter(
+            Q(**{f'{section_path}__isnull': True}) | Q(**{f'{session_class_field}__in': teacher_sections})
+        )
+    return queryset
 
 
 # ---------------------------------------------------------------------------
@@ -1841,13 +1858,13 @@ class AssignmentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
         from academic_sessions.utils import annotate_session_class_display
 
         queryset = super().get_queryset().select_related(
-            'school', 'academic_year', 'class_obj', 'subject', 'teacher',
+            'school', 'academic_year', 'class_obj', 'session_class', 'subject', 'teacher',
         ).prefetch_related('attachments').annotate(
             submission_count=Count('submissions'),
         ).order_by('-due_date', '-id')
         queryset = annotate_session_class_display(queryset)
 
-        queryset = _apply_teacher_dual_scope(queryset, self.request)
+        queryset = _apply_teacher_dual_scope(queryset, self.request, session_class_field='session_class_id')
 
         # Filter by class
         scope = resolve_class_scope(self.request, class_param_names=('class_id', 'class_obj'))
@@ -1857,6 +1874,11 @@ class AssignmentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
         class_id = scope['class_obj_id']
         if class_id:
             queryset = queryset.filter(class_obj_id=class_id)
+        if scope['session_class_id']:
+            # Whole-class assignments plus this section's own, not a sibling's.
+            queryset = queryset.filter(
+                Q(session_class__isnull=True) | Q(session_class_id=scope['session_class_id'])
+            )
 
         # Filter by subject
         subject_id = self.request.query_params.get('subject_id')
@@ -2000,6 +2022,7 @@ class AssignmentSubmissionViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewse
             self.request,
             class_field='assignment__class_obj_id',
             subject_field='assignment__subject_id',
+            session_class_field='assignment__session_class_id',
         )
 
         # Nested route: filter by assignment_id from URL

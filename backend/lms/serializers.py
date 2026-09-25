@@ -708,7 +708,7 @@ class AssignmentReadSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'school', 'school_name',
             'academic_year', 'academic_year_name',
-            'class_obj', 'class_name',
+            'class_obj', 'session_class', 'class_name',
             'subject', 'subject_name',
             'teacher', 'teacher_name',
             'title', 'description', 'instructions',
@@ -722,6 +722,8 @@ class AssignmentReadSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'created_at', 'updated_at']
 
     def get_class_name(self, obj):
+        if obj.session_class_id:
+            return obj.session_class.label
         session_name = getattr(obj, 'session_display_name', None)
         if session_name:
             section = getattr(obj, 'session_display_section', None)
@@ -736,7 +738,7 @@ class AssignmentCreateSerializer(serializers.ModelSerializer):
         model = Assignment
         fields = [
             'id', 'school', 'academic_year',
-            'class_obj', 'subject', 'teacher',
+            'class_obj', 'session_class', 'subject', 'teacher',
             'title', 'description', 'instructions',
             'assignment_type', 'requires_submission',
             'due_date', 'total_marks',
@@ -764,6 +766,13 @@ class AssignmentCreateSerializer(serializers.ModelSerializer):
         if requires_submission and not due_date:
             raise serializers.ValidationError({
                 'due_date': 'Due date is required for submission-based assignments.',
+            })
+
+        session_class = attrs.get('session_class')
+        class_obj = attrs.get('class_obj') or getattr(self.instance, 'class_obj', None)
+        if session_class and session_class.class_obj_id != getattr(class_obj, 'id', None):
+            raise serializers.ValidationError({
+                'session_class': 'Section does not belong to the selected class.',
             })
 
         return attrs

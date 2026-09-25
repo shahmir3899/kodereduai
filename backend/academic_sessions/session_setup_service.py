@@ -186,9 +186,10 @@ class SessionSetupService:
 
             preview['class_subjects'].append(cs_dict)
 
-        # 3. Timetable summary
+        # 3. Timetable summary. Shared entries only: section overrides belong to
+        # this year's sections, which the new year doesn't have.
         source_entries = TimetableEntry.objects.filter(
-            school_id=self.school_id,
+            school_id=self.school_id, session_class__isnull=True,
         ).filter(
             **({'academic_year': source_year} if TimetableEntry.objects.filter(
                 school_id=self.school_id, academic_year=source_year
@@ -211,7 +212,7 @@ class SessionSetupService:
         if sync_mode and timetable_count > 0:
             existing_keys = set(
                 TimetableEntry.objects.filter(
-                    school_id=self.school_id,
+                    school_id=self.school_id, session_class__isnull=True,
                 ).values_list('class_obj_id', 'day', 'slot_id')
             )
             source_keys = set(
@@ -344,7 +345,7 @@ class SessionSetupService:
                 if preview_data.get('timetable_summary', {}).get('will_clone'):
                     source_year_id = preview_data['source_year']['id']
                     source_entries = TimetableEntry.objects.filter(
-                        school_id=self.school_id,
+                        school_id=self.school_id, session_class__isnull=True,
                     ).filter(
                         **({'academic_year_id': source_year_id} if TimetableEntry.objects.filter(
                             school_id=self.school_id, academic_year_id=source_year_id
@@ -355,6 +356,7 @@ class SessionSetupService:
                         tt, created = TimetableEntry.objects.update_or_create(
                             school_id=self.school_id,
                             class_obj_id=entry.class_obj_id,
+                            session_class=None,
                             day=entry.day,
                             slot_id=entry.slot_id,
                             defaults={

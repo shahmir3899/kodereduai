@@ -27,4 +27,15 @@ REST_FRAMEWORK['DEFAULT_THROTTLE_RATES'] = {}
 # Disable Celery Beat scheduler for tests (avoid DB table dependency)
 CELERY_BEAT_SCHEDULER = 'django.conf:settings'
 CELERY_TASK_ALWAYS_EAGER = True
+
+# Local cache for tests. Inheriting settings.CACHES pointed tests at the real
+# Upstash Redis (same 'eduai' key prefix as the live app): every cache read and
+# invalidation was a network round trip (~95s of seed setup per test) and test
+# runs could evict or overwrite the live app's cache entries.
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+        'LOCATION': 'eduai-tests',
+    }
+}
 CELERY_TASK_EAGER_PROPAGATES = True

@@ -3792,14 +3792,20 @@ class StudentDiscountViewSet(ModuleAccessMixin, viewsets.ModelViewSet):
         # is for that year, and Student.class_obj is only the current class.
         from academic_sessions.roster import enrollments_in_scope
 
+        students_qs = Student.objects.filter(school_id=school_id, is_active=True)
         enrollments = enrollments_in_scope(
             school_id, academic_year_id=academic_year_id, class_obj_id=class_id or None,
         )
-        if not class_id:
-            enrollments = enrollments.filter(class_obj__grade_level=grade_level)
-        students_qs = Student.objects.filter(
-            school_id=school_id, is_active=True, id__in=enrollments.values('student_id'),
-        )
+        if enrollments is not None:
+            if not class_id:
+                enrollments = enrollments.filter(class_obj__grade_level=grade_level)
+            students_qs = students_qs.filter(id__in=enrollments.values('student_id'))
+        elif class_id:
+            # Year with no enrollment rows (legacy data): the snapshot is the
+            # only placement there is.
+            students_qs = students_qs.filter(class_obj_id=class_id)
+        else:
+            students_qs = students_qs.filter(class_obj__grade_level=grade_level)
 
         now = tz.now()
 
