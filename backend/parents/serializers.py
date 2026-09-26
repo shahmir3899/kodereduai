@@ -150,8 +150,8 @@ class ParentRegistrationSerializer(serializers.Serializer):
 class ParentChildSerializer(serializers.ModelSerializer):
     parent_name = serializers.SerializerMethodField()
     student_name = serializers.CharField(source='student.name', read_only=True)
-    student_roll_number = serializers.CharField(source='student.roll_number', read_only=True)
-    class_name = serializers.CharField(source='student.class_obj.name', read_only=True)
+    student_roll_number = serializers.SerializerMethodField()
+    class_name = serializers.SerializerMethodField()
     school_name = serializers.CharField(source='school.name', read_only=True)
 
     class Meta:
@@ -163,6 +163,28 @@ class ParentChildSerializer(serializers.ModelSerializer):
             'is_primary', 'can_pickup', 'created_at',
         ]
         read_only_fields = ['id', 'created_at']
+
+    def _placement(self, obj):
+        """The child's current-year enrollment, looked up once for a whole
+        list. The Student snapshot is the latest class (next year's right after
+        promotion) and has no section."""
+        if not hasattr(self, '_placements'):
+            from academic_sessions.roster import current_placements_for
+
+            listing = isinstance(self.parent, serializers.ListSerializer) and self.parent.instance is not None
+            links = list(self.parent.instance) if listing else [obj]
+            self._placements = current_placements_for(obj.school_id, [link.student_id for link in links])
+        return self._placements.get(obj.student_id)
+
+    def get_student_roll_number(self, obj):
+        from academic_sessions.roster import placement_roll
+
+        return placement_roll(self._placement(obj), obj.student)
+
+    def get_class_name(self, obj):
+        from academic_sessions.roster import placement_label
+
+        return placement_label(self._placement(obj), obj.student)
 
     def get_parent_name(self, obj):
         return obj.parent.user.get_full_name() or obj.parent.user.username

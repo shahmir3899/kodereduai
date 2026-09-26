@@ -251,7 +251,11 @@ def teacher_has_student_access(request, student, school_id=None):
     session_ids = scope.get('full_session_class_ids', set())
     if session_ids and student.id in _get_session_class_student_ids(session_ids):
         return True
-    return student.class_obj_id in scope.get('full_class_ids', set())
+    # Current placement, not the Student snapshot (the latest class, which is
+    # next year's right after promotion).
+    from academic_sessions.roster import current_placement, placement_class_id
+
+    return placement_class_id(current_placement(student), student) in scope.get('full_class_ids', set())
 
 
 def _is_data_restricted_user(request):

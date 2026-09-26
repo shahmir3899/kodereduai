@@ -94,6 +94,40 @@ def current_academic_year_id(school_id):
     )
 
 
+def _is_latest_enrollment(enrollment):
+    """True when no enrollment of this student is in a later academic year."""
+    latest_id = (
+        StudentEnrollment.objects
+        .filter(student_id=enrollment.student_id)
+        .order_by('-academic_year__start_date', '-is_active', '-id')
+        .values_list('id', flat=True)
+        .first()
+    )
+    return latest_id == enrollment.id
+
+
+def sync_student_snapshot(student):
+    """Point the Student.class_obj/roll_number snapshot at the student's latest
+    enrollment. For writers that set the snapshot directly (the student edit
+    form) while a later year's enrollment may already exist."""
+    latest = (
+        StudentEnrollment.objects
+        .filter(student_id=student.id)
+        .order_by('-academic_year__start_date', '-is_active', '-id')
+        .first()
+    )
+    if latest:
+        _write_snapshot(student, latest)
+
+
+def _write_snapshot(student, enrollment):
+    """The only writer of the Student.class_obj/roll_number snapshot."""
+    if (student.class_obj_id, student.roll_number) != (enrollment.class_obj_id, enrollment.roll_number):
+        student.class_obj_id = enrollment.class_obj_id
+        student.roll_number = enrollment.roll_number
+        student.save(update_fields=['class_obj', 'roll_number', 'updated_at'])
+
+
 def move_student(enrollment, *, session_class=None, class_obj=None, roll_number=None,
                  sync_student=True):
     """Move an enrollment to a new section (or master class) and/or roll number.
@@ -104,7 +138,10 @@ def move_student(enrollment, *, session_class=None, class_obj=None, roll_number=
     shows up as unassigned instead of silently sitting in the wrong section.
 
     ``sync_student`` keeps the ``Student.class_obj``/``roll_number`` snapshot in
-    step when the enrollment is for the current academic year.
+    step when the enrollment is the student's latest one. The snapshot means the
+    latest placement (promotion sets it to next year's class before that year
+    becomes current), so a correction in the latest year must reach it even
+    while an older year is still current.
     """
     if session_class is not None:
         enrollment.session_class = session_class
@@ -128,11 +165,7 @@ def move_student(enrollment, *, session_class=None, class_obj=None, roll_number=
 
     enrollment.save(update_fields=['class_obj', 'session_class', 'roll_number', 'updated_at'])
 
-    if sync_student and enrollment.academic_year_id == current_academic_year_id(enrollment.school_id):
-        student = enrollment.student
-        if (student.class_obj_id, student.roll_number) != (enrollment.class_obj_id, enrollment.roll_number):
-            student.class_obj_id = enrollment.class_obj_id
-            student.roll_number = enrollment.roll_number
-            student.save(update_fields=['class_obj', 'roll_number', 'updated_at'])
+    if sync_student and _is_latest_enrollment(enrollment):
+        _write_snapshot(enrollment.student, enrollment)
 
     return enrollment

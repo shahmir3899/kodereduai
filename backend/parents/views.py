@@ -218,11 +218,14 @@ class ChildOverviewView(APIView):
         except Exception:
             pass
 
+        from academic_sessions.roster import current_placement, placement_label, placement_roll
+
+        placement = current_placement(student)
         data = {
             'student_id': student.id,
             'student_name': student.name,
-            'class_name': student.class_obj.name,
-            'roll_number': student.roll_number,
+            'class_name': placement_label(placement, student),
+            'roll_number': placement_roll(placement, student),
             'school_name': student.school.name,
             'attendance_summary': attendance_summary,
             'fee_summary': fee_summary,
@@ -789,6 +792,11 @@ class AdminParentListView(APIView):
             'parent', 'parent__user', 'student', 'student__class_obj',
         )
 
+        from academic_sessions.roster import current_placements_for, placement_label, placement_roll
+
+        parent_links = list(parent_links)
+        placements = current_placements_for(school_id, [link.student_id for link in parent_links])
+
         # Group by parent
         parents_map = {}
         for link in parent_links:
@@ -802,8 +810,8 @@ class AdminParentListView(APIView):
                 'link_id': link.id,
                 'student_id': link.student_id,
                 'student_name': link.student.name,
-                'class_name': link.student.class_obj.name,
-                'roll_number': link.student.roll_number,
+                'class_name': placement_label(placements.get(link.student_id), link.student),
+                'roll_number': placement_roll(placements.get(link.student_id), link.student),
                 'relation': link.relation,
                 'is_primary': link.is_primary,
                 'can_pickup': link.can_pickup,

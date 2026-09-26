@@ -281,7 +281,8 @@ class ExamSubjectCreateSerializer(serializers.ModelSerializer):
 
 class StudentMarkSerializer(serializers.ModelSerializer):
     student_name = serializers.CharField(source='student.name', read_only=True)
-    student_roll_number = serializers.CharField(source='student.roll_number', read_only=True)
+    # Roll from the mark's own enrollment (the exam year), not the current one.
+    student_roll_number = serializers.SerializerMethodField()
     subject_name = serializers.CharField(source='exam_subject.subject.name', read_only=True)
     total_marks = serializers.DecimalField(
         source='exam_subject.total_marks', read_only=True,
@@ -305,6 +306,11 @@ class StudentMarkSerializer(serializers.ModelSerializer):
             'created_at', 'updated_at',
         ]
         read_only_fields = ['id', 'school', 'created_at', 'updated_at']
+
+    def get_student_roll_number(self, obj):
+        from academic_sessions.roster import placement_roll
+
+        return placement_roll(obj.enrollment, obj.student)
 
 
 class StudentMarkCreateSerializer(serializers.ModelSerializer):

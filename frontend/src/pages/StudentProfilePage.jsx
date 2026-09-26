@@ -83,6 +83,10 @@ export default function StudentProfilePage() {
   const [recommendedEditRoll, setRecommendedEditRoll] = useState('')
   const [showStatusModal, setShowStatusModal] = useState(false)
   const [statusForm, setStatusForm] = useState({ status: '', status_date: '', status_reason: '' })
+  // Attendance/marks already recorded on or after the chosen leaving date
+  // (server-side check); the admin picks a later date or removes them.
+  const [statusConflict, setStatusConflict] = useState(null)
+  const [removeRecordsAfterLeaving, setRemoveRecordsAfterLeaving] = useState(false)
   const [showReclassifyModal, setShowReclassifyModal] = useState(false)
   const [reclassifyForm, setReclassifyForm] = useState({
     target_session_class_id: '',
@@ -316,13 +320,25 @@ export default function StudentProfilePage() {
 
   const updateStatusMutation = useMutation({
     mutationFn: (payload) => studentsApi.updateStudent(id, payload),
-    onSuccess: () => {
-      showSuccess('Student status updated successfully')
+    onSuccess: (_res, payload) => {
+      showSuccess(
+        payload?.remove_records_after_leaving
+          ? 'Student status updated; records after the leaving date were removed'
+          : 'Student status updated successfully'
+      )
       setShowStatusModal(false)
+      setStatusConflict(null)
+      setRemoveRecordsAfterLeaving(false)
       queryClient.invalidateQueries({ queryKey: ['student', id] })
       queryClient.invalidateQueries({ queryKey: ['students'] })
     },
     onError: (error) => {
+      const data = error?.response?.data
+      if (data?.code === 'records_after_leaving') {
+        setStatusConflict(data)
+        setRemoveRecordsAfterLeaving(false)
+        return
+      }
       showError(getApiErrorMessage(error, 'Failed to update student status'))
     },
   })
@@ -460,6 +476,8 @@ export default function StudentProfilePage() {
       status_date: student?.status_date || '',
       status_reason: student?.status_reason || '',
     })
+    setStatusConflict(null)
+    setRemoveRecordsAfterLeaving(false)
     setShowStatusModal(true)
   }
 
@@ -472,6 +490,7 @@ export default function StudentProfilePage() {
       status: statusForm.status,
       status_date: statusForm.status_date || null,
       status_reason: statusForm.status_reason,
+      ...(statusConflict && removeRecordsAfterLeaving ? { remove_records_after_leaving: true } : {}),
     })
   }
 
@@ -937,7 +956,10 @@ export default function StudentProfilePage() {
                 <select
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg"
                   value={statusForm.status}
-                  onChange={(e) => setStatusForm((p) => ({ ...p, status: e.target.value }))}
+                  onChange={(e) => {
+                    setStatusForm((p) => ({ ...p, status: e.target.value }))
+                    setStatusConflict(null)
+                  }}
                 >
                   <option value="ACTIVE">Active</option>
                   <option value="WITHDRAWN">Withdrawn (Left school)</option>
@@ -953,9 +975,24 @@ export default function StudentProfilePage() {
                   type="date"
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg"
                   value={statusForm.status_date}
-                  onChange={(e) => setStatusForm((p) => ({ ...p, status_date: e.target.value }))}
+                  onChange={(e) => {
+                    setStatusForm((p) => ({ ...p, status_date: e.target.value }))
+                    setStatusConflict(null)
+                  }}
                 />
               </div>
+              {statusConflict && (
+                <LeavingConflictNotice
+                  conflict={statusConflict}
+                  removeRecords={removeRecordsAfterLeaving}
+                  onToggleRemove={setRemoveRecordsAfterLeaving}
+                  onUseSuggestedDate={() => {
+                    setStatusForm((p) => ({ ...p, status_date: statusConflict.suggested_leaving_date }))
+                    setStatusConflict(null)
+                    setRemoveRecordsAfterLeaving(false)
+                  }}
+                />
+              )}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Reason</label>
                 <textarea
@@ -970,8 +1007,17 @@ export default function StudentProfilePage() {
 
             <div className="px-6 py-4 border-t border-gray-200 flex justify-end gap-2">
               <button type="button" onClick={() => setShowStatusModal(false)} className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50">Cancel</button>
-              <button type="button" onClick={handleSubmitStatus} disabled={updateStatusMutation.isPending} className="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 disabled:opacity-50">
-                {updateStatusMutation.isPending ? 'Saving...' : 'Save Status'}
+              <button
+                type="button"
+                onClick={handleSubmitStatus}
+                disabled={updateStatusMutation.isPending || (statusConflict && !removeRecordsAfterLeaving)}
+                className={`px-4 py-2 text-white rounded-lg disabled:opacity-50 ${
+                  statusConflict && removeRecordsAfterLeaving ? 'bg-red-600 hover:bg-red-700' : 'bg-amber-600 hover:bg-amber-700'
+                }`}
+              >
+                {updateStatusMutation.isPending
+                  ? 'Saving...'
+                  : statusConflict && removeRecordsAfterLeaving ? 'Remove Records & Save' : 'Save Status'}
               </button>
             </div>
           </div>
@@ -1157,6 +1203,81 @@ export default function StudentProfilePage() {
         />
       )}
 
+    </div>
+  )
+}
+
+function LeavingConflictNotice({ conflict, removeRecords, onToggleRemove, onUseSuggestedDate }) {
+  const att = conflict.attendance || {}
+  const marks = conflict.marks || {}
+  const total = (att.count || 0) + (marks.count || 0)
+  const attParts = [
+    att.present ? `${att.present} present` : null,
+    att.absent ? `${att.absent} absent` : null,
+    att.leave ? `${att.leave} on leave` : null,
+  ].filter(Boolean).join(', ')
+
+  return (
+    <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 space-y-3">
+      <div>
+        <p className="font-semibold">Records exist after this leaving date</p>
+        <p className="mt-1">
+          {conflict.student_name} still has records on or after <strong>{formatDate(conflict.leaving_date)}</strong>,
+          the leaving date you chose. A student can&apos;t have attendance or exam marks after they leave, so
+          this date can&apos;t be saved as it is.
+        </p>
+      </div>
+
+      <ul className="list-disc pl-5 space-y-1">
+        {att.count > 0 && (
+          <li>
+            <strong>{att.count} attendance record{att.count === 1 ? '' : 's'}</strong>{' '}
+            from {formatDate(att.first_date)} to {formatDate(att.last_date)}
+            {attParts ? ` (${attParts})` : ''}
+          </li>
+        )}
+        {(marks.exams || []).map((exam) => (
+          <li key={exam.id}>
+            <strong>{exam.count} exam mark{exam.count === 1 ? '' : 's'}</strong> in {exam.name}
+            {exam.entered < exam.count ? ` (${exam.entered} entered, ${exam.count - exam.entered} blank)` : ''}
+          </li>
+        ))}
+      </ul>
+
+      <p>
+        The last recorded day is <strong>{formatDate(conflict.last_record_date)}</strong>. Choose one:
+      </p>
+
+      <div className="space-y-2">
+        <button
+          type="button"
+          onClick={onUseSuggestedDate}
+          className="w-full text-left px-3 py-2 rounded-lg border border-amber-400 bg-white hover:bg-amber-100"
+        >
+          <span className="font-medium">Use {formatDate(conflict.suggested_leaving_date)} as the leaving date</span>
+          <span className="block text-xs text-amber-800">
+            Keeps all records. Pick this if the student really attended until {formatDate(conflict.last_record_date)}.
+          </span>
+        </button>
+
+        <label className="flex items-start gap-2 px-3 py-2 rounded-lg border border-red-300 bg-white cursor-pointer">
+          <input
+            type="checkbox"
+            className="mt-1"
+            checked={removeRecords}
+            onChange={(e) => onToggleRemove(e.target.checked)}
+          />
+          <span>
+            <span className="font-medium text-red-700">
+              Keep {formatDate(conflict.leaving_date)} and remove these {total} record{total === 1 ? '' : 's'}
+            </span>
+            <span className="block text-xs text-gray-600">
+              Pick this if the records were entered by mistake. A copy is saved in the admin audit log before
+              they are deleted.
+            </span>
+          </span>
+        </label>
+      </div>
     </div>
   )
 }

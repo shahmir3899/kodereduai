@@ -300,11 +300,12 @@ class AdmissionEnquiryViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.M
                                         ft,
                                         annual_category_id=annual_category_id,
                                         monthly_category_id=monthly_category_id,
+                                        academic_year_id=academic_year.id,
                                     )
                                     if amount is None and ft in ('MONTHLY', 'ANNUAL'):
                                         # Backward compatibility: allow legacy uncategorized structures
                                         # as source amount, but always create categorized fee records.
-                                        amount = resolve_fee_amount(student, ft)
+                                        amount = resolve_fee_amount(student, ft, academic_year_id=academic_year.id)
                                     if amount is not None:
                                         FeePayment.objects.create(
                                             school_id=school_id,

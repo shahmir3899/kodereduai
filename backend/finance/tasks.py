@@ -123,20 +123,13 @@ def generate_monthly_fees_task(
             ).select_related('class_obj', 'session_class')
             enrollment_by_student = {e.student_id: e for e in enrollment_qs}
 
+        from academic_sessions.roster import placement_class_id, placement_label
+
         def _class_obj_id_getter(student):
-            enrollment = enrollment_by_student.get(student.id)
-            if enrollment and enrollment.class_obj_id:
-                return enrollment.class_obj_id
-            return student.class_obj_id
+            return placement_class_id(enrollment_by_student.get(student.id), student)
 
         def _class_name_getter(student):
-            enrollment = enrollment_by_student.get(student.id)
-            if enrollment:
-                if enrollment.session_class_id and enrollment.session_class:
-                    return enrollment.session_class.display_name
-                if enrollment.class_obj_id and enrollment.class_obj:
-                    return enrollment.class_obj.name
-            return student.class_obj.name if student.class_obj else ''
+            return placement_label(enrollment_by_student.get(student.id), student)
 
         total = len(students) * len(categories)
         update_task_progress(task_id, current=0, total=total)
@@ -378,20 +371,13 @@ def generate_annual_fees_task(
             ).select_related('class_obj', 'session_class')
             enrollment_by_student = {e.student_id: e for e in enrollment_qs}
 
+        from academic_sessions.roster import placement_class_id, placement_label
+
         def _class_obj_id_getter(student):
-            enrollment = enrollment_by_student.get(student.id)
-            if enrollment and enrollment.class_obj_id:
-                return enrollment.class_obj_id
-            return student.class_obj_id
+            return placement_class_id(enrollment_by_student.get(student.id), student)
 
         def _class_name_getter(student):
-            enrollment = enrollment_by_student.get(student.id)
-            if enrollment:
-                if enrollment.session_class_id and enrollment.session_class:
-                    return enrollment.session_class.display_name
-                if enrollment.class_obj_id and enrollment.class_obj:
-                    return enrollment.class_obj.name
-            return student.class_obj.name if student.class_obj else ''
+            return placement_label(enrollment_by_student.get(student.id), student)
 
         total = len(students) * len(categories)
         update_task_progress(task_id, current=0, total=total)

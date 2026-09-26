@@ -11,7 +11,29 @@ from datetime import date
 from decimal import Decimal
 
 from django.conf import settings
-from django.db.models import Sum, Count, Q
+from django.db.models import Exists, OuterRef, Sum, Count, Q
+
+from academic_sessions.models import StudentEnrollment
+from academic_sessions.roster import placement_group, placement_roll, placements_for
+from academic_sessions.utils import resolve_current_academic_year_id
+
+
+def _payment_class_q(class_name):
+    """Q matching fee payments whose student was in `class_name` for the
+    payment's own year -- by master class name or section label ("Class 2",
+    "Class 2 - A"). The Student.class_obj snapshot answered "Class 1 fees" with
+    this year's Class 1 students, even for last year's records."""
+    name, _, section = class_name.partition(' - ')
+    in_class = Q(class_obj__name__icontains=class_name) | Q(session_class__display_name__icontains=class_name)
+    if section:
+        in_class |= Q(session_class__display_name__icontains=name.strip(), session_class__section__iexact=section.strip())
+    year_enrollment = StudentEnrollment.objects.filter(
+        student_id=OuterRef('student_id'), academic_year_id=OuterRef('academic_year_id'),
+    )
+    return (
+        Q(Exists(year_enrollment.filter(in_class)))
+        | (~Q(Exists(year_enrollment)) & Q(student__class_obj__name__icontains=class_name))
+    )
 
 logger = logging.getLogger(__name__)
 
@@ -290,7 +312,7 @@ class FinanceAIAgent:
         )
 
         if class_name:
-            qs = qs.filter(student__class_obj__name__icontains=class_name)
+            qs = qs.filter(_payment_class_q(class_name))
 
         totals = qs.aggregate(
             total_due=Sum('amount_due'),
@@ -344,17 +366,20 @@ class FinanceAIAgent:
         ).select_related('student', 'student__class_obj')
 
         if class_name:
-            qs = qs.filter(student__class_obj__name__icontains=class_name)
+            qs = qs.filter(_payment_class_q(class_name))
 
-        students = [
-            {
+        payments = list(qs[:50])  # Limit to 50 for LLM context
+        placements = placements_for(self.school_id, ((p.student_id, p.academic_year_id) for p in payments))
+        students = []
+        for p in payments:
+            placement = placements.get((p.student_id, p.academic_year_id))
+            _key, label, _master = placement_group(placement, p.student)
+            students.append({
                 "name": p.student.name,
-                "roll_number": p.student.roll_number,
-                "class": p.student.class_obj.name,
+                "roll_number": placement_roll(placement, p.student),
+                "class": label,
                 "amount_due": float(p.amount_due),
-            }
-            for p in qs[:50]  # Limit to 50 for LLM context
-        ]
+            })
 
         return {
             "month": month,
@@ -746,15 +771,26 @@ class FinanceAIAgent:
             unpaid_months__gte=int(min_months),
         ).order_by('-unpaid_months')[:30]
 
+        # Unpaid months can span years, so name each student's class as it is now.
+        rows = list(qs)
+        year_id = resolve_current_academic_year_id(self.school_id)
+        now = placements_for(self.school_id, ((item['student_id'], year_id) for item in rows)) if year_id else {}
+
+        def current_label(item):
+            placement = now.get((item['student_id'], year_id))
+            if placement is None:
+                return item['student__class_obj__name']
+            return placement.session_class.label if placement.session_class_id else placement.class_obj.name
+
         return {
             "defaulters": [
                 {
                     "student": item['student__name'],
-                    "class": item['student__class_obj__name'],
+                    "class": current_label(item),
                     "unpaid_months": item['unpaid_months'],
                     "total_due": float(item['total_due'] or 0),
                 }
-                for item in qs
+                for item in rows
             ],
             "min_months_filter": min_months,
         }

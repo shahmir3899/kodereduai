@@ -405,3 +405,39 @@ def recompute_student_risk_snapshots():
 
     logger.info(f"Student risk snapshots recomputed for {processed_schools} schools.")
     return {'processed_schools': processed_schools}
+
+
+@shared_task
+def check_enrollment_drift():
+    """
+    Nightly Celery Beat job: run the class-record drift checks
+    (academic_sessions.drift) per active school, log anything flagged and send
+    admins one in-app alert. Read-only apart from the notification -- it never
+    repairs records, because the right fix depends on which copy is wrong.
+    """
+    from schools.models import School
+    from notifications.triggers import trigger_enrollment_drift_alert
+    from .drift import drift_checks
+
+    schools_flagged = 0
+    for school in School.objects.filter(is_active=True):
+        try:
+            flagged = []
+            for _key, title, qs in drift_checks(school_id=school.id):
+                count = qs.count()
+                if count:
+                    names = list(qs.order_by('student__name').values_list('student__name', flat=True)[:5])
+                    flagged.append((title, count, names))
+            if not flagged:
+                continue
+            schools_flagged += 1
+            logger.warning(
+                'Enrollment drift at school %s (%s): %s', school.id, school.name,
+                '; '.join(f'{title}: {count}' for title, count, _names in flagged),
+            )
+            trigger_enrollment_drift_alert(school, flagged)
+        except Exception as e:
+            logger.error(f"Enrollment drift check failed for school {school.id}: {e}")
+
+    logger.info(f"Enrollment drift check done; {schools_flagged} school(s) flagged.")
+    return {'schools_flagged': schools_flagged}

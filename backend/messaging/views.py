@@ -374,8 +374,6 @@ class MessagingViewSet(viewsets.ViewSet):
 
             seen = set()
             for link in child_links:
-                if not link.student.class_obj:
-                    continue
                 # Teachers of the child's own section, not every section of
                 # the master class.
                 class_subjects, class_label = _class_subjects_for_student(link.student, school_id)
@@ -455,7 +453,9 @@ def _class_subjects_for_student(student, school_id):
             qs.filter(class_obj_id=placement.class_obj_id, academic_year_id=placement.academic_year_id),
             placement.class_obj.name,
         )
-    return qs.filter(class_obj_id=student.class_obj_id), (student.class_obj.name if student.class_obj else None)
+    from academic_sessions.roster import placement_class_id, placement_label
+
+    return qs.filter(class_obj_id=placement_class_id(None, student)), (placement_label(None, student) or None)
 
 
 def _students_taught_by(staff_member, school_id):

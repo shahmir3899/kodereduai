@@ -108,12 +108,8 @@ class RoomCreateSerializer(serializers.ModelSerializer):
 class HostelAllocationReadSerializer(serializers.ModelSerializer):
     """Read serializer with nested student, room, and hostel details."""
     student_name = serializers.CharField(source='student.name', read_only=True)
-    student_roll_number = serializers.CharField(
-        source='student.roll_number', read_only=True, default=None,
-    )
-    student_class_name = serializers.CharField(
-        source='student.class_obj.name', read_only=True, default=None,
-    )
+    student_roll_number = serializers.SerializerMethodField()
+    student_class_name = serializers.SerializerMethodField()
     room_number = serializers.CharField(source='room.room_number', read_only=True)
     hostel_name = serializers.CharField(source='room.hostel.name', read_only=True)
     academic_year_name = serializers.CharField(
@@ -131,6 +127,16 @@ class HostelAllocationReadSerializer(serializers.ModelSerializer):
             'created_at',
         ]
         read_only_fields = ['id', 'allocated_date', 'created_at']
+
+    def get_student_roll_number(self, obj):
+        from academic_sessions.roster import placement_roll, serializer_placement
+
+        return placement_roll(serializer_placement(self, obj, lambda a: a.academic_year_id), obj.student)
+
+    def get_student_class_name(self, obj):
+        from academic_sessions.roster import placement_label, serializer_placement
+
+        return placement_label(serializer_placement(self, obj, lambda a: a.academic_year_id), obj.student) or None
 
 
 class HostelAllocationCreateSerializer(serializers.ModelSerializer):
@@ -182,9 +188,7 @@ class HostelAllocationCreateSerializer(serializers.ModelSerializer):
 class GatePassReadSerializer(serializers.ModelSerializer):
     """Read serializer with nested student and approval details."""
     student_name = serializers.CharField(source='student.name', read_only=True)
-    student_roll_number = serializers.CharField(
-        source='student.roll_number', read_only=True, default=None,
-    )
+    student_roll_number = serializers.SerializerMethodField()
     hostel_name = serializers.CharField(
         source='allocation.room.hostel.name', read_only=True,
     )
@@ -219,6 +223,14 @@ class GatePassReadSerializer(serializers.ModelSerializer):
             'id', 'approved_by', 'approved_at', 'actual_return',
             'created_at', 'updated_at',
         ]
+
+    def get_student_roll_number(self, obj):
+        from academic_sessions.roster import placement_roll, serializer_placement
+
+        placement = serializer_placement(
+            self, obj, lambda g: g.allocation.academic_year_id if g.allocation_id else None,
+        )
+        return placement_roll(placement, obj.student)
 
 
 class GatePassCreateSerializer(serializers.ModelSerializer):

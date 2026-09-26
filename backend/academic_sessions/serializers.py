@@ -668,7 +668,8 @@ class PromotionTargetApplySerializer(PromotionTargetPreviewSerializer):
 
 class PromotionEventSerializer(serializers.ModelSerializer):
     student_name = serializers.CharField(source='student.name', read_only=True)
-    student_roll_number = serializers.CharField(source='student.roll_number', read_only=True, default='')
+    # Roll at the time of the event (source enrollment), not the current one.
+    student_roll_number = serializers.SerializerMethodField()
     source_academic_year_name = serializers.CharField(source='source_academic_year.name', read_only=True, default='')
     target_academic_year_name = serializers.CharField(source='target_academic_year.name', read_only=True, default='')
     source_class_name = serializers.CharField(source='source_class.name', read_only=True, default='')
@@ -710,6 +711,12 @@ class PromotionEventSerializer(serializers.ModelSerializer):
             'created_by',
             'created_at',
         ]
+
+    def get_student_roll_number(self, obj):
+        from .roster import placement_roll
+
+        return placement_roll(obj.source_enrollment, obj.student) or ''
+
 
 
 class PromotionHistoryQuerySerializer(serializers.Serializer):

@@ -369,6 +369,8 @@ class FaceAttendanceSessionViewSet(ModuleAccessMixin, TenantQuerySetMixin, views
                     attendance_status=student_status,
                     face_session=session,
                 )
+                if record is None:
+                    continue  # left the school by this date
                 if created:
                     created_count += 1
                 else:
@@ -898,7 +900,7 @@ class LiveMatchView(APIView):
                     academic_year=academic_year,
                     attendance_status=AttendanceRecord.AttendanceStatus.PRESENT,
                 )
-                resulted_in_attendance = True
+                resulted_in_attendance = attendance_record is not None
 
         event = FaceLiveDetectionEvent.objects.create(
             school=school,

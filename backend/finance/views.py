@@ -116,6 +116,18 @@ def _get_staff_visible_accounts(school_id):
     )
 
 
+
+def _current_students_in_classes_q(school_id, class_ids):
+    """Q on `student` for students currently enrolled in `class_ids`, from the
+    enrollment; the Student.class_obj snapshot only for legacy years without
+    enrollment rows."""
+    from academic_sessions.roster import current_student_ids_in_classes
+
+    student_ids = current_student_ids_in_classes(school_id, class_ids)
+    if student_ids is None:
+        return Q(student__class_obj_id__in=class_ids)
+    return Q(student_id__in=student_ids)
+
 def _filter_students_by_scope(queryset, school_id, class_id=None, academic_year_id=None,
                               session_class_id=None, year=None, month=None):
     """Apply class/year scope consistently for student selections in finance flows.
@@ -202,7 +214,20 @@ class FeeStructureViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Model
                 return queryset.none()
             class_id = scope['class_obj_id'] or class_id
         if class_id:
-            queryset = queryset.filter(Q(class_obj_id=class_id) | Q(student__class_obj_id=class_id))
+            # Class-level structures, plus per-student overrides of the students
+            # in this class/section for the selected (or current) year. The
+            # Student.class_obj snapshot listed overrides under the student's
+            # current class instead.
+            from academic_sessions.roster import enrollments_in_scope
+
+            enrollments = enrollments_in_scope(
+                school_id, academic_year_id=academic_year, session_class_id=session_class_id,
+                class_obj_id=class_id, include_inactive=True,
+            ) if school_id else None
+            if enrollments is None:
+                queryset = queryset.filter(Q(class_obj_id=class_id) | Q(student__class_obj_id=class_id))
+            else:
+                queryset = queryset.filter(Q(class_obj_id=class_id) | Q(student_id__in=enrollments.values('student_id')))
 
         student_id = self.request.query_params.get('student_id')
         if student_id:
@@ -472,11 +497,11 @@ class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
                     legacy_classes = get_teacher_master_only_class_scope(self.request, school_id=school_id)
                     queryset = queryset.filter(
                         Q(student_id__in=enrolled_ids) |
-                        Q(student__class_obj_id__in=legacy_classes)
+                        _current_students_in_classes_q(school_id, legacy_classes)
                     )
                 else:
                     teacher_classes = get_teacher_class_scope(self.request, school_id=school_id)
-                    queryset = queryset.filter(student__class_obj_id__in=teacher_classes)
+                    queryset = queryset.filter(_current_students_in_classes_q(school_id, teacher_classes))
 
         # Filters
         academic_year = self.request.query_params.get('academic_year')
@@ -635,6 +660,7 @@ class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
             fee_type,
             annual_category_id=annual_category_id,
             monthly_category_id=monthly_category_id,
+            academic_year_id=academic_year_id,
         )
         if base_amount is None:
             return Response({'detail': 'No fee structure found for the selected student/type/category.'}, status=400)
@@ -779,6 +805,7 @@ class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
             fee_type,
             annual_category_id=annual_category_id,
             monthly_category_id=monthly_category_id,
+            academic_year_id=request.query_params.get('academic_year') or None,
         )
         source = None
         if amount is not None:
@@ -3117,12 +3144,15 @@ class AccountViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
         entries = []
 
         # Recent fee payments (where money was actually received)
-        fee_payments = (
+        fee_payments = list(
             FeePayment.objects
             .filter(school_id=school_id, amount_paid__gt=0)
             .select_related('student', 'student__class_obj', 'account', 'collected_by')
             .order_by('-updated_at')[:limit]
         )
+        # Label each payment with the class the student was in for its own year.
+        from academic_sessions.roster import placement_group, placements_for
+        fee_placements = placements_for(school_id, ((fp.student_id, fp.academic_year_id) for fp in fee_payments))
         for fp in fee_payments:
             # Map fee_type to readable label
             fee_type_label = {
@@ -3142,7 +3172,7 @@ class AccountViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
                 'id': fp.id,
                 'fee_type': fp.fee_type,
                 'fee_type_label': fee_type_label,
-                'description': f"{fp.student.name} ({fp.student.class_obj.name if fp.student.class_obj else 'N/A'})",
+                'description': f"{fp.student.name} ({placement_group(fee_placements.get((fp.student_id, fp.academic_year_id)), fp.student)[1] or 'N/A'})",
                 'amount': float(fp.amount_paid),
                 'date': str(fp.payment_date) if fp.payment_date else None,
                 'account_name': fp.account.name if fp.account else None,
@@ -4011,12 +4041,14 @@ class FeeBreakdownView(ModuleAccessMixin, APIView):
 
         # 1. Get base fee amount
         base_amount = resolve_fee_amount(student)
+        from academic_sessions.roster import current_placement, placement_label
+        class_name = placement_label(current_placement(student), student)
 
         if base_amount is None:
             return Response(FeeBreakdownSerializer({
                 'student_id': student.id,
                 'student_name': student.name,
-                'class_name': student.class_obj.name,
+                'class_name': class_name,
                 'base_amount': None,
                 'discounts_applied': [],
                 'scholarship_applied': None,
@@ -4077,7 +4109,7 @@ class FeeBreakdownView(ModuleAccessMixin, APIView):
         return Response(FeeBreakdownSerializer({
             'student_id': student.id,
             'student_name': student.name,
-            'class_name': student.class_obj.name,
+            'class_name': class_name,
             'base_amount': base_amount,
             'discounts_applied': discounts_applied,
             'scholarship_applied': scholarship_applied,

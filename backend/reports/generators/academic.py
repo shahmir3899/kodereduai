@@ -16,6 +16,7 @@ class ClassResultReportGenerator(BaseReportGenerator):
 
         try:
             from examinations.models import Exam, StudentMark, ExamSubject
+            from academic_sessions.roster import placement_label, placement_roll
 
             exam = Exam.objects.get(id=exam_id)
             academic_year_id = self._academic_year_id()
@@ -26,27 +27,19 @@ class ClassResultReportGenerator(BaseReportGenerator):
             if academic_year_id:
                 marks = marks.filter(enrollment__academic_year_id=academic_year_id)
 
+            # Rows are sorted by resolved class/roll below, so no DB ordering.
             marks = marks.select_related(
                 'student', 'student__class_obj', 'enrollment', 'enrollment__class_obj',
                 'enrollment__session_class', 'exam_subject', 'exam_subject__subject'
-            ).order_by('student__class_obj__name', 'student__roll_number')
+            )
 
             # Aggregate per student
             student_totals = {}
             for mark in marks:
                 sid = mark.student_id
                 if sid not in student_totals:
-                    if mark.enrollment_id:
-                        if mark.enrollment.session_class_id and mark.enrollment.session_class:
-                            class_name = mark.enrollment.session_class.label
-                        elif mark.enrollment.class_obj_id and mark.enrollment.class_obj:
-                            class_name = mark.enrollment.class_obj.name
-                        else:
-                            class_name = mark.student.class_obj.name
-                        roll_number = mark.enrollment.roll_number or mark.student.roll_number
-                    else:
-                        class_name = mark.student.class_obj.name
-                        roll_number = mark.student.roll_number
+                    class_name = placement_label(mark.enrollment, mark.student)
+                    roll_number = placement_roll(mark.enrollment, mark.student)
 
                     student_totals[sid] = {
                         'name': mark.student.name,

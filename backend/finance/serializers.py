@@ -7,6 +7,7 @@ from decimal import Decimal
 from rest_framework import serializers
 from core.mixins import ensure_tenant_school_id
 from core.permissions import _is_data_restricted_user
+from academic_sessions.roster import current_placement, placement_class_id, placement_label, placement_roll
 from .class_resolution import resolve_unambiguous_session_class
 from .models import (
     Account, Transfer, FeeStructure, FeePayment, Expense, OtherIncome,
@@ -196,7 +197,7 @@ class BulkStudentFeeStructureSerializer(serializers.Serializer):
 
 class FeePaymentSerializer(serializers.ModelSerializer):
     student_name = serializers.CharField(source='student.name', read_only=True, default='Deleted Student')
-    student_roll = serializers.CharField(source='student.roll_number', read_only=True, default=None)
+    student_roll = serializers.SerializerMethodField()
     # Student lifecycle status (ACTIVE/WITHDRAWN/TRANSFERRED/...) at the time this payment
     # is viewed — lets the frontend split a class's students into "currently enrolled" vs.
     # "left" without a second bucket in the class-wise breakdown (see fee_summary below).
@@ -252,10 +253,11 @@ class FeePaymentSerializer(serializers.ModelSerializer):
             return None
         if not hasattr(self, '_fallback_session_class_cache'):
             self._fallback_session_class_cache = {}
-        cache_key = (obj.school_id, obj.academic_year_id, obj.student.class_obj_id)
+        class_obj_id = placement_class_id(None, obj.student)
+        cache_key = (obj.school_id, obj.academic_year_id, class_obj_id)
         if cache_key not in self._fallback_session_class_cache:
             self._fallback_session_class_cache[cache_key] = resolve_unambiguous_session_class(
-                obj.student.class_obj_id, obj.academic_year_id, obj.school_id,
+                class_obj_id, obj.academic_year_id, obj.school_id,
             )
         return self._fallback_session_class_cache[cache_key]
 
@@ -266,6 +268,10 @@ class FeePaymentSerializer(serializers.ModelSerializer):
             return f"{session_class.display_name} - {session_class.section}"
         return session_class.display_name
 
+    def get_student_roll(self, obj):
+        """Roll number for the payment's own year; the snapshot is the current one."""
+        return placement_roll(self._get_active_enrollment(obj), obj.student)
+
     def get_class_obj_id(self, obj):
         """Master class for the payment's own year, not the student's current one.
 
@@ -273,10 +279,7 @@ class FeePaymentSerializer(serializers.ModelSerializer):
         Student.class_obj snapshot (e.g. Nursery after promotion) hid every
         2025-26 Playgroup row when that class was selected.
         """
-        enrollment = self._get_active_enrollment(obj)
-        if enrollment and enrollment.class_obj_id:
-            return enrollment.class_obj_id
-        return obj.student.class_obj_id if obj.student else None
+        return placement_class_id(self._get_active_enrollment(obj), obj.student)
 
     def get_session_class_id(self, obj):
         session_class = self._get_session_class(obj)
@@ -302,11 +305,7 @@ class FeePaymentSerializer(serializers.ModelSerializer):
         session_label = self.get_session_class_label(obj)
         if session_label:
             return session_label
-        
-        cls = obj.student.class_obj if obj.student else None
-        if not cls:
-            return None
-        return f"{cls.name} - {cls.section}" if cls.section else cls.name
+        return placement_label(self._get_active_enrollment(obj), obj.student) or None
 
     annual_category_name = serializers.CharField(source='annual_category.name', read_only=True, default=None)
     monthly_category_name = serializers.CharField(source='monthly_category.name', read_only=True, default=None)
@@ -845,8 +844,8 @@ class ScholarshipSerializer(serializers.ModelSerializer):
 class StudentDiscountSerializer(serializers.ModelSerializer):
     """Read serializer for StudentDiscount with nested names."""
     student_name = serializers.CharField(source='student.name', read_only=True, default='Deleted Student')
-    student_roll = serializers.CharField(source='student.roll_number', read_only=True, default=None)
-    class_name = serializers.CharField(source='student.class_obj.name', read_only=True, default=None)
+    student_roll = serializers.SerializerMethodField()
+    class_name = serializers.SerializerMethodField()
     discount_name = serializers.CharField(source='discount.name', read_only=True, default=None)
     scholarship_name = serializers.CharField(source='scholarship.name', read_only=True, default=None)
     academic_year_name = serializers.CharField(source='academic_year.name', read_only=True, default=None)
@@ -864,6 +863,25 @@ class StudentDiscountSerializer(serializers.ModelSerializer):
             'is_active', 'notes', 'created_at',
         ]
         read_only_fields = ['id', 'school', 'approved_by', 'approved_at', 'created_at']
+
+    def _placement(self, obj):
+        """The student's enrollment in the discount's year, looked up once for a
+        whole list (the Student.class_obj snapshot is the current class)."""
+        if not hasattr(self, '_placements'):
+            from academic_sessions.roster import placements_for
+
+            listing = isinstance(self.parent, serializers.ListSerializer) and self.parent.instance is not None
+            instances = list(self.parent.instance) if listing else [obj]
+            self._placements = placements_for(
+                obj.school_id, ((d.student_id, d.academic_year_id) for d in instances),
+            )
+        return self._placements.get((obj.student_id, obj.academic_year_id))
+
+    def get_student_roll(self, obj):
+        return placement_roll(self._placement(obj), obj.student)
+
+    def get_class_name(self, obj):
+        return placement_label(self._placement(obj), obj.student) or None
 
 
 class StudentDiscountCreateSerializer(serializers.Serializer):
@@ -1034,12 +1052,15 @@ class SiblingGroupMemberSerializer(serializers.Serializer):
     id = serializers.IntegerField(source='student.id')
     name = serializers.CharField(source='student.name')
     class_name = serializers.SerializerMethodField()
-    roll_number = serializers.CharField(source='student.roll_number')
+    roll_number = serializers.SerializerMethodField()
     order_index = serializers.IntegerField()
     has_sibling_discount = serializers.SerializerMethodField()
 
     def get_class_name(self, obj):
-        return obj.student.class_obj.name if obj.student.class_obj else ''
+        return placement_label(current_placement(obj.student), obj.student)
+
+    def get_roll_number(self, obj):
+        return placement_roll(current_placement(obj.student), obj.student)
 
     def get_has_sibling_discount(self, obj):
         from finance.models import StudentDiscount

@@ -25,22 +25,12 @@ class DailyAttendanceReportGenerator(BaseReportGenerator):
         filters = {'school': self.school, 'date': report_date}
         if academic_year_id:
             filters['academic_year_id'] = academic_year_id
-        if session_class_id:
-            # Scope to the actual section — class_obj_id alone would pool every
-            # section that shares this master class.
-            filters['student__enrollments__session_class_id'] = session_class_id
-            filters['student__enrollments__is_active'] = True
-        elif class_id:
-            if academic_year_id:
-                filters['student__enrollments__academic_year_id'] = academic_year_id
-                filters['student__enrollments__class_obj_id'] = class_id
-                filters['student__enrollments__is_active'] = True
-            else:
-                filters['student__class_obj_id'] = class_id
 
-        records = AttendanceRecord.objects.filter(**filters).select_related(
-            'student', 'student__class_obj'
-        ).order_by('student__name', 'date').distinct()
+        # Section first: class_obj_id alone pools every section sharing the
+        # master class.
+        records = self._scope_records_to_class(
+            AttendanceRecord.objects.filter(**filters), class_id, academic_year_id, session_class_id,
+        ).select_related('student', 'student__class_obj').order_by('student__name', 'date')
 
         enrollment_map = self._get_enrollment_map([r.student_id for r in records])
 
@@ -101,22 +91,10 @@ class MonthlyAttendanceReportGenerator(BaseReportGenerator):
         }
         if academic_year_id:
             filters['academic_year_id'] = academic_year_id
-        if session_class_id:
-            # Scope to the actual section — class_obj_id alone would pool every
-            # section that shares this master class.
-            filters['student__enrollments__session_class_id'] = session_class_id
-            filters['student__enrollments__is_active'] = True
-        elif class_id:
-            if academic_year_id:
-                filters['student__enrollments__academic_year_id'] = academic_year_id
-                filters['student__enrollments__class_obj_id'] = class_id
-                filters['student__enrollments__is_active'] = True
-            else:
-                filters['student__class_obj_id'] = class_id
 
-        records = AttendanceRecord.objects.filter(**filters).select_related(
-            'student', 'student__class_obj'
-        ).distinct()
+        records = self._scope_records_to_class(
+            AttendanceRecord.objects.filter(**filters), class_id, academic_year_id, session_class_id,
+        ).select_related('student', 'student__class_obj')
 
         enrollment_map = self._get_enrollment_map([r.student_id for r in records])
 

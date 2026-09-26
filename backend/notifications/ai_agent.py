@@ -176,10 +176,13 @@ class ParentCommunicationAgent:
         att_total = AttendanceRecord.objects.filter(student=student).count()
         att_present = AttendanceRecord.objects.filter(student=student, status='PRESENT').count()
 
+        from academic_sessions.roster import current_placement, placement_label, placement_roll
+
+        placement = current_placement(student)
         return json.dumps({
             'name': student.name,
-            'class': student.class_obj.name,
-            'roll_number': student.roll_number,
+            'class': placement_label(placement, student),
+            'roll_number': placement_roll(placement, student),
             'parent_name': student.parent_name or student.guardian_name,
             'parent_phone': student.parent_phone or student.guardian_phone,
             'attendance_rate': f"{round(att_present / att_total * 100, 1)}%" if att_total else 'N/A',
@@ -187,10 +190,12 @@ class ParentCommunicationAgent:
         })
 
     def _get_class_info(self, class_id):
-        from students.models import Class, Student
+        from students.models import Class
+
+        from academic_sessions.roster import class_student_count
 
         cls = Class.objects.get(id=class_id, school=self.school)
-        student_count = Student.objects.filter(class_obj=cls, is_active=True).count()
+        student_count = class_student_count(cls)
 
         return json.dumps({
             'name': cls.name,
@@ -275,10 +280,17 @@ class ParentCommunicationAgent:
         from students.models import Student
         from lms.models import Assignment, AssignmentSubmission
 
+        from academic_sessions.roster import current_year_q, own_section_q, placement_scope
+
         student = Student.objects.get(id=student_id, school=self.school)
+        # Own section and current year only; the master class alone listed
+        # sibling sections' and past years' assignments.
+        class_obj_id, year_id = placement_scope(student)
         assignments = Assignment.objects.filter(
+            current_year_q(year_id),
+            own_section_q(student),
             school=self.school,
-            class_obj=student.class_obj,
+            class_obj_id=class_obj_id,
             status='PUBLISHED',
         ).select_related('subject').order_by('due_date')[:20]
 

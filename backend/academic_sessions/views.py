@@ -663,6 +663,14 @@ class StudentEnrollmentViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
         status_filter = self.request.query_params.get('status')
         if status_filter:
             qs = qs.filter(status=status_filter)
+        # active_on=YYYY-MM-DD: only enrollments in effect that day (not yet
+        # left), for pages that record something on a date -- manual attendance
+        # listed students weeks after they had withdrawn.
+        active_on = parse_date(self.request.query_params.get('active_on') or '')
+        if active_on:
+            from .leaving import enrolled_on_q
+
+            qs = qs.filter(enrolled_on_q(active_on))
         return qs
 
     @staticmethod
@@ -1746,6 +1754,7 @@ class StudentEnrollmentViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
         events = PromotionEvent.objects.filter(school_id=school_id).select_related(
             'operation',
             'student',
+            'source_enrollment',
             'source_academic_year',
             'target_academic_year',
             'source_class',

@@ -89,16 +89,19 @@ class FeeDefaultersReportGenerator(BaseReportGenerator):
         )
         if academic_year_id:
             defaulters = defaulters.filter(academic_year_id=academic_year_id)
-        defaulters = defaulters.select_related(
-            'student', 'student__class_obj'
-        ).order_by('student__class_obj__name', 'student__roll_number')
+        defaulters = defaulters.select_related('student', 'student__class_obj')
 
         enrollment_map = self._get_enrollment_map(
             defaulters.values_list('student_id', flat=True).distinct()
         )
 
         rows = []
-        for fp in defaulters:
+        # Sorted by the class/roll resolved for the report's year, not the
+        # Student snapshot (the latest class).
+        for fp in sorted(defaulters, key=lambda p: (
+            self._resolve_class_name(p.student, enrollment_map),
+            str(self._resolve_roll_number(p.student, enrollment_map) or ''),
+        )):
             outstanding = float(fp.amount_due - fp.amount_paid)
             rows.append([
                 self._resolve_class_name(fp.student, enrollment_map),

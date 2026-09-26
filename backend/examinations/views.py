@@ -10,6 +10,7 @@ from django.db.models.functions import Coalesce
 from django.http import HttpResponse
 from django.utils import timezone
 from pgvector.django import CosineDistance
+from academic_sessions.roster import placement_roll
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied, ValidationError
@@ -56,6 +57,19 @@ from .term_periods import attendance_summaries, report_attendance_window as _rep
 
 logger = logging.getLogger(__name__)
 
+def calculate_overall_pass(subject_results, max_failed_subjects=2):
+    """
+    Determines overall exam pass/fail from subject-level results.
+
+    A student passes when the number of failed subjects
+    is equal to or below max_failed_subjects.
+    """
+    failed_subjects = sum(
+        1 for subject in subject_results
+        if not subject['is_pass']
+    )
+
+    return failed_subjects <= max_failed_subjects
 
 def _resolve_school_id(request):
     school_id = ensure_tenant_school_id(request)
@@ -343,15 +357,60 @@ def _exam_class_subjects(exam):
     )
 
 
-def _exam_roster(school_id, exam, session_class_id=None):
+def _exam_roster(school_id, exam, session_class_id=None, for_entry=False):
     """_class_roster() for an Exam's own (class, academic year), anchored to
     the exam's own date for month-precision withdrawn/transferred handling.
-    A section exam is always its section's roster."""
-    return _class_roster(
+    A section exam is always its section's roster.
+
+    Students who withdrew or transferred are held to day precision:
+    - ``for_entry`` (marks entry, the Excel template): never listed, since marks
+      can't be entered for them.
+    - results/report cards: kept only if they left after the exam started
+      and have marks recorded for it. Otherwise a student who left before
+      the exam, or whose marks were never entered, sat in the results as a
+      blank row that pulled down averages and ranks.
+    """
+    students, roll_by_student = _class_roster(
         school_id, exam.class_obj_id, exam.academic_year_id,
         as_of_date=exam.start_date or exam.end_date,
         session_class_id=exam.session_class_id or session_class_id,
     )
+    from academic_sessions.leaving import departed_in_year
+
+    departed = departed_in_year(school_id, [s.id for s in students], exam.academic_year_id)
+    if not departed:
+        return students, roll_by_student
+    if for_entry:
+        drop = set(departed)
+    else:
+        start = exam.start_date or exam.end_date
+        with_marks = set(
+            StudentMark.objects.filter(exam_subject__exam=exam, student_id__in=departed)
+            .filter(Q(marks_obtained__isnull=False) | Q(is_absent=True))
+            .values_list('student_id', flat=True)
+        )
+        drop = {
+            sid for sid, (_status, left) in departed.items()
+            if sid not in with_marks or (start and left and left <= start)
+        }
+    students = [s for s in students if s.id not in drop]
+    return students, {sid: roll for sid, roll in roll_by_student.items() if sid not in drop}
+
+
+def _departed_mark_errors(school_id, exam, student_ids):
+    """{student_id: message} for students marks can't be saved for: they
+    withdrew or transferred out during the exam's year."""
+    from academic_sessions.leaving import departed_in_year, departed_message
+    from students.models import Student
+
+    departed = departed_in_year(school_id, student_ids, exam.academic_year_id)
+    if not departed:
+        return {}
+    names = dict(Student.objects.filter(id__in=departed).values_list('id', 'name'))
+    return {
+        sid: departed_message(names.get(sid, 'This student'), status, left)
+        for sid, (status, left) in departed.items()
+    }
 
 
 def _exam_section_param(request, school_id, exam):
@@ -1779,157 +1838,328 @@ class ExamViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet)
     def results(self, request, pk=None):
         exam = self.get_object()
         school_id = _resolve_school_id(request)
-        exam_subjects = exam.exam_subjects.filter(is_active=True).select_related('subject')
+        exam_subjects = exam.exam_subjects.filter(
+            is_active=True
+        ).select_related('subject')
 
         students, roll_by_student = _exam_roster(
-            school_id, exam, session_class_id=_exam_section_param(request, school_id, exam),
+            school_id,
+            exam,
+            session_class_id=_exam_section_param(
+                request,
+                school_id,
+                exam
+            ),
         )
 
-        grade_scales = list(GradeScale.objects.filter(
-            school_id=school_id, is_active=True,
-        ).order_by('-min_percentage'))
+        grade_scales = list(
+            GradeScale.objects.filter(
+                school_id=school_id,
+                is_active=True,
+            ).order_by('-min_percentage')
+        )
 
         # Prefetch all marks in one query and build lookup dict
         all_marks = StudentMark.objects.filter(
-            exam_subject__in=exam_subjects, school_id=school_id,
+            exam_subject__in=exam_subjects,
+            school_id=school_id,
         ).select_related('exam_subject')
+
         marks_lookup = {
-            (m.student_id, m.exam_subject_id): m for m in all_marks
+            (m.student_id, m.exam_subject_id): m
+            for m in all_marks
         }
+
         overall_comments = {
-            c.student_id: c for c in StudentExamComment.objects.filter(exam=exam, school_id=school_id)
+            c.student_id: c
+            for c in StudentExamComment.objects.filter(
+                exam=exam,
+                school_id=school_id
+            )
         }
 
         results = []
+
         for student in students:
             marks_list = []
+
             total_obtained = Decimal('0')
             total_possible = Decimal('0')
-            all_pass = True
+
+            # Count actual failed subjects.
+            # A subject is failed if:
+            # 1. Student is absent
+            # 2. Marks are below passing marks
+            # 3. Marks are missing
+            #failed_subjects = 0
+
             is_incomplete = False
 
             for es in exam_subjects:
-                mark = marks_lookup.get((student.id, es.id))
-                obtained = mark.marks_obtained if mark and not mark.is_absent else None
-                is_absent = mark.is_absent if mark else False
+                mark = marks_lookup.get(
+                    (student.id, es.id)
+                )
+
+                obtained = (
+                    mark.marks_obtained
+                    if mark and not mark.is_absent
+                    else None
+                )
+
+                is_absent = (
+                    mark.is_absent
+                    if mark
+                    else False
+                )
+
+                # Missing marks (not absent) means the result
+                # is incomplete.
                 if obtained is None and not is_absent:
                     is_incomplete = True
+
+                # Subject-level pass/fail
+                #
+                # Pass only when:
+                # - marks exist
+                # - student is not absent
+                # - obtained marks >= passing marks
+                #
+                # Therefore:
+                # 0 marks = Fail
+                # Absent = Fail
+                subject_is_pass = (
+                    obtained is not None
+                    and obtained >= es.passing_marks
+                )
+
+                # Count failed subjects.
+                #
+                # Absent = Failed
+                # Marks below passing = Failed
+                # Missing marks = Failed for overall calculation,
+                # while is_incomplete separately records that
+                # the result is unfinished.
+                #if not subject_is_pass:
+                 #   failed_subjects += 1
 
                 marks_list.append({
                     'subject_id': es.subject_id,
                     'subject_name': es.subject.name,
                     'total_marks': float(es.total_marks),
                     'passing_marks': float(es.passing_marks),
-                    'marks_obtained': float(obtained) if obtained is not None else None,
+                    'marks_obtained': (
+                        float(obtained)
+                        if obtained is not None
+                        else None
+                    ),
                     'is_absent': is_absent,
-                    'is_pass': obtained is not None and obtained >= es.passing_marks,
-                    'ai_comment': mark.ai_comment if mark else '',
-                    'comment_source': (mark.ai_comment_source or None) if mark else None,
-                    'comment_at': mark.ai_comment_generated_at.isoformat() if mark and mark.ai_comment_generated_at else None,
-                    'comment_model': (mark.ai_model or None) if mark else None,
+                    'is_pass': subject_is_pass,
+                    'ai_comment': (
+                        mark.ai_comment
+                        if mark
+                        else ''
+                    ),
+                    'comment_source': (
+                        (mark.ai_comment_source or None)
+                        if mark
+                        else None
+                    ),
+                    'comment_at': (
+                        mark.ai_comment_generated_at.isoformat()
+                        if mark
+                        and mark.ai_comment_generated_at
+                        else None
+                    ),
+                    'comment_model': (
+                        (mark.ai_model or None)
+                        if mark
+                        else None
+                    ),
                 })
 
+                # Only actual obtained marks contribute to
+                # the percentage.
                 if obtained is not None:
                     total_obtained += obtained
                     total_possible += es.total_marks
-                    if obtained < es.passing_marks:
-                        all_pass = False
                 else:
+                    # The subject still contributes to the
+                    # possible total, even if absent.
                     total_possible += es.total_marks
-                    all_pass = False
 
-            percentage = float(total_obtained / total_possible * 100) if total_possible > 0 else 0
-            grade_label = self._get_grade(percentage, grade_scales)
+            overall_is_pass = calculate_overall_pass(marks_list)
+
+            failed_subjects = sum(
+                1 for subject in marks_list
+                if not subject['is_pass']
+            )
+            percentage = (
+                float(
+                    total_obtained /
+                    total_possible *
+                    100
+                )
+                if total_possible > 0
+                else 0
+            )
+
+            grade_label = self._get_grade(
+                percentage,
+                grade_scales
+            )
+
+            # -------------------------------------------------
+            # OVERALL EXAM PASS / FAIL
+            # -------------------------------------------------
+            #
+            # New rule:
+            #
+            # 0 failed subjects  -> Pass
+            # 1 failed subject   -> Pass
+            # 2 failed subjects  -> Pass
+            # 3+ failed subjects -> Fail
+            #
+            # Absent subjects count as failed subjects.
+            #
+            overall_is_pass = failed_subjects < 3
 
             results.append({
                 'student_id': student.id,
                 'student_name': student.name,
-                'roll_number': roll_by_student.get(student.id, student.roll_number),
+                'roll_number': (
+                    roll_by_student.get(student.id)
+                    or placement_roll(None, student)
+                ),
                 'marks': marks_list,
                 'total_obtained': float(total_obtained),
                 'total_possible': float(total_possible),
                 'percentage': round(percentage, 2),
                 'grade': grade_label,
-                'is_pass': all_pass,
+
+                # Overall exam-level result
+                'is_pass': overall_is_pass,
+
+                # Number of failed subjects
+                'failed_subjects': failed_subjects,
+
+                # Separately identify incomplete results
                 'is_incomplete': is_incomplete,
-                'overall_comment': overall_comments[student.id].comment if student.id in overall_comments else '',
-                'overall_comment_source': overall_comments[student.id].source if student.id in overall_comments else None,
-                'overall_comment_model': overall_comments[student.id].ai_model if student.id in overall_comments else None,
+
+                'overall_comment': (
+                    overall_comments[student.id].comment
+                    if student.id in overall_comments
+                    else ''
+                ),
+                'overall_comment_source': (
+                    overall_comments[student.id].source
+                    if student.id in overall_comments
+                    else None
+                ),
+                'overall_comment_model': (
+                    overall_comments[student.id].ai_model
+                    if student.id in overall_comments
+                    else None
+                ),
                 'overall_comment_at': (
                     overall_comments[student.id].generated_at.isoformat()
-                    if student.id in overall_comments and overall_comments[student.id].generated_at else None
+                    if (
+                        student.id in overall_comments
+                        and overall_comments[student.id].generated_at
+                    )
+                    else None
                 ),
             })
 
-        # Dense ranking: equal percentages share a rank and the next distinct score
-        # is rank+1 (1,1,1,2). Students with a subject not yet entered are left
-        # unranked so half-finished results can't take a top position.
-        results.sort(key=lambda x: (x['is_incomplete'], -x['percentage']))
-        prev_pct, current_rank = None, 0
+        # Dense ranking:
+        # equal percentages share a rank and the next distinct
+        # score gets the next rank (1,1,1,2).
+        #
+        # Students with incomplete results remain unranked.
+        results.sort(
+            key=lambda x: (
+                x['is_incomplete'],
+                -x['percentage']
+            )
+        )
+
+        prev_pct = None
+        current_rank = 0
+
         for r in results:
             if r['is_incomplete']:
                 r['rank'] = None
                 continue
-            pct = round(r['percentage'], 2)
+
+            pct = round(
+                r['percentage'],
+                2
+            )
+
             if pct != prev_pct:
                 current_rank += 1
                 prev_pct = pct
+
             r['rank'] = current_rank
 
         return Response({
             'exam': ExamSerializer(exam).data,
-            'exam_type_weight': float(exam.exam_type.weight),
-            'subjects': ExamSubjectSerializer(exam_subjects, many=True).data,
+            'exam_type_weight': float(
+                exam.exam_type.weight
+            ),
+            'subjects': ExamSubjectSerializer(
+                exam_subjects,
+                many=True
+            ).data,
             'results': results,
-        })
+        })  
+        @action(detail=True, methods=['get'])
+        def class_summary(self, request, pk=None):
+            exam = self.get_object()
+            school_id = _resolve_school_id(request)
+            exam_subjects = exam.exam_subjects.filter(is_active=True).select_related('subject')
 
-    @action(detail=True, methods=['get'])
-    def class_summary(self, request, pk=None):
-        exam = self.get_object()
-        school_id = _resolve_school_id(request)
-        exam_subjects = exam.exam_subjects.filter(is_active=True).select_related('subject')
+            students, _roll_by_student = _exam_roster(
+                school_id, exam, session_class_id=_exam_section_param(request, school_id, exam),
+            )
 
-        students, _roll_by_student = _exam_roster(
-            school_id, exam, session_class_id=_exam_section_param(request, school_id, exam),
-        )
+            # Prefetch all marks for this exam in one query
+            all_marks = StudentMark.objects.filter(
+                exam_subject__in=exam_subjects, school_id=school_id,
+                is_absent=False, marks_obtained__isnull=False,
+            )
+            # Group marks by exam_subject_id
+            marks_by_subject = {}
+            for m in all_marks:
+                marks_by_subject.setdefault(m.exam_subject_id, []).append(m)
 
-        # Prefetch all marks for this exam in one query
-        all_marks = StudentMark.objects.filter(
-            exam_subject__in=exam_subjects, school_id=school_id,
-            is_absent=False, marks_obtained__isnull=False,
-        )
-        # Group marks by exam_subject_id
-        marks_by_subject = {}
-        for m in all_marks:
-            marks_by_subject.setdefault(m.exam_subject_id, []).append(m)
+            subject_stats = []
+            for es in exam_subjects:
+                subject_marks = marks_by_subject.get(es.id, [])
+                marks_values = [float(m.marks_obtained) for m in subject_marks]
+                passed = sum(1 for m in subject_marks if m.marks_obtained >= es.passing_marks)
+                subject_stats.append({
+                    'subject_name': es.subject.name,
+                    'total_marks': float(es.total_marks),
+                    'students_appeared': len(marks_values),
+                    'average': round(sum(marks_values) / len(marks_values), 2) if marks_values else 0,
+                    'highest': max(marks_values) if marks_values else 0,
+                    'lowest': min(marks_values) if marks_values else 0,
+                    'passed': passed,
+                    'failed': len(marks_values) - passed,
+                })
 
-        subject_stats = []
-        for es in exam_subjects:
-            subject_marks = marks_by_subject.get(es.id, [])
-            marks_values = [float(m.marks_obtained) for m in subject_marks]
-            passed = sum(1 for m in subject_marks if m.marks_obtained >= es.passing_marks)
-            subject_stats.append({
-                'subject_name': es.subject.name,
-                'total_marks': float(es.total_marks),
-                'students_appeared': len(marks_values),
-                'average': round(sum(marks_values) / len(marks_values), 2) if marks_values else 0,
-                'highest': max(marks_values) if marks_values else 0,
-                'lowest': min(marks_values) if marks_values else 0,
-                'passed': passed,
-                'failed': len(marks_values) - passed,
+            return Response({
+                'exam': ExamSerializer(exam).data,
+                'total_students': len(students),
+                'subject_stats': subject_stats,
             })
 
-        return Response({
-            'exam': ExamSerializer(exam).data,
-            'total_students': len(students),
-            'subject_stats': subject_stats,
-        })
-
+    
     def _get_grade(self, percentage, grade_scales):
-        for gs in grade_scales:
-            if float(gs.min_percentage) <= percentage <= float(gs.max_percentage):
-                return gs.grade_label
-        return '-'
+            for gs in grade_scales:
+                if float(gs.min_percentage) <= percentage <= float(gs.max_percentage):
+                    return gs.grade_label
+            return '-'
 
 
 class ExamSubjectViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet):
@@ -2014,10 +2244,18 @@ class StudentMarkViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelV
                 'Only School Admin, Principal, or assigned class/subject teachers can enter marks for this exam subject.'
             )
 
+    def _refuse_departed(self, exam_subject, student, school_id):
+        if exam_subject is None or student is None:
+            return
+        errors = _departed_mark_errors(school_id, exam_subject.exam, [student.id])
+        if errors:
+            raise ValidationError({'student': [errors[student.id]]})
+
     def perform_create(self, serializer):
         school_id = _resolve_school_id(self.request)
         exam_subject = serializer.validated_data.get('exam_subject')
         self._check_exam_subject_scope(exam_subject, school_id)
+        self._refuse_departed(exam_subject, serializer.validated_data.get('student'), school_id)
         # TenantQuerySetMixin.perform_create resolves/validates school_id and saves.
         super().perform_create(serializer)
 
@@ -2025,6 +2263,9 @@ class StudentMarkViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelV
         school_id = _resolve_school_id(self.request)
         exam_subject = serializer.validated_data.get('exam_subject', serializer.instance.exam_subject)
         self._check_exam_subject_scope(exam_subject, school_id)
+        self._refuse_departed(
+            exam_subject, serializer.validated_data.get('student', serializer.instance.student), school_id,
+        )
         serializer.save()
 
     def perform_destroy(self, instance):
@@ -2035,7 +2276,7 @@ class StudentMarkViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelV
     def get_queryset(self):
         qs = super().get_queryset().select_related(
             'school', 'exam_subject', 'exam_subject__subject',
-            'exam_subject__exam', 'student',
+            'exam_subject__exam', 'student', 'enrollment',
         )
         qs = _apply_teacher_exam_scope(
             qs,
@@ -2093,11 +2334,19 @@ class StudentMarkViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelV
 
         from academic_sessions.models import StudentEnrollment
 
+        departed_errors = _departed_mark_errors(
+            school_id, exam_subject.exam, [e.get('student_id') for e in marks_data],
+        )
+
         for entry in marks_data:
             student_id = entry.get('student_id')
             marks_obtained = entry.get('marks_obtained')
             is_absent = entry.get('is_absent', False)
             remarks = entry.get('remarks', '')
+
+            if student_id in departed_errors:
+                errors.append({'student_id': student_id, 'error': departed_errors[student_id]})
+                continue
 
             if marks_obtained is not None:
                 marks_obtained = Decimal(str(marks_obtained))
@@ -2156,23 +2405,10 @@ class StudentMarkViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelV
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        # Get students enrolled in the exam's class for the exam's academic year
-        from students.models import Student
-        from academic_sessions.models import StudentEnrollment
-        students = Student.objects.filter(
-            school_id=school_id,
-            class_obj=exam_subject.exam.class_obj,
-            is_active=True,
-        )
-        # Filter by enrollment if the school uses enrollments
-        academic_year_id = exam_subject.exam.academic_year_id
-        if academic_year_id and StudentEnrollment.objects.filter(school_id=school_id).exists():
-            enrolled_ids = StudentEnrollment.objects.filter(
-                academic_year_id=academic_year_id,
-                is_active=True,
-            ).values_list('student_id', flat=True)
-            students = students.filter(id__in=enrolled_ids)
-        students = students.order_by('roll_number', 'name')
+        # Same roster as results: the exam's year and, for a section exam, its
+        # section. This matched the Student snapshot class plus an enrollment
+        # in the year in *any* class, and listed every section's students.
+        students, roll_by_student = _exam_roster(school_id, exam_subject.exam, for_entry=True)
 
         # Also check for existing marks
         existing_marks = {
@@ -2234,7 +2470,7 @@ class StudentMarkViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelV
         for row_idx, student in enumerate(students, 5):
             existing = existing_marks.get(student.id)
             ws.cell(row=row_idx, column=1, value=student.id).border = thin_border
-            ws.cell(row=row_idx, column=2, value=student.roll_number or '').border = thin_border
+            ws.cell(row=row_idx, column=2, value=roll_by_student.get(student.id) or '').border = thin_border
             name_cell = ws.cell(row=row_idx, column=3, value=student.name)
             name_cell.border = thin_border
             name_cell.font = Font(size=10)
@@ -3109,6 +3345,8 @@ class ReportCardView(ModuleAccessMixin, APIView):
             if enrollment.session_class_id and enrollment.session_class.display_name
             else enrollment.class_obj.name
         )
+        # "Current class" is the latest placement -- after promotion that is
+        # next year's class, which is exactly what the Student snapshot holds.
         current_class_name = resolve_class_display_name(
             school_id, resolve_current_academic_year_id(school_id), student.class_obj,
         )
@@ -3214,7 +3452,7 @@ class ReportCardView(ModuleAccessMixin, APIView):
 
         return Response({
             'student_name': student.name,
-            'roll_number': enrollment.roll_number or student.roll_number,
+            'roll_number': placement_roll(enrollment, student),
             'class_name': enrollment_class_name,
             'school_name': student.school.name,
             'academic_year_name': enrollment.academic_year.name,
@@ -3246,7 +3484,7 @@ class ReportCardView(ModuleAccessMixin, APIView):
             'student': {
                 'id': student.id,
                 'name': student.name,
-                'roll_number': enrollment.roll_number or student.roll_number,
+                'roll_number': placement_roll(enrollment, student),
                 'class_name': enrollment_class_name,
                 'school_name': student.school.name,
             },
@@ -3262,7 +3500,7 @@ class ReportCardView(ModuleAccessMixin, APIView):
                 'percentage': round(overall_pct, 2),
                 'grade': overall_grade,
                 'rank': rank,
-                'overall_pass': all(s['is_pass'] for s in subject_summaries) if subject_summaries else False,
+                'overall_pass': calculate_overall_pass(subject_summaries) if subject_summaries else False,
                 'calculation_mode': 'weighted' if weighted_calc else ('main_only' if len(exams) > 1 else 'simple'),
             },
             'grade_scales': [

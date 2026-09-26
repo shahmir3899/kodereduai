@@ -80,6 +80,25 @@ class StudyHelperService:
     def __init__(self, student, school):
         self.student = student
         self.school = school
+        self._scope = None
+
+    def _class_scope(self):
+        """(class_obj_id, class label, Q for class content) from the student's
+        current placement, looked up once. The Student snapshot is the latest
+        placement (next year's class right after promotion), and scoping by
+        master class alone showed sibling sections' and past years' content."""
+        if self._scope is None:
+            from django.db.models import Q
+            from academic_sessions.roster import (
+                current_placement, current_year_q, own_section_q, placement_class_id, placement_label,
+            )
+
+            placement = current_placement(self.student)
+            class_obj_id = placement_class_id(placement, self.student)
+            year_id = placement.academic_year_id if placement else None
+            content_q = Q(class_obj_id=class_obj_id) & current_year_q(year_id) & own_section_q(self.student)
+            self._scope = (class_obj_id, placement_label(placement, self.student), content_q)
+        return self._scope
 
     # ── Rate Limiting ────────────────────────────────────────────────────
 
@@ -132,14 +151,15 @@ class StudyHelperService:
 
         # Basic info
         parts.append(f"Student name: {student.name}")
-        parts.append(f"Class: {student.class_obj.name}")
+        class_obj_id, class_label, content_q = self._class_scope()
+        parts.append(f"Class: {class_label}")
 
         # Subjects from ClassSubject
         try:
             from academics.models import ClassSubject
             class_subjects = ClassSubject.objects.filter(
                 school=self.school,
-                class_obj=student.class_obj,
+                class_obj_id=class_obj_id,
             ).select_related('subject')
             subject_names = [cs.subject.name for cs in class_subjects]
             if subject_names:
@@ -152,8 +172,8 @@ class StudyHelperService:
             from lms.models import LessonPlan
             week_ago = timezone.now().date() - timedelta(days=7)
             lessons = LessonPlan.objects.filter(
+                content_q,
                 school=self.school,
-                class_obj=student.class_obj,
                 status='PUBLISHED',
                 lesson_date__gte=week_ago,
             ).select_related('subject').order_by('-lesson_date')[:5]
@@ -171,8 +191,8 @@ class StudyHelperService:
         try:
             from lms.models import Assignment
             assignments = Assignment.objects.filter(
+                content_q,
                 school=self.school,
-                class_obj=student.class_obj,
                 status='PUBLISHED',
                 due_date__gte=timezone.now(),
             ).select_related('subject').order_by('due_date')[:5]
@@ -433,8 +453,8 @@ class StudyHelperService:
         from lms.models import Assignment, AssignmentSubmission
 
         assignments = Assignment.objects.filter(
+            self._class_scope()[2],
             school=self.school,
-            class_obj=self.student.class_obj,
             status='PUBLISHED',
         ).select_related('subject').order_by('due_date')[:20]
 
@@ -460,7 +480,7 @@ class StudyHelperService:
     def _get_topic_details(self, subject_name=None):
         from lms.models import Book
         qs = Book.objects.filter(
-            school=self.school, class_obj=self.student.class_obj,
+            school=self.school, class_obj_id=self._class_scope()[0],
         ).select_related('subject').prefetch_related('chapters__topics')
 
         if subject_name:
@@ -514,7 +534,10 @@ class StudyHelperService:
     def _get_exam_schedule(self):
         from examinations.models import Exam, ExamSubject
 
+        # Own class/section/year only; this used to list the whole school's
+        # upcoming exams.
         exams = Exam.objects.filter(
+            self._class_scope()[2],
             school=self.school,
             start_date__gte=timezone.now().date(),
         ).order_by('start_date')[:5]
@@ -544,8 +567,8 @@ class StudyHelperService:
         from lms.models import LessonPlan, LessonAttachment
 
         lessons = LessonPlan.objects.filter(
+            self._class_scope()[2],
             school=self.school,
-            class_obj=self.student.class_obj,
             status='PUBLISHED',
         ).select_related('subject').order_by('-lesson_date')
 

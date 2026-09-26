@@ -307,8 +307,8 @@ class AttendanceRecordSerializer(serializers.ModelSerializer):
     Serializer for AttendanceRecord.
     """
     student_name = serializers.CharField(source='student.name', read_only=True)
-    student_roll = serializers.CharField(source='student.roll_number', read_only=True)
-    class_name = serializers.CharField(source='student.class_obj.name', read_only=True)
+    student_roll = serializers.SerializerMethodField()
+    class_name = serializers.SerializerMethodField()
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     source_display = serializers.CharField(source='get_source_display', read_only=True)
     academic_year_name = serializers.CharField(source='academic_year.name', read_only=True, default=None)
@@ -324,6 +324,30 @@ class AttendanceRecordSerializer(serializers.ModelSerializer):
             'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
+
+    def _placement(self, obj):
+        """The student's enrollment in the record's year, looked up once for a
+        whole page. The Student.class_obj snapshot is the current class, so last
+        year's records showed this year's class and roll."""
+        if not hasattr(self, '_placements'):
+            from academic_sessions.roster import placements_for
+
+            listing = isinstance(self.parent, serializers.ListSerializer) and self.parent.instance is not None
+            instances = list(self.parent.instance) if listing else [obj]
+            self._placements = placements_for(
+                obj.school_id, ((r.student_id, r.academic_year_id) for r in instances),
+            )
+        return self._placements.get((obj.student_id, obj.academic_year_id))
+
+    def get_student_roll(self, obj):
+        from academic_sessions.roster import placement_roll
+
+        return placement_roll(self._placement(obj), obj.student)
+
+    def get_class_name(self, obj):
+        from academic_sessions.roster import placement_label
+
+        return placement_label(self._placement(obj), obj.student) or None
 
 
 class AttendanceBulkEntryItemSerializer(serializers.Serializer):

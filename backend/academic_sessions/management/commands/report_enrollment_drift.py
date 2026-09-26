@@ -8,11 +8,13 @@ the rows affected in any environment so a repair can be scoped. It never writes.
 
     python manage.py report_enrollment_drift
     python manage.py report_enrollment_drift --school-id 42 --limit 50
+
+The same checks run nightly (academic_sessions.tasks.check_enrollment_drift),
+which notifies school admins when anything is flagged.
 """
 from django.core.management.base import BaseCommand
-from django.db.models import F
 
-from academic_sessions.models import StudentEnrollment
+from academic_sessions.drift import drift_checks
 
 
 class Command(BaseCommand):
@@ -24,39 +26,11 @@ class Command(BaseCommand):
         parser.add_argument('--limit', type=int, default=20, help='Sample rows to print per check (default 20).')
 
     def handle(self, *args, **opts):
-        base = StudentEnrollment.objects.filter(is_active=True)
-        if opts['school_id']:
-            base = base.filter(school_id=opts['school_id'])
-        if opts['academic_year_id']:
-            base = base.filter(academic_year_id=opts['academic_year_id'])
-        base = base.select_related('student', 'class_obj', 'session_class', 'academic_year')
-
-        checks = [
-            (
-                'class_obj disagrees with session_class master',
-                base.filter(session_class__class_obj__isnull=False)
-                .exclude(session_class__class_obj_id=F('class_obj_id')),
-            ),
-            (
-                'no session_class (unassigned section)',
-                base.filter(session_class__isnull=True),
-            ),
-            (
-                'session_class not linked to a master class (orphan)',
-                base.filter(session_class__isnull=False, session_class__class_obj__isnull=True),
-            ),
-            (
-                'current-year Student snapshot disagrees with enrollment',
-                base.filter(academic_year__is_current=True).exclude(
-                    student__class_obj_id=F('class_obj_id'),
-                    student__roll_number=F('roll_number'),
-                ),
-            ),
-        ]
+        checks = drift_checks(school_id=opts['school_id'], academic_year_id=opts['academic_year_id'])
 
         limit = opts['limit']
         total = 0
-        for title, qs in checks:
+        for _key, title, qs in checks:
             count = qs.count()
             total += count
             style = self.style.WARNING if count else self.style.SUCCESS

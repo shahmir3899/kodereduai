@@ -131,11 +131,15 @@ export default function MarksEntryPage() {
     }
   }, [selectedExamId, selectedSubjectId, selectedExam?.name, examSubjects, examSubjectsLoading])
 
-  // Fetch students from the exam's class (filtered by academic year enrollment)
+  // Students currently enrolled in the exam's class for its year (a
+  // section-only exam: that section only). is_active drops students who have
+  // withdrawn or transferred -- marks can't be entered for them.
   const { data: classStudentsRes, isLoading: studentsLoading } = useQuery({
-    queryKey: ['classStudentsForMarks', selectedExam?.class_obj, selectedExam?.academic_year],
+    queryKey: ['classStudentsForMarks', selectedExam?.class_obj, selectedExam?.session_class, selectedExam?.academic_year],
     queryFn: () => studentsApi.getStudents({
-      class_id: selectedExam?.class_obj,
+      ...(selectedExam?.session_class
+        ? { session_class_id: selectedExam.session_class }
+        : { class_id: selectedExam?.class_obj }),
       academic_year: selectedExam?.academic_year,
       is_active: true,
       page_size: 9999,
@@ -144,11 +148,27 @@ export default function MarksEntryPage() {
   })
   const classStudents = classStudentsRes?.data?.results || classStudentsRes?.data || []
 
-  // Initialize marks grid when subject is selected and marks load
+  // Initialize marks grid when subject is selected and marks load.
+  // Rows come from the current roster with any saved marks filled in: building
+  // it from saved marks alone kept students who had since left (and dropped
+  // anyone without a saved row yet).
   useEffect(() => {
-    if (!selectedSubjectId) return
-    if (existingMarks.length > 0) {
-      // Populate from existing marks
+    if (!selectedSubjectId || marksLoading || studentsLoading) return
+    if (classStudents.length > 0) {
+      const saved = new Map(existingMarks.map(m => [m.student, m]))
+      setMarksData(sortByRollNumber(classStudents.map(s => {
+        const m = saved.get(s.id)
+        return {
+          student_id: s.id,
+          student_name: s.name,
+          student_roll: s.roll_number || '',
+          marks_obtained: m && m.marks_obtained !== null ? String(m.marks_obtained) : '',
+          is_absent: m ? m.is_absent : false,
+          remarks: m?.remarks || '',
+        }
+      })))
+    } else if (existingMarks.length > 0) {
+      // No roster (legacy class without enrollments): saved marks only
       setMarksData(sortByRollNumber(existingMarks.map(m => ({
         student_id: m.student,
         student_name: m.student_name,
@@ -157,18 +177,10 @@ export default function MarksEntryPage() {
         is_absent: m.is_absent,
         remarks: m.remarks || '',
       }))))
-    } else if (!marksLoading && classStudents.length > 0) {
-      // No marks yet — pre-populate grid with students from the class
-      setMarksData(sortByRollNumber(classStudents.map(s => ({
-        student_id: s.id,
-        student_name: s.name,
-        student_roll: s.roll_number || '',
-        marks_obtained: '',
-        is_absent: false,
-        remarks: '',
-      }))))
     }
-  }, [selectedSubjectId, existingMarks.length, classStudents.length, marksLoading])
+  // Query responses (structurally shared, so stable until the data changes),
+  // not the derived arrays, which are new on every render.
+  }, [selectedSubjectId, marksRes, classStudentsRes, marksLoading, studentsLoading])
 
   // Bulk save mutation
   const bulkSaveMut = useMutation({

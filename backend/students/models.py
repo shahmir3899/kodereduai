@@ -68,8 +68,10 @@ class Class(models.Model):
 
     @property
     def student_count(self) -> int:
-        """Return the number of active students in this class."""
-        return self.students.filter(is_active=True).count()
+        """Active students in this class for the current academic year."""
+        from academic_sessions.roster import class_student_count
+
+        return class_student_count(self)
 
 
 class Student(models.Model):

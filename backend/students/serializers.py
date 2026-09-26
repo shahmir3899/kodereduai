@@ -86,28 +86,68 @@ class StudentSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
 
+    # Placement fields come from the enrollment: the year the view annotated
+    # (academic_year param), else the current year's, looked up once per list.
+    # The Student snapshot is the latest placement (next year's class right
+    # after promotion) and is only the fallback for students with no enrollment.
+
+    @staticmethod
+    def _annotated(obj):
+        return hasattr(obj, '_enrollment_class_obj_id')
+
+    def _current_placement(self, obj):
+        from academic_sessions.roster import current_placements_for
+
+        if not hasattr(self, '_placements'):
+            self._placements, self._covered = {}, set()
+        if obj.id not in self._covered:
+            parent = self.parent
+            listing = isinstance(parent, serializers.ListSerializer) and parent.instance is not None
+            students = [s for s in (parent.instance if listing else [obj]) if s.id not in self._covered]
+            if obj.id not in {s.id for s in students}:
+                students.append(obj)
+            by_school = {}
+            for s in students:
+                by_school.setdefault(s.school_id, []).append(s.id)
+            for school_id, ids in by_school.items():
+                self._placements.update(current_placements_for(school_id, ids))
+            self._covered.update(s.id for s in students)
+        return self._placements.get(obj.id)
+
     def get_class_obj(self, obj):
-        """Return enrollment class ID for historical sessions, else current class."""
-        eid = getattr(obj, '_enrollment_class_obj_id', None)
-        return eid if eid is not None else obj.class_obj_id
+        if self._annotated(obj):
+            eid = obj._enrollment_class_obj_id
+            return eid if eid is not None else obj.class_obj_id
+        from academic_sessions.roster import placement_class_id
+
+        return placement_class_id(self._current_placement(obj), obj)
 
     def get_session_class_obj(self, obj):
-        """Return the session class ID from enrollment annotation (when academic_year scoped)."""
-        return getattr(obj, '_enrollment_session_class_id', None)
+        if self._annotated(obj):
+            return getattr(obj, '_enrollment_session_class_id', None)
+        placement = self._current_placement(obj)
+        return placement.session_class_id if placement else None
 
     def get_class_name(self, obj):
-        """Return enrollment class name for historical sessions, else current class."""
-        ename = getattr(obj, '_enrollment_class_name', None)
-        if ename is not None:
-            return ename
+        if self._annotated(obj):
+            ename = getattr(obj, '_enrollment_class_name', None)
+            if ename is not None:
+                return ename
+        else:
+            placement = self._current_placement(obj)
+            if placement is not None:
+                if placement.session_class_id and placement.session_class.display_name:
+                    return placement.session_class.display_name
+                return placement.class_obj.name if placement.class_obj_id else None
         return obj.class_obj.name if obj.class_obj else None
 
     def get_roll_number(self, obj):
-        """Return session-scoped roll number when available, else current snapshot."""
-        enrollment_roll = getattr(obj, '_enrollment_roll_number', None)
-        if enrollment_roll is not None:
-            return enrollment_roll
-        return obj.roll_number
+        if self._annotated(obj):
+            enrollment_roll = getattr(obj, '_enrollment_roll_number', None)
+            return enrollment_roll if enrollment_roll is not None else obj.roll_number
+        from academic_sessions.roster import placement_roll
+
+        return placement_roll(self._current_placement(obj), obj)
 
     def get_status(self, obj):
         """Return enrollment status for academic-year scope, else current snapshot status."""
@@ -197,12 +237,81 @@ class StudentUpdateSerializer(serializers.ModelSerializer):
             'is_active', 'status', 'status_date', 'status_reason',
         ]
 
-    def update(self, instance, validated_data):
-        previous_status = instance.status
-        student = super().update(instance, validated_data)
-        new_status = student.status
+    def _leaving_date(self, attrs):
+        """The leaving date this update sets, or None when it doesn't set or
+        move one (not departing, or already departed with the same date)."""
+        from django.utils import timezone
 
+        student = self.instance
+        if not student:
+            return None
+        new_status = attrs.get('status', student.status)
+        if new_status not in DEPARTED_STATUSES:
+            return None
+        leaving = attrs.get('status_date', student.status_date) or timezone.now().date()
+        already_departed = student.status in DEPARTED_STATUSES
+        if already_departed and leaving == student.status_date and 'status' not in attrs:
+            return None
+        if already_departed and leaving == student.status_date and attrs.get('status') == student.status:
+            return None
+        return leaving
+
+    def _remove_requested(self):
+        flag = (getattr(self, 'initial_data', None) or {}).get('remove_records_after_leaving')
+        return str(flag).lower() in ('1', 'true', 'yes')
+
+    def update(self, instance, validated_data):
+        from django.db import transaction
+
+        previous_status = instance.status
+        previous_date = instance.status_date
+        leaving = self._leaving_date(validated_data)
+        with transaction.atomic():
+            if leaving and self._remove_requested():
+                self._remove_records_after_leaving(instance, leaving)
+            student = super().update(instance, validated_data)
+            self._sync_enrollment_status(student, previous_status, previous_date)
+        return student
+
+    def _remove_records_after_leaving(self, student, leaving):
+        """Delete attendance/marks on or after the leaving date, backed up in
+        the admin audit log first so they can be restored."""
+        from academic_sessions.leaving import records_after_leaving
+        from core.audit import log_admin_action
+
+        attendance, marks, summary = records_after_leaving(student, leaving)
+        if summary is None:
+            return
+        backup = {
+            'leaving_date': leaving.isoformat(),
+            'attendance': [
+                {k: (v.isoformat() if hasattr(v, 'isoformat') else v) for k, v in row.items()}
+                for row in attendance.values()
+            ],
+            'marks': [
+                {k: (str(v) if v is not None and not isinstance(v, (int, bool, str)) else v) for k, v in row.items()}
+                for row in marks.values()
+            ],
+        }
+        request = self.context.get('request')
+        log_admin_action(request, 'student_records_removed_after_leaving', student, metadata=backup)
+        marks.delete()
+        attendance.delete()
+
+    def _sync_enrollment_status(self, student, previous_status, previous_date):
+        new_status = student.status
         if new_status == previous_status:
+            # Same departure, new date: the enrollment's leaving date follows,
+            # or the rosters keep using the old one.
+            if new_status in DEPARTED_STATUSES and student.status_date != previous_date:
+                from academic_sessions.models import AcademicYear, StudentEnrollment
+
+                current_year = AcademicYear.objects.filter(school=student.school, is_current=True).first()
+                if current_year and student.status_date:
+                    StudentEnrollment.objects.filter(
+                        school=student.school, student=student, academic_year=current_year,
+                        status__in=DEPARTED_STATUSES,
+                    ).update(left_date=student.status_date)
             return student
 
         # A student's Student.is_active/class_obj deliberately stay untouched here
@@ -293,6 +402,21 @@ class StudentUpdateSerializer(serializers.ModelSerializer):
                     raise serializers.ValidationError({
                         'roll_number': f"Roll number '{roll_number}' already exists in this class for {current_year.name}."
                     })
+
+        # A leaving date must not strand attendance or marks after it (the
+        # withdrawal was once entered late and back-dated over three weeks of
+        # attendance and an exam). Refuse with the details, unless the admin
+        # asked to remove those records.
+        leaving = self._leaving_date(attrs)
+        if leaving and not self._remove_requested():
+            from academic_sessions.leaving import records_after_leaving
+
+            _attendance, _marks, summary = records_after_leaving(student, leaving)
+            if summary is not None:
+                # The view returns the full summary as the response body; the
+                # message here covers any other caller.
+                self.leaving_conflict = summary
+                raise serializers.ValidationError({'status_date': [summary['detail']]})
 
         return attrs
 

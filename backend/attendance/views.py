@@ -453,6 +453,12 @@ class AttendanceUploadViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.M
                 is_active=True,
             )
 
+        # Never write for students who had left by the upload's date.
+        from academic_sessions.leaving import left_by
+
+        departed = left_by(upload.school_id, [s.id for s in all_students], upload.date)
+        all_students = [s for s in all_students if s.id not in departed]
+
         # Create attendance records using bulk operations
         student_ids = [s.id for s in all_students]
         existing_records = {
@@ -790,7 +796,26 @@ class AttendanceRecordViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.R
         if record_status:
             queryset = queryset.filter(status=record_status)
 
-        return queryset.order_by('-date', 'student__class_obj', 'student__roll_number')
+        # Order within a day by the placement for the record's own year; the
+        # Student snapshot is the current class, so last year's records sorted
+        # by this year's class and roll. Snapshot only without an enrollment.
+        from django.db.models import F, OuterRef, Subquery, Value
+        from django.db.models.functions import Coalesce
+        from academic_sessions.models import StudentEnrollment
+
+        placement = StudentEnrollment.objects.filter(
+            student_id=OuterRef('student_id'), academic_year_id=OuterRef('academic_year_id'),
+        ).order_by('-is_active', '-updated_at', '-id')
+        return queryset.annotate(
+            _grade=Coalesce(Subquery(placement.values('class_obj__grade_level')[:1]), F('student__class_obj__grade_level')),
+            _section=Coalesce(
+                Subquery(placement.values('session_class__section')[:1]),
+                Subquery(placement.values('class_obj__section')[:1]),
+                F('student__class_obj__section'),
+                Value(''),
+            ),
+            _roll=Coalesce(Subquery(placement.values('roll_number')[:1]), F('student__roll_number')),
+        ).order_by('-date', '_grade', '_section', '_roll', 'id')
 
     @action(detail=False, methods=['get'])
     def register_data(self, request):
@@ -1009,6 +1034,15 @@ class AttendanceRecordViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.R
         ).select_related('class_obj')
         student_map = {student.id: student for student in students_qs}
 
+        # Class, roll and off-day calendar from this year's enrollment rather
+        # than the Student snapshot (roster helpers fall back to it for
+        # students with no enrollment this year).
+        from academic_sessions.roster import placement_class_id, placement_label, placement_roll, placements_for
+        from academic_sessions.utils import resolve_current_academic_year_id
+
+        current_year_id = resolve_current_academic_year_id(school_id)
+        placements = placements_for(school_id, ((sid, current_year_id) for sid in student_map))
+
         attendance_rows = AttendanceRecord.objects.filter(
             school_id=school_id,
             date__gte=date_from,
@@ -1023,7 +1057,7 @@ class AttendanceRecordViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.R
             if not student:
                 continue
 
-            class_id = getattr(student, 'class_obj_id', None)
+            class_id = placement_class_id(placements.get((student.id, current_year_id)), student)
             if class_id not in class_off_dates_cache:
                 class_off_dates_cache[class_id] = build_off_day_date_set(
                     school_id=school_id,
@@ -1048,12 +1082,13 @@ class AttendanceRecordViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.R
             if total_days > 0 and student:
                 percentage = (absent_count / total_days) * 100
                 if percentage >= threshold:
+                    placement = placements.get((student.id, current_year_id))
                     chronic.append({
                         'student': {
                             'id': student.id,
                             'name': student.name,
-                            'roll_number': student.roll_number,
-                            'class_name': student.class_obj.name,
+                            'roll_number': placement_roll(placement, student),
+                            'class_name': placement_label(placement, student),
                         },
                         'absent_count': absent_count,
                         'total_days': total_days,
@@ -1682,9 +1717,14 @@ class AttendanceRecordViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.R
                 academic_year_id=academic_year.id,
                 session_class_id=session_class.id if session_class else None,
                 class_obj_id=class_id,
+                include_inactive=True,
             )
         if enrollments is not None:
-            valid_student_ids = set(enrollments.values_list('student_id', flat=True))
+            # Enrolled on *this date*: a student who left is refused from their
+            # leaving date on, but can still be back-filled for days before it.
+            from academic_sessions.leaving import enrolled_on_q
+
+            valid_student_ids = set(enrollments.filter(enrolled_on_q(date)).values_list('student_id', flat=True))
         else:
             valid_student_ids = set(
                 Student.objects.filter(
@@ -1694,6 +1734,11 @@ class AttendanceRecordViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.R
                 ).values_list('id', flat=True)
             )
 
+        from academic_sessions.leaving import left_by, left_message
+
+        departed = left_by(school_id, [e['student_id'] for e in entries], date)
+        departed_names = dict(Student.objects.filter(id__in=departed).values_list('id', 'name')) if departed else {}
+
         created = 0
         updated = 0
         errors = []
@@ -1701,6 +1746,12 @@ class AttendanceRecordViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.R
             student_id = entry['student_id']
             att_status = entry['status']
 
+            if student_id in departed:
+                errors.append({
+                    'student_id': student_id,
+                    'error': left_message(departed_names.get(student_id, 'This student'), departed[student_id]),
+                })
+                continue
             if student_id not in valid_student_ids:
                 errors.append({'student_id': student_id, 'error': 'Student not found in this class.'})
                 continue

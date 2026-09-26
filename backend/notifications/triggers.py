@@ -748,32 +748,23 @@ def trigger_class_teacher_attendance_pending(school, target_date=None):
             date=target_date,
         )
 
-        if assignment.academic_year_id:
-            if assignment.session_class_id:
-                students_qs = students_qs.filter(
-                    enrollments__academic_year_id=assignment.academic_year_id,
-                    enrollments__session_class_id=assignment.session_class_id,
-                    enrollments__is_active=True,
-                ).distinct()
-                attendance_qs = attendance_qs.filter(
-                    student__enrollments__academic_year_id=assignment.academic_year_id,
-                    student__enrollments__session_class_id=assignment.session_class_id,
-                    student__enrollments__is_active=True,
-                ).distinct()
-            else:
-                students_qs = students_qs.filter(
-                    enrollments__academic_year_id=assignment.academic_year_id,
-                    enrollments__class_obj_id=class_obj.id,
-                    enrollments__is_active=True,
-                ).distinct()
-                attendance_qs = attendance_qs.filter(
-                    student__enrollments__academic_year_id=assignment.academic_year_id,
-                    student__enrollments__class_obj_id=class_obj.id,
-                    student__enrollments__is_active=True,
-                ).distinct()
-        else:
+        # Section, or master class in the assignment's year (current year when
+        # it has none), through one enrollment subquery.
+        from academic_sessions.roster import enrollments_in_scope
+
+        enrollments = enrollments_in_scope(
+            school.id,
+            academic_year_id=assignment.academic_year_id,
+            session_class_id=assignment.session_class_id,
+            class_obj_id=class_obj.id,
+        )
+        if enrollments is None:
             students_qs = students_qs.filter(class_obj=class_obj)
             attendance_qs = attendance_qs.filter(student__class_obj=class_obj)
+        else:
+            in_scope = enrollments.values('student_id')
+            students_qs = students_qs.filter(id__in=in_scope)
+            attendance_qs = attendance_qs.filter(student_id__in=in_scope)
 
         if not students_qs.exists():
             continue
@@ -924,6 +915,53 @@ def trigger_lesson_plan_published(lesson_plan):
         f"Lesson plan '{lesson_plan.title}' notifications sent: {sent} students "
         f"in {lesson_plan.class_obj.name} for {lesson_plan.school.name}"
     )
+    return sent
+
+
+def trigger_enrollment_drift_alert(school, flagged):
+    """
+    Tell SCHOOL_ADMIN/PRINCIPAL users that some students' class records
+    disagree (see academic_sessions.drift). Called nightly by
+    academic_sessions.tasks.check_enrollment_drift, once per school with
+    anything flagged; at most one alert per admin per day.
+
+    `flagged` is [(title, count, [student names...])] for the non-empty checks.
+    """
+    from .engine import NotificationEngine
+
+    total = sum(count for _title, count, _names in flagged)
+    if not total:
+        return 0
+
+    today = timezone.localdate()
+    lines = []
+    for title, count, names in flagged:
+        sample = ', '.join(names[:5]) + (f', and {count - 5} more' if count > 5 else '')
+        lines.append(f"{title}: {count} ({sample})")
+    title = f"Class records need attention — {total} student record{'s' if total != 1 else ''}"
+    body = (
+        f"The nightly check found students whose class, section or roll number disagree "
+        f"between their records at {school.name}. " + ' | '.join(lines)
+        + ". Ask your administrator to run: python manage.py report_enrollment_drift "
+        f"--school-id {school.id}"
+    )
+    engine = NotificationEngine(school)
+    sent = 0
+    for admin_user in _get_admin_users(school):
+        try:
+            if _daily_notification_already_sent(
+                school=school, event_type='GENERAL', channel='IN_APP',
+                recipient_user=admin_user, title=title, body=body, target_date=today,
+            ):
+                continue
+            engine.send(
+                event_type='GENERAL', channel='IN_APP', context={},
+                recipient_identifier=str(admin_user.id), recipient_type='ADMIN',
+                recipient_user=admin_user, title=title, body=body,
+            )
+            sent += 1
+        except Exception as e:
+            logger.error(f"Enrollment drift alert failed for admin {admin_user.id}: {e}")
     return sent
 
 

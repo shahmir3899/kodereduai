@@ -274,6 +274,11 @@ def _process_one_cohort_digest(
     # Parent in-app (own child only); one per absent student per day.
     date_h = target_date.strftime('%d %B %Y')
     cohort_label = _cohort_class_label(class_obj_id, session_class_id)
+    # Roll from this year's enrollment; the Student snapshot is the latest
+    # placement (next year's roll right after promotion).
+    from academic_sessions.roster import placement_roll, placements_for
+
+    placements = placements_for(school.id, ((sid, academic_year.id) for sid in student_ids))
     for sid in student_ids:
         rec = by_student.get(sid)
         if (
@@ -298,7 +303,7 @@ def _process_one_cohort_digest(
                     'class_name': cohort_label,
                     'date': date_h,
                     'school_name': school.name,
-                    'roll_number': student.roll_number,
+                    'roll_number': placement_roll(placements.get((sid, academic_year.id)), student),
                 },
                 recipient_identifier=str(parent_user.id),
                 recipient_type='PARENT',

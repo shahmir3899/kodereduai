@@ -68,50 +68,6 @@ def _build_fee_maps(school_id, fee_type, today, annual_category_id=None, monthly
     return student_fees, class_fees
 
 
-def _summarize_scope(students, existing_ids, student_fees, class_fees, category_name=None, row_limit=50):
-    """Summarize create/skip/no-structure counts and collect first preview rows."""
-    will_create = 0
-    already_exist = 0
-    no_fee_structure = 0
-    total_amount = Decimal('0')
-    rows = []
-
-    for student in students:
-        if student.id in existing_ids:
-            already_exist += 1
-            continue
-
-        amount = student_fees.get(student.id)
-        if amount is None:
-            amount = class_fees.get(student.class_obj_id)
-
-        if amount is None:
-            no_fee_structure += 1
-            continue
-
-        will_create += 1
-        total_amount += amount
-
-        if len(rows) < row_limit:
-            row = {
-                'student_id': student.id,
-                'student_name': student.name,
-                'class_name': student.class_obj.name if student.class_obj else '',
-                'amount': str(amount),
-            }
-            if category_name is not None:
-                row['category'] = category_name
-            rows.append(row)
-
-    return {
-        'will_create': will_create,
-        'already_exist': already_exist,
-        'no_fee_structure': no_fee_structure,
-        'total_amount': total_amount,
-        'rows': rows,
-    }
-
-
 def plan_scope_records(
     *,
     school_id,
@@ -148,10 +104,11 @@ def plan_scope_records(
     no_fee_structure = 0
     total_amount = Decimal('0')
 
-    class_obj_id_getter = class_obj_id_getter or (lambda student: student.class_obj_id)
-    class_name_getter = class_name_getter or (
-        lambda student: student.class_obj.name if student.class_obj else ''
-    )
+    # No enrollment map from the caller: the roster helpers' snapshot fallback.
+    from academic_sessions.roster import placement_class_id, placement_label
+
+    class_obj_id_getter = class_obj_id_getter or (lambda student: placement_class_id(None, student))
+    class_name_getter = class_name_getter or (lambda student: placement_label(None, student))
 
     for student in students:
         if student.id in existing_ids:
@@ -230,20 +187,13 @@ def build_preview_plan(
         ).select_related('class_obj', 'session_class')
         enrollment_by_student = {e.student_id: e for e in enrollment_qs}
 
+    from academic_sessions.roster import placement_class_id, placement_label
+
     def _class_obj_id_getter(student):
-        enrollment = enrollment_by_student.get(student.id)
-        if enrollment and enrollment.class_obj_id:
-            return enrollment.class_obj_id
-        return student.class_obj_id
+        return placement_class_id(enrollment_by_student.get(student.id), student)
 
     def _class_name_getter(student):
-        enrollment = enrollment_by_student.get(student.id)
-        if enrollment:
-            if enrollment.session_class_id and enrollment.session_class:
-                return enrollment.session_class.display_name
-            if enrollment.class_obj_id and enrollment.class_obj:
-                return enrollment.class_obj.name
-        return student.class_obj.name if student.class_obj else ''
+        return placement_label(enrollment_by_student.get(student.id), student)
 
     # ANNUAL per-category preview
     if fee_type == 'ANNUAL' and annual_category_ids:

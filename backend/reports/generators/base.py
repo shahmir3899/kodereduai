@@ -66,21 +66,35 @@ class BaseReportGenerator:
         return {enrollment.student_id: enrollment for enrollment in enrollment_qs}
 
     def _resolve_class_name(self, student, enrollment_map):
-        enrollment = enrollment_map.get(student.id)
-        if enrollment:
-            if enrollment.session_class_id and enrollment.session_class:
-                # label, not display_name: display_name has no section, so
-                # "Class 2 - A" and "Class 2 - B" merged into one "Class 2" row.
-                return enrollment.session_class.label
-            if enrollment.class_obj_id and enrollment.class_obj:
-                return enrollment.class_obj.name
-        return student.class_obj.name if student.class_obj else 'Unknown'
+        # Section label, not display_name: display_name has no section, so
+        # "Class 2 - A" and "Class 2 - B" merged into one "Class 2" row.
+        from academic_sessions.roster import placement_label
+
+        return placement_label(enrollment_map.get(student.id), student) or 'Unknown'
 
     def _resolve_roll_number(self, student, enrollment_map):
-        enrollment = enrollment_map.get(student.id)
-        if enrollment and enrollment.roll_number:
-            return enrollment.roll_number
-        return student.roll_number
+        from academic_sessions.roster import placement_roll
+
+        return placement_roll(enrollment_map.get(student.id), student)
+
+    def _scope_records_to_class(self, records, class_id, academic_year_id, session_class_id):
+        """Narrow attendance records to a section, or a master class in a year,
+        through one enrollment subquery. Inactive enrollments stay in so a
+        withdrawn student's days before they left still appear."""
+        from academic_sessions.roster import enrollments_in_scope
+
+        if not (session_class_id or class_id):
+            return records
+        enrollments = enrollments_in_scope(
+            self.school.id,
+            academic_year_id=academic_year_id,
+            session_class_id=session_class_id,
+            class_obj_id=class_id,
+            include_inactive=True,
+        )
+        if enrollments is None:
+            return records.filter(student__class_obj_id=class_id) if class_id else records
+        return records.filter(student_id__in=enrollments.values('student_id'))
 
     def get_data(self) -> dict:
         raise NotImplementedError

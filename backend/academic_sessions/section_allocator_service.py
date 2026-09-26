@@ -10,6 +10,8 @@ from collections import defaultdict
 
 from django.db.models import Avg, F, Q, Case, When, DecimalField
 
+from .roster import placement_roll
+
 logger = logging.getLogger(__name__)
 
 
@@ -104,12 +106,7 @@ class SectionAllocatorService:
             if not student:
                 continue
 
-            enrollment = enrollment_map.get(sid)
-            roll_number = ''
-            if enrollment and hasattr(enrollment, 'roll_number'):
-                roll_number = enrollment.roll_number
-            else:
-                roll_number = student.roll_number or ''
+            roll_number = placement_roll(enrollment_map.get(sid), student) or ''
 
             info = {
                 'student_id': student.id,

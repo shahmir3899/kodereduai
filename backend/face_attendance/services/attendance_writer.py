@@ -18,7 +18,14 @@ def upsert_attendance_record(*, student, date, school, academic_year, attendance
     Safe to call repeatedly for the same (student, date) — the unique
     constraint plus update_or_create means a later call updates the
     existing row rather than creating a duplicate.
+
+    Returns (None, False) without writing when the student had left the
+    school by ``date``: callers must not record attendance for them.
     """
+    from academic_sessions.leaving import left_by
+
+    if left_by(school.id if school else student.school_id, [student.id], date):
+        return None, False
     return AttendanceRecord.objects.update_or_create(
         student=student,
         date=date,

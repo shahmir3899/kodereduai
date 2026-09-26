@@ -66,10 +66,13 @@ export default function ManualEntryPage() {
 
   // Fetch enrolled students for selected class + academic year
   const { data: studentsRes, isLoading: studentsLoading } = useQuery({
-    queryKey: ['studentsForAttendance', classId, activeAcademicYear?.id, useSessionClassFilter],
+    queryKey: ['studentsForAttendance', classId, activeAcademicYear?.id, useSessionClassFilter, date],
     queryFn: () => sessionsApi.getEnrollments({
       ...classFilterParams,
       academic_year: activeAcademicYear?.id,
+      // Only students still enrolled on the chosen date; someone who left
+      // before it can't have attendance marked.
+      active_on: date,
       page_size: 500,
     }),
     enabled: !!classId && !!activeAcademicYear?.id,

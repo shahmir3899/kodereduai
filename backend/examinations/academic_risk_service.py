@@ -37,10 +37,20 @@ class AcademicRiskService:
         from students.models import Student
         from .models import StudentMark
 
+        # Active students enrolled in this year, labelled with that year's
+        # placement. Every active student used to be analysed, labelled by the
+        # Student snapshot (the latest class, not this year's).
+        from academic_sessions.roster import (
+            enrollments_in_scope, placement_label, placement_roll, placements_for,
+        )
+
         students = Student.objects.filter(
             school_id=self.school_id,
             is_active=True,
         ).select_related('class_obj')
+        year_enrollments = enrollments_in_scope(self.school_id, academic_year_id=self.academic_year_id)
+        if year_enrollments is not None:
+            students = students.filter(id__in=year_enrollments.values('student_id'))
 
         total_students = students.count()
         if total_students == 0:
@@ -53,6 +63,7 @@ class AcademicRiskService:
 
         student_ids = list(students.values_list('id', flat=True))
         student_map = {s.id: s for s in students}
+        placements = placements_for(self.school_id, ((sid, self.academic_year_id) for sid in student_ids))
 
         # Fetch every mark for the academic year once. percentage/is_pass are
         # Python properties on StudentMark, not queryable — pull the raw
@@ -125,8 +136,8 @@ class AcademicRiskService:
             at_risk_students.append({
                 'student_id': sid,
                 'student_name': student.name,
-                'roll_number': student.roll_number,
-                'class_name': student.class_obj.name if student.class_obj else '',
+                'roll_number': placement_roll(placements.get((sid, self.academic_year_id)), student),
+                'class_name': placement_label(placements.get((sid, self.academic_year_id)), student),
                 'current_average': current_average,
                 'severity': severity,
                 'trend': trend,

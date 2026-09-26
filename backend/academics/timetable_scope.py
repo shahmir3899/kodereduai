@@ -87,10 +87,10 @@ def split_shared_timetable(school_id, class_obj_id, academic_year_id):
 
 def student_timetable(student):
     """Effective timetable entries for a student's current placement."""
-    from academic_sessions.roster import current_placement
+    from academic_sessions.roster import current_placement, placement_class_id
 
     placement = current_placement(student)
-    class_obj_id = placement.class_obj_id if placement else student.class_obj_id
+    class_obj_id = placement_class_id(placement, student)
     queryset = TimetableEntry.objects.filter(class_obj_id=class_obj_id, school_id=student.school_id)
     if placement and placement.session_class_id:
         return section_timetable(queryset, placement.session_class_id)

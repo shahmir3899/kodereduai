@@ -41,11 +41,21 @@ class AttendanceRiskService:
         from attendance.models import AttendanceRecord
         from .models import AcademicYear
 
-        # 1. Get all active students in this school with their class info
+        # 1. Active students enrolled in this year, with their placement for
+        #    it. Every active student used to be analysed (including ones not
+        #    enrolled in the year), labelled by the Student snapshot, which is
+        #    the latest class rather than this year's.
+        from .roster import (
+            enrollments_in_scope, placement_class_id, placement_label, placement_roll, placements_for,
+        )
+
         students = Student.objects.filter(
             school_id=self.school_id,
             is_active=True,
         ).select_related('class_obj')
+        year_enrollments = enrollments_in_scope(self.school_id, academic_year_id=self.academic_year_id)
+        if year_enrollments is not None:
+            students = students.filter(id__in=year_enrollments.values('student_id'))
 
         total_students = students.count()
         if total_students == 0:
@@ -58,6 +68,10 @@ class AttendanceRiskService:
 
         student_ids = list(students.values_list('id', flat=True))
         student_map = {s.id: s for s in students}
+        placements = placements_for(self.school_id, ((sid, self.academic_year_id) for sid in student_ids))
+
+        def placement(sid):
+            return placements.get((sid, self.academic_year_id))
 
         today = date.today()
 
@@ -81,7 +95,7 @@ class AttendanceRiskService:
                 return True
             if rec_date in off_day_index['school']:
                 return True
-            return rec_date in off_day_index['classes'].get(student.class_obj_id, ())
+            return rec_date in off_day_index['classes'].get(placement_class_id(placement(student.id), student), ())
 
         def is_approved_leave(sid, rec_date):
             return rec_date in leave_index.get(sid, ())
@@ -179,8 +193,8 @@ class AttendanceRiskService:
             at_risk_students.append({
                 'student_id': sid,
                 'student_name': student.name,
-                'roll_number': student.roll_number,
-                'class_name': student.class_obj.name if student.class_obj else '',
+                'roll_number': placement_roll(placement(sid), student),
+                'class_name': placement_label(placement(sid), student),
                 'current_rate': current_rate,
                 'severity': severity,
                 'trend': trend,

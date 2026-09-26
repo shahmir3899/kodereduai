@@ -76,6 +76,12 @@ class FeeCollectionPredictorService:
         ):
             payments_by_student[row['student_id']].append(row)
 
+        # Current class labels from the enrollment (current year), in one query.
+        from academic_sessions.roster import placement_group, placements_for
+        from academic_sessions.utils import resolve_current_academic_year_id
+        year_id = self.academic_year_id or resolve_current_academic_year_id(self.school_id)
+        placements = placements_for(self.school_id, ((s.id, year_id) for s in students)) if year_id else {}
+
         predictions = []
 
         for student in students:
@@ -138,7 +144,7 @@ class FeeCollectionPredictorService:
                 predictions.append({
                     'student_id': student.id,
                     'student_name': student.name,
-                    'class_name': student.class_obj.name,
+                    'class_name': placement_group(placements.get((student.id, year_id)), student)[1],
                     'parent_phone': student.parent_phone or student.guardian_phone,
                     'default_probability': round(probability, 2),
                     'risk_level': risk_level,

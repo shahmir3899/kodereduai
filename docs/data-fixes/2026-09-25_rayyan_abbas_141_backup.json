@@ -1,0 +1,142 @@
+{
+  "student": [
+    {
+      "id": 141,
+      "name": "Rayyan Abbas",
+      "status": "WITHDRAWN",
+      "status_date": "2026-09-01",
+      "status_reason": "Student has left the school"
+    }
+  ],
+  "enrollment": [
+    {
+      "id": 947,
+      "school_id": 1,
+      "student_id": 141,
+      "academic_year_id": 33,
+      "session_class_id": 14,
+      "class_obj_id": 84,
+      "roll_number": "17",
+      "status": "WITHDRAWN",
+      "is_active": false,
+      "left_date": "2026-09-01",
+      "created_at": "2026-03-30T10:16:58.823241+00:00",
+      "updated_at": "2026-09-24T11:07:06.933261+00:00"
+    }
+  ],
+  "attendance_deleted": [
+    {
+      "id": 29234,
+      "school_id": 1,
+      "academic_year_id": 33,
+      "student_id": 141,
+      "date": "2026-09-17",
+      "status": "PRESENT",
+      "source": "MANUAL",
+      "upload_id": null,
+      "face_session_id": null,
+      "notification_sent": false,
+      "notification_sent_at": null,
+      "created_at": "2026-09-17T02:58:08.419508+00:00",
+      "updated_at": "2026-09-17T02:58:08.419520+00:00"
+    }
+  ],
+  "marks_deleted": [
+    {
+      "id": 1955,
+      "school_id": 1,
+      "exam_subject_id": 278,
+      "student_id": 141,
+      "enrollment_id": 947,
+      "marks_obtained": null,
+      "is_absent": true,
+      "remarks": "",
+      "ai_comment": "",
+      "ai_comment_generated_at": null,
+      "ai_comment_source": null,
+      "ai_model": null,
+      "created_at": "2026-09-24T03:50:19.854058+00:00",
+      "updated_at": "2026-09-24T08:34:24.224626+00:00"
+    },
+    {
+      "id": 1795,
+      "school_id": 1,
+      "exam_subject_id": 276,
+      "student_id": 141,
+      "enrollment_id": 947,
+      "marks_obtained": null,
+      "is_absent": true,
+      "remarks": "",
+      "ai_comment": "",
+      "ai_comment_generated_at": null,
+      "ai_comment_source": null,
+      "ai_model": null,
+      "created_at": "2026-09-24T03:21:35.256427+00:00",
+      "updated_at": "2026-09-24T06:53:39.534723+00:00"
+    },
+    {
+      "id": 1924,
+      "school_id": 1,
+      "exam_subject_id": 277,
+      "student_id": 141,
+      "enrollment_id": 947,
+      "marks_obtained": null,
+      "is_absent": false,
+      "remarks": "",
+      "ai_comment": "",
+      "ai_comment_generated_at": null,
+      "ai_comment_source": null,
+      "ai_model": null,
+      "created_at": "2026-09-24T03:46:14.797692+00:00",
+      "updated_at": "2026-09-24T03:46:53.202535+00:00"
+    },
+    {
+      "id": 1849,
+      "school_id": 1,
+      "exam_subject_id": 279,
+      "student_id": 141,
+      "enrollment_id": 947,
+      "marks_obtained": null,
+      "is_absent": false,
+      "remarks": "",
+      "ai_comment": "",
+      "ai_comment_generated_at": null,
+      "ai_comment_source": null,
+      "ai_model": null,
+      "created_at": "2026-09-24T03:37:40.321273+00:00",
+      "updated_at": "2026-09-24T03:39:24.333784+00:00"
+    },
+    {
+      "id": 1982,
+      "school_id": 1,
+      "exam_subject_id": 455,
+      "student_id": 141,
+      "enrollment_id": 947,
+      "marks_obtained": null,
+      "is_absent": false,
+      "remarks": "",
+      "ai_comment": "",
+      "ai_comment_generated_at": null,
+      "ai_comment_source": null,
+      "ai_model": null,
+      "created_at": "2026-09-24T03:57:53.695215+00:00",
+      "updated_at": "2026-09-24T03:58:27.253068+00:00"
+    },
+    {
+      "id": 1822,
+      "school_id": 1,
+      "exam_subject_id": 280,
+      "student_id": 141,
+      "enrollment_id": 947,
+      "marks_obtained": null,
+      "is_absent": false,
+      "remarks": "",
+      "ai_comment": "",
+      "ai_comment_generated_at": null,
+      "ai_comment_source": null,
+      "ai_model": null,
+      "created_at": "2026-09-24T03:30:02.284715+00:00",
+      "updated_at": "2026-09-24T03:30:50.695303+00:00"
+    }
+  ]
+}

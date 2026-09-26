@@ -785,7 +785,7 @@ class AssignmentCreateSerializer(serializers.ModelSerializer):
 class AssignmentSubmissionReadSerializer(serializers.ModelSerializer):
     """Read serializer with nested student details."""
     student_name = serializers.CharField(source='student.name', read_only=True)
-    student_roll = serializers.CharField(source='student.roll_number', read_only=True)
+    student_roll = serializers.SerializerMethodField()
     assignment_title = serializers.CharField(source='assignment.title', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     graded_by_name = serializers.SerializerMethodField()
@@ -808,6 +808,13 @@ class AssignmentSubmissionReadSerializer(serializers.ModelSerializer):
 
     def get_graded_by_name(self, obj):
         return obj.graded_by.full_name if obj.graded_by else None
+
+    def get_student_roll(self, obj):
+        from academic_sessions.roster import placement_roll, serializer_placement
+
+        return placement_roll(
+            serializer_placement(self, obj, lambda sub: sub.assignment.academic_year_id), obj.student,
+        )
 
 
 class AssignmentSubmissionCreateSerializer(serializers.ModelSerializer):
@@ -843,11 +850,25 @@ class AssignmentSubmissionCreateSerializer(serializers.ModelSerializer):
                 'assignment': 'This assignment is closed and no longer accepts submissions.',
             })
 
-        # Ensure the student belongs to the same class as the assignment
-        if assignment and student and student.class_obj_id != assignment.class_obj_id:
-            raise serializers.ValidationError({
-                'student': 'Student does not belong to the class this assignment is for.',
-            })
+        # Ensure the student is in the assignment's class (and section) for
+        # the assignment's year. The Student snapshot is the latest class, so
+        # right after promotion it blocked this year's submissions, and it
+        # never checked the section.
+        if assignment and student:
+            from academic_sessions.roster import placement_class_id, placement_for_year
+
+            placement = placement_for_year(student, assignment.academic_year_id)
+            if placement_class_id(placement, student) != assignment.class_obj_id:
+                raise serializers.ValidationError({
+                    'student': 'Student does not belong to the class this assignment is for.',
+                })
+            if (
+                assignment.session_class_id and placement is not None
+                and placement.session_class_id != assignment.session_class_id
+            ):
+                raise serializers.ValidationError({
+                    'student': 'Student does not belong to the section this assignment is for.',
+                })
 
         # Ensure the student belongs to the same school
         if assignment and student and student.school_id != assignment.school_id:

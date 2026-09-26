@@ -33,17 +33,33 @@ class AcademicsAnalytics:
         day_order = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT']
         day_map = {0: 'MON', 1: 'TUE', 2: 'WED', 3: 'THU', 4: 'FRI', 5: 'SAT'}
 
-        # Build class+day -> subject names from timetable.
-        class_day_subjects = defaultdict(set)
+        # (class, day) and (section, day) -> {slot: subjects}. A section follows
+        # its own entries plus the shared class entries at slots it hasn't
+        # overridden (same rule as timetable_scope.section_timetable).
+        shared_slots = defaultdict(lambda: defaultdict(set))
+        section_slots = defaultdict(lambda: defaultdict(set))
         timetable_rows = TimetableEntry.objects.filter(
             school_id=self.school_id, subject__isnull=False
-        ).values('class_obj_id', 'day', 'subject__name')
+        ).values('class_obj_id', 'session_class_id', 'day', 'slot_id', 'subject__name')
 
         for row in timetable_rows:
-            class_day_subjects[(row['class_obj_id'], row['day'])].add(row['subject__name'])
+            if row['session_class_id']:
+                section_slots[(row['session_class_id'], row['day'])][row['slot_id']].add(row['subject__name'])
+            else:
+                shared_slots[(row['class_obj_id'], row['day'])][row['slot_id']].add(row['subject__name'])
 
-        if not class_day_subjects:
+        if not shared_slots and not section_slots:
             return {'subjects': [], 'message': 'No timetable subject mapping found.'}
+
+        def subjects_for(class_id, section_id, day_code):
+            own = section_slots.get((section_id, day_code), {}) if section_id else {}
+            subjects = set()
+            for names in own.values():
+                subjects |= names
+            for slot_id, names in shared_slots.get((class_id, day_code), {}).items():
+                if slot_id not in own:
+                    subjects |= names
+            return subjects
 
         att_qs = AttendanceRecord.objects.filter(school_id=self.school_id)
         if date_from:
@@ -51,7 +67,13 @@ class AcademicsAnalytics:
         if date_to:
             att_qs = att_qs.filter(date__lte=date_to)
 
-        class_date_attendance = att_qs.values('student__class_obj_id', 'date').annotate(
+        # Grouped by the placement for each record's own year, not the Student
+        # snapshot (the latest class).
+        from academic_sessions.roster import annotate_record_placement
+
+        class_date_attendance = annotate_record_placement(att_qs).values(
+            'pl_class_id', 'pl_section_id', 'date',
+        ).annotate(
             total=Count('id'),
             present=Count('id', filter=Q(status='PRESENT')),
         )
@@ -66,8 +88,7 @@ class AcademicsAnalytics:
             if not day_code:
                 continue
 
-            class_id = record['student__class_obj_id']
-            subjects_for_day = class_day_subjects.get((class_id, day_code), set())
+            subjects_for_day = subjects_for(record['pl_class_id'], record['pl_section_id'], day_code)
             if not subjects_for_day:
                 continue
 
@@ -147,21 +168,34 @@ class AcademicsAnalytics:
         if date_to:
             att_qs = att_qs.filter(date__lte=date_to)
 
-        # Get class attendance rates (AttendanceRecord -> Student -> class_obj)
-        class_attendance = att_qs.values('student__class_obj_id').annotate(
+        # Attendance rates per class and per section, each record placed by
+        # its own year's enrollment (the Student snapshot is the latest class).
+        from academic_sessions.roster import annotate_record_placement
+
+        class_totals = defaultdict(lambda: [0, 0])
+        section_totals = defaultdict(lambda: [0, 0])
+        for row in annotate_record_placement(att_qs).values('pl_class_id', 'pl_section_id').annotate(
             total=Count('id'),
             present=Count('id', filter=Q(status='PRESENT')),
-        )
-        class_rate_map = {}
-        for ca in class_attendance:
-            if ca['total'] > 0:
-                class_rate_map[ca['student__class_obj_id']] = round(ca['present'] / ca['total'] * 100, 1)
+        ):
+            for totals, key in ((class_totals, row['pl_class_id']), (section_totals, row['pl_section_id'])):
+                if key:
+                    totals[key][0] += row['present']
+                    totals[key][1] += row['total']
 
+        def _rates(totals):
+            return {k: round(p / t * 100, 1) for k, (p, t) in totals.items() if t > 0}
+
+        class_rate_map = _rates(class_totals)
+        section_rate_map = _rates(section_totals)
+
+        # A teacher's shared (whole-class) entries count at the class rate;
+        # entries on one section's own timetable count at that section's rate.
         teacher_class_map = defaultdict(set)
-        for entry in TimetableEntry.objects.filter(
+        for tid, class_id, section_id in TimetableEntry.objects.filter(
             school_id=self.school_id, teacher__isnull=False
-        ).values_list('teacher_id', 'class_obj_id').distinct():
-            teacher_class_map[entry[0]].add(entry[1])
+        ).values_list('teacher_id', 'class_obj_id', 'session_class_id').distinct():
+            teacher_class_map[tid].add(('section', section_id) if section_id else ('class', class_id))
 
         # Get appraisal ratings
         ratings = PerformanceAppraisal.objects.filter(
@@ -175,8 +209,12 @@ class AcademicsAnalytics:
             teacher_name = f"{te['teacher__first_name']} {te['teacher__last_name']}"
 
             # Compute avg attendance across classes this teacher teaches
-            class_ids = teacher_class_map.get(tid, set())
-            class_rates = [class_rate_map[cid] for cid in class_ids if cid in class_rate_map]
+            units = teacher_class_map.get(tid, set())
+            class_rates = [
+                (section_rate_map if kind == 'section' else class_rate_map)[uid]
+                for kind, uid in units
+                if uid in (section_rate_map if kind == 'section' else class_rate_map)
+            ]
             avg_attendance = round(sum(class_rates) / len(class_rates), 1) if class_rates else None
 
             avg_rating = rating_map.get(tid)
@@ -474,21 +512,32 @@ class AcademicsAnalytics:
         end_date = date.today()
         start_date = date(end_date.year, end_date.month, 1) - timedelta(days=30 * (months - 1))
 
-        records = AttendanceRecord.objects.filter(
+        # Per section (or class) of each record's own year, not the Student
+        # snapshot, which put last year's records under the promoted class.
+        from academic_sessions.roster import annotate_record_placement, placement_group_labels
+
+        records = list(annotate_record_placement(AttendanceRecord.objects.filter(
             school_id=self.school_id,
             date__gte=start_date,
             date__lte=end_date,
-        ).values(
-            'student__class_obj_id', 'student__class_obj__name', 'date__year', 'date__month'
+        )).values(
+            'pl_class_id', 'pl_section_id', 'date__year', 'date__month'
         ).annotate(
             total=Count('id'),
             present=Count('id', filter=Q(status='PRESENT')),
-        ).order_by('date__year', 'date__month')
+        ).order_by('date__year', 'date__month'))
+        class_names, section_labels = placement_group_labels(
+            [r['pl_class_id'] for r in records], [r['pl_section_id'] for r in records],
+        )
 
         month_data = defaultdict(lambda: defaultdict(dict))
         for r in records:
             month_key = f"{r['date__year']}-{r['date__month']:02d}"
-            class_name = r['student__class_obj__name']
+            class_name = (
+                section_labels.get(r['pl_section_id'])
+                or class_names.get(r['pl_class_id'])
+                or 'Unknown'
+            )
             rate = round(r['present'] / r['total'] * 100, 1) if r['total'] > 0 else 0
             month_data[month_key][class_name] = rate
 

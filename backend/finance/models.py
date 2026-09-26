@@ -403,18 +403,23 @@ class FeeStructure(models.Model):
         return f"{target} - {self.monthly_amount} ({type_label})"
 
 
-def resolve_fee_amount(student, fee_type='MONTHLY', annual_category_id=None, monthly_category_id=None):
+def resolve_fee_amount(student, fee_type='MONTHLY', annual_category_id=None, monthly_category_id=None,
+                       academic_year_id=None):
     """
     Resolve the fee for a student by fee_type (and optionally annual_category or monthly_category).
     Priority: student-level FeeStructure > class-level FeeStructure.
     Returns Decimal amount or None if no fee structure found.
+
+    The class is the student's class in `academic_year_id` (default: current
+    year) from their enrollment. Pricing by the Student.class_obj snapshot
+    charged a promoted student's past-year fee at their new class's price.
     """
     from datetime import date
+    from academic_sessions.roster import class_id_for_year
     today = date.today()
 
-    # Use _id fields to avoid triggering FK lookups (N+1 queries)
     school_id = student.school_id
-    class_obj_id = student.class_obj_id
+    class_obj_id = class_id_for_year(student, academic_year_id)
 
     extra_filters = {}
     if fee_type == 'ANNUAL' and annual_category_id:

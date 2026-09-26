@@ -659,6 +659,22 @@ class StudentComprehensiveReportGenerator(BaseReportGenerator):
         # 512MB web dyno into an OOM kill.
         academic_year_obj = self._resolve_academic_year(date_from, academic_year_id)
 
+        # Placement for the report's year (class, section, roll). Without an
+        # explicit year the map above is empty, so fall back to the year the
+        # report resolves to rather than the Student snapshot (latest class).
+        from academic_sessions.roster import placement_class_id, placements_for
+
+        placement = enrollment_map.get(student.id)
+        if placement is None and academic_year_obj:
+            placement = placements_for(self.school.id, [(student.id, academic_year_obj.id)]).get(
+                (student.id, academic_year_obj.id)
+            )
+            if placement is not None:
+                enrollment_map = {student.id: placement}
+                class_name = self._resolve_class_name(student, enrollment_map)
+                roll_number = self._resolve_roll_number(student, enrollment_map)
+        placement_class = placement_class_id(placement, student)
+
         # --- Attendance ---
         from attendance.models import AttendanceRecord
         att_qs = AttendanceRecord.objects.filter(student=student)
@@ -688,7 +704,7 @@ class StudentComprehensiveReportGenerator(BaseReportGenerator):
             (code, status_display.get(code, code.title()))
             for code in sorted(status_counts)
         ]
-        holiday_dates = self._resolve_holiday_dates(attendance_months, student.class_obj_id)
+        holiday_dates = self._resolve_holiday_dates(attendance_months, placement_class)
 
         # --- Fees: always a fixed 12-month view of the academic year, independent of
         # the report's date_from/date_to — a partial-period chart isn't useful for
@@ -770,8 +786,13 @@ class StudentComprehensiveReportGenerator(BaseReportGenerator):
         lessons_by_subject = OrderedDict()
         try:
             from lms.models import LessonPlan
+            # Whole-class plans plus the student's own section, never a sibling's.
+            section_q = Q(session_class__isnull=True)
+            if placement is not None and placement.session_class_id:
+                section_q |= Q(session_class_id=placement.session_class_id)
             lessons = LessonPlan.objects.filter(
-                class_obj_id=student.class_obj_id,
+                section_q,
+                class_obj_id=placement_class,
                 status=LessonPlan.Status.PUBLISHED,
             ).select_related('subject')
             if date_from and date_to:

@@ -122,6 +122,9 @@ class NotificationOptimizerService:
         Use LLM to personalize a template message for a specific student.
         Falls back to simple placeholder replacement.
         """
+        from academic_sessions.roster import current_placement, placement_label
+
+        class_name = placement_label(current_placement(student), student)
         try:
             from django.conf import settings
             if not settings.GROQ_API_KEY:
@@ -134,7 +137,7 @@ class NotificationOptimizerService:
 
 Template: {template_body}
 Student Name: {student.name}
-Class: {student.class_obj.name}
+Class: {class_name}
 Context: {context}
 
 Return ONLY the personalized message text, nothing else."""
@@ -151,7 +154,7 @@ Return ONLY the personalized message text, nothing else."""
             # Fallback: simple replacement
             result = template_body
             result = result.replace('{{student_name}}', student.name)
-            result = result.replace('{{class_name}}', student.class_obj.name)
+            result = result.replace('{{class_name}}', class_name)
             for key, value in context.items():
                 result = result.replace('{{' + key + '}}', str(value))
             return result

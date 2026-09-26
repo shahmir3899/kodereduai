@@ -131,12 +131,8 @@ class TransportVehicleCreateSerializer(serializers.ModelSerializer):
 class TransportAssignmentReadSerializer(serializers.ModelSerializer):
     """Read serializer with nested student, route, stop, and vehicle names."""
     student_name = serializers.CharField(source='student.name', read_only=True)
-    student_roll_number = serializers.CharField(
-        source='student.roll_number', read_only=True
-    )
-    student_class_name = serializers.CharField(
-        source='student.class_obj.name', read_only=True, default=None
-    )
+    student_roll_number = serializers.SerializerMethodField()
+    student_class_name = serializers.SerializerMethodField()
     route_name = serializers.CharField(source='route.name', read_only=True)
     stop_name = serializers.CharField(source='stop.name', read_only=True)
     stop_pickup_time = serializers.TimeField(source='stop.pickup_time', read_only=True, default=None)
@@ -165,6 +161,16 @@ class TransportAssignmentReadSerializer(serializers.ModelSerializer):
             'created_at',
         ]
         read_only_fields = ['id', 'created_at']
+
+    def get_student_roll_number(self, obj):
+        from academic_sessions.roster import placement_roll, serializer_placement
+
+        return placement_roll(serializer_placement(self, obj, lambda a: a.academic_year_id), obj.student)
+
+    def get_student_class_name(self, obj):
+        from academic_sessions.roster import placement_label, serializer_placement
+
+        return placement_label(serializer_placement(self, obj, lambda a: a.academic_year_id), obj.student) or None
 
 
 class TransportAssignmentCreateSerializer(serializers.ModelSerializer):
@@ -205,12 +211,8 @@ class TransportAssignmentCreateSerializer(serializers.ModelSerializer):
 class TransportAttendanceReadSerializer(serializers.ModelSerializer):
     """Read serializer with nested student and route details."""
     student_name = serializers.CharField(source='student.name', read_only=True)
-    student_roll_number = serializers.CharField(
-        source='student.roll_number', read_only=True
-    )
-    student_class_name = serializers.CharField(
-        source='student.class_obj.name', read_only=True, default=None
-    )
+    student_roll_number = serializers.SerializerMethodField()
+    student_class_name = serializers.SerializerMethodField()
     route_name = serializers.CharField(source='route.name', read_only=True)
     boarding_status_display = serializers.CharField(
         source='get_boarding_status_display', read_only=True
@@ -230,6 +232,17 @@ class TransportAttendanceReadSerializer(serializers.ModelSerializer):
             'created_at',
         ]
         read_only_fields = ['id', 'created_at']
+
+    # No year on attendance rows: the current year's placement.
+    def get_student_roll_number(self, obj):
+        from academic_sessions.roster import placement_roll, serializer_placement
+
+        return placement_roll(serializer_placement(self, obj), obj.student)
+
+    def get_student_class_name(self, obj):
+        from academic_sessions.roster import placement_label, serializer_placement
+
+        return placement_label(serializer_placement(self, obj), obj.student) or None
 
 
 class TransportAttendanceCreateSerializer(serializers.ModelSerializer):

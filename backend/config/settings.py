@@ -416,6 +416,12 @@ CELERY_BEAT_SCHEDULE = {
         'task': 'academic_sessions.tasks.recompute_student_risk_snapshots',
         'schedule': crontab(hour=2, minute=30),
     },
+    'nightly-enrollment-drift-check': {
+        # Class/section/roll records that disagree -> log + one admin alert.
+        # After the risk snapshots, before the 3am weekly cleanups.
+        'task': 'academic_sessions.tasks.check_enrollment_drift',
+        'schedule': crontab(hour=2, minute=50),
+    },
     'cleanup-old-face-sessions': {
         # Existed since Phase 2 but was never scheduled (flagged in the
         # original investigation and design doc §8) — fixing that omission

@@ -68,8 +68,10 @@ class ClassViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet
         return ClassSerializer
 
     def get_queryset(self):
+        from academic_sessions.roster import class_student_count_expr
+
         queryset = Class.objects.select_related('school').annotate(
-            annotated_student_count=Count('students', filter=Q(students__is_active=True))
+            annotated_student_count=class_student_count_expr()
         )
 
         active_school_id = ensure_tenant_school_id(self.request)
@@ -224,7 +226,23 @@ class StudentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
                 )
             queryset = queryset.filter(roster_filter).distinct()
         elif class_id:
-            queryset = queryset.filter(class_obj_id=class_id)
+            # The class in the requested (or current) year, through one
+            # enrollment subquery. Filtering the Student snapshot class and,
+            # separately, "enrolled in the year" matched each condition on a
+            # different row: last year's list for a class showed whoever is
+            # in that class now.
+            from academic_sessions.roster import enrollments_in_scope
+
+            class_enrollments = enrollments_in_scope(
+                active_school_id or school_id,
+                academic_year_id=self.request.query_params.get('academic_year') or None,
+                class_obj_id=class_id,
+                include_inactive=True,
+            ) if (active_school_id or school_id) else None
+            if class_enrollments is None:
+                queryset = queryset.filter(class_obj_id=class_id)
+            else:
+                queryset = queryset.filter(id__in=class_enrollments.values('student_id'))
 
         academic_year = self.request.query_params.get('academic_year')
         enrollment_active_filter = True
@@ -243,10 +261,21 @@ class StudentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
 
         search = self.request.query_params.get('search')
         if search:
-            queryset = queryset.filter(
-                db_models.Q(name__icontains=search) |
-                db_models.Q(roll_number__icontains=search)
+            search_q = db_models.Q(name__icontains=search) | db_models.Q(roll_number__icontains=search)
+            # Roll numbers live on the enrollment per year; the Student snapshot
+            # holds only the latest one.
+            from academic_sessions.utils import resolve_current_academic_year_id
+
+            search_school = active_school_id or school_id
+            search_year = academic_year or (
+                resolve_current_academic_year_id(search_school) if search_school else None
             )
+            if search_year:
+                from academic_sessions.models import StudentEnrollment
+                search_q |= db_models.Q(id__in=StudentEnrollment.objects.filter(
+                    academic_year_id=search_year, roll_number__icontains=search,
+                ).values('student_id'))
+            queryset = queryset.filter(search_q)
 
         if academic_year:
             # Only exclude non-enrolled students on the list action — a single-student
@@ -268,7 +297,7 @@ class StudentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
             enr_qs = StudentEnrollment.objects.filter(
                 student_id=OuterRef('pk'),
                 academic_year_id=academic_year,
-            )
+            ).order_by('-is_active', '-updated_at', '-id')
             queryset = queryset.annotate(
                 _enrollment_roll_number=Subquery(enr_qs.values('roll_number')[:1]),
                 _enrollment_class_obj_id=Subquery(enr_qs.values('class_obj_id')[:1]),
@@ -323,12 +352,37 @@ class StudentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
                 },
             )
 
+    def update(self, request, *args, **kwargs):
+        # Same as UpdateModelMixin.update, except a leaving date that would
+        # strand attendance/marks answers with the full conflict summary (counts,
+        # dates, exams, suggested date) for the Update Status dialog, instead of
+        # DRF's flattened field errors.
+        partial = kwargs.pop('partial', False)
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        if not serializer.is_valid():
+            conflict = getattr(serializer, 'leaving_conflict', None)
+            if conflict is not None:
+                return Response(conflict, status=status.HTTP_400_BAD_REQUEST)
+            serializer.is_valid(raise_exception=True)
+        self.perform_update(serializer)
+        if getattr(instance, '_prefetched_objects_cache', None):
+            instance._prefetched_objects_cache = {}
+        return Response(serializer.data)
+
     def perform_update(self, serializer):
+        # Only move the enrollment when the request actually changed class or
+        # roll: a partial update (say a phone number) used to push the Student
+        # snapshot -- next year's class right after promotion -- into this
+        # year's enrollment.
+        sent = set(serializer.validated_data)
         student = serializer.save()
 
         # Sync enrollment for the current academic year
         from academic_sessions.models import AcademicYear, StudentEnrollment
-        from academic_sessions.enrollment_service import move_student, resolve_session_class
+        from academic_sessions.enrollment_service import (
+            move_student, resolve_session_class, sync_student_snapshot,
+        )
         current_year = AcademicYear.objects.filter(
             school_id=student.school_id, is_current=True,
         ).first()
@@ -339,12 +393,13 @@ class StudentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
                 academic_year=current_year,
             ).first()
             if enrollment:
-                move_student(
-                    enrollment,
-                    class_obj=student.class_obj,
-                    roll_number=student.roll_number,
-                    sync_student=False,
-                )
+                if sent & {'class_obj', 'roll_number'}:
+                    move_student(
+                        enrollment,
+                        class_obj=student.class_obj if 'class_obj' in sent else None,
+                        roll_number=student.roll_number if 'roll_number' in sent else None,
+                        sync_student=False,
+                    )
             else:
                 StudentEnrollment.objects.create(
                     school_id=student.school_id,
@@ -359,6 +414,10 @@ class StudentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
                     roll_number=student.roll_number,
                     status='ACTIVE',
                 )
+
+        # The form wrote the current year's class/roll onto the snapshot; it
+        # means the latest placement, which may be next year's enrollment.
+        sync_student_snapshot(student)
 
     @action(detail=True, methods=['post'], url_path='reclassify')
     def reclassify(self, request, pk=None):
@@ -683,11 +742,17 @@ class StudentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
             )
         ).order_by('grade_level', 'name')
 
+        # Group by this year's enrollment; the Student snapshot is the latest
+        # placement, which after promotion is next year's class.
+        from academic_sessions.roster import current_students_by_class
+
+        by_enrollment = current_students_by_class(school_id)
         result = []
         for cls in classes:
+            members = by_enrollment.get(cls.id, []) if by_enrollment is not None else cls.students.all()
             result.append({
                 'class': ClassSerializer(cls).data,
-                'students': StudentSerializer(cls.students.all(), many=True).data
+                'students': StudentSerializer(members, many=True).data
             })
 
         return Response(result)
