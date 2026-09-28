@@ -29,13 +29,23 @@ class AcademicRiskService:
         self.school_id = school_id
         self.academic_year_id = academic_year_id
 
-    def get_at_risk_students(self, threshold: float = 40.0) -> dict:
+    def get_at_risk_students(self, threshold: float = None) -> dict:
         """
         Analyze all active students and return those who are at risk or
         predicted to be at risk of falling below the passing threshold.
+
+        threshold defaults to this school's own configured policy
+        (School.get_academic_risk_pass_threshold) rather than a hardcoded 40 --
+        a caller that omits it must still get the school's real threshold,
+        not a number that only matches by coincidence.
         """
         from students.models import Student
+        from schools.models import School
         from .models import StudentMark
+
+        if threshold is None:
+            school = School.objects.only('id', 'academic_risk_config').get(id=self.school_id)
+            threshold = school.get_academic_risk_pass_threshold()
 
         # Active students enrolled in this year, labelled with that year's
         # placement. Every active student used to be analysed, labelled by the

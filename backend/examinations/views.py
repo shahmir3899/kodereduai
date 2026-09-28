@@ -5614,14 +5614,10 @@ class AcademicRiskView(APIView):
             academic_year_id = current.id
 
         explicit_threshold = request.query_params.get('threshold')
-        if explicit_threshold is None:
-            from schools.models import School
-            school = School.objects.filter(id=school_id).only('id', 'academic_risk_config').first()
-            threshold = float((school.academic_risk_config or {}).get('risk_pass_threshold', 40.0)) if school else 40.0
-        else:
-            threshold = float(explicit_threshold)
-
         service = AcademicRiskService(school_id, int(academic_year_id))
-        result = service.get_at_risk_students(threshold=threshold)
+        if explicit_threshold is None:
+            result = service.get_at_risk_students()
+        else:
+            result = service.get_at_risk_students(threshold=float(explicit_threshold))
 
         return Response(result)

@@ -290,6 +290,15 @@ class School(models.Model):
         """
         return float((self.attendance_config or {}).get('risk_threshold', 75.0))
 
+    def get_academic_risk_pass_threshold(self) -> float:
+        """The average marks below which a student counts as academically at-risk.
+
+        Single source of truth for this school's policy -- read this instead
+        of re-deriving it from academic_risk_config, so the Academic Risk
+        report and the composite Student Risk Score can't silently disagree.
+        """
+        return float((self.academic_risk_config or {}).get('risk_pass_threshold', 40.0))
+
     def has_capability(self, module_key: str, capability_key: str) -> bool:
         """Check if a specific capability is unlocked for this school."""
         if not self.get_enabled_module(module_key):

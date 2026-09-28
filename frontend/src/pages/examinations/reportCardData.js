@@ -27,13 +27,21 @@ export function formatIssueDate(iso) {
  * Keeping this in one place is what guarantees the formats never drift apart
  * on which fields they show.
  */
-export async function buildReportData({ report, schoolData }) {
+export async function buildReportData({ report, schoolData, logoCache }) {
   let logo = null
   if (schoolData?.logo) {
-    try {
-      logo = await loadImage(schoolData.logo)
-    } catch {
-      // Logo failed to load (missing file, CORS, etc.) - render without it.
+    if (logoCache && logoCache.url === schoolData.logo) {
+      logo = logoCache.image
+    } else {
+      try {
+        logo = await loadImage(schoolData.logo)
+      } catch {
+        // Logo failed to load (missing file, CORS, etc.) - render without it.
+      }
+      if (logoCache) {
+        logoCache.url = schoolData.logo
+        logoCache.image = logo
+      }
     }
   }
 

@@ -9,7 +9,7 @@ import BulkReportCardModal from './BulkReportCardModal'
 import MarksTable from './ReportCardMarksTable'
 import { ExamPicker, StudentPicker } from './ReportCardFilters'
 import { MONTH_NAMES } from './reportCardTemplates/stars'
-import { exportReportCardPDF } from './reportCardExport'
+import { exportReportCardPDF, exportBulkReportCardsZIP } from './reportCardExport'
 import ClassSelector from '../../components/ClassSelector'
 import { useSessionClasses } from '../../hooks/useSessionClasses'
 import useTeacherScopedClasses from '../../hooks/useTeacherScopedClasses'
@@ -73,6 +73,9 @@ export default function ReportCardPage() {
   // Exams on the card, oldest first as the picker lists them; the newest is the main exam.
   const [examIds, setExamIds] = useState([])
   const [downloading, setDownloading] = useState(false)
+  const [bulkProgress, setBulkProgress] = useState(null) // {done, total} while running
+  const [bulkResult, setBulkResult] = useState(null) // {generated, skipped} briefly after finishing
+  const [showBulkSkips, setShowBulkSkips] = useState(false)
   const [pdfFormat, setPdfFormat] = useState(() => {
     try {
       return localStorage.getItem('reportCardFormat') || 'enhanced'
@@ -230,6 +233,31 @@ export default function ReportCardPage() {
     }
   }
 
+  const handleBulkDownload = async () => {
+    if (!students.length || !examIds.length) return
+    setBulkResult(null)
+    setShowBulkSkips(false)
+    setBulkProgress({ done: 0, total: students.length })
+    try {
+      const result = await exportBulkReportCardsZIP({
+        students: students.map(e => ({ studentId: e.student, name: e.student_name, roll: e.roll_number })),
+        yearId,
+        examIds,
+        schoolData,
+        format: pdfFormat,
+        className: report?.class_name || students[0]?.class_name,
+        onProgress: (done, total) => setBulkProgress({ done, total }),
+      })
+      setBulkResult(result)
+    } catch (err) {
+      console.error('Bulk PDF export failed:', err)
+      setBulkResult({ generated: 0, skipped: [], error: true })
+    } finally {
+      setBulkProgress(null)
+      setTimeout(() => setBulkResult(null), 6000)
+    }
+  }
+
   return (
     <div>
       <div className="mb-6">
@@ -237,14 +265,69 @@ export default function ReportCardPage() {
         <p className="text-sm text-gray-600">View individual student report cards</p>
       </div>
 
-      {canEdit && classId && yearId && students.length > 0 && (
-        <div className="flex justify-end mb-2">
+      {classId && yearId && students.length > 0 && (
+        <div className="flex justify-end items-center gap-2 mb-2 flex-wrap">
+          {bulkResult && (
+            <div className="text-xs text-gray-600">
+              {bulkResult.error ? (
+                <span className="text-red-600">Could not generate the ZIP.</span>
+              ) : (
+                <>
+                  <span className={bulkResult.skipped.length ? 'text-amber-700' : 'text-green-700'}>
+                    {bulkResult.generated} / {students.length} ready
+                    {bulkResult.skipped.length > 0 && ` — ${bulkResult.skipped.length} skipped`}
+                  </span>
+                  {bulkResult.skipped.length > 0 && (
+                    <button
+                      onClick={() => setShowBulkSkips(v => !v)}
+                      className="ml-1.5 text-primary-600 hover:underline"
+                    >
+                      {showBulkSkips ? 'hide' : 'why?'}
+                    </button>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+          {showBulkSkips && bulkResult?.skipped?.length > 0 && (
+            <div className="w-full order-3 text-xs bg-amber-50 border border-amber-200 rounded-lg p-2 text-amber-800 space-y-0.5">
+              {bulkResult.skipped.map((s, i) => (
+                <p key={i}>{s.name}: {s.reason}</p>
+              ))}
+            </div>
+          )}
+          {bulkProgress && (
+            <div className="flex items-center gap-2 text-xs text-gray-600">
+              <span>Preparing {bulkProgress.done} / {bulkProgress.total} reports…</span>
+              <div className="w-24 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-primary-500 transition-all"
+                  style={{ width: `${(bulkProgress.done / bulkProgress.total) * 100}%` }}
+                />
+              </div>
+            </div>
+          )}
           <button
-            onClick={() => setShowBulk(true)}
-            className="px-3 py-1.5 rounded-lg text-sm border border-gray-300 text-gray-700 hover:bg-gray-50"
+            onClick={handleBulkDownload}
+            disabled={!!bulkProgress || examIds.length === 0}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+            title={examIds.length === 0 ? 'Select at least one exam first' : undefined}
           >
-            Class bulk edit ({students.length})
+            {bulkProgress ? <Spinner size="xs" /> : (
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+            )}
+            Download all ({students.length})
           </button>
+          {canEdit && (
+            <button
+              onClick={() => setShowBulk(true)}
+              className="px-3 py-1.5 rounded-lg text-sm border border-gray-300 text-gray-700 hover:bg-gray-50"
+            >
+              Class bulk edit ({students.length})
+            </button>
+          )}
         </div>
       )}
 
