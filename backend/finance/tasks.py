@@ -18,27 +18,6 @@ def _normalize_decimal(value):
     return value if value is not None else Decimal('0')
 
 
-def _recompute_payment_status(payment):
-    amount_due = _normalize_decimal(payment.amount_due)
-    amount_paid = _normalize_decimal(payment.amount_paid)
-
-    if amount_due == 0 and amount_paid == 0:
-        payment.status = payment.PaymentStatus.PAID
-    elif amount_due <= 0:
-        payment.status = payment.PaymentStatus.ADVANCE
-    elif amount_paid >= amount_due:
-        payment.status = payment.PaymentStatus.PAID
-    elif amount_paid > 0:
-        payment.status = payment.PaymentStatus.PARTIAL
-    else:
-        payment.status = payment.PaymentStatus.UNPAID
-
-    if payment.status == payment.PaymentStatus.UNPAID:
-        payment.payment_date = None
-        payment.account = None
-        payment.receipt_number = ''
-
-
 def _is_annual_conflict(existing_payment, expected_amount_due):
     return _normalize_decimal(existing_payment.amount_due) != _normalize_decimal(expected_amount_due)
 
@@ -225,7 +204,7 @@ def generate_monthly_fees_task(
                             existing_payment.base_monthly_fee = monthly_fee
                             existing_payment.amount_due = amount_due
                             existing_payment.updated_at = now_ts
-                            _recompute_payment_status(existing_payment)
+                            existing_payment.compute_status()
                             to_update.append(existing_payment)
                             updated_count += 1
                             continue
@@ -450,7 +429,7 @@ def generate_annual_fees_task(
                             # Keep category immutable on update; only refresh computed amounts/status.
                             existing_payment.amount_due = amount
                             existing_payment.updated_at = now_ts
-                            _recompute_payment_status(existing_payment)
+                            existing_payment.compute_status()
                             to_update.append(existing_payment)
                             updated_count += 1
                             continue

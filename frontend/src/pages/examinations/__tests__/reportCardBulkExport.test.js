@@ -59,6 +59,31 @@ describe('exportBulkReportCardsZIP', () => {
     expect(global.URL.createObjectURL).toHaveBeenCalledTimes(1)
   })
 
+  it('has multiple report-card fetches in flight at once, not one after another', async () => {
+    const sixStudents = Array.from({ length: 6 }, (_, i) => ({
+      studentId: i + 1, name: `Student ${i + 1}`, roll: String(i + 1),
+    }))
+    let inFlight = 0
+    let maxInFlight = 0
+    mockGetReportCard.mockImplementation(() => {
+      inFlight += 1
+      maxInFlight = Math.max(maxInFlight, inFlight)
+      return new Promise((resolve) => {
+        setTimeout(() => {
+          inFlight -= 1
+          resolve({ data: { ...baseReport, student_name: 'Someone' } })
+        }, 10)
+      })
+    })
+
+    await exportBulkReportCardsZIP({
+      students: sixStudents, yearId: '1', examIds: ['1'], schoolData: null, className: 'Class 5-A',
+    })
+
+    // Sequential would never exceed 1; the default pool size is 4.
+    expect(maxInFlight).toBeGreaterThan(1)
+  })
+
   it('skips a student with no report data instead of failing the whole batch', async () => {
     mockGetReportCard.mockImplementation(({ student_id }) => Promise.resolve({
       data: student_id === 2 ? null : { ...baseReport, student_name: 'Someone' },

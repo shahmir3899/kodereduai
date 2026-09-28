@@ -218,11 +218,10 @@ class PromotionAdvisorService:
                 continue
 
             total_marks = float(mark.exam_subject.total_marks)
-            passing_marks = float(mark.exam_subject.passing_marks)
             obtained = float(mark.marks_obtained)
 
             pct = (obtained / total_marks * 100) if total_marks > 0 else 0.0
-            passed = obtained >= passing_marks
+            passed = mark.is_pass
             subject_name = mark.exam_subject.subject.name
 
             subject_scores.append({

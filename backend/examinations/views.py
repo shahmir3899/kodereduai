@@ -2005,7 +2005,7 @@ class ExamViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet)
                 else 0
             )
 
-            grade_label = self._get_grade(
+            grade_label = GradeScale.grade_for(
                 percentage,
                 grade_scales
             )
@@ -2140,13 +2140,6 @@ class ExamViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet)
                 'total_students': len(students),
                 'subject_stats': subject_stats,
             })
-
-    
-    def _get_grade(self, percentage, grade_scales):
-            for gs in grade_scales:
-                if float(gs.min_percentage) <= percentage <= float(gs.max_percentage):
-                    return gs.grade_label
-            return '-'
 
 
 class ExamSubjectViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet):
@@ -3264,11 +3257,7 @@ class ReportCardView(ModuleAccessMixin, APIView):
         grand_total_possible = Decimal(str(own_stats['possible'])) if own_stats else Decimal('0')
         overall_pct = own_stats['percentage'] if own_stats else 0
 
-        overall_grade = '-'
-        for gs in grade_scales:
-            if float(gs.min_percentage) <= overall_pct <= float(gs.max_percentage):
-                overall_grade = gs.grade_label
-                break
+        overall_grade = GradeScale.grade_for(overall_pct, grade_scales)
 
         # Subject rows come from the main exam; earlier exams only add their columns
         # (exam_data above). Pass/fail is the main exam's own criteria.
@@ -3289,11 +3278,7 @@ class ReportCardView(ModuleAccessMixin, APIView):
                     subj_absent = True
 
             subj_pct = self._subject_result_pct(student.id, subj_id, exams, es_by_exam, marks_by_key, weighted_calc) or 0
-            subj_grade = '-'
-            for gs in grade_scales:
-                if float(gs.min_percentage) <= subj_pct <= float(gs.max_percentage):
-                    subj_grade = gs.grade_label
-                    break
+            subj_grade = GradeScale.grade_for(subj_pct, grade_scales)
 
             # Class average: of the main exam's marks, or (weighted) of classmates' blended %.
             # A missing/absent mark isn't a zero - it would drag the average down.

@@ -376,8 +376,8 @@ class ReportCardCommentGenerator:
                 'obtained': float(m.marks_obtained),
                 'total': float(es.total_marks),
                 'pct': pct,
-                'grade': self._get_grade(pct, grade_scales),
-                'passed': m.marks_obtained >= es.passing_marks,
+                'grade': GradeScale.grade_for(pct, grade_scales),
+                'passed': m.is_pass,
             })
         overall_pct = obtained_sum / possible_sum * 100 if possible_sum else 0
         ranked = sorted(subjects, key=lambda s: s['pct'], reverse=True)
@@ -390,7 +390,7 @@ class ReportCardCommentGenerator:
             'subjects': {s['name']: s for s in subjects},
             'todo_marks': todo,
             'overall_pct': overall_pct,
-            'overall_grade': self._get_grade(overall_pct, grade_scales),
+            'overall_grade': GradeScale.grade_for(overall_pct, grade_scales),
             'strongest': strongest,
             'weakest': weakest,
             'rank': rank,
@@ -707,12 +707,6 @@ class ReportCardCommentGenerator:
             sid: {'pct': got / possible * 100, 'name': prev_exam.name}
             for sid, (got, possible) in totals.items() if possible > 0
         }
-
-    def _get_grade(self, percentage, grade_scales):
-        for gs in grade_scales:
-            if float(gs.min_percentage) <= percentage <= float(gs.max_percentage):
-                return gs.grade_label
-        return '-'
 
 
 ASSESSMENT_REMARK_PROMPT_TEMPLATE = """Write a remark for a student's monthly progress assessment.

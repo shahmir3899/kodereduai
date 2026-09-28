@@ -616,6 +616,33 @@ class FeePayment(models.Model):
         student_name = self.student.name if self.student else 'Deleted Student'
         return f"{prefix}{student_name} - {self.month}/{self.year}: {self.get_status_display()}"
 
+    def compute_status(self):
+        """Derive PAID/PARTIAL/UNPAID/ADVANCE from amount_due/amount_paid, clearing
+        payment metadata when the result is UNPAID.
+
+        Single source of truth for this rule -- save() calls it below, and the
+        bulk fee-generation task (finance.tasks) also calls it directly before
+        a bulk_update(), which bypasses save() entirely. Don't let that task
+        re-derive its own copy of this logic.
+        """
+        if self.amount_due == 0 and self.amount_paid == 0:
+            self.status = self.PaymentStatus.PAID
+        elif self.amount_due <= 0:
+            # Covered by advance from previous month
+            self.status = self.PaymentStatus.ADVANCE
+        elif self.amount_paid >= self.amount_due:
+            self.status = self.PaymentStatus.PAID
+        elif self.amount_paid > 0:
+            self.status = self.PaymentStatus.PARTIAL
+        else:
+            self.status = self.PaymentStatus.UNPAID
+
+        # Clear payment metadata when fee becomes UNPAID
+        if self.status == self.PaymentStatus.UNPAID:
+            self.payment_date = None
+            self.account = None
+            self.receipt_number = ''
+
     def save(self, *args, **kwargs):
         """Validate payment fields, check period locks, then auto-compute status."""
         # --- Safeguard 1: enforce payment_date + account when money received ---
@@ -646,23 +673,7 @@ class FeePayment(models.Model):
                     f"Reopen it before modifying fee records."
                 )
 
-        if self.amount_due == 0 and self.amount_paid == 0:
-            self.status = self.PaymentStatus.PAID
-        elif self.amount_due <= 0:
-            # Covered by advance from previous month
-            self.status = self.PaymentStatus.ADVANCE
-        elif self.amount_paid >= self.amount_due:
-            self.status = self.PaymentStatus.PAID
-        elif self.amount_paid > 0:
-            self.status = self.PaymentStatus.PARTIAL
-        else:
-            self.status = self.PaymentStatus.UNPAID
-
-        # Clear payment metadata when fee becomes UNPAID
-        if self.status == self.PaymentStatus.UNPAID:
-            self.payment_date = None
-            self.account = None
-            self.receipt_number = ''
+        self.compute_status()
 
         super().save(*args, **kwargs)
 

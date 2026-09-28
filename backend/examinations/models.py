@@ -382,6 +382,19 @@ class GradeScale(models.Model):
     def __str__(self):
         return f"{self.grade_label} ({self.min_percentage}%-{self.max_percentage}%)"
 
+    @staticmethod
+    def grade_for(percentage, grade_scales) -> str:
+        """Look up the letter grade for a percentage against a school's grade scales.
+
+        Single source of truth for this lookup -- report cards, subject stats,
+        and AI-generated comments all read this instead of copy-pasting the
+        min/max scan, so a future tie-break or ordering fix lands everywhere.
+        """
+        for gs in grade_scales:
+            if float(gs.min_percentage) <= percentage <= float(gs.max_percentage):
+                return gs.grade_label
+        return '-'
+
 
 # ===========================================
 # Question Paper Builder Models

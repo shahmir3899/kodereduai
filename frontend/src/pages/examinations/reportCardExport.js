@@ -15,6 +15,23 @@ function safeName(value, fallback) {
 }
 
 /**
+ * Runs `worker` over `items` with at most `limit` in flight at once - a fixed pool of
+ * runners that each pull the next index off a shared cursor. `cursor++` and the
+ * `Array.from` runner list are both synchronous, so two runners never grab the same
+ * index even though the workers themselves run concurrently.
+ */
+async function runWithConcurrency(items, limit, worker) {
+  let cursor = 0
+  const runners = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (cursor < items.length) {
+      const index = cursor++
+      await worker(items[index], index)
+    }
+  })
+  await Promise.all(runners)
+}
+
+/**
  * Builds a rendered report card doc for one student. Shared by the single-card
  * download and the bulk ZIP export so the two never drift apart.
  * @param {Object} params
@@ -47,11 +64,16 @@ export async function exportReportCardPDF({ report, schoolData, format = 'enhanc
   doc.save(`Report_Card_${safeName(report.student_name, 'Student')}.pdf`)
 }
 
+// A handful in flight at once is enough to hide network/render latency behind each
+// other without opening dozens of simultaneous requests against the API and
+// Supabase storage (which is what fetching 100+ photos at once would do).
+const BULK_EXPORT_CONCURRENCY = 4
+
 /**
  * Generates one report card PDF per student and downloads them together as a single
- * ZIP. Runs entirely client-side, sequentially (one student at a time), so it reuses
- * the exact same fetch -> render pipeline as the single-card download and doesn't
- * flood the API/Supabase storage with parallel requests for marks and photos.
+ * ZIP. Runs entirely client-side, reusing the exact same fetch -> render pipeline as
+ * the single-card download, with up to `concurrency` students in flight at once so
+ * one student's slow photo fetch doesn't stall everyone behind it.
  *
  * @param {Object} params
  * @param {Array<{studentId: number|string, name: string, roll: string}>} params.students
@@ -60,19 +82,21 @@ export async function exportReportCardPDF({ report, schoolData, format = 'enhanc
  * @param {Object} params.schoolData
  * @param {'enhanced'|'traditional'} [params.format]
  * @param {string} [params.className] - Used in the ZIP filename only.
+ * @param {number} [params.concurrency]
  * @param {(done: number, total: number) => void} [params.onProgress]
  * @returns {Promise<{generated: number, skipped: Array<{name: string, reason: string}>}>}
  */
 export async function exportBulkReportCardsZIP({
-  students, yearId, examIds, schoolData, format = 'enhanced', className, onProgress,
+  students, yearId, examIds, schoolData, format = 'enhanced', className,
+  concurrency = BULK_EXPORT_CONCURRENCY, onProgress,
 }) {
   const zip = new JSZip()
   const logoCache = {}
   const skipped = []
   let generated = 0
+  let done = 0
 
-  for (let i = 0; i < students.length; i++) {
-    const student = students[i]
+  await runWithConcurrency(students, concurrency, async (student, i) => {
     try {
       const res = await examinationsApi.getReportCard({
         student_id: student.studentId,
@@ -95,8 +119,9 @@ export async function exportBulkReportCardsZIP({
         reason: err.response?.data?.detail || 'Could not generate this report card',
       })
     }
-    onProgress?.(i + 1, students.length)
-  }
+    done += 1
+    onProgress?.(done, students.length)
+  })
 
   if (generated > 0) {
     const zipBlob = await zip.generateAsync({ type: 'blob' })

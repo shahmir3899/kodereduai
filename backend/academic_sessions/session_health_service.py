@@ -251,7 +251,7 @@ class SessionHealthService:
         for m in marks.select_related('exam_subject').iterator():
             pct = float(m.marks_obtained / m.exam_subject.total_marks * 100)
             score_sum += pct
-            if m.marks_obtained >= m.exam_subject.passing_marks:
+            if m.is_pass:
                 pass_count += 1
 
         average_pass_rate = round((pass_count / total_marks_count * 100), 1)

@@ -30,17 +30,21 @@ export function formatIssueDate(iso) {
 export async function buildReportData({ report, schoolData, logoCache }) {
   let logo = null
   if (schoolData?.logo) {
-    if (logoCache && logoCache.url === schoolData.logo) {
-      logo = logoCache.image
+    if (logoCache) {
+      // Setting logoCache.promise happens synchronously (before any await below), so
+      // concurrent callers sharing the same logoCache - as the bulk ZIP export does -
+      // all see the first call's in-flight promise instead of each starting their own
+      // fetch of the same logo image.
+      if (logoCache.url !== schoolData.logo) {
+        logoCache.url = schoolData.logo
+        logoCache.promise = loadImage(schoolData.logo).catch(() => null)
+      }
+      logo = await logoCache.promise
     } else {
       try {
         logo = await loadImage(schoolData.logo)
       } catch {
         // Logo failed to load (missing file, CORS, etc.) - render without it.
-      }
-      if (logoCache) {
-        logoCache.url = schoolData.logo
-        logoCache.image = logo
       }
     }
   }
