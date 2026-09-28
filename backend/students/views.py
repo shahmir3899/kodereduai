@@ -309,6 +309,7 @@ class StudentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
                 ),
                 _enrollment_class_grade=Subquery(enr_qs.values('class_obj__grade_level')[:1]),
                 _enrollment_status=Subquery(enr_qs.values('status')[:1]),
+                _enrollment_left_date=Subquery(enr_qs.values('left_date')[:1]),
             )
             if self.action == 'list':
                 return queryset.order_by(

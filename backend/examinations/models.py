@@ -164,6 +164,13 @@ class Exam(models.Model):
     # different effect (see notifications.triggers.trigger_exam_schedule_published
     # vs trigger_exam_result_published).
     schedule_published_at = models.DateTimeField(null=True, blank=True)
+    # Overall pass/fail policy for this exam: a student who fails this many
+    # subjects (or more) fails overall, regardless of percentage/grade.
+    # Default of 3 reproduces the rule this replaced (3+ failed subjects = fail).
+    fail_threshold_subjects = models.PositiveSmallIntegerField(
+        default=3,
+        help_text='Fail overall if this many subjects (or more) are failed.',
+    )
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

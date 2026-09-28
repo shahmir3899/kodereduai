@@ -32,14 +32,24 @@ class AttendanceRiskService:
         self.school_id = school_id
         self.academic_year_id = academic_year_id
 
-    def get_at_risk_students(self, threshold: float = 75.0) -> dict:
+    def get_at_risk_students(self, threshold: float = None) -> dict:
         """
         Analyze all active students and return those who are at risk or
         predicted to be at risk of falling below the attendance threshold.
+
+        threshold defaults to this school's own configured policy
+        (School.get_attendance_risk_threshold) rather than a hardcoded 75 --
+        a caller that omits it must still get the school's real threshold,
+        not a number that only matches by coincidence.
         """
         from students.models import Student
         from attendance.models import AttendanceRecord
+        from schools.models import School
         from .models import AcademicYear
+
+        if threshold is None:
+            school = School.objects.only('id', 'attendance_config').get(id=self.school_id)
+            threshold = school.get_attendance_risk_threshold()
 
         # 1. Active students enrolled in this year, with their placement for
         #    it. Every active student used to be analysed (including ones not

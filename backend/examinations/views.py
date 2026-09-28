@@ -57,19 +57,19 @@ from .term_periods import attendance_summaries, report_attendance_window as _rep
 
 logger = logging.getLogger(__name__)
 
-def calculate_overall_pass(subject_results, max_failed_subjects=2):
+def calculate_overall_pass(subject_results, fail_threshold=3):
     """
     Determines overall exam pass/fail from subject-level results.
 
-    A student passes when the number of failed subjects
-    is equal to or below max_failed_subjects.
+    A student fails overall once their failed-subject count reaches
+    fail_threshold (an exam's own Exam.fail_threshold_subjects).
     """
     failed_subjects = sum(
         1 for subject in subject_results
         if not subject['is_pass']
     )
 
-    return failed_subjects <= max_failed_subjects
+    return failed_subjects < fail_threshold
 
 def _resolve_school_id(request):
     school_id = ensure_tenant_school_id(request)
@@ -952,6 +952,7 @@ class ExamGroupViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVie
 
         default_total = data.get('default_total_marks', 100)
         default_passing = data.get('default_passing_marks', 33)
+        fail_threshold_subjects = data.get('fail_threshold_subjects', 3)
 
         try:
             with transaction.atomic():
@@ -980,6 +981,7 @@ class ExamGroupViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVie
                         start_date=data.get('start_date'),
                         end_date=data.get('end_date'),
                         status=Exam.Status.SCHEDULED,
+                        fail_threshold_subjects=fail_threshold_subjects,
                     )
                     created_exams.append((target['key'], exam))
 
@@ -1987,7 +1989,7 @@ class ExamViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet)
                     # possible total, even if absent.
                     total_possible += es.total_marks
 
-            overall_is_pass = calculate_overall_pass(marks_list)
+            overall_is_pass = calculate_overall_pass(marks_list, exam.fail_threshold_subjects)
 
             failed_subjects = sum(
                 1 for subject in marks_list
@@ -2007,21 +2009,6 @@ class ExamViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet)
                 percentage,
                 grade_scales
             )
-
-            # -------------------------------------------------
-            # OVERALL EXAM PASS / FAIL
-            # -------------------------------------------------
-            #
-            # New rule:
-            #
-            # 0 failed subjects  -> Pass
-            # 1 failed subject   -> Pass
-            # 2 failed subjects  -> Pass
-            # 3+ failed subjects -> Fail
-            #
-            # Absent subjects count as failed subjects.
-            #
-            overall_is_pass = failed_subjects < 3
 
             results.append({
                 'student_id': student.id,
@@ -3463,6 +3450,7 @@ class ReportCardView(ModuleAccessMixin, APIView):
             'main_exam': {
                 'id': main_exam.id, 'name': main_exam.name, 'exam_type': main_exam.exam_type.name,
                 'is_final': main_exam.exam_type.is_final,
+                'fail_threshold_subjects': main_exam.fail_threshold_subjects,
             } if main_exam else None,
             'earlier_exam_names': exam_names[:-1],
             'weighted': weighted_calc,
@@ -3500,7 +3488,10 @@ class ReportCardView(ModuleAccessMixin, APIView):
                 'percentage': round(overall_pct, 2),
                 'grade': overall_grade,
                 'rank': rank,
-                'overall_pass': calculate_overall_pass(subject_summaries) if subject_summaries else False,
+                'overall_pass': (
+                    calculate_overall_pass(subject_summaries, main_exam.fail_threshold_subjects)
+                    if subject_summaries and main_exam else False
+                ),
                 'calculation_mode': 'weighted' if weighted_calc else ('main_only' if len(exams) > 1 else 'simple'),
             },
             'grade_scales': [

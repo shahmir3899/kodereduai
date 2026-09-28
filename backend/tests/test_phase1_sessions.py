@@ -19,7 +19,7 @@ Covers:
 """
 
 import pytest
-from datetime import date, time
+from datetime import date, time, timedelta
 from decimal import Decimal
 
 
@@ -939,6 +939,88 @@ class TestAttendanceRiskService:
         svc = AttendanceRiskService(seed_data['SID_A'], seed_data['academic_year'].id)
         report = svc.get_at_risk_students()
         assert 'total_students' in report, "Risk report should have 'total_students' key"
+
+
+@pytest.mark.django_db
+@pytest.mark.phase1
+class TestAttendanceRiskThresholdSharedSource:
+    """A school's configured attendance_config['risk_threshold'] must drive
+    AttendanceRiskService, SessionHealthService, and PromotionAdvisorService
+    identically -- these used to each hardcode their own 75, so a school that
+    customized the threshold got silently different answers from each one."""
+
+    def _seed_student_at_76_percent(self, seed_data):
+        """19 present / 25 school days = 76% -- between the old hardcoded 75
+        and a school-configured 80, so it only trips as at-risk once all three
+        services actually read the school's configured threshold."""
+        from attendance.models import AttendanceRecord
+        from academic_sessions.models import StudentEnrollment
+
+        school = seed_data['school_a']
+        ay = seed_data['academic_year']
+        student = seed_data['students'][0]
+        cls = seed_data['classes'][0]
+
+        StudentEnrollment.objects.get_or_create(
+            school=school, academic_year=ay, student=student,
+            defaults={'class_obj': cls, 'roll_number': student.roll_number},
+        )
+
+        school.attendance_config = {**(school.attendance_config or {}), 'risk_threshold': 80.0}
+        school.save(update_fields=['attendance_config'])
+
+        day = date(2025, 5, 5)  # Monday
+        made = 0
+        while made < 25:
+            if day.weekday() != 6:  # skip Sunday, same as the services' own off-day handling
+                AttendanceRecord.objects.get_or_create(
+                    student=student, date=day,
+                    defaults={
+                        'school': school, 'academic_year': ay,
+                        'status': 'PRESENT' if made < 19 else 'ABSENT',
+                        'source': 'MANUAL',
+                    },
+                )
+                made += 1
+            day += timedelta(days=1)
+
+        return student, cls
+
+    def test_risk_service_uses_school_configured_threshold(self, seed_data, api):
+        from academic_sessions.attendance_risk_service import AttendanceRiskService
+
+        student, _ = self._seed_student_at_76_percent(seed_data)
+        svc = AttendanceRiskService(seed_data['SID_A'], seed_data['academic_year'].id)
+        report = svc.get_at_risk_students()  # no explicit threshold -- must resolve from school config
+        flagged_ids = {s['student_id'] for s in report['students']}
+        assert student.id in flagged_ids, (
+            "76% attendance should be flagged at-risk under this school's configured 80% "
+            "threshold; the old hardcoded 75 default would have missed it"
+        )
+
+    def test_session_health_chronic_absentees_uses_school_configured_threshold(self, seed_data, api):
+        from academic_sessions.session_health_service import SessionHealthService
+
+        self._seed_student_at_76_percent(seed_data)
+        svc = SessionHealthService(seed_data['SID_A'], seed_data['academic_year'].id)
+        report = svc.generate_health_report()
+        assert report['attendance']['chronic_absentees'] == 1, (
+            "Chronic-absentee count should use the school's configured 80% threshold, "
+            "not a hardcoded 75%"
+        )
+
+    def test_promotion_advisor_uses_school_configured_threshold(self, seed_data, api):
+        from academic_sessions.promotion_advisor_service import PromotionAdvisorService
+
+        _, cls = self._seed_student_at_76_percent(seed_data)
+        advisor = PromotionAdvisorService(seed_data['SID_A'], seed_data['academic_year'].id)
+        recommendations = advisor.get_recommendations(cls.id)
+        assert len(recommendations) > 0
+        rec = recommendations[0]
+        assert any('Attendance below 80' in flag for flag in rec['risk_flags']), (
+            f"Expected an 'Attendance below 80%' risk flag under this school's configured "
+            f"threshold, got: {rec['risk_flags']}"
+        )
 
 
 # ---------------------------------------------------------------------------

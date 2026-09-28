@@ -110,6 +110,11 @@ class SessionHealthService:
     def _attendance_metrics(self, academic_year) -> dict:
         from academic_sessions.models import Term
         from attendance.models import AttendanceRecord
+        from schools.models import School
+
+        risk_threshold = School.objects.only('id', 'attendance_config').get(
+            id=self.school_id,
+        ).get_attendance_risk_threshold()
 
         # All records for this academic year
         records = AttendanceRecord.objects.filter(
@@ -162,7 +167,7 @@ class SessionHealthService:
                     (pt_present / pt_total * 100), 1
                 ) if pt_total > 0 else 0
 
-        # Chronic absentees: students with < 75% attendance in this session
+        # Chronic absentees: students below this school's attendance-risk threshold
         chronic_absentees = 0
         student_stats = (
             records.values('student_id')
@@ -172,7 +177,7 @@ class SessionHealthService:
             )
         )
         for s in student_stats:
-            if s['total'] > 0 and (s['present'] / s['total'] * 100) < 75:
+            if s['total'] > 0 and (s['present'] / s['total'] * 100) < risk_threshold:
                 chronic_absentees += 1
 
         return {

@@ -172,7 +172,8 @@ class ExamSerializer(serializers.ModelSerializer):
             'class_obj', 'session_class', 'class_name', 'exam_group', 'exam_group_name',
             'name', 'start_date', 'end_date', 'status', 'schedule_published_at',
             'subjects_count', 'marks_entered_count', 'marks_expected_count',
-            'marks_entry_complete', 'is_active', 'created_at', 'updated_at',
+            'marks_entry_complete', 'fail_threshold_subjects',
+            'is_active', 'created_at', 'updated_at',
         ]
         read_only_fields = ['id', 'school', 'created_at', 'updated_at']
 
@@ -183,6 +184,7 @@ class ExamCreateSerializer(serializers.ModelSerializer):
         fields = [
             'academic_year', 'term', 'exam_type', 'class_obj',
             'name', 'start_date', 'end_date', 'status',
+            'fail_threshold_subjects',
         ]
 
     def validate(self, data):
@@ -511,6 +513,11 @@ class ExamGroupWizardCreateSerializer(serializers.Serializer):
     )
     default_passing_marks = serializers.DecimalField(
         max_digits=6, decimal_places=2, default=33.00, required=False,
+    )
+    fail_threshold_subjects = serializers.IntegerField(
+        default=3, required=False, min_value=1,
+        help_text="Applied to every Exam this wizard creates: fail overall if this "
+                   "many subjects (or more) are failed.",
     )
     date_sheet = serializers.ListField(
         child=serializers.DictField(),

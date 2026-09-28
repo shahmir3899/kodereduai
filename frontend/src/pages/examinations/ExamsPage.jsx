@@ -7,6 +7,7 @@ import { useAuth } from '../../contexts/AuthContext'
 import { useSessionClasses } from '../../hooks/useSessionClasses'
 import { getClassSelectorScope, getResolvedMasterClassId } from '../../utils/classScope'
 import ExamWizard from './ExamWizard'
+import FailThresholdExplainer from './FailThresholdExplainer'
 import BulkTestModal from './BulkTestModal'
 import { useConfirmModal } from '../../components/ConfirmModal'
 import Spinner from '../../components/ui/Spinner'
@@ -22,6 +23,7 @@ const createEmptyForm = (academicYearId = '', termId = '') => ({
   start_date: '',
   end_date: '',
   status: 'SCHEDULED',
+  fail_threshold_subjects: '3',
 })
 
 const STATUS_STYLES = {
@@ -1069,6 +1071,7 @@ export default function ExamsPage() {
       exam_type: item.exam_type, class_obj: mappedClassObj,
       name: item.name, start_date: item.start_date || '',
       end_date: item.end_date || '', status: item.status,
+      fail_threshold_subjects: String(item.fail_threshold_subjects ?? 3),
     })
     setEditId(item.id); setErrors({}); setTestScheduleRows([]); setShowModal(true)
   }
@@ -1137,7 +1140,10 @@ export default function ExamsPage() {
             exam: editId, subject: subjectId, total_marks: totalMarks, passing_marks: passingMarks,
           })))
         }
-        let payload = { ...form, class_obj: resolvedFormClassObj, term: form.term || null }
+        let payload = {
+          ...form, class_obj: resolvedFormClassObj, term: form.term || null,
+          fail_threshold_subjects: parseInt(form.fail_threshold_subjects, 10) || 3,
+        }
         if (isTestEdit) {
           const datedRows = testScheduleRows.filter(r => !!r.exam_date)
           if (datedRows.length > 0) {
@@ -1187,7 +1193,10 @@ export default function ExamsPage() {
       if (needsBulkAssign) {
         await academicsApi.bulkAssignSubjects({ class_obj: parseInt(resolvedFormClassObj), subjects: selectedSubjects })
       }
-      const payload = { ...form, class_obj: resolvedFormClassObj, term: form.term || null }
+      const payload = {
+        ...form, class_obj: resolvedFormClassObj, term: form.term || null,
+        fail_threshold_subjects: parseInt(form.fail_threshold_subjects, 10) || 3,
+      }
       await examinationsApi.createExam(payload)
       queryClient.invalidateQueries({ queryKey: ['exams'] })
       showSuccess('Test created.')
@@ -2276,6 +2285,13 @@ export default function ExamsPage() {
                   </select>
                 </div>
               )}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Fail overall if this many subjects (or more) are failed</label>
+                <input type="number" min="1" value={form.fail_threshold_subjects}
+                  onChange={e => setForm(p => ({ ...p, fail_threshold_subjects: e.target.value }))}
+                  className="input w-full max-w-[160px]" />
+                <FailThresholdExplainer value={form.fail_threshold_subjects} />
+              </div>
               <div className="flex justify-end gap-3 pt-2">
                 <button type="button" onClick={closeModal} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">Cancel</button>
                 <button type="submit" disabled={isSubmitting || updateMut.isPending} className="btn-primary px-4 py-2 text-sm disabled:opacity-50">

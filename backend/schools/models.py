@@ -281,6 +281,15 @@ class School(models.Model):
     def __str__(self):
         return self.name
 
+    def get_attendance_risk_threshold(self) -> float:
+        """The attendance percentage below which a student counts as at-risk.
+
+        Single source of truth for this school's policy -- read this instead
+        of re-deriving it from attendance_config, so the risk dashboard,
+        session health stats, and promotion advisor can't silently disagree.
+        """
+        return float((self.attendance_config or {}).get('risk_threshold', 75.0))
+
     def has_capability(self, module_key: str, capability_key: str) -> bool:
         """Check if a specific capability is unlocked for this school."""
         if not self.get_enabled_module(module_key):

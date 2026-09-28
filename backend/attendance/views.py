@@ -5,7 +5,7 @@ Attendance views for upload, review, and confirmation workflow.
 import logging
 import io
 from calendar import monthrange
-from datetime import date
+from datetime import date, timedelta
 from rest_framework import viewsets, status
 from rest_framework.views import APIView
 from rest_framework.decorators import action
@@ -1305,64 +1305,260 @@ class AttendanceRecordViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.R
 
         elements.append(Spacer(1, 0.15*inch))
 
-        # Build table: headers (dates) + rows (students)
-        # Columns: Roll#, Student Name, Date1, Date2, ..., DateN, Present, Absent
+        # Same layout as the on-screen register: weekday letter over the day
+        # number, shaded Sunday/holiday columns, a thicker line before each
+        # Monday, an amber dot for school days nobody marked, and one "Left
+        # <date>" band from the day a student withdrew/transferred -- a plain
+        # "-" everywhere made those impossible to tell apart.
+        from academic_sessions.calendar_rules import build_student_off_day_set
+        from academic_sessions.leaving import DEPARTED_STATUSES
+        from academic_sessions.models import SchoolCalendarEntry, StudentEnrollment
+        from academic_sessions.utils import resolve_current_academic_year_id
+
         dates_in_month = [date(year, month, day) for day in range(1, last_day + 1)]
+        off_days = build_student_off_day_set(school_id, date_from, date_to, class_id=class_id)
 
-        # Table headers
-        headers = ['Roll#', 'Student Name'] + [str(d.day) for d in dates_in_month] + ['P', 'A', 'L']
-        table_data = [headers]
+        # Named holiday runs of 3+ consecutive days (e.g. Summer Vacation) get a
+        # merged, labeled header block instead of a wall of identical shaded columns
+        # that a printed page (no hover, unlike the web register) can't explain -
+        # see AttendanceRecordsPage.jsx's offBands for the on-screen equivalent.
+        named_entries = list(SchoolCalendarEntry.objects.filter(
+            school_id=school_id, is_active=True, entry_kind=SchoolCalendarEntry.EntryKind.OFF_DAY,
+            affects_students=True, start_date__lte=date_to, end_date__gte=date_from,
+        ).prefetch_related('classes'))
 
-        # Table rows
-        for student in students:
+        def _holiday_label(d):
+            names = []
+            for entry in named_entries:
+                if not (entry.start_date <= d <= entry.end_date):
+                    continue
+                if entry.scope == SchoolCalendarEntry.Scope.CLASS and (
+                    not class_id or class_id not in {c.id for c in entry.classes.all()}
+                ):
+                    continue
+                names.append(entry.name)
+            return ', '.join(names)
+
+        off_bands = []
+        _run = None
+        for d in dates_in_month:
+            label = _holiday_label(d)
+            if label and _run and _run['label'] == label:
+                _run['end'] = d
+            else:
+                if _run:
+                    off_bands.append(_run)
+                _run = {'start': d, 'end': d, 'label': label} if label else None
+        if _run:
+            off_bands.append(_run)
+        off_bands = [b for b in off_bands if (b['end'] - b['start']).days + 1 >= 3]
+        band_span_by_day = {b['start'].day: (b['end'] - b['start']).days + 1 for b in off_bands}
+        band_skip_days = {
+            d.day for b in off_bands for d in [b['start'] + timedelta(days=i) for i in range(1, (b['end'] - b['start']).days + 1)]
+        }
+        today_date = timezone.localdate()
+        marked_days = {r['date'] for r in records}
+
+        year_for_leaving = academic_year_id or resolve_current_academic_year_id(school_id)
+        leaving = {}
+        if year_for_leaving:
+            leaving = {
+                sid: (st, left)
+                for sid, st, left in StudentEnrollment.objects.filter(
+                    school_id=school_id, student_id__in=student_ids, academic_year_id=year_for_leaving,
+                    is_active=False, status__in=DEPARTED_STATUSES, left_date__isnull=False,
+                ).values_list('student_id', 'status', 'left_date')
+            }
+
+        # Roll numbers from the year's enrollment, sorted as numbers (the
+        # Student snapshot roll sorted as text: 1, 10, 11, ..., 2).
+        from academic_sessions.roster import placement_roll, placements_for
+
+        student_objs = {st.id: st for st in Student.objects.filter(id__in=student_ids)}
+        placements = placements_for(school_id, ((sid, year_for_leaving) for sid in student_ids)) if year_for_leaving else {}
+        roll_of = {
+            sid: placement_roll(placements.get((sid, year_for_leaving)), student_objs.get(sid)) or ''
+            for sid in student_ids
+        }
+
+        def _roll_key(st):
+            roll = str(roll_of.get(st['id']) or '')
+            return (0, int(roll), st['name']) if roll.isdigit() else (1, 0, roll or st['name'])
+
+        students = sorted(students, key=_roll_key)
+
+        day_col0 = 2
+        n_days = len(dates_in_month)
+        pal_col0 = day_col0 + n_days
+        weekday_letters = 'MTWTFSS'  # date.weekday(): Monday = 0
+
+        band_start_days = {b['start'].day for b in off_bands}
+        band_all_days = band_start_days | band_skip_days
+
+        header_top = ['Roll#', 'Student Name'] + [
+            '' if d.day in band_all_days else weekday_letters[d.weekday()] for d in dates_in_month
+        ] + ['P', 'A', 'L']
+        header_days = ['', ''] + [
+            '' if d.day in band_all_days else str(d.day) for d in dates_in_month
+        ] + ['', '', '']
+        # Reportlab shows a SPAN's content from its top-left (anchor) cell only,
+        # so the holiday label goes in header_top at the band's start column.
+        for b in off_bands:
+            header_top[day_col0 + b['start'].day - 1] = b['label']
+        table_data = [header_top, header_days]
+
+        green, red, purple = colors.HexColor('#16A34A'), colors.HexColor('#DC2626'), colors.HexColor('#9333EA')
+        amber = colors.HexColor('#F59E0B')
+        off_bg, off_head_bg = colors.HexColor('#E5E7EB'), colors.HexColor('#93A3C7')
+        holiday_bg, holiday_head_bg, holiday_text = (
+            colors.HexColor('#EEF2FF'), colors.HexColor('#C7D2FE'), colors.HexColor('#4338CA'),
+        )
+        cell_styles = []
+
+        for row_idx, student in enumerate(students, start=2):
             student_id = student['id']
-            present_count = 0
-            absent_count = 0
-            leave_count = 0
+            counts = {'PRESENT': 0, 'ABSENT': 0, 'LEAVE': 0}
+            row = [str(roll_of.get(student_id) or ''), student['name'][:22]]
 
-            row = [
-                str(student['roll_number'] or ''),
-                student['name'][:20],  # Truncate long names
-            ]
+            left_status, left_date = leaving.get(student_id, (None, None))
+            band_from = None
+            if left_date and left_date <= date_to:
+                first = max(left_date, date_from)
+                if not any(d >= first for d in attendance_matrix[student_id]):
+                    band_from = first.day
 
-            # Add daily marks
             for day_date in dates_in_month:
+                col = day_col0 + day_date.day - 1
+                if band_from is not None and day_date.day >= band_from:
+                    if day_date.day == band_from:
+                        verb = 'Transferred' if left_status == 'TRANSFERRED' else 'Left'
+                        row.append(f"{verb} {left_date.strftime('%d %b')}")
+                    else:
+                        row.append('')
+                    continue
                 status_val = attendance_matrix[student_id].get(day_date, '')
-                if status_val == 'PRESENT':
-                    row.append('P')
-                    present_count += 1
-                elif status_val == 'ABSENT':
-                    row.append('A')
-                    absent_count += 1
-                elif status_val == 'LEAVE':
-                    row.append('L')
-                    leave_count += 1
+                if status_val in counts:
+                    counts[status_val] += 1
+                    row.append(status_val[0])
+                    colour = {'PRESENT': green, 'ABSENT': red, 'LEAVE': purple}[status_val]
+                    cell_styles.append(('TEXTCOLOR', (col, row_idx), (col, row_idx), colour))
+                    cell_styles.append(('FONTNAME', (col, row_idx), (col, row_idx), 'Helvetica-Bold'))
+                elif (
+                    day_date not in off_days and day_date <= today_date
+                    and day_date in marked_days
+                    and not (left_date and day_date >= left_date)
+                ):
+                    row.append('\u2022')
+                    cell_styles.append(('TEXTCOLOR', (col, row_idx), (col, row_idx), amber))
                 else:
-                    row.append('-')
+                    row.append('')
 
-            row.append(str(present_count))
-            row.append(str(absent_count))
-            row.append(str(leave_count))
+            if band_from is not None:
+                c0 = day_col0 + band_from - 1
+                c1 = pal_col0 - 1
+                cell_styles += [
+                    ('SPAN', (c0, row_idx), (c1, row_idx)),
+                    ('BACKGROUND', (c0, row_idx), (c1, row_idx), off_bg),
+                    ('ALIGN', (c0, row_idx), (c1, row_idx), 'LEFT'),
+                    ('TEXTCOLOR', (c0, row_idx), (c1, row_idx), colors.HexColor('#4B5563')),
+                    ('FONTNAME', (c0, row_idx), (c1, row_idx), 'Helvetica-Oblique'),
+                    ('LINEBEFORE', (c0, row_idx), (c0, row_idx), 1.5, colors.HexColor('#9CA3AF')),
+                ]
+            if left_date and left_date <= date_to:
+                cell_styles.append(('TEXTCOLOR', (0, row_idx), (1, row_idx), colors.HexColor('#6B7280')))
+
+            row += [str(counts['PRESENT']), str(counts['ABSENT']), str(counts['LEAVE'])]
             table_data.append(row)
 
-        # Create table with styling
-        table = Table(table_data, repeatRows=1)
+        last_row = len(table_data) - 1
+        col_styles = []
+        for day_date in dates_in_month:
+            col = day_col0 + day_date.day - 1
+            in_band = day_date.day in band_span_by_day or day_date.day in band_skip_days
+            if in_band:
+                # Header shading/label for a named holiday run comes from the SPAN
+                # block below instead - only the body (attendance) rows get the
+                # distinct holiday tint here.
+                if last_row >= 2:
+                    col_styles.append(('BACKGROUND', (col, 2), (col, last_row), holiday_bg))
+            elif day_date in off_days:
+                col_styles.append(('BACKGROUND', (col, 0), (col, 1), off_head_bg))
+                if last_row >= 2:
+                    col_styles.append(('BACKGROUND', (col, 2), (col, last_row), off_bg))
+            if day_date.weekday() == 0:
+                col_styles.append(('LINEBEFORE', (col, 0), (col, last_row), 1.2, colors.HexColor('#374151')))
+            if day_date == today_date:
+                col_styles.append(('BOX', (col, 0), (col, last_row), 1, colors.HexColor('#2563EB')))
+
+        # Merge each named holiday run's header cells (both header rows) into one
+        # labeled block, e.g. "Summer Vacation" spanning Jun 9 - Aug 31.
+        for b in off_bands:
+            c0 = day_col0 + b['start'].day - 1
+            c1 = c0 + (b['end'] - b['start']).days
+            col_styles += [
+                ('SPAN', (c0, 0), (c1, 1)),
+                ('BACKGROUND', (c0, 0), (c1, 1), holiday_head_bg),
+                ('TEXTCOLOR', (c0, 0), (c1, 1), holiday_text),
+                ('FONTNAME', (c0, 0), (c1, 1), 'Helvetica-Bold'),
+                ('FONTSIZE', (c0, 0), (c1, 1), 6.5),
+            ]
+
+        name_w = 1.55 * inch
+        roll_w = 0.42 * inch
+        pal_w = 0.3 * inch
+        usable = landscape(A4)[0] - 0.6 * inch
+        day_w = (usable - roll_w - name_w - 3 * pal_w) / n_days
+        table = Table(
+            table_data,
+            colWidths=[roll_w, name_w] + [day_w] * n_days + [pal_w] * 3,
+            repeatRows=2,
+        )
         table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#2563EB')),
-            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
-            ('FONTSIZE', (0, 0), (-1, 0), 8),
-            ('FONTSIZE', (0, 1), (-1, -1), 7),
+            ('BACKGROUND', (0, 0), (-1, 1), colors.HexColor('#2563EB')),
+            ('TEXTCOLOR', (0, 0), (-1, 1), colors.white),
+            ('FONTSIZE', (0, 0), (-1, 0), 6.5),
+            ('FONTSIZE', (0, 1), (-1, 1), 7.5),
+            ('FONTNAME', (0, 1), (-1, 1), 'Helvetica-Bold'),
+            ('FONTNAME', (0, 0), (1, 0), 'Helvetica-Bold'),
+            ('FONTNAME', (pal_col0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (1, 0), 8),
+            ('FONTSIZE', (pal_col0, 0), (-1, 0), 8),
+            ('SPAN', (0, 0), (0, 1)),
+            ('SPAN', (1, 0), (1, 1)),
+            ('SPAN', (pal_col0, 0), (pal_col0, 1)),
+            ('SPAN', (pal_col0 + 1, 0), (pal_col0 + 1, 1)),
+            ('SPAN', (pal_col0 + 2, 0), (pal_col0 + 2, 1)),
+            ('FONTSIZE', (0, 2), (-1, -1), 7),
             ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('ALIGN', (1, 2), (1, -1), 'LEFT'),
             ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
-            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#F9FAFB')]),
-            ('TOPPADDING', (0, 0), (-1, -1), 2),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 2),
-            ('LEFTPADDING', (0, 0), (-1, -1), 2),
-            ('RIGHTPADDING', (0, 0), (-1, -1), 2),
-        ]))
+            ('GRID', (0, 0), (-1, -1), 0.25, colors.HexColor('#D1D5DB')),
+            ('ROWBACKGROUNDS', (0, 2), (-1, -1), [colors.white, colors.HexColor('#F9FAFB')]),
+            ('LINEBEFORE', (pal_col0, 0), (pal_col0, -1), 1, colors.HexColor('#6B7280')),
+            ('FONTNAME', (pal_col0, 2), (-1, -1), 'Helvetica-Bold'),
+            ('TEXTCOLOR', (pal_col0, 2), (pal_col0, -1), green),
+            ('TEXTCOLOR', (pal_col0 + 1, 2), (pal_col0 + 1, -1), red),
+            ('TEXTCOLOR', (pal_col0 + 2, 2), (pal_col0 + 2, -1), purple),
+            ('TOPPADDING', (0, 0), (-1, -1), 1.5),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 1.5),
+            ('LEFTPADDING', (0, 0), (-1, -1), 1.5),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 1.5),
+            ('LEFTPADDING', (1, 0), (1, -1), 4),
+        ] + col_styles + cell_styles))
 
         elements.append(table)
+        legend_style = ParagraphStyle('RegisterLegend', parent=styles['Normal'], fontSize=7, textColor=colors.HexColor('#4B5563'))
+        elements.append(Spacer(1, 0.06*inch))
+        elements.append(Paragraph(
+            '<font color="#16A34A"><b>P</b></font> Present &nbsp;&nbsp; '
+            '<font color="#DC2626"><b>A</b></font> Absent &nbsp;&nbsp; '
+            '<font color="#9333EA"><b>L</b></font> Leave &nbsp;&nbsp; '
+            'Shaded column = Sunday / short holiday &nbsp;&nbsp; '
+            '<font color="#4338CA"><b>&#9632;</b></font> Named block = multi-day holiday (labeled above) &nbsp;&nbsp; '
+            '<font color="#F59E0B"><b>\u2022</b></font> Not marked &nbsp;&nbsp; '
+            '<i>Left &lt;date&gt;</i> = left the school from that day',
+            legend_style,
+        ))
         elements.append(Spacer(1, 0.2*inch))
 
         # Signature section

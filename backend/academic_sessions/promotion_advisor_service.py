@@ -40,11 +40,16 @@ class PromotionAdvisorService:
 
         # Get highest grade_level for this school
         from students.models import Class
+        from schools.models import School
         highest_grade = Class.get_highest_grade_level(self.school_id)
         manual_graduates = manual_graduates or set()
 
         if not enrollments.exists():
             return []
+
+        attendance_risk_threshold = School.objects.only('id', 'attendance_config').get(
+            id=self.school_id,
+        ).get_attendance_risk_threshold()
 
         student_ids = list(enrollments.values_list('student_id', flat=True))
 
@@ -146,6 +151,7 @@ class PromotionAdvisorService:
             # Risk flags
             risk_flags = self._identify_risk_flags(
                 exam_data, attendance_rate, fee_paid_rate, trend, marks_list,
+                attendance_risk_threshold,
             )
 
             # Graduation logic
@@ -325,15 +331,17 @@ class PromotionAdvisorService:
 
     def _identify_risk_flags(self, exam_data: dict, attendance_rate: float,
                               fee_paid_rate: float, trend: str,
-                              marks_list: list) -> list:
+                              marks_list: list, attendance_risk_threshold: float) -> list:
         """Identify risk flags for a student."""
         flags = []
 
-        # Attendance flags
+        # Attendance flags -- the 75% tier is this school's own configured
+        # policy (School.get_attendance_risk_threshold), same number the
+        # attendance risk dashboard and session health stats use.
         if attendance_rate < 60:
             flags.append('Critical: Attendance below 60%')
-        elif attendance_rate < 75:
-            flags.append('Attendance below 75%')
+        elif attendance_rate < attendance_risk_threshold:
+            flags.append(f'Attendance below {attendance_risk_threshold:g}%')
 
         # Exam flags
         if exam_data['average_percentage'] < 35:

@@ -5,6 +5,7 @@ import { useClasses } from '../../hooks/useClasses'
 import { useSessionClasses } from '../../hooks/useSessionClasses'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
+import FailThresholdExplainer from './FailThresholdExplainer'
 
 const STEPS = [
   { num: 1, label: 'Details' },
@@ -54,6 +55,7 @@ export default function ExamWizard({ onClose, onSuccess }) {
     end_date: '',
     default_total_marks: '100',
     default_passing_marks: '33',
+    fail_threshold_subjects: '3',
     class_ids: [],
     subject_ids_by_class: {},  // Key: classId → [subjectId, ...], independent per class
     date_sheet: {},  // Key: "classId_subjectId" → { exam_date, start_time, end_time }
@@ -520,6 +522,7 @@ export default function ExamWizard({ onClose, onSuccess }) {
       })),
       default_total_marks: parseFloat(wizardData.default_total_marks) || 100,
       default_passing_marks: parseFloat(wizardData.default_passing_marks) || 33,
+      fail_threshold_subjects: parseInt(wizardData.fail_threshold_subjects, 10) || 3,
       date_sheet: dateSheetList,
     }
     wizardMut.mutate(payload)
@@ -691,6 +694,13 @@ export default function ExamWizard({ onClose, onSuccess }) {
                   <input type="number" value={wizardData.default_passing_marks} onChange={e => update('default_passing_marks', e.target.value)}
                     className="input w-full" min="0" />
                 </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Fail overall if this many subjects (or more) are failed</label>
+                <input type="number" value={wizardData.fail_threshold_subjects} onChange={e => update('fail_threshold_subjects', e.target.value)}
+                  className="input w-full max-w-[160px]" min="1" />
+                <FailThresholdExplainer value={wizardData.fail_threshold_subjects} />
               </div>
             </div>
           )}
@@ -952,6 +962,7 @@ export default function ExamWizard({ onClose, onSuccess }) {
                   <div><span className="text-gray-500">Period:</span> {wizardData.start_date || '-'} to {wizardData.end_date || '-'}</div>
                   <div><span className="text-gray-500">Total:</span> {wizardData.default_total_marks}</div>
                   <div><span className="text-gray-500">Passing:</span> {wizardData.default_passing_marks}</div>
+                  <div><span className="text-gray-500">Fail threshold:</span> {wizardData.fail_threshold_subjects} subjects</div>
                 </div>
               </div>
 

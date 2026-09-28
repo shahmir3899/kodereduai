@@ -336,7 +336,7 @@ def recompute_attendance_risk_snapshots():
             if not academic_year:
                 continue
 
-            threshold = (school.attendance_config or {}).get('risk_threshold', 75.0)
+            threshold = school.get_attendance_risk_threshold()
             report = AttendanceRiskService(school.id, academic_year.id).get_at_risk_students(threshold=threshold)
 
             AttendanceRiskSnapshot.objects.update_or_create(

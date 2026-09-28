@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { attendanceApi, studentsApi } from '../services/api'
+import { attendanceApi, sessionsApi, studentsApi } from '../services/api'
 import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../components/Toast'
 import ClassSelector from '../components/ClassSelector'
@@ -18,6 +18,26 @@ function formatMonth(year, month) {
 
 function pad(n) {
   return n < 10 ? '0' + n : '' + n
+}
+
+const WEEKDAY_LETTERS = ['S', 'M', 'T', 'W', 'T', 'F', 'S']
+
+function formatShortDate(iso) {
+  const d = new Date(`${iso}T00:00:00`)
+  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
+}
+
+// Day-of-month on which a student's "left" band starts in this month:
+// 1 when they had left before the month began, null when they hadn't left
+// by its end (or never).
+function leftFromDay(leftDate, year, month, daysInMonth) {
+  if (!leftDate) return null
+  const [ly, lm, ld] = leftDate.split('-').map(Number)
+  const monthIndex = year * 12 + month
+  const leftIndex = ly * 12 + (lm - 1)
+  if (leftIndex < monthIndex) return 1
+  if (leftIndex > monthIndex) return null
+  return ld <= daysInMonth ? ld : null
 }
 
 export default function AttendanceRecordsPage() {
@@ -59,6 +79,68 @@ export default function AttendanceRecordsPage() {
     enabled: !!classId,
   })
   const enrolledStudents = studentsData?.data?.results || studentsData?.data || []
+  const masterClassId = enrolledStudents[0]?.class_obj
+
+  // Sundays and holidays for the month (class-specific off days included),
+  // so the register can shade them instead of showing "-" like a missed day.
+  const { data: calendarData } = useQuery({
+    queryKey: ['registerCalendar', year, month, masterClassId, activeAcademicYear?.id],
+    queryFn: () => sessionsApi.getCalendarMonthView({
+      year,
+      month: month + 1,
+      class_id: masterClassId || undefined,
+      academic_year: activeAcademicYear?.id || undefined,
+    }),
+    enabled: !!classId,
+    staleTime: 5 * 60_000,
+  })
+  const offDays = useMemo(() => {
+    const map = {}
+    for (const d of calendarData?.data?.days || []) {
+      const studentOff = (d.entries || []).filter(
+        (e) => e.entry_kind === 'OFF_DAY' && e.affects_students !== false,
+      )
+      if (d.is_sunday || studentOff.length) {
+        map[d.day] = studentOff.map((e) => e.name).join(', ') || 'Sunday'
+      }
+    }
+    return map
+  }, [calendarData])
+
+  // Named holiday runs of 3+ consecutive days (e.g. Summer Vacation) get a single
+  // spanning, labeled header cell instead of a wall of identical gray columns that
+  // reads as "no data" rather than "school was closed" - a lone Sunday stays as
+  // the quiet per-day tint below.
+  const offBands = useMemo(() => {
+    const days = calendarData?.data?.days || []
+    const bands = []
+    let run = null
+    for (const d of days) {
+      const named = (d.entries || []).filter(
+        (e) => e.entry_kind === 'OFF_DAY' && e.affects_students !== false,
+      )
+      const label = named.map((e) => e.name).join(', ')
+      if (label && run && run.label === label) {
+        run.endDay = d.day
+      } else {
+        if (run) bands.push(run)
+        run = label ? { startDay: d.day, endDay: d.day, label } : null
+      }
+    }
+    if (run) bands.push(run)
+    return bands.filter((b) => b.endDay - b.startDay + 1 >= 3)
+  }, [calendarData])
+  const bandByStartDay = useMemo(
+    () => Object.fromEntries(offBands.map((b) => [b.startDay, b])),
+    [offBands],
+  )
+  const bandDaySet = useMemo(() => {
+    const set = new Set()
+    for (const b of offBands) {
+      for (let d = b.startDay; d <= b.endDay; d++) set.add(d)
+    }
+    return set
+  }, [offBands])
 
   // Fetch attendance records for the month + class (page_size large enough for full month)
   const { data: recordsData, isLoading, error } = useQuery({
@@ -107,6 +189,9 @@ export default function AttendanceRecordsPage() {
         name: s.name,
         roll: s.roll_number,
         dates: attendanceMap[s.id] || {},
+        leftDate: s.left_date || null,
+        leftStatus: s.status,
+        leftFrom: leftFromDay(s.left_date, year, month, daysInMonth),
       }))
       .sort((a, b) => {
         const ra = parseInt(a.roll) || 0
@@ -119,16 +204,22 @@ export default function AttendanceRecordsPage() {
       datesWithData: [...datesSet].sort((a, b) => a - b),
       summary: {
         totalStudents: studentRows.length,
+        leftStudents: studentRows.filter((r) => r.leftFrom !== null).length,
         totalPresent,
         totalAbsent,
         totalLeave,
         totalRecords: totalPresent + totalAbsent + totalLeave,
       },
     }
-  }, [records, enrolledStudents])
+  }, [records, enrolledStudents, year, month, daysInMonth])
 
   // Generate all day numbers for the month
   const allDays = Array.from({ length: daysInMonth }, (_, i) => i + 1)
+  const weekdayOf = (day) => new Date(year, month, day).getDay()
+  const todayDay = today.getFullYear() === year && today.getMonth() === month ? today.getDate() : null
+  const isPastOrToday = (day) =>
+    year < today.getFullYear()
+    || (year === today.getFullYear() && (month < today.getMonth() || (month === today.getMonth() && day <= today.getDate())))
 
   // Month navigation
   const prevMonth = () => {
@@ -268,7 +359,12 @@ export default function AttendanceRecordsPage() {
           <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
             <div className="card">
               <p className="text-xs text-gray-500">Students</p>
-              <p className="text-xl sm:text-2xl font-bold text-gray-900">{summary.totalStudents}</p>
+              <p className="text-xl sm:text-2xl font-bold text-gray-900">
+                {summary.totalStudents - summary.leftStudents}
+                {summary.leftStudents > 0 && (
+                  <span className="ml-1 text-sm font-medium text-gray-400">+ {summary.leftStudents} left</span>
+                )}
+              </p>
             </div>
             <div className="card">
               <p className="text-xs text-gray-500">Days Recorded</p>
@@ -323,31 +419,71 @@ export default function AttendanceRecordsPage() {
               <table className="min-w-full border-collapse">
                 <thead>
                   <tr className="bg-gray-50">
-                    <th className="sticky left-0 z-10 bg-gray-50 px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase border-b border-r border-gray-200 min-w-[40px]">
+                    <th rowSpan={2} className="sticky left-0 z-10 bg-gray-50 px-2 py-1 text-left text-[10px] font-medium text-gray-500 uppercase border-b border-r border-gray-200 min-w-[48px] w-[48px]">
                       Roll
                     </th>
-                    <th className="sticky left-[52px] z-10 bg-gray-50 px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase border-b border-r border-gray-200 min-w-[140px]">
+                    <th rowSpan={2} className="sticky left-[48px] z-10 bg-gray-50 px-2 py-1 text-left text-[10px] font-medium text-gray-500 uppercase border-b border-r border-gray-200 min-w-[140px]">
                       Name
                     </th>
-                    {allDays.map((day) => (
-                      <th
-                        key={day}
-                        className={`px-0 py-2 text-center text-xs font-medium border-b border-gray-200 min-w-[32px] ${
-                          datesWithData.includes(day) ? 'text-gray-700' : 'text-gray-300'
-                        }`}
-                      >
-                        {day}
-                      </th>
-                    ))}
-                    <th className="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase border-b border-l border-gray-200 min-w-[32px]">
-                      P
+                    <th colSpan={daysInMonth} className="px-2 pt-1.5 pb-0.5 text-left text-[11px] font-semibold text-gray-700 tracking-wide uppercase">
+                      {formatMonth(year, month)}
                     </th>
-                    <th className="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase border-b border-gray-200 min-w-[32px]">
-                      A
+                    <th colSpan={3} rowSpan={2} className="px-1 py-1 text-center text-[10px] font-medium text-gray-500 uppercase border-b border-l border-gray-200">
+                      <div className="grid grid-cols-3 gap-1 min-w-[72px]">
+                        <span className="text-green-700">P</span>
+                        <span className="text-red-700">A</span>
+                        <span className="text-purple-700">L</span>
+                      </div>
                     </th>
-                    <th className="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase border-b border-gray-200 min-w-[32px]">
-                      L
-                    </th>
+                  </tr>
+                  <tr className="bg-gray-50">
+                    {(() => {
+                      const cells = []
+                      let day = 1
+                      while (day <= daysInMonth) {
+                        const band = bandByStartDay[day]
+                        if (band) {
+                          const span = band.endDay - band.startDay + 1
+                          cells.push(
+                            <th
+                              key={day}
+                              colSpan={span}
+                              title={band.label}
+                              className="px-1 pb-1 pt-0.5 text-center border-b border-l border-gray-200 bg-indigo-50 align-middle"
+                            >
+                              <span className="block text-[9px] font-semibold text-indigo-700 whitespace-nowrap overflow-hidden text-ellipsis">
+                                {band.label}
+                              </span>
+                            </th>,
+                          )
+                          day += span
+                          continue
+                        }
+                        const wd = weekdayOf(day)
+                        const off = offDays[day]
+                        const isToday = day === todayDay
+                        cells.push(
+                          <th
+                            key={day}
+                            title={off || undefined}
+                            className={`px-0 pb-1 pt-0.5 text-center border-b border-gray-200 min-w-[26px] w-[26px] leading-tight ${
+                              wd === 1 ? 'border-l border-l-gray-200' : ''
+                            } ${off ? 'bg-gray-100' : ''} ${isToday ? 'ring-1 ring-inset ring-blue-400 rounded-sm' : ''}`}
+                          >
+                            <span className={`block text-[9px] font-medium ${off ? 'text-gray-400' : 'text-gray-400'}`}>
+                              {WEEKDAY_LETTERS[wd]}
+                            </span>
+                            <span className={`block text-[11px] font-semibold ${
+                              isToday ? 'text-blue-600' : !isPastOrToday(day) ? 'text-gray-300' : off ? 'text-gray-400' : 'text-gray-700'
+                            }`}>
+                              {day}
+                            </span>
+                          </th>,
+                        )
+                        day += 1
+                      }
+                      return cells
+                    })()}
                   </tr>
                 </thead>
                 <tbody>
@@ -356,43 +492,81 @@ export default function AttendanceRecordsPage() {
                     const aCount = Object.values(student.dates).filter((s) => s === 'ABSENT').length
                     const lCount = Object.values(student.dates).filter((s) => s === 'LEAVE').length
 
+                    const leftFrom = student.leftFrom
+                    // Merge the days from leaving into one band, unless records
+                    // somehow exist there (then show them rather than hide them).
+                    const bandFrom = leftFrom !== null
+                      && !Object.keys(student.dates).some((d) => Number(d) >= leftFrom)
+                      ? leftFrom : null
+                    const leftLabel = student.leftDate
+                      ? `${student.leftStatus === 'TRANSFERRED' ? 'Transferred' : 'Left'} ${formatShortDate(student.leftDate)}`
+                      : null
+                    const rowBg = idx % 2 === 0 ? 'white' : '#f9fafb'
+
                     return (
                       <tr
                         key={student.id}
-                        className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}
+                        className={`${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'} ${leftFrom !== null ? 'opacity-80' : ''}`}
                       >
-                        <td className="sticky left-0 z-10 px-3 py-1.5 text-xs text-gray-600 border-r border-gray-200 font-medium"
-                            style={{ backgroundColor: idx % 2 === 0 ? 'white' : '#f9fafb' }}>
+                        <td className="sticky left-0 z-10 px-2 py-1 text-xs text-gray-600 border-r border-gray-200 font-medium min-w-[48px] w-[48px]"
+                            style={{ backgroundColor: rowBg }}>
                           {student.roll}
                         </td>
-                        <td className="sticky left-[52px] z-10 px-3 py-1.5 text-xs text-gray-900 border-r border-gray-200 font-medium truncate max-w-[160px]"
-                            style={{ backgroundColor: idx % 2 === 0 ? 'white' : '#f9fafb' }}
-                            title={student.name}>
-                          {student.name}
+                        <td className="sticky left-[48px] z-10 px-2 py-1 text-xs text-gray-900 border-r border-gray-200 font-medium max-w-[160px]"
+                            style={{ backgroundColor: rowBg }}
+                            title={leftLabel ? `${student.name} (${leftLabel})` : student.name}>
+                          <span className="block truncate">{student.name}</span>
+                          {leftFrom !== null && leftLabel && (
+                            <span className="inline-block mt-0.5 px-1.5 py-px rounded text-[9px] font-semibold uppercase tracking-wide bg-gray-200 text-gray-600">
+                              {leftLabel}
+                            </span>
+                          )}
                         </td>
                         {allDays.map((day) => {
+                          if (bandFrom !== null && day > bandFrom) return null
+                          if (bandFrom !== null && day === bandFrom) {
+                            return (
+                              <td
+                                key={day}
+                                colSpan={daysInMonth - bandFrom + 1}
+                                className="px-2 py-1 text-[10px] font-medium text-gray-500 bg-gray-100 border-l-2 border-l-gray-300"
+                                title={leftLabel || 'Left'}
+                              >
+                                <span className="whitespace-nowrap">{leftLabel || 'Left'}</span>
+                              </td>
+                            )
+                          }
                           const s = student.dates[day]
+                          const off = offDays[day]
+                          const enrolledThatDay = leftFrom === null || day < leftFrom
+                          const unmarked = !s && !off && enrolledThatDay && isPastOrToday(day) && datesWithData.includes(day)
                           return (
-                            <td key={day} className="px-0 py-1.5 text-center text-xs border-gray-100">
+                            <td
+                              key={day}
+                              title={unmarked ? 'Not marked' : off && !s ? off : undefined}
+                              className={`px-0 py-1 text-center text-xs border-gray-100 ${
+                                weekdayOf(day) === 1 ? 'border-l border-l-gray-200' : ''
+                              } ${bandDaySet.has(day) ? 'bg-indigo-50/70' : off ? 'bg-gray-100/80' : ''} ${day === todayDay ? 'bg-blue-50/60' : ''}`}
+                            >
                               {s === 'PRESENT' ? (
                                 <span className="text-green-600 font-semibold">P</span>
                               ) : s === 'ABSENT' ? (
                                 <span className="text-red-600 font-semibold">A</span>
                               ) : s === 'LEAVE' ? (
                                 <span className="text-purple-600 font-semibold">L</span>
-                              ) : (
-                                <span className="text-gray-200">-</span>
-                              )}
+                              ) : unmarked ? (
+                                <span className="text-amber-500 font-bold">·</span>
+                              ) : null}
                             </td>
                           )
                         })}
-                        <td className="px-2 py-1.5 text-center text-xs font-bold text-green-700 border-l border-gray-200">
+                        <td className="px-2 py-1 text-center text-xs font-bold text-green-700 border-l border-gray-200">
                           {pCount}
                         </td>
-                        <td className="px-2 py-1.5 text-center text-xs font-bold text-red-700">
+                        <td className="px-2 py-1 text-center text-xs font-bold text-red-700">
                           {aCount}
                         </td>
-                        <td className="px-2 py-1.5 text-center text-xs font-bold text-purple-700">
+                        <td className="px-2 py-1 text-center text-xs font-bold text-purple-700">
                           {lCount}
                         </td>
                       </tr>
@@ -400,6 +574,15 @@ export default function AttendanceRecordsPage() {
                   })}
                 </tbody>
               </table>
+            </div>
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-3 py-2 border-t border-gray-100 text-[11px] text-gray-500">
+              <span><span className="font-semibold text-green-600">P</span> Present</span>
+              <span><span className="font-semibold text-red-600">A</span> Absent</span>
+              <span><span className="font-semibold text-purple-600">L</span> Leave</span>
+              <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded-sm bg-gray-100 border border-gray-200" /> Sunday / short holiday</span>
+              <span className="flex items-center gap-1"><span className="inline-block w-5 h-3 rounded-sm bg-indigo-50 border border-indigo-100" /> Multi-day holiday (named above)</span>
+              <span><span className="font-bold text-amber-500">·</span> Not marked</span>
+              <span className="flex items-center gap-1"><span className="inline-block w-5 h-3 rounded-sm bg-gray-100 border-l-2 border-gray-300" /> Left the school</span>
             </div>
           </div>
 
@@ -415,7 +598,14 @@ export default function AttendanceRecordsPage() {
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-sm font-medium text-gray-900">{student.name}</p>
-                      <p className="text-xs text-gray-500">Roll #{student.roll}</p>
+                      <p className="text-xs text-gray-500">
+                        Roll #{student.roll}
+                        {student.leftFrom !== null && student.leftDate && (
+                          <span className="ml-2 px-1.5 py-px rounded text-[10px] font-semibold uppercase bg-gray-200 text-gray-600">
+                            {student.leftStatus === 'TRANSFERRED' ? 'Transferred' : 'Left'} {formatShortDate(student.leftDate)}
+                          </span>
+                        )}
+                      </p>
                     </div>
                     <div className="flex gap-3 text-sm">
                       <span className="text-green-600 font-semibold">{pCount}P</span>

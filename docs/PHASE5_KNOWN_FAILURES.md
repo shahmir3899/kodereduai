@@ -88,6 +88,10 @@ Already fixed along the way: two annual-fee tests in `tests/test_fee_types.py` (
   - Exams: `_exam_roster(for_entry=True)` drops departed students (Excel template); the results roster keeps a departed student only if they left after the exam started and have marks; marks create/update/bulk refuse departed students.
   - Marks Entry page: section-aware roster, and the grid is built from the roster merged with saved marks.
   - Drift: the `records_after_leaving` check.
+- **Attendance register (screen + PDF):**
+  - student API `left_date` (annotated year or current placement);
+  - register shades Sundays/holidays from `calendar-entries/month-view`, shows a "Left <date>" band from the leaving day, an amber dot on unmarked past school days the class was marked, two-line weekday/day headers, and "N + M left" in the Students card;
+  - the PDF does the same via `build_student_off_day_set`, with enrollment rolls sorted as numbers.
 - Add to this list every later module built without tests.
 
 ## Side issues noticed (not test failures)

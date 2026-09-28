@@ -67,13 +67,14 @@ class StudentSerializer(serializers.ModelSerializer):
     user_username = serializers.SerializerMethodField()
     roll_number = serializers.SerializerMethodField()
     status = serializers.SerializerMethodField()
+    left_date = serializers.SerializerMethodField()
 
     class Meta:
         model = Student
         fields = [
             'id', 'school', 'school_name',
             'class_obj', 'class_name', 'session_class_obj',
-            'roll_number', 'name',
+            'roll_number', 'name', 'left_date',
             'admission_number', 'admission_date', 'date_of_birth',
             'gender', 'blood_group', 'address', 'previous_school', 'photo_url',
             'parent_phone', 'parent_name',
@@ -148,6 +149,14 @@ class StudentSerializer(serializers.ModelSerializer):
         from academic_sessions.roster import placement_roll
 
         return placement_roll(self._current_placement(obj), obj)
+
+    def get_left_date(self, obj):
+        """First day the student is gone (withdrew/transferred) in the year in
+        view; None while enrolled. The register shades from here on."""
+        if self._annotated(obj):
+            return getattr(obj, '_enrollment_left_date', None)
+        placement = self._current_placement(obj)
+        return placement.left_date if placement is not None else None
 
     def get_status(self, obj):
         """Return enrollment status for academic-year scope, else current snapshot status."""

@@ -2216,7 +2216,7 @@ class AttendanceRiskView(APIView):
         explicit_threshold = request.query_params.get('threshold')
         if explicit_threshold is None:
             school = School.objects.filter(id=school_id).only('id', 'attendance_config').first()
-            threshold = float((school.attendance_config or {}).get('risk_threshold', 75.0)) if school else 75.0
+            threshold = school.get_attendance_risk_threshold() if school else 75.0
         else:
             threshold = float(explicit_threshold)
 
