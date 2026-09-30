@@ -835,6 +835,7 @@ export default function ExamsPage() {
       academic_year: yearFilter || undefined,
       ungrouped: true,
       page_size: 9999,
+      include_marks_status: true,
       ...examStatusParams,
     }),
   })

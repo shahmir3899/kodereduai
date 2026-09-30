@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query'
 import { examinationsApi, studentsApi } from '../../services/api'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
 import ClassSelector from '../../components/ClassSelector'
@@ -84,18 +84,21 @@ export default function MarksEntryPage() {
       page_size: 9999,
     }),
     enabled: !!selectedExamType,
+    staleTime: 5 * 60_000,
   })
 
   const { data: examSubjectsRes, isLoading: examSubjectsLoading } = useQuery({
     queryKey: ['examSubjects', selectedExamId],
     queryFn: () => examinationsApi.getExamSubjects({ exam: selectedExamId, page_size: 9999 }),
     enabled: !!selectedExamId,
+    placeholderData: keepPreviousData,
   })
 
   const { data: marksRes, isLoading: marksLoading } = useQuery({
     queryKey: ['marks', selectedSubjectId],
     queryFn: () => examinationsApi.getMarks({ exam_subject: selectedSubjectId, page_size: 9999 }),
     enabled: !!selectedSubjectId,
+    placeholderData: keepPreviousData,
   })
 
   const examTypes = examTypesRes?.data?.results || examTypesRes?.data || []
@@ -145,6 +148,7 @@ export default function MarksEntryPage() {
       page_size: 9999,
     }),
     enabled: !!selectedExam?.class_obj && !!selectedSubjectId,
+    placeholderData: keepPreviousData,
   })
   const classStudents = classStudentsRes?.data?.results || classStudentsRes?.data || []
 

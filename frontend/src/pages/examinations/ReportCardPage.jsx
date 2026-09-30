@@ -128,6 +128,7 @@ export default function ReportCardPage() {
     queryKey: ['reportCardExams', masterClassId, yearId],
     queryFn: () => examinationsApi.getExams({ class_obj: masterClassId, academic_year: yearId, page_size: 9999 }),
     enabled: !!masterClassId && !!yearId,
+    staleTime: 5 * 60_000,
   })
   const exams = useMemo(() => {
     const list = examsRes?.data?.results || examsRes?.data || []

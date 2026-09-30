@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query'
 import { examinationsApi } from '../../services/api'
 import ClassSelector from '../../components/ClassSelector'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
@@ -196,6 +196,7 @@ export default function ResultsPage() {
       // Whole-class exams plus this section's own, not a sibling section's.
       session_class_id: selectedSessionClassId || undefined,
     }),
+    staleTime: 5 * 60_000,
   })
 
   const { data: resultsRes, isLoading: resultsLoading } = useQuery({
@@ -205,6 +206,7 @@ export default function ResultsPage() {
       selectedSessionClassId ? { session_class_id: selectedSessionClassId } : undefined,
     ),
     enabled: !!selectedExamId,
+    placeholderData: keepPreviousData,
   })
 
   const {

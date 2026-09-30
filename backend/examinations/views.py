@@ -1446,7 +1446,17 @@ class ExamViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet)
         ).annotate(
             subjects_count=Count('exam_subjects', filter=Q(exam_subjects__is_active=True)),
         )
-        qs = _annotate_marks_completion(qs)
+        # The two correlated subqueries in _annotate_marks_completion are only
+        # needed by ExamsPage's announce-results badges -- every other caller
+        # (exam pickers on MarksEntryPage/ResultsPage/ReportCardPage/etc.) just
+        # reads id/name and never touches marks_entry_complete, so skip them
+        # unless the caller explicitly asks (ExamSerializer defaults those
+        # fields to 0/False when the annotations are absent). announce_results
+        # reads exam.enrolled_count directly (not via getattr), so it always
+        # needs the annotation regardless of query params -- it reaches this
+        # queryset through get_object(), not a list request.
+        if self.action == 'announce_results' or self.request.query_params.get('include_marks_status', '').lower() == 'true':
+            qs = _annotate_marks_completion(qs)
         qs = annotate_session_class_display(qs)
         qs = _apply_teacher_exam_scope(qs, self.request, class_field='class_obj_id')
         scope = resolve_class_scope(
