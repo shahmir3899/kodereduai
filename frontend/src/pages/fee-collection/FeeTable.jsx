@@ -152,7 +152,7 @@ export default function FeeTable({
         <div className="text-center py-8">
           <p className="text-gray-500 mb-2">No {feeColumnLabel.toLowerCase()} records for {periodLabel}</p>
           <p className="text-sm text-gray-400">
-            {isMonthly ? 'Click "Generate Records" to create fee entries for students' : `No ${feeColumnLabel.toLowerCase()} records found`}
+            {isMonthly ? 'Click "Generate Multiple Fee Records" to create fee entries for students' : `No ${feeColumnLabel.toLowerCase()} records found`}
           </p>
         </div>
       </div>

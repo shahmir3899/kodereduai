@@ -13,7 +13,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from core.mixins import TenantQuerySetMixin, ensure_tenant_school_id
-from core.permissions import IsSchoolAdminOrReadOnly, HasSchoolAccess
+from core.permissions import IsSchoolAdmin, IsSchoolAdminOrReadOnly, HasSchoolAccess
 from core.class_scope import resolve_class_scope
 
 from .models import (
@@ -2182,8 +2182,12 @@ class SectionAllocatorView(APIView):
 
 
 class AttendanceRiskView(APIView):
-    """AI Attendance Risk Predictor - identifies students at risk of poor attendance."""
-    permission_classes = [IsAuthenticated, HasSchoolAccess]
+    """AI Attendance Risk Predictor - identifies students at risk of poor attendance.
+
+    School-wide, so admin/principal only. Teachers get their own sections via
+    ClassTeacherAssignmentViewSet.my_students_at_risk.
+    """
+    permission_classes = [IsAuthenticated, HasSchoolAccess, IsSchoolAdmin]
 
     def get(self, request):
         from .attendance_risk_service import AttendanceRiskService
@@ -2244,8 +2248,11 @@ class AttendanceRiskView(APIView):
 
 
 class StudentRiskScoreView(APIView):
-    """Composite AI Student Risk Score - blends attendance, fee default, and academic risk."""
-    permission_classes = [IsAuthenticated, HasSchoolAccess]
+    """Composite AI Student Risk Score - blends attendance, fee default, and academic risk.
+
+    School-wide (and includes fee data), so admin/principal only.
+    """
+    permission_classes = [IsAuthenticated, HasSchoolAccess, IsSchoolAdmin]
 
     def get(self, request):
         from .student_risk_score_service import StudentRiskScoreService

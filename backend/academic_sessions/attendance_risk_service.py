@@ -32,10 +32,14 @@ class AttendanceRiskService:
         self.school_id = school_id
         self.academic_year_id = academic_year_id
 
-    def get_at_risk_students(self, threshold: float = None) -> dict:
+    def get_at_risk_students(self, threshold: float = None, only_student_ids=None) -> dict:
         """
         Analyze all active students and return those who are at risk or
         predicted to be at risk of falling below the attendance threshold.
+
+        only_student_ids limits the analysis to those students (a teacher's own
+        sections). None keeps the school-wide behaviour; an empty collection
+        analyses nobody rather than falling back to everyone.
 
         threshold defaults to this school's own configured policy
         (School.get_attendance_risk_threshold) rather than a hardcoded 75 --
@@ -66,6 +70,8 @@ class AttendanceRiskService:
         year_enrollments = enrollments_in_scope(self.school_id, academic_year_id=self.academic_year_id)
         if year_enrollments is not None:
             students = students.filter(id__in=year_enrollments.values('student_id'))
+        if only_student_ids is not None:
+            students = students.filter(id__in=list(only_student_ids))
 
         total_students = students.count()
         if total_students == 0:

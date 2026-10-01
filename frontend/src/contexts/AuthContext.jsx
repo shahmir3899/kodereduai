@@ -383,10 +383,6 @@ export function AuthProvider({ children }) {
       setTimeout(runDeferred, PRELOAD_TIER_B_DELAY_MS)
     }
 
-    addPrefetch(
-      ['dashboardNotifications', 5, school?.id || 'all'],
-      () => notificationsApi.getMyNotifications({ page_size: 5, school_id: school?.id || undefined }),
-    )
     addPrefetch(['notificationUnreadCount'], () => notificationsApi.getUnreadCount())
 
     // Prime class filter datasets used across ClassSelector/useSessionClasses hooks.

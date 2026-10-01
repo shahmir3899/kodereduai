@@ -30,11 +30,15 @@ class NotificationLogSerializer(serializers.ModelSerializer):
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     student_name = serializers.CharField(source='student.name', read_only=True, default=None)
     school_name = serializers.CharField(source='school.name', read_only=True, default=None)
+    is_read = serializers.SerializerMethodField()
+
+    def get_is_read(self, obj):
+        return obj.read_at is not None or obj.status == 'READ'
 
     class Meta:
         model = NotificationLog
         fields = [
-            'id', 'school', 'school_name', 'template', 'channel', 'channel_display',
+            'id', 'school', 'school_name', 'template', 'channel', 'channel_display', 'is_read',
             'event_type', 'event_type_display',
             'recipient_type', 'recipient_identifier', 'recipient_user',
             'student', 'student_name',

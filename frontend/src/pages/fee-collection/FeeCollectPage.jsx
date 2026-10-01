@@ -22,6 +22,7 @@ import {
 } from '../../utils/classScope'
 import Button from '../../components/ui/Button'
 import useResetStaleClassFilter from '../../hooks/useResetStaleClassFilter'
+import { useDebounce } from '../../hooks/useDebounce'
 
 export default function FeeCollectPage() {
   const { user, activeSchool, effectiveRole, isSchoolAdmin, isAccountant, isPrincipal, isSuperAdmin } = useAuth()
@@ -44,6 +45,8 @@ export default function FeeCollectPage() {
   })
   const [classFilter, setClassFilter] = useState(() => searchParams.get('class') || '')
   const [statusFilter, setStatusFilter] = useState(() => searchParams.get('status') || '')
+  const [searchQuery, setSearchQuery] = useState('')
+  const debouncedSearch = useDebounce(searchQuery, 300)
   const [feeTypeFilter, setFeeTypeFilter] = useState('MONTHLY')
   const [annualCategoryFilter, setAnnualCategoryFilter] = useState('')
   const [monthlyCategoryFilter, setMonthlyCategoryFilter] = useState('')
@@ -75,7 +78,7 @@ export default function FeeCollectPage() {
 
   // Data hook
   const data = useFeeCollection({
-    month, year, classFilter: resolvedClassFilter, statusFilter, feeTypeFilter,
+    month, year, classFilter: resolvedClassFilter, statusFilter, searchQuery: debouncedSearch, feeTypeFilter,
     annualCategoryFilter,
     monthlyCategoryFilter,
     sessionClassId: selectedSessionClassId,
@@ -258,17 +261,25 @@ export default function FeeCollectPage() {
                 }}
                 className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm"
               >
-                Create Fee
+                Generate Single Fee Record
               </button>
               <Button onClick={() => setShowGenerateModal(true)}>
-                Generate Records
+                Generate Multiple Fee Records
               </Button>
             </>
+          )}
+          {data.paymentList.length > 0 && (
+            <button
+              onClick={handleExportPDF}
+              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm whitespace-nowrap"
+            >
+              Export PDF
+            </button>
           )}
         </div>
       </div>
 
-      {/* Sticky Toolbar: Filters + Export */}
+      {/* Sticky Toolbar: Filters (Export lives in the header with the other actions to free filter width) */}
       <div className="mb-4 rounded-xl border border-gray-200 bg-white/95 p-2 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-white/80 sm:p-3 lg:sticky lg:top-0 lg:z-20">
         <div className="flex flex-col gap-3 xl:flex-row xl:items-end">
           <div className="min-w-0 flex-1">
@@ -277,6 +288,7 @@ export default function FeeCollectPage() {
             year={year} setYear={setYear}
             classFilter={classFilter} setClassFilter={setClassFilter}
             statusFilter={statusFilter} setStatusFilter={setStatusFilter}
+            searchQuery={searchQuery} setSearchQuery={setSearchQuery}
             feeTypeFilter={feeTypeFilter} setFeeTypeFilter={setFeeTypeFilter}
             annualCategoryFilter={annualCategoryFilter} setAnnualCategoryFilter={setAnnualCategoryFilter}
             monthlyCategoryFilter={monthlyCategoryFilter} setMonthlyCategoryFilter={setMonthlyCategoryFilter}
@@ -288,14 +300,6 @@ export default function FeeCollectPage() {
             allowAllClasses={!isTeacher}
           />
           </div>
-          {data.paymentList.length > 0 && (
-            <button
-              onClick={handleExportPDF}
-              className="w-full xl:w-auto xl:self-end px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm whitespace-nowrap"
-            >
-              Export PDF
-            </button>
-          )}
         </div>
       </div>
 

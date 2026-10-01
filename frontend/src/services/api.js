@@ -573,6 +573,8 @@ export const academicsApi = {
   updateClassTeacher: (id, data) => api.patch(`/api/academics/class-teachers/${id}/`, data),
   deleteClassTeacher: (id) => api.delete(`/api/academics/class-teachers/${id}/`),
   getMyClassTeacherAssignments: (params) => api.get('/api/academics/class-teachers/my_classes/', { params }),
+  // Teacher-scoped attendance + marks risk for the caller's own sections (TEACHER only).
+  getMyStudentsAtRisk: (params) => api.get('/api/academics/class-teachers/my_students_at_risk/', { params }),
 
   // Timetable Slots
   getTimetableSlots: (params) => api.get('/api/academics/timetable-slots/', { params }),
@@ -871,6 +873,8 @@ export const notificationsApi = {
 
   // My notifications (in-app)
   getMyNotifications: (params) => api.get('/api/notifications/my/', { params }),
+  markReadBulk: (ids) => api.post('/api/notifications/mark-read-bulk/', { ids }),
+  getDigest: (params) => api.get('/api/notifications/digest/', { params }),
   /** Optional params: `{ school_id }` for unread in one branch only. */
   getUnreadCount: (params) => api.get('/api/notifications/unread-count/', { params }),
   markRead: (id) => api.post(`/api/notifications/${id}/mark-read/`),

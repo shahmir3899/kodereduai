@@ -9,7 +9,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 from django.utils import timezone
-from django.db.models import Count, Q
+from django.db.models import Count, F, Q
 from django.db.models.functions import TruncDate
 
 from core.permissions import IsSchoolAdmin, IsSchoolAdminOrReadOnly, HasSchoolAccess, ModuleAccessMixin
@@ -219,8 +219,33 @@ class MyNotificationsView(ListAPIView):
         if event_type:
             qs = qs.filter(event_type=event_type)
 
+        if self.request.query_params.get('unread') in ('1', 'true'):
+            qs = qs.filter(read_at__isnull=True).exclude(status='READ')
+
         qs = filter_my_notifications_by_school(self.request, qs)
+
+        # Carousel shows unread first; the id tiebreak keeps pages stable
+        # while new rows arrive between page fetches.
+        if self.request.query_params.get('ordering') == 'unread_first':
+            qs = qs.order_by(F('read_at').asc(nulls_first=True), '-created_at', '-id')
         return qs
+
+
+class NotificationDigestView(APIView):
+    """AI daily digest of the user's unread in-app notifications."""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        from .digest import get_digest
+
+        qs = NotificationLog.objects.filter(
+            recipient_user=request.user,
+            channel='IN_APP',
+            read_at__isnull=True,
+        ).exclude(status__in=['FAILED', 'READ'])
+        qs = filter_my_notifications_by_school(request, qs)
+        scope = request.query_params.get('school_id') or 'all'
+        return Response(get_digest(request.user, qs, scope))
 
 
 class UnreadCountView(APIView):
@@ -287,6 +312,31 @@ class MarkAllReadView(APIView):
 
         updated = qs.update(read_at=timezone.now(), status='READ')
 
+        return Response({'marked_read': updated})
+
+
+class MarkReadBulkView(APIView):
+    """Mark specific notifications read (carousel marks what the user has seen)."""
+    permission_classes = [IsAuthenticated]
+    MAX_IDS = 200
+
+    def post(self, request):
+        raw_ids = request.data.get('ids')
+        if not isinstance(raw_ids, list):
+            return Response({'error': 'ids must be a list'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            ids = [int(i) for i in raw_ids[:self.MAX_IDS]]
+        except (TypeError, ValueError):
+            return Response({'error': 'ids must be integers'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Same school scoping as MarkAllReadView so a stale membership can't be reached.
+        updated = NotificationLog.objects.filter(
+            id__in=ids,
+            recipient_user=request.user,
+            channel='IN_APP',
+            read_at__isnull=True,
+            school_id__in=request.user.get_accessible_school_ids(),
+        ).update(read_at=timezone.now(), status='READ')
         return Response({'marked_read': updated})
 
 

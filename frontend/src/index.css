@@ -80,3 +80,13 @@ textarea[dir="rtl"] {
   text-align: right;
   direction: rtl;
 }
+
+
+/* Notification carousel: fills the active dot over one slide; onAnimationEnd advances. */
+@keyframes notif-progress-fill {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+.notif-progress {
+  animation: notif-progress-fill 6s linear forwards;
+}

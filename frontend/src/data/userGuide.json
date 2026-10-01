@@ -1931,12 +1931,12 @@
           "content": [
             {
               "type": "nav_path",
-              "path": "Sidebar > Finance > Fee Collection > Create Fee"
+              "path": "Sidebar > Finance > Fee Collection > Generate Single Fee Record"
             },
             {
               "type": "step",
               "number": 1,
-              "text": "Click 'Create Fee' to open the single fee creation modal."
+              "text": "Click 'Generate Single Fee Record' to open the single fee creation modal."
             },
             {
               "type": "step",

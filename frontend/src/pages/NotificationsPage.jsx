@@ -5,11 +5,13 @@ import { notificationsApi } from '../services/api'
 import { useAuth } from '../contexts/AuthContext'
 import { useAcademicYear } from '../contexts/AcademicYearContext'
 import { useToast } from '../components/Toast'
-import { formatDistanceToNow } from 'date-fns'
 import { useSessionClasses } from '../hooks/useSessionClasses'
 import Spinner from '../components/ui/Spinner'
 import { useEscapeKey } from '../hooks/useEscapeKey'
 import Button from '../components/ui/Button'
+import NotificationCard from '../components/notifications/NotificationCard'
+import { EVENT_TYPE_OPTIONS, bundleNotifications } from '../components/notifications/notificationMeta'
+import { useNotificationActions } from '../components/notifications/useNotificationActions'
 
 // === CONSTANTS (mirrored from backend model choices) ===
 
@@ -133,12 +135,25 @@ export default function NotificationsPage() {
 
 // === INBOX TAB ===
 
+function groupByDay(items) {
+  const startOfToday = new Date()
+  startOfToday.setHours(0, 0, 0, 0)
+  const dayMs = 86400000
+  const buckets = [['Today', []], ['Yesterday', []], ['Earlier', []]]
+  items.forEach((n) => {
+    const age = startOfToday.getTime() - new Date(n.created_at).getTime()
+    buckets[age < 0 ? 0 : age < dayMs ? 1 : 2][1].push(n)
+  })
+  return buckets.filter(([, list]) => list.length).map(([label, list]) => ({ label, items: list }))
+}
+
 function InboxTab() {
   const queryClient = useQueryClient()
   const { showSuccess } = useToast()
   const { user, activeSchool } = useAuth()
   const [filter, setFilter] = useState('')
   const [schoolFilter, setSchoolFilter] = useState('')
+  const [unreadOnly, setUnreadOnly] = useState(false)
   const [page, setPage] = useState(1)
   const [confirmMarkAll, setConfirmMarkAll] = useState(false)
   const schoolOptions = user?.schools || []
@@ -146,9 +161,10 @@ function InboxTab() {
   useEscapeKey(() => setConfirmMarkAll(false), confirmMarkAll)
 
   const { data, isLoading } = useQuery({
-    queryKey: ['myNotifications', filter, schoolFilter, page],
+    queryKey: ['myNotifications', filter, schoolFilter, unreadOnly, page],
     queryFn: () => notificationsApi.getMyNotifications({
       event_type: filter || undefined,
+      unread: unreadOnly ? 1 : undefined,
       school_id: schoolFilter || undefined,
       page,
       page_size: 20,
@@ -161,19 +177,15 @@ function InboxTab() {
     }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['myNotifications'] })
+      queryClient.invalidateQueries({ queryKey: ['notificationCarousel'] })
+      queryClient.invalidateQueries({ queryKey: ['notificationDigest'] })
       queryClient.invalidateQueries({ queryKey: ['notificationUnreadCount'] })
       showSuccess('All notifications marked as read')
       setConfirmMarkAll(false)
     },
   })
 
-  const markReadMutation = useMutation({
-    mutationFn: (id) => notificationsApi.markRead(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['myNotifications'] })
-      queryClient.invalidateQueries({ queryKey: ['notificationUnreadCount'] })
-    },
-  })
+  const { open: openNotification } = useNotificationActions()
 
   const notifications = data?.data?.results || data?.data || []
   const totalCount = data?.data?.count || notifications.length
@@ -201,10 +213,19 @@ function InboxTab() {
             className="text-sm border-gray-300 rounded-lg"
           >
             <option value="">All Types</option>
-            {EVENT_TYPES.map(({ value, label }) => (
+            {EVENT_TYPE_OPTIONS.map(({ value, label }) => (
               <option key={value} value={value}>{label}</option>
             ))}
           </select>
+          <label className="flex items-center gap-1.5 text-sm text-gray-600">
+            <input
+              type="checkbox"
+              checked={unreadOnly}
+              onChange={(e) => { setUnreadOnly(e.target.checked); setPage(1) }}
+              className="rounded border-gray-300"
+            />
+            Unread only
+          </label>
         </div>
         <button
           onClick={() => setConfirmMarkAll(true)}
@@ -217,41 +238,22 @@ function InboxTab() {
       {notifications.length === 0 ? (
         <div className="text-center py-10 text-gray-500">No notifications</div>
       ) : (
-        <div className="bg-white rounded-xl border border-gray-200 divide-y divide-gray-200">
-          {notifications.map((n) => (
-            <div
-              key={n.id}
-              className={`px-4 py-3 hover:bg-gray-50 cursor-pointer ${n.status !== 'READ' ? 'bg-primary-50/30' : ''}`}
-              onClick={() => n.status !== 'READ' && markReadMutation.mutate(n.id)}
-            >
-              <div className="flex items-start justify-between">
-                <div className="flex-1">
-                  <div className="flex items-center gap-2">
-                    {n.status !== 'READ' && (
-                      <span className="inline-block w-2 h-2 rounded-full bg-primary-500 flex-shrink-0" />
-                    )}
-                    <p className="text-sm font-medium text-gray-900">{n.title}</p>
-                    <span className="px-1.5 py-0.5 rounded text-xs bg-gray-100 text-gray-600">
-                      {EVENT_TYPE_LABEL[n.event_type] || n.event_type}
-                    </span>
-                    {n.channel && (
-                      <span className="px-1.5 py-0.5 rounded text-xs bg-blue-50 text-blue-600">
-                        {CHANNEL_LABEL[n.channel] || n.channel}
-                      </span>
-                    )}
-                    {n.school_name && (
-                      <span className="px-1.5 py-0.5 rounded text-xs bg-emerald-50 text-emerald-700">
-                        {n.school_name}
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-sm text-gray-600 mt-0.5">{n.body}</p>
-                </div>
-                <span className="text-xs text-gray-400 whitespace-nowrap ml-4">
-                  {formatDistanceToNow(new Date(n.created_at), { addSuffix: true })}
-                </span>
+        <div className="space-y-5">
+          {groupByDay(bundleNotifications(notifications)).map((group) => (
+            <section key={group.label}>
+              <h3 className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-2">{group.label}</h3>
+              <div className="space-y-2">
+                {group.items.map((n) => (
+                  <NotificationCard
+                    key={n.id}
+                    n={n}
+                    variant="row"
+                    multiSchool={schoolOptions.length > 1}
+                    onOpen={openNotification}
+                  />
+                ))}
               </div>
-            </div>
+            </section>
           ))}
         </div>
       )}

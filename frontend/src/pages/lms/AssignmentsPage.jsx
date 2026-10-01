@@ -17,6 +17,7 @@ import Spinner from '../../components/ui/Spinner'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
 import { RecordCard, CardGrid, ViewToggle } from '../../components/cards'
 import { useViewPreference } from '../../hooks/useViewPreference'
+import { filterAssignments } from './assignmentFilters'
 
 const STATUS_BADGES = {
   DRAFT: 'bg-gray-100 text-gray-800',
@@ -175,16 +176,13 @@ export default function AssignmentsPage() {
 
   // -- Data fetching --
 
+  // Class/subject/status/type are deliberately NOT part of this query: the whole year is
+  // fetched once and those filters run client-side below, so changing a filter costs no API
+  // call. Teacher section scoping is enforced server-side in AssignmentViewSet.get_queryset.
   const { data: assignmentsData, isLoading } = useQuery({
-    queryKey: ['assignments', resolvedFilterClass, filterClass, filterSubject, filterStatus, filterType, activeAcademicYear?.id],
+    queryKey: ['assignments', activeAcademicYear?.id],
     queryFn: () =>
       lmsApi.getAssignments({
-        ...(resolvedFilterClass && { class_obj: resolvedFilterClass }),
-        // Whole-class assignments plus this section's own, not a sibling's.
-        ...(classSelectorScope === 'session' && filterClass && { session_class_id: filterClass }),
-        ...(filterSubject && { subject: filterSubject }),
-        ...(filterStatus && { status: filterStatus }),
-        ...(filterType && { assignment_type: filterType }),
         ...(activeAcademicYear?.id && { academic_year: activeAcademicYear.id }),
         page_size: 9999,
       }),
@@ -247,12 +245,16 @@ export default function AssignmentsPage() {
     })
   }, [showBulkDiaryModal, isTeacher, teacherDailyDiaryPrefillClassId])
 
-  // Client-side search
-  const assignments = useMemo(() => {
-    if (!search) return allAssignments
-    const q = search.toLowerCase()
-    return allAssignments.filter((a) => a.title?.toLowerCase().includes(q))
-  }, [allAssignments, search])
+  // Client-side filters + search
+  const assignments = useMemo(() => filterAssignments(allAssignments, {
+    masterClassId: resolvedFilterClass,
+    sessionClassId: filterClass,
+    sessionScoped: classSelectorScope === 'session',
+    subject: filterSubject,
+    status: filterStatus,
+    type: filterType,
+    search,
+  }), [allAssignments, search, resolvedFilterClass, classSelectorScope, filterClass, filterSubject, filterStatus, filterType])
 
   // -- Mutations --
 

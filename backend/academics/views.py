@@ -8,6 +8,7 @@ from datetime import datetime
 from django.db.models import Q
 from django.db.utils import OperationalError, ProgrammingError
 from django.http import HttpResponse
+from django.utils import timezone
 
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
@@ -538,6 +539,121 @@ class ClassTeacherAssignmentViewSet(ModuleAccessMixin, TenantQuerySetMixin, view
 
         serializer = ClassTeacherAssignmentSerializer(qs, many=True)
         return Response(serializer.data)
+
+    @action(detail=False, methods=['get'])
+    def my_students_at_risk(self, request):
+        """At-risk students (attendance + marks) in the logged-in class teacher's own sections.
+
+        The school-wide risk endpoints are admin/principal-only; this one exists so
+        a teacher gets the same signal for just their students. Scope is section-level
+        (get_teacher_session_class_scope), plus legacy master-level assignments that
+        have no section. A subject-only teacher has no class-teacher assignment, so
+        they get empty lists.
+
+        Query params: academic_year (default: current year), limit (default 5, max 50).
+        """
+        from academic_sessions.models import AttendanceRiskSnapshot, StudentEnrollment
+        from academic_sessions.attendance_risk_service import AttendanceRiskService
+        from academic_sessions.utils import resolve_current_academic_year_id
+        from core.leadership_insights_views import _module_on
+        from core.permissions import get_teacher_master_only_class_scope, get_teacher_session_class_scope
+        from examinations.academic_risk_service import AcademicRiskService
+        from schools.models import School
+        from students.models import Student
+
+        if get_effective_role(request) != 'TEACHER':
+            return Response(
+                {'detail': 'Only teachers can use this endpoint. Admins have the full risk pages.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        school_id = _resolve_school_id(request)
+        if not school_id:
+            return Response({'detail': 'No school selected.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        raw_year = request.query_params.get('academic_year')
+        try:
+            academic_year_id = int(raw_year) if raw_year else resolve_current_academic_year_id(school_id)
+            limit = max(1, min(int(request.query_params.get('limit', 5)), 50))
+        except (TypeError, ValueError):
+            return Response({'detail': 'academic_year and limit must be integers.'}, status=status.HTTP_400_BAD_REQUEST)
+        if not academic_year_id:
+            return Response({'detail': 'No current academic year set for this school.'}, status=status.HTTP_404_NOT_FOUND)
+
+        section_ids = get_teacher_session_class_scope(request, school_id, academic_year_id)
+        master_only_ids = get_teacher_master_only_class_scope(request, school_id, academic_year_id)
+
+        assignments = ClassTeacherAssignment.objects.filter(
+            school_id=school_id, teacher__user=request.user, is_active=True,
+        ).filter(Q(academic_year_id=academic_year_id) | Q(academic_year__isnull=True)).select_related(
+            'class_obj', 'session_class',
+        )
+        sections = [
+            {
+                'session_class_id': row['session_class'],
+                'label': f"{row['class_name']}{' - ' + row['class_section'] if row['class_section'] else ''}",
+            }
+            for row in ClassTeacherAssignmentSerializer(assignments, many=True).data
+        ]
+
+        def empty_block():
+            return {'total_students': 0, 'at_risk_count': 0, 'risk_levels': {'HIGH': 0, 'MEDIUM': 0, 'LOW': 0}, 'students': []}
+
+        result = {
+            'academic_year': academic_year_id,
+            'sections': sections,
+            'attendance': empty_block(),
+            'academic': empty_block(),
+        }
+        if not section_ids and not master_only_ids:
+            return Response(result)
+
+        student_ids = set(
+            StudentEnrollment.objects.filter(
+                school_id=school_id, academic_year_id=academic_year_id, is_active=True,
+            ).filter(
+                Q(session_class_id__in=section_ids) | Q(class_obj_id__in=master_only_ids)
+            ).values_list('student_id', flat=True)
+        )
+        if not student_ids:
+            return Response(result)
+
+        school = School.objects.only('id', 'enabled_modules').filter(id=school_id).first()
+        enabled = (school.enabled_modules if school and isinstance(school.enabled_modules, dict) else {})
+
+        def trim(block):
+            block = dict(block)
+            block['students'] = block['students'][:limit]
+            return block
+
+        if _module_on(enabled, 'attendance'):
+            snapshot = AttendanceRiskSnapshot.objects.filter(
+                school_id=school_id, academic_year_id=academic_year_id,
+            ).first()
+            if snapshot and snapshot.computed_at.date() == timezone.localdate():
+                # Fresh nightly snapshot: filter it rather than re-scanning a year of attendance.
+                mine = [s for s in snapshot.students if s.get('student_id') in student_ids]
+                levels = {'HIGH': 0, 'MEDIUM': 0, 'LOW': 0}
+                for s in mine:
+                    levels[s.get('severity')] = levels.get(s.get('severity'), 0) + 1
+                block = {
+                    'total_students': Student.objects.filter(id__in=student_ids, is_active=True).count(),
+                    'at_risk_count': len(mine),
+                    'risk_levels': levels,
+                    'students': mine,
+                }
+            else:
+                block = AttendanceRiskService(school_id, academic_year_id).get_at_risk_students(
+                    only_student_ids=student_ids,
+                )
+            result['attendance'] = trim(block)
+
+        if _module_on(enabled, 'examinations'):
+            result['academic'] = trim(
+                AcademicRiskService(school_id, academic_year_id).get_at_risk_students(only_student_ids=student_ids)
+            )
+
+        return Response(result)
 
 
 # ── TimetableSlot ViewSet ────────────────────────────────────────────────────

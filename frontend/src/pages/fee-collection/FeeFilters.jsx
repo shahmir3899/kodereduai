@@ -14,6 +14,8 @@ export default function FeeFilters({
   setClassFilter,
   statusFilter,
   setStatusFilter,
+  searchQuery,
+  setSearchQuery,
   feeTypeFilter,
   setFeeTypeFilter,
   annualCategoryFilter,
@@ -34,7 +36,7 @@ export default function FeeFilters({
   const controlClass = 'input-field text-sm w-full'
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-6 gap-3 w-full">
+    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-7 gap-3 w-full">
       <div className={fieldWrapperClass}>
         <label className="block text-xs font-medium text-gray-500 mb-1">Fee Type</label>
         <select value={feeTypeFilter || ''} onChange={(e) => { setFeeTypeFilter(e.target.value); setAnnualCategoryFilter?.(''); setMonthlyCategoryFilter?.('') }} className={controlClass}>
@@ -97,6 +99,18 @@ export default function FeeFilters({
           <option value="ADVANCE">Advance</option>
         </select>
       </div>
+      {setSearchQuery && (
+        <div className={fieldWrapperClass}>
+          <label className="block text-xs font-medium text-gray-500 mb-1">Search</label>
+          <input
+            type="text"
+            className={controlClass}
+            placeholder="Search by name or roll number..."
+            value={searchQuery || ''}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
+        </div>
+      )}
     </div>
   )
 }

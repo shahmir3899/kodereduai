@@ -5581,8 +5581,12 @@ class PaperFeedbackViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Read
 
 
 class AcademicRiskView(APIView):
-    """AI Academic Risk Predictor - identifies students trending toward failing grades."""
-    permission_classes = [IsAuthenticated, HasSchoolAccess]
+    """AI Academic Risk Predictor - identifies students trending toward failing grades.
+
+    School-wide, so admin/principal only. Teachers get their own sections via
+    ClassTeacherAssignmentViewSet.my_students_at_risk.
+    """
+    permission_classes = [IsAuthenticated, HasSchoolAccess, IsSchoolAdmin]
 
     def get(self, request):
         from .academic_risk_service import AcademicRiskService

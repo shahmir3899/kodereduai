@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useSearchParams } from 'react-router-dom'
 import { attendanceApi, sessionsApi } from '../services/api'
 import { useAcademicYear } from '../contexts/AcademicYearContext'
 import ClassSelector from '../components/ClassSelector'
@@ -12,7 +13,10 @@ import PageHeader from '../components/ui/PageHeader'
 export default function ManualEntryPage() {
   const queryClient = useQueryClient()
   const { activeAcademicYear } = useAcademicYear()
-  const [classId, setClassId] = useState('')
+  // ?class=<id> lets dashboards deep-link to one section. If the id isn't in the
+  // teacher's options, useTeacherScopedClasses falls back to the first allowed class.
+  const [searchParams] = useSearchParams()
+  const [classId, setClassId] = useState(() => searchParams.get('class') || '')
   const [date, setDate] = useState(new Date().toISOString().split('T')[0])
   const [attendanceData, setAttendanceData] = useState([])
   const [saveMsg, setSaveMsg] = useState('')

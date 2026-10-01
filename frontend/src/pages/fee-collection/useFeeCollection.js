@@ -10,7 +10,7 @@ const formatGenerationPeriod = (month, year) => new Date(year, month - 1).toLoca
  * Data hook for FeeCollectPage — payment collection workbench.
  * Handles fee payments queries + all payment-related mutations.
  */
-export function useFeeCollection({ month, year, classFilter, statusFilter, feeTypeFilter, annualCategoryFilter, monthlyCategoryFilter, sessionClassId, academicYearId }) {
+export function useFeeCollection({ month, year, classFilter, statusFilter, searchQuery = '', feeTypeFilter, annualCategoryFilter, monthlyCategoryFilter, sessionClassId, academicYearId }) {
   const queryClient = useQueryClient()
 
   // Reference data
@@ -30,14 +30,15 @@ export function useFeeCollection({ month, year, classFilter, statusFilter, feeTy
   const isMonthlyType = feeTypeFilter === 'MONTHLY'
   const isAnnualType = feeTypeFilter === 'ANNUAL'
 
+  // Class is deliberately NOT part of these queries: the whole month is fetched once and the
+  // class/search filters run client-side (filterPayments), so switching class costs no API call.
+  // Teacher scoping is enforced server-side in FeePaymentViewSet.get_queryset regardless of params.
   // Single query when a specific fee type is selected
   const { data: payments, isLoading: singleLoading } = useQuery({
-    queryKey: ['feePayments', feeTypeFilter, isMonthlyType ? month : 0, year, classFilter, sessionClassId, annualCategoryFilter, monthlyCategoryFilter, academicYearId],
+    queryKey: ['feePayments', feeTypeFilter, isMonthlyType ? month : 0, year, annualCategoryFilter, monthlyCategoryFilter, academicYearId],
     queryFn: () => financeApi.getFeePayments({
       month: isMonthlyType ? month : 0, year,
       fee_type: feeTypeFilter,
-      ...(classFilter && { class_id: classFilter }),
-      ...(sessionClassId && { session_class_id: sessionClassId }),
       ...(annualCategoryFilter && { annual_category: annualCategoryFilter }),
       ...(monthlyCategoryFilter && { monthly_category: monthlyCategoryFilter }),
       ...(academicYearId && { academic_year: academicYearId }),
@@ -48,11 +49,9 @@ export function useFeeCollection({ month, year, classFilter, statusFilter, feeTy
 
   // "All Types" mode: two parallel queries — monthly (month=N) + annual (month=0)
   const { data: monthlyPayments, isLoading: monthlyLoading } = useQuery({
-    queryKey: ['feePayments', 'MONTHLY', month, year, classFilter, sessionClassId, monthlyCategoryFilter, academicYearId],
+    queryKey: ['feePayments', 'MONTHLY', month, year, monthlyCategoryFilter, academicYearId],
     queryFn: () => financeApi.getFeePayments({
       month, year, fee_type: 'MONTHLY',
-      ...(classFilter && { class_id: classFilter }),
-      ...(sessionClassId && { session_class_id: sessionClassId }),
       ...(monthlyCategoryFilter && { monthly_category: monthlyCategoryFilter }),
       ...(academicYearId && { academic_year: academicYearId }),
       page_size: 9999,
@@ -61,11 +60,9 @@ export function useFeeCollection({ month, year, classFilter, statusFilter, feeTy
   })
 
   const { data: annualPayments, isLoading: annualLoading } = useQuery({
-    queryKey: ['feePayments', 'ANNUAL', 0, year, classFilter, sessionClassId, annualCategoryFilter, academicYearId],
+    queryKey: ['feePayments', 'ANNUAL', 0, year, annualCategoryFilter, academicYearId],
     queryFn: () => financeApi.getFeePayments({
       month: 0, year, fee_type: 'ANNUAL',
-      ...(classFilter && { class_id: classFilter }),
-      ...(sessionClassId && { session_class_id: sessionClassId }),
       ...(annualCategoryFilter && { annual_category: annualCategoryFilter }),
       ...(academicYearId && { academic_year: academicYearId }),
       page_size: 9999,
@@ -177,7 +174,7 @@ export function useFeeCollection({ month, year, classFilter, statusFilter, feeTy
   }, [classList])
 
   const filteredPayments = useMemo(() => {
-    const filtered = filterPayments(allPayments, classFilter, statusFilter, sortedClassList)
+    const filtered = filterPayments(allPayments, classFilter, statusFilter, sortedClassList, sessionClassId, searchQuery)
     
     // Create mappings for sorting
     const classOrderMap = new Map()
@@ -226,7 +223,7 @@ export function useFeeCollection({ month, year, classFilter, statusFilter, feeTy
       const typeOrder = { MONTHLY: 0, ANNUAL: 1, ADMISSION: 2, BOOKS: 3, FINE: 4 }
       return (typeOrder[a.fee_type] ?? 9) - (typeOrder[b.fee_type] ?? 9)
     })
-  }, [allPayments, classFilter, statusFilter, sortedClassList])
+  }, [allPayments, classFilter, statusFilter, sortedClassList, sessionClassId, searchQuery])
 
   // --- Canonical backend summary for stat cards ---
   // Build query params matching the current filter state so that the summary

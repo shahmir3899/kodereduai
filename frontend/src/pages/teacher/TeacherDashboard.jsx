@@ -4,20 +4,22 @@ import { Link } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
 import { academicsApi, attendanceApi, lmsApi, examinationsApi, sessionsApi } from '../../services/api'
-import StatCard from '../../components/dashboard/StatCard'
 import QuickActionGrid from '../../components/dashboard/QuickActionGrid'
 import NotificationsFeed from '../../components/dashboard/NotificationsFeed'
+import DashboardShell from '../../components/dashboard/DashboardShell'
+import SectionCard from '../../components/dashboard/SectionCard'
+import HeroCard from '../../components/dashboard/HeroCard'
+import AttentionStrip from '../../components/dashboard/AttentionStrip'
+import StudentsAtRiskCard from '../../components/dashboard/StudentsAtRiskCard'
+import TeacherScopeSummary from '../../components/teacher/TeacherScopeSummary'
+import useOffDay from '../../hooks/useOffDay'
+import useNow from '../../hooks/useNow'
+import {
+  findPeriod, matchAssignment, sectionParams, manualEntryClassId,
+  assignmentLabel, countOf, buildTeacherAttentionItems,
+} from './teacherDashboardUtils'
 
 const DAY_NAMES = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT']
-
-function getOrdinalSuffix(day) {
-  if (day >= 11 && day <= 13) return 'th'
-  const lastDigit = day % 10
-  if (lastDigit === 1) return 'st'
-  if (lastDigit === 2) return 'nd'
-  if (lastDigit === 3) return 'rd'
-  return 'th'
-}
 
 // ─── Icons ──────────────────────────────────────────────────────────────────────
 const icons = {
@@ -76,427 +78,290 @@ const icons = {
 export default function TeacherDashboard() {
   const { user, activeSchool, isModuleEnabled } = useAuth()
   const { activeAcademicYear } = useAcademicYear()
-  const now = new Date()
+  const now = useNow()
   const todayDay = DAY_NAMES[now.getDay()]
-  const formattedLongDate = `${now.toLocaleDateString('en-US', { weekday: 'long' })}, ${now.getDate()}${getOrdinalSuffix(now.getDate())} ${now.toLocaleDateString('en-US', { month: 'long' })} ${now.getFullYear()}`
+  const todayDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+  const ayId = activeAcademicYear?.id
 
-  // Detect current period
-  const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
+  const attendanceOn = isModuleEnabled('attendance')
+  const academicsOn = isModuleEnabled('academics')
+  const examsOn = isModuleEnabled('examinations')
 
-  // Week date range for lesson plans
+  // Week range for lesson plans (Sunday → Saturday, local time)
   const weekStart = new Date(now)
   weekStart.setDate(now.getDate() - now.getDay())
   const weekEnd = new Date(weekStart)
   weekEnd.setDate(weekStart.getDate() + 6)
-  const weekStartStr = weekStart.toISOString().split('T')[0]
-  const weekEndStr = weekEnd.toISOString().split('T')[0]
-  const todayDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+  const fmt = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  const weekStartStr = fmt(weekStart)
+  const weekEndStr = fmt(weekEnd)
 
-  // ─── Queries ──────────────────────────────────────────────────────────────────
+  // ─── Queries ───────────────────────────────────────────────────────────
 
-  // Academic calendar: is today an OFF day (holiday/weekly-off/custom)?
-  const { data: dailyReportRes } = useQuery({
-    queryKey: ['teacherDailyReport', todayDate, activeSchool?.id, activeAcademicYear?.id],
-    queryFn: () => attendanceApi.getDailyReport(todayDate, activeSchool?.id, activeAcademicYear?.id),
-    enabled: isModuleEnabled('attendance') && !!activeSchool?.id,
-  })
-  const isOffDay = !!dailyReportRes?.data?.is_off_day
-  const offDayTypes = dailyReportRes?.data?.off_day_types || []
-  const offDayLabel = `OFF Day${offDayTypes.length ? `: ${offDayTypes.join(', ')}` : ''}`
+  const { isOffDay, label: offDayLabel } = useOffDay({ enabled: !!activeSchool?.id })
 
-  // Today's timetable
-  const { data: timetableRes, isLoading: loadingTimetable } = useQuery({
-    queryKey: ['myTimetable', todayDay, activeAcademicYear?.id],
+  const { data: timetableRes, isLoading: loadingTimetable, isError: timetableError } = useQuery({
+    queryKey: ['myTimetable', todayDay, ayId],
     queryFn: () => academicsApi.getMyTimetable({
       day: todayDay,
-      ...(activeAcademicYear?.id && { academic_year: activeAcademicYear.id }),
+      ...(ayId && { academic_year: ayId }),
     }),
   })
-  const timetable = timetableRes?.data || []
+  const timetable = useMemo(() => timetableRes?.data || [], [timetableRes])
 
-  // Classes needing attendance
-  const { data: myClassesRes } = useQuery({
-    queryKey: ['myAttendanceClasses'],
-    queryFn: () => attendanceApi.getMyAttendanceClasses(),
-    enabled: isModuleEnabled('attendance'),
+  const { data: classTeacherScopeRes, isLoading: loadingAssignments } = useQuery({
+    queryKey: ['myClassTeacherAssignments', ayId],
+    queryFn: () => academicsApi.getMyClassTeacherAssignments(ayId ? { academic_year: ayId } : undefined),
+    enabled: academicsOn,
   })
-  const myClasses = myClassesRes?.data?.results || myClassesRes?.data || []
+  const assignments = useMemo(() => classTeacherScopeRes?.data || [], [classTeacherScopeRes])
 
-  const { data: attendanceProgressByClass, isLoading: loadingAttendanceProgress } = useQuery({
-    queryKey: ['teacherAttendanceProgress', todayDate, activeAcademicYear?.id, myClasses.map(c => c.id).join(',')],
-    queryFn: async () => {
-      const classIds = myClasses.map((c) => c.id).filter(Boolean)
-      if (!classIds.length) return []
-
-      const settled = await Promise.allSettled(
-        classIds.map(async (classId) => {
-          const currentClass = myClasses.find((c) => Number(c.id) === Number(classId))
-          const [enrollRes, recordsRes] = await Promise.all([
-            sessionsApi.getEnrollments({
-              class_id: classId,
-              academic_year: activeAcademicYear?.id || undefined,
-              page_size: 1000,
-            }),
-            attendanceApi.getRecords({
-              class_id: classId,
-              date: todayDate,
-              academic_year: activeAcademicYear?.id || undefined,
-              page_size: 1000,
-            }),
-          ])
-
-          const enrollments = enrollRes?.data?.results || enrollRes?.data || []
-          const records = recordsRes?.data?.results || recordsRes?.data || []
-
-          return {
-            classId,
-            className: currentClass?.name || `Class ${classId}`,
-            classSection: currentClass?.section || '',
-            total: enrollments.length,
-            marked: records.length,
-          }
-        }),
-      )
-      return settled.map((result, index) => {
-        if (result.status === 'fulfilled') return result.value
-        const fallbackClass = myClasses[index]
-        return {
-          classId: fallbackClass?.id || `fallback-${index}`,
-          className: fallbackClass?.name || `Class ${fallbackClass?.id || index + 1}`,
-          classSection: fallbackClass?.section || '',
-          total: 0,
-          marked: 0,
-        }
-      })
-    },
-    enabled: isModuleEnabled('attendance') && myClasses.length > 0,
+  // Per-section progress. Counts come from page_size=1 list responses, and each
+  // section is queried by session_class_id: the old page used the master class id,
+  // which would blend 5-A and 5-B into one number for a sectioned class.
+  const assignmentKey = assignments.map((a) => a.id).join(',')
+  const { data: progress, isLoading: loadingProgress, isError: progressError } = useQuery({
+    queryKey: ['teacherSectionProgress', todayDate, ayId, assignmentKey],
+    queryFn: () => Promise.all(assignments.map(async (a) => {
+      const params = sectionParams(a, ayId)
+      try {
+        const [enrollRes, recordsRes] = await Promise.all([
+          sessionsApi.getEnrollments({ ...params, active_on: todayDate, page_size: 1 }),
+          attendanceApi.getRecords({ ...params, date: todayDate, page_size: 1 }),
+        ])
+        return { assignment: a, total: countOf(enrollRes), marked: countOf(recordsRes), failed: false }
+      } catch {
+        return { assignment: a, total: null, marked: null, failed: true }
+      }
+    })),
+    enabled: attendanceOn && assignments.length > 0,
   })
+  const rows = useMemo(() => progress || [], [progress])
+  const isPending = (r) => !r.failed && (r.total || 0) > 0 && (r.marked || 0) < r.total
+  const pendingAttendanceClasses = rows.filter(isPending).length
 
-  const { data: classTeacherScopeRes } = useQuery({
-    queryKey: ['myClassTeacherAssignments', activeAcademicYear?.id],
-    queryFn: () => academicsApi.getMyClassTeacherAssignments(
-      activeAcademicYear?.id ? { academic_year: activeAcademicYear.id } : undefined,
-    ),
-    enabled: isModuleEnabled('academics'),
-  })
-  const classTeacherAssignments = classTeacherScopeRes?.data || []
-
-  const { data: subjectTeacherScopeRes } = useQuery({
-    queryKey: ['mySubjectAssignments', activeAcademicYear?.id],
-    queryFn: () => academicsApi.getMySubjectAssignments(
-      activeAcademicYear?.id ? { academic_year: activeAcademicYear.id } : undefined,
-    ),
-    enabled: isModuleEnabled('academics'),
-  })
-  const subjectTeacherAssignments = subjectTeacherScopeRes?.data || []
-
-  // Submissions needing grading
-  const { data: submissionsRes } = useQuery({
+  const { data: submissionsRes, isLoading: loadingSubmissions, isError: submissionsError } = useQuery({
     queryKey: ['pendingSubmissions'],
     queryFn: () => lmsApi.getSubmissions({ status: 'SUBMITTED', page_size: 10 }),
-    enabled: isModuleEnabled('academics'),
+    enabled: academicsOn,
   })
   const submissions = submissionsRes?.data?.results || submissionsRes?.data || []
+  const submissionCount = countOf(submissionsRes)
 
-  // Upcoming exams (for teacher's subjects)
-  const { data: examsRes } = useQuery({
-    queryKey: ['teacherExams', activeAcademicYear?.id],
+  // Class teachers only: the API scopes this to the teacher's own sections and returns
+  // empty lists for a subject-only teacher. Fetched last and cached — it recomputes risk.
+  const { data: riskRes, isLoading: loadingRisk, isError: riskError } = useQuery({
+    queryKey: ['myStudentsAtRisk', ayId],
+    queryFn: () => academicsApi.getMyStudentsAtRisk({ ...(ayId && { academic_year: ayId }), limit: 5 }),
+    enabled: academicsOn && assignments.length > 0,
+    staleTime: 10 * 60 * 1000,
+  })
+  const risk = riskRes?.data
+  const studentsAtRisk = (risk?.attendance?.at_risk_count || 0) + (risk?.academic?.at_risk_count || 0)
+
+  const { data: examsRes, isLoading: loadingExams, isError: examsError } = useQuery({
+    queryKey: ['teacherExams', ayId],
     queryFn: () => examinationsApi.getExams({
-      ...(activeAcademicYear?.id && { academic_year: activeAcademicYear.id }),
+      ...(ayId && { academic_year: ayId }),
       page_size: 10,
     }),
-    enabled: isModuleEnabled('examinations'),
+    enabled: examsOn,
   })
   const allExams = examsRes?.data?.results || examsRes?.data || []
 
-  // Lesson plans this week
-  const { data: lessonPlansRes } = useQuery({
+  const { data: lessonPlansRes, isLoading: loadingPlans, isError: plansError } = useQuery({
     queryKey: ['weekLessonPlans', weekStartStr, weekEndStr],
-    queryFn: () => lmsApi.getLessonPlans({
-      date_from: weekStartStr,
-      date_to: weekEndStr,
-      page_size: 30,
-    }),
-    enabled: isModuleEnabled('academics'),
+    queryFn: () => lmsApi.getLessonPlans({ date_from: weekStartStr, date_to: weekEndStr, page_size: 30 }),
+    enabled: academicsOn,
   })
   const weekPlans = lessonPlansRes?.data?.results || lessonPlansRes?.data || []
 
-  // ─── Computed ─────────────────────────────────────────────────────────────────
+  // ─── Derived ───────────────────────────────────────────────────────────
 
-  // Find current/next period
-  const currentPeriodIdx = useMemo(() => {
-    if (!timetable.length) return -1
-    for (let i = 0; i < timetable.length; i++) {
-      const start = timetable[i].slot_start_time?.slice(0, 5)
-      const end = timetable[i].slot_end_time?.slice(0, 5)
-      if (start && end && currentTime >= start && currentTime <= end) return i
-    }
-    // If between periods, find next upcoming
-    for (let i = 0; i < timetable.length; i++) {
-      const start = timetable[i].slot_start_time?.slice(0, 5)
-      if (start && currentTime < start) return i
-    }
-    return -1
-  }, [timetable, currentTime])
+  const period = useMemo(() => findPeriod(timetable, now), [timetable, now])
+  const heroEntry = period.index >= 0 ? timetable[period.index] : null
+  const heroAssignment = matchAssignment(heroEntry, assignments)
+  const heroRow = heroAssignment ? rows.find((r) => r.assignment.id === heroAssignment.id) : null
 
-  // Exams needing marks entry (PUBLISHED status usually means marks can be entered)
-  const upcomingExams = useMemo(() => {
-    return allExams
-      .filter(e => e.status === 'SCHEDULED' || e.status === 'PUBLISHED')
-      .slice(0, 5)
-  }, [allExams])
+  const upcomingExams = useMemo(
+    () => allExams.filter((e) => e.status === 'SCHEDULED' || e.status === 'PUBLISHED').slice(0, 5),
+    [allExams],
+  )
+  const examsAwaitingMarks = allExams.filter((e) => e.status === 'PUBLISHED').length
 
-  // Lesson plan stats
   const lessonPlanStats = useMemo(() => {
     const total = weekPlans.length
-    const completed = weekPlans.filter(p => p.status === 'COMPLETED' || p.is_completed).length
-    const published = weekPlans.filter(p => p.status === 'PUBLISHED').length
+    const completed = weekPlans.filter((p) => p.status === 'COMPLETED' || p.is_completed).length
+    const published = weekPlans.filter((p) => p.status === 'PUBLISHED').length
     return { total, completed, published }
   }, [weekPlans])
 
-  const pendingExamMarkingCount = useMemo(
-    () => allExams.filter((e) => e.status === 'PUBLISHED').length,
-    [allExams],
-  )
-  const pendingGradingCount = pendingExamMarkingCount + submissions.length
-  const hasGradingContext = allExams.length > 0 || submissions.length > 0
-
-  const scopeSummary = useMemo(() => {
-    const classTeacherClasses = classTeacherAssignments.map(item => ({
-      id: item.id,
-      label: `${item.class_name}${item.class_section ? ` - ${item.class_section}` : ''}`,
-    }))
-
-    const subjectTeacherClasses = new Map()
-    subjectTeacherAssignments.forEach(item => {
-      const key = `${item.class_obj}`
-      if (!subjectTeacherClasses.has(key)) {
-        subjectTeacherClasses.set(key, {
-          classLabel: `${item.class_name}${item.class_section ? ` - ${item.class_section}` : ''}`,
-          subjects: [],
-        })
-      }
-      const subjectLabel = item.subject_name || item.subject_code
-      if (subjectLabel && !subjectTeacherClasses.get(key).subjects.includes(subjectLabel)) {
-        subjectTeacherClasses.get(key).subjects.push(subjectLabel)
-      }
-    })
-
-    return {
-      classTeacherClasses,
-      subjectTeacherClasses: [...subjectTeacherClasses.values()],
-    }
-  }, [classTeacherAssignments, subjectTeacherAssignments])
-
-  // ─── Quick Actions ──────────────────────────────────────────────────────────
+  const attentionItems = buildTeacherAttentionItems({
+    isOffDay, attendanceOn, examsOn, academicsOn,
+    pendingAttendanceClasses,
+    submissionsToGrade: submissionCount,
+    examsAwaitingMarks,
+    studentsAtRisk,
+  })
+  const attentionLoading = (attendanceOn && (loadingAssignments || loadingProgress))
+    || (academicsOn && loadingSubmissions) || (examsOn && loadingExams)
 
   const quickActions = [
-    ...(isModuleEnabled('attendance') ? [{ label: 'Mark Attendance', href: '/attendance/manual-entry', icon: icons.attendance }] : []),
+    ...(attendanceOn ? [{ label: 'Mark Attendance', href: '/attendance/manual-entry', icon: icons.attendance, badge: isOffDay ? 0 : pendingAttendanceClasses }] : []),
     { label: 'My Timetable', href: '/academics/timetable', icon: icons.timetable },
-    ...(isModuleEnabled('academics') ? [
+    ...(academicsOn ? [
       { label: 'Lesson Plans', href: '/academics/lesson-plans', icon: icons.lessonPlan },
-      { label: 'Assignments', href: '/academics/assignments', icon: icons.assignments },
+      { label: 'Assignments', href: '/academics/assignments', icon: icons.assignments, badge: submissionCount || 0 },
     ] : []),
-    ...(isModuleEnabled('examinations') ? [{ label: 'Enter Marks', href: '/academics/marks-entry', icon: icons.marks }] : []),
+    ...(examsOn ? [{ label: 'Enter Marks', href: '/academics/marks-entry', icon: icons.marks, badge: examsAwaitingMarks }] : []),
     ...(isModuleEnabled('hr') ? [{ label: 'My Leave', href: '/hr/leave', icon: icons.leave }] : []),
     { label: 'Notifications', href: '/notifications', icon: icons.notify },
   ]
 
-  // ─── Render ─────────────────────────────────────────────────────────────────
+  // ─── Hero ──────────────────────────────────────────────────────────────
+
+  let hero
+  if (isOffDay) {
+    hero = <HeroCard tone="gray" eyebrow="Today" title="No school today" subtitle={offDayLabel} />
+  } else if (loadingTimetable) {
+    hero = <div className="mb-6 h-24 rounded-xl bg-gray-50 border border-gray-100 animate-pulse" />
+  } else if (timetable.length === 0) {
+    hero = <HeroCard tone="gray" eyebrow="Today" title="No classes scheduled today" />
+  } else if (!heroEntry) {
+    hero = <HeroCard tone="green" eyebrow="Today" title="All classes done for today" subtitle={`${timetable.length} period${timetable.length === 1 ? '' : 's'} taught`} />
+  } else {
+    const times = `${heroEntry.slot_start_time?.slice(0, 5)} – ${heroEntry.slot_end_time?.slice(0, 5)}`
+    const inMinutes = period.minutes
+    const eyebrow = period.state === 'now'
+      ? `Now · ${inMinutes} min left`
+      : `Next · starts in ${inMinutes >= 60 ? `${Math.floor(inMinutes / 60)}h ${inMinutes % 60}m` : `${inMinutes} min`}`
+    const unmarked = heroRow ? isPending(heroRow) : false
+    hero = (
+      <HeroCard
+        tone={period.state === 'now' ? 'sky' : 'gray'}
+        eyebrow={eyebrow}
+        title={`${heroEntry.subject_name || 'Free Period'} — ${heroEntry.class_name}`}
+        subtitle={`${times}${heroEntry.room ? ` · ${heroEntry.room}` : ''}`}
+        primaryAction={attendanceOn && heroAssignment
+          ? {
+            label: unmarked ? 'Mark attendance' : 'View attendance',
+            href: `/attendance/manual-entry?class=${manualEntryClassId(heroAssignment)}`,
+          }
+          : undefined}
+      />
+    )
+  }
+
+  // ─── Render ────────────────────────────────────────────────────────────
+
+  const displayName = [user?.first_name, user?.last_name].filter(Boolean).join(' ') || user?.username
 
   return (
-    <div>
-      {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Dashboard</h1>
-        <p className="text-sm text-gray-500">
-          Welcome back, {[user?.first_name, user?.last_name].filter(Boolean).join(' ') || user?.username}
-          <span className="text-gray-400 ml-1">— {formattedLongDate}</span>
-        </p>
-      </div>
+    <DashboardShell
+      title="Dashboard"
+      subtitle={`Welcome back, ${displayName}`}
+      offDayLabel={offDayLabel}
+    >
+      <AttentionStrip items={attentionItems} loading={attentionLoading} />
 
-      {/* KPI Stats */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
-        <StatCard
-          label="Classes Today"
-          value={isOffDay ? 'OFF' : timetable.length}
-          subtitle={isOffDay ? offDayLabel : (currentPeriodIdx >= 0 ? `Now: ${timetable[currentPeriodIdx]?.subject_name || 'Class'}` : undefined)}
-          icon={icons.classes}
-          color={isOffDay ? 'gray' : 'blue'}
-          loading={loadingTimetable}
-          cardClassName="h-28"
-        />
-        <Link to="/attendance/manual-entry" className="block">
-          <div className="bg-white rounded-xl border border-gray-200 p-4 h-28 transition-shadow hover:shadow-md cursor-pointer">
-            <div className="flex items-start justify-between">
-              <div className="min-w-0">
-                <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Attendance to Mark</p>
-                {isOffDay ? (
-                  <p className="text-sm text-gray-500 mt-1 font-medium">{offDayLabel}</p>
-                ) : loadingAttendanceProgress ? (
-                  <p className="text-sm text-gray-400 mt-1">Loading...</p>
-                ) : attendanceProgressByClass?.length ? (
-                  <div className="mt-2 space-y-1.5 max-h-14 overflow-y-auto pr-1">
-                    {attendanceProgressByClass.map((row) => {
-                      const pending = Math.max((row.total || 0) - (row.marked || 0), 0)
-                      return (
-                        <div key={row.classId} className="flex items-center justify-between gap-3 text-sm">
-                          <span className="text-gray-700 truncate">
-                            {row.className}{row.classSection ? ` - ${row.classSection}` : ''}
-                          </span>
-                          <span className={pending > 0 ? 'font-semibold text-amber-700' : 'font-semibold text-green-700'}>
-                            {row.marked || 0}/{row.total || 0}
-                          </span>
-                        </div>
-                      )
-                    })}
-                  </div>
-                ) : (
-                  <p className="text-sm text-gray-400 mt-1">No classes assigned</p>
-                )}
-              </div>
-              <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${isOffDay ? 'bg-gray-100 text-gray-500' : 'bg-amber-100 text-amber-600'}`}>
-                {icons.attendance}
-              </div>
-            </div>
-          </div>
-        </Link>
-        <StatCard
-          label="Pending Grading"
-          value={hasGradingContext ? pendingGradingCount : 'N/A'}
-          subtitle={
-            !hasGradingContext
-              ? 'no exam/test context'
-              : pendingGradingCount > 0
-              ? 'items pending'
-              : 'all marked'
-          }
-          icon={icons.grading}
-          color={!hasGradingContext ? 'gray' : pendingGradingCount > 0 ? 'red' : 'green'}
-          href="/academics/assignments"
-          cardClassName="h-28"
-        />
-        <StatCard
-          label="Upcoming Exams"
-          value={upcomingExams.length}
-          subtitle={upcomingExams.length > 0 ? 'need attention' : 'none scheduled'}
-          icon={icons.exams}
-          color={upcomingExams.length > 0 ? 'purple' : 'gray'}
-          href="/academics/exams"
-          cardClassName="h-28"
-        />
-      </div>
+      {hero}
 
-      {isModuleEnabled('academics') && (
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 mb-6">
-          <div className="card">
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="text-sm font-semibold text-gray-900">Class Teacher Scope</h2>
-            </div>
-            {scopeSummary.classTeacherClasses.length === 0 ? (
-              <p className="text-sm text-gray-400">No class-teacher assignments in the current academic year.</p>
-            ) : (
-              <div className="flex flex-wrap gap-2">
-                {scopeSummary.classTeacherClasses.map(item => (
-                  <span key={item.id} className="inline-flex items-center rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700 border border-emerald-200">
-                    {item.label}
-                  </span>
-                ))}
-              </div>
-            )}
-            <p className="mt-3 text-xs text-gray-500">Class Teacher access is class-wide across attendance, students, finance, LMS, and exams.</p>
-          </div>
-
-          <div className="card">
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="text-sm font-semibold text-gray-900">Subject Teacher Scope</h2>
-            </div>
-            {scopeSummary.subjectTeacherClasses.length === 0 ? (
-              <p className="text-sm text-gray-400">No subject-teacher assignments in the current academic year.</p>
-            ) : (
-              <div className="space-y-2">
-                {scopeSummary.subjectTeacherClasses.slice(0, 6).map(item => (
-                  <div key={item.classLabel} className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
-                    <p className="text-sm font-medium text-amber-800">{item.classLabel}</p>
-                    <p className="mt-1 text-xs text-amber-700">{item.subjects.join(', ')}</p>
-                  </div>
-                ))}
-              </div>
-            )}
-            <p className="mt-3 text-xs text-gray-500">Subject Teacher access remains limited to the assigned subjects in each class.</p>
-          </div>
-        </div>
-      )}
-
-      {/* Two-Column Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
-
-        {/* Left Column */}
+        {/* Left column */}
         <div className="lg:col-span-3 space-y-6">
-
-          {/* Today's Timetable */}
-          <div className="card">
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="text-sm font-semibold text-gray-900">Today's Timetable</h2>
-              <Link to="/academics/timetable" className="text-xs text-sky-600 hover:text-sky-700 font-medium">Full Timetable</Link>
-            </div>
+          <SectionCard
+            title="Today's Timetable"
+            action={{ label: 'Full Timetable', href: '/academics/timetable' }}
+            loading={loadingTimetable}
+            error={timetableError}
+            empty={timetable.length === 0}
+            emptyText="No classes scheduled today"
+          >
             {isOffDay && (
               <div className="mb-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-600">
                 {offDayLabel} — school is not in session today. Periods below are the regular weekly schedule and won't run.
               </div>
             )}
-            {loadingTimetable ? (
-              <div className="space-y-2 animate-pulse">
-                {[...Array(4)].map((_, i) => <div key={i} className="h-12 bg-gray-50 rounded-lg" />)}
-              </div>
-            ) : timetable.length === 0 ? (
-              <p className="text-sm text-gray-400 text-center py-6">No classes scheduled today</p>
-            ) : (
-              <div className="space-y-1.5">
-                {timetable.map((entry, idx) => {
-                  const isCurrent = !isOffDay && idx === currentPeriodIdx
-                  return (
-                    <div
-                      key={entry.id}
-                      className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${
-                        isCurrent ? 'bg-sky-50 border border-sky-200' : 'hover:bg-gray-50'
-                      }`}
-                    >
-                      {/* Time */}
-                      <div className="w-20 shrink-0">
-                        <p className={`text-xs font-medium tabular-nums ${isCurrent ? 'text-sky-700' : 'text-gray-500'}`}>
-                          {entry.slot_start_time?.slice(0, 5)} - {entry.slot_end_time?.slice(0, 5)}
-                        </p>
-                        {isCurrent && <span className="text-[10px] font-semibold text-sky-600 uppercase">Now</span>}
-                      </div>
-                      {/* Details */}
-                      <div className="flex-1 min-w-0">
-                        <p className={`text-sm font-medium ${isCurrent ? 'text-sky-800' : 'text-gray-800'}`}>
-                          {entry.subject_name || 'Free Period'}
-                        </p>
-                        <p className="text-xs text-gray-500">
-                          {entry.class_name}
-                          {entry.room && <span className="ml-1.5 text-gray-400">| {entry.room}</span>}
-                        </p>
-                      </div>
-                      {/* Period name */}
-                      <span className="text-xs text-gray-400 shrink-0">{entry.slot_name}</span>
+            <div className="space-y-1.5">
+              {timetable.map((entry, idx) => {
+                const isCurrent = !isOffDay && period.state === 'now' && idx === period.index
+                return (
+                  <div
+                    key={entry.id}
+                    className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${
+                      isCurrent ? 'bg-sky-50 border border-sky-200' : 'hover:bg-gray-50'
+                    }`}
+                  >
+                    <div className="w-20 shrink-0">
+                      <p className={`text-xs font-medium tabular-nums ${isCurrent ? 'text-sky-700' : 'text-gray-500'}`}>
+                        {entry.slot_start_time?.slice(0, 5)} - {entry.slot_end_time?.slice(0, 5)}
+                      </p>
+                      {isCurrent && <span className="text-[10px] font-semibold text-sky-600 uppercase">Now</span>}
                     </div>
+                    <div className="flex-1 min-w-0">
+                      <p className={`text-sm font-medium ${isCurrent ? 'text-sky-800' : 'text-gray-800'}`}>
+                        {entry.subject_name || 'Free Period'}
+                      </p>
+                      <p className="text-xs text-gray-500">
+                        {entry.class_name}
+                        {entry.room && <span className="ml-1.5 text-gray-400">| {entry.room}</span>}
+                      </p>
+                    </div>
+                    <span className="text-xs text-gray-400 shrink-0">{entry.slot_name}</span>
+                  </div>
+                )
+              })}
+            </div>
+          </SectionCard>
+
+          {attendanceOn && (
+            <SectionCard
+              title="Attendance by Section"
+              action={{ label: 'Mark Attendance', href: '/attendance/manual-entry' }}
+              loading={loadingAssignments || loadingProgress}
+              error={progressError}
+              empty={assignments.length === 0}
+              emptyText="No class-teacher assignments in the current academic year."
+            >
+              {isOffDay && <p className="mb-2 text-xs text-gray-500">{offDayLabel} — nothing to mark today.</p>}
+              <div className="space-y-1.5">
+                {rows.map((r) => {
+                  const pending = isPending(r)
+                  return (
+                    <Link
+                      key={r.assignment.id}
+                      to={`/attendance/manual-entry?class=${manualEntryClassId(r.assignment)}`}
+                      className="flex items-center justify-between gap-3 px-3 py-2 rounded-lg hover:bg-gray-50"
+                    >
+                      <span className="text-sm text-gray-800 truncate">{assignmentLabel(r.assignment)}</span>
+                      {r.failed ? (
+                        <span className="text-xs text-red-600">Couldn't load</span>
+                      ) : (
+                        <span className={`text-sm font-semibold tabular-nums ${
+                          isOffDay ? 'text-gray-400' : pending ? 'text-amber-700' : 'text-green-700'
+                        }`}>
+                          {r.marked || 0}/{r.total || 0}
+                          {!isOffDay && !pending && (r.total || 0) > 0 && <span className="ml-1 text-xs font-normal">marked</span>}
+                        </span>
+                      )}
+                    </Link>
                   )
                 })}
               </div>
-            )}
-          </div>
+            </SectionCard>
+          )}
 
-          {/* Exams & Marks Entry */}
-          {isModuleEnabled('examinations') && upcomingExams.length > 0 && (
-            <div className="card">
-              <div className="flex items-center justify-between mb-3">
-                <h2 className="text-sm font-semibold text-gray-900">Exams & Marks Entry</h2>
-                <Link to="/academics/exams" className="text-xs text-sky-600 hover:text-sky-700 font-medium">View All</Link>
-              </div>
+          {examsOn && (
+            <SectionCard
+              title="Exams & Marks Entry"
+              action={{ label: 'View All', href: '/academics/exams' }}
+              loading={loadingExams}
+              error={examsError}
+              empty={upcomingExams.length === 0}
+              emptyText="No upcoming exams."
+            >
               <div className="space-y-2">
-                {upcomingExams.map(exam => (
+                {upcomingExams.map((exam) => (
                   <div key={exam.id} className="flex items-center justify-between py-2.5 px-3 bg-gray-50 rounded-lg">
                     <div className="min-w-0">
                       <p className="text-sm font-medium text-gray-800">{exam.name}</p>
@@ -514,10 +379,7 @@ export default function TeacherDashboard() {
                         {exam.status}
                       </span>
                       {exam.status === 'PUBLISHED' && (
-                        <Link
-                          to={`/academics/marks-entry?exam=${exam.id}`}
-                          className="text-xs text-sky-600 hover:text-sky-700 font-medium"
-                        >
+                        <Link to={`/academics/marks-entry?exam=${exam.id}`} className="text-xs text-sky-600 hover:text-sky-700 font-medium">
                           Enter Marks
                         </Link>
                       )}
@@ -525,18 +387,20 @@ export default function TeacherDashboard() {
                   </div>
                 ))}
               </div>
-            </div>
+            </SectionCard>
           )}
 
-          {/* Submissions Needing Grading */}
-          {submissions.length > 0 && (
-            <div className="card">
-              <div className="flex items-center justify-between mb-3">
-                <h2 className="text-sm font-semibold text-gray-900">Submissions Needing Grading</h2>
-                <Link to="/academics/assignments" className="text-xs text-sky-600 hover:text-sky-700 font-medium">View All</Link>
-              </div>
+          {academicsOn && (
+            <SectionCard
+              title="Submissions Needing Grading"
+              action={{ label: 'View All', href: '/academics/assignments' }}
+              loading={loadingSubmissions}
+              error={submissionsError}
+              empty={submissions.length === 0}
+              emptyText="Nothing waiting to be graded."
+            >
               <div className="space-y-1.5">
-                {submissions.slice(0, 5).map(sub => (
+                {submissions.slice(0, 5).map((sub) => (
                   <div key={sub.id} className="flex items-center justify-between py-2 px-2.5 hover:bg-gray-50 rounded-lg transition-colors">
                     <div className="min-w-0">
                       <p className="text-sm font-medium text-gray-800">{sub.student_name || 'Student'}</p>
@@ -548,85 +412,81 @@ export default function TeacherDashboard() {
                   </div>
                 ))}
               </div>
-            </div>
+            </SectionCard>
+          )}
+          {academicsOn && assignments.length > 0 && (
+            <StudentsAtRiskCard data={risk} loading={loadingRisk} error={riskError} />
           )}
         </div>
 
-        {/* Right Column */}
+        {/* Right column */}
         <div className="lg:col-span-2 space-y-6">
-
-          {/* Quick Actions */}
           <div>
             <h2 className="text-sm font-semibold text-gray-900 mb-3">Quick Actions</h2>
             <QuickActionGrid actions={quickActions} />
           </div>
 
-          {/* Lesson Plans This Week */}
-          {isModuleEnabled('academics') && (
-            <div className="card">
-              <div className="flex items-center justify-between mb-3">
-                <h2 className="text-sm font-semibold text-gray-900">Lesson Plans This Week</h2>
-                <Link to="/academics/lesson-plans" className="text-xs text-sky-600 hover:text-sky-700 font-medium">View All</Link>
-              </div>
-              {lessonPlanStats.total === 0 ? (
-                <p className="text-sm text-gray-400 text-center py-4">No lesson plans this week</p>
-              ) : (
-                <div>
-                  {/* Progress bar */}
-                  <div className="flex items-center gap-2 mb-3">
-                    <div className="flex-1 h-2.5 bg-gray-100 rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-green-500 rounded-full transition-all duration-500"
-                        style={{ width: `${(lessonPlanStats.completed / lessonPlanStats.total) * 100}%` }}
-                      />
-                    </div>
-                    <span className="text-xs font-medium text-gray-600 tabular-nums">
-                      {lessonPlanStats.completed}/{lessonPlanStats.total}
-                    </span>
-                  </div>
-                  <div className="flex gap-3 text-xs text-gray-500">
-                    <span className="flex items-center gap-1">
-                      <span className="w-2 h-2 rounded-full bg-green-500" /> {lessonPlanStats.completed} completed
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <span className="w-2 h-2 rounded-full bg-blue-400" /> {lessonPlanStats.published} published
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <span className="w-2 h-2 rounded-full bg-gray-300" /> {lessonPlanStats.total - lessonPlanStats.completed - lessonPlanStats.published} draft
-                    </span>
-                  </div>
-                  {/* Recent plans */}
-                  {weekPlans.length > 0 && (
-                    <div className="mt-3 pt-3 border-t border-gray-100 space-y-1.5">
-                      {weekPlans.slice(0, 4).map(plan => (
-                        <div key={plan.id} className="flex items-center justify-between py-1">
-                          <div className="min-w-0">
-                            <p className="text-sm text-gray-700 truncate">{plan.title || plan.topic || 'Lesson Plan'}</p>
-                            <p className="text-xs text-gray-400">{plan.subject_name || ''} {plan.class_name ? `— ${plan.class_name}` : ''}</p>
-                          </div>
-                          <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium shrink-0 ml-2 ${
-                            plan.status === 'COMPLETED' || plan.is_completed ? 'bg-green-100 text-green-700'
-                              : plan.status === 'PUBLISHED' ? 'bg-blue-100 text-blue-700'
-                                : 'bg-gray-100 text-gray-500'
-                          }`}>
-                            {plan.status === 'COMPLETED' || plan.is_completed ? 'Done' : plan.status || 'Draft'}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
+          {academicsOn && (
+            <SectionCard
+              title="Lesson Plans This Week"
+              action={{ label: 'View All', href: '/academics/lesson-plans' }}
+              loading={loadingPlans}
+              error={plansError}
+              empty={lessonPlanStats.total === 0}
+              emptyText="No lesson plans this week"
+            >
+              <div className="flex items-center gap-2 mb-3">
+                <div className="flex-1 h-2.5 bg-gray-100 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-green-500 rounded-full transition-all duration-500"
+                    style={{ width: `${(lessonPlanStats.completed / lessonPlanStats.total) * 100}%` }}
+                  />
                 </div>
-              )}
-            </div>
+                <span className="text-xs font-medium text-gray-600 tabular-nums">
+                  {lessonPlanStats.completed}/{lessonPlanStats.total}
+                </span>
+              </div>
+              <div className="flex gap-3 text-xs text-gray-500">
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-green-500" /> {lessonPlanStats.completed} completed</span>
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-400" /> {lessonPlanStats.published} published</span>
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-gray-300" /> {lessonPlanStats.total - lessonPlanStats.completed - lessonPlanStats.published} draft</span>
+              </div>
+              <div className="mt-3 pt-3 border-t border-gray-100 space-y-1.5">
+                {weekPlans.slice(0, 4).map((plan) => (
+                  <div key={plan.id} className="flex items-center justify-between py-1">
+                    <div className="min-w-0">
+                      <p className="text-sm text-gray-700 truncate">{plan.title || plan.topic || 'Lesson Plan'}</p>
+                      <p className="text-xs text-gray-400">{plan.subject_name || ''} {plan.class_name ? `— ${plan.class_name}` : ''}</p>
+                    </div>
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium shrink-0 ml-2 ${
+                      plan.status === 'COMPLETED' || plan.is_completed ? 'bg-green-100 text-green-700'
+                        : plan.status === 'PUBLISHED' ? 'bg-blue-100 text-blue-700'
+                          : 'bg-gray-100 text-gray-500'
+                    }`}>
+                      {plan.status === 'COMPLETED' || plan.is_completed ? 'Done' : plan.status || 'Draft'}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </SectionCard>
           )}
 
-          {/* Notifications */}
           <div className="card">
             <h2 className="text-sm font-semibold text-gray-900 mb-3">Notifications</h2>
             <NotificationsFeed limit={5} />
           </div>
         </div>
       </div>
-    </div>
+
+      {academicsOn && (
+        <details className="mt-8 group">
+          <summary className="cursor-pointer select-none px-4 py-3 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 text-sm font-semibold text-gray-900">
+            My teaching scope
+            <span className="ml-2 text-xs font-normal text-gray-500">class-teacher and subject-teacher assignments</span>
+          </summary>
+          <div className="mt-3"><TeacherScopeSummary compact /></div>
+        </details>
+      )}
+    </DashboardShell>
   )
 }

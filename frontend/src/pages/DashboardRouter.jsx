@@ -1,6 +1,7 @@
 import { lazy } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import DashboardPage from './DashboardPage'
+import AdminDashboard from './admin-dashboard/AdminDashboard'
 
 const TeacherDashboard = lazy(() => import('./teacher/TeacherDashboard'))
 const ManagerDashboard = lazy(() => import('./ManagerDashboard'))
@@ -22,6 +23,8 @@ export default function DashboardRouter() {
       return <StaffDashboard />
     case 'DRIVER':
       return <DriverDashboard />
+    case 'SCHOOL_ADMIN':
+      return <AdminDashboard />
     case 'PRINCIPAL':
       return <DashboardPage variant="principal" />
     default:

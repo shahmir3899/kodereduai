@@ -1,13 +1,14 @@
 import { useState, useRef, useEffect } from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useMutation } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { notificationsApi } from '../services/api'
 import { useAuth } from '../contexts/AuthContext'
+import NotificationCarousel from './notifications/NotificationCarousel'
+import { useNotificationActions } from './notifications/useNotificationActions'
 
 export default function NotificationBell() {
   const [open, setOpen] = useState(false)
   const dropdownRef = useRef(null)
-  const queryClient = useQueryClient()
   const { activeSchool } = useAuth()
 
   // Unread count
@@ -18,30 +19,11 @@ export default function NotificationBell() {
     staleTime: 15000,
   })
 
-  // Recent notifications (when dropdown open)
-  const { data: notifData } = useQuery({
-    queryKey: ['myNotifications', 'all'],
-    queryFn: () => notificationsApi.getMyNotifications({
-      page_size: 8,
-    }),
-    enabled: open,
-    staleTime: 20000,
-  })
-
-  const markReadMutation = useMutation({
-    mutationFn: (id) => notificationsApi.markRead(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['notificationUnreadCount'] })
-      queryClient.invalidateQueries({ queryKey: ['myNotifications'] })
-    },
-  })
+  const { invalidate } = useNotificationActions()
 
   const markAllMutation = useMutation({
     mutationFn: () => notificationsApi.markAllRead(),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['notificationUnreadCount'] })
-      queryClient.invalidateQueries({ queryKey: ['myNotifications'] })
-    },
+    onSuccess: invalidate,
   })
 
   // Close dropdown on outside click
@@ -56,7 +38,6 @@ export default function NotificationBell() {
   }, [open])
 
   const unread = countData?.data?.unread_count || 0
-  const notifications = notifData?.data?.results || notifData?.data || []
 
   // Bounce animation when new notifications arrive
   const [prevUnread, setPrevUnread] = useState(0)
@@ -70,16 +51,6 @@ export default function NotificationBell() {
     }
     setPrevUnread(unread)
   }, [unread]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  const timeAgo = (dateStr) => {
-    const diff = Date.now() - new Date(dateStr).getTime()
-    const mins = Math.floor(diff / 60000)
-    if (mins < 1) return 'just now'
-    if (mins < 60) return `${mins}m ago`
-    const hours = Math.floor(mins / 60)
-    if (hours < 24) return `${hours}h ago`
-    return `${Math.floor(hours / 24)}d ago`
-  }
 
   return (
     <div className="relative" ref={dropdownRef}>
@@ -101,7 +72,7 @@ export default function NotificationBell() {
       </button>
 
       {open && (
-        <div className="absolute right-0 mt-2 w-80 bg-white rounded-lg shadow-xl border border-gray-200 z-50">
+        <div className="absolute right-0 mt-2 w-[22rem] max-w-[calc(100vw-1.5rem)] bg-white rounded-lg shadow-xl border border-gray-200 z-50">
           <div className="flex items-center justify-between p-3 border-b border-gray-100">
             <div>
               <h3 className="text-sm font-semibold text-gray-900">Notifications</h3>
@@ -119,41 +90,8 @@ export default function NotificationBell() {
             )}
           </div>
 
-          <div className="max-h-80 overflow-y-auto">
-            {notifications.length === 0 ? (
-              <p className="p-4 text-sm text-gray-500 text-center">No notifications</p>
-            ) : (
-              notifications.map((n) => (
-                <div
-                  key={n.id}
-                  className={`px-3 py-2.5 border-b border-gray-50 hover:bg-gray-50 cursor-pointer ${
-                    n.status !== 'READ' ? 'bg-primary-50/30' : ''
-                  }`}
-                  onClick={() => {
-                    if (n.status !== 'READ') markReadMutation.mutate(n.id)
-                  }}
-                >
-                  <p className="text-sm font-medium text-gray-900 truncate">{n.title}</p>
-                  <p className="text-xs text-gray-600 line-clamp-2 mt-0.5">{n.body}</p>
-                  {n.school_name ? (
-                    <span className="inline-block mt-1 px-1.5 py-0.5 rounded text-[10px] bg-gray-100 text-gray-700">
-                      {n.school_name}
-                    </span>
-                  ) : null}
-                  <p className="text-xs text-gray-400 mt-1">{timeAgo(n.created_at)}</p>
-                </div>
-              ))
-            )}
-          </div>
-
-          <div className="p-2 border-t border-gray-100">
-            <Link
-              to="/notifications"
-              onClick={() => setOpen(false)}
-              className="block text-center text-sm text-primary-600 hover:text-primary-800 py-1"
-            >
-              View all notifications
-            </Link>
+          <div className="p-3">
+            <NotificationCarousel allSchools showViewAll={false} onNavigate={() => setOpen(false)} />
           </div>
         </div>
       )}
