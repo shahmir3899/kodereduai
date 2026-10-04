@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { screen, waitFor } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
 import { server } from '../../test/mocks/server'
@@ -13,6 +13,12 @@ vi.mock('../../contexts/AuthContext', () => ({
     activeSchool: { id: 1, name: 'Test School', role: 'SCHOOL_ADMIN', is_default: true },
     isModuleEnabled: () => true,
   }),
+}))
+
+// StudentsPage reads the active year from AcademicYearContext and throws without
+// a provider. No year keeps class scope on master classes, which this suite needs.
+vi.mock('../../contexts/AcademicYearContext', () => ({
+  useAcademicYear: () => ({ activeAcademicYear: null }),
 }))
 
 // Mock Toast
@@ -43,6 +49,12 @@ vi.mock('../../hooks/useDebounce', () => ({
 function expectTextPresent(text) {
   const matches = screen.getAllByText(text)
   expect(matches.length).toBeGreaterThanOrEqual(1)
+}
+
+// The list behind a modal also has "Create Account" buttons, so submit buttons
+// must be looked up inside the modal's own overlay.
+function modalFor(titleRegex) {
+  return within(screen.getByText(titleRegex).closest('.fixed'))
 }
 
 describe('StudentsPage — User Conversion Features', () => {
@@ -145,14 +157,11 @@ describe('StudentsPage — User Conversion Features', () => {
     await user.clear(usernameInput)
     await user.type(usernameInput, 'sara_khan')
 
-    const passwordInputs = screen.getAllByPlaceholderText(/password/i)
-    await user.type(passwordInputs[0], 'Student@123')
-    if (passwordInputs.length > 1) {
-      await user.type(passwordInputs[1], 'Student@123')
-    }
+    await user.type(screen.getByPlaceholderText(/min 8 chars/i), 'Student@123')
+    await user.type(screen.getByPlaceholderText(/^confirm$/i), 'Student@123')
 
     // Submit — find button within modal context
-    const submitBtn = screen.getByRole('button', { name: /create.*account|save|submit/i })
+    const submitBtn = modalFor(/Create User Account/i).getByRole('button', { name: /^create account$/i })
     await user.click(submitBtn)
 
     await waitFor(() => {
@@ -267,11 +276,11 @@ describe('StudentsPage — User Conversion Features', () => {
     })
 
     // Enter default password
-    const passwordField = screen.getByPlaceholderText(/default password|password/i)
+    const passwordField = screen.getByPlaceholderText(/min 8 characters/i)
     await user.type(passwordField, 'BulkPass@123')
 
     // Submit
-    const submitBtn = screen.getByRole('button', { name: /create.*accounts|confirm|submit/i })
+    const submitBtn = modalFor(/Bulk Create/i).getByRole('button', { name: /create \d+ account/i })
     await user.click(submitBtn)
 
     await waitFor(() => {
@@ -312,13 +321,10 @@ describe('StudentsPage — User Conversion Features', () => {
     await user.clear(usernameInput)
     await user.type(usernameInput, 'duplicate_user')
 
-    const passwordInputs = screen.getAllByPlaceholderText(/password/i)
-    await user.type(passwordInputs[0], 'Student@123')
-    if (passwordInputs.length > 1) {
-      await user.type(passwordInputs[1], 'Student@123')
-    }
+    await user.type(screen.getByPlaceholderText(/min 8 chars/i), 'Student@123')
+    await user.type(screen.getByPlaceholderText(/^confirm$/i), 'Student@123')
 
-    const submitBtn = screen.getByRole('button', { name: /create.*account|save|submit/i })
+    const submitBtn = modalFor(/Create User Account/i).getByRole('button', { name: /^create account$/i })
     await user.click(submitBtn)
 
     // Error message should be displayed
@@ -369,16 +375,16 @@ describe('StudentsPage — User Conversion Features', () => {
       expect(screen.getByText(/Bulk Create/i)).toBeInTheDocument()
     })
 
-    const passwordField = screen.getByPlaceholderText(/default password|password/i)
+    const passwordField = screen.getByPlaceholderText(/min 8 characters/i)
     await user.type(passwordField, 'BulkPass@123')
 
-    const submitBtn = screen.getByRole('button', { name: /create.*accounts|confirm|submit/i })
+    const submitBtn = modalFor(/Bulk Create/i).getByRole('button', { name: /create \d+ account/i })
     await user.click(submitBtn)
 
     // Results should show
     await waitFor(() => {
-      const created = screen.queryByText(/created/i)
-      expect(created).toBeInTheDocument()
+      expect(screen.getByText('Created: 2 account(s)')).toBeInTheDocument()
     })
+    expect(screen.getByText(/Skipped: 1/)).toBeInTheDocument()
   })
 })
