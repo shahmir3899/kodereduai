@@ -806,6 +806,25 @@ class StudentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
         except Exception:
             pass
 
+        # Cumulative monthly rows make total_due - total_paid double count carried
+        # balances; the pending figure comes from the finance helper instead.
+        from finance.student_balance import student_pending_fees
+        pending_fee = student_pending_fees(student)['total']
+
+        latest_exit = None
+        if get_effective_role(request) in ADMIN_ROLES:
+            from student_exits.models import StudentExit
+            from student_exits.serializers import StudentExitSerializer
+
+            exit_case = (
+                StudentExit.objects.filter(student=student)
+                .exclude(status=StudentExit.Status.CANCELLED)
+                .select_related('student', 'destination_school', 'requested_by', 'finalized_by')
+                .prefetch_related('items__waived_by')
+                .first()
+            )
+            latest_exit = StudentExitSerializer(exit_case).data if exit_case else None
+
         return Response({
             'student': StudentSerializer(student).data,
             'attendance_rate': attendance_rate,
@@ -815,7 +834,9 @@ class StudentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
             'total_days': total_days,
             'total_due': float(fee_total_due),
             'total_paid': float(fee_total_paid),
-            'outstanding': float(fee_total_due - fee_total_paid),
+            'outstanding': float(pending_fee),
+            'pending_fee': float(pending_fee),
+            'latest_exit': latest_exit,
             'exam_average': exam_average,
             'enrollment_status': enrollment_status,
         })

@@ -419,6 +419,17 @@ class CanEditStudentRecord(permissions.BasePermission):
         return role in ADMIN_ROLES or role == 'TEACHER'
 
 
+class CanManageStudentExit(permissions.BasePermission):
+    """Starting, clearing, waiving and finalizing a student's exit (withdrawal or
+    transfer): Principal and school admins only."""
+    message = "Only a Principal or school admin can manage student exits."
+
+    def has_permission(self, request, view):
+        if not request.user.is_authenticated:
+            return False
+        return get_effective_role(request) in ADMIN_ROLES
+
+
 class CanCreateStudentAccount(permissions.BasePermission):
     """
     Permission for creating a student's portal (user) account, single or bulk.

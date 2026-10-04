@@ -212,6 +212,7 @@ urlpatterns = [
 
     # Hostel Management
     path('api/hostel/', include('hostel.urls')),
+    path('api/student-exits/', include('student_exits.urls')),
 
     # Inventory & Store
     path('api/inventory/', include('inventory.urls')),

@@ -283,89 +283,36 @@ class StudentUpdateSerializer(serializers.ModelSerializer):
         return student
 
     def _remove_records_after_leaving(self, student, leaving):
-        """Delete attendance/marks on or after the leaving date, backed up in
-        the admin audit log first so they can be restored."""
-        from academic_sessions.leaving import records_after_leaving
-        from core.audit import log_admin_action
+        from academic_sessions.leaving import remove_records_after_leaving
 
-        attendance, marks, summary = records_after_leaving(student, leaving)
-        if summary is None:
-            return
-        backup = {
-            'leaving_date': leaving.isoformat(),
-            'attendance': [
-                {k: (v.isoformat() if hasattr(v, 'isoformat') else v) for k, v in row.items()}
-                for row in attendance.values()
-            ],
-            'marks': [
-                {k: (str(v) if v is not None and not isinstance(v, (int, bool, str)) else v) for k, v in row.items()}
-                for row in marks.values()
-            ],
-        }
-        request = self.context.get('request')
-        log_admin_action(request, 'student_records_removed_after_leaving', student, metadata=backup)
-        marks.delete()
-        attendance.delete()
+        remove_records_after_leaving(student, leaving, self.context.get('request'))
 
     def _sync_enrollment_status(self, student, previous_status, previous_date):
-        new_status = student.status
-        if new_status == previous_status:
-            # Same departure, new date: the enrollment's leaving date follows,
-            # or the rosters keep using the old one.
-            if new_status in DEPARTED_STATUSES and student.status_date != previous_date:
-                from academic_sessions.models import AcademicYear, StudentEnrollment
+        from academic_sessions.leaving import sync_enrollment_status
 
-                current_year = AcademicYear.objects.filter(school=student.school, is_current=True).first()
-                if current_year and student.status_date:
-                    StudentEnrollment.objects.filter(
-                        school=student.school, student=student, academic_year=current_year,
-                        status__in=DEPARTED_STATUSES,
-                    ).update(left_date=student.status_date)
-            return student
+        return sync_enrollment_status(student, previous_status, previous_date)
 
-        # A student's Student.is_active/class_obj deliberately stay untouched here
-        # (see the exam-results/report-card investigation: flipping those hides
-        # the student from their own PAST sessions, not just the current one).
-        # What actually needs to change is the CURRENT year's enrollment -- the
-        # same mechanism that already makes a graduate correctly disappear from
-        # this year's rosters while staying visible in their own history.
-        went_departed = new_status in DEPARTED_STATUSES and previous_status not in DEPARTED_STATUSES
-        came_back = new_status == 'ACTIVE' and previous_status in DEPARTED_STATUSES
-        if not (went_departed or came_back):
-            return student
+    def _refuse_direct_departure(self, student, attrs):
+        """Withdrawn/Transferred go through the student exit workflow (clearance and
+        finalization), not a bare status change. Only enforced once the exit UI is
+        live (STUDENT_EXIT_WORKFLOW_ENFORCED); a date correction on a student who has
+        already left is still a plain update."""
+        from django.conf import settings
 
-        from academic_sessions.models import AcademicYear, StudentEnrollment
-
-        current_year = AcademicYear.objects.filter(school=student.school, is_current=True).first()
-        if not current_year:
-            return student
-
-        enrollment = StudentEnrollment.objects.filter(
-            school=student.school, student=student, academic_year=current_year,
-        ).first()
-        if not enrollment:
-            return student
-
-        if went_departed:
-            from django.utils import timezone
-
-            enrollment.is_active = False
-            enrollment.status = new_status
-            # Falls back to today when no effective date was given, so the
-            # enrollment_covers_month() cutoff still lands somewhere sensible
-            # (a null left_date would exclude every month, including this one).
-            enrollment.left_date = student.status_date or timezone.now().date()
-            enrollment.save(update_fields=['is_active', 'status', 'left_date', 'updated_at'])
-        elif came_back:
-            enrollment.is_active = True
-            enrollment.status = 'ACTIVE'
-            enrollment.left_date = None
-            enrollment.save(update_fields=['is_active', 'status', 'left_date', 'updated_at'])
-
-        return student
+        new_status = attrs.get('status')
+        if (
+            student
+            and getattr(settings, 'STUDENT_EXIT_WORKFLOW_ENFORCED', False)
+            and new_status in DEPARTED_STATUSES
+            and new_status != student.status
+        ):
+            raise serializers.ValidationError({
+                'status': 'Use the student exit workflow to withdraw or transfer a student.',
+            })
 
     def validate(self, attrs):
         student = self.instance
+        self._refuse_direct_departure(student, attrs)
         school = student.school if student else None
         class_obj = attrs.get('class_obj', student.class_obj if student else None)
         roll_number = attrs.get('roll_number', student.roll_number if student else None)

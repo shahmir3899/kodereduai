@@ -9,7 +9,7 @@ import { formatDate, getApiErrorMessage } from './profileUtils'
 // only while open. When the chosen leaving date would strand attendance or marks,
 // the server answers 400 records_after_leaving and this shows the conflict with the
 // two ways out (use the suggested date, or remove the records).
-export default function StatusUpdateModal({ student, onClose }) {
+export default function StatusUpdateModal({ student, onClose, onStartExit }) {
   const queryClient = useQueryClient()
   const { showError, showSuccess } = useToast()
   const [form, setForm] = useState({
@@ -47,9 +47,17 @@ export default function StatusUpdateModal({ student, onClose }) {
     },
   })
 
+  // Leaving the school goes through the exit workflow (clearance checklist and
+  // finalization), not a bare status change.
+  const startsExit = ['WITHDRAWN', 'TRANSFERRED'].includes(form.status) && form.status !== student.status
+
   const handleSubmit = () => {
     if (!form.status) {
       showError('Status is required')
+      return
+    }
+    if (startsExit && onStartExit) {
+      onStartExit({ exit_type: form.status, leaving_date: form.status_date || '', reason: form.status_reason })
       return
     }
     mutation.mutate({
@@ -88,6 +96,12 @@ export default function StatusUpdateModal({ student, onClose }) {
               <option value="REPEAT">Repeat</option>
             </select>
           </div>
+          {startsExit && onStartExit && (
+            <p className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+              Leaving the school goes through a short checklist: pending fees, library books and gate passes are
+              cleared or waived before the exit is finalized.
+            </p>
+          )}
           <div>
             <label htmlFor="status-update-date" className="block text-sm font-medium text-gray-700 mb-1">Effective Date</label>
             <input
@@ -138,6 +152,7 @@ export default function StatusUpdateModal({ student, onClose }) {
           >
             {mutation.isPending
               ? 'Saving...'
+              : startsExit && onStartExit ? 'Continue to checklist'
               : conflict && removeRecords ? 'Remove Records & Save' : 'Save Status'}
           </button>
         </div>
@@ -146,7 +161,7 @@ export default function StatusUpdateModal({ student, onClose }) {
   )
 }
 
-function LeavingConflictNotice({ conflict, removeRecords, onToggleRemove, onUseSuggestedDate }) {
+export function LeavingConflictNotice({ conflict, removeRecords, onToggleRemove, onUseSuggestedDate }) {
   const att = conflict.attendance || {}
   const marks = conflict.marks || {}
   const total = (att.count || 0) + (marks.count || 0)

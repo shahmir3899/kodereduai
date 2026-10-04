@@ -14,7 +14,9 @@ promoted students stay allowed.
 """
 from datetime import timedelta
 
+from django.db import transaction
 from django.db.models import Count, Max, Min, Q
+from django.utils import timezone
 
 from .models import StudentEnrollment
 
@@ -161,3 +163,97 @@ def records_after_leaving(student, leaving_date):
         f"or remove these records."
     )
     return attendance, marks, summary
+
+
+def remove_records_after_leaving(student, leaving, request=None):
+    """Delete attendance/marks on or after the leaving date, backed up in the
+    admin audit log first so they can be restored."""
+    from core.audit import log_admin_action
+
+    attendance, marks, summary = records_after_leaving(student, leaving)
+    if summary is None:
+        return
+    backup = {
+        'leaving_date': leaving.isoformat(),
+        'attendance': [
+            {k: (v.isoformat() if hasattr(v, 'isoformat') else v) for k, v in row.items()}
+            for row in attendance.values()
+        ],
+        'marks': [
+            {k: (str(v) if v is not None and not isinstance(v, (int, bool, str)) else v) for k, v in row.items()}
+            for row in marks.values()
+        ],
+    }
+    log_admin_action(request, 'student_records_removed_after_leaving', student, metadata=backup)
+    marks.delete()
+    attendance.delete()
+
+
+def sync_enrollment_status(student, previous_status, previous_date):
+    """Bring the current year's enrollment in line with a status change.
+
+    A student's Student.is_active/class_obj deliberately stay untouched (see the
+    exam-results/report-card investigation: flipping those hides the student from
+    their own PAST sessions, not just the current one). What changes is the
+    CURRENT year's enrollment, the same mechanism that makes a graduate disappear
+    from this year's rosters while staying visible in their own history.
+    """
+    from .models import AcademicYear
+
+    new_status = student.status
+    if new_status == previous_status:
+        # Same departure, new date: the enrollment's leaving date follows,
+        # or the rosters keep using the old one.
+        if new_status in DEPARTED_STATUSES and student.status_date != previous_date:
+            current_year = AcademicYear.objects.filter(school=student.school, is_current=True).first()
+            if current_year and student.status_date:
+                StudentEnrollment.objects.filter(
+                    school=student.school, student=student, academic_year=current_year,
+                    status__in=DEPARTED_STATUSES,
+                ).update(left_date=student.status_date)
+        return student
+
+    went_departed = new_status in DEPARTED_STATUSES and previous_status not in DEPARTED_STATUSES
+    came_back = new_status == 'ACTIVE' and previous_status in DEPARTED_STATUSES
+    if not (went_departed or came_back):
+        return student
+
+    current_year = AcademicYear.objects.filter(school=student.school, is_current=True).first()
+    if not current_year:
+        return student
+
+    enrollment = StudentEnrollment.objects.filter(
+        school=student.school, student=student, academic_year=current_year,
+    ).first()
+    if not enrollment:
+        return student
+
+    if went_departed:
+        enrollment.is_active = False
+        enrollment.status = new_status
+        # Falls back to today when no effective date was given, so the
+        # enrollment_covers_month() cutoff still lands somewhere sensible
+        # (a null left_date would exclude every month, including this one).
+        enrollment.left_date = student.status_date or timezone.now().date()
+    else:
+        enrollment.is_active = True
+        enrollment.status = 'ACTIVE'
+        enrollment.left_date = None
+    enrollment.save(update_fields=['is_active', 'status', 'left_date', 'updated_at'])
+    return student
+
+
+def apply_departure(student, status, leaving_date, reason='', *, remove_records=False, request=None):
+    """Mark a student as departed (WITHDRAWN/TRANSFERRED) and close this year's
+    enrollment. Used by the exit workflow; the Update Status serializer applies
+    the same two steps for its own status changes."""
+    previous_status, previous_date = student.status, student.status_date
+    with transaction.atomic():
+        if remove_records:
+            remove_records_after_leaving(student, leaving_date, request)
+        student.status = status
+        student.status_date = leaving_date
+        student.status_reason = reason or ''
+        student.save(update_fields=['status', 'status_date', 'status_reason', 'updated_at'])
+        sync_enrollment_status(student, previous_status, previous_date)
+    return student

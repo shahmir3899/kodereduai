@@ -63,6 +63,8 @@ function useStudentApi(overrides = {}) {
     http.get('/api/students/5/', () => HttpResponse.json(current)),
     http.get('/api/students/5/profile_summary/', () => HttpResponse.json({})),
     http.get('/api/students/5/ai-profile/', () => HttpResponse.json({})),
+    http.get('/api/student-exits/', () => HttpResponse.json({ count: 0, results: [] })),
+    http.get('/api/student-exits/destinations/', () => HttpResponse.json([])),
     http.patch('/api/students/5/', async ({ request }) => {
       const body = await request.json()
       patches.push(body)
@@ -124,6 +126,91 @@ describe('StudentProfilePage', () => {
 
     expect(screen.queryByRole('button', { name: 'Edit Profile' })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Edit Basic' })).toBeInTheDocument()
+  })
+
+  // ─── Header: pending fee and exit ────────────────────────────
+
+  describe('header', () => {
+    const waivedExit = {
+      id: 70, status: 'FINALIZED', exit_type: 'WITHDRAWN', leaving_date: '2026-03-01', reason: 'Family relocated',
+      destination_school_name: null,
+      items: [
+        { kind: 'FEES', kind_label: 'Pending fees', state: 'WAIVED', summary: 'PKR 1,500 pending',
+          waiver_reason: 'Fee concession approved by the board', waived_by_name: 'principal', waived_at: '2026-03-02T10:00:00Z' },
+        { kind: 'LIBRARY', kind_label: 'Library books', state: 'CLEAR', summary: '' },
+      ],
+    }
+
+    const serveSummary = (summary) => server.use(
+      http.get('/api/students/5/profile_summary/', () => HttpResponse.json(summary)),
+    )
+
+    it('shows the pending fee on the main card and jumps to the Fees tab', async () => {
+      serveSummary({ pending_fee: 1500, latest_exit: null })
+      const user = await renderProfile()
+
+      const chip = await screen.findByRole('button', { name: 'Pending fee: PKR 1,500' })
+      server.use(http.get('/api/students/5/fee_ledger/', () => HttpResponse.json([])))
+      await user.click(chip)
+
+      expect(screen.getByRole('button', { name: 'Fees' })).toHaveClass('border-primary-600')
+    })
+
+    it('shows no fee chip when nothing is pending', async () => {
+      serveSummary({ pending_fee: 0, latest_exit: null })
+      await renderProfile()
+
+      await waitFor(() => expect(screen.queryByText(/Pending fee:/)).not.toBeInTheDocument())
+    })
+
+    it('shows the exit banner with each waived item, who waived it and why', async () => {
+      serveSummary({ pending_fee: 1500, latest_exit: waivedExit })
+      await renderProfile()
+
+      const banner = await screen.findByRole('status')
+      expect(banner).toHaveTextContent('Withdrawn on')
+      expect(banner).toHaveTextContent('Reason: Family relocated')
+      expect(banner).toHaveTextContent('Pending fees waived (PKR 1,500 pending) by principal')
+      expect(banner).toHaveTextContent('Fee concession approved by the board')
+      expect(banner).not.toHaveTextContent('Library books')
+    })
+
+    it('names the destination for a transfer', async () => {
+      serveSummary({ pending_fee: 0, latest_exit: { ...waivedExit, exit_type: 'TRANSFERRED', destination_school_name: 'Branch 2', items: [] } })
+      await renderProfile()
+
+      expect(await screen.findByRole('status')).toHaveTextContent('Transferred to Branch 2 on')
+    })
+
+    it('does not show a banner for an exit that is still open', async () => {
+      serveSummary({ pending_fee: 0, latest_exit: { ...waivedExit, status: 'OPEN' } })
+      await renderProfile()
+
+      await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument())
+    })
+
+    it('offers to continue an exit that is in progress, reopening the wizard at the checklist', async () => {
+      const open = {
+        id: 70, student: 5, status: 'OPEN', exit_type: 'WITHDRAWN', exit_type_label: 'Withdrawn (left school)',
+        leaving_date: '2026-03-01', reason: '', remove_records_after_leaving: false, open_item_count: 0,
+        items: [{ id: 1, kind: 'FEES', kind_label: 'Pending fees', state: 'CLEAR', summary: '', detail: {} }],
+      }
+      server.use(http.get('/api/student-exits/', () => HttpResponse.json({ count: 1, results: [open] })))
+      const user = await renderProfile()
+
+      await user.click(await screen.findByRole('button', { name: 'Exit in progress — Continue' }))
+
+      expect(await screen.findByTestId('item-FEES')).toBeInTheDocument()
+    })
+
+    it('does not offer exit actions to a teacher', async () => {
+      mockRole = 'TEACHER'
+      const open = { id: 70, student: 5, status: 'OPEN', exit_type: 'WITHDRAWN', items: [] }
+      server.use(http.get('/api/student-exits/', () => HttpResponse.json({ count: 1, results: [open] })))
+      await renderProfile()
+
+      expect(screen.queryByRole('button', { name: 'Exit in progress — Continue' })).not.toBeInTheDocument()
+    })
   })
 
   // ─── Per-section editing ─────────────────────────────────────
@@ -335,74 +422,43 @@ describe('StudentProfilePage', () => {
   // ─── Status ──────────────────────────────────────────────────
 
   describe('status update', () => {
-    it('saves a new status with its date and reason', async () => {
+    it('saves a status that does not leave the school directly, with its date and reason', async () => {
       const user = await renderProfile()
 
       await user.click(screen.getByRole('button', { name: 'Update Status' }))
       const modal = modalFor('Update Student Status')
-      await user.selectOptions(modal.getByLabelText('Status'), 'WITHDRAWN')
+      await user.selectOptions(modal.getByLabelText('Status'), 'SUSPENDED')
       await user.type(modal.getByLabelText('Effective Date'), '2026-03-01')
-      await user.type(modal.getByLabelText('Reason'), 'Moved abroad')
+      await user.type(modal.getByLabelText('Reason'), 'Disciplinary')
       await user.click(modal.getByRole('button', { name: 'Save Status' }))
 
       await waitFor(() => expect(patches).toHaveLength(1))
-      expect(patches[0]).toEqual({ status: 'WITHDRAWN', status_date: '2026-03-01', status_reason: 'Moved abroad' })
+      expect(patches[0]).toEqual({ status: 'SUSPENDED', status_date: '2026-03-01', status_reason: 'Disciplinary' })
       await waitFor(() => expect(mockShowSuccess).toHaveBeenCalledWith('Student status updated successfully'))
       expect(screen.queryByRole('heading', { name: 'Update Student Status' })).not.toBeInTheDocument()
     })
 
-    it('shows the records-after-leaving conflict and blocks saving until the admin chooses', async () => {
-      const conflict = {
-        code: 'records_after_leaving',
-        detail: 'Records exist',
-        student_name: 'Ali Hassan',
-        leaving_date: '2026-03-01',
-        suggested_leaving_date: '2026-03-10',
-        last_record_date: '2026-03-09',
-        attendance: { count: 4, first_date: '2026-03-02', last_date: '2026-03-09', present: 3, absent: 1 },
-        marks: { count: 2, exams: [{ id: 1, name: 'Mid Term', count: 2, entered: 1 }] },
-      }
-      server.use(http.patch('/api/students/5/', () => HttpResponse.json(conflict, { status: 400 })))
+    it.each([
+      ['WITHDRAWN', 'Withdrawn'],
+      ['TRANSFERRED', 'Transferred'],
+    ])('hands %s over to the exit checklist instead of saving it', async (value) => {
       const user = await renderProfile()
 
       await user.click(screen.getByRole('button', { name: 'Update Status' }))
       const modal = modalFor('Update Student Status')
-      await user.selectOptions(modal.getByLabelText('Status'), 'WITHDRAWN')
+      await user.selectOptions(modal.getByLabelText('Status'), value)
       await user.type(modal.getByLabelText('Effective Date'), '2026-03-01')
-      await user.click(modal.getByRole('button', { name: 'Save Status' }))
+      await user.type(modal.getByLabelText('Reason'), 'Moving away')
+      expect(modal.getByText(/short checklist/i)).toBeInTheDocument()
+      await user.click(modal.getByRole('button', { name: 'Continue to checklist' }))
 
-      expect(await modal.findByText('Records exist after this leaving date')).toBeInTheDocument()
-      expect(modal.getByText(/4 attendance records/)).toBeInTheDocument()
-      expect(modal.getByText(/2 exam marks/)).toBeInTheDocument()
-      expect(modal.getByRole('button', { name: 'Save Status' })).toBeDisabled()
-      expect(mockShowError).not.toHaveBeenCalled()
-
-      await user.click(modal.getByRole('checkbox'))
-      expect(modal.getByRole('button', { name: 'Remove Records & Save' })).toBeEnabled()
-    })
-
-    it('lets the admin accept the suggested leaving date instead', async () => {
-      const conflict = {
-        code: 'records_after_leaving',
-        student_name: 'Ali Hassan',
-        leaving_date: '2026-03-01',
-        suggested_leaving_date: '2026-03-10',
-        last_record_date: '2026-03-09',
-        attendance: { count: 1, first_date: '2026-03-02', last_date: '2026-03-02' },
-        marks: {},
-      }
-      server.use(http.patch('/api/students/5/', () => HttpResponse.json(conflict, { status: 400 })))
-      const user = await renderProfile()
-
-      await user.click(screen.getByRole('button', { name: 'Update Status' }))
-      const modal = modalFor('Update Student Status')
-      await user.selectOptions(modal.getByLabelText('Status'), 'WITHDRAWN')
-      await user.type(modal.getByLabelText('Effective Date'), '2026-03-01')
-      await user.click(modal.getByRole('button', { name: 'Save Status' }))
-      await user.click(await modal.findByRole('button', { name: /use .* as the leaving date/i }))
-
-      expect(modal.queryByText('Records exist after this leaving date')).not.toBeInTheDocument()
-      expect(modal.getByLabelText('Effective Date')).toHaveValue('2026-03-10')
+      expect(screen.queryByRole('heading', { name: 'Update Student Status' })).not.toBeInTheDocument()
+      await screen.findByRole('heading', { name: 'Student exit' })
+      const wizard = modalFor('Student exit')
+      expect(wizard.getByLabelText('Leaving date')).toHaveValue('2026-03-01')
+      expect(wizard.getByLabelText('Reason')).toHaveValue('Moving away')
+      expect(wizard.getByLabelText(value === 'WITHDRAWN' ? /Withdrawn/ : /Transferred/)).toBeChecked()
+      expect(patches).toHaveLength(0)
     })
 
     it('shows other failures as a toast', async () => {

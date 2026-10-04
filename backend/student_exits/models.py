@@ -1,0 +1,130 @@
+from django.conf import settings
+from django.db import models
+
+
+class StudentExit(models.Model):
+    """One case of a student leaving (withdrawn, or transferred to another branch).
+
+    The case runs OPEN -> FINALIZED (or CANCELLED). While it is open the school
+    works through the clearance checklist; finalizing applies the departure to
+    the student and closes their enrollment in one transaction. There is no
+    separate approval state: the same Principal/admin may start and finalize.
+    """
+
+    class ExitType(models.TextChoices):
+        WITHDRAWN = 'WITHDRAWN', 'Withdrawn (left school)'
+        TRANSFERRED = 'TRANSFERRED', 'Transferred (to another branch)'
+
+    class Status(models.TextChoices):
+        OPEN = 'OPEN', 'Open'
+        FINALIZED = 'FINALIZED', 'Finalized'
+        CANCELLED = 'CANCELLED', 'Cancelled'
+
+    school = models.ForeignKey(
+        'schools.School', on_delete=models.CASCADE, related_name='student_exits',
+    )
+    student = models.ForeignKey(
+        'students.Student', on_delete=models.CASCADE, related_name='exits',
+    )
+    exit_type = models.CharField(max_length=20, choices=ExitType.choices)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.OPEN)
+
+    leaving_date = models.DateField(
+        help_text='First day the student is gone (same meaning as StudentEnrollment.left_date).',
+    )
+    reason = models.TextField(blank=True, default='')
+    destination_school = models.ForeignKey(
+        'schools.School', null=True, blank=True, on_delete=models.PROTECT,
+        related_name='incoming_exits',
+        help_text='Required for TRANSFERRED; must be another school of the same organization.',
+    )
+    remove_records_after_leaving = models.BooleanField(
+        default=False,
+        help_text='Delete attendance/marks on or after the leaving date when finalizing '
+                  '(backed up in the admin audit log first).',
+    )
+
+    requested_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
+        related_name='+',
+    )
+    requested_at = models.DateTimeField(auto_now_add=True)
+    finalized_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
+        related_name='+',
+    )
+    finalized_at = models.DateTimeField(null=True, blank=True)
+    cancelled_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
+        related_name='+',
+    )
+    cancelled_at = models.DateTimeField(null=True, blank=True)
+    cancel_reason = models.TextField(blank=True, default='')
+
+    snapshot = models.JSONField(
+        default=dict, blank=True,
+        help_text='Class, roll, pending fees and clearance as they were at finalization.',
+    )
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-requested_at', '-id']
+        verbose_name = 'Student Exit'
+        verbose_name_plural = 'Student Exits'
+        indexes = [
+            models.Index(fields=['school', 'status']),
+            models.Index(fields=['student', 'status']),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=['student'],
+                condition=models.Q(status='OPEN'),
+                name='one_open_exit_per_student',
+            ),
+        ]
+
+    def __str__(self):
+        return f'{self.get_exit_type_display()} - {self.student.name} ({self.get_status_display()})'
+
+
+class ExitClearanceItem(models.Model):
+    """One obligation that must be cleared (or waived with a reason) before an
+    exit can be finalized. State is recomputed from live data on refresh, so
+    fixing the underlying problem clears the item without any manual step."""
+
+    class Kind(models.TextChoices):
+        FEES = 'FEES', 'Pending fees'
+        LIBRARY = 'LIBRARY', 'Library books'
+        GATE_PASS = 'GATE_PASS', 'Open gate pass'
+
+    class State(models.TextChoices):
+        CLEAR = 'CLEAR', 'Clear'
+        OPEN = 'OPEN', 'Open'
+        WAIVED = 'WAIVED', 'Waived'
+
+    exit = models.ForeignKey(StudentExit, on_delete=models.CASCADE, related_name='items')
+    kind = models.CharField(max_length=20, choices=Kind.choices)
+    state = models.CharField(max_length=10, choices=State.choices, default=State.CLEAR)
+    summary = models.CharField(max_length=255, blank=True, default='')
+    detail = models.JSONField(default=dict, blank=True)
+    amount = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+
+    # What the situation looked like when it was waived. If it later changes (more
+    # fees generated, another book issued) the waiver lapses and the item reopens.
+    waived_fingerprint = models.CharField(max_length=255, blank=True, default='')
+    waiver_reason = models.TextField(blank=True, default='')
+    waived_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
+        related_name='+',
+    )
+    waived_at = models.DateTimeField(null=True, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['id']
+        unique_together = ('exit', 'kind')
+        verbose_name = 'Exit Clearance Item'
+        verbose_name_plural = 'Exit Clearance Items'
+
+    def __str__(self):
+        return f'{self.get_kind_display()}: {self.get_state_display()}'

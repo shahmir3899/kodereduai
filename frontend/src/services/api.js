@@ -278,6 +278,20 @@ export const schoolsApi = {
 }
 
 // Students API
+// Student exit workflow (withdrawal / transfer): start, clear, waive, finalize.
+export const studentExitsApi = {
+  list: (params) => api.get('/api/student-exits/', { params }),
+  get: (id) => api.get(`/api/student-exits/${id}/`),
+  destinations: () => api.get('/api/student-exits/destinations/'),
+  start: (data) => api.post('/api/student-exits/', data),
+  update: (id, data) => api.patch(`/api/student-exits/${id}/`, data),
+  refresh: (id) => api.post(`/api/student-exits/${id}/refresh/`),
+  waive: (id, kind, reason) => api.post(`/api/student-exits/${id}/items/${kind}/waive/`, { reason }),
+  unwaive: (id, kind) => api.post(`/api/student-exits/${id}/items/${kind}/unwaive/`),
+  finalize: (id) => api.post(`/api/student-exits/${id}/finalize/`),
+  cancel: (id, reason) => api.post(`/api/student-exits/${id}/cancel/`, { reason }),
+}
+
 export const studentsApi = {
   getStudents: (params) => api.get('/api/students/', { params }),
   getStudent: (id, params) => api.get(`/api/students/${id}/`, { params }),

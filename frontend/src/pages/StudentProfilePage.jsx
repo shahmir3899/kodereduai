@@ -6,6 +6,7 @@ import { useToast } from '../components/Toast'
 import { useAcademicYear } from '../contexts/AcademicYearContext'
 import { useAuth } from '../contexts/AuthContext'
 import { useUpdateStudent } from '../hooks/useUpdateStudent'
+import { useStudentExit } from '../hooks/useStudentExit'
 import { downloadInstantReport } from '../utils/downloadReport'
 import { canManageStudentLifecycle } from '../utils/accessPolicies'
 import Spinner from '../components/ui/Spinner'
@@ -13,6 +14,7 @@ import StudentProfileHeader from './students/profile/StudentProfileHeader'
 import ProfileSections from './students/profile/ProfileSections'
 import StatusUpdateModal from './students/profile/StatusUpdateModal'
 import ParentInviteModal from './students/profile/ParentInviteModal'
+import StudentExitWizard from './students/profile/StudentExitWizard'
 import ReclassifyStudentModal from './students/components/ReclassifyStudentModal'
 import {
   OverviewTab,
@@ -33,10 +35,12 @@ export default function StudentProfilePage() {
   const [showStatusModal, setShowStatusModal] = useState(false)
   const [showReclassifyModal, setShowReclassifyModal] = useState(false)
   const [showInviteModal, setShowInviteModal] = useState(false)
+  const [exitPrefill, setExitPrefill] = useState(null) // non-null while the exit wizard is open
   const { showError, showSuccess } = useToast()
   const { user } = useAuth()
   const canManageLifecycle = canManageStudentLifecycle(user?.role)
   const { activeAcademicYear } = useAcademicYear()
+  const { exitCase: openExit } = useStudentExit(id, { enabled: canManageLifecycle })
 
   // Report download — generated synchronously and streamed straight back, nothing saved server-side.
   const [isDownloadingReport, setIsDownloadingReport] = useState(false)
@@ -189,6 +193,10 @@ export default function StudentProfilePage() {
         onUpdateStatus={() => setShowStatusModal(true)}
         onReclassify={handleOpenReclassifyModal}
         onInvite={() => setShowInviteModal(true)}
+        summary={summary}
+        openExit={openExit}
+        onContinueExit={() => setExitPrefill({})}
+        onOpenFees={() => setTab('Fees')}
       />
 
       <ProfileSections
@@ -276,7 +284,17 @@ export default function StudentProfilePage() {
       {tab === 'History' && <HistoryTab data={historyData?.data} isLoading={historyLoading} error={historyIsError ? historyError : null} />}
       {tab === 'Documents' && <DocumentsTab studentId={id} data={docsData?.data} refetch={refetchDocs} isLoading={docsLoading} error={docsIsError ? docsError : null} />}
 
-      {showStatusModal && <StatusUpdateModal student={student} onClose={() => setShowStatusModal(false)} />}
+      {showStatusModal && (
+        <StatusUpdateModal
+          student={student}
+          onClose={() => setShowStatusModal(false)}
+          onStartExit={(prefill) => {
+            setShowStatusModal(false)
+            setExitPrefill(prefill)
+          }}
+        />
+      )}
+      {exitPrefill && <StudentExitWizard student={student} prefill={exitPrefill} onClose={() => setExitPrefill(null)} />}
       {showReclassifyModal && <ReclassifyStudentModal student={student} onClose={() => setShowReclassifyModal(false)} />}
       {showInviteModal && <ParentInviteModal student={student} onClose={() => setShowInviteModal(false)} />}
     </div>

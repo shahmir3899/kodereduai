@@ -26,6 +26,10 @@ export default function StudentProfileHeader({
   onUpdateStatus,
   onReclassify,
   onInvite,
+  summary = null,
+  openExit = null,
+  onContinueExit,
+  onOpenFees,
 }) {
   const queryClient = useQueryClient()
   const { showError, showSuccess } = useToast()
@@ -147,6 +151,25 @@ export default function StudentProfileHeader({
             </div>
             {/* Quick-action chips */}
             <div className="flex flex-wrap gap-2 mt-2">
+              {summary?.pending_fee > 0 && (
+                <button
+                  type="button"
+                  onClick={onOpenFees}
+                  title="Open the fee ledger"
+                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-red-50 text-red-700 border border-red-200 hover:bg-red-100"
+                >
+                  Pending fee: PKR {Number(summary.pending_fee).toLocaleString()}
+                </button>
+              )}
+              {openExit && canManageLifecycle && (
+                <button
+                  type="button"
+                  onClick={onContinueExit}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-amber-50 text-amber-800 border border-amber-300 hover:bg-amber-100"
+                >
+                  Exit in progress — Continue
+                </button>
+              )}
               {student.emergency_contact && (
                 <a
                   href={`tel:${student.emergency_contact}`}
@@ -212,6 +235,8 @@ export default function StudentProfileHeader({
         </div>
       </div>
 
+      <ExitBanner exit={summary?.latest_exit} />
+
       {cropImageSrc && (
         <PhotoCropModal
           imageSrc={cropImageSrc}
@@ -220,5 +245,31 @@ export default function StudentProfileHeader({
         />
       )}
     </>
+  )
+}
+
+// Shown for a student who has left: when, and any fee or book waived on the way out,
+// with who waived it and why. Only admin roles receive latest_exit from the server.
+function ExitBanner({ exit }) {
+  if (!exit || exit.status !== 'FINALIZED') return null
+  const waived = (exit.items || []).filter((i) => i.state === 'WAIVED')
+  const verb = exit.exit_type === 'TRANSFERRED' ? 'Transferred' : 'Withdrawn'
+  return (
+    <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-sm text-amber-900" role="status">
+      <p className="font-semibold">
+        {verb}{exit.destination_school_name ? ` to ${exit.destination_school_name}` : ''} on {new Date(exit.leaving_date).toLocaleDateString()}
+      </p>
+      {exit.reason && <p className="mt-0.5">Reason: {exit.reason}</p>}
+      {waived.length > 0 && (
+        <ul className="mt-2 space-y-1">
+          {waived.map((i) => (
+            <li key={i.kind}>
+              <span className="font-medium">{i.kind_label} waived{i.summary ? ` (${i.summary})` : ''}</span>
+              {' '}by {i.waived_by_name} on {new Date(i.waived_at).toLocaleDateString()}: {i.waiver_reason}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   )
 }
