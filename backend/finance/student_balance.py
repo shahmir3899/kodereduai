@@ -13,6 +13,8 @@ Credits (ADVANCE rows, or paid above due) never offset another row's balance.
 """
 from decimal import Decimal
 
+from django.db.models import Sum
+
 from .models import FeePayment
 
 ZERO = Decimal('0')
@@ -62,3 +64,17 @@ def student_pending_fees(student):
         })
 
     return {'total': sum((i['balance'] for i in items), ZERO), 'items': items}
+
+
+def student_fee_summary(student):
+    """Headline fee figures for one student, consistent with each other.
+
+    ``total_paid`` is money actually received (a plain sum of amount_paid: it never
+    double counts). ``pending`` is what is still owed today (student_pending_fees).
+    ``total_due`` is therefore what has been charged: paid plus still pending. Summing
+    amount_due over every row instead would count a carried-forward monthly balance
+    again in each later month.
+    """
+    pending = student_pending_fees(student)['total']
+    paid = FeePayment.objects.filter(student=student).aggregate(total=Sum('amount_paid'))['total'] or ZERO
+    return {'total_paid': paid, 'pending': pending, 'total_due': paid + pending}

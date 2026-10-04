@@ -32,7 +32,8 @@ class AttendanceRiskService:
         self.school_id = school_id
         self.academic_year_id = academic_year_id
 
-    def get_at_risk_students(self, threshold: float = None, only_student_ids=None) -> dict:
+    def get_at_risk_students(self, threshold: float = None, only_student_ids=None,
+                             include_unflagged: bool = False) -> dict:
         """
         Analyze all active students and return those who are at risk or
         predicted to be at risk of falling below the attendance threshold.
@@ -40,6 +41,14 @@ class AttendanceRiskService:
         only_student_ids limits the analysis to those students (a teacher's own
         sections). None keeps the school-wide behaviour; an empty collection
         analyses nobody rather than falling back to everyone.
+
+        include_unflagged also returns every analysed student that is NOT at risk
+        (severity None) and every student with too few records to score
+        (insufficient_data True), for a caller that needs one student's full picture
+        (the profile). at_risk_count and risk_levels still count flagged students only.
+
+        Excused days (a teacher-marked LEAVE, or an approved parent leave request)
+        count as present, so taking leave never lowers the rate.
 
         threshold defaults to this school's own configured policy
         (School.get_attendance_risk_threshold) rather than a hardcoded 75 --
@@ -139,9 +148,10 @@ class AttendanceRiskService:
 
             # Excused: either a teacher marked the day LEAVE directly on the
             # attendance record, or the parent's leave request was approved.
+            # Excused days count as present.
             if rec_status == 'LEAVE' or is_approved_leave(sid, rec_date):
                 excused_leave_counts[sid] += 1
-                continue
+                rec_status = 'PRESENT'
 
             stats = overall_stats[sid]
             stats['total_days'] += 1
@@ -169,13 +179,21 @@ class AttendanceRiskService:
             student = student_map[sid]
             stats = overall_stats.get(sid)
 
-            # Skip students with no attendance records at all
-            if not stats or stats['total_days'] == 0:
-                continue
-
-            # Skip students with too few school-day records to score reliably —
-            # a couple of noisy days shouldn't be enough to flag HIGH/MEDIUM.
-            if stats['total_days'] < MIN_SAMPLE_DAYS:
+            # Skip students with no attendance records at all, or too few school-day
+            # records to score reliably: a couple of noisy days shouldn't be enough
+            # to flag HIGH/MEDIUM.
+            if not stats or stats['total_days'] < MIN_SAMPLE_DAYS:
+                if include_unflagged:
+                    at_risk_students.append({
+                        'student_id': sid,
+                        'student_name': student.name,
+                        'current_rate': stats['rate'] if stats and stats['total_days'] else None,
+                        'severity': None,
+                        'insufficient_data': True,
+                        'total_days': stats['total_days'] if stats else 0,
+                        'present_days': stats['present_days'] if stats else 0,
+                        'excused_leave_days': excused_leave_counts.get(sid, 0),
+                    })
                 continue
 
             current_rate = stats['rate']
@@ -200,11 +218,14 @@ class AttendanceRiskService:
             )
 
             # Only include students who are at risk or predicted to be at risk
-            if severity is None:
+            # (unless the caller asked for everyone analysed).
+            if severity is None and not include_unflagged:
                 continue
 
             # Generate suggested action
-            suggested_action = self._suggest_action(severity, trend, day_pattern, current_rate, streak)
+            suggested_action = (
+                self._suggest_action(severity, trend, day_pattern, current_rate, streak) if severity else None
+            )
 
             at_risk_students.append({
                 'student_id': sid,
@@ -220,17 +241,21 @@ class AttendanceRiskService:
                 'consecutive_absent_days': streak,
                 'excused_leave_days': excused_leave_counts.get(sid, 0),
                 'suggested_action': suggested_action,
+                'total_days': stats['total_days'],
+                'present_days': stats['present_days'],
+                'insufficient_data': False,
             })
 
-            risk_counts[severity] += 1
+            if severity:
+                risk_counts[severity] += 1
 
         # Sort: HIGH first, then MEDIUM, then LOW
         severity_order = {'HIGH': 0, 'MEDIUM': 1, 'LOW': 2}
-        at_risk_students.sort(key=lambda s: (severity_order.get(s['severity'], 3), s['current_rate']))
+        at_risk_students.sort(key=lambda s: (severity_order.get(s['severity'], 3), s['current_rate'] or 0))
 
         return {
             'total_students': total_students,
-            'at_risk_count': len(at_risk_students),
+            'at_risk_count': sum(1 for s in at_risk_students if s['severity']),
             'risk_levels': risk_counts,
             'students': at_risk_students,
         }

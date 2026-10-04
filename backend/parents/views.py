@@ -184,18 +184,14 @@ class ChildOverviewView(APIView):
             'attendance_rate': attendance_rate,
         }
 
-        # Fee summary
-        from finance.models import FeePayment
-        fee_agg = FeePayment.objects.filter(student=student).aggregate(
-            total_due=Sum('amount_due'),
-            total_paid=Sum('amount_paid'),
-        )
-        fee_total_due = fee_agg['total_due'] or Decimal('0')
-        fee_total_paid = fee_agg['total_paid'] or Decimal('0')
+        # Fee summary: the shared calculation, so parents see the same figures staff do
+        # (summing every monthly row would count a carried-forward balance repeatedly).
+        from finance.student_balance import student_fee_summary
+        fees = student_fee_summary(student)
         fee_summary = {
-            'total_due': str(fee_total_due),
-            'total_paid': str(fee_total_paid),
-            'outstanding': str(fee_total_due - fee_total_paid),
+            'total_due': str(fees['total_due']),
+            'total_paid': str(fees['total_paid']),
+            'outstanding': str(fees['pending']),
         }
 
         # Latest exam

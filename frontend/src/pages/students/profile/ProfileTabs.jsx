@@ -4,6 +4,7 @@ import { studentsApi, examinationsApi } from '../../../services/api'
 import { useToast } from '../../../components/Toast'
 import Button from '../../../components/ui/Button'
 import { describeAway } from '../../../utils/awayPeriods'
+import { formatMoney } from './profileUtils'
 
 // The profile page's tab panels, moved out of StudentProfilePage unchanged.
 
@@ -23,6 +24,14 @@ function StatCard({ label, value, sub, color = 'primary' }) {
   )
 }
 
+// Green/yellow/red for a risk level; neutral when there was not enough data to judge.
+function riskColor(level) {
+  if (level === 'LOW') return 'green'
+  if (level === 'MEDIUM') return 'yellow'
+  if (level === 'HIGH') return 'red'
+  return 'primary'
+}
+
 export function OverviewTab({ summary, ai, isLoading, error }) {
   if (isLoading) return <div className="text-center py-10 text-gray-500">Loading summary...</div>
   if (error) return <div className="text-center py-10 text-red-600">Failed to load summary</div>
@@ -39,25 +48,51 @@ export function OverviewTab({ summary, ai, isLoading, error }) {
       <StatCard
         label="Fee Paid"
         value={summary.total_due ? `${Math.round((summary.total_paid || 0) / summary.total_due * 100)}%` : 'N/A'}
-        sub={`PKR ${(summary.total_paid || 0).toLocaleString()} / ${(summary.total_due || 0).toLocaleString()}`}
+        sub={`PKR ${formatMoney(summary.total_paid)} / ${formatMoney(summary.total_due)}`}
         color={summary.total_paid >= summary.total_due ? 'green' : 'yellow'}
       />
       <StatCard
         label="Outstanding"
-        value={`PKR ${(summary.outstanding || 0).toLocaleString()}`}
+        value={`PKR ${formatMoney(summary.outstanding)}`}
         color={summary.outstanding > 0 ? 'red' : 'green'}
       />
       <StatCard
         label="Exam Average"
-        value={summary.exam_average != null ? `${summary.exam_average}` : 'N/A'}
+        value={summary.exam_average != null ? `${summary.exam_average}%` : 'No exams'}
+        sub={summary.exam_average_label || null}
         color={summary.exam_average >= 60 ? 'green' : summary.exam_average >= 40 ? 'yellow' : 'red'}
       />
+      {ai?.left_school && (
+        <StatCard
+          label="Risk"
+          value="Left school"
+          sub={ai.left_date ? `Since ${ai.left_date}` : null}
+        />
+      )}
       {ai?.attendance && (
         <>
-          <StatCard label="Attendance Risk" value={ai.attendance.risk} color={ai.attendance.risk === 'LOW' ? 'green' : ai.attendance.risk === 'MEDIUM' ? 'yellow' : 'red'} sub={`Trend: ${ai.attendance.trend}`} />
-          <StatCard label="Academic Risk" value={ai.academic?.risk || 'N/A'} color={ai.academic?.risk === 'LOW' ? 'green' : ai.academic?.risk === 'MEDIUM' ? 'yellow' : 'red'} sub={ai.academic?.weakest ? `Weakest: ${ai.academic.weakest}` : null} />
-          <StatCard label="Financial Risk" value={ai.financial?.risk || 'N/A'} color={ai.financial?.risk === 'LOW' ? 'green' : ai.financial?.risk === 'MEDIUM' ? 'yellow' : 'red'} sub={`${ai.financial?.months_overdue || 0} months overdue`} />
-          <StatCard label="Overall Risk Score" value={ai.risk_score != null ? `${ai.risk_score}%` : 'N/A'} color={ai.overall_risk === 'LOW' ? 'green' : ai.overall_risk === 'MEDIUM' ? 'yellow' : 'red'} />
+          <StatCard
+            label="Attendance Risk"
+            value={ai.attendance.insufficient_data ? 'Not enough data' : ai.attendance.risk}
+            color={riskColor(ai.attendance.risk)}
+            sub={ai.attendance.insufficient_data ? null : `Trend: ${ai.attendance.trend}`}
+          />
+          <StatCard
+            label="Academic Risk"
+            value={ai.academic?.insufficient_data ? 'Not enough data' : (ai.academic?.risk || 'N/A')}
+            color={riskColor(ai.academic?.risk)}
+            sub={ai.academic?.weakest ? `Weakest: ${ai.academic.weakest}` : null}
+          />
+          {/* Absent for roles that cannot see fees: the server leaves the section out. */}
+          {ai.financial && (
+            <StatCard
+              label="Financial Risk"
+              value={ai.financial.insufficient_data ? 'Not enough data' : (ai.financial.risk || 'N/A')}
+              color={riskColor(ai.financial.risk)}
+              sub={ai.financial.insufficient_data ? null : `${ai.financial.months_overdue || 0} month${ai.financial.months_overdue === 1 ? '' : 's'} overdue`}
+            />
+          )}
+          <StatCard label="Overall Risk Score" value={ai.risk_score != null ? `${ai.risk_score}%` : 'N/A'} color={riskColor(ai.overall_risk)} />
         </>
       )}
     </div>
@@ -192,8 +227,14 @@ export function AcademicsTab({ data, isLoading, error }) {
     <div className="space-y-4">
       {(Array.isArray(exams) ? exams : Object.entries(exams).map(([name, marks]) => ({ exam_name: name, marks }))).map((exam, i) => (
         <div key={i} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-          <div className="px-4 py-3 bg-gray-50 border-b border-gray-200">
-            <h3 className="text-sm font-semibold text-gray-900">{exam.exam_name || exam.name || `Exam ${i + 1}`}</h3>
+          <div className="px-4 py-3 bg-gray-50 border-b border-gray-200 flex items-baseline justify-between gap-3">
+            <h3 className="text-sm font-semibold text-gray-900">
+              {exam.exam_name || exam.name || `Exam ${i + 1}`}
+              {exam.exam_date && <span className="ml-2 text-xs font-normal text-gray-500">{exam.exam_date}</span>}
+            </h3>
+            {exam.average_percentage != null && (
+              <span className="text-xs text-gray-600">Average {exam.average_percentage}%</span>
+            )}
           </div>
           <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200">
@@ -208,16 +249,18 @@ export function AcademicsTab({ data, isLoading, error }) {
             </thead>
             <tbody className="divide-y divide-gray-100">
               {(exam.marks || exam.subjects || []).map((m, j) => {
-                const pct = m.total_marks ? Math.round(m.marks_obtained / m.total_marks * 100) : 0
+                const pct = m.percentage ?? (m.total_marks ? Math.round(m.marks_obtained / m.total_marks * 100) : 0)
                 return (
                   <tr key={j}>
                     <td className="px-4 py-2 text-sm text-gray-900">{m.subject_name || m.subject}</td>
-                    <td className="px-4 py-2 text-sm text-gray-900 text-right">{m.marks_obtained}</td>
+                    <td className="px-4 py-2 text-sm text-gray-900 text-right">{m.is_absent ? 'Absent' : (m.marks_obtained ?? '-')}</td>
                     <td className="px-4 py-2 text-sm text-gray-500 text-right">{m.total_marks}</td>
                     <td className="px-4 py-2 text-sm text-right">
-                      <span className={pct >= 60 ? 'text-green-600' : pct >= 40 ? 'text-yellow-600' : 'text-red-600'}>
-                        {pct}%
-                      </span>
+                      {m.is_absent || m.percentage === null ? '-' : (
+                        <span className={pct >= 60 ? 'text-green-600' : pct >= 40 ? 'text-yellow-600' : 'text-red-600'}>
+                          {pct}%
+                        </span>
+                      )}
                     </td>
                     <td className="px-4 py-2 text-sm text-gray-600">{m.grade || '-'}</td>
                   </tr>

@@ -772,27 +772,31 @@ class StudentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
         total_present = attendance_qs.filter(status='PRESENT').count()
         total_absent = attendance_qs.filter(status='ABSENT').count()
         total_leave = attendance_qs.filter(status='LEAVE').count()
-        attendance_rate = round(total_present / total_days * 100, 1) if total_days > 0 else 0.0
+        # Leave days count as present, the same rule as the risk assessment, so the
+        # Attendance card and the Attendance Risk card never disagree.
+        present_with_leave = total_present + total_leave
+        attendance_rate = round(present_with_leave / total_days * 100, 1) if total_days > 0 else 0.0
 
-        # Fee stats
-        from finance.models import FeePayment
-        fee_agg = FeePayment.objects.filter(student=student).aggregate(
-            total_due=Sum('amount_due'),
-            total_paid=Sum('amount_paid'),
-        )
-        fee_total_due = fee_agg['total_due'] or Decimal('0')
-        fee_total_paid = fee_agg['total_paid'] or Decimal('0')
+        # Fee stats: one shared calculation (see finance.student_balance), so the
+        # header chip, the Overview cards and the exit checklist always agree.
+        from finance.student_balance import student_fee_summary
+        fees = student_fee_summary(student)
+        fee_total_due, fee_total_paid, pending_fee = fees['total_due'], fees['total_paid'], fees['pending']
 
-        # Exam average
-        exam_average = None
-        try:
-            from examinations.models import StudentMark
-            avg = StudentMark.objects.filter(student=student).aggregate(
-                avg_score=Avg('marks_obtained')
-            )
-            exam_average = round(avg['avg_score'], 1) if avg['avg_score'] else None
-        except Exception:
-            pass
+        # Exam average: the last exam's percentage this year, the same figure the
+        # AI assessment's Academic Risk uses (raw marks of different totals and years
+        # used to be averaged together, which is not a percentage).
+        from academic_sessions.utils import resolve_current_academic_year_id
+        from examinations.academic_risk_service import AcademicRiskService
+        exam_average, exam_average_label = None, None
+        year_id = resolve_current_academic_year_id(student.school_id)
+        if year_id:
+            entry = next(iter(AcademicRiskService(student.school_id, year_id).get_at_risk_students(
+                only_student_ids=[student.id], include_unflagged=True,
+            )['students']), None)
+            if entry and entry.get('current_average') is not None:
+                exam_average = entry['current_average']
+                exam_average_label = entry.get('current_exam_name')
 
         # Enrollment status
         enrollment_status = None
@@ -805,11 +809,6 @@ class StudentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
                 enrollment_status = latest.status
         except Exception:
             pass
-
-        # Cumulative monthly rows make total_due - total_paid double count carried
-        # balances; the pending figure comes from the finance helper instead.
-        from finance.student_balance import student_pending_fees
-        pending_fee = student_pending_fees(student)['total']
 
         latest_exit = None
         if get_effective_role(request) in ADMIN_ROLES:
@@ -828,7 +827,7 @@ class StudentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
         return Response({
             'student': StudentSerializer(student).data,
             'attendance_rate': attendance_rate,
-            'present_days': total_present,
+            'present_days': present_with_leave,
             'total_absent': total_absent,
             'total_leave': total_leave,
             'total_days': total_days,
@@ -838,6 +837,7 @@ class StudentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
             'pending_fee': float(pending_fee),
             'latest_exit': latest_exit,
             'exam_average': exam_average,
+            'exam_average_label': exam_average_label,
             'enrollment_status': enrollment_status,
         })
 
@@ -892,33 +892,38 @@ class StudentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
     def exam_results(self, request, pk=None):
         """All exam marks grouped by exam."""
         student = self.get_object()
-        try:
-            from examinations.models import StudentMark
-            marks = StudentMark.objects.filter(
-                student=student
-            ).select_related(
-                'exam_subject', 'exam_subject__exam', 'exam_subject__subject'
-            ).order_by('-exam_subject__exam__date', 'exam_subject__subject__name')
+        from examinations.models import GradeScale, StudentMark
+        marks = StudentMark.objects.filter(
+            student=student, exam_subject__is_active=True,
+        ).select_related(
+            'exam_subject', 'exam_subject__exam', 'exam_subject__subject'
+        ).order_by('-exam_subject__exam__start_date', 'exam_subject__exam_id', 'exam_subject__subject__name')
 
-            result = {}
-            for mark in marks:
-                exam_name = mark.exam_subject.exam.name
-                if exam_name not in result:
-                    result[exam_name] = {
-                        'exam_name': exam_name,
-                        'exam_date': str(mark.exam_subject.exam.date) if hasattr(mark.exam_subject.exam, 'date') else None,
-                        'subjects': [],
-                    }
-                result[exam_name]['subjects'].append({
-                    'subject': mark.exam_subject.subject.name,
-                    'marks_obtained': float(mark.marks_obtained) if mark.marks_obtained else None,
-                    'total_marks': float(mark.exam_subject.total_marks) if mark.exam_subject.total_marks else None,
-                    'grade': mark.grade if hasattr(mark, 'grade') else None,
-                })
+        grade_scales = list(GradeScale.objects.filter(school_id=student.school_id))
 
-            return Response(list(result.values()))
-        except Exception:
-            return Response([])
+        result = {}
+        for mark in marks:
+            exam = mark.exam_subject.exam
+            entry = result.setdefault(exam.id, {
+                'exam_id': exam.id,
+                'exam_name': exam.name,
+                'exam_date': exam.start_date.isoformat() if exam.start_date else None,
+                'subjects': [],
+            })
+            pct = mark.percentage
+            entry['subjects'].append({
+                'subject': mark.exam_subject.subject.name,
+                'marks_obtained': float(mark.marks_obtained) if mark.marks_obtained is not None else None,
+                'total_marks': float(mark.exam_subject.total_marks) if mark.exam_subject.total_marks else None,
+                'percentage': round(pct, 1) if pct is not None else None,
+                'grade': GradeScale.grade_for(pct, grade_scales) if pct is not None else None,
+                'is_absent': mark.is_absent,
+            })
+
+        for entry in result.values():
+            pcts = [s['percentage'] for s in entry['subjects'] if s['percentage'] is not None]
+            entry['average_percentage'] = round(sum(pcts) / len(pcts), 1) if pcts else None
+        return Response(list(result.values()))
 
     @action(detail=True, methods=['get'])
     def away_periods(self, request, pk=None):
@@ -1050,9 +1055,10 @@ class StudentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
     def ai_profile(self, request, pk=None):
         """AI-generated 360 student risk profile."""
         student = self.get_object()
-        from .ai_service import Student360Service
+        from .ai_service import Student360Service, can_see_fees
         service = Student360Service(student.school_id, student.id)
-        profile = service.generate_profile()
+        # Teachers and other non-finance roles get the profile without any fee detail.
+        profile = service.generate_profile(include_fees=can_see_fees(get_effective_role(request)))
         return Response(profile)
 
 

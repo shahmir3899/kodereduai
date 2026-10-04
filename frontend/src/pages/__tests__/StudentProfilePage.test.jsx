@@ -229,6 +229,153 @@ describe('StudentProfilePage', () => {
     })
   })
 
+  // ─── Overview fee cards ──────────────────────────────────────
+
+  describe('overview fee cards', () => {
+    const serveSummary = (summary) => server.use(
+      http.get('/api/students/5/profile_summary/', () => HttpResponse.json(summary)),
+    )
+    const card = async (label) => (await screen.findByText(label)).closest('div')
+
+    it('shows paid, charged and owed from the shared figures (800 paid of 3,800 charged, 3,000 owed)', async () => {
+      serveSummary({ total_due: 3800, total_paid: 800, outstanding: 3000, pending_fee: 3000, latest_exit: null })
+      await renderProfile()
+
+      const paid = await card('Fee Paid')
+      expect(paid).toHaveTextContent('21%')
+      expect(paid).toHaveTextContent('PKR 800 / 3,800')
+      expect(await card('Outstanding')).toHaveTextContent('PKR 3,000')
+    })
+
+    it('keeps the cents on every fee figure', async () => {
+      serveSummary({ total_due: 27360, total_paid: 23512.5, outstanding: 3847.5, pending_fee: 3847.5, latest_exit: null })
+      await renderProfile()
+
+      expect(await card('Fee Paid')).toHaveTextContent('PKR 23,512.50 / 27,360')
+      expect(await card('Outstanding')).toHaveTextContent('PKR 3,847.50')
+    })
+
+    it('shows N/A and nothing owed for a student with no fees', async () => {
+      serveSummary({ total_due: 0, total_paid: 0, outstanding: 0, pending_fee: 0, latest_exit: null })
+      await renderProfile()
+
+      expect(await card('Fee Paid')).toHaveTextContent('N/A')
+      expect(await card('Outstanding')).toHaveTextContent('PKR 0')
+    })
+  })
+
+  // ─── AI risk assessment ──────────────────────────────────────
+
+  describe('risk assessment', () => {
+    const serveAi = (ai) => server.use(
+      http.get('/api/students/5/ai-profile/', () => HttpResponse.json(ai)),
+    )
+    const full = {
+      left_school: false, overall_risk: 'MEDIUM', risk_score: 53.5, fees_hidden: false,
+      attendance: { rate: 82, risk: 'LOW', trend: 'stable', insufficient_data: false },
+      academic: { avg_score: 59.5, risk: 'MEDIUM', weakest: 'Math', insufficient_data: false },
+      financial: { risk: 'HIGH', months_overdue: 3, outstanding: 3000, insufficient_data: false },
+      ai_summary: 'Watch fees.', recommendations: [],
+    }
+    const card = async (label) => (await screen.findByText(label)).closest('div')
+
+    it('shows every dimension and the real overall score for a finance-visible role', async () => {
+      serveAi(full)
+      await renderProfile()
+
+      expect(await card('Attendance Risk')).toHaveTextContent('LOW')
+      expect(await card('Academic Risk')).toHaveTextContent('Weakest: Math')
+      expect(await card('Financial Risk')).toHaveTextContent('3 months overdue')
+      expect(await card('Overall Risk Score')).toHaveTextContent('53.5%')
+    })
+
+    it('says "Not enough data" instead of a risk level when there is too little to judge', async () => {
+      serveAi({
+        ...full, overall_risk: 'LOW', risk_score: 10,
+        attendance: { rate: null, risk: null, trend: 'no_data', insufficient_data: true },
+        academic: { avg_score: null, risk: null, weakest: null, insufficient_data: true },
+        financial: { risk: null, months_overdue: 0, outstanding: 0, insufficient_data: true },
+      })
+      await renderProfile()
+
+      for (const label of ['Attendance Risk', 'Academic Risk', 'Financial Risk']) {
+        expect(await card(label)).toHaveTextContent('Not enough data')
+      }
+      expect(await card('Overall Risk Score')).toHaveTextContent('10%')
+    })
+
+    it('leaves out the Financial Risk card when the server hides fees', async () => {
+      const { financial, ...noFees } = full
+      serveAi({ ...noFees, fees_hidden: true })
+      await renderProfile()
+
+      await screen.findByText('Attendance Risk')
+      expect(screen.queryByText('Financial Risk')).not.toBeInTheDocument()
+    })
+
+    it('shows "Left school" in the header and Overview instead of a risk badge', async () => {
+      serveAi({ left_school: true, left_status: 'WITHDRAWN', left_date: '2026-03-01',
+        overall_risk: null, risk_score: null, ai_summary: null, recommendations: [] })
+      await renderProfile()
+
+      expect(await screen.findAllByText('Left school')).not.toHaveLength(0)
+      expect(screen.queryByText(/Risk$/, { selector: 'span' })).not.toBeInTheDocument()
+      expect(screen.queryByText('Attendance Risk')).not.toBeInTheDocument()
+    })
+
+    it('still shows the header badge from overall_risk', async () => {
+      serveAi(full)
+      await renderProfile()
+
+      expect(await screen.findByText('MEDIUM Risk')).toBeInTheDocument()
+    })
+  })
+
+  // ─── Exam results ────────────────────────────────────────────
+
+  describe('academics tab and exam average chip', () => {
+    it('lists each exam with date, average, percentages, grades and absences', async () => {
+      useStudentApi()
+      server.use(http.get('/api/students/5/exam_results/', () => HttpResponse.json([{
+        exam_id: 1, exam_name: 'Mid-Term', exam_date: '2026-09-01', average_percentage: 70,
+        subjects: [
+          { subject: 'Math', marks_obtained: 70, total_marks: 100, percentage: 70, grade: 'B', is_absent: false },
+          { subject: 'Urdu', marks_obtained: null, total_marks: 100, percentage: null, grade: null, is_absent: true },
+        ],
+      }])))
+      const user = await renderProfile()
+
+      await user.click(screen.getByRole('button', { name: 'Academics' }))
+
+      expect(await screen.findByText('Mid-Term')).toBeInTheDocument()
+      expect(screen.getByText('Average 70%')).toBeInTheDocument()
+      expect(screen.getByText('B')).toBeInTheDocument()
+      expect(screen.getByText('Absent')).toBeInTheDocument()
+    })
+
+    it('shows the last exam percentage and its name on the Exam Average chip', async () => {
+      useStudentApi()
+      server.use(http.get('/api/students/5/profile_summary/', () => HttpResponse.json({
+        exam_average: 78, exam_average_label: 'Mid-Term', latest_exit: null,
+      })))
+      await renderProfile()
+
+      const chip = (await screen.findByText('Exam Average')).closest('div')
+      expect(chip).toHaveTextContent('78%')
+      expect(chip).toHaveTextContent('Mid-Term')
+    })
+
+    it('says "No exams" when the student has none', async () => {
+      useStudentApi()
+      server.use(http.get('/api/students/5/profile_summary/', () => HttpResponse.json({
+        exam_average: null, latest_exit: null,
+      })))
+      await renderProfile()
+
+      expect((await screen.findByText('Exam Average')).closest('div')).toHaveTextContent('No exams')
+    })
+  })
+
   // ─── Re-admission and time away ──────────────────────────────
 
   describe('re-admission', () => {

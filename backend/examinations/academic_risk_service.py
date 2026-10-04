@@ -14,7 +14,7 @@ from datetime import date
 logger = logging.getLogger(__name__)
 
 # Exams are naturally few per year — 10 weekly buckets doesn't apply here.
-MIN_EXAMS = 2
+MIN_EXAMS = 1  # the last exam alone is enough to judge; the trend needs two and stays 'stable' with one
 
 # A run of consecutive failing exams is itself a red flag, independent of
 # the running average.
@@ -29,7 +29,8 @@ class AcademicRiskService:
         self.school_id = school_id
         self.academic_year_id = academic_year_id
 
-    def get_at_risk_students(self, threshold: float = None, only_student_ids=None) -> dict:
+    def get_at_risk_students(self, threshold: float = None, only_student_ids=None,
+                             include_unflagged: bool = False) -> dict:
         """
         Analyze all active students and return those who are at risk or
         predicted to be at risk of falling below the passing threshold.
@@ -37,6 +38,11 @@ class AcademicRiskService:
         only_student_ids limits the analysis to those students (a teacher's own
         sections). None keeps the school-wide behaviour; an empty collection
         analyses nobody rather than falling back to everyone.
+
+        include_unflagged also returns every analysed student that is NOT at risk
+        (severity None) and every student with fewer than MIN_EXAMS exams
+        (insufficient_data True), for a caller that needs one student's full picture
+        (the profile). at_risk_count and risk_levels still count flagged students only.
 
         threshold defaults to this school's own configured policy
         (School.get_academic_risk_pass_threshold) rather than a hardcoded 40 --
@@ -95,6 +101,7 @@ class AcademicRiskService:
             'student_id',
             'exam_subject__exam_id',
             'exam_subject__exam__start_date',
+            'exam_subject__exam__name',
             'marks_obtained',
             'exam_subject__total_marks',
         )
@@ -102,8 +109,9 @@ class AcademicRiskService:
         # Bucket into per-student, per-exam (subject-averaged) percentages.
         student_exam_totals = defaultdict(lambda: defaultdict(lambda: {'sum': 0.0, 'count': 0}))
         student_exam_dates = {}
+        exam_names = {}
 
-        for sid, exam_id, exam_date, marks_obtained, total_marks in marks:
+        for sid, exam_id, exam_date, exam_name, marks_obtained, total_marks in marks:
             if not total_marks:
                 continue
             pct = float(marks_obtained) / float(total_marks) * 100
@@ -111,6 +119,7 @@ class AcademicRiskService:
             bucket['sum'] += pct
             bucket['count'] += 1
             student_exam_dates[exam_id] = exam_date or date.min
+            exam_names[exam_id] = exam_name
 
         at_risk_students = []
         risk_counts = {'HIGH': 0, 'MEDIUM': 0, 'LOW': 0}
@@ -119,6 +128,11 @@ class AcademicRiskService:
             student = student_map[sid]
             exam_totals = student_exam_totals.get(sid)
             if not exam_totals:
+                if include_unflagged:
+                    at_risk_students.append({
+                        'student_id': sid, 'student_name': student.name, 'current_average': None,
+                        'severity': None, 'insufficient_data': True, 'exams_recorded': 0,
+                    })
                 continue
 
             # Per-exam average percentage, ordered chronologically.
@@ -132,6 +146,12 @@ class AcademicRiskService:
             )
 
             if len(exam_averages) < MIN_EXAMS:
+                if include_unflagged:
+                    at_risk_students.append({
+                        'student_id': sid, 'student_name': student.name,
+                        'current_average': round(exam_averages[-1][1], 1) if exam_averages else None,
+                        'severity': None, 'insufficient_data': True, 'exams_recorded': len(exam_averages),
+                    })
                 continue
 
             averages = [pct for _, pct in exam_averages]
@@ -144,10 +164,10 @@ class AcademicRiskService:
             severity = self._determine_severity(
                 current_average, threshold, trend, predicted_average, streak,
             )
-            if severity is None:
+            if severity is None and not include_unflagged:
                 continue
 
-            suggested_action = self._suggest_action(severity, trend, streak, current_average)
+            suggested_action = self._suggest_action(severity, trend, streak, current_average) if severity else None
 
             at_risk_students.append({
                 'student_id': sid,
@@ -155,6 +175,7 @@ class AcademicRiskService:
                 'roll_number': placement_roll(placements.get((sid, self.academic_year_id)), student),
                 'class_name': placement_label(placements.get((sid, self.academic_year_id)), student),
                 'current_average': current_average,
+                'current_exam_name': exam_names.get(exam_averages[-1][0]),
                 'severity': severity,
                 'trend': trend,
                 'trend_detail': trend_detail,
@@ -162,16 +183,18 @@ class AcademicRiskService:
                 'consecutive_fails': streak,
                 'exams_recorded': len(exam_averages),
                 'suggested_action': suggested_action,
+                'insufficient_data': False,
             })
 
-            risk_counts[severity] += 1
+            if severity:
+                risk_counts[severity] += 1
 
         severity_order = {'HIGH': 0, 'MEDIUM': 1, 'LOW': 2}
-        at_risk_students.sort(key=lambda s: (severity_order.get(s['severity'], 3), s['current_average']))
+        at_risk_students.sort(key=lambda s: (severity_order.get(s['severity'], 3), s['current_average'] or 0))
 
         return {
             'total_students': total_students,
-            'at_risk_count': len(at_risk_students),
+            'at_risk_count': sum(1 for s in at_risk_students if s['severity']),
             'risk_levels': risk_counts,
             'students': at_risk_students,
         }

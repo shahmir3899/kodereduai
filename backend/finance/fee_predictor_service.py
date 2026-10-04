@@ -24,7 +24,8 @@ class FeeCollectionPredictorService:
         self.school_id = school_id
         self.academic_year_id = academic_year_id
 
-    def predict_defaults(self, target_month=None, target_year=None):
+    def predict_defaults(self, target_month=None, target_year=None, only_student_ids=None,
+                         include_unflagged=False):
         """
         Analyze payment history to predict defaults for the target month.
 
@@ -46,7 +47,12 @@ class FeeCollectionPredictorService:
                     }
                 ]
             }
+
+        only_student_ids narrows the analysis to those students (one student's profile
+        should not pay for a school-wide scan). include_unflagged keeps students whose
+        probability is below the 0.25 cut-off, for the same reason.
         """
+        from finance.fee_risk import fee_risk_for_students
         from finance.models import FeePayment
         from students.models import Student
 
@@ -56,10 +62,10 @@ class FeeCollectionPredictorService:
         if not target_year:
             target_year = today.year if target_month > today.month else today.year + 1
 
-        students = list(Student.objects.filter(
-            school_id=self.school_id,
-            is_active=True,
-        ).select_related('class_obj'))
+        student_qs = Student.objects.filter(school_id=self.school_id, is_active=True)
+        if only_student_ids is not None:
+            student_qs = student_qs.filter(id__in=list(only_student_ids))
+        students = list(student_qs.select_related('class_obj'))
         total_students = len(students)
 
         # Bulk-fetch every payment for every active student in one query and
@@ -82,6 +88,10 @@ class FeeCollectionPredictorService:
         year_id = self.academic_year_id or resolve_current_academic_year_id(self.school_id)
         placements = placements_for(self.school_id, ((s.id, year_id) for s in students)) if year_id else {}
 
+        # Outstanding comes from the shared helper: summing (due - paid) over every
+        # unpaid row counted a carried-forward balance again in each later month.
+        fee_risk = fee_risk_for_students(student_ids)
+
         predictions = []
 
         for student in students:
@@ -102,10 +112,7 @@ class FeeCollectionPredictorService:
             recent_unpaid = sum(1 for p in recent if p['status'] in ('UNPAID', 'PARTIAL'))
 
             # Outstanding amount
-            outstanding = sum(
-                (p['amount_due'] - p['amount_paid'] for p in payments if p['status'] in ('UNPAID', 'PARTIAL')),
-                Decimal('0'),
-            )
+            outstanding = fee_risk[student.id]['pending']
 
             # Calculate probability
             probability = 0.0
@@ -140,7 +147,7 @@ class FeeCollectionPredictorService:
                 risk_level = 'LOW'
                 action = 'Standard reminder on due date'
 
-            if probability >= 0.25:  # Only include meaningful predictions
+            if probability >= 0.25 or include_unflagged:  # Only include meaningful predictions
                 predictions.append({
                     'student_id': student.id,
                     'student_name': student.name,

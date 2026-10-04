@@ -128,7 +128,9 @@ export default function StudentProfileHeader({
           <div className="flex-1">
             <div className="flex items-center gap-3">
               <h1 className="text-2xl font-bold text-gray-900">{student.name}</h1>
-              {ai?.overall_risk && (
+              {ai?.left_school ? (
+                <Badge tone="neutral">Left school</Badge>
+              ) : ai?.overall_risk && (
                 <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium border ${riskColors[ai.overall_risk]}`}>
                   {ai.overall_risk} Risk
                 </span>
