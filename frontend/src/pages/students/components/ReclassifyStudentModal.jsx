@@ -60,7 +60,8 @@ export default function ReclassifyStudentModal({ student, onClose }) {
   const autoFillRoll = useCallback((roll) => setForm((p) => ({ ...p, new_roll_number: roll })), [])
   const { recommendedRoll } = useRollSuggestion({
     enabled: true,
-    hasClass: !!form.target_session_class_id,
+    // Not before the roster is in: suggesting from an empty list would fill in roll 1.
+    hasClass: !!form.target_session_class_id && !!roster,
     occupiedRolls,
     currentRoll: form.new_roll_number,
     manuallyEdited: rollTyped,

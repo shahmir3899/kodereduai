@@ -24,9 +24,26 @@ DEPARTED_STATUSES = ('WITHDRAWN', 'TRANSFERRED')
 
 
 def enrolled_on_q(day, prefix=''):
-    """Q on StudentEnrollment: in effect on ``day`` (active, or left after it)."""
+    """Q on StudentEnrollment: in effect on ``day`` (active, or left after it, and
+    not inside a break: a re-admitted student's enrollment is active again but
+    they were away on the days of their EnrollmentBreak)."""
+    from django.db.models import Exists, OuterRef
+
+    from student_exits.models import EnrollmentBreak
+
     p = f'{prefix}__' if prefix else ''
-    return Q(**{f'{p}is_active': True}) | Q(**{f'{p}left_date__gt': day})
+    away = EnrollmentBreak.objects.filter(
+        student_id=OuterRef(f'{p}student_id'), start_date__lte=day,
+    ).filter(Q(end_date__isnull=True) | Q(end_date__gt=day))
+    return (Q(**{f'{p}is_active': True}) | Q(**{f'{p}left_date__gt': day})) & ~Exists(away)
+
+
+def _breaks_covering(school_id, student_ids, day):
+    from student_exits.models import EnrollmentBreak
+
+    return EnrollmentBreak.objects.filter(
+        school_id=school_id, student_id__in=student_ids, start_date__lte=day,
+    ).filter(Q(end_date__isnull=True) | Q(end_date__gt=day))
 
 
 def left_by(school_id, student_ids, day):
@@ -34,7 +51,10 @@ def left_by(school_id, student_ids, day):
     latest enrollment starting on or before ``day`` is a departure dated on or
     before it. The latest one, so a student who left and was later
     re-admitted isn't blocked by the old departure, and a day that falls
-    outside every recorded year range is still checked."""
+    outside every recorded year range is still checked.
+
+    A student re-admitted since is still out for the days of their break: those
+    map to the day the break started."""
     ids = [sid for sid in student_ids if sid]
     if not ids or not day:
         return {}
@@ -46,9 +66,25 @@ def left_by(school_id, student_ids, day):
         .values_list('student_id', 'is_active', 'status', 'left_date')
     ):
         latest.setdefault(sid, (active, status, left))
-    return {
+    result = {
         sid: left for sid, (active, status, left) in latest.items()
         if not active and status in DEPARTED_STATUSES and left and left <= day
+    }
+    for sid, start in _breaks_covering(school_id, ids, day).values_list('student_id', 'start_date'):
+        result.setdefault(sid, start)
+    return result
+
+
+def returns_after(school_id, student_ids, day):
+    """{student_id: first day back} for students inside a closed break on ``day``,
+    so a refusal can say when they return. Students still away are left out."""
+    ids = [sid for sid in student_ids if sid]
+    if not ids or not day:
+        return {}
+    return {
+        sid: end
+        for sid, end in _breaks_covering(school_id, ids, day)
+        .filter(end_date__isnull=False).values_list('student_id', 'end_date')
     }
 
 
@@ -70,8 +106,13 @@ def departed_in_year(school_id, student_ids, academic_year_id):
     }
 
 
-def left_message(name, left_date, what='attendance'):
+def left_message(name, left_date, what='attendance', back_on=None):
     when = left_date.strftime('%d %b %Y') if left_date else 'an earlier date'
+    if back_on:
+        return (
+            f"{name} was away from {when} until {back_on.strftime('%d %b %Y')}; "
+            f"{what} can't be recorded for that period."
+        )
     return f"{name} left the school on {when}; {what} can't be recorded on or after that date."
 
 
@@ -217,6 +258,22 @@ def sync_enrollment_status(student, previous_status, previous_date):
     came_back = new_status == 'ACTIVE' and previous_status in DEPARTED_STATUSES
     if not (went_departed or came_back):
         return student
+
+    if went_departed:
+        # Any route out records the start of the absence (the exit workflow does too).
+        from student_exits.services import ensure_open_break
+
+        ensure_open_break(student, student.status_date or timezone.now().date())
+
+    if came_back:
+        # However the student is reactivated, the months away are remembered and
+        # their own login comes back (the Re-admit action does the same).
+        from student_exits.services import activate_portal_login, close_break_on_return
+
+        close_break_on_return(
+            student, return_date=student.status_date or timezone.now().date(), previous_start=previous_date,
+        )
+        activate_portal_login(student)
 
     current_year = AcademicYear.objects.filter(school=student.school, is_current=True).first()
     if not current_year:

@@ -7,6 +7,7 @@ import ClassSelector from '../components/ClassSelector'
 import { useAcademicYear } from '../contexts/AcademicYearContext'
 import useTeacherScopedClasses from '../hooks/useTeacherScopedClasses'
 import Spinner from '../components/ui/Spinner'
+import { awayDaysInMonth } from '../utils/awayPeriods'
 
 function getDaysInMonth(year, month) {
   return new Date(year, month + 1, 0).getDate()
@@ -30,6 +31,7 @@ function formatShortDate(iso) {
 // Day-of-month on which a student's "left" band starts in this month:
 // 1 when they had left before the month began, null when they hadn't left
 // by its end (or never).
+// (A re-admitted student's closed away periods are shaded separately, day by day.)
 function leftFromDay(leftDate, year, month, daysInMonth) {
   if (!leftDate) return null
   const [ly, lm, ld] = leftDate.split('-').map(Number)
@@ -192,6 +194,7 @@ export default function AttendanceRecordsPage() {
         leftDate: s.left_date || null,
         leftStatus: s.status,
         leftFrom: leftFromDay(s.left_date, year, month, daysInMonth),
+        awayDays: awayDaysInMonth(s.away_periods, year, month, daysInMonth),
       }))
       .sort((a, b) => {
         const ra = parseInt(a.roll) || 0
@@ -538,15 +541,16 @@ export default function AttendanceRecordsPage() {
                           }
                           const s = student.dates[day]
                           const off = offDays[day]
-                          const enrolledThatDay = leftFrom === null || day < leftFrom
+                          const awayThatDay = student.awayDays?.has(day)
+                          const enrolledThatDay = (leftFrom === null || day < leftFrom) && !awayThatDay
                           const unmarked = !s && !off && enrolledThatDay && isPastOrToday(day) && datesWithData.includes(day)
                           return (
                             <td
                               key={day}
-                              title={unmarked ? 'Not marked' : off && !s ? off : undefined}
+                              title={awayThatDay ? 'Away from school' : unmarked ? 'Not marked' : off && !s ? off : undefined}
                               className={`px-0 py-1 text-center text-xs border-gray-100 ${
                                 weekdayOf(day) === 1 ? 'border-l border-l-gray-200' : ''
-                              } ${bandDaySet.has(day) ? 'bg-indigo-50/70' : off ? 'bg-gray-100/80' : ''} ${day === todayDay ? 'bg-blue-50/60' : ''}`}
+                              } ${awayThatDay ? 'bg-gray-200/80' : bandDaySet.has(day) ? 'bg-indigo-50/70' : off ? 'bg-gray-100/80' : ''} ${day === todayDay ? 'bg-blue-50/60' : ''}`}
                             >
                               {s === 'PRESENT' ? (
                                 <span className="text-green-600 font-semibold">P</span>
@@ -583,6 +587,7 @@ export default function AttendanceRecordsPage() {
               <span className="flex items-center gap-1"><span className="inline-block w-5 h-3 rounded-sm bg-indigo-50 border border-indigo-100" /> Multi-day holiday (named above)</span>
               <span><span className="font-bold text-amber-500">·</span> Not marked</span>
               <span className="flex items-center gap-1"><span className="inline-block w-5 h-3 rounded-sm bg-gray-100 border-l-2 border-gray-300" /> Left the school</span>
+              <span className="flex items-center gap-1"><span className="inline-block w-5 h-3 rounded-sm bg-gray-200" /> Away (not enrolled)</span>
             </div>
           </div>
 

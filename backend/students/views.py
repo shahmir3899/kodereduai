@@ -153,7 +153,7 @@ class StudentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
     def get_queryset(self):
         queryset = Student.objects.select_related(
             'school', 'class_obj',
-        ).prefetch_related('user_profile__user')
+        ).prefetch_related('user_profile__user', 'enrollment_breaks')
 
         active_school_id = ensure_tenant_school_id(self.request)
         if active_school_id:
@@ -919,6 +919,15 @@ class StudentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
             return Response(list(result.values()))
         except Exception:
             return Response([])
+
+    @action(detail=True, methods=['get'])
+    def away_periods(self, request, pk=None):
+        """The student's recorded absences (withdrawn, then re-admitted), oldest first."""
+        student = self.get_object()
+        from student_exits.serializers import EnrollmentBreakSerializer
+
+        breaks = student.enrollment_breaks.select_related('readmitted_by').order_by('start_date', 'id')
+        return Response(EnrollmentBreakSerializer(breaks, many=True).data)
 
     @action(detail=True, methods=['get'])
     def enrollment_history(self, request, pk=None):

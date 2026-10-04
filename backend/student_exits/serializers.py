@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from .models import ExitClearanceItem, StudentExit
+from .models import EnrollmentBreak, ExitClearanceItem, StudentExit
 
 
 def _display_name(user):
@@ -75,3 +75,23 @@ class UpdateExitSerializer(serializers.Serializer):
 
 class ReasonSerializer(serializers.Serializer):
     reason = serializers.CharField(required=False, allow_blank=True, default='')
+
+
+class ReadmitSerializer(serializers.Serializer):
+    student = serializers.IntegerField()
+    return_date = serializers.DateField()
+    session_class = serializers.IntegerField(required=False, allow_null=True, default=None)
+    roll_number = serializers.CharField(required=False, allow_blank=True, default='')
+    reason = serializers.CharField(required=False, allow_blank=True, default='')
+
+
+class EnrollmentBreakSerializer(serializers.ModelSerializer):
+    readmitted_by_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = EnrollmentBreak
+        fields = ['id', 'start_date', 'end_date', 'reason', 'readmitted_by_name', 'readmitted_at']
+        read_only_fields = fields
+
+    def get_readmitted_by_name(self, obj):
+        return _display_name(obj.readmitted_by)

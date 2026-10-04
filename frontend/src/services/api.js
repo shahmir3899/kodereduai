@@ -290,6 +290,7 @@ export const studentExitsApi = {
   unwaive: (id, kind) => api.post(`/api/student-exits/${id}/items/${kind}/unwaive/`),
   finalize: (id) => api.post(`/api/student-exits/${id}/finalize/`),
   cancel: (id, reason) => api.post(`/api/student-exits/${id}/cancel/`, { reason }),
+  readmit: (data) => api.post('/api/student-exits/readmit/', data),
 }
 
 export const studentsApi = {

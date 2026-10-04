@@ -229,6 +229,116 @@ describe('StudentProfilePage', () => {
     })
   })
 
+  // ─── Re-admission and time away ──────────────────────────────
+
+  describe('re-admission', () => {
+    const away = [{ start: '2026-03-01', end: '2026-03-20', reason: 'Returned home' }]
+
+    it('offers Re-admit to an admin for a student who has left, and opens the dialog', async () => {
+      useStudentApi({ status: 'WITHDRAWN', status_date: '2026-03-01' })
+      const user = await renderProfile()
+
+      await user.click(screen.getByRole('button', { name: 'Re-admit' }))
+
+      expect(await screen.findByRole('heading', { name: 'Re-admit student' })).toBeInTheDocument()
+    })
+
+    it.each(['ACTIVE', 'SUSPENDED'])('does not offer Re-admit for a %s student', async (status) => {
+      useStudentApi({ status })
+      await renderProfile()
+
+      expect(screen.queryByRole('button', { name: 'Re-admit' })).not.toBeInTheDocument()
+    })
+
+    it('does not offer Re-admit to a teacher', async () => {
+      mockRole = 'TEACHER'
+      useStudentApi({ status: 'WITHDRAWN', status_date: '2026-03-01' })
+      await renderProfile()
+
+      expect(screen.queryByRole('button', { name: 'Re-admit' })).not.toBeInTheDocument()
+    })
+
+    it('sends Active from the status dialog to re-admission instead of saving it', async () => {
+      useStudentApi({ status: 'WITHDRAWN', status_date: '2026-03-01' })
+      const user = await renderProfile()
+
+      await user.click(screen.getByRole('button', { name: 'Update Status' }))
+      const modal = modalFor('Update Student Status')
+      await user.selectOptions(modal.getByLabelText('Status'), 'ACTIVE')
+      await user.clear(modal.getByLabelText('Effective Date'))
+      await user.type(modal.getByLabelText('Effective Date'), '2026-03-20')
+      await user.type(modal.getByLabelText('Reason'), 'Back home')
+      expect(modal.getByText(/is a re-admission/)).toBeInTheDocument()
+      await user.click(modal.getByRole('button', { name: 'Continue to re-admission' }))
+
+      expect(await screen.findByRole('heading', { name: 'Re-admit student' })).toBeInTheDocument()
+      expect(screen.getByLabelText('Return date')).toHaveValue('2026-03-20')
+      expect(screen.getByLabelText('Reason')).toHaveValue('Back home')
+      expect(patches).toHaveLength(0)
+    })
+
+    it('re-admits and refreshes the profile', async () => {
+      useStudentApi({ status: 'WITHDRAWN', status_date: '2026-03-01' })
+      let body = null
+      server.use(http.post('/api/student-exits/readmit/', async ({ request }) => {
+        body = await request.json()
+        current = { ...current, status: 'ACTIVE', status_date: body.return_date }
+        return HttpResponse.json({ student: 5, status: 'ACTIVE', break: {} })
+      }))
+      const user = await renderProfile()
+
+      await user.click(screen.getByRole('button', { name: 'Re-admit' }))
+      await user.click(await screen.findByRole('button', { name: 'Re-admit student' }))
+
+      await waitFor(() => expect(body).not.toBeNull())
+      await waitFor(() => expect(mockShowSuccess).toHaveBeenCalledWith('Ali Hassan has been re-admitted.'))
+      await waitFor(() => expect(screen.queryByRole('button', { name: 'Re-admit' })).not.toBeInTheDocument())
+    })
+
+    it('lists the time away on the History tab with the reason', async () => {
+      useStudentApi({ away_periods: away })
+      server.use(http.get('/api/students/5/enrollment_history/', () => HttpResponse.json([
+        { academic_year_name: '2025-2026', class_name: 'Class 1A', section: 'A', roll_number: '9', status: 'ACTIVE' },
+      ])))
+      const user = await renderProfile()
+
+      await user.click(screen.getByRole('button', { name: 'History' }))
+
+      const note = await screen.findByRole('note')
+      expect(note).toHaveTextContent('Away from school')
+      expect(note).toHaveTextContent('19 days')
+      expect(note).toHaveTextContent('Returned home')
+      expect(note).toHaveTextContent('stays empty')
+    })
+
+    it('says on the Attendance tab that the time away is not counted as absences', async () => {
+      useStudentApi({ away_periods: away })
+      server.use(http.get('/api/students/5/attendance_history/', () => HttpResponse.json({
+        months: [{ month: 'Feb 2026', present: 18, absent: 2, late: 0, total: 20, rate: 90 }],
+      })))
+      const user = await renderProfile()
+
+      await user.click(screen.getByRole('button', { name: 'Attendance' }))
+
+      const note = await screen.findByRole('note')
+      expect(note).toHaveTextContent('not counted as absences')
+      expect(await screen.findByText('Feb 2026')).toBeInTheDocument()
+    })
+
+    it('shows no away note for a student who was never away', async () => {
+      useStudentApi({ away_periods: [] })
+      server.use(http.get('/api/students/5/enrollment_history/', () => HttpResponse.json([
+        { academic_year_name: '2025-2026', class_name: 'Class 1A', status: 'ACTIVE' },
+      ])))
+      const user = await renderProfile()
+
+      await user.click(screen.getByRole('button', { name: 'History' }))
+
+      await screen.findByText('2025-2026')
+      expect(screen.queryByRole('note')).not.toBeInTheDocument()
+    })
+  })
+
   // ─── Per-section editing ─────────────────────────────────────
 
   it('edits one section inline and leaves the other cards alone', async () => {
@@ -557,6 +667,29 @@ describe('StudentProfilePage', () => {
       })
       await waitFor(() => expect(mockShowSuccess).toHaveBeenCalledWith('Student reclassified successfully'))
       expect(screen.queryByRole('heading', { name: 'Reclassify Student' })).not.toBeInTheDocument()
+    })
+
+    it('does not suggest roll 1 from an empty list while the class roster is still loading', async () => {
+      mockYear = { id: 1, name: '2025-2026' }
+      let release
+      const gate = new Promise((resolve) => { release = resolve })
+      const roster = [
+        { id: 1, class_obj: 1, roll_number: '1' }, { id: 2, class_obj: 1, roll_number: '2' }, { id: 3, class_obj: 1, roll_number: '3' },
+      ]
+      server.use(http.get('/api/students/', async () => {
+        await gate
+        return HttpResponse.json(roster)
+      }))
+      const user = await renderProfile()
+
+      await user.click(screen.getByRole('button', { name: 'Reclassify' }))
+      const modal = modalFor('Reclassify Student')
+      await waitFor(() => expect(within(modal.getByLabelText('Target Class')).getByText('Class 1A - A')).toBeInTheDocument())
+      await user.selectOptions(modal.getByLabelText('Target Class'), 'Class 1A - A')
+
+      expect(modal.getByLabelText('New Roll Number (optional)')).toHaveValue('')
+      release()
+      await waitFor(() => expect(modal.getByLabelText('New Roll Number (optional)')).toHaveValue('4'))
     })
 
     it('shows a server rejection inside the dialog', async () => {

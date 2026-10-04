@@ -105,15 +105,32 @@ def enrollment_covers_month(year, month, prefix=''):
     "withdrawn student" investigation for why a bare is_active check alone
     (whole-year, not month-precise) isn't enough for these three.
 
+    A month lying entirely inside an EnrollmentBreak (a re-admitted student's time
+    away) is excluded too: nothing is billed, rostered or registered for it.
+
     `prefix` lets this be used against a queryset whose base model isn't
     StudentEnrollment itself, e.g. AttendanceRecord filtered via
     `student__enrollments` -- pass prefix='student__enrollments' so the field
     lookups become `student__enrollments__is_active` etc. Leave it blank when
     filtering a StudentEnrollment queryset directly.
     """
+    import calendar
     from datetime import date
-    from django.db.models import Q
+    from django.db.models import Exists, OuterRef, Q
 
     month_start = date(year, month, 1)
+    month_end = date(year, month, calendar.monthrange(year, month)[1])
     field = f'{prefix}__' if prefix else ''
-    return Q(**{f'{field}is_active': True}) | Q(**{f'{field}left_date__gte': month_start})
+
+    # A re-admitted student's enrollment is active again, so the months they were
+    # away are only known from their EnrollmentBreak rows. A month is excluded only
+    # when a break spans all of it; a month they were away for part of still counts,
+    # the same month-precision the leaving month already has.
+    from student_exits.models import EnrollmentBreak
+
+    fully_away = EnrollmentBreak.objects.filter(
+        student_id=OuterRef(f'{field}student_id'), start_date__lte=month_start,
+    ).filter(Q(end_date__isnull=True) | Q(end_date__gt=month_end))
+
+    in_effect = Q(**{f'{field}is_active': True}) | Q(**{f'{field}left_date__gte': month_start})
+    return in_effect & ~Exists(fully_away)

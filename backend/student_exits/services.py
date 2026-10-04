@@ -3,19 +3,21 @@
 Views stay thin and call these. Everything that changes data on finalize runs in
 one transaction, so a failure part-way leaves the student untouched.
 """
-from datetime import date as date_cls
+from datetime import date as date_cls, timedelta
 from decimal import Decimal
 
 from django.db import transaction
 from django.utils import timezone
 
+from academic_sessions.enrollment_service import move_student, sync_student_snapshot
 from academic_sessions.leaving import (
     DEPARTED_STATUSES, apply_departure, records_after_leaving,
 )
+from academic_sessions.models import AcademicYear, StudentEnrollment
 from core.audit import log_admin_action
 from finance.student_balance import student_pending_fees
 
-from .models import ExitClearanceItem, StudentExit
+from .models import EnrollmentBreak, ExitClearanceItem, StudentExit
 
 WAIVER_REASON_MIN_LENGTH = 10
 Kind = ExitClearanceItem.Kind
@@ -293,6 +295,21 @@ def _close_school_services(student, leaving_date):
     GatePass.objects.filter(student=student, status__in=['PENDING', 'APPROVED']).update(status='EXPIRED')
 
 
+def ensure_open_break(student, start_date, exit_case=None):
+    """Record the start of an absence. A stale open break (nothing should leave one,
+    since a departed student cannot leave again) is reused, not duplicated."""
+    return EnrollmentBreak.objects.update_or_create(
+        student=student, end_date__isnull=True,
+        defaults={
+            'school': student.school, 'exit': exit_case, 'start_date': start_date,
+        },
+    )[0]
+
+
+def _open_break(exit_case):
+    ensure_open_break(exit_case.student, exit_case.leaving_date, exit_case)
+
+
 def _snapshot(exit_case, items):
     student = exit_case.student
     return {
@@ -330,6 +347,7 @@ def finalize_exit(exit_case, user, request=None):
         )
         _close_school_services(student, exit_case.leaving_date)
         _deactivate_portal_login(student)
+        _open_break(exit_case)
 
         exit_case.snapshot = _snapshot(exit_case, items)
         exit_case.status = StudentExit.Status.FINALIZED
@@ -358,3 +376,147 @@ def cancel_exit(exit_case, user, reason='', request=None):
         'exit_id': exit_case.id, 'reason': exit_case.cancel_reason,
     })
     return exit_case
+
+
+# ── Re-admission ─────────────────────────────────────────────────────────────
+
+def activate_portal_login(student):
+    """Switch the student's own login back on at this school (the exit switched it off)."""
+    from schools.models import UserSchoolMembership
+
+    profile = getattr(student, 'user_profile', None)
+    if profile is None:
+        return 0
+    return UserSchoolMembership.objects.filter(
+        user_id=profile.user_id, school_id=student.school_id, is_active=False,
+    ).update(is_active=True)
+
+
+def _away_since(student, open_break):
+    """The day the student left: from the open break, else (an exit that predates
+    breaks, or a re-activation through the old status dialog) from the enrollment."""
+    if open_break:
+        return open_break.start_date
+    latest = (
+        StudentEnrollment.objects.filter(student=student, left_date__isnull=False)
+        .order_by('-academic_year__start_date', '-id').first()
+    )
+    return (latest.left_date if latest else None) or student.status_date
+
+
+def close_break_on_return(student, *, return_date, previous_start=None, reason='', user=None):
+    """Close the student's open break on ``return_date``. With no open break (an exit
+    from before breaks existed, or a plain status change) one is recorded from
+    ``previous_start`` so the gap is not forgotten. Returns the break, or None when
+    there was nothing to record."""
+    open_break = EnrollmentBreak.objects.filter(student=student, end_date__isnull=True).first()
+    start = open_break.start_date if open_break else previous_start
+    if start is None:
+        return None
+    end = return_date if return_date > start else start + timedelta(days=1)
+    if open_break:
+        open_break.end_date = end
+        open_break.reason = reason
+        open_break.readmitted_by = user
+        open_break.readmitted_at = timezone.now()
+        open_break.save()
+        return open_break
+    return EnrollmentBreak.objects.create(
+        school=student.school, student=student, start_date=start, end_date=end,
+        reason=reason, readmitted_by=user, readmitted_at=timezone.now(),
+    )
+
+
+def _roll_taken(school_id, academic_year_id, session_class, class_obj_id, roll_number, student):
+    """Same rule as the roll constraints: unique per section, or per master class for
+    enrollments with no section."""
+    taken = StudentEnrollment.objects.filter(
+        school_id=school_id, academic_year_id=academic_year_id, roll_number=roll_number,
+    ).exclude(student=student)
+    taken = taken.filter(session_class=session_class) if session_class else taken.filter(
+        session_class__isnull=True, class_obj_id=class_obj_id,
+    )
+    return taken.exists()
+
+
+def readmit_student(*, student, return_date, session_class=None, roll_number=None,
+                    reason='', user=None, request=None):
+    """Bring a withdrawn/transferred student back: same Student record, so every old
+    attendance, mark and fee row stays attached; the months away stay empty because
+    the break is closed rather than deleted.
+
+    Same academic year as they left in: that enrollment is re-activated (and moved
+    when a section or roll is given). A later year: a new enrollment, which needs a
+    section and roll. The return date may be in the future."""
+    if student.status not in DEPARTED_STATUSES:
+        raise ExitError(f'{student.name} has not left, so there is nothing to re-admit.')
+    if not isinstance(return_date, date_cls):
+        raise ExitError('A return date is required.')
+
+    open_break = EnrollmentBreak.objects.filter(student=student, end_date__isnull=True).first()
+    left_on = _away_since(student, open_break)
+    if left_on is None:
+        raise ExitError("We can't tell when this student left, so the gap can't be recorded. "
+                        'Ask an administrator to record the leaving date first.')
+    if return_date <= left_on:
+        raise ExitError(f'The return date must be after the day they left ({left_on.isoformat()}).')
+
+    year = (
+        AcademicYear.objects.filter(school=student.school, start_date__lte=return_date, end_date__gte=return_date).first()
+        or AcademicYear.objects.filter(school=student.school, is_current=True).first()
+    )
+    if year is None:
+        raise ExitError('No academic year covers the return date.')
+
+    if session_class is not None and (
+        session_class.school_id != student.school_id or session_class.academic_year_id != year.id
+    ):
+        raise ExitError(f'Choose a class of {year.name} at this school.')
+
+    enrollment = StudentEnrollment.objects.filter(school=student.school, student=student, academic_year=year).first()
+    if enrollment is None and (session_class is None or not (roll_number or '').strip()):
+        raise ExitError(f'Choose a class and a roll number: {student.name} has no enrollment in {year.name} yet.')
+
+    target_class = session_class or (enrollment.session_class if enrollment else None)
+    target_class_obj_id = (
+        target_class.class_obj_id if target_class else (enrollment.class_obj_id if enrollment else None)
+    )
+    target_roll = (roll_number or '').strip() or (enrollment.roll_number if enrollment else '')
+    if _roll_taken(student.school_id, year.id, target_class, target_class_obj_id, target_roll, student):
+        raise ExitError(f"Roll number '{target_roll}' is already taken in that class for {year.name}.")
+
+    with transaction.atomic():
+        if enrollment is None:
+            enrollment = StudentEnrollment.objects.create(
+                school=student.school, student=student, academic_year=year,
+                class_obj_id=target_class_obj_id, session_class=target_class,
+                roll_number=target_roll, status=StudentEnrollment.Status.ACTIVE,
+            )
+        else:
+            enrollment.is_active = True
+            enrollment.status = StudentEnrollment.Status.ACTIVE
+            enrollment.left_date = None
+            enrollment.save(update_fields=['is_active', 'status', 'left_date', 'updated_at'])
+            if session_class is not None or (roll_number or '').strip():
+                move_student(
+                    enrollment, session_class=session_class,
+                    roll_number=(roll_number or '').strip() or None, sync_student=False,
+                )
+
+        student.status = 'ACTIVE'
+        student.status_date = return_date
+        student.status_reason = ''
+        student.save(update_fields=['status', 'status_date', 'status_reason', 'updated_at'])
+        sync_student_snapshot(student)
+
+        brk = close_break_on_return(
+            student, return_date=return_date, previous_start=left_on, reason=reason, user=user,
+        )
+        activate_portal_login(student)
+
+        log_admin_action(request, 'student_readmitted', student, metadata={
+            'return_date': return_date.isoformat(), 'away_since': left_on.isoformat(),
+            'academic_year_id': year.id, 'session_class_id': getattr(target_class, 'id', None),
+            'roll_number': target_roll, 'reason': reason,
+        })
+    return brk

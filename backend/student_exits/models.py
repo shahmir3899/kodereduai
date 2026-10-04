@@ -128,3 +128,63 @@ class ExitClearanceItem(models.Model):
 
     def __str__(self):
         return f'{self.get_kind_display()}: {self.get_state_display()}'
+
+
+class EnrollmentBreak(models.Model):
+    """A period a student was away from school: opened when an exit is finalized,
+    closed when they are re-admitted. The enrollment itself is re-activated on
+    return, so without this record the months away would be forgotten; the
+    attendance, fee and exam guards read it to leave the gap empty.
+
+    A day is inside the break when start_date <= day < end_date; while end_date is
+    empty the student is still away.
+    """
+
+    school = models.ForeignKey(
+        'schools.School', on_delete=models.CASCADE, related_name='enrollment_breaks',
+    )
+    student = models.ForeignKey(
+        'students.Student', on_delete=models.CASCADE, related_name='enrollment_breaks',
+    )
+    exit = models.ForeignKey(
+        StudentExit, null=True, blank=True, on_delete=models.SET_NULL, related_name='breaks',
+        help_text='The exit that opened this break (empty for backfilled or legacy cases).',
+    )
+    start_date = models.DateField(help_text='First day away (the leaving date).')
+    end_date = models.DateField(
+        null=True, blank=True,
+        help_text='First day back. Empty while the student is still away.',
+    )
+    reason = models.TextField(blank=True, default='', help_text='Why they came back (set at re-admission).')
+    readmitted_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name='+',
+    )
+    readmitted_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-start_date', '-id']
+        verbose_name = 'Enrollment Break'
+        verbose_name_plural = 'Enrollment Breaks'
+        indexes = [
+            models.Index(fields=['student', 'start_date']),
+            models.Index(fields=['school', 'start_date']),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=['student'],
+                condition=models.Q(end_date__isnull=True),
+                name='one_open_break_per_student',
+            ),
+            models.CheckConstraint(
+                condition=models.Q(end_date__isnull=True) | models.Q(end_date__gt=models.F('start_date')),
+                name='break_ends_after_it_starts',
+            ),
+        ]
+
+    def covers(self, day):
+        return self.start_date <= day and (self.end_date is None or day < self.end_date)
+
+    def __str__(self):
+        end = self.end_date.isoformat() if self.end_date else 'now'
+        return f'{self.student.name} away {self.start_date.isoformat()} to {end}'

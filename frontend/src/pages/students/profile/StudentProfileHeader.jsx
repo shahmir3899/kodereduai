@@ -26,6 +26,7 @@ export default function StudentProfileHeader({
   onUpdateStatus,
   onReclassify,
   onInvite,
+  onReadmit,
   summary = null,
   openExit = null,
   onContinueExit,
@@ -215,6 +216,14 @@ export default function StudentProfileHeader({
                 className="px-4 py-2 bg-amber-100 text-amber-800 border border-amber-200 rounded-lg hover:bg-amber-200 text-sm"
               >
                 Update Status
+              </button>
+            )}
+            {canManageLifecycle && ['WITHDRAWN', 'TRANSFERRED'].includes(student.status) && (
+              <button
+                onClick={onReadmit}
+                className="px-4 py-2 bg-green-100 text-green-800 border border-green-200 rounded-lg hover:bg-green-200 text-sm"
+              >
+                Re-admit
               </button>
             )}
             {canManageLifecycle && (

@@ -15,6 +15,7 @@ import ProfileSections from './students/profile/ProfileSections'
 import StatusUpdateModal from './students/profile/StatusUpdateModal'
 import ParentInviteModal from './students/profile/ParentInviteModal'
 import StudentExitWizard from './students/profile/StudentExitWizard'
+import ReadmitStudentModal from './students/profile/ReadmitStudentModal'
 import ReclassifyStudentModal from './students/components/ReclassifyStudentModal'
 import {
   OverviewTab,
@@ -36,6 +37,7 @@ export default function StudentProfilePage() {
   const [showReclassifyModal, setShowReclassifyModal] = useState(false)
   const [showInviteModal, setShowInviteModal] = useState(false)
   const [exitPrefill, setExitPrefill] = useState(null) // non-null while the exit wizard is open
+  const [readmitPrefill, setReadmitPrefill] = useState(null) // non-null while the re-admit dialog is open
   const { showError, showSuccess } = useToast()
   const { user } = useAuth()
   const canManageLifecycle = canManageStudentLifecycle(user?.role)
@@ -196,6 +198,7 @@ export default function StudentProfilePage() {
         summary={summary}
         openExit={openExit}
         onContinueExit={() => setExitPrefill({})}
+        onReadmit={() => setReadmitPrefill({})}
         onOpenFees={() => setTab('Fees')}
       />
 
@@ -262,7 +265,7 @@ export default function StudentProfilePage() {
 
       {/* Tab Content */}
       {tab === 'Overview' && <OverviewTab summary={summary} ai={ai} isLoading={summaryLoading} error={summaryIsError ? summaryError : null} />}
-      {tab === 'Attendance' && <AttendanceTab data={attendanceData?.data} isLoading={attendanceLoading} error={attendanceIsError ? attendanceError : null} />}
+      {tab === 'Attendance' && <AttendanceTab awayPeriods={student.away_periods} data={attendanceData?.data} isLoading={attendanceLoading} error={attendanceIsError ? attendanceError : null} />}
       {tab === 'Fees' && <FeesTab data={feeData?.data} isLoading={feeLoading} error={feeIsError ? feeError : null} />}
       {tab === 'Academics' && <AcademicsTab data={examData?.data} isLoading={examLoading} error={examIsError ? examError : null} />}
       {tab === 'Assessment' && (
@@ -281,7 +284,7 @@ export default function StudentProfilePage() {
           )
           : <div className="text-center py-10 text-gray-500">Select an academic year to record an assessment.</div>
       )}
-      {tab === 'History' && <HistoryTab data={historyData?.data} isLoading={historyLoading} error={historyIsError ? historyError : null} />}
+      {tab === 'History' && <HistoryTab awayPeriods={student.away_periods} data={historyData?.data} isLoading={historyLoading} error={historyIsError ? historyError : null} />}
       {tab === 'Documents' && <DocumentsTab studentId={id} data={docsData?.data} refetch={refetchDocs} isLoading={docsLoading} error={docsIsError ? docsError : null} />}
 
       {showStatusModal && (
@@ -292,9 +295,14 @@ export default function StudentProfilePage() {
             setShowStatusModal(false)
             setExitPrefill(prefill)
           }}
+          onStartReadmit={(prefill) => {
+            setShowStatusModal(false)
+            setReadmitPrefill(prefill)
+          }}
         />
       )}
       {exitPrefill && <StudentExitWizard student={student} prefill={exitPrefill} onClose={() => setExitPrefill(null)} />}
+      {readmitPrefill && <ReadmitStudentModal student={student} prefill={readmitPrefill} onClose={() => setReadmitPrefill(null)} />}
       {showReclassifyModal && <ReclassifyStudentModal student={student} onClose={() => setShowReclassifyModal(false)} />}
       {showInviteModal && <ParentInviteModal student={student} onClose={() => setShowInviteModal(false)} />}
     </div>

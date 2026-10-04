@@ -68,13 +68,14 @@ class StudentSerializer(serializers.ModelSerializer):
     roll_number = serializers.SerializerMethodField()
     status = serializers.SerializerMethodField()
     left_date = serializers.SerializerMethodField()
+    away_periods = serializers.SerializerMethodField()
 
     class Meta:
         model = Student
         fields = [
             'id', 'school', 'school_name',
             'class_obj', 'class_name', 'session_class_obj',
-            'roll_number', 'name', 'left_date',
+            'roll_number', 'name', 'left_date', 'away_periods',
             'admission_number', 'admission_date', 'date_of_birth',
             'gender', 'blood_group', 'address', 'previous_school', 'photo_url',
             'parent_phone', 'parent_name',
@@ -157,6 +158,18 @@ class StudentSerializer(serializers.ModelSerializer):
             return getattr(obj, '_enrollment_left_date', None)
         placement = self._current_placement(obj)
         return placement.left_date if placement is not None else None
+
+    def get_away_periods(self, obj):
+        """When the student was away and came back (an open break has no end).
+        Lists prefetch enrollment_breaks, so this costs no extra query per row."""
+        return [
+            {
+                'start': b.start_date.isoformat(),
+                'end': b.end_date.isoformat() if b.end_date else None,
+                'reason': b.reason,
+            }
+            for b in sorted(obj.enrollment_breaks.all(), key=lambda b: b.start_date)
+        ]
 
     def get_status(self, obj):
         """Return enrollment status for academic-year scope, else current snapshot status."""

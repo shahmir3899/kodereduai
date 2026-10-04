@@ -3,6 +3,7 @@ import { useMutation } from '@tanstack/react-query'
 import { studentsApi, examinationsApi } from '../../../services/api'
 import { useToast } from '../../../components/Toast'
 import Button from '../../../components/ui/Button'
+import { describeAway } from '../../../utils/awayPeriods'
 
 // The profile page's tab panels, moved out of StudentProfilePage unchanged.
 
@@ -63,13 +64,40 @@ export function OverviewTab({ summary, ai, isLoading, error }) {
   )
 }
 
-export function AttendanceTab({ data, isLoading, error }) {
+// Time the student was away (withdrawn, then re-admitted): no attendance exists for it.
+function AwayNotice({ periods, what }) {
+  if (!periods?.length) return null
+  return (
+    <div className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-700" role="note">
+      <p className="font-medium text-gray-900">Away from school</p>
+      <ul className="mt-1 space-y-0.5">
+        {periods.map((p) => (
+          <li key={p.start}>
+            {describeAway(p)}{p.reason ? ` — ${p.reason}` : ''}
+          </li>
+        ))}
+      </ul>
+      <p className="text-xs text-gray-500 mt-1">{what}</p>
+    </div>
+  )
+}
+
+export function AttendanceTab({ data, isLoading, error, awayPeriods }) {
   if (isLoading) return <div className="text-center py-10 text-gray-500">Loading attendance...</div>
   if (error) return <div className="text-center py-10 text-red-600">Failed to load attendance</div>
   const months = data?.months || []
-  if (months.length === 0) return <div className="text-center py-10 text-gray-500">No attendance records found</div>
+  if (months.length === 0) {
+    return (
+      <div className="space-y-4">
+        <AwayNotice periods={awayPeriods} what="No attendance is recorded for these days." />
+        <div className="text-center py-10 text-gray-500">No attendance records found</div>
+      </div>
+    )
+  }
 
   return (
+    <div className="space-y-4">
+    <AwayNotice periods={awayPeriods} what="No attendance is recorded for these days, so they are not counted as absences." />
     <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
       <div className="overflow-x-auto">
       <table className="min-w-full divide-y divide-gray-200">
@@ -101,6 +129,7 @@ export function AttendanceTab({ data, isLoading, error }) {
         </tbody>
       </table>
       </div>
+    </div>
     </div>
   )
 }
@@ -203,13 +232,15 @@ export function AcademicsTab({ data, isLoading, error }) {
   )
 }
 
-export function HistoryTab({ data, isLoading, error }) {
+export function HistoryTab({ data, isLoading, error, awayPeriods }) {
   if (isLoading) return <div className="text-center py-10 text-gray-500">Loading enrollment history...</div>
   if (error) return <div className="text-center py-10 text-red-600">Failed to load enrollment history</div>
   const history = data?.enrollments || data || []
   if (history.length === 0) return <div className="text-center py-10 text-gray-500">No enrollment history found</div>
 
   return (
+    <div className="space-y-4">
+    <AwayNotice periods={awayPeriods} what="The time away stays empty: nothing is billed, rostered or recorded for it." />
     <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
       <div className="overflow-x-auto">
       <table className="min-w-full divide-y divide-gray-200">
@@ -243,6 +274,7 @@ export function HistoryTab({ data, isLoading, error }) {
         </tbody>
       </table>
       </div>
+    </div>
     </div>
   )
 }

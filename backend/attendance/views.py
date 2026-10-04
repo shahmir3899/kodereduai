@@ -1930,9 +1930,10 @@ class AttendanceRecordViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.R
                 ).values_list('id', flat=True)
             )
 
-        from academic_sessions.leaving import left_by, left_message
+        from academic_sessions.leaving import left_by, left_message, returns_after
 
         departed = left_by(school_id, [e['student_id'] for e in entries], date)
+        returns = returns_after(school_id, list(departed), date) if departed else {}
         departed_names = dict(Student.objects.filter(id__in=departed).values_list('id', 'name')) if departed else {}
 
         created = 0
@@ -1945,7 +1946,10 @@ class AttendanceRecordViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.R
             if student_id in departed:
                 errors.append({
                     'student_id': student_id,
-                    'error': left_message(departed_names.get(student_id, 'This student'), departed[student_id]),
+                    'error': left_message(
+                        departed_names.get(student_id, 'This student'), departed[student_id],
+                        back_on=returns.get(student_id),
+                    ),
                 })
                 continue
             if student_id not in valid_student_ids:

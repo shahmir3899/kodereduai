@@ -7,12 +7,14 @@ from rest_framework.response import Response
 from core.mixins import TenantQuerySetMixin, ensure_tenant_school_id
 from core.permissions import CanManageStudentExit, HasSchoolAccess, ModuleAccessMixin
 from schools.models import School
+from academic_sessions.models import SessionClass
 from students.models import Student
 
 from . import services
 from .models import ExitClearanceItem, StudentExit
 from .serializers import (
-    ReasonSerializer, StartExitSerializer, StudentExitSerializer, UpdateExitSerializer,
+    EnrollmentBreakSerializer, ReadmitSerializer, ReasonSerializer, StartExitSerializer,
+    StudentExitSerializer, UpdateExitSerializer,
 )
 
 
@@ -108,6 +110,37 @@ class StudentExitViewSet(
             .exclude(pk=school.pk).order_by('name')
         )
         return Response([{'id': s.id, 'name': s.name} for s in schools])
+
+    @action(detail=False, methods=['post'])
+    def readmit(self, request):
+        """Bring a withdrawn/transferred student back (same record, gap kept)."""
+        serializer = ReadmitSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        school_id = ensure_tenant_school_id(request)
+        if not school_id:
+            return Response({'detail': 'Select a school first.'}, status=status.HTTP_400_BAD_REQUEST)
+        student = get_object_or_404(Student, pk=data['student'], school_id=school_id)
+
+        session_class = None
+        if data['session_class'] is not None:
+            session_class = SessionClass.objects.filter(pk=data['session_class'], school_id=school_id).first()
+            if session_class is None:
+                return Response({'detail': 'Class not found.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            brk = services.readmit_student(
+                student=student, return_date=data['return_date'], session_class=session_class,
+                roll_number=data['roll_number'], reason=data['reason'],
+                user=request.user, request=request,
+            )
+        except services.ExitError as exc:
+            return self._error(exc)
+        return Response({
+            'student': student.id, 'status': 'ACTIVE',
+            'break': EnrollmentBreakSerializer(brk).data if brk else None,
+        })
 
     @action(detail=True, methods=['post'])
     def refresh(self, request, pk=None):
