@@ -6,9 +6,9 @@ import { server } from '../../test/mocks/server'
 import { renderWithProviders } from '../../test/utils'
 import StudentsPage from '../StudentsPage'
 
-// Characterization tests for the list page's add/edit/delete/filter behaviour.
-// They pin what StudentsPage does today so the form refactor (shared StudentForm,
-// page split) can be checked against it; they are not a spec for the final UI.
+// Tests for the list page's add/edit/delete/filter behaviour. Originally written
+// against the pre-refactor page; the edit/add expectations were updated when the
+// modal moved onto the shared StudentForm (inline errors, changed-fields-only edit).
 
 let mockRole = 'SCHOOL_ADMIN'
 let mockYear = null
@@ -103,19 +103,86 @@ describe('StudentsPage — list, edit, delete, add', () => {
 
   // ─── Edit ────────────────────────────────────────────────────
 
-  it('opens the edit modal prefilled, with the class locked', async () => {
+  it('opens the edit modal with every field prefilled and the class shown read-only', async () => {
     const user = await renderLoaded()
 
     await user.click(firstButton('Edit'))
 
     const modal = modalFor('Edit Student')
-    expect(modal.getByDisplayValue('Ali Hassan')).toBeInTheDocument()
-    expect(modal.getByDisplayValue('Hassan Sr')).toBeInTheDocument()
-    expect(modal.getByRole('combobox')).toBeDisabled()
-    expect(modal.getByText(/class cannot be changed after creation/i)).toBeInTheDocument()
+    expect(modal.getByLabelText(/student name/i)).toHaveValue('Ali Hassan')
+    expect(modal.getByLabelText(/roll number/i)).toHaveValue('1')
+    expect(modal.getByLabelText('Parent name')).toHaveValue('Hassan Sr')
+    expect(modal.getByLabelText('Guardian email')).toBeInTheDocument()
+    expect(modal.queryByLabelText(/^Class/)).not.toBeInTheDocument()
+    expect(modal.getByText('Class 1A')).toBeInTheDocument()
+    expect(modal.getByRole('button', { name: 'Change class' })).toBeEnabled()
   })
 
-  it('PATCHes only name, roll and parent fields — never the class — then closes', async () => {
+  it('tells a teacher the class cannot be changed, with no Change class button', async () => {
+    mockRole = 'TEACHER'
+    const user = await renderLoaded()
+
+    await user.click(firstButton('Edit'))
+    const modal = modalFor('Edit Student')
+
+    expect(modal.getByText(/class cannot be changed here/i)).toBeInTheDocument()
+    expect(modal.queryByRole('button', { name: 'Change class' })).not.toBeInTheDocument()
+  })
+
+  describe('Change class', () => {
+    it('is disabled while there are unsaved edits', async () => {
+      const user = await renderLoaded()
+
+      await user.click(firstButton('Edit'))
+      const modal = modalFor('Edit Student')
+      await user.type(modal.getByLabelText('Blood group'), 'A')
+
+      expect(modal.getByRole('button', { name: 'Change class' })).toBeDisabled()
+    })
+
+    it('asks for an academic year first and keeps the edit form open', async () => {
+      const user = await renderLoaded()
+
+      await user.click(firstButton('Edit'))
+      await user.click(modalFor('Edit Student').getByRole('button', { name: 'Change class' }))
+
+      expect(mockShowError).toHaveBeenCalledWith('Select an academic year from the top switcher first')
+      expect(screen.getByRole('heading', { name: 'Edit Student' })).toBeInTheDocument()
+      expect(screen.queryByRole('heading', { name: 'Reclassify Student' })).not.toBeInTheDocument()
+    })
+
+    it('closes the edit form and opens the reclassify dialog for that student', async () => {
+      mockYear = { id: 1, name: '2025-2026' }
+      let body = null
+      let studentId = null
+      server.use(
+        http.post('/api/students/:id/reclassify/', async ({ request, params }) => {
+          body = await request.json()
+          studentId = params.id
+          return HttpResponse.json({})
+        }),
+      )
+      const user = await renderLoaded()
+
+      await user.click(firstButton('Edit'))
+      await user.click(modalFor('Edit Student').getByRole('button', { name: 'Change class' }))
+
+      expect(screen.queryByRole('heading', { name: 'Edit Student' })).not.toBeInTheDocument()
+      const modal = modalFor('Reclassify Student')
+      await waitFor(() => expect(within(modal.getByLabelText('Target Class')).getByText('Class 1A - A')).toBeInTheDocument())
+      await user.selectOptions(modal.getByLabelText('Target Class'), 'Class 1A - A')
+      await user.type(modal.getByLabelText('Reason'), 'Wrong section')
+      await user.click(modal.getByRole('button', { name: 'Apply Reclassification' }))
+
+      await waitFor(() => expect(body).not.toBeNull())
+      expect(studentId).toBe('1')
+      expect(body).toMatchObject({ academic_year_id: 1, target_session_class_id: 1, reason: 'Wrong section' })
+      await waitFor(() => expect(mockShowSuccess).toHaveBeenCalledWith('Student reclassified successfully'))
+      expect(screen.queryByRole('heading', { name: 'Reclassify Student' })).not.toBeInTheDocument()
+    })
+  })
+
+  it('PATCHes only the changed fields, never the class, then closes', async () => {
     let patched = null
     server.use(
       http.patch('/api/students/:id/', async ({ request, params }) => {
@@ -127,21 +194,84 @@ describe('StudentsPage — list, edit, delete, add', () => {
 
     await user.click(firstButton('Edit'))
     const modal = modalFor('Edit Student')
-    const nameInput = modal.getByDisplayValue('Ali Hassan')
+    const nameInput = modal.getByLabelText(/student name/i)
     await user.clear(nameInput)
     await user.type(nameInput, 'Ali H. Hassan')
     await user.click(modal.getByRole('button', { name: 'Save Changes' }))
 
     await waitFor(() => expect(patched).not.toBeNull())
     expect(patched.id).toBe('1')
-    expect(Object.keys(patched.body).sort()).toEqual(['name', 'parent_name', 'parent_phone', 'roll_number'])
-    expect(patched.body.name).toBe('Ali H. Hassan')
-    expect(patched.body.roll_number).toBe('1')
+    expect(patched.body).toEqual({ name: 'Ali H. Hassan' })
     await waitFor(() => expect(mockShowSuccess).toHaveBeenCalledWith('Student updated successfully!'))
     expect(screen.queryByRole('heading', { name: 'Edit Student' })).not.toBeInTheDocument()
   })
 
-  it('blocks saving when name is cleared and shows a toast', async () => {
+  it('updates the list row at once while the save is in flight, and puts it back if the save fails', async () => {
+    let release
+    const gate = new Promise((resolve) => { release = resolve })
+    server.use(
+      http.patch('/api/students/:id/', async () => {
+        await gate
+        return HttpResponse.json({ name: ['Rejected.'] }, { status: 400 })
+      }),
+    )
+    const user = await renderLoaded()
+
+    await user.click(firstButton('Edit'))
+    const modal = modalFor('Edit Student')
+    const nameInput = modal.getByLabelText(/student name/i)
+    await user.clear(nameInput)
+    await user.type(nameInput, 'Ali Renamed')
+    await user.click(modal.getByRole('button', { name: 'Save Changes' }))
+
+    await waitFor(() => expect(screen.getAllByText('Ali Renamed').length).toBeGreaterThanOrEqual(1))
+    expect(screen.queryAllByText('Ali Hassan')).toHaveLength(0)
+
+    release()
+
+    expect(await modal.findByText('Rejected.')).toBeInTheDocument()
+    await waitFor(() => expect(screen.queryAllByText('Ali Renamed')).toHaveLength(0))
+    expect(screen.getAllByText('Ali Hassan').length).toBeGreaterThanOrEqual(1)
+  })
+
+  it('edits fields the old modal could not reach, such as guardian details', async () => {
+    let body = null
+    server.use(
+      http.patch('/api/students/:id/', async ({ request }) => {
+        body = await request.json()
+        return HttpResponse.json({})
+      }),
+    )
+    const user = await renderLoaded()
+
+    await user.click(firstButton('Edit'))
+    const modal = modalFor('Edit Student')
+    await user.type(modal.getByLabelText('Guardian email'), 'guardian@example.com')
+    await user.selectOptions(modal.getByLabelText('Gender'), 'F')
+    await user.click(modal.getByRole('button', { name: 'Save Changes' }))
+
+    await waitFor(() => expect(body).not.toBeNull())
+    expect(body).toEqual({ guardian_email: 'guardian@example.com', gender: 'F' })
+  })
+
+  it('closes without a request when nothing was changed', async () => {
+    let called = false
+    server.use(
+      http.patch('/api/students/:id/', () => {
+        called = true
+        return HttpResponse.json({})
+      }),
+    )
+    const user = await renderLoaded()
+
+    await user.click(firstButton('Edit'))
+    await user.click(modalFor('Edit Student').getByRole('button', { name: 'Save Changes' }))
+
+    expect(screen.queryByRole('heading', { name: 'Edit Student' })).not.toBeInTheDocument()
+    expect(called).toBe(false)
+  })
+
+  it('shows an inline error and sends nothing when the name is cleared', async () => {
     let called = false
     server.use(
       http.patch('/api/students/:id/', () => {
@@ -153,15 +283,27 @@ describe('StudentsPage — list, edit, delete, add', () => {
 
     await user.click(firstButton('Edit'))
     const modal = modalFor('Edit Student')
-    await user.clear(modal.getByDisplayValue('Ali Hassan'))
+    await user.clear(modal.getByLabelText(/student name/i))
     await user.click(modal.getByRole('button', { name: 'Save Changes' }))
 
-    expect(mockShowError).toHaveBeenCalledWith('Name and Roll Number are required')
+    expect(modal.getByText('Student name is required')).toBeInTheDocument()
+    expect(modal.getByLabelText(/student name/i)).toHaveFocus()
     expect(called).toBe(false)
-    expect(screen.getByRole('heading', { name: 'Edit Student' })).toBeInTheDocument()
+    expect(mockShowError).not.toHaveBeenCalled()
   })
 
-  it('shows the server roll-number error and keeps the modal open', async () => {
+  it('validates a changed guardian email on the client', async () => {
+    const user = await renderLoaded()
+
+    await user.click(firstButton('Edit'))
+    const modal = modalFor('Edit Student')
+    await user.type(modal.getByLabelText('Guardian email'), 'nope')
+    await user.click(modal.getByRole('button', { name: 'Save Changes' }))
+
+    expect(modal.getByText('Enter a valid email address')).toBeInTheDocument()
+  })
+
+  it('shows the server roll-number error under the roll field and keeps the modal open', async () => {
     server.use(
       http.patch('/api/students/:id/', () =>
         HttpResponse.json({ roll_number: ['Roll number already exists in this class.'] }, { status: 400 })),
@@ -169,14 +311,57 @@ describe('StudentsPage — list, edit, delete, add', () => {
     const user = await renderLoaded()
 
     await user.click(firstButton('Edit'))
-    await user.click(modalFor('Edit Student').getByRole('button', { name: 'Save Changes' }))
+    const modal = modalFor('Edit Student')
+    const roll = modal.getByLabelText(/roll number/i)
+    await user.clear(roll)
+    await user.type(roll, '2')
+    await user.click(modal.getByRole('button', { name: 'Save Changes' }))
 
-    await waitFor(() => {
-      expect(mockShowError).toHaveBeenCalledWith(
-        expect.stringContaining('Roll number already exists in this class.'),
-      )
-    })
+    expect(await modal.findByText(/Roll number already exists in this class\./)).toBeInTheDocument()
+    expect(roll).toHaveAttribute('aria-invalid', 'true')
     expect(screen.getByRole('heading', { name: 'Edit Student' })).toBeInTheDocument()
+    expect(mockShowError).not.toHaveBeenCalled()
+  })
+
+  it('shows a non-field server error as a banner in the modal', async () => {
+    server.use(
+      http.patch('/api/students/:id/', () => HttpResponse.json({ detail: 'You cannot edit this student.' }, { status: 403 })),
+    )
+    const user = await renderLoaded()
+
+    await user.click(firstButton('Edit'))
+    const modal = modalFor('Edit Student')
+    await user.type(modal.getByLabelText('Blood group'), 'O+')
+    await user.click(modal.getByRole('button', { name: 'Save Changes' }))
+
+    expect(await modal.findByText('You cannot edit this student.')).toBeInTheDocument()
+  })
+
+  it('asks before discarding unsaved edits, and keeps them if you choose to keep editing', async () => {
+    const user = await renderLoaded()
+
+    await user.click(firstButton('Edit'))
+    const modal = modalFor('Edit Student')
+    await user.type(modal.getByLabelText('Blood group'), 'A')
+    await user.click(modal.getByRole('button', { name: 'Cancel' }))
+
+    expect(modal.getByText('Discard your unsaved changes?')).toBeInTheDocument()
+    await user.click(modal.getByRole('button', { name: 'Keep editing' }))
+    expect(modal.getByLabelText('Blood group')).toHaveValue('A')
+
+    await user.keyboard('{Escape}')
+    expect(modal.getByText('Discard your unsaved changes?')).toBeInTheDocument()
+    await user.click(modal.getByRole('button', { name: 'Discard' }))
+    expect(screen.queryByRole('heading', { name: 'Edit Student' })).not.toBeInTheDocument()
+  })
+
+  it('closes straight away when nothing was typed', async () => {
+    const user = await renderLoaded()
+
+    await user.click(firstButton('Edit'))
+    await user.click(modalFor('Edit Student').getByRole('button', { name: 'Cancel' }))
+
+    expect(screen.queryByRole('heading', { name: 'Edit Student' })).not.toBeInTheDocument()
   })
 
   // ─── Delete ──────────────────────────────────────────────────
@@ -233,41 +418,158 @@ describe('StudentsPage — list, edit, delete, add', () => {
     expect(screen.getByRole('button', { name: 'Add Student' })).toBeDisabled()
   })
 
-  it('asks for a class before creating a student', async () => {
-    mockYear = { id: 1, name: '2025-2026' }
-    const user = await renderLoaded()
+  describe('with an academic year', () => {
+    beforeEach(() => {
+      mockYear = { id: 1, name: '2025-2026' }
+    })
 
-    await user.click(screen.getByRole('button', { name: 'Add Student' }))
-    await user.click(modalFor('Add Student').getByRole('button', { name: 'Add Student' }))
+    async function openAdd() {
+      const user = await renderLoaded()
+      await user.click(screen.getByRole('button', { name: 'Add Student' }))
+      const modal = modalFor('Add Student')
+      const classSelect = modal.getByLabelText(/^Class/)
+      await waitFor(() => expect(within(classSelect).getByText('Class 1A - A')).toBeInTheDocument())
+      return { user, modal, classSelect }
+    }
 
-    expect(mockShowError).toHaveBeenCalledWith('Please select a class')
-  })
+    it('shows only the quick fields at first and reveals the rest on request', async () => {
+      const { user, modal } = await openAdd()
 
-  it('POSTs the new student with the master class resolved from the session class', async () => {
-    mockYear = { id: 1, name: '2025-2026' }
-    let created = null
-    server.use(
-      http.post('/api/students/', async ({ request }) => {
-        created = await request.json()
-        return HttpResponse.json({ id: 77, ...created }, { status: 201 })
-      }),
-    )
-    const user = await renderLoaded()
+      expect(modal.getByLabelText(/student name/i)).toBeInTheDocument()
+      expect(modal.getByLabelText('Parent phone')).toBeInTheDocument()
+      expect(modal.queryByLabelText('Guardian email')).not.toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: 'Add Student' }))
-    const modal = modalFor('Add Student')
-    const classSelect = modal.getByRole('combobox')
-    await waitFor(() => expect(within(classSelect).getByText('Class 1A - A')).toBeInTheDocument())
-    await user.selectOptions(classSelect, 'Class 1A - A')
+      await user.click(modal.getByRole('button', { name: 'Show more fields' }))
+      expect(modal.getByLabelText('Guardian email')).toBeInTheDocument()
+      expect(modal.getByLabelText('Date of birth')).toBeInTheDocument()
 
-    const [rollInput, nameInput] = modal.getAllByRole('textbox')
-    await user.clear(rollInput)
-    await user.type(rollInput, '10')
-    await user.type(nameInput, 'New Pupil')
-    await user.click(modal.getByRole('button', { name: 'Add Student' }))
+      await user.click(modal.getByRole('button', { name: 'Show fewer fields' }))
+      expect(modal.queryByLabelText('Guardian email')).not.toBeInTheDocument()
+    })
 
-    await waitFor(() => expect(created).not.toBeNull())
-    expect(created).toMatchObject({ school: 1, class_obj: 1, name: 'New Pupil', roll_number: '10' })
-    await waitFor(() => expect(mockShowSuccess).toHaveBeenCalledWith('Student added successfully!'))
+    it('asks for a class, inline, before creating a student', async () => {
+      const { user, modal } = await openAdd()
+
+      await user.type(modal.getByLabelText(/student name/i), 'New Pupil')
+      await user.type(modal.getByLabelText(/roll number/i), '9')
+      await user.click(modal.getByRole('button', { name: 'Add Student' }))
+
+      expect(modal.getByText('Please select a class')).toBeInTheDocument()
+    })
+
+    it('requires name and roll number', async () => {
+      const { user, modal, classSelect } = await openAdd()
+
+      await user.selectOptions(classSelect, 'Class 1A - A')
+      await user.clear(modal.getByLabelText(/roll number/i))
+      await user.click(modal.getByRole('button', { name: 'Add Student' }))
+
+      expect(modal.getByText('Student name is required')).toBeInTheDocument()
+      expect(modal.getByText('Roll number is required')).toBeInTheDocument()
+    })
+
+    it('suggests the next free roll for the chosen class and fills it in', async () => {
+      const { user, modal, classSelect } = await openAdd()
+      expect(modal.getByLabelText(/roll number/i)).toHaveValue('')
+
+      await user.selectOptions(classSelect, 'Class 1A - A')
+
+      expect(modal.getByLabelText(/roll number/i)).toHaveValue('4')
+      expect(modal.getByRole('button', { name: 'Suggest 4' })).toBeInTheDocument()
+    })
+
+    it('does not treat an auto-filled roll as an unsaved edit', async () => {
+      const { user, modal, classSelect } = await openAdd()
+      await user.selectOptions(classSelect, 'Class 1A - A')
+
+      await user.click(modal.getByRole('button', { name: 'Cancel' }))
+
+      expect(screen.queryByRole('heading', { name: 'Add Student' })).not.toBeInTheDocument()
+    })
+
+    it('POSTs the new student with the master class resolved from the session class', async () => {
+      let created = null
+      server.use(
+        http.post('/api/students/', async ({ request }) => {
+          created = await request.json()
+          return HttpResponse.json({ id: 77, ...created }, { status: 201 })
+        }),
+      )
+      const { user, modal, classSelect } = await openAdd()
+
+      await user.selectOptions(classSelect, 'Class 1A - A')
+      const roll = modal.getByLabelText(/roll number/i)
+      await user.clear(roll)
+      await user.type(roll, '10')
+      await user.type(modal.getByLabelText(/student name/i), 'New Pupil')
+      await user.type(modal.getByLabelText('Parent phone'), '0300-4444444')
+      await user.click(modal.getByRole('button', { name: 'Add Student' }))
+
+      await waitFor(() => expect(created).not.toBeNull())
+      expect(created).toMatchObject({
+        school: 1, class_obj: 1, name: 'New Pupil', roll_number: '10', parent_phone: '+923004444444',
+      })
+      await waitFor(() => expect(mockShowSuccess).toHaveBeenCalledWith('Student added successfully!'))
+      expect(screen.queryByRole('heading', { name: 'Add Student' })).not.toBeInTheDocument()
+    })
+
+    it('creates a portal login after the student when asked, with the username suggested from the name', async () => {
+      let account = null
+      server.use(
+        http.post('/api/students/', async ({ request }) => HttpResponse.json({ id: 78, ...(await request.json()) }, { status: 201 })),
+        http.post('/api/students/:id/create-user-account/', async ({ request, params }) => {
+          account = { id: params.id, body: await request.json() }
+          return HttpResponse.json({ username: 'new_pupil' }, { status: 201 })
+        }),
+      )
+      const { user, modal, classSelect } = await openAdd()
+
+      await user.selectOptions(classSelect, 'Class 1A - A')
+      await user.type(modal.getByLabelText(/student name/i), 'New Pupil')
+      await user.click(modal.getByLabelText(/create user account/i))
+      expect(modal.getByPlaceholderText('Login username')).toHaveValue('new_pupil')
+      await user.type(modal.getByPlaceholderText('Min 8 chars'), 'Student@123')
+      await user.type(modal.getByPlaceholderText('Confirm'), 'Student@123')
+      await user.click(modal.getByRole('button', { name: 'Add Student' }))
+
+      await waitFor(() => expect(account).not.toBeNull())
+      expect(account.id).toBe('78')
+      expect(account.body).toMatchObject({ username: 'new_pupil', password: 'Student@123' })
+      await waitFor(() => expect(mockShowSuccess).toHaveBeenCalledWith('Student and user account created successfully!'))
+    })
+
+    it('does not create anything when the login details are incomplete', async () => {
+      let created = false
+      server.use(
+        http.post('/api/students/', () => {
+          created = true
+          return HttpResponse.json({}, { status: 201 })
+        }),
+      )
+      const { user, modal, classSelect } = await openAdd()
+
+      await user.selectOptions(classSelect, 'Class 1A - A')
+      await user.type(modal.getByLabelText(/student name/i), 'New Pupil')
+      await user.click(modal.getByLabelText(/create user account/i))
+      await user.click(modal.getByRole('button', { name: 'Add Student' }))
+
+      expect(modal.getByText('Username and password are required for user account.')).toBeInTheDocument()
+      expect(created).toBe(false)
+    })
+
+    it('opens the full form when the server rejects a field that was hidden', async () => {
+      server.use(
+        http.post('/api/students/', () =>
+          HttpResponse.json({ guardian_email: ['Enter a valid email address.'] }, { status: 400 })),
+      )
+      const { user, modal, classSelect } = await openAdd()
+
+      await user.selectOptions(classSelect, 'Class 1A - A')
+      await user.type(modal.getByLabelText(/student name/i), 'New Pupil')
+      await user.click(modal.getByRole('button', { name: 'Add Student' }))
+
+      expect(await modal.findByLabelText('Guardian email')).toHaveAttribute('aria-invalid', 'true')
+      expect(modal.getByText('Enter a valid email address.')).toBeInTheDocument()
+    })
   })
 })

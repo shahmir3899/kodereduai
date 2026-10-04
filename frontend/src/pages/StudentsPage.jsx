@@ -1,7 +1,5 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
-import { PasswordInput } from '../components'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { useAcademicYear } from '../contexts/AcademicYearContext'
 import { studentsApi, schoolsApi } from '../services/api'
@@ -10,56 +8,46 @@ import { useSessionClasses } from '../hooks/useSessionClasses'
 import { useClasses } from '../hooks/useClasses'
 import { getClassSelectorScope, getResolvedMasterClassId } from '../utils/classScope'
 import { canManageStudentLifecycle } from '../utils/accessPolicies'
-import { sortClassOptions } from '../utils/classOrdering'
-import { getNextAvailableRoll } from '../utils/rollSuggestion'
-import ClassSelector from '../components/ClassSelector'
 import { exportStudentsPDF, exportStudentsPNG } from './studentExport'
 import { useDebounce } from '../hooks/useDebounce'
-import { usePasswordPolicy } from '../hooks/usePasswordPolicy'
-import WhatsAppTick from '../components/WhatsAppTick'
-import ReportPeriodPicker from '../components/ReportPeriodPicker'
 import PhotoCropModal from '../components/PhotoCropModal'
 import { downloadInstantReport } from '../utils/downloadReport'
-import { getLifecycleLabel, getLifecycleStyle } from '../utils/studentLifecycle'
-import Spinner from '../components/ui/Spinner'
-import { SkeletonTable } from '../components/ui/Skeleton'
 import { useEscapeKey } from '../hooks/useEscapeKey'
-import Badge from '../components/ui/Badge'
-import { RecordCard, CardGrid, ViewToggle } from '../components/cards'
 import { useViewPreference } from '../hooks/useViewPreference'
-
-function StudentAvatar({ student, sizeClass = 'w-8 h-8' }) {
-  if (student.photo_url) {
-    return (
-      <img
-        src={student.photo_url}
-        alt={student.name}
-        className={`${sizeClass} rounded-full object-cover flex-shrink-0`}
-      />
-    )
-  }
-  return (
-    <div className={`${sizeClass} rounded-full bg-primary-100 flex items-center justify-center flex-shrink-0`}>
-      <span className="text-xs font-bold text-primary-700">
-        {student.name?.charAt(0)?.toUpperCase()}
-      </span>
-    </div>
-  )
-}
-
-// Phone format: +92XXXXXXXXXX (E.164) — Excel export forces text format to preserve + prefix
-
-const normalizeClassText = (value) => String(value || '').trim().toLowerCase().replace(/\s+/g, ' ')
+import { useStudentSelection } from '../hooks/useStudentSelection'
+import { useUpdateStudent } from '../hooks/useUpdateStudent'
+import { downloadStudentsExcel, readStudentsFile } from './students/studentExcel'
+import {
+  buildClassChipData,
+  buildClassFilterOptions,
+  computeStats,
+  filterStudents,
+  sortStudents,
+  summarizeByGender,
+} from './students/studentListUtils'
+import StudentsHeader from './students/components/StudentsHeader'
+import StudentFormModal from './students/components/StudentFormModal'
+import StudentPhotoControl from './students/components/StudentPhotoControl'
+import ReclassifyStudentModal from './students/components/ReclassifyStudentModal'
+import StudentStats from './students/components/StudentStats'
+import StudentFilters from './students/components/StudentFilters'
+import StudentsList from './students/components/StudentsList'
+import SelectionBar from './students/components/SelectionBar'
+import DeleteStudentModal from './students/components/DeleteStudentModal'
+import BulkUploadModal from './students/components/BulkUploadModal'
+import ConvertAccountModal from './students/components/ConvertAccountModal'
+import BulkConvertModal from './students/components/BulkConvertModal'
 
 export default function StudentsPage() {
   const { user, activeSchool } = useAuth()
   const { activeAcademicYear } = useAcademicYear()
   const queryClient = useQueryClient()
   const { showError, showSuccess, showWarning } = useToast()
-  const { validate: validatePassword, validateLength: validatePasswordLength } = usePasswordPolicy()
   const isSuperAdmin = user?.role === 'SUPER_ADMIN'
   const canManageLifecycle = canManageStudentLifecycle(user?.role)
   const fileInputRef = useRef(null)
+
+  // Report download progress (bulk "Download Reports" from the selection bar)
   const [isGeneratingReports, setIsGeneratingReports] = useState(false)
   const [reportDownloadProgress, setReportDownloadProgress] = useState({ current: 0, total: 0 })
 
@@ -70,42 +58,19 @@ export default function StudentsPage() {
   const [showInactiveRecords, setShowInactiveRecords] = useState(false)
   const [showModal, setShowModal] = useState(false)
   const [editingStudent, setEditingStudent] = useState(null)
+  const [reclassifyStudent, setReclassifyStudent] = useState(null)
   const [deleteConfirm, setDeleteConfirm] = useState(null)
   const [showBulkModal, setShowBulkModal] = useState(false)
   const [bulkData, setBulkData] = useState({ class_id: '', students: [] })
   const [isUploading, setIsUploading] = useState(false)
-  const [showExportMenu, setShowExportMenu] = useState(false)
-  const exportRef = useRef(null)
-  const photoInputRef = useRef(null)
   const [cropImageSrc, setCropImageSrc] = useState(null)
-  const [studentForm, setStudentForm] = useState({
-    name: '',
-    roll_number: '',
-    parent_phone: '',
-    parent_name: '',
-    class_id: '',
-  })
-  const [recommendedRoll, setRecommendedRoll] = useState('')
-  const [rollManuallyEdited, setRollManuallyEdited] = useState(false)
-  const [createUserAccount, setCreateUserAccount] = useState(false)
-  const [studentUserForm, setStudentUserForm] = useState({
-    username: '', email: '', password: '', confirm_password: '',
-  })
-  const [studentUserError, setStudentUserError] = useState('')
 
   const [view, setView] = useViewPreference('students')
 
-  // Convert existing students to users
-  const [selectedStudents, setSelectedStudents] = useState(new Set())
-  const [showConvertModal, setShowConvertModal] = useState(false)
-  const [convertStudent, setConvertStudent] = useState(null) // for individual convert
-  const [convertForm, setConvertForm] = useState({ username: '', email: '', password: '', confirm_password: '' })
-  const [convertError, setConvertError] = useState('')
+  // Convert existing students to portal users (the modals own their form state)
+  const [convertStudent, setConvertStudent] = useState(null)
   const [showBulkConvertModal, setShowBulkConvertModal] = useState(false)
-  const [bulkConvertPassword, setBulkConvertPassword] = useState('')
-  const [bulkConvertError, setBulkConvertError] = useState('')
-  const [convertResults, setConvertResults] = useState(null)
-  const [isConverting, setIsConverting] = useState(false)
+
   const { sessionClasses } = useSessionClasses(activeAcademicYear?.id, selectedSchoolId)
   const classSelectorScope = getClassSelectorScope(activeAcademicYear?.id)
   const resolvedSelectedClasses = useMemo(
@@ -114,14 +79,7 @@ export default function StudentsPage() {
       .filter(Boolean),
     [selectedClassIds, activeAcademicYear?.id, sessionClasses],
   )
-  const resolvedStudentFormClassId = getResolvedMasterClassId(studentForm.class_id, activeAcademicYear?.id, sessionClasses)
-  const sessionClassIdByMaster = useMemo(() => {
-    const map = {}
-    sessionClasses.forEach((sc) => {
-      if (sc.class_obj) map[String(sc.class_obj)] = String(sc.id)
-    })
-    return map
-  }, [sessionClasses])
+  const resolveMasterClassId = (classId) => getResolvedMasterClassId(classId, activeAcademicYear?.id, sessionClasses)
 
   // Fetch schools for Super Admin
   const { data: schoolsData } = useQuery({
@@ -149,44 +107,6 @@ export default function StudentsPage() {
       ...(activeAcademicYear?.id && { academic_year: activeAcademicYear.id }),
     }),
     enabled: !!selectedSchoolId,
-  })
-
-  // Add student mutation
-  const addMutation = useMutation({
-    mutationFn: (data) => studentsApi.createStudent(data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['students'] })
-      queryClient.invalidateQueries({ queryKey: ['classes'] })
-      closeModal()
-      showSuccess('Student added successfully!')
-    },
-    onError: (error) => {
-      const message = error.response?.data?.roll_number?.[0] ||
-                      error.response?.data?.detail ||
-                      error.message ||
-                      'Failed to add student'
-      showError(message)
-    },
-  })
-
-  // Update student mutation
-  const updateMutation = useMutation({
-    mutationFn: ({ id, data }) => studentsApi.updateStudent(id, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['students'] })
-      closeModal()
-      showSuccess('Student updated successfully!')
-    },
-    onError: (error) => {
-      const rollError = parseRollError(error)
-      const message = (rollError && recommendedRoll)
-        ? `${rollError} Suggested next roll: ${recommendedRoll}.`
-        : error.response?.data?.roll_number?.[0] ||
-                      error.response?.data?.detail ||
-                      error.message ||
-                      'Failed to update student'
-      showError(message)
-    },
   })
 
   // Delete student mutation
@@ -231,11 +151,7 @@ export default function StudentsPage() {
     },
   })
 
-  const handlePhotoFileChange = (e) => {
-    const file = e.target.files?.[0]
-    if (file) setCropImageSrc(URL.createObjectURL(file))
-    e.target.value = ''
-  }
+  const handlePhotoSelected = (file) => setCropImageSrc(URL.createObjectURL(file))
 
   const closeCropModal = () => {
     if (cropImageSrc) URL.revokeObjectURL(cropImageSrc)
@@ -248,488 +164,134 @@ export default function StudentsPage() {
     closeCropModal()
   }
 
-  // Individual convert handler
-  const handleIndividualConvert = async () => {
-    setConvertError('')
-    if (!convertForm.username || !convertForm.password) {
-      setConvertError('Username and password are required.')
-      return
-    }
-    const pwdError = validatePassword(convertForm.password, convertForm.confirm_password)
-    if (pwdError) {
-      setConvertError(pwdError)
-      return
-    }
-    setIsConverting(true)
-    try {
-      await studentsApi.createStudentUserAccount(convertStudent.id, convertForm)
-      queryClient.invalidateQueries({ queryKey: ['students'] })
-      setShowConvertModal(false)
-      setConvertStudent(null)
-      setConvertForm({ username: '', email: '', password: '', confirm_password: '' })
-      showSuccess('User account created successfully!')
-    } catch (err) {
-      setConvertError(err?.response?.data?.error || err?.response?.data?.detail || 'Failed to create user account')
-    } finally {
-      setIsConverting(false)
-    }
-  }
-
-  // Bulk convert handler
-  const handleBulkConvert = async () => {
-    setBulkConvertError('')
-    const pwdError = bulkConvertPassword ? validatePasswordLength(bulkConvertPassword) : 'Default password is required.'
-    if (pwdError) {
-      setBulkConvertError(pwdError)
-      return
-    }
-    setIsConverting(true)
-    try {
-      const response = await studentsApi.bulkCreateAccounts({
-        student_ids: Array.from(selectedStudents),
-        default_password: bulkConvertPassword,
-      })
-      setConvertResults(response.data)
-      queryClient.invalidateQueries({ queryKey: ['students'] })
-      setSelectedStudents(new Set())
-      showSuccess(`Created ${response.data.created_count} user account(s)!`)
-    } catch (err) {
-      setBulkConvertError(err?.response?.data?.error || err?.response?.data?.detail || 'Bulk conversion failed')
-    } finally {
-      setIsConverting(false)
-    }
-  }
-
-  const openConvertModal = (student) => {
-    setConvertStudent(student)
-    const suggestedUsername = student.name?.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '') || ''
-    setConvertForm({ username: suggestedUsername, email: student.guardian_email || '', password: '', confirm_password: '' })
-    setConvertError('')
-    setShowConvertModal(true)
-  }
-
-  const toggleStudentSelection = useCallback((id) => {
-    setSelectedStudents(prev => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
-  }, [])
-
-  // Modal handlers
   const openAddModal = () => {
     setEditingStudent(null)
-    setRollManuallyEdited(false)
-    setStudentForm({
-      name: '',
-      roll_number: '',
-      parent_phone: '',
-      parent_name: '',
-      class_id: selectedClassIds[0] || '',
-    })
     setShowModal(true)
   }
 
   const openEditModal = (student) => {
-    const mappedClassId = classSelectorScope === 'session'
-      ? (sessionClassIdByMaster[String(student.class_obj)] || '')
-      : (student.class_obj?.toString() || '')
-
     setEditingStudent(student)
-    setRollManuallyEdited(true)
-    setStudentForm({
-      name: student.name,
-      roll_number: student.roll_number,
-      parent_phone: student.parent_phone || '',
-      parent_name: student.parent_name || '',
-      class_id: mappedClassId,
-    })
     setShowModal(true)
   }
 
   const closeModal = () => {
     setShowModal(false)
     setEditingStudent(null)
-    setRecommendedRoll('')
-    setRollManuallyEdited(false)
-    setStudentForm({
-      name: '',
-      roll_number: '',
-      parent_phone: '',
-      parent_name: '',
-      class_id: '',
-    })
-    setCreateUserAccount(false)
-    setStudentUserForm({ username: '', email: '', password: '', confirm_password: '' })
-    setStudentUserError('')
   }
 
-  useEscapeKey(closeModal, showModal)
+  // Hands the student over to the reclassify dialog and closes the edit form: a
+  // reclassify can change the roll number too, and a form left open would still
+  // hold the old one.
+  const handleChangeClass = () => {
+    if (!activeAcademicYear?.id) {
+      showError('Select an academic year from the top switcher first')
+      return
+    }
+    const student = editingStudent
+    closeModal()
+    setReclassifyStudent(student)
+  }
+
   useEscapeKey(() => setDeleteConfirm(null), !!deleteConfirm)
   useEscapeKey(() => setShowBulkModal(false), showBulkModal)
-  useEscapeKey(() => { setShowConvertModal(false); setConvertStudent(null) }, showConvertModal && !!convertStudent)
-  useEscapeKey(() => setShowBulkConvertModal(false), showBulkConvertModal)
 
-  const parseRollError = (error) => {
-    const rollError = error?.response?.data?.roll_number
-    if (Array.isArray(rollError) && rollError.length > 0) return rollError[0]
-    if (typeof rollError === 'string') return rollError
-    return null
-  }
+  const updateStudent = useUpdateStudent()
 
-  const applyRecommendedRoll = () => {
-    if (!recommendedRoll) return
-    setStudentForm((prev) => ({ ...prev, roll_number: recommendedRoll }))
-    setRollManuallyEdited(true)
-  }
-
-  const handleClassSelectionChange = (value) => {
-    if (!studentForm.roll_number?.trim()) {
-      setRollManuallyEdited(false)
-    }
-    setStudentForm((prev) => ({ ...prev, class_id: value }))
-  }
-
-  const handleSubmit = async () => {
-    if (!editingStudent && !resolvedStudentFormClassId) {
-      showError('Please select a class')
-      return
-    }
-    if (!studentForm.name || !studentForm.roll_number) {
-      showError('Name and Roll Number are required')
-      return
-    }
-
-    // Validate user account fields if checkbox is checked
-    if (createUserAccount && !editingStudent) {
-      setStudentUserError('')
-      if (!studentUserForm.username || !studentUserForm.password) {
-        setStudentUserError('Username and password are required for user account.')
-        return
-      }
-      const pwdError = validatePassword(studentUserForm.password, studentUserForm.confirm_password)
-      if (pwdError) {
-        setStudentUserError(pwdError)
-        return
-      }
-    }
-
-    // Normalize phone number if provided
-    const normalizedPhone = studentForm.parent_phone ? parsePhone(studentForm.parent_phone) : ''
-
-    const data = {
-      name: studentForm.name,
-      roll_number: studentForm.roll_number,
-      parent_phone: normalizedPhone,
-      parent_name: studentForm.parent_name,
-    }
-
+  // Resolves on success (and closes the modal); rejects with the API error so the
+  // form can show it beside the field instead of as a toast.
+  const handleSaveStudent = async ({ payload, classId, account }) => {
     if (editingStudent) {
-      updateMutation.mutate({ id: editingStudent.id, data })
-    } else {
-      // Create student first, then optionally create user account
-      try {
-        const response = await studentsApi.createStudent({
-          school: selectedSchoolId,
-          class_obj: parseInt(resolvedStudentFormClassId),
-          ...data,
-        })
-        const newStudent = response.data
-
-        if (createUserAccount && newStudent?.id) {
-          try {
-            await studentsApi.createStudentUserAccount(newStudent.id, {
-              username: studentUserForm.username,
-              email: studentUserForm.email,
-              password: studentUserForm.password,
-              confirm_password: studentUserForm.confirm_password,
-            })
-            showSuccess('Student and user account created successfully!')
-          } catch (userErr) {
-            const errMsg = userErr?.response?.data?.error || userErr?.response?.data?.detail || 'Failed to create user account'
-            showWarning(`Student created but user account failed: ${errMsg}`)
-          }
-        } else {
-          showSuccess('Student added successfully!')
-        }
-
-        queryClient.invalidateQueries({ queryKey: ['students'] })
-        closeModal()
-      } catch (err) {
-        const errData = err?.response?.data
-        const rollError = parseRollError(err)
-        let msg = 'Failed to add student'
-        if (errData) {
-          if (typeof errData === 'string') msg = errData
-          else if (errData.detail) msg = errData.detail
-          else if (errData.non_field_errors) msg = errData.non_field_errors.join(', ')
-          else {
-            const msgs = []
-            for (const [key, val] of Object.entries(errData)) {
-              if (Array.isArray(val)) msgs.push(`${key}: ${val.join(', ')}`)
-              else if (typeof val === 'string') msgs.push(`${key}: ${val}`)
-            }
-            if (msgs.length > 0) msg = msgs.join('; ')
-          }
-        }
-        if (rollError && recommendedRoll) {
-          msg = `${rollError} Suggested next roll: ${recommendedRoll}.`
-        }
-        showError(msg)
-      }
+      await updateStudent.mutateAsync({ id: editingStudent.id, payload })
+      closeModal()
+      showSuccess('Student updated successfully!')
+      return
     }
+
+    // Create the student first, then optionally their portal login
+    const response = await studentsApi.createStudent({
+      school: selectedSchoolId,
+      class_obj: parseInt(classId),
+      ...payload,
+    })
+    const newStudent = response.data
+
+    if (account && newStudent?.id) {
+      try {
+        await studentsApi.createStudentUserAccount(newStudent.id, {
+          username: account.username,
+          email: account.email,
+          password: account.password,
+          confirm_password: account.confirm_password,
+        })
+        showSuccess('Student and user account created successfully!')
+      } catch (userErr) {
+        const errMsg = userErr?.response?.data?.error || userErr?.response?.data?.detail || 'Failed to create user account'
+        showWarning(`Student created but user account failed: ${errMsg}`)
+      }
+    } else {
+      showSuccess('Student added successfully!')
+    }
+
+    queryClient.invalidateQueries({ queryKey: ['students'] })
+    queryClient.invalidateQueries({ queryKey: ['classes'] })
+    closeModal()
   }
 
   // Download Students Excel (or blank template if no students exist)
   const downloadExcelTemplate = async () => {
-    const dlClasses = classesList
-    const selectedSchool = schools.find(s => s.id === selectedSchoolId)
+    const selectedSchool = schools.find((s) => s.id === selectedSchoolId)
 
-    if (dlClasses.length === 0) {
+    if (classesList.length === 0) {
       showError('Please add classes before downloading')
       return
     }
 
-    const XLSX = (await import('xlsx')).default || await import('xlsx')
-    const wb = XLSX.utils.book_new()
-
-    // Instruction rows + header (same format the upload parser expects)
-    const sheetData = [
-      [`School: ${selectedSchool?.name || 'Unknown'}`],
-      [`Classes: ${dlClasses.map(c => c.name).join(' | ')}`],
-      ['Phone (optional): Use +92 format like +923001234567 for WhatsApp - can be added later'],
-      [], // Empty row separator
-      ['class_name', 'roll_number', 'student_name', 'parent_phone', 'parent_name'],
-    ]
-
     const existingStudents = studentsData?.data?.results || studentsData?.data || []
-
-    if (existingStudents.length > 0) {
-      // Export real student data sorted by class then roll number
-      const sorted = [...existingStudents].sort((a, b) => {
-        if (a.class_name !== b.class_name) return (a.class_name || '').localeCompare(b.class_name || '')
-        return (parseInt(a.roll_number) || 0) - (parseInt(b.roll_number) || 0)
-      })
-      sorted.forEach(s => {
-        sheetData.push([
-          s.class_name || '',
-          s.roll_number || '',
-          s.name || '',
-          s.parent_phone || '',
-          s.parent_name || '',
-        ])
-      })
-    } else {
-      // No students yet — generate blank template with sample rows
-      const sampleClasses = dlClasses.slice(0, 2)
-      sampleClasses.forEach(cls => {
-        sheetData.push([cls.name, '1', 'Student Name', '+923001234567', 'Parent Name'])
-      })
-      for (let i = 0; i < 10; i++) {
-        sheetData.push(['', '', '', '', ''])
-      }
-    }
-
-    const ws = XLSX.utils.aoa_to_sheet(sheetData)
-
-    // Force phone column cells to text format so Excel preserves the + prefix
-    const range = XLSX.utils.decode_range(ws['!ref'] || 'A1')
-    const phoneCol = 3 // D column (0-indexed: class_name=0, roll=1, name=2, phone=3)
-    for (let r = range.s.r; r <= range.e.r; r++) {
-      const addr = XLSX.utils.encode_cell({ r, c: phoneCol })
-      if (ws[addr] && ws[addr].v) {
-        ws[addr].t = 's' // force string type
-        ws[addr].z = '@' // text number format
-      }
-    }
-
-    ws['!cols'] = [
-      { wch: 15 },  // class_name
-      { wch: 12 },  // roll_number
-      { wch: 25 },  // student_name
-      { wch: 22 },  // parent_phone
-      { wch: 20 },  // parent_name
-    ]
-
-    XLSX.utils.book_append_sheet(wb, ws, 'Students')
-
-    const fileName = `students_${selectedSchool?.name?.replace(/\s+/g, '_') || 'school'}.xlsx`
-    XLSX.writeFile(wb, fileName)
+    await downloadStudentsExcel({
+      schoolName: selectedSchool?.name,
+      classes: classesList,
+      students: existingStudents,
+    })
 
     showSuccess(existingStudents.length > 0
       ? `Downloaded ${existingStudents.length} students!`
       : 'Template downloaded!')
   }
 
-  // Parse phone number (remove dashes/formatting and normalize)
-  const parsePhone = (rawPhone) => {
-    if (!rawPhone) return ''
-
-    let phone = String(rawPhone).trim()
-
-    // Remove P: prefix if present (legacy support)
-    if (phone.toUpperCase().startsWith('P:')) {
-      phone = phone.substring(2).trim()
-    }
-
-    // Handle scientific notation BEFORE removing characters
-    if (String(rawPhone).includes('E') || String(rawPhone).includes('e')) {
-      try {
-        phone = Number(rawPhone).toFixed(0)
-      } catch {
-        // Keep original if conversion fails
-      }
-    }
-
-    // Remove dashes, spaces, and other formatting (keep + and digits)
-    phone = phone.replace(/[^\d+]/g, '')
-
-    // Auto-add Pakistan country code if missing
-    if (phone.startsWith('03')) {
-      phone = '+92' + phone.substring(1)
-    } else if (phone.startsWith('3') && phone.length === 10) {
-      phone = '+92' + phone
-    } else if (phone.startsWith('92') && !phone.startsWith('+')) {
-      phone = '+' + phone
-    } else if (phone.match(/^9[0-9]{11}$/)) {
-      phone = '+' + phone
-    }
-
-    return phone
-  }
-
   // Handle file upload (supports both XLSX and CSV)
-  const handleFileUpload = (event) => {
+  const handleFileUpload = async (event) => {
     const file = event.target.files[0]
+    event.target.value = ''
     if (!file) return
 
-    const reader = new FileReader()
-    reader.onload = async (e) => {
-      try {
-        const XLSX = (await import('xlsx')).default || await import('xlsx')
-        const data = new Uint8Array(e.target.result)
-        const workbook = XLSX.read(data, { type: 'array' })
-
-        // Find Students sheet or use first sheet
-        let sheetName = workbook.SheetNames.find(name =>
-          name.toLowerCase().includes('student')
-        ) || workbook.SheetNames[0]
-
-        const worksheet = workbook.Sheets[sheetName]
-        const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 })
-
-        if (jsonData.length < 2) {
-          showError('File is empty or invalid')
-          return
-        }
-
-        // Find header row (skip instruction rows)
-        let headerRowIndex = jsonData.findIndex(row =>
-          row.some(cell => String(cell).toLowerCase() === 'class_name')
-        )
-
-        if (headerRowIndex === -1) {
-          showError('Could not find header row with "class_name" column')
-          return
-        }
-
-        const headers = jsonData[headerRowIndex].map(h => String(h).toLowerCase().trim())
-        const classNameIdx = headers.indexOf('class_name')
-        const rollIdx = headers.indexOf('roll_number')
-        const nameIdx = headers.indexOf('student_name')
-        const phoneIdx = headers.indexOf('parent_phone')
-        const parentNameIdx = headers.indexOf('parent_name')
-
-        if (classNameIdx === -1 || rollIdx === -1 || nameIdx === -1) {
-          showError('Missing required columns: class_name, roll_number, student_name')
-          return
-        }
-
-        const uploadClasses = classesList
-        const classMap = {}
-        const classMapNoSpace = {} // Fallback for matching without spaces
-        uploadClasses.forEach(cls => {
-          const normalized = cls.name.toLowerCase().trim().replace(/\s+/g, ' ')
-          classMap[normalized] = cls.id
-          classMapNoSpace[normalized.replace(/\s/g, '')] = cls.id
-        })
-
-        // Log available classes for debugging
-        console.log('Available classes:', Object.keys(classMap))
-
-        const studentsByClass = {}
-        const errors = []
-
-        for (let i = headerRowIndex + 1; i < jsonData.length; i++) {
-          const row = jsonData[i]
-          if (!row || row.length === 0) continue
-
-          const className = String(row[classNameIdx] || '').trim().replace(/\s+/g, ' ')
-          const classNameLower = className.toLowerCase()
-
-          // Try exact match first, then without spaces
-          let classId = classMap[classNameLower] || classMapNoSpace[classNameLower.replace(/\s/g, '')]
-
-          if (!classId) {
-            if (className && !className.toLowerCase().includes('enter') && !className.toLowerCase().includes('student')) {
-              errors.push(`Row ${i + 1}: Unknown class "${className}"`)
-            }
-            continue
-          }
-
-          const rollNumber = String(row[rollIdx] || '').trim()
-          const studentName = String(row[nameIdx] || '').trim()
-          const rawPhone = row[phoneIdx]
-
-          // Skip sample/placeholder rows
-          if (studentName.toLowerCase().includes('enter') ||
-              studentName.toLowerCase().includes('here') ||
-              !rollNumber || !studentName) {
-            continue
-          }
-
-          // Phone is optional - parse if provided, otherwise empty string
-          const phone = rawPhone ? parsePhone(rawPhone) : ''
-
-          if (!studentsByClass[classId]) {
-            studentsByClass[classId] = []
-          }
-
-          studentsByClass[classId].push({
-            roll_number: rollNumber,
-            name: studentName,
-            parent_phone: phone,
-            parent_name: String(row[parentNameIdx] || '').trim(),
-          })
-        }
-
-        if (errors.length > 0) {
-          showWarning(`Found ${errors.length} issues. Check console for details.`)
-          console.log('Upload Issues:', errors)
-        }
-
-        const totalStudents = Object.values(studentsByClass).flat().length
-        if (totalStudents === 0) {
-          showError('No valid students found in file')
-          return
-        }
-
-        setBulkData({
-          studentsByClass,
-          totalStudents,
-          classCount: Object.keys(studentsByClass).length
-        })
-        setShowBulkModal(true)
-      } catch (err) {
-        showError('Failed to parse file. Make sure it is a valid Excel or CSV file.')
-        console.error(err)
+    try {
+      const { error, studentsByClass, issues } = await readStudentsFile(file, classesList)
+      if (error) {
+        showError(error)
+        return
       }
-    }
-    reader.readAsArrayBuffer(file)
 
-    // Reset file input
-    event.target.value = ''
+      if (issues.length > 0) {
+        showWarning(`Found ${issues.length} issues. Check console for details.`)
+        console.log('Upload Issues:', issues)
+      }
+
+      const totalStudents = Object.values(studentsByClass).flat().length
+      if (totalStudents === 0) {
+        showError('No valid students found in file')
+        return
+      }
+
+      setBulkData({
+        studentsByClass,
+        totalStudents,
+        classCount: Object.keys(studentsByClass).length,
+      })
+      setShowBulkModal(true)
+    } catch (err) {
+      showError('Failed to parse file. Make sure it is a valid Excel or CSV file.')
+      console.error(err)
+    }
   }
 
   // Handle bulk upload confirm
@@ -785,43 +347,6 @@ export default function StudentsPage() {
   const schools = schoolsData?.data?.results || schoolsData?.data || []
   const classes = classesList
 
-  const occupiedRollsForSelectedClass = useMemo(() => {
-    if (!resolvedStudentFormClassId) return []
-
-    return allStudents
-      .filter((student) => {
-        if (String(student.class_obj) !== String(resolvedStudentFormClassId)) return false
-        if (editingStudent && student.id === editingStudent.id) return false
-        return true
-      })
-      .map((student) => student.roll_number)
-  }, [allStudents, resolvedStudentFormClassId, editingStudent])
-
-  useEffect(() => {
-    if (!showModal) return
-    if (!resolvedStudentFormClassId) {
-      setRecommendedRoll('')
-      return
-    }
-
-    const nextRoll = getNextAvailableRoll(occupiedRollsForSelectedClass)
-    setRecommendedRoll(nextRoll)
-
-    if (!rollManuallyEdited && !studentForm.roll_number?.trim()) {
-      setStudentForm((prev) => (
-        prev.roll_number === nextRoll
-          ? prev
-          : { ...prev, roll_number: nextRoll }
-      ))
-    }
-  }, [
-    showModal,
-    resolvedStudentFormClassId,
-    occupiedRollsForSelectedClass,
-    rollManuallyEdited,
-    studentForm.roll_number,
-  ])
-
   // Create a map of class_id to grade_level for proper sorting
   const classGradeMap = useMemo(() => {
     const map = {}
@@ -831,233 +356,43 @@ export default function StudentsPage() {
     return map
   }, [classes])
 
-  const classFilterOptions = useMemo(() => {
-    const baseOptions = classSelectorScope === 'session'
-      ? sessionClasses
-        .filter(sc => !!sc.class_obj)
-        .map(sc => ({
-          id: sc.id,
-          class_obj: sc.class_obj,
-          name: sc.display_name || `Class ${sc.class_obj}`,
-          label: sc.label || (sc.section ? `${sc.display_name || `Class ${sc.class_obj}`} - ${sc.section}` : (sc.display_name || `Class ${sc.class_obj}`)),
-          grade_level: sc.grade_level,
-          section: sc.section || '',
-        }))
-      : classes
+  const classFilterOptions = useMemo(
+    () => buildClassFilterOptions({ scope: classSelectorScope, sessionClasses, classes }),
+    [classSelectorScope, sessionClasses, classes],
+  )
 
-    const sortedOptions = sortClassOptions(baseOptions)
-
-    return sortedOptions.map((cls) => ({
-      id: String(cls.id),
-      label: cls.label || cls.name,
-    }))
-  }, [classSelectorScope, sessionClasses, classes])
-
-
-
-  // Client-side filtering and sorting with useMemo for performance
   const students = useMemo(() => {
-    const sessionClassMap = new Map((sessionClasses || []).map(sc => [String(sc.id), sc]))
-    const selectedSessionMatchers = selectedClassIds
-      .map((selectedId) => {
-        const sc = sessionClassMap.get(String(selectedId))
-        if (!sc) return null
-        const baseName = sc.display_name || `Class ${sc.class_obj || ''}`
-        const withSection = sc.section ? `${baseName} - ${sc.section}` : ''
-        return {
-          sessionClassId: String(sc.id),
-          masterClassId: sc.class_obj ? String(sc.class_obj) : '',
-          baseNameNorm: normalizeClassText(baseName),
-          withSectionNorm: normalizeClassText(withSection),
-          hasSection: !!sc.section,
-        }
-      })
-      .filter(Boolean)
-
-    // First filter
-    const filtered = allStudents.filter(student => {
-      // Filter by class
-      if (resolvedSelectedClasses.length > 0) {
-        if (classSelectorScope === 'session') {
-          const matchesAnySelectedSession = selectedSessionMatchers.some((matcher) => {
-            const studentSessionClassId = String(student.session_class_obj || '')
-            // Prefer exact session_class_obj match (most reliable — handles shared master class)
-            if (studentSessionClassId && matcher.sessionClassId) {
-              return studentSessionClassId === matcher.sessionClassId
-            }
-            // Fallback: match by master class ID (only safe when no section)
-            if (!matcher.hasSection && matcher.masterClassId) {
-              return String(student.class_obj || '') === matcher.masterClassId
-            }
-            return false
-          })
-          if (!matchesAnySelectedSession) return false
-        } else if (!resolvedSelectedClasses.includes(student.class_obj?.toString())) {
-          return false
-        }
-      }
-      // Filter by search (name or roll number)
-      if (debouncedSearch) {
-        const searchLower = debouncedSearch.toLowerCase()
-        const matchesName = student.name?.toLowerCase().includes(searchLower)
-        const matchesRoll = student.roll_number?.toLowerCase().includes(searchLower)
-        if (!matchesName && !matchesRoll) {
-          return false
-        }
-      }
-      // Hide inactive records by default (Record State) — toggled via the filter bar
-      if (!showInactiveRecords && !student.is_active) {
-        return false
-      }
-      return true
+    const filtered = filterStudents({
+      students: allStudents,
+      selectedClassIds,
+      resolvedSelectedClasses,
+      scope: classSelectorScope,
+      sessionClasses,
+      search: debouncedSearch,
+      showInactive: showInactiveRecords,
     })
-
-    const compareRollNumbers = (leftRoll, rightRoll) => {
-      const leftRaw = String(leftRoll || '').trim()
-      const rightRaw = String(rightRoll || '').trim()
-      const leftParsed = Number.parseInt(leftRaw, 10)
-      const rightParsed = Number.parseInt(rightRaw, 10)
-      const leftIsNumeric = Number.isFinite(leftParsed)
-      const rightIsNumeric = Number.isFinite(rightParsed)
-
-      if (leftIsNumeric && rightIsNumeric) return leftParsed - rightParsed
-      if (leftIsNumeric) return -1
-      if (rightIsNumeric) return 1
-
-      return leftRaw.localeCompare(rightRaw, undefined, {
-        numeric: true,
-        sensitivity: 'base',
-      })
-    }
-
-    const isSingleClassFilter = selectedClassIds.length === 1 || resolvedSelectedClasses.length === 1
-
-    // Sort by roll number when focused on one class; otherwise keep class-grouped ordering.
-    return filtered.sort((a, b) => {
-      if (isSingleClassFilter) {
-        const singleClassRollCompare = compareRollNumbers(a.roll_number, b.roll_number)
-        if (singleClassRollCompare !== 0) return singleClassRollCompare
-        return String(a.name || '').localeCompare(String(b.name || ''), undefined, {
-          numeric: true,
-          sensitivity: 'base',
-        })
-      }
-
-      // First sort by class grade level
-      const gradeA = classGradeMap[a.class_obj] ?? 999
-      const gradeB = classGradeMap[b.class_obj] ?? 999
-      if (gradeA !== gradeB) return gradeA - gradeB
-
-      const classNameCompare = String(a.class_name || '').localeCompare(String(b.class_name || ''), undefined, {
-        numeric: true,
-        sensitivity: 'base',
-      })
-      if (classNameCompare !== 0) return classNameCompare
-
-      // Then sort by roll number
-      const rollCompare = compareRollNumbers(a.roll_number, b.roll_number)
-      if (rollCompare !== 0) return rollCompare
-
-      return String(a.name || '').localeCompare(String(b.name || ''), undefined, {
-        numeric: true,
-        sensitivity: 'base',
-      })
-    })
+    return sortStudents(filtered, { selectedClassIds, resolvedSelectedClasses, classGradeMap })
   }, [allStudents, resolvedSelectedClasses, debouncedSearch, classGradeMap, classSelectorScope, selectedClassIds, sessionClasses, showInactiveRecords])
 
-  // Students without accounts (for bulk select) — must be after `students` useMemo
-  const studentsWithoutAccounts = useMemo(() => {
-    return students.filter(s => !s.has_user_account)
-  }, [students])
+  // Students without accounts are the ones bulk "Create Accounts" applies to
+  const studentsWithoutAccounts = useMemo(() => students.filter((s) => !s.has_user_account), [students])
+  const selection = useStudentSelection(studentsWithoutAccounts)
+  const selectedIds = selection.selectedIds
 
-  const toggleSelectAll = useCallback(() => {
-    if (selectedStudents.size === studentsWithoutAccounts.length && studentsWithoutAccounts.length > 0) {
-      setSelectedStudents(new Set())
-    } else {
-      setSelectedStudents(new Set(studentsWithoutAccounts.map(s => s.id)))
-    }
-  }, [studentsWithoutAccounts, selectedStudents.size])
+  const stats = useMemo(() => computeStats(students), [students])
 
-  // Stats computation
-  const stats = useMemo(() => {
-    const active = students.filter(s => s.is_active).length
-    const inactive = students.length - active
-    const byClass = {}
-    students.forEach(s => {
-      const className = s.class_name || 'Unassigned'
-      if (!byClass[className]) byClass[className] = 0
-      byClass[className]++
-    })
-    return { total: students.length, active, inactive, byClass }
-  }, [students])
+  const classChipData = useMemo(
+    () => buildClassChipData({
+      allStudents,
+      search: debouncedSearch,
+      classFilterOptions,
+      scope: classSelectorScope,
+      sessionClasses,
+    }),
+    [allStudents, debouncedSearch, classFilterOptions, classSelectorScope, sessionClasses],
+  )
 
-  const classChipData = useMemo(() => {
-    // Count per class (by master class ID) using search filter only, so all chips are always visible
-    const counts = {}
-    allStudents.forEach((s) => {
-      if (debouncedSearch) {
-        const searchLower = debouncedSearch.toLowerCase()
-        const matchesName = s.name?.toLowerCase().includes(searchLower)
-        const matchesRoll = s.roll_number?.toLowerCase().includes(searchLower)
-        if (!matchesName && !matchesRoll) return
-      }
-      const key = s.class_obj ? String(s.class_obj) : null
-      if (key) counts[key] = (counts[key] || 0) + 1
-    })
-    // Build session class ID → master class ID map (needed when scope is session)
-    const sessionById = {}
-    sessionClasses.forEach((sc) => {
-      sessionById[String(sc.id)] = sc
-    })
-    return classFilterOptions.map((option) => {
-      const sessionClass = classSelectorScope === 'session'
-        ? sessionById[String(option.id)]
-        : null
-
-      const masterClassId = classSelectorScope === 'session'
-        ? (sessionClass?.class_obj ? String(sessionClass.class_obj) : '')
-        : option.id
-
-      const baseNameNorm = classSelectorScope === 'session'
-        ? normalizeClassText(sessionClass?.display_name || option.label)
-        : ''
-
-      const withSectionNorm = classSelectorScope === 'session' && sessionClass?.section
-        ? normalizeClassText(`${sessionClass.display_name || option.label} - ${sessionClass.section}`)
-        : ''
-
-      const count = classSelectorScope === 'session'
-        ? allStudents.filter((s) => {
-          const studentSessionClassId = String(s.session_class_obj || '')
-          // Prefer exact session_class_obj match
-          if (studentSessionClassId && option.id) {
-            return studentSessionClassId === String(option.id)
-          }
-          // Fallback for students without session_class_obj annotation (non-academic-year scope)
-          const studentClassId = String(s.class_obj || '')
-          return masterClassId ? studentClassId === masterClassId : false
-        }).length
-        : (masterClassId ? (counts[masterClassId] || 0) : 0)
-
-      return {
-        id: option.id,
-        name: option.label,
-        count,
-      }
-    })
-  }, [allStudents, debouncedSearch, classFilterOptions, classSelectorScope, sessionClasses])
-
-  const summaryByGender = useMemo(() => {
-    const counts = { male: 0, female: 0, other: 0, unknown: 0 }
-    students.forEach((s) => {
-      const g = (s.gender || '').toString().trim().toLowerCase()
-      if (g === 'male' || g === 'm') counts.male += 1
-      else if (g === 'female' || g === 'f') counts.female += 1
-      else if (g) counts.other += 1
-      else counts.unknown += 1
-    })
-    return counts
-  }, [students])
+  const summaryByGender = useMemo(() => summarizeByGender(students), [students])
 
   const toggleClassSelection = useCallback((classId) => {
     setSelectedClassIds((prev) => (
@@ -1066,17 +401,6 @@ export default function StudentsPage() {
         : [...prev, classId]
     ))
   }, [])
-
-  // Close export menu when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (e) => {
-      if (exportRef.current && !exportRef.current.contains(e.target)) {
-        setShowExportMenu(false)
-      }
-    }
-    if (showExportMenu) document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [showExportMenu])
 
   const getExportInfo = () => {
     const schoolName = activeSchool?.name || schools.find(s => s.id === selectedSchoolId)?.name || ''
@@ -1095,13 +419,11 @@ export default function StudentsPage() {
   const handleExportPDF = () => {
     const { schoolName, filterInfo } = getExportInfo()
     exportStudentsPDF({ students, schoolName, filterInfo })
-    setShowExportMenu(false)
     showSuccess('PDF downloaded!')
   }
 
   const handleExportPNG = async () => {
     const { schoolName, filterInfo } = getExportInfo()
-    setShowExportMenu(false)
     try {
       await exportStudentsPNG({ students, schoolName, filterInfo })
       showSuccess('PNG downloaded!')
@@ -1110,11 +432,11 @@ export default function StudentsPage() {
     }
   }
 
-  // Downloads one STUDENT_COMPREHENSIVE report per selected student, sequentially —
+  // Downloads one STUDENT_COMPREHENSIVE report per selected student, sequentially;
   // each is generated synchronously and streamed straight back (nothing saved
   // server-side), so this is a plain loop rather than a background-task dispatch.
   const handleDownloadSelectedReports = async (periodParams) => {
-    const selected = allStudents.filter((s) => selectedStudents.has(s.id))
+    const selected = allStudents.filter((s) => selectedIds.has(s.id))
     if (selected.length === 0) return
 
     setIsGeneratingReports(true)
@@ -1143,81 +465,17 @@ export default function StudentsPage() {
 
   return (
     <div>
-      <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Students</h1>
-          <p className="text-sm sm:text-base text-gray-600">Manage students in your school</p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-          {selectedSchoolId && classes.length > 0 && (
-            <>
-              {/* Export dropdown (PDF / PNG) */}
-              {students.length > 0 && (
-                <div className="relative" ref={exportRef}>
-                  <button
-                    onClick={() => setShowExportMenu(!showExportMenu)}
-                    className="btn btn-secondary flex items-center gap-1"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                    </svg>
-                    Export
-                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                    </svg>
-                  </button>
-                  {showExportMenu && (
-                    <div className="absolute right-0 mt-1 w-44 bg-white border border-gray-200 rounded-lg shadow-lg z-20 py-1">
-                      <button
-                        onClick={handleExportPDF}
-                        className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
-                      >
-                        <svg className="w-4 h-4 text-red-500" fill="currentColor" viewBox="0 0 20 20">
-                          <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" clipRule="evenodd" />
-                        </svg>
-                        Download PDF
-                      </button>
-                      <button
-                        onClick={handleExportPNG}
-                        className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
-                      >
-                        <svg className="w-4 h-4 text-blue-500" fill="currentColor" viewBox="0 0 20 20">
-                          <path fillRule="evenodd" d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z" clipRule="evenodd" />
-                        </svg>
-                        Download PNG
-                      </button>
-                    </div>
-                  )}
-                </div>
-              )}
-              <button
-                onClick={downloadExcelTemplate}
-                className="btn btn-secondary"
-              >
-                Download Excel
-              </button>
-              <label className={`btn btn-secondary cursor-pointer ${!activeAcademicYear ? 'opacity-50 pointer-events-none' : ''}`}>
-                Upload Excel
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept=".xlsx,.xls,.csv"
-                  onChange={handleFileUpload}
-                  className="hidden"
-                  disabled={!activeAcademicYear}
-                />
-              </label>
-            </>
-          )}
-          <button
-            onClick={openAddModal}
-            className="btn btn-primary"
-            disabled={!activeAcademicYear}
-          >
-            Add Student
-          </button>
-        </div>
-      </div>
+      <StudentsHeader
+        showTools={!!selectedSchoolId && classes.length > 0}
+        hasStudents={students.length > 0}
+        hasAcademicYear={!!activeAcademicYear}
+        fileInputRef={fileInputRef}
+        onExportPDF={handleExportPDF}
+        onExportPNG={handleExportPNG}
+        onDownloadExcel={downloadExcelTemplate}
+        onUploadFile={handleFileUpload}
+        onAdd={openAddModal}
+      />
 
       {/* Warning: No academic year */}
       {!activeAcademicYear && selectedSchoolId && (
@@ -1232,128 +490,28 @@ export default function StudentsPage() {
         </div>
       )}
 
-      {/* Stats Cards */}
-      {selectedSchoolId && !isLoading && allStudents.length > 0 && (
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 mb-6">
-          <div className="card !p-4">
-            <p className="text-xs font-medium text-gray-500 uppercase">Total Students</p>
-            <p className="text-2xl font-bold text-gray-900 mt-1">{stats.total}</p>
-          </div>
-          <div className="card !p-4">
-            <p className="text-xs font-medium text-gray-500 uppercase">Active</p>
-            <p className="text-2xl font-bold text-green-600 mt-1">{stats.active}</p>
-          </div>
-          <div className="card !p-4">
-            <p className="text-xs font-medium text-gray-500 uppercase">Inactive</p>
-            <p className="text-2xl font-bold text-gray-400 mt-1">{stats.inactive}</p>
-          </div>
-          <div className="card !p-4">
-            <p className="text-xs font-medium text-gray-500 uppercase">Classes</p>
-            <p className="text-2xl font-bold text-primary-600 mt-1">{Object.keys(stats.byClass).length}</p>
-          </div>
-        </div>
-      )}
+      {selectedSchoolId && !isLoading && allStudents.length > 0 && <StudentStats stats={stats} />}
 
-      {/* Filters + Summary */}
-      <div className="card mb-6">
-        <div className={`grid grid-cols-1 gap-3 sm:gap-4 ${isSuperAdmin ? 'sm:grid-cols-2' : ''}`}>
-          {/* School Selector for Super Admin */}
-          {isSuperAdmin && (
-            <div>
-              <label className="label">School</label>
-              <select
-                className="input"
-                value={selectedSchoolId || ''}
-                onChange={(e) => {
-                  setSelectedSchoolId(e.target.value ? parseInt(e.target.value) : null)
-                  setSelectedClassIds([])
-                }}
-              >
-                <option value="">-- Select School --</option>
-                {schools.map((school) => (
-                  <option key={school.id} value={school.id}>
-                    {school.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
-          <div className={isSuperAdmin ? '' : 'w-full'}>
-            <label className="label">Search</label>
-            <input
-              type="text"
-              className="input"
-              placeholder="Search by name or roll number..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              disabled={!selectedSchoolId}
-            />
-          </div>
-        </div>
-
-        {selectedSchoolId && (
-          <label className="flex items-center gap-2 mt-3 text-sm text-gray-600 cursor-pointer w-fit">
-            <input
-              type="checkbox"
-              checked={showInactiveRecords}
-              onChange={(e) => setShowInactiveRecords(e.target.checked)}
-              className="rounded"
-            />
-            Show inactive records
-          </label>
-        )}
-
-        {/* Class chips — always show full list; 0-count chips are dimmed/disabled */}
-        {selectedSchoolId && classChipData.length > 0 && (
-          <div className="flex flex-wrap items-center gap-2 mt-4">
-            <button
-              type="button"
-              onClick={() => setSelectedClassIds([])}
-              className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium transition-colors ${
-                selectedClassIds.length === 0
-                  ? 'bg-primary-600 text-white'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
-            >
-              All
-            </button>
-            {classChipData.map((item) => {
-              const isActive = selectedClassIds.includes(item.id)
-              const isEmpty = item.count === 0
-              return (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() => toggleClassSelection(item.id)}
-                  className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium transition-colors ${
-                    isActive
-                      ? 'bg-primary-600 text-white'
-                      : isEmpty
-                      ? 'bg-gray-50 text-gray-300 border border-gray-100'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                  }`}
-                >
-                  {item.name}
-                  <span className={isActive ? 'text-primary-200' : isEmpty ? 'text-gray-300' : 'text-gray-400'}>
-                    ({item.count})
-                  </span>
-                </button>
-              )
-            })}
-          </div>
-        )}
-
-        {/* Summary stats */}
-        {selectedSchoolId && !isLoading && students.length > 0 && (
-          <div className="border-t border-gray-100 mt-3 pt-3 flex flex-wrap items-center gap-3 text-sm text-gray-500">
-            <span><strong className="text-gray-900">{students.length}</strong> shown</span>
-            <span>Male: <strong>{summaryByGender.male}</strong></span>
-            <span>Female: <strong>{summaryByGender.female}</strong></span>
-            {summaryByGender.other > 0 && <span>Other: <strong>{summaryByGender.other}</strong></span>}
-            {summaryByGender.unknown > 0 && <span>Unknown: <strong>{summaryByGender.unknown}</strong></span>}
-          </div>
-        )}
-      </div>
+      <StudentFilters
+        isSuperAdmin={isSuperAdmin}
+        schools={schools}
+        selectedSchoolId={selectedSchoolId}
+        onSchoolChange={(schoolId) => {
+          setSelectedSchoolId(schoolId)
+          setSelectedClassIds([])
+        }}
+        search={search}
+        onSearchChange={setSearch}
+        showInactive={showInactiveRecords}
+        onShowInactiveChange={setShowInactiveRecords}
+        classChipData={classChipData}
+        selectedClassIds={selectedClassIds}
+        onClearClasses={() => setSelectedClassIds([])}
+        onToggleClass={toggleClassSelection}
+        shownCount={students.length}
+        genderSummary={summaryByGender}
+        isLoading={isLoading}
+      />
 
       {!selectedSchoolId && (
         <div className="card text-center py-8 text-gray-500">
@@ -1361,714 +519,104 @@ export default function StudentsPage() {
         </div>
       )}
 
-      {/* Students Table */}
       {selectedSchoolId && (
-      <div className="card">
-        {/* Results count + view toggle */}
-        {!isLoading && allStudents.length > 0 && (
-          <div className="mb-4 flex items-center justify-between gap-3">
-            <div className="text-sm text-gray-500">
-              Showing {students.length} of {allStudents.length} students
-              {(selectedClassIds.length > 0 || search) && ' (filtered)'}
-            </div>
-            <ViewToggle view={view} onChange={setView} />
-          </div>
-        )}
-
-        {isLoading ? (
-          <div className="hidden sm:block overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase w-10"></th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Roll No</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Class</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Parent Phone</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Account</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Lifecycle</th>
-                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
-                </tr>
-              </thead>
-              <SkeletonTable rows={6} cols={8} />
-            </table>
-          </div>
-        ) : students.length === 0 ? (
-          <div className="text-center py-8 text-gray-500">
-            {allStudents.length === 0
-              ? 'No students found. Add students individually or upload an Excel file.'
-              : 'No students match your filter. Try adjusting the class or search criteria.'}
-          </div>
-        ) : view === 'cards' ? (
-          <CardGrid>
-            {students.map((student) => (
-              <RecordCard
-                key={student.id}
-                highlighted={selectedStudents.has(student.id)}
-                leading={
-                  <div className="flex items-center gap-2">
-                    {!student.has_user_account && (
-                      <input
-                        type="checkbox"
-                        checked={selectedStudents.has(student.id)}
-                        onChange={() => toggleStudentSelection(student.id)}
-                        className="rounded flex-shrink-0"
-                      />
-                    )}
-                    <StudentAvatar student={student} sizeClass="w-9 h-9" />
-                  </div>
-                }
-                title={student.name}
-                meta={`Roll #${student.roll_number} · ${student.class_name}`}
-                status={
-                  <span className={`px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap ${getLifecycleStyle(student.status)}`}>
-                    {getLifecycleLabel(student.status)}
-                  </span>
-                }
-                fields={[
-                  {
-                    label: 'Parent phone',
-                    value: student.parent_phone
-                      ? <span className="inline-flex items-center">{student.parent_phone}<WhatsAppTick phone={student.parent_phone} /></span>
-                      : <span className="text-gray-400 italic">Not set</span>,
-                  },
-                  {
-                    label: 'Account',
-                    value: student.has_user_account
-                      ? <Badge tone="success" title={student.user_username}>{student.user_username || 'User'}</Badge>
-                      : <span className="text-gray-400">No account</span>,
-                  },
-                ]}
-                actions={[
-                  { label: 'View', to: `/students/${student.id}` },
-                  { label: 'Edit', tone: 'info', onClick: () => openEditModal(student) },
-                  ...(!student.has_user_account ? [{ label: 'Create Account', tone: 'accent', onClick: () => openConvertModal(student) }] : []),
-                  ...(canManageLifecycle ? [{ label: 'Delete', tone: 'danger', onClick: () => setDeleteConfirm(student) }] : []),
-                ]}
-              />
-            ))}
-          </CardGrid>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase w-10">
-                    <input
-                      type="checkbox"
-                      checked={studentsWithoutAccounts.length > 0 && selectedStudents.size === studentsWithoutAccounts.length}
-                      onChange={toggleSelectAll}
-                      className="rounded"
-                      title="Select all students without accounts"
-                    />
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Roll No</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Class</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Parent Phone</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Account</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Lifecycle</th>
-                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {students.map((student) => (
-                  <tr key={student.id} className={`hover:bg-gray-50 ${selectedStudents.has(student.id) ? 'bg-purple-50' : ''}`}>
-                    <td className="px-3 py-3">
-                      {!student.has_user_account ? (
-                        <input
-                          type="checkbox"
-                          checked={selectedStudents.has(student.id)}
-                          onChange={() => toggleStudentSelection(student.id)}
-                          className="rounded"
-                        />
-                      ) : <span className="w-4 h-4 block" />}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-gray-900">{student.roll_number}</td>
-                    <td className="px-4 py-3 text-sm font-medium text-gray-900">
-                      <div className="flex items-center gap-2">
-                        <StudentAvatar student={student} sizeClass="w-7 h-7" />
-                        {student.name}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-sm text-gray-500">{student.class_name}</td>
-                    <td className="px-4 py-3 text-sm text-gray-500">
-                      {student.parent_phone ? <>{student.parent_phone}<WhatsAppTick phone={student.parent_phone} /></> : <span className="text-gray-400 italic">Not set</span>}
-                    </td>
-                    <td className="px-4 py-3">
-                      {student.has_user_account ? (
-                        <Badge tone="success" title={student.user_username}>
-                          {student.user_username || 'User'}
-                        </Badge>
-                      ) : (
-                        <span className="text-xs text-gray-400">No Account</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                        getLifecycleStyle(student.status)
-                      }`}>
-                        {getLifecycleLabel(student.status)}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-right whitespace-nowrap">
-                      <Link
-                        to={`/students/${student.id}`}
-                        className="text-sm text-primary-600 hover:text-primary-800 font-medium mr-3"
-                      >
-                        View
-                      </Link>
-                      <button
-                        onClick={() => openEditModal(student)}
-                        className="text-sm text-blue-600 hover:text-blue-800 font-medium mr-3"
-                      >
-                        Edit
-                      </button>
-                      {!student.has_user_account && (
-                        <button
-                          onClick={() => openConvertModal(student)}
-                          className="text-sm text-purple-600 hover:text-purple-800 font-medium mr-3"
-                        >
-                          Create Account
-                        </button>
-                      )}
-                      {canManageLifecycle && (
-                        <button
-                          onClick={() => setDeleteConfirm(student)}
-                          className="text-sm text-red-600 hover:text-red-800 font-medium"
-                        >
-                          Delete
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+        <StudentsList
+          isLoading={isLoading}
+          students={students}
+          totalCount={allStudents.length}
+          isFiltered={selectedClassIds.length > 0 || !!search}
+          view={view}
+          onViewChange={setView}
+          selectedIds={selectedIds}
+          allSelectableSelected={studentsWithoutAccounts.length > 0 && selectedIds.size === studentsWithoutAccounts.length}
+          onToggleSelect={selection.toggle}
+          onToggleSelectAll={selection.toggleAll}
+          canManageLifecycle={canManageLifecycle}
+          onEdit={openEditModal}
+          onConvert={setConvertStudent}
+          onDelete={setDeleteConfirm}
+        />
       )}
 
-      {/* Add/Edit Student Modal */}
       {showModal && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
-          <div className="bg-white rounded-xl shadow-xl p-4 sm:p-6 w-full max-w-md mx-4">
-            <h2 className="text-xl font-bold text-gray-900 mb-4">
-              {editingStudent ? 'Edit Student' : 'Add Student'}
-            </h2>
-
-            {editingStudent && (
-              <div className="flex items-center gap-4 mb-4">
-                <div className="relative w-16 h-16 flex-shrink-0 group">
-                  <StudentAvatar student={editingStudent} sizeClass="w-16 h-16" />
-                  <button
-                    type="button"
-                    onClick={() => photoInputRef.current?.click()}
-                    disabled={uploadPhotoMutation.isPending}
-                    title={editingStudent.photo_url ? 'Change photo' : 'Upload photo'}
-                    className="absolute inset-0 rounded-full bg-black/50 text-white opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity disabled:opacity-100 disabled:bg-black/30"
-                  >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
-                    </svg>
-                  </button>
-                  <input
-                    ref={photoInputRef}
-                    type="file"
-                    accept="image/jpeg,image/png,image/webp"
-                    onChange={handlePhotoFileChange}
-                    className="hidden"
-                  />
-                </div>
-                <div className="flex flex-col gap-1">
-                  <button
-                    type="button"
-                    onClick={() => photoInputRef.current?.click()}
-                    disabled={uploadPhotoMutation.isPending}
-                    className="text-sm font-medium text-primary-600 hover:text-primary-700 text-left"
-                  >
-                    {editingStudent.photo_url ? 'Change Photo' : 'Upload Photo'}
-                  </button>
-                  {editingStudent.photo_url && (
-                    <button
-                      type="button"
-                      onClick={() => removePhotoMutation.mutate(editingStudent.id)}
-                      disabled={removePhotoMutation.isPending}
-                      className="text-sm font-medium text-red-600 hover:text-red-700 text-left"
-                    >
-                      {removePhotoMutation.isPending ? 'Removing...' : 'Remove Photo'}
-                    </button>
-                  )}
-                </div>
-              </div>
-            )}
-
-            <div className="space-y-4">
-              <div>
-                <label className="label">Class</label>
-                <ClassSelector
-                  className="input"
-                  value={studentForm.class_id}
-                  onChange={(e) => handleClassSelectionChange(e.target.value)}
-                  disabled={!!editingStudent}
-                  required
-                  placeholder="Select a class"
-                  scope={classSelectorScope}
-                  academicYearId={activeAcademicYear?.id}
-                  schoolId={selectedSchoolId}
-                />
-                {editingStudent && (
-                  <p className="text-xs text-gray-500 mt-1">Class cannot be changed after creation</p>
-                )}
-              </div>
-
-              <div>
-                <div className="flex items-center justify-between">
-                  <label className="label">Roll Number</label>
-                  {recommendedRoll && (
-                    <button
-                      type="button"
-                      onClick={applyRecommendedRoll}
-                      className="text-xs font-medium text-primary-600 hover:text-primary-700"
-                    >
-                      Suggest {recommendedRoll}
-                    </button>
-                  )}
-                </div>
-                <input
-                  type="text"
-                  className="input"
-                  value={studentForm.roll_number}
-                  onChange={(e) => {
-                    setRollManuallyEdited(true)
-                    setStudentForm({ ...studentForm, roll_number: e.target.value })
-                  }}
-                  required
-                />
-                {recommendedRoll && (
-                  <p className="text-xs text-gray-500 mt-1">
-                    Next available roll in this class: {recommendedRoll}
-                  </p>
-                )}
-              </div>
-
-              <div>
-                <label className="label">Student Name</label>
-                <input
-                  type="text"
-                  className="input"
-                  value={studentForm.name}
-                  onChange={(e) => {
-                    const name = e.target.value
-                    setStudentForm({ ...studentForm, name })
-                    if (createUserAccount) {
-                      setStudentUserForm(f => ({ ...f, username: name.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '') }))
-                    }
-                  }}
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="label">Parent Phone (Optional)</label>
-                <div className="flex items-center gap-1">
-                  <input
-                    type="text"
-                    className="input"
-                    placeholder="+923001234567"
-                    value={studentForm.parent_phone}
-                    onChange={(e) => setStudentForm({ ...studentForm, parent_phone: e.target.value })}
-                  />
-                  <WhatsAppTick phone={studentForm.parent_phone} />
-                </div>
-                <p className="text-xs text-gray-500 mt-1">Use +92 format (e.g. +923001234567) for WhatsApp notifications</p>
-              </div>
-
-              <div>
-                <label className="label">Parent Name (Optional)</label>
-                <input
-                  type="text"
-                  className="input"
-                  value={studentForm.parent_name}
-                  onChange={(e) => setStudentForm({ ...studentForm, parent_name: e.target.value })}
-                />
-              </div>
-
-              {/* Create User Account */}
-              {!editingStudent && (
-                <div className="border-t border-gray-200 pt-4">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={createUserAccount}
-                      onChange={(e) => {
-                        setCreateUserAccount(e.target.checked)
-                        if (e.target.checked && studentForm.name) {
-                          setStudentUserForm(f => ({
-                            ...f,
-                            username: studentForm.name.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, ''),
-                          }))
-                        }
-                      }}
-                      className="rounded"
-                    />
-                    <span className="text-sm font-medium text-gray-700">Create User Account (Student Portal)</span>
-                  </label>
-                  <p className="text-xs text-gray-500 mt-1 ml-6">Create login credentials so the student can access the Student Portal</p>
-
-                  {createUserAccount && (
-                    <div className="mt-3 ml-6 space-y-3 p-3 bg-gray-50 rounded-lg">
-                      <div>
-                        <label className="block text-xs font-medium text-gray-700 mb-1">Username *</label>
-                        <input
-                          type="text"
-                          className="input text-sm"
-                          value={studentUserForm.username}
-                          onChange={(e) => setStudentUserForm(f => ({ ...f, username: e.target.value }))}
-                          placeholder="Login username"
-                          required
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-medium text-gray-700 mb-1">Email</label>
-                        <input
-                          type="email"
-                          className="input text-sm"
-                          value={studentUserForm.email}
-                          onChange={(e) => setStudentUserForm(f => ({ ...f, email: e.target.value }))}
-                          placeholder="Email address (optional)"
-                        />
-                      </div>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                        <div>
-                          <label className="block text-xs font-medium text-gray-700 mb-1">Password *</label>
-                          <PasswordInput
-                            className="input text-sm"
-                            value={studentUserForm.password}
-                            onChange={(e) => setStudentUserForm(f => ({ ...f, password: e.target.value }))}
-                            placeholder="Min 8 chars"
-                            required
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-xs font-medium text-gray-700 mb-1">Confirm *</label>
-                          <PasswordInput
-                            className="input text-sm"
-                            value={studentUserForm.confirm_password}
-                            onChange={(e) => setStudentUserForm(f => ({ ...f, confirm_password: e.target.value }))}
-                            placeholder="Confirm"
-                            required
-                          />
-                        </div>
-                      </div>
-                      {studentUserError && <p className="text-xs text-red-600">{studentUserError}</p>}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-
-            <div className="flex justify-end space-x-3 mt-6">
-              <button
-                onClick={closeModal}
-                className="btn btn-secondary"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleSubmit}
-                disabled={addMutation.isPending || updateMutation.isPending}
-                className="btn btn-primary"
-              >
-                {(addMutation.isPending || updateMutation.isPending)
-                  ? 'Saving...'
-                  : (editingStudent ? 'Save Changes' : 'Add Student')}
-              </button>
-            </div>
-          </div>
-        </div>
+        <StudentFormModal
+          key={editingStudent?.id ?? 'new'}
+          student={editingStudent}
+          allStudents={allStudents}
+          classSelector={{
+            scope: classSelectorScope,
+            academicYearId: activeAcademicYear?.id,
+            schoolId: selectedSchoolId,
+          }}
+          resolveMasterClassId={resolveMasterClassId}
+          initialClassId={selectedClassIds[0] || ''}
+          photoSlot={editingStudent ? (
+            <StudentPhotoControl
+              student={editingStudent}
+              isUploading={uploadPhotoMutation.isPending}
+              isRemoving={removePhotoMutation.isPending}
+              onFileSelected={handlePhotoSelected}
+              onRemove={() => removePhotoMutation.mutate(editingStudent.id)}
+            />
+          ) : null}
+          onChangeClass={editingStudent && canManageLifecycle ? handleChangeClass : null}
+          onSubmit={handleSaveStudent}
+          onClose={closeModal}
+        />
       )}
 
-      {/* Delete Confirmation Modal */}
+      {reclassifyStudent && (
+        <ReclassifyStudentModal student={reclassifyStudent} onClose={() => setReclassifyStudent(null)} />
+      )}
+
       {deleteConfirm && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
-          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm mx-4">
-            <h2 className="text-xl font-bold text-gray-900 mb-2">Delete Student</h2>
-            <p className="text-gray-600 mb-6">
-              Are you sure you want to delete <strong>{deleteConfirm.name}</strong> (Roll #{deleteConfirm.roll_number})?
-              This will also delete all their attendance records.
-            </p>
-
-            <div className="flex justify-end space-x-3">
-              <button
-                onClick={() => setDeleteConfirm(null)}
-                className="btn btn-secondary"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => deleteMutation.mutate(deleteConfirm.id)}
-                disabled={deleteMutation.isPending}
-                className="btn btn-danger"
-              >
-                {deleteMutation.isPending ? 'Deleting...' : 'Delete'}
-              </button>
-            </div>
-          </div>
-        </div>
+        <DeleteStudentModal
+          student={deleteConfirm}
+          isPending={deleteMutation.isPending}
+          onCancel={() => setDeleteConfirm(null)}
+          onConfirm={() => deleteMutation.mutate(deleteConfirm.id)}
+        />
       )}
 
-      {/* Bulk Upload Confirmation Modal */}
       {showBulkModal && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
-          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md mx-4">
-            <h2 className="text-xl font-bold text-gray-900 mb-4">Confirm Bulk Upload</h2>
-
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
-              <p className="text-blue-800">
-                Ready to upload <strong>{bulkData.totalStudents}</strong> students
-                across <strong>{bulkData.classCount}</strong> classes.
-              </p>
-            </div>
-
-            <div className="space-y-2 mb-6 max-h-48 overflow-y-auto">
-              {Object.entries(bulkData.studentsByClass || {}).map(([classId, students]) => {
-                const cls = classes.find(c => c.id === parseInt(classId))
-                return (
-                  <div key={classId} className="flex justify-between text-sm">
-                    <span className="text-gray-600">{cls?.name || `Class ${classId}`}</span>
-                    <span className="font-medium">{students.length} students</span>
-                  </div>
-                )
-              })}
-            </div>
-
-            <div className="flex justify-end space-x-3">
-              <button
-                onClick={() => {
-                  setShowBulkModal(false)
-                  setBulkData({ class_id: '', students: [] })
-                }}
-                disabled={isUploading}
-                className="btn btn-secondary"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleBulkUpload}
-                disabled={isUploading}
-                className="btn btn-primary"
-              >
-                {isUploading ? 'Uploading...' : 'Upload Students'}
-              </button>
-            </div>
-          </div>
-        </div>
+        <BulkUploadModal
+          bulkData={bulkData}
+          classes={classes}
+          isUploading={isUploading}
+          onCancel={() => {
+            setShowBulkModal(false)
+            setBulkData({ class_id: '', students: [] })
+          }}
+          onConfirm={handleBulkUpload}
+        />
       )}
 
-      {/* Floating Bulk Convert Action Bar */}
-      {selectedStudents.size > 0 && (
-        <div className="fixed bottom-4 inset-x-4 sm:inset-x-auto sm:bottom-6 sm:left-1/2 sm:-translate-x-1/2 z-40 bg-purple-600 text-white px-4 sm:px-6 py-3 rounded-2xl sm:rounded-full shadow-lg flex flex-wrap items-center justify-center gap-2 sm:gap-4">
-          <span className="text-sm font-medium">
-            {isGeneratingReports
-              ? `Downloading ${reportDownloadProgress.current} of ${reportDownloadProgress.total}...`
-              : `${selectedStudents.size} student(s) selected`}
-          </span>
-          <button
-            onClick={() => {
-              setBulkConvertPassword('')
-              setBulkConvertError('')
-              setConvertResults(null)
-              setShowBulkConvertModal(true)
-            }}
-            className="bg-white text-purple-700 px-4 py-1.5 rounded-full text-sm font-semibold hover:bg-purple-50"
-          >
-            Create Accounts
-          </button>
-          <ReportPeriodPicker
-            label={isGeneratingReports ? 'Downloading...' : 'Download Reports'}
-            activeAcademicYearId={activeAcademicYear?.id}
-            disabled={isGeneratingReports}
-            onSelect={handleDownloadSelectedReports}
-            buttonClassName="bg-white text-purple-700 px-4 py-1.5 rounded-full text-sm font-semibold hover:bg-purple-50 disabled:opacity-50 flex items-center gap-1"
-            openUpward
-          />
-          <button
-            onClick={() => setSelectedStudents(new Set())}
-            disabled={isGeneratingReports}
-            className="text-purple-200 hover:text-white text-sm disabled:opacity-50"
-          >
-            Clear
-          </button>
-        </div>
+      {selectedIds.size > 0 && (
+        <SelectionBar
+          count={selectedIds.size}
+          isGeneratingReports={isGeneratingReports}
+          reportProgress={reportDownloadProgress}
+          activeAcademicYearId={activeAcademicYear?.id}
+          onCreateAccounts={() => setShowBulkConvertModal(true)}
+          onDownloadReports={handleDownloadSelectedReports}
+          onClear={selection.clear}
+        />
       )}
 
-      {/* Individual Convert Modal */}
-      {showConvertModal && convertStudent && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
-          <div className="bg-white rounded-xl shadow-xl p-4 sm:p-6 w-full max-w-md mx-4">
-            <h2 className="text-lg font-bold text-gray-900 mb-1">Create User Account</h2>
-            <p className="text-sm text-gray-500 mb-4">
-              For student: <strong>{convertStudent.name}</strong> (Roll #{convertStudent.roll_number})
-            </p>
-
-            <div className="space-y-3">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Username *</label>
-                <input
-                  type="text"
-                  className="input"
-                  value={convertForm.username}
-                  onChange={(e) => setConvertForm(f => ({ ...f, username: e.target.value }))}
-                  placeholder="Login username"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-                <input
-                  type="email"
-                  className="input"
-                  value={convertForm.email}
-                  onChange={(e) => setConvertForm(f => ({ ...f, email: e.target.value }))}
-                  placeholder="Email (optional)"
-                />
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Password *</label>
-                  <PasswordInput
-                    className="input"
-                    value={convertForm.password}
-                    onChange={(e) => setConvertForm(f => ({ ...f, password: e.target.value }))}
-                    placeholder="Min 8 chars"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Confirm *</label>
-                  <PasswordInput
-                    className="input"
-                    value={convertForm.confirm_password}
-                    onChange={(e) => setConvertForm(f => ({ ...f, confirm_password: e.target.value }))}
-                    placeholder="Confirm"
-                  />
-                </div>
-              </div>
-              {convertError && <p className="text-sm text-red-600">{convertError}</p>}
-            </div>
-
-            <div className="flex justify-end space-x-3 mt-6">
-              <button
-                onClick={() => { setShowConvertModal(false); setConvertStudent(null) }}
-                className="btn btn-secondary"
-                disabled={isConverting}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleIndividualConvert}
-                className="btn btn-primary"
-                disabled={isConverting}
-              >
-                {isConverting ? 'Creating...' : 'Create Account'}
-              </button>
-            </div>
-          </div>
-        </div>
+      {convertStudent && (
+        <ConvertAccountModal
+          key={convertStudent.id}
+          student={convertStudent}
+          onClose={() => setConvertStudent(null)}
+        />
       )}
 
-      {/* Bulk Convert Modal */}
       {showBulkConvertModal && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
-          <div className="bg-white rounded-xl shadow-xl p-4 sm:p-6 w-full max-w-md mx-4">
-            <h2 className="text-lg font-bold text-gray-900 mb-4">Bulk Create User Accounts</h2>
-
-            {!convertResults ? (
-              <>
-                <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 mb-4">
-                  <p className="text-purple-800 text-sm">
-                    Create user accounts for <strong>{selectedStudents.size}</strong> selected student(s).
-                    Usernames will be auto-generated from student names.
-                  </p>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Default Password *</label>
-                  <PasswordInput
-                    className="input"
-                    value={bulkConvertPassword}
-                    onChange={(e) => setBulkConvertPassword(e.target.value)}
-                    placeholder="Min 8 characters — same for all accounts"
-                  />
-                  <p className="text-xs text-gray-500 mt-1">Students can change their password after first login.</p>
-                </div>
-                {bulkConvertError && <p className="text-sm text-red-600 mt-2">{bulkConvertError}</p>}
-
-                <div className="flex justify-end space-x-3 mt-6">
-                  <button
-                    onClick={() => setShowBulkConvertModal(false)}
-                    className="btn btn-secondary"
-                    disabled={isConverting}
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={handleBulkConvert}
-                    className="btn btn-primary"
-                    disabled={isConverting}
-                  >
-                    {isConverting ? 'Creating...' : `Create ${selectedStudents.size} Account(s)`}
-                  </button>
-                </div>
-              </>
-            ) : (
-              <>
-                <div className="space-y-3 mb-6">
-                  <div className="bg-green-50 border border-green-200 rounded-lg p-3">
-                    <p className="text-green-800 text-sm font-medium">Created: {convertResults.created_count} account(s)</p>
-                  </div>
-                  {convertResults.skipped_count > 0 && (
-                    <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
-                      <p className="text-yellow-800 text-sm font-medium">Skipped: {convertResults.skipped_count} (already have accounts)</p>
-                    </div>
-                  )}
-                  {convertResults.error_count > 0 && (
-                    <div className="bg-red-50 border border-red-200 rounded-lg p-3">
-                      <p className="text-red-800 text-sm font-medium">Errors: {convertResults.error_count}</p>
-                      <ul className="mt-1 text-xs text-red-700 list-disc list-inside">
-                        {convertResults.errors?.map((e, i) => (
-                          <li key={i}>{e.name}: {e.error}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                  {convertResults.created?.length > 0 && (
-                    <div className="max-h-40 overflow-y-auto">
-                      <p className="text-xs font-medium text-gray-600 mb-1">Created usernames:</p>
-                      <div className="space-y-1">
-                        {convertResults.created.map((c, i) => (
-                          <div key={i} className="flex justify-between text-xs bg-gray-50 px-2 py-1 rounded">
-                            <span className="text-gray-700">{c.student_name}</span>
-                            <span className="font-mono text-gray-900">{c.username}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-                <div className="flex justify-end">
-                  <button
-                    onClick={() => { setShowBulkConvertModal(false); setConvertResults(null) }}
-                    className="btn btn-primary"
-                  >
-                    Done
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
-        </div>
+        <BulkConvertModal
+          studentIds={Array.from(selectedIds)}
+          onConverted={selection.clear}
+          onClose={() => setShowBulkConvertModal(false)}
+        />
       )}
 
       {cropImageSrc && (
