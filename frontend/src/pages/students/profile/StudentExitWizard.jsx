@@ -2,11 +2,11 @@ import { useState } from 'react'
 import { useToast } from '../../../components/Toast'
 import { useEscapeKey } from '../../../hooks/useEscapeKey'
 import { useExitDestinations, useStudentExit } from '../../../hooks/useStudentExit'
-import { formatDate, getApiErrorMessage } from './profileUtils'
+import { formatDate, formatMoney, getApiErrorMessage } from './profileUtils'
 import { LeavingConflictNotice } from './StatusUpdateModal'
 
 const STEPS = ['Details', 'Clearance', 'Review']
-const money = (value) => `PKR ${Number(value || 0).toLocaleString()}`
+const money = (value) => `PKR ${formatMoney(value)}`
 const today = () => new Date().toISOString().slice(0, 10)
 
 const STATE_STYLES = {

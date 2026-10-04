@@ -156,6 +156,13 @@ describe('StudentProfilePage', () => {
       expect(screen.getByRole('button', { name: 'Fees' })).toHaveClass('border-primary-600')
     })
 
+    it('keeps the cents on the pending fee', async () => {
+      serveSummary({ pending_fee: 3847.5, latest_exit: null })
+      await renderProfile()
+
+      expect(await screen.findByRole('button', { name: 'Pending fee: PKR 3,847.50' })).toBeInTheDocument()
+    })
+
     it('shows no fee chip when nothing is pending', async () => {
       serveSummary({ pending_fee: 0, latest_exit: null })
       await renderProfile()
@@ -164,6 +171,7 @@ describe('StudentProfilePage', () => {
     })
 
     it('shows the exit banner with each waived item, who waived it and why', async () => {
+      useStudentApi({ status: 'WITHDRAWN' })
       serveSummary({ pending_fee: 1500, latest_exit: waivedExit })
       await renderProfile()
 
@@ -176,10 +184,18 @@ describe('StudentProfilePage', () => {
     })
 
     it('names the destination for a transfer', async () => {
+      useStudentApi({ status: 'TRANSFERRED' })
       serveSummary({ pending_fee: 0, latest_exit: { ...waivedExit, exit_type: 'TRANSFERRED', destination_school_name: 'Branch 2', items: [] } })
       await renderProfile()
 
       expect(await screen.findByRole('status')).toHaveTextContent('Transferred to Branch 2 on')
+    })
+
+    it('hides the banner once the student has been re-activated', async () => {
+      serveSummary({ pending_fee: 0, latest_exit: waivedExit })  // student is ACTIVE again
+      await renderProfile()
+
+      await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument())
     })
 
     it('does not show a banner for an exit that is still open', async () => {

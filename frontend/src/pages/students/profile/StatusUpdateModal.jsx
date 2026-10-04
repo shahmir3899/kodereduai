@@ -90,7 +90,7 @@ export default function StatusUpdateModal({ student, onClose, onStartExit }) {
             >
               <option value="ACTIVE">Active</option>
               <option value="WITHDRAWN">Withdrawn (Left school)</option>
-              <option value="TRANSFERRED">Transferred (Moved to another school)</option>
+              <option value="TRANSFERRED">Transferred (To another branch of this organization)</option>
               <option value="SUSPENDED">Suspended</option>
               <option value="GRADUATED">Graduated</option>
               <option value="REPEAT">Repeat</option>

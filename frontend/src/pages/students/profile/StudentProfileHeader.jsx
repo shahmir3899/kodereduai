@@ -7,7 +7,7 @@ import WhatsAppTick from '../../../components/WhatsAppTick'
 import ReportPeriodPicker from '../../../components/ReportPeriodPicker'
 import PhotoCropModal from '../../../components/PhotoCropModal'
 import Badge from '../../../components/ui/Badge'
-import { getApiErrorMessage } from './profileUtils'
+import { formatMoney, getApiErrorMessage } from './profileUtils'
 
 const riskColors = {
   HIGH: 'bg-red-100 text-red-800 border-red-200',
@@ -158,7 +158,7 @@ export default function StudentProfileHeader({
                   title="Open the fee ledger"
                   className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-red-50 text-red-700 border border-red-200 hover:bg-red-100"
                 >
-                  Pending fee: PKR {Number(summary.pending_fee).toLocaleString()}
+                  Pending fee: PKR {formatMoney(summary.pending_fee)}
                 </button>
               )}
               {openExit && canManageLifecycle && (
@@ -235,7 +235,7 @@ export default function StudentProfileHeader({
         </div>
       </div>
 
-      <ExitBanner exit={summary?.latest_exit} />
+      <ExitBanner exit={summary?.latest_exit} student={student} />
 
       {cropImageSrc && (
         <PhotoCropModal
@@ -250,8 +250,9 @@ export default function StudentProfileHeader({
 
 // Shown for a student who has left: when, and any fee or book waived on the way out,
 // with who waived it and why. Only admin roles receive latest_exit from the server.
-function ExitBanner({ exit }) {
-  if (!exit || exit.status !== 'FINALIZED') return null
+function ExitBanner({ exit, student }) {
+  // Only while the student is actually out: after a re-activation the old exit is history.
+  if (!exit || exit.status !== 'FINALIZED' || !['WITHDRAWN', 'TRANSFERRED'].includes(student.status)) return null
   const waived = (exit.items || []).filter((i) => i.state === 'WAIVED')
   const verb = exit.exit_type === 'TRANSFERRED' ? 'Transferred' : 'Withdrawn'
   return (

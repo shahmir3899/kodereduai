@@ -167,6 +167,11 @@ class TestOpen:
         assert Decimal(fees['amount']) == Decimal('1500')
         assert '1,500' in fees['summary']
 
+    def test_fee_summary_keeps_the_cents(self, api, ctx, category):
+        monthly_payment(ctx, category, 3, '3847.50', '0')
+        fees = next(i for i in start(api, ctx).json()['items'] if i['kind'] == 'FEES')
+        assert fees['summary'] == 'PKR 3,847.50 pending'
+
     def test_records_after_the_leaving_date_are_reported_in_the_dialogs_shape(self, api, ctx):
         from attendance.models import AttendanceRecord
         AttendanceRecord.objects.create(

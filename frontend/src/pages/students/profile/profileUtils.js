@@ -23,3 +23,12 @@ export function formatDate(value) {
   if (Number.isNaN(date.getTime())) return value
   return date.toLocaleDateString()
 }
+
+// 1,500 for whole amounts, 3,847.50 when there are cents (never 3,847.5).
+export function formatMoney(value) {
+  const n = Number(value || 0)
+  return n.toLocaleString(undefined, {
+    minimumFractionDigits: Number.isInteger(n) ? 0 : 2,
+    maximumFractionDigits: 2,
+  })
+}

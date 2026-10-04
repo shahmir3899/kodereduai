@@ -53,7 +53,8 @@ class ClearanceIncomplete(ExitError):
 # ── Clearance ────────────────────────────────────────────────────────────────
 
 def _money(value):
-    return f'{Decimal(value):,.2f}'.rstrip('0').rstrip('.')
+    text = f'{Decimal(value):,.2f}'
+    return text[:-3] if text.endswith('.00') else text
 
 
 def _fees_check(student):
