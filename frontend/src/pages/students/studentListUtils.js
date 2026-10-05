@@ -124,8 +124,13 @@ export function sortStudents(students, { selectedClassIds, resolvedSelectedClass
   })
 }
 
+const LEFT_STATUSES = ['WITHDRAWN', 'TRANSFERRED', 'GRADUATED']
+
+// "Left" = no longer here: withdrawn, transferred, graduated, or switched off.
+export const hasLeft = (student) => LEFT_STATUSES.includes(student.status) || !student.is_active
+
 export function computeStats(students) {
-  const active = students.filter((s) => s.is_active).length
+  const active = students.filter((s) => !hasLeft(s)).length
   const byClass = {}
   students.forEach((s) => {
     const className = s.class_name || 'Unassigned'

@@ -11,6 +11,8 @@ import logging
 from collections import defaultdict
 from datetime import date
 
+from django.db.models import Q
+
 logger = logging.getLogger(__name__)
 
 # Exams are naturally few per year — 10 weekly buckets doesn't apply here.
@@ -30,7 +32,7 @@ class AcademicRiskService:
         self.academic_year_id = academic_year_id
 
     def get_at_risk_students(self, threshold: float = None, only_student_ids=None,
-                             include_unflagged: bool = False) -> dict:
+                             include_unflagged: bool = False, timelines=None) -> dict:
         """
         Analyze all active students and return those who are at risk or
         predicted to be at risk of falling below the passing threshold.
@@ -43,6 +45,11 @@ class AcademicRiskService:
         (severity None) and every student with fewer than MIN_EXAMS exams
         (insufficient_data True), for a caller that needs one student's full picture
         (the profile). at_risk_count and risk_levels still count flagged students only.
+
+        timelines ({student_id: segments} from students.timeline) lets a student who was
+        transferred in from another branch be judged on what really happened: the exams
+        their earlier record took at the earlier branch(es), dated inside this year, count
+        as theirs alongside the exams here. Those marks are read in place, never copied.
 
         threshold defaults to this school's own configured policy
         (School.get_academic_risk_pass_threshold) rather than a hardcoded 40 --
@@ -90,10 +97,39 @@ class AcademicRiskService:
         # Fetch every mark for the academic year once. percentage/is_pass are
         # Python properties on StudentMark, not queryable — pull the raw
         # fields and compute in Python.
+        # Earlier branches' exams for a transferred-in student: that record's marks, inside
+        # the segment's dates AND this academic year's own date window ("old exams for the
+        # current year"), counted as the current record's.
+        history_map, history_q = {}, Q()
+        if timelines:
+            from academic_sessions.models import AcademicYear
+            year = AcademicYear.objects.filter(pk=self.academic_year_id).only('start_date', 'end_date').first()
+            for primary_id, segments in timelines.items():
+                if primary_id not in student_map:
+                    continue
+                for seg in segments:
+                    if seg.is_current:
+                        continue
+                    history_map[seg.student_id] = primary_id
+                    window = Q(
+                        student_id=seg.student_id, school_id=seg.school_id,
+                        exam_subject__exam__start_date__lt=seg.end,
+                    )
+                    if seg.start is not None:
+                        window &= Q(exam_subject__exam__start_date__gte=seg.start)
+                    if year is not None:
+                        window &= Q(
+                            exam_subject__exam__start_date__gte=year.start_date,
+                            exam_subject__exam__start_date__lte=year.end_date,
+                        )
+                    history_q |= window
+
         marks = StudentMark.objects.filter(
-            school_id=self.school_id,
-            student_id__in=student_ids,
-            exam_subject__exam__academic_year_id=self.academic_year_id,
+            Q(
+                school_id=self.school_id,
+                student_id__in=student_ids,
+                exam_subject__exam__academic_year_id=self.academic_year_id,
+            ) | history_q,
             exam_subject__is_active=True,
             is_absent=False,
             marks_obtained__isnull=False,
@@ -112,6 +148,7 @@ class AcademicRiskService:
         exam_names = {}
 
         for sid, exam_id, exam_date, exam_name, marks_obtained, total_marks in marks:
+            sid = history_map.get(sid, sid)
             if not total_marks:
                 continue
             pct = float(marks_obtained) / float(total_marks) * 100

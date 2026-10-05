@@ -109,11 +109,20 @@ class ReadmitSerializer(serializers.Serializer):
 
 class EnrollmentBreakSerializer(serializers.ModelSerializer):
     readmitted_by_name = serializers.SerializerMethodField()
+    joined_from_transfer = serializers.SerializerMethodField()
 
     class Meta:
         model = EnrollmentBreak
-        fields = ['id', 'start_date', 'end_date', 'reason', 'readmitted_by_name', 'readmitted_at']
+        fields = [
+            'id', 'start_date', 'end_date', 'reason', 'readmitted_by_name', 'readmitted_at',
+            'joined_from_transfer',
+        ]
         read_only_fields = fields
+
+    def get_joined_from_transfer(self, obj):
+        """True for the days before a transferred-in student joined this branch: not time
+        away but time at their earlier branch (the History and Attendance tabs say so)."""
+        return bool(obj.exit_id and obj.exit.destination_student_id == obj.student_id)
 
     def get_readmitted_by_name(self, obj):
         return _display_name(obj.readmitted_by)

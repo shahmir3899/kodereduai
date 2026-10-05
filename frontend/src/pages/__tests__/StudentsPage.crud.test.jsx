@@ -12,12 +12,14 @@ import StudentsPage from '../StudentsPage'
 
 let mockRole = 'SCHOOL_ADMIN'
 let mockYear = null
+const mockSwitchSchool = vi.fn()
 
 vi.mock('../../contexts/AuthContext', () => ({
   useAuth: () => ({
     user: { id: 1, role: mockRole, username: 'admin' },
     activeSchool: { id: 1, name: 'Test School', role: mockRole, is_default: true },
     isModuleEnabled: () => true,
+    switchSchool: mockSwitchSchool,
   }),
 }))
 
@@ -80,24 +82,129 @@ describe('StudentsPage — list, edit, delete, add', () => {
     expect(screen.getAllByText('Sara Khan').length).toBeGreaterThanOrEqual(1)
   })
 
-  it('hides inactive students until "Show inactive records" is ticked', async () => {
-    server.use(
-      http.get('/api/students/', () => HttpResponse.json([
-        { id: 1, school: 1, class_obj: 1, class_name: 'Class 1A', roll_number: '1', name: 'Ali Hassan', is_active: true, status: 'ACTIVE', has_user_account: true, user_username: 'ali' },
-        { id: 9, school: 1, class_obj: 1, class_name: 'Class 1A', roll_number: '9', name: 'Zara Left', is_active: false, status: 'WITHDRAWN', has_user_account: false },
-      ])),
-    )
-    const user = userEvent.setup()
-    renderWithProviders(<StudentsPage />)
-    await waitFor(() => {
-      expect(screen.getAllByText('Ali Hassan').length).toBeGreaterThanOrEqual(1)
+  describe('current / left / all', () => {
+    const current = { id: 1, school: 1, class_obj: 1, class_name: 'Class 1A', roll_number: '1', name: 'Ali Hassan', is_active: true, status: 'ACTIVE', has_user_account: true, user_username: 'ali' }
+    const withdrawn = { id: 9, school: 1, class_obj: 1, class_name: 'Class 1A', roll_number: '9', name: 'Zara Left', is_active: true, status: 'WITHDRAWN', left_date: '2026-01-10', has_user_account: false, transferred_to: null }
+    const transferred = {
+      id: 10, school: 1, class_obj: 1, class_name: 'Class 1A', roll_number: '10', name: 'Omar Moved', is_active: true, status: 'TRANSFERRED',
+      left_date: '2026-02-01', has_user_account: false,
+      transferred_to: { school_name: 'Branch 2', student_id: 77, school_id: 2 },
+    }
+    let requests
+
+    // The server decides who is listed: the default asks for current students only.
+    const serve = () => {
+      requests = []
+      server.use(http.get('/api/students/', ({ request }) => {
+        const scope = new URL(request.url).searchParams.get('status_scope')
+        requests.push(scope)
+        if (scope === 'left') return HttpResponse.json([withdrawn, transferred])
+        if (scope === 'all') return HttpResponse.json([current, withdrawn, transferred])
+        return HttpResponse.json([current])
+      }))
+    }
+
+    it('lists only current students by default and does not ask the server for more', async () => {
+      serve()
+      renderWithProviders(<StudentsPage />)
+      await waitFor(() => expect(screen.getAllByText('Ali Hassan').length).toBeGreaterThanOrEqual(1))
+
+      expect(screen.queryAllByText('Zara Left')).toHaveLength(0)
+      expect(requests).toEqual([null])
+      expect(screen.getByRole('radio', { name: 'Current' })).toHaveAttribute('aria-checked', 'true')
     })
-    expect(screen.queryAllByText('Zara Left')).toHaveLength(0)
 
-    await user.click(screen.getByLabelText(/show inactive records/i))
+    it('shows withdrawn and transferred students under Left, with the date they left', async () => {
+      serve()
+      const user = userEvent.setup()
+      renderWithProviders(<StudentsPage />)
+      await waitFor(() => expect(screen.getAllByText('Ali Hassan').length).toBeGreaterThanOrEqual(1))
 
-    await waitFor(() => {
-      expect(screen.getAllByText('Zara Left').length).toBeGreaterThanOrEqual(1)
+      await user.click(screen.getByRole('radio', { name: 'Left' }))
+
+      await waitFor(() => expect(screen.getAllByText('Zara Left').length).toBeGreaterThanOrEqual(1))
+      expect(requests).toContain('left')
+      expect(screen.queryAllByText('Ali Hassan')).toHaveLength(0)
+      expect(screen.getByTestId('left-note-9')).toHaveTextContent('Left')
+      expect(screen.getByTestId('left-note-9')).toHaveTextContent('2026')
+    })
+
+    it('has a filter for every status, not only Left', async () => {
+      serve()
+      renderWithProviders(<StudentsPage />)
+      await waitFor(() => expect(screen.getAllByText('Ali Hassan').length).toBeGreaterThanOrEqual(1))
+
+      const names = screen.getAllByRole('radio').map((r) => r.textContent)
+      expect(names).toEqual(['Current', 'Left', 'Withdrawn', 'Transferred', 'Graduated', 'Suspended', 'Repeat', 'All'])
+    })
+
+    it.each([
+      ['Withdrawn', 'withdrawn'], ['Transferred', 'transferred'], ['Graduated', 'graduated'],
+      ['Suspended', 'suspended'], ['Repeat', 'repeat'],
+    ])('asks the server for exactly %s students', async (label, scope) => {
+      serve()
+      const user = userEvent.setup()
+      renderWithProviders(<StudentsPage />)
+      await waitFor(() => expect(screen.getAllByText('Ali Hassan').length).toBeGreaterThanOrEqual(1))
+
+      await user.click(screen.getByRole('radio', { name: label }))
+
+      await waitFor(() => expect(requests).toContain(scope))
+      expect(screen.getByRole('radio', { name: label })).toHaveAttribute('aria-checked', 'true')
+    })
+
+    it('shows everyone under All', async () => {
+      serve()
+      const user = userEvent.setup()
+      renderWithProviders(<StudentsPage />)
+      await waitFor(() => expect(screen.getAllByText('Ali Hassan').length).toBeGreaterThanOrEqual(1))
+
+      await user.click(screen.getByRole('radio', { name: 'All' }))
+
+      await waitFor(() => expect(screen.getAllByText('Zara Left').length).toBeGreaterThanOrEqual(1))
+      expect(screen.getAllByText('Ali Hassan').length).toBeGreaterThanOrEqual(1)
+      expect(screen.getAllByText('Omar Moved').length).toBeGreaterThanOrEqual(1)
+    })
+
+    it('shows where a transferred student went and opens them there', async () => {
+      serve()
+      mockSwitchSchool.mockResolvedValue({})
+      const user = userEvent.setup()
+      renderWithProviders(<StudentsPage />)
+      await waitFor(() => expect(screen.getAllByText('Ali Hassan').length).toBeGreaterThanOrEqual(1))
+      await user.click(screen.getByRole('radio', { name: 'Left' }))
+
+      const note = await screen.findByTestId('left-note-10')
+      expect(note).toHaveTextContent('to Branch 2')
+      await user.click(within(note).getByRole('button', { name: 'Open there' }))
+
+      expect(mockSwitchSchool).toHaveBeenCalledWith(2)
+    })
+
+    it('shows the destination but no link when the viewer cannot open that branch', async () => {
+      requests = []
+      server.use(http.get('/api/students/', () => HttpResponse.json([
+        { ...transferred, transferred_to: { school_name: 'Branch 2', student_id: null, school_id: null } },
+      ])))
+      const user = userEvent.setup()
+      renderWithProviders(<StudentsPage />)
+      await user.click(await screen.findByRole('radio', { name: 'Left' }))
+
+      const note = await screen.findByTestId('left-note-10')
+      expect(note).toHaveTextContent('to Branch 2')
+      expect(within(note).queryByRole('button', { name: 'Open there' })).not.toBeInTheDocument()
+    })
+
+    it('counts current and left students in the summary cards', async () => {
+      serve()
+      const user = userEvent.setup()
+      renderWithProviders(<StudentsPage />)
+      await waitFor(() => expect(screen.getAllByText('Ali Hassan').length).toBeGreaterThanOrEqual(1))
+      await user.click(screen.getByRole('radio', { name: 'All' }))
+      await waitFor(() => expect(screen.getAllByText('Zara Left').length).toBeGreaterThanOrEqual(1))
+
+      expect(screen.getByText('Current', { selector: 'p' }).closest('div')).toHaveTextContent('1')
+      expect(screen.getByText('Left', { selector: 'p' }).closest('div')).toHaveTextContent('2')
     })
   })
 

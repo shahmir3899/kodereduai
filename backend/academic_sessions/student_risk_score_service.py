@@ -74,11 +74,11 @@ class StudentRiskScoreService:
         self.school_id = school_id
         self.academic_year_id = academic_year_id
 
-    def _predictor_report(self, only_student_ids=None, include_unflagged=False):
+    def _predictor_report(self, only_student_ids=None, include_unflagged=False, timelines=None):
         from finance.fee_predictor_service import FeeCollectionPredictorService
         try:
             return FeeCollectionPredictorService(self.school_id, self.academic_year_id).predict_defaults(
-                only_student_ids=only_student_ids, include_unflagged=include_unflagged,
+                only_student_ids=only_student_ids, include_unflagged=include_unflagged, timelines=timelines,
             )
         except Exception as e:
             logger.warning(f"Fee predictor unavailable for composite risk score, school {self.school_id}: {e}")
@@ -91,9 +91,11 @@ class StudentRiskScoreService:
         from examinations.academic_risk_service import AcademicRiskService
         from finance.fee_risk import fee_risk_for_students
 
+        from students.timeline import student_timeline
+
         active = list(Student.objects.filter(
             school_id=self.school_id, is_active=True,
-        ).select_related('class_obj'))
+        ).select_related('class_obj', 'school'))
         total_students = len(active)
 
         if total_students == 0:
@@ -104,9 +106,17 @@ class StudentRiskScoreService:
                 'students': [],
             }
 
-        attendance_report = AttendanceRiskService(self.school_id, self.academic_year_id).get_at_risk_students()
-        academic_report = AcademicRiskService(self.school_id, self.academic_year_id).get_at_risk_students()
-        fee_report = self._predictor_report()
+        # Students transferred in from another branch are judged on their whole history
+        # (the earlier branch's days, exams and payments, read in place); everyone else
+        # costs nothing extra.
+        timelines = {s.id: student_timeline(s) for s in active if s.transferred_from_id}
+        timelines = {sid: segs for sid, segs in timelines.items() if len(segs) > 1} or None
+
+        attendance_report = AttendanceRiskService(self.school_id, self.academic_year_id).get_at_risk_students(
+            timelines=timelines)
+        academic_report = AcademicRiskService(self.school_id, self.academic_year_id).get_at_risk_students(
+            timelines=timelines)
+        fee_report = self._predictor_report(timelines=timelines)
 
         attendance_by_student = {s['student_id']: s for s in attendance_report.get('students', [])}
         academic_by_student = {s['student_id']: s for s in academic_report.get('students', [])}
@@ -115,7 +125,7 @@ class StudentRiskScoreService:
         # Arrears are measured for every active student, so a family that owes three
         # months is flagged even when its payment history looks regular.
         students_by_id = {s.id: s for s in active}
-        arrears = fee_risk_for_students(students_by_id)
+        arrears = fee_risk_for_students(students_by_id, timelines)
         fee_level = {}
         for sid, info in arrears.items():
             level = worse(info['level'], predicted_by_student.get(sid, {}).get('risk_level'))
@@ -180,7 +190,7 @@ class StudentRiskScoreService:
             'students': scored,
         }
 
-    def score_student(self, student_id: int, include_fees: bool = True) -> dict:
+    def score_student(self, student_id: int, include_fees: bool = True, student=None) -> dict:
         """One student's full picture, using exactly the school-wide rules.
 
         Returns the composite/severity plus each dimension's detail record (with
@@ -189,21 +199,28 @@ class StudentRiskScoreService:
         """
         from academic_sessions.attendance_risk_service import AttendanceRiskService
         from examinations.academic_risk_service import AcademicRiskService
+        from students.models import Student
+        from students.timeline import student_timeline
 
         ids = [student_id]
+        if student is None:
+            student = Student.objects.select_related('school').get(pk=student_id)
+        segments = student_timeline(student)
+        timelines = {student_id: segments} if len(segments) > 1 else None
+
         attendance = next(iter(AttendanceRiskService(self.school_id, self.academic_year_id)
-                               .get_at_risk_students(only_student_ids=ids, include_unflagged=True)
+                               .get_at_risk_students(only_student_ids=ids, include_unflagged=True, timelines=timelines)
                                .get('students', [])), None)
         academic = next(iter(AcademicRiskService(self.school_id, self.academic_year_id)
-                             .get_at_risk_students(only_student_ids=ids, include_unflagged=True)
+                             .get_at_risk_students(only_student_ids=ids, include_unflagged=True, timelines=timelines)
                              .get('students', [])), None)
 
         fee = None
         fee_severity = None
         if include_fees:
             from finance.fee_risk import student_fee_risk
-            arrears = student_fee_risk(student_id)
-            predicted = next(iter(self._predictor_report(ids, include_unflagged=True)
+            arrears = student_fee_risk(student_id, segments if timelines else None)
+            predicted = next(iter(self._predictor_report(ids, include_unflagged=True, timelines=timelines)
                                   .get('predictions', [])), None)
             # The school-wide page only sees predictions at or above PREDICTION_CUTOFF
             # (the predictor drops the rest), so a lower one must not count here either.

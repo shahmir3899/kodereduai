@@ -311,6 +311,7 @@ export const studentsApi = {
   getExamResults: (id) => api.get(`/api/students/${id}/exam_results/`),
   getEnrollmentHistory: (id) => api.get(`/api/students/${id}/enrollment_history/`),
   getDocuments: (id) => api.get(`/api/students/${id}/documents/`),
+  getEarlierAssessments: (id) => api.get(`/api/students/${id}/earlier_assessments/`),
   uploadDocument: (id, data) => api.post(`/api/students/${id}/documents/`, data),
   deleteDocument: (id, docId) => api.delete(`/api/students/${id}/documents/${docId}/`),
   uploadPhoto: (id, file) => {

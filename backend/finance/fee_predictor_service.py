@@ -8,6 +8,8 @@ from collections import defaultdict
 from datetime import date
 from decimal import Decimal
 
+from django.db.models import Q
+
 logger = logging.getLogger(__name__)
 
 
@@ -25,7 +27,7 @@ class FeeCollectionPredictorService:
         self.academic_year_id = academic_year_id
 
     def predict_defaults(self, target_month=None, target_year=None, only_student_ids=None,
-                         include_unflagged=False):
+                         include_unflagged=False, timelines=None):
         """
         Analyze payment history to predict defaults for the target month.
 
@@ -51,6 +53,11 @@ class FeeCollectionPredictorService:
         only_student_ids narrows the analysis to those students (one student's profile
         should not pay for a school-wide scan). include_unflagged keeps students whose
         probability is below the 0.25 cut-off, for the same reason.
+
+        timelines ({student_id: segments} from students.timeline): a student transferred in
+        from another branch is judged on their whole payment history, the earlier
+        branch's rows included. The carried row is the same debt as the earlier branch's
+        last row, so it is left out of the history rather than counted twice.
         """
         from finance.fee_risk import fee_risk_for_students
         from finance.models import FeePayment
@@ -73,14 +80,26 @@ class FeeCollectionPredictorService:
         # bulk-fetch-then-analyze pattern as
         # academic_sessions.attendance_risk_service.AttendanceRiskService.
         student_ids = [s.id for s in students]
+        earlier_of, history_filter = {}, Q(student_id__in=student_ids, school_id=self.school_id)
+        for primary_id, segments in (timelines or {}).items():
+            if primary_id not in student_ids:
+                continue
+            for seg in segments:
+                if not seg.is_current:
+                    earlier_of[seg.student_id] = primary_id
+                    history_filter |= Q(student_id=seg.student_id, school_id=seg.school_id)
+
+        transferred_in = set(earlier_of.values())
         payments_by_student = defaultdict(list)
-        for row in FeePayment.objects.filter(
-            student_id__in=student_ids,
-            school_id=self.school_id,
-        ).order_by('student_id', '-year', '-month').values(
-            'student_id', 'status', 'amount_due', 'amount_paid'
+        for row in FeePayment.objects.filter(history_filter).order_by('student_id', '-year', '-month').values(
+            'student_id', 'status', 'amount_due', 'amount_paid', 'year', 'month', 'carried_from_exit_id',
         ):
-            payments_by_student[row['student_id']].append(row)
+            owner = earlier_of.get(row['student_id'], row['student_id'])
+            if owner in transferred_in and row['carried_from_exit_id']:
+                continue
+            payments_by_student[owner].append(row)
+        for owner in transferred_in:
+            payments_by_student[owner].sort(key=lambda r: (r['year'], r['month']), reverse=True)
 
         # Current class labels from the enrollment (current year), in one query.
         from academic_sessions.roster import placement_group, placements_for

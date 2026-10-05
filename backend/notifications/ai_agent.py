@@ -166,15 +166,20 @@ class ParentCommunicationAgent:
 
     # ── Original Tools (1-5) ─────────────────────────────────────────────
 
-    def _get_student_info(self, student_id):
+    def _student(self, student_id):
+        """The student, looked up in THIS school only (a student id from the chat is never
+        trusted to name another school's record); earlier branches are reached through the
+        transfer link, not through the id."""
         from students.models import Student
 
-        student = Student.objects.select_related('class_obj').get(
-            id=student_id, school=self.school
-        )
-        from attendance.models import AttendanceRecord
-        att_total = AttendanceRecord.objects.filter(student=student).count()
-        att_present = AttendanceRecord.objects.filter(student=student, status='PRESENT').count()
+        return Student.objects.select_related('class_obj', 'school').get(id=student_id, school=self.school)
+
+    def _get_student_info(self, student_id):
+        student = self._student(student_id)
+        from students import history
+
+        att = history.attendance_totals(student)
+        att_total, att_present = att['total_days'], att['present_days']
 
         from academic_sessions.roster import current_placement, placement_label, placement_roll
 
@@ -207,6 +212,19 @@ class ParentCommunicationAgent:
     def _get_attendance_summary(self, student_id=None, class_id=None):
         from attendance.models import AttendanceRecord
 
+        if student_id and not class_id:
+            # One student: every branch they have been at, leave counted as present.
+            from students import history
+
+            att = history.attendance_totals(self._student(student_id))
+            return json.dumps({
+                'total_records': att['total_days'],
+                'present': att['present_days'] - att['leave'],
+                'absent': att['absent'],
+                'leave': att['leave'],
+                'rate': f"{att['rate']}%" if att['total_days'] else 'N/A',
+            })
+
         filters = {'school': self.school}
         if student_id:
             filters['student_id'] = student_id
@@ -227,22 +245,21 @@ class ParentCommunicationAgent:
         })
 
     def _get_fee_status(self, student_id):
-        from finance.models import FeePayment
+        from finance.student_balance import student_fee_summary, student_pending_fees
+        from students import timeline
 
-        payments = FeePayment.objects.filter(
-            student_id=student_id, school=self.school
-        )
-        agg = payments.aggregate(
-            total_due=Sum('amount_due'),
-            total_paid=Sum('amount_paid'),
-        )
-        pending = payments.filter(status__in=['PENDING', 'PARTIAL']).count()
+        # The shared calculation (summing every monthly row counts a carried-forward balance
+        # again each month), across every branch the student has been at: paid counts at
+        # all of them, owed is only this branch's.
+        student = self._student(student_id)
+        fees = student_fee_summary(student, timeline.student_timeline(student))
+        owing = student_pending_fees(student)['items']
 
         return json.dumps({
-            'total_due': str(agg['total_due'] or 0),
-            'total_paid': str(agg['total_paid'] or 0),
-            'outstanding': str((agg['total_due'] or 0) - (agg['total_paid'] or 0)),
-            'pending_months': pending,
+            'total_due': str(fees['total_due']),
+            'total_paid': str(fees['total_paid']),
+            'outstanding': str(fees['pending']),
+            'pending_months': len(owing),
         })
 
     def _draft_message(self, params):
@@ -255,13 +272,10 @@ class ParentCommunicationAgent:
     # ── New Tools (6-15) ─────────────────────────────────────────────────
 
     def _get_exam_performance(self, student_id):
-        from examinations.models import StudentMark
+        from students import history
 
-        marks = StudentMark.objects.filter(
-            school=self.school, student_id=student_id,
-        ).select_related(
-            'exam_subject__exam', 'exam_subject__subject',
-        ).order_by('-exam_subject__exam__start_date')[:20]
+        # Results at every branch the student has been at, newest first.
+        marks = history.exam_marks(self._student(student_id))[:20]
 
         result = []
         for m in marks:
@@ -309,12 +323,10 @@ class ParentCommunicationAgent:
         return json.dumps({'assignments': result, 'total': len(result)})
 
     def _get_detailed_attendance(self, student_id, days=30):
-        from attendance.models import AttendanceRecord
+        from students import history
 
         cutoff = timezone.now().date() - timedelta(days=int(days))
-        records = AttendanceRecord.objects.filter(
-            student_id=student_id, school=self.school, date__gte=cutoff,
-        ).order_by('-date')
+        records = history.attendance_records(self._student(student_id)).filter(date__gte=cutoff).order_by('-date')
 
         total = records.count()
         present = records.filter(status='PRESENT').count()

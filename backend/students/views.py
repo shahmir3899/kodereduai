@@ -125,6 +125,12 @@ class ClassViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet
 from django.db import models as db_models
 
 
+# Enrollment/student statuses that mean "no longer here" for the Students page Left view.
+LEFT_STATUSES = ('WITHDRAWN', 'TRANSFERRED', 'GRADUATED')
+# Statuses of students who are still enrolled but in a special state.
+STILL_ENROLLED_STATUSES = ('SUSPENDED', 'REPEAT')
+
+
 class StudentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet):
     required_module = 'students'
     queryset = Student.objects.all()
@@ -153,7 +159,7 @@ class StudentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
     def get_queryset(self):
         queryset = Student.objects.select_related(
             'school', 'class_obj',
-        ).prefetch_related('user_profile__user', 'enrollment_breaks')
+        ).prefetch_related('user_profile__user', 'enrollment_breaks__exit', 'transferred_to__school')
 
         active_school_id = ensure_tenant_school_id(self.request)
         if active_school_id:
@@ -247,6 +253,41 @@ class StudentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
         academic_year = self.request.query_params.get('academic_year')
         enrollment_active_filter = True
 
+        # status_scope (list only): 'current' (default, enrolled now), 'left' (withdrawn,
+        # transferred or graduated in the year), 'all', or one exact status:
+        # withdrawn / transferred / graduated (left students) and suspended / repeat
+        # (still enrolled). Left students have an inactive enrollment, so the default
+        # "enrolled and active" join never returns them.
+        status_scope = (self.request.query_params.get('status_scope') or '').lower()
+        exact_status = status_scope.upper() if status_scope.upper() in (*LEFT_STATUSES, *STILL_ENROLLED_STATUSES) else None
+        left_only = False
+        left_statuses = LEFT_STATUSES
+        if self.action == 'list' and (status_scope in ('left', 'all') or exact_status):
+            if not academic_year:
+                from academic_sessions.utils import resolve_current_academic_year_id
+                academic_year = resolve_current_academic_year_id(active_school_id or school_id) \
+                    if (active_school_id or school_id) else None
+            if exact_status in STILL_ENROLLED_STATUSES:
+                # Still enrolled, so the normal current listing, narrowed by status. REPEAT
+                # also lives on the enrollment, so either place counts.
+                condition = db_models.Q(status=exact_status)
+                if exact_status == 'REPEAT' and academic_year:
+                    condition |= db_models.Q(
+                        enrollments__academic_year_id=academic_year, enrollments__status='REPEAT',
+                    )
+                queryset = queryset.filter(condition)
+            elif not academic_year:
+                if status_scope == 'left':
+                    queryset = queryset.filter(status__in=LEFT_STATUSES)
+                elif exact_status:
+                    queryset = queryset.filter(status=exact_status)
+            elif status_scope == 'left' or exact_status:
+                enrollment_active_filter, left_only = False, True
+                if exact_status:
+                    left_statuses = (exact_status,)
+            else:
+                enrollment_active_filter = None
+
         is_active = self.request.query_params.get('is_active')
         if is_active is not None:
             is_active_bool = is_active.lower() == 'true'
@@ -287,10 +328,13 @@ class StudentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
                 # Skipped when session_class_id already scoped the roster with
                 # month-precision above -- re-applying a bare is_active check here
                 # would cancel that out for a withdrawn/transferred student.
-                queryset = queryset.filter(
-                    enrollments__academic_year_id=academic_year,
-                    enrollments__is_active=enrollment_active_filter,
-                ).distinct()
+                # One filter() call so every condition is checked on the same enrollment row.
+                enrollment_conditions = {'enrollments__academic_year_id': academic_year}
+                if enrollment_active_filter is not None:
+                    enrollment_conditions['enrollments__is_active'] = enrollment_active_filter
+                if left_only:
+                    enrollment_conditions['enrollments__status__in'] = left_statuses
+                queryset = queryset.filter(**enrollment_conditions).distinct()
             # Annotate with enrollment-scoped roll number, class ID, and class name
             # so the serializer can return historical class info for previous sessions.
             from academic_sessions.models import StudentEnrollment
@@ -352,6 +396,24 @@ class StudentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
                     'status': 'ACTIVE',
                 },
             )
+
+    def destroy(self, request, *args, **kwargs):
+        """A student who is part of a branch transfer cannot be deleted: either record
+        is the other one's history (attendance, exams and fees are read through the
+        link), so deleting one would silently cut that history off."""
+        student = self.get_object()
+        if student.transferred_from_id or student.transferred_to.exists():
+            return Response(
+                {
+                    'code': 'transfer_linked',
+                    'detail': (
+                        f'{student.name} was transferred between branches, so this record is part of '
+                        'their history and cannot be deleted. Mark them as withdrawn instead.'
+                    ),
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return super().destroy(request, *args, **kwargs)
 
     def update(self, request, *args, **kwargs):
         # Same as UpdateModelMixin.update, except a leaving date that would
@@ -765,22 +827,21 @@ class StudentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
         from django.db.models import Sum, Avg
         from decimal import Decimal
 
-        # Attendance stats
-        from attendance.models import AttendanceRecord
-        attendance_qs = AttendanceRecord.objects.filter(student=student)
-        total_days = attendance_qs.count()
-        total_present = attendance_qs.filter(status='PRESENT').count()
-        total_absent = attendance_qs.filter(status='ABSENT').count()
-        total_leave = attendance_qs.filter(status='LEAVE').count()
-        # Leave days count as present, the same rule as the risk assessment, so the
-        # Attendance card and the Attendance Risk card never disagree.
-        present_with_leave = total_present + total_leave
-        attendance_rate = round(present_with_leave / total_days * 100, 1) if total_days > 0 else 0.0
+        # Attendance stats: every branch the student has been at (students.timeline), each
+        # limited to its own dates. Leave days count as present, the same rule as the risk
+        # assessment, so the Attendance card and the Attendance Risk card never disagree.
+        from . import history, timeline
+        segments = timeline.student_timeline(student)
+        timeline.audit_cross_branch_read(request, student, 'profile')
+        attendance = history.attendance_totals(student, segments)
+        total_days, present_with_leave = attendance['total_days'], attendance['present_days']
+        total_absent, total_leave = attendance['absent'], attendance['leave']
+        attendance_rate = attendance['rate']
 
         # Fee stats: one shared calculation (see finance.student_balance), so the
         # header chip, the Overview cards and the exit checklist always agree.
         from finance.student_balance import student_fee_summary
-        fees = student_fee_summary(student)
+        fees = student_fee_summary(student, segments)
         fee_total_due, fee_total_paid, pending_fee = fees['total_due'], fees['total_paid'], fees['pending']
 
         # Exam average: the last exam's percentage this year, the same figure the
@@ -793,6 +854,7 @@ class StudentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
         if year_id:
             entry = next(iter(AcademicRiskService(student.school_id, year_id).get_at_risk_students(
                 only_student_ids=[student.id], include_unflagged=True,
+                timelines={student.id: segments},
             )['students']), None)
             if entry and entry.get('current_average') is not None:
                 exam_average = entry['current_average']
@@ -839,91 +901,47 @@ class StudentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
             'exam_average': exam_average,
             'exam_average_label': exam_average_label,
             'enrollment_status': enrollment_status,
+            'has_earlier_branch_data': len(segments) > 1,
+            'earlier_branches': [s.school_name for s in segments if not s.is_current],
         })
 
     @action(detail=True, methods=['get'])
     def attendance_history(self, request, pk=None):
         """Monthly attendance breakdown for a student."""
         student = self.get_object()
-        from attendance.models import AttendanceRecord
-        from django.db.models.functions import TruncMonth
+        from . import history
 
-        records = AttendanceRecord.objects.filter(
-            student=student
-        ).annotate(
-            month=TruncMonth('date')
-        ).values('month').annotate(
-            present=Count('id', filter=Q(status='PRESENT')),
-            absent=Count('id', filter=Q(status='ABSENT')),
-            late=Count('id', filter=Q(status='LATE')),
-            leave=Count('id', filter=Q(status='LEAVE')),
-            total=Count('id'),
-        ).order_by('-month')
-
-        months = []
-        for r in records:
-            rate = round(r['present'] / r['total'] * 100, 1) if r['total'] > 0 else 0.0
-            months.append({
-                'month': r['month'].strftime('%B %Y') if r['month'] else None,
-                'present': r['present'],
-                'absent': r['absent'],
-                'late': r['late'],
-                'leave': r['leave'],
-                'total': r['total'],
-                'rate': rate,
-            })
-
-        return Response({'months': months})
+        # Every branch the student has been at; a month that spans a transfer has one
+        # row per branch, the earlier branch's tagged and read-only.
+        return Response({'months': history.attendance_months(student)})
 
     @action(detail=True, methods=['get'])
     def fee_ledger(self, request, pk=None):
         """All fee payments for a student."""
         student = self.get_object()
-        from finance.models import FeePayment
-        from finance.serializers import FeePaymentSerializer
+        from . import history
 
-        payments = FeePayment.objects.filter(
-            student=student
-        ).order_by('-year', '-month')
-
-        return Response(FeePaymentSerializer(payments, many=True).data)
+        # Both branches' ledgers, each row tagged; what is still owed is only the
+        # current branch's (a carried balance was handed over).
+        return Response(history.fee_rows(student))
 
     @action(detail=True, methods=['get'])
     def exam_results(self, request, pk=None):
         """All exam marks grouped by exam."""
         student = self.get_object()
-        from examinations.models import GradeScale, StudentMark
-        marks = StudentMark.objects.filter(
-            student=student, exam_subject__is_active=True,
-        ).select_related(
-            'exam_subject', 'exam_subject__exam', 'exam_subject__subject'
-        ).order_by('-exam_subject__exam__start_date', 'exam_subject__exam_id', 'exam_subject__subject__name')
+        from . import history
 
-        grade_scales = list(GradeScale.objects.filter(school_id=student.school_id))
+        # Exams of every branch the student has been at, each from its own branch's rows
+        # and grade scale; earlier branches' exams are tagged and read-only.
+        return Response(history.exam_groups(student))
 
-        result = {}
-        for mark in marks:
-            exam = mark.exam_subject.exam
-            entry = result.setdefault(exam.id, {
-                'exam_id': exam.id,
-                'exam_name': exam.name,
-                'exam_date': exam.start_date.isoformat() if exam.start_date else None,
-                'subjects': [],
-            })
-            pct = mark.percentage
-            entry['subjects'].append({
-                'subject': mark.exam_subject.subject.name,
-                'marks_obtained': float(mark.marks_obtained) if mark.marks_obtained is not None else None,
-                'total_marks': float(mark.exam_subject.total_marks) if mark.exam_subject.total_marks else None,
-                'percentage': round(pct, 1) if pct is not None else None,
-                'grade': GradeScale.grade_for(pct, grade_scales) if pct is not None else None,
-                'is_absent': mark.is_absent,
-            })
+    @action(detail=True, methods=['get'], url_path='earlier_assessments')
+    def earlier_assessments(self, request, pk=None):
+        """Skills/behaviour ratings and remarks from earlier branches, read-only."""
+        student = self.get_object()
+        from . import history
 
-        for entry in result.values():
-            pcts = [s['percentage'] for s in entry['subjects'] if s['percentage'] is not None]
-            entry['average_percentage'] = round(sum(pcts) / len(pcts), 1) if pcts else None
-        return Response(list(result.values()))
+        return Response(history.earlier_assessments(student))
 
     @action(detail=True, methods=['get'])
     def away_periods(self, request, pk=None):
@@ -931,43 +949,17 @@ class StudentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
         student = self.get_object()
         from student_exits.serializers import EnrollmentBreakSerializer
 
-        breaks = student.enrollment_breaks.select_related('readmitted_by').order_by('start_date', 'id')
+        breaks = student.enrollment_breaks.select_related('readmitted_by', 'exit').order_by('start_date', 'id')
         return Response(EnrollmentBreakSerializer(breaks, many=True).data)
 
     @action(detail=True, methods=['get'])
     def enrollment_history(self, request, pk=None):
         """Enrollment records across academic years."""
         student = self.get_object()
-        from academic_sessions.models import StudentEnrollment
+        from . import history
 
-        enrollments = StudentEnrollment.objects.filter(
-            student=student
-        ).select_related(
-            'academic_year', 'session_class', 'class_obj'
-        ).order_by('-academic_year__start_date', '-academic_year__id', '-id')
-
-        result = []
-        for e in enrollments:
-            class_name = (
-                (e.session_class.display_name if e.session_class_id else None)
-                or (e.class_obj.name if e.class_obj_id else None)
-            )
-            section = (
-                (e.session_class.section if e.session_class_id else None)
-                or (e.class_obj.section if e.class_obj_id else None)
-            )
-
-            result.append({
-                'academic_year': str(e.academic_year),
-                'academic_year_name': getattr(e.academic_year, 'name', str(e.academic_year)),
-                'class_name': class_name,
-                'section': section,
-                'roll_number': e.roll_number,
-                'status': e.status,
-                'is_active': e.is_active,
-            })
-
-        return Response(result)
+        # Enrollments at every branch the student has been at (earlier ones tagged).
+        return Response(history.enrollment_rows(student))
 
     @action(detail=True, methods=['get', 'post'], url_path='documents')
     def documents(self, request, pk=None):
@@ -975,8 +967,11 @@ class StudentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
         student = self.get_object()
 
         if request.method == 'GET':
-            docs = StudentDocument.objects.filter(student=student)
-            return Response(StudentDocumentSerializer(docs, many=True).data)
+            from . import history
+
+            # Earlier branches' documents are shown too (tagged); uploading and deleting
+            # only ever touch this record.
+            return Response(history.document_rows(student))
 
         # POST
         serializer = StudentDocumentSerializer(data={
@@ -1161,21 +1156,16 @@ class StudentDashboardView(APIView):
         if not student:
             return Response({'error': 'No student profile linked.'}, status=404)
 
-        from attendance.models import AttendanceRecord
-        from finance.models import FeePayment
+        from finance.student_balance import student_fee_summary
+        from . import history, timeline
 
-        # Attendance summary
-        att_qs = AttendanceRecord.objects.filter(student=student)
-        total_days = att_qs.count()
-        present = att_qs.filter(status='PRESENT').count()
-        absent = att_qs.filter(status='ABSENT').count()
-        leave = att_qs.filter(status='LEAVE').count()
-
-        # Fee summary
-        fee_agg = FeePayment.objects.filter(student=student).aggregate(
-            total_due=Sum('amount_due'),
-            total_paid=Sum('amount_paid'),
-        )
+        # Attendance and fees cover every branch the student has been at (students.timeline);
+        # the fee summary is the shared one, so staff, parents and the student agree.
+        segments = timeline.student_timeline(student)
+        att = history.attendance_totals(student, segments)
+        total_days, absent, leave = att['total_days'], att['absent'], att['leave']
+        present = att['present_days'] - leave
+        fees = student_fee_summary(student, segments)
 
         from academic_sessions.roster import current_year_q, own_section_q, placement_scope
         class_obj_id, year_id = placement_scope(student)
@@ -1233,12 +1223,12 @@ class StudentDashboardView(APIView):
                 'present': present,
                 'absent': absent,
                 'leave': leave,
-                'rate': round(present / total_days * 100, 1) if total_days > 0 else 0,
+                'rate': att['rate'],
             },
             'fees': {
-                'total_due': str(fee_agg['total_due'] or 0),
-                'total_paid': str(fee_agg['total_paid'] or 0),
-                'outstanding': str((fee_agg['total_due'] or 0) - (fee_agg['total_paid'] or 0)),
+                'total_due': str(fees['total_due']),
+                'total_paid': str(fees['total_paid']),
+                'outstanding': str(fees['pending']),
             },
             'upcoming_assignments': upcoming_assignments,
             'today_timetable': today_timetable,
@@ -1254,34 +1244,38 @@ class StudentAttendanceView(APIView):
         if not student:
             return Response({'error': 'No student profile linked.'}, status=404)
 
-        from attendance.models import AttendanceRecord
-        qs = AttendanceRecord.objects.filter(student=student).order_by('-date')
+        from django.db.models import Count, Q
+        from . import history, timeline
 
+        # Every branch the student has been at; earlier branches' records are tagged.
+        segments = timeline.student_timeline(student)
         month = request.query_params.get('month')
         year = request.query_params.get('year')
-        if month and year:
-            qs = qs.filter(date__month=int(month), date__year=int(year))
-
+        month_year = {'month': month, 'year': year} if month and year else {}
         records = [
-            {
-                'date': str(r.date),
-                'status': r.status,
-                'source': r.source if hasattr(r, 'source') else None,
-            }
-            for r in qs[:200]
+            {k: v for k, v in row.items() if k not in ('id', 'created_at')}
+            for row in history.attendance_rows(student, segments, limit=200, **month_year)
         ]
-        total = qs.count()
-        present = qs.filter(status='PRESENT').count()
+        qs = history.attendance_records(student, segments)
+        if month_year:
+            qs = qs.filter(date__month=int(month), date__year=int(year))
+        counts = qs.aggregate(
+            total=Count('id'), present=Count('id', filter=Q(status='PRESENT')),
+            absent=Count('id', filter=Q(status='ABSENT')), late=Count('id', filter=Q(status='LATE')),
+            leave=Count('id', filter=Q(status='LEAVE')),
+        )
+        total = counts['total']
 
         return Response({
             'records': records,
             'summary': {
                 'total_days': total,
-                'present': present,
-                'absent': qs.filter(status='ABSENT').count(),
-                'late': qs.filter(status='LATE').count(),
-                'leave': qs.filter(status='LEAVE').count(),
-                'rate': round(present / total * 100, 1) if total > 0 else 0,
+                'present': counts['present'],
+                'absent': counts['absent'],
+                'late': counts['late'],
+                'leave': counts['leave'],
+                # Leave counts as present, the same rule as the profile and the risk assessment.
+                'rate': round((counts['present'] + counts['leave']) / total * 100, 1) if total > 0 else 0,
             },
         })
 
@@ -1295,10 +1289,8 @@ class StudentFeesView(APIView):
         if not student:
             return Response({'error': 'No student profile linked.'}, status=404)
 
-        from finance.models import FeePayment
-        from finance.serializers import FeePaymentSerializer
-        payments = FeePayment.objects.filter(student=student).order_by('-year', '-month')
-        return Response(FeePaymentSerializer(payments, many=True).data)
+        from . import history
+        return Response(history.fee_rows(student))
 
 
 class StudentTimetableView(APIView):
@@ -1470,35 +1462,10 @@ class StudentResultsView(APIView):
         if not student:
             return Response({'error': 'No student profile linked.'}, status=404)
 
-        try:
-            from examinations.models import Exam, StudentMark
-            marks = StudentMark.objects.filter(
-                student=student,
-                exam_subject__exam__status=Exam.Status.PUBLISHED,
-            ).select_related(
-                'exam_subject', 'exam_subject__exam', 'exam_subject__subject',
-            ).order_by('-exam_subject__exam__start_date', 'exam_subject__subject__name')
+        from . import history
 
-            result = {}
-            for mark in marks:
-                exam = mark.exam_subject.exam
-                exam_key = str(exam.id)
-                if exam_key not in result:
-                    result[exam_key] = {
-                        'exam_name': exam.name,
-                        'exam_type': exam.exam_type.name if exam.exam_type else None,
-                        'subjects': [],
-                    }
-                result[exam_key]['subjects'].append({
-                    'subject': mark.exam_subject.subject.name,
-                    'marks_obtained': float(mark.marks_obtained) if mark.marks_obtained else None,
-                    'total_marks': float(mark.exam_subject.total_marks) if mark.exam_subject.total_marks else None,
-                    'is_absent': mark.is_absent,
-                })
-
-            return Response(list(result.values()))
-        except Exception:
-            return Response([])
+        # Published results at every branch the student has been at (earlier ones tagged).
+        return Response(history.portal_exam_results(student))
 
 
 class StudentAssignmentsView(APIView):

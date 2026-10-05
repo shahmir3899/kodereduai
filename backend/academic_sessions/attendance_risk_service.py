@@ -33,7 +33,7 @@ class AttendanceRiskService:
         self.academic_year_id = academic_year_id
 
     def get_at_risk_students(self, threshold: float = None, only_student_ids=None,
-                             include_unflagged: bool = False) -> dict:
+                             include_unflagged: bool = False, timelines=None) -> dict:
         """
         Analyze all active students and return those who are at risk or
         predicted to be at risk of falling below the attendance threshold.
@@ -49,6 +49,13 @@ class AttendanceRiskService:
 
         Excused days (a teacher-marked LEAVE, or an approved parent leave request)
         count as present, so taking leave never lowers the rate.
+
+        timelines ({student_id: segments} from students.timeline) lets a student who was
+        transferred in from another branch be judged on what really happened: their
+        earlier record's days at the earlier branch(es), inside this academic year's
+        dates, count as theirs, using that branch's own holidays and approved leave. The
+        rate, trend and absence streak then run across the transfer. Those rows are read
+        in place, never copied.
 
         threshold defaults to this school's own configured policy
         (School.get_attendance_risk_threshold) rather than a hardcoded 75 --
@@ -135,17 +142,21 @@ class AttendanceRiskService:
             academic_year_id=self.academic_year_id,
             student_id__in=student_ids,
         ).values_list('student_id', 'date', 'status')
+        # Off days are decided per record (this branch's calendar for its own rows).
+        counted_records = [
+            (sid, rec_date, rec_status) for sid, rec_date, rec_status in all_records
+            if student_map.get(sid) and not is_off_day(student_map[sid], rec_date)
+        ]
+        counted_records += self._earlier_branch_records(
+            timelines, student_map, year_start, year_end, leave_index,
+        )
 
         overall_stats = defaultdict(lambda: {'total_days': 0, 'present_days': 0})
         student_recent = defaultdict(list)
         student_dow = defaultdict(lambda: defaultdict(lambda: {'total': 0, 'absent': 0}))
         excused_leave_counts = defaultdict(int)
 
-        for sid, rec_date, rec_status in all_records:
-            student = student_map.get(sid)
-            if not student or is_off_day(student, rec_date):
-                continue
-
+        for sid, rec_date, rec_status in counted_records:
             # Excused: either a teacher marked the day LEAVE directly on the
             # attendance record, or the parent's leave request was approved.
             # Excused days count as present.
@@ -260,7 +271,47 @@ class AttendanceRiskService:
             'students': at_risk_students,
         }
 
-    def _build_off_day_index(self, date_from: date, date_to: date) -> dict:
+    def _earlier_branch_records(self, timelines, student_map, year_start, year_end, leave_index):
+        """[(current student id, date, status)] for the days a transferred-in student spent at
+        EARLIER branches inside this year's dates, with each of those branches' own off
+        days applied. Approved leave found there is merged into ``leave_index``."""
+        from attendance.models import AttendanceRecord
+        from django.db.models import Q
+        from students.models import Student
+
+        earlier = [
+            (primary_id, seg)
+            for primary_id, segments in (timelines or {}).items() if primary_id in student_map
+            for seg in segments if not seg.is_current
+        ]
+        if not earlier:
+            return []
+
+        by_old = {seg.student_id: primary_id for primary_id, seg in earlier}
+        class_of = dict(Student.objects.filter(id__in=list(by_old)).values_list('id', 'class_obj_id'))
+        query = Q()
+        for primary_id, seg in earlier:
+            lower = max(d for d in (seg.start, year_start) if d is not None)
+            query |= Q(student_id=seg.student_id, school_id=seg.school_id, date__gte=lower, date__lt=seg.end)
+
+        off_days = {}
+        for school_id in {seg.school_id for _, seg in earlier}:
+            off_days[school_id] = self._build_off_day_index(year_start, year_end, school_id=school_id, any_year=True)
+            old_ids = [seg.student_id for _, seg in earlier if seg.school_id == school_id]
+            for old_id, dates in self._build_leave_index(old_ids, year_start, year_end, school_id=school_id).items():
+                leave_index[by_old[old_id]].update(dates)
+
+        rows = []
+        for old_id, school_id, rec_date, rec_status in AttendanceRecord.objects.filter(query).values_list(
+            'student_id', 'school_id', 'date', 'status',
+        ):
+            index = off_days[school_id]
+            if rec_date.weekday() == 6 or rec_date in index['school'] or rec_date in index['classes'].get(class_of.get(old_id), ()):
+                continue
+            rows.append((by_old[old_id], rec_date, rec_status))
+        return rows
+
+    def _build_off_day_index(self, date_from: date, date_to: date, school_id=None, any_year=False) -> dict:
         """
         Expand active OFF_DAY calendar entries (affecting students) into date
         sets, split into school-wide and per-class. One query regardless of
@@ -275,14 +326,17 @@ class AttendanceRiskService:
             return {'school': school_dates, 'classes': class_dates}
 
         entries = SchoolCalendarEntry.objects.filter(
-            school_id=self.school_id,
-            academic_year_id=self.academic_year_id,
+            school_id=school_id or self.school_id,
             is_active=True,
             entry_kind=SchoolCalendarEntry.EntryKind.OFF_DAY,
             affects_students=True,
             start_date__lte=date_to,
             end_date__gte=date_from,
         ).prefetch_related('classes')
+        if not any_year:
+            # This branch's own calendar for this academic year. An earlier branch has its
+            # own year record, so its calendar is matched by dates instead (any_year).
+            entries = entries.filter(academic_year_id=self.academic_year_id)
 
         for entry in entries:
             start = max(entry.start_date, date_from)
@@ -299,7 +353,7 @@ class AttendanceRiskService:
 
         return {'school': school_dates, 'classes': class_dates}
 
-    def _build_leave_index(self, student_ids: list, date_from: date, date_to: date) -> dict:
+    def _build_leave_index(self, student_ids: list, date_from: date, date_to: date, school_id=None) -> dict:
         """
         Expand APPROVED ParentLeaveRequest ranges into a per-student set of
         excused dates. One query regardless of how many students/ranges exist.
@@ -312,7 +366,7 @@ class AttendanceRiskService:
             return leave_dates
 
         requests = ParentLeaveRequest.objects.filter(
-            school_id=self.school_id,
+            school_id=school_id or self.school_id,
             student_id__in=student_ids,
             status='APPROVED',
             start_date__lte=date_to,

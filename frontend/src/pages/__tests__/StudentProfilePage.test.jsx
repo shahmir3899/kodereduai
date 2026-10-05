@@ -376,6 +376,140 @@ describe('StudentProfilePage', () => {
     })
   })
 
+  // ─── Transferred student: earlier branch records ─────────────
+
+  describe('earlier branch records', () => {
+    const OLD = 'Branch Old'
+    const serve = (path, body) => server.use(http.get(`/api/students/5/${path}/`, () => HttpResponse.json(body)))
+    const openTab = async (name) => {
+      useStudentApi()
+      const user = await renderProfile()
+      await user.click(screen.getByRole('button', { name }))
+      return user
+    }
+
+    it('says on the Overview that the figures include the earlier branch', async () => {
+      useStudentApi()
+      serve('profile_summary', { has_earlier_branch_data: true, earlier_branches: [OLD], latest_exit: null, attendance_rate: 90 })
+      await renderProfile()
+
+      expect(await screen.findByRole('note')).toHaveTextContent(`Includes records from ${OLD}`)
+    })
+
+    it('shows no such note for an ordinary student', async () => {
+      useStudentApi()
+      serve('profile_summary', { has_earlier_branch_data: false, earlier_branches: [], latest_exit: null })
+      await renderProfile()
+
+      await screen.findByRole('button', { name: 'Attendance' })
+      await waitFor(() => expect(screen.queryByText('Loading summary...')).not.toBeInTheDocument())
+      expect(screen.queryByText(/Includes records from/)).not.toBeInTheDocument()
+    })
+
+    it('tags attendance months from the earlier branch', async () => {
+      serve('attendance_history', { months: [
+        { month: 'March 2026', present: 3, absent: 0, late: 0, total: 3, rate: 100, branch: null, read_only: false },
+        { month: 'February 2026', present: 8, absent: 2, late: 0, total: 10, rate: 80, branch: OLD, read_only: true },
+      ] })
+      await openTab('Attendance')
+
+      const rows = await screen.findAllByRole('row')
+      expect(within(rows.find((r) => r.textContent.includes('February 2026'))).getByTitle(`From ${OLD} (earlier branch, read-only)`)).toBeInTheDocument()
+      expect(within(rows.find((r) => r.textContent.includes('March 2026'))).queryByTitle(/earlier branch/)).not.toBeInTheDocument()
+    })
+
+    it('says "Joined from" instead of "Away" for the days before the student joined', async () => {
+      useStudentApi({ away_periods: [{ start: '2025-04-01', end: '2026-03-01', reason: 'Joined from Branch Old', joined_from_transfer: true }] })
+      serve('attendance_history', { months: [
+        { month: 'February 2026', present: 8, absent: 2, late: 0, total: 10, rate: 80, branch: OLD, read_only: true },
+      ] })
+      const user = await renderProfile()
+      await user.click(screen.getByRole('button', { name: 'Attendance' }))
+
+      const note = await screen.findByRole('note')
+      expect(note).toHaveTextContent(`from ${OLD}`)
+      expect(screen.queryByText('Away from school')).not.toBeInTheDocument()
+    })
+
+    it('still shows real time away as Away', async () => {
+      useStudentApi({ away_periods: [{ start: '2026-05-01', end: '2026-05-09', reason: 'Visited family', joined_from_transfer: false }] })
+      serve('attendance_history', { months: [
+        { month: 'May 2026', present: 8, absent: 0, late: 0, total: 8, rate: 100, branch: null, read_only: false },
+      ] })
+      const user = await renderProfile()
+      await user.click(screen.getByRole('button', { name: 'Attendance' }))
+
+      expect(await screen.findByText('Away from school')).toBeInTheDocument()
+    })
+
+    it('marks fee rows whose balance moved to the new branch', async () => {
+      serve('fee_ledger', [
+        { id: 1, month: 2, year: 2026, fee_type: 'MONTHLY', amount_due: '1500', amount_paid: '0', status: 'UNPAID', branch: OLD, read_only: true, handed_over: true, carried: false },
+        { id: 2, month: 2, year: 2026, fee_type: 'MONTHLY', amount_due: '1500', amount_paid: '0', status: 'UNPAID', branch: null, read_only: false, handed_over: false, carried: true },
+      ])
+      await openTab('Fees')
+
+      expect(await screen.findByText('Balance moved to the new branch')).toBeInTheDocument()
+      expect(screen.getByText('Carried from the earlier branch')).toBeInTheDocument()
+      expect(screen.getByTitle(`From ${OLD} (earlier branch, read-only)`)).toBeInTheDocument()
+    })
+
+    it('tags exams of the earlier branch', async () => {
+      serve('exam_results', [
+        { exam_id: 2, exam_name: 'New Exam', exam_date: '2026-03-20', average_percentage: 90, branch: null, read_only: false,
+          subjects: [{ subject: 'Math', marks_obtained: 90, total_marks: 100, percentage: 90, grade: 'A', is_absent: false }] },
+        { exam_id: 1, exam_name: 'Old Exam', exam_date: '2026-02-10', average_percentage: 70, branch: OLD, read_only: true,
+          subjects: [{ subject: 'Math', marks_obtained: 70, total_marks: 100, percentage: 70, grade: 'B', is_absent: false }] },
+      ])
+      await openTab('Academics')
+
+      const oldHeader = (await screen.findByText('Old Exam')).closest('div')
+      expect(within(oldHeader).getByTitle(`From ${OLD} (earlier branch, read-only)`)).toBeInTheDocument()
+      expect(within(screen.getByText('New Exam').closest('div')).queryByTitle(/earlier branch/)).not.toBeInTheDocument()
+    })
+
+    it('lists enrollments of both branches with the earlier one tagged', async () => {
+      serve('enrollment_history', [
+        { academic_year_name: '2026-27', class_name: 'Class 3', section: '', roll_number: '2', status: 'ACTIVE', branch: null },
+        { academic_year_name: '2026-27', class_name: 'Class 3', section: '', roll_number: '12', status: 'TRANSFERRED', branch: OLD },
+      ])
+      await openTab('History')
+
+      expect(await screen.findByTitle(`From ${OLD} (earlier branch, read-only)`)).toBeInTheDocument()
+      expect(screen.getAllByText('2026-27')).toHaveLength(2)
+    })
+
+    it('offers no Delete on a document from the earlier branch', async () => {
+      serve('documents', [
+        { id: 1, title: 'Birth certificate', document_type: 'BIRTH_CERT', created_at: '2026-01-02T00:00:00Z', file_url: 'https://x/y', branch: OLD, read_only: true },
+        { id: 2, title: 'Admission form', document_type: 'OTHER', created_at: '2026-03-02T00:00:00Z', file_url: 'https://x/z', branch: null, read_only: false },
+      ])
+      await openTab('Documents')
+
+      const oldRow = (await screen.findByText('Birth certificate')).closest('div.flex')
+      const newRow = screen.getByText('Admission form').closest('div.flex')
+      expect(within(oldRow).queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument()
+      expect(within(newRow).getByRole('button', { name: 'Delete' })).toBeInTheDocument()
+    })
+
+    it('shows earlier-branch remarks read-only under the editable assessment', async () => {
+      mockYear = { id: 1, name: '2025-2026' }
+      useStudentApi()
+      serve('profile_summary', { has_earlier_branch_data: true, earlier_branches: [OLD], latest_exit: null })
+      serve('earlier_assessments', [
+        { id: 1, academic_year_name: '2025-26', month: 2, ratings: { listening: 4 }, teacher_remark: 'Keen learner', principal_remark: 'Well done', branch: OLD, read_only: true },
+      ])
+      server.use(http.get('/api/examinations/student-term-assessment/', () => HttpResponse.json({})))
+      const user = await renderProfile()
+      await user.click(screen.getByRole('button', { name: 'Assessment' }))
+
+      const earlier = await screen.findByTestId('earlier-assessments')
+      expect(earlier).toHaveTextContent('Keen learner')
+      expect(earlier).toHaveTextContent('Listening: Very Good')
+      expect(within(earlier).queryByRole('textbox')).not.toBeInTheDocument()
+    })
+  })
+
   // ─── Re-admission and time away ──────────────────────────────
 
   describe('re-admission', () => {

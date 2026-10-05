@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../contexts/AuthContext'
 import { useAcademicYear } from '../contexts/AcademicYearContext'
@@ -39,7 +40,8 @@ import ConvertAccountModal from './students/components/ConvertAccountModal'
 import BulkConvertModal from './students/components/BulkConvertModal'
 
 export default function StudentsPage() {
-  const { user, activeSchool } = useAuth()
+  const { user, activeSchool, switchSchool } = useAuth()
+  const navigate = useNavigate()
   const { activeAcademicYear } = useAcademicYear()
   const queryClient = useQueryClient()
   const { showError, showSuccess, showWarning } = useToast()
@@ -55,7 +57,8 @@ export default function StudentsPage() {
   const [selectedClassIds, setSelectedClassIds] = useState([])
   const [search, setSearch] = useState('')
   const debouncedSearch = useDebounce(search, 300)
-  const [showInactiveRecords, setShowInactiveRecords] = useState(false)
+  // 'current' (enrolled now), 'left' (withdrawn/transferred/graduated this year) or 'all'.
+  const [statusScope, setStatusScope] = useState('current')
   const [showModal, setShowModal] = useState(false)
   const [editingStudent, setEditingStudent] = useState(null)
   const [reclassifyStudent, setReclassifyStudent] = useState(null)
@@ -100,11 +103,12 @@ export default function StudentsPage() {
 
   // Fetch ALL students once for this school (client-side filtering)
   const { data: studentsData, isLoading } = useQuery({
-    queryKey: ['students', selectedSchoolId, activeAcademicYear?.id],
+    queryKey: ['students', selectedSchoolId, activeAcademicYear?.id, statusScope],
     queryFn: () => studentsApi.getStudents({
       school_id: selectedSchoolId,
       page_size: 9999,
       ...(activeAcademicYear?.id && { academic_year: activeAcademicYear.id }),
+      ...(statusScope !== 'current' && { status_scope: statusScope }),
     }),
     enabled: !!selectedSchoolId,
   })
@@ -369,10 +373,11 @@ export default function StudentsPage() {
       scope: classSelectorScope,
       sessionClasses,
       search: debouncedSearch,
-      showInactive: showInactiveRecords,
+      // The server already decides who is listed; only the Current view hides switched-off records.
+      showInactive: statusScope !== 'current',
     })
     return sortStudents(filtered, { selectedClassIds, resolvedSelectedClasses, classGradeMap })
-  }, [allStudents, resolvedSelectedClasses, debouncedSearch, classGradeMap, classSelectorScope, selectedClassIds, sessionClasses, showInactiveRecords])
+  }, [allStudents, resolvedSelectedClasses, debouncedSearch, classGradeMap, classSelectorScope, selectedClassIds, sessionClasses, statusScope])
 
   // Students without accounts are the ones bulk "Create Accounts" applies to
   const studentsWithoutAccounts = useMemo(() => students.filter((s) => !s.has_user_account), [students])
@@ -380,6 +385,18 @@ export default function StudentsPage() {
   const selectedIds = selection.selectedIds
 
   const stats = useMemo(() => computeStats(students), [students])
+
+  // A transferred student's new record lives at another branch: switch to it, then open it.
+  const openTransferred = async (student) => {
+    const target = student.transferred_to
+    if (!target?.student_id) return
+    try {
+      await switchSchool(target.school_id)
+      navigate(`/students/${target.student_id}`)
+    } catch {
+      showError(`Could not open ${target.school_name}.`)
+    }
+  }
 
   const classChipData = useMemo(
     () => buildClassChipData({
@@ -502,8 +519,8 @@ export default function StudentsPage() {
         }}
         search={search}
         onSearchChange={setSearch}
-        showInactive={showInactiveRecords}
-        onShowInactiveChange={setShowInactiveRecords}
+        statusScope={statusScope}
+        onStatusScopeChange={setStatusScope}
         classChipData={classChipData}
         selectedClassIds={selectedClassIds}
         onClearClasses={() => setSelectedClassIds([])}
@@ -535,6 +552,7 @@ export default function StudentsPage() {
           onEdit={openEditModal}
           onConvert={setConvertStudent}
           onDelete={setDeleteConfirm}
+          onOpenTransferred={openTransferred}
         />
       )}
 

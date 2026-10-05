@@ -146,6 +146,13 @@ export default function StudentProfilePage() {
 
   const student = studentData?.data
   const summary = summaryData?.data
+
+  // Skills/behaviour ratings and remarks from earlier branches (transferred students only).
+  const { data: earlierAssessmentsData } = useQuery({
+    queryKey: ['studentEarlierAssessments', id],
+    queryFn: () => studentsApi.getEarlierAssessments(id),
+    enabled: !!summary?.has_earlier_branch_data && tab === 'Assessment',
+  })
   const ai = aiData?.data
 
   const handleOpenReclassifyModal = () => {
@@ -277,6 +284,7 @@ export default function StudentProfilePage() {
               month={assessmentMonth}
               onMonthChange={setAssessmentMonth}
               data={assessmentData?.data}
+              earlier={earlierAssessmentsData?.data}
               refetch={refetchAssessment}
               isLoading={assessmentLoading}
               error={assessmentIsError ? assessmentError : null}

@@ -74,7 +74,7 @@ def student_pending_fees(student):
     return {'total': sum((i['balance'] for i in items), ZERO), 'items': items}
 
 
-def student_fee_summary(student):
+def student_fee_summary(student, segments=None):
     """Headline fee figures for one student, consistent with each other.
 
     ``total_paid`` is money actually received (a plain sum of amount_paid: it never
@@ -82,7 +82,16 @@ def student_fee_summary(student):
     ``total_due`` is therefore what has been charged: paid plus still pending. Summing
     amount_due over every row instead would count a carried-forward monthly balance
     again in each later month.
+
+    For a student transferred between branches (``segments`` from students.timeline), what
+    was PAID counts at every branch, while what is still OWED is only the current
+    branch's: a carried balance was handed over, so it is owed once, to the new branch.
     """
     pending = student_pending_fees(student)['total']
-    paid = FeePayment.objects.filter(student=student).aggregate(total=Sum('amount_paid'))['total'] or ZERO
+    if segments is not None and len(segments) > 1:
+        from students.timeline import fees_q
+        rows = FeePayment.objects.filter(fees_q(segments))
+    else:
+        rows = FeePayment.objects.filter(student=student)
+    paid = rows.aggregate(total=Sum('amount_paid'))['total'] or ZERO
     return {'total_paid': paid, 'pending': pending, 'total_due': paid + pending}

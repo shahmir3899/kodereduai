@@ -329,16 +329,16 @@ class TestAwayPeriods:
         leave(api, ctx)
         readmit(api, ctx)
         detail = api.get(f"/api/students/{ctx['student'].id}/", ctx['tokens']['admin'], ctx['SID_A']).json()
-        assert detail['away_periods'] == [{'start': '2026-03-01', 'end': '2026-03-20', 'reason': 'Returned home'}]
+        assert detail['away_periods'] == [{'start': '2026-03-01', 'end': '2026-03-20', 'reason': 'Returned home', 'joined_from_transfer': False}]
         listing = api.get('/api/students/?page_size=50', ctx['tokens']['admin'], ctx['SID_A']).json()
         rows = {r['id']: r for r in listing['results']}
-        assert rows[ctx['student'].id]['away_periods'] == [{'start': '2026-03-01', 'end': '2026-03-20', 'reason': 'Returned home'}]
+        assert rows[ctx['student'].id]['away_periods'] == [{'start': '2026-03-01', 'end': '2026-03-20', 'reason': 'Returned home', 'joined_from_transfer': False}]
         assert rows[ctx['students'][1].id]['away_periods'] == []
 
     def test_an_open_break_shows_with_no_end(self, api, ctx):
         leave(api, ctx)
         detail = api.get(f"/api/students/{ctx['student'].id}/", ctx['tokens']['admin'], ctx['SID_A']).json()
-        assert detail['away_periods'] == [{'start': '2026-03-01', 'end': None, 'reason': ''}]
+        assert detail['away_periods'] == [{'start': '2026-03-01', 'end': None, 'reason': '', 'joined_from_transfer': False}]
 
     def test_the_list_does_not_query_breaks_once_per_student(self, api, ctx, django_assert_max_num_queries):
         leave(api, ctx)

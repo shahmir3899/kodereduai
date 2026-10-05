@@ -78,6 +78,11 @@ function WizardBody({ student, prefill = null, onClose }) {
     onAutoFill: autoFillRoll,
   })
 
+  // A transfer cannot continue until the new branch, class and roll are all chosen.
+  const transferReady = !isTransfer || (
+    !!form.destination_school && !!form.destination_session_class && !!form.destination_roll_number.trim()
+  )
+
   const set = (name, value) => {
     setForm((f) => ({
       ...f,
@@ -497,7 +502,7 @@ function WizardBody({ student, prefill = null, onClose }) {
                 )}
                 {step === 0 && (
                   <button
-                    type="button" onClick={handleContinue} disabled={busy || (conflict && !form.remove_records_after_leaving)}
+                    type="button" onClick={handleContinue} disabled={busy || (conflict && !form.remove_records_after_leaving) || !transferReady}
                     className="px-4 py-2 bg-primary-600 text-white rounded-lg text-sm hover:bg-primary-700 disabled:opacity-50"
                   >
                     {busy ? 'Saving...' : 'Continue'}

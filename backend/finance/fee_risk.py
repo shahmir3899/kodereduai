@@ -40,35 +40,67 @@ def _level(months_owed):
     return None
 
 
-def fee_risk_for_students(student_ids):
+def fee_risk_for_students(student_ids, timelines=None):
     """{student_id: info} for every id given (students with no fee rows get zeros).
 
     info: pending (all fee types), monthly_pending, monthly_fee, months_owed,
     months_overdue, level ('HIGH' | 'MEDIUM' | None).
     One query however many students.
+
+    timelines ({student_id: segments} from students.timeline): for a student transferred
+    in from another branch, what is OWED is still only this branch's rows (the balance
+    was carried here), but two figures use what really happened:
+      * months_overdue runs across the earlier branch's months too (the carried row is
+        the same debt as the earlier branch's last row, so it is not counted twice);
+      * when the carried row has no monthly fee of its own, the monthly fee is the one
+        the earlier branch last billed, so "months owed" means what it should.
     """
     ids = list(student_ids)
+    earlier_of = {}   # earlier record id -> the current record it belongs to
+    for primary_id, segments in (timelines or {}).items():
+        if primary_id not in ids:
+            continue
+        for seg in segments:
+            if not seg.is_current:
+                earlier_of[seg.student_id] = primary_id
+
     rows_by_student = defaultdict(list)
-    for row in FeePayment.objects.filter(student_id__in=ids).order_by(
+    for row in FeePayment.objects.filter(student_id__in=ids + list(earlier_of)).order_by(
         'student_id', 'monthly_category_id', 'year', 'month', 'id',
     ).values(
-        'student_id', 'fee_type', 'monthly_category_id', 'year', 'month',
+        'id', 'student_id', 'fee_type', 'monthly_category_id', 'monthly_category__name', 'year', 'month',
         'amount_due', 'amount_paid', 'previous_balance', 'base_monthly_fee', 'handed_over_to_exit_id',
+        'carried_from_exit_id',
     ):
-        rows_by_student[row['student_id']].append(row)
+        row['earlier'] = row['student_id'] in earlier_of
+        rows_by_student[earlier_of.get(row['student_id'], row['student_id'])].append(row)
 
     result = {}
     for sid in ids:
+        rows = rows_by_student.get(sid, [])
+        has_history = any(r['earlier'] for r in rows)
+        if has_history:
+            # Categories have different ids at each branch: line them up by name, and walk
+            # the months in order across both branches.
+            rows = sorted(rows, key=lambda r: (r['year'], r['month'], r['id']))
+
         latest_monthly = {}   # category -> latest row (rows are ordered, so the last write wins)
         unpaid_run = {}       # category -> trailing months with nothing paid
+        earlier_fee = {}      # category name -> the earlier branch's last monthly base fee
         other_pending = ZERO
-        for row in rows_by_student.get(sid, []):
+        for row in rows:
             if row['fee_type'] == 'MONTHLY':
-                key = row['monthly_category_id']
-                latest_monthly[key] = row
+                name = (row['monthly_category__name'] or '').lower()
+                key = name if has_history else row['monthly_category_id']
+                if row['earlier']:
+                    earlier_fee[name] = max(_base_fee(row), ZERO)
+                else:
+                    latest_monthly[key] = row
+                if row['carried_from_exit_id']:
+                    continue          # the same debt as the earlier branch's last row
                 nothing_paid = (row['amount_paid'] or ZERO) == 0 and (row['amount_due'] or ZERO) > 0
                 unpaid_run[key] = unpaid_run.get(key, 0) + 1 if nothing_paid else 0
-            elif not row['handed_over_to_exit_id']:
+            elif not row['handed_over_to_exit_id'] and not row['earlier']:
                 balance = (row['amount_due'] or ZERO) - (row['amount_paid'] or ZERO)
                 if balance > ZERO:
                     other_pending += balance
@@ -90,6 +122,13 @@ def fee_risk_for_students(student_ids):
                 (max(_base_fee(r), ZERO) for r in latest_monthly.values() if (r['year'], r['month']) == newest),
                 ZERO,
             )
+        if monthly_fee <= ZERO and earlier_fee:
+            # A carried balance has no monthly fee of its own yet: use what the earlier
+            # branch last billed for the same charges.
+            monthly_fee = sum(
+                (earlier_fee.get((r['monthly_category__name'] or '').lower(), ZERO) for r in latest_monthly.values()),
+                ZERO,
+            )
 
         months_owed = (monthly_pending / monthly_fee) if monthly_fee > ZERO else ZERO
         pending = monthly_pending + other_pending
@@ -104,5 +143,6 @@ def fee_risk_for_students(student_ids):
     return result
 
 
-def student_fee_risk(student_id):
-    return fee_risk_for_students([student_id])[student_id]
+def student_fee_risk(student_id, segments=None):
+    timelines = {student_id: segments} if segments else None
+    return fee_risk_for_students([student_id], timelines)[student_id]

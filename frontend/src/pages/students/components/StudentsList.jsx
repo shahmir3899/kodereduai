@@ -5,8 +5,39 @@ import WhatsAppTick from '../../../components/WhatsAppTick'
 import { RecordCard, CardGrid, ViewToggle } from '../../../components/cards'
 import { getLifecycleLabel, getLifecycleStyle } from '../../../utils/studentLifecycle'
 import StudentAvatar from './StudentAvatar'
+import { formatDate } from '../profile/profileUtils'
+import { hasLeft } from '../studentListUtils'
 
 const TH = 'px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase'
+
+// When a student left, and for a transfer where they went (with a way to open the new
+// record when the viewer has access to that branch).
+function LeftNote({ student, onOpenTransferred }) {
+  if (!hasLeft(student)) return null
+  const target = student.transferred_to
+  if (!student.left_date && !target) return null
+  return (
+    <span className="block text-xs text-gray-500 mt-1" data-testid={`left-note-${student.id}`}>
+      {student.left_date && `Left ${formatDate(student.left_date)}`}
+      {target && (
+        <>
+          {student.left_date ? ' · ' : ''}to {target.school_name}
+          {target.student_id && (
+            <>
+              {' · '}
+              <button
+                type="button" onClick={() => onOpenTransferred(student)}
+                className="font-medium text-primary-600 hover:text-primary-800"
+              >
+                Open there
+              </button>
+            </>
+          )}
+        </>
+      )}
+    </span>
+  )
+}
 
 // Results card: count + card/table toggle, then skeleton, empty state, cards or table.
 export default function StudentsList({
@@ -24,6 +55,7 @@ export default function StudentsList({
   onEdit,
   onConvert,
   onDelete,
+  onOpenTransferred,
 }) {
   return (
     <div className="card">
@@ -88,6 +120,9 @@ export default function StudentsList({
                 </span>
               }
               fields={[
+                ...(hasLeft(student) && (student.left_date || student.transferred_to)
+                  ? [{ label: 'Left', value: <LeftNote student={student} onOpenTransferred={onOpenTransferred} /> }]
+                  : []),
                 {
                   label: 'Parent phone',
                   value: student.parent_phone
@@ -170,6 +205,7 @@ export default function StudentsList({
                     <span className={`px-2 py-1 rounded-full text-xs font-medium ${getLifecycleStyle(student.status)}`}>
                       {getLifecycleLabel(student.status)}
                     </span>
+                    <LeftNote student={student} onOpenTransferred={onOpenTransferred} />
                   </td>
                   <td className="px-4 py-3 text-right whitespace-nowrap">
                     <Link

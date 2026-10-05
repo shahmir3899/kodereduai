@@ -6,11 +6,11 @@ export default function StudentStats({ stats }) {
         <p className="text-2xl font-bold text-gray-900 mt-1">{stats.total}</p>
       </div>
       <div className="card !p-4">
-        <p className="text-xs font-medium text-gray-500 uppercase">Active</p>
+        <p className="text-xs font-medium text-gray-500 uppercase">Current</p>
         <p className="text-2xl font-bold text-green-600 mt-1">{stats.active}</p>
       </div>
       <div className="card !p-4">
-        <p className="text-xs font-medium text-gray-500 uppercase">Inactive</p>
+        <p className="text-xs font-medium text-gray-500 uppercase">Left</p>
         <p className="text-2xl font-bold text-gray-400 mt-1">{stats.inactive}</p>
       </div>
       <div className="card !p-4">

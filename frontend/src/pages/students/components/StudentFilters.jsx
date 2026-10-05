@@ -1,4 +1,25 @@
-// Filter card: school picker (super admin), search, inactive toggle, class chips, gender summary.
+// Filter card: school picker (super admin), search, Current/Left/All, class chips, gender summary.
+// Current = enrolled now. Left = withdrawn + transferred + graduated together; each of
+// those, and the still-enrolled special states, also has its own filter. All = everyone.
+const STATUS_SCOPES = [
+  ['current', 'Current'],
+  ['left', 'Left'],
+  ['withdrawn', 'Withdrawn'],
+  ['transferred', 'Transferred'],
+  ['graduated', 'Graduated'],
+  ['suspended', 'Suspended'],
+  ['repeat', 'Repeat'],
+  ['all', 'All'],
+]
+const SCOPE_HINTS = {
+  left: 'Withdrawn, transferred and graduated this academic year',
+  withdrawn: 'Students who withdrew this academic year',
+  transferred: 'Students transferred to another branch this academic year',
+  graduated: 'Students who graduated this academic year',
+  suspended: 'Enrolled students who are currently suspended',
+  repeat: 'Students repeating the year',
+}
+
 export default function StudentFilters({
   isSuperAdmin,
   schools,
@@ -6,8 +27,8 @@ export default function StudentFilters({
   onSchoolChange,
   search,
   onSearchChange,
-  showInactive,
-  onShowInactiveChange,
+  statusScope,
+  onStatusScopeChange,
   classChipData,
   selectedClassIds,
   onClearClasses,
@@ -50,15 +71,26 @@ export default function StudentFilters({
       </div>
 
       {selectedSchoolId && (
-        <label className="flex items-center gap-2 mt-3 text-sm text-gray-600 cursor-pointer w-fit">
-          <input
-            type="checkbox"
-            checked={showInactive}
-            onChange={(e) => onShowInactiveChange(e.target.checked)}
-            className="rounded"
-          />
-          Show inactive records
-        </label>
+        <div className="mt-3 flex flex-wrap items-center gap-2" role="radiogroup" aria-label="Show students">
+          <span className="text-sm text-gray-600">Show</span>
+          {STATUS_SCOPES.map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              role="radio"
+              aria-checked={statusScope === value}
+              onClick={() => onStatusScopeChange(value)}
+              className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                statusScope === value ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+          {SCOPE_HINTS[statusScope] && (
+            <span className="w-full text-xs text-gray-500">{SCOPE_HINTS[statusScope]}</span>
+          )}
+        </div>
       )}
 
       {/* Class chips: always the full list; 0-count chips are dimmed */}

@@ -145,10 +145,17 @@ describe('sortStudents', () => {
 })
 
 describe('computeStats / summarizeByGender', () => {
-  it('counts active, inactive and classes', () => {
+  it('counts current, left and classes', () => {
     const stats = computeStats([s({}), s({ id: 2, class_name: 'Class 2' }), s({ id: 3, is_active: false, class_name: null })])
     expect(stats).toMatchObject({ total: 3, active: 2, inactive: 1 })
     expect(Object.keys(stats.byClass).sort()).toEqual(['Class 1', 'Class 2', 'Unassigned'])
+  })
+
+  it('counts withdrawn, transferred and graduated students as left even though their record is still on', () => {
+    const stats = computeStats([
+      s({ status: 'ACTIVE' }), s({ id: 2, status: 'WITHDRAWN' }), s({ id: 3, status: 'TRANSFERRED' }), s({ id: 4, status: 'GRADUATED' }),
+    ])
+    expect(stats).toMatchObject({ total: 4, active: 1, inactive: 3 })
   })
 
   it('buckets genders from codes and words', () => {

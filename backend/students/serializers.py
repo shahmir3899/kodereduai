@@ -69,13 +69,14 @@ class StudentSerializer(serializers.ModelSerializer):
     status = serializers.SerializerMethodField()
     left_date = serializers.SerializerMethodField()
     away_periods = serializers.SerializerMethodField()
+    transferred_to = serializers.SerializerMethodField()
 
     class Meta:
         model = Student
         fields = [
             'id', 'school', 'school_name',
             'class_obj', 'class_name', 'session_class_obj',
-            'roll_number', 'name', 'left_date', 'away_periods',
+            'roll_number', 'name', 'left_date', 'away_periods', 'transferred_to',
             'admission_number', 'admission_date', 'date_of_birth',
             'gender', 'blood_group', 'address', 'previous_school', 'photo_url',
             'parent_phone', 'parent_name',
@@ -167,9 +168,34 @@ class StudentSerializer(serializers.ModelSerializer):
                 'start': b.start_date.isoformat(),
                 'end': b.end_date.isoformat() if b.end_date else None,
                 'reason': b.reason,
+                # Days before a transferred-in student joined: not "away", just at an earlier branch.
+                'joined_from_transfer': bool(b.exit_id and b.exit.destination_student_id == obj.id),
             }
             for b in sorted(obj.enrollment_breaks.all(), key=lambda b: b.start_date)
         ]
+
+    def get_transferred_to(self, obj):
+        """Where a transferred student went: the branch name, and the new record's id
+        only when the viewer can open that branch (None otherwise). Lists prefetch
+        transferred_to__school, so this costs no extra query per row."""
+        if obj.status != Student.Status.TRANSFERRED:
+            return None
+        target = next(iter(obj.transferred_to.all()), None)
+        if target is None:
+            return None
+        from core.mixins import ensure_tenant_schools
+
+        request = self.context.get('request')
+        user = getattr(request, 'user', None)
+        allowed = bool(user) and (
+            getattr(user, 'is_super_admin', False)
+            or target.school_id in (ensure_tenant_schools(request) or [])
+        )
+        return {
+            'school_name': target.school.name,
+            'student_id': target.id if allowed else None,
+            'school_id': target.school_id if allowed else None,
+        }
 
     def get_status(self, obj):
         """Return enrollment status for academic-year scope, else current snapshot status."""

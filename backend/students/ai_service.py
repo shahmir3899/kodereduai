@@ -69,17 +69,28 @@ class Student360Service:
             'insufficient_data': False,
         }
 
-    def _weakest_subject(self, academic_year_id):
+    def _weakest_subject(self, academic_year_id, segments=None):
         """Subject with the lowest average percentage this year (marks are out of
-        different totals per exam, so raw marks cannot be compared)."""
+        different totals per exam, so raw marks cannot be compared). For a transferred
+        student the earlier branch's exams dated inside this year count too."""
         from examinations.models import StudentMark
 
         pcts = defaultdict(list)
-        marks = StudentMark.objects.filter(
-            student_id=self.student_id, is_absent=False, marks_obtained__isnull=False,
-            exam_subject__exam__academic_year_id=academic_year_id,
-            exam_subject__total_marks__gt=0,
-        ).select_related('exam_subject__subject')
+        if segments is not None and len(segments) > 1:
+            from academic_sessions.models import AcademicYear
+            from students.timeline import marks_q
+
+            year = AcademicYear.objects.filter(pk=academic_year_id).only('start_date', 'end_date').first()
+            marks = StudentMark.objects.filter(
+                marks_q(segments), is_absent=False, marks_obtained__isnull=False, exam_subject__total_marks__gt=0,
+                exam_subject__exam__start_date__gte=year.start_date, exam_subject__exam__start_date__lte=year.end_date,
+            ).select_related('exam_subject__subject')
+        else:
+            marks = StudentMark.objects.filter(
+                student_id=self.student_id, is_absent=False, marks_obtained__isnull=False,
+                exam_subject__exam__academic_year_id=academic_year_id,
+                exam_subject__total_marks__gt=0,
+            ).select_related('exam_subject__subject')
         for m in marks:
             pcts[m.exam_subject.subject.name].append(
                 float(m.marks_obtained) / float(m.exam_subject.total_marks) * 100
@@ -88,7 +99,7 @@ class Student360Service:
             return None
         return min(pcts.items(), key=lambda kv: sum(kv[1]) / len(kv[1]))[0]
 
-    def _academic_section(self, entry, academic_year_id):
+    def _academic_section(self, entry, academic_year_id, segments=None):
         if not entry or entry.get('insufficient_data'):
             entry = entry or {}
             return {
@@ -102,21 +113,20 @@ class Student360Service:
         return {
             'avg_score': entry['current_average'],        # percentage, last exam
             'trend': entry['trend'],
-            'weakest': self._weakest_subject(academic_year_id),
+            'weakest': self._weakest_subject(academic_year_id, segments),
             'risk': entry['severity'] or 'LOW',
             'exams_recorded': entry['exams_recorded'],
             'insufficient_data': False,
         }
 
-    def _financial_section(self, fee):
+    def _financial_section(self, fee, student, segments):
         from finance.models import FeePayment
         from finance.student_balance import student_fee_summary
-        from students.models import Student
 
-        student = Student.objects.get(pk=self.student_id)
-        summary = student_fee_summary(student)
+        summary = student_fee_summary(student, segments)
         due, paid = summary['total_due'], summary['total_paid']
-        has_history = FeePayment.objects.filter(student_id=self.student_id).exists()
+        from students.timeline import fees_q
+        has_history = FeePayment.objects.filter(fees_q(segments)).exists()
         return {
             'paid_rate': round(float(paid) / float(due) * 100, 1) if due > 0 else None,
             'outstanding': float(summary['pending']),
@@ -129,7 +139,7 @@ class Student360Service:
     # ── Summary text ─────────────────────────────────────────────────────────
 
     @staticmethod
-    def _rule_based_summary(attendance, academic, financial, overall_risk):
+    def _rule_based_summary(attendance, academic, financial, overall_risk, earlier=()):
         parts = []
         if attendance['insufficient_data']:
             parts.append("Not enough attendance data to assess yet")
@@ -146,15 +156,18 @@ class Student360Service:
             )
         if not parts:
             parts.append("Student is performing well across all areas")
-        return '. '.join(parts) + '.'
+        text = '. '.join(parts) + '.'
+        if earlier:
+            text += f" (Includes records from {', '.join(earlier)}.)"
+        return text
 
-    def _summary(self, attendance, academic, financial, overall_risk):
+    def _summary(self, attendance, academic, financial, overall_risk, earlier=()):
         """LLM summary, cached per student per day. The key also carries a hash of the
         facts it was written from (and whether fees were included), so a changed figure
         gets a fresh summary and a teacher's fee-free text is never served to an admin
         (or the reverse). Only LLM answers are cached; the rule-based fallback is cheap
         and a transient LLM failure must not stick for the whole day."""
-        facts = f"{attendance}|{academic}|{financial}|{overall_risk}"
+        facts = f"{attendance}|{academic}|{financial}|{overall_risk}|{list(earlier)}"
         digest = hashlib.sha1(facts.encode()).hexdigest()[:12]
         key = (f"student360:summary:{self.school_id}:{self.student_id}:{date.today().isoformat()}:"
                f"{'fees' if financial else 'nofees'}:{digest}")
@@ -186,6 +199,8 @@ class Student360Service:
                     f"- Fees: PKR {financial['outstanding']:,.0f} outstanding "
                     f"({financial['months_owed']} months of fees owed)"
                 )
+            if earlier:
+                lines.append(f"- Note: this includes records from the student's earlier branch ({', '.join(earlier)})")
             prompt = (
                 "Generate a brief 2-3 sentence student assessment summary based on:\n"
                 + "\n".join(lines)
@@ -207,7 +222,7 @@ class Student360Service:
             return text
         except Exception as e:
             logger.info(f"LLM summary fallback: {e}")
-            return self._rule_based_summary(attendance, academic, financial, overall_risk)
+            return self._rule_based_summary(attendance, academic, financial, overall_risk, earlier)
 
     # ── Entry point ──────────────────────────────────────────────────────────
 
@@ -228,21 +243,25 @@ class Student360Service:
         from academic_sessions.leaving import departed_in_year
         from academic_sessions.student_risk_score_service import StudentRiskScoreService
         from academic_sessions.utils import resolve_current_academic_year_id
+        from students.models import Student
+        from students.timeline import student_timeline
 
         year_id = resolve_current_academic_year_id(self.school_id)
+        student = Student.objects.select_related('school').get(pk=self.student_id)
+        segments = student_timeline(student)
 
         departed = departed_in_year(self.school_id, [self.student_id], year_id).get(self.student_id)
         if departed:
             return self._left_school(*departed)
 
         result = StudentRiskScoreService(self.school_id, year_id).score_student(
-            self.student_id, include_fees=include_fees,
+            self.student_id, include_fees=include_fees, student=student,
         ) if year_id else {'composite_score': 10.0, 'severity': 'LOW',
                            'attendance': None, 'academic': None, 'fee': None}
 
         attendance = self._attendance_section(result['attendance'])
-        academic = self._academic_section(result['academic'], year_id)
-        financial = self._financial_section(result['fee']) if include_fees and result['fee'] else None
+        academic = self._academic_section(result['academic'], year_id, segments)
+        financial = self._financial_section(result['fee'], student, segments) if include_fees and result['fee'] else None
 
         overall_risk, risk_score = result['severity'], result['composite_score']
 
@@ -262,9 +281,13 @@ class Student360Service:
             'overall_risk': overall_risk,
             'risk_score': risk_score,
             'fees_hidden': not include_fees,
+            'earlier_branches': [s.school_name for s in segments if not s.is_current],
             'attendance': attendance,
             'academic': academic,
-            'ai_summary': self._summary(attendance, academic, financial, overall_risk),
+            'ai_summary': self._summary(
+                attendance, academic, financial, overall_risk,
+                [s.school_name for s in segments if not s.is_current],
+            ),
             'recommendations': recommendations,
         }
         if include_fees:

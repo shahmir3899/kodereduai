@@ -208,23 +208,24 @@ class StudyHelperService:
         except Exception:
             pass
 
-        # Weak subjects (lowest marks from recent exams)
+        # Weak subjects: the student's real results at every branch they have been at.
+        # (percentage is a Python property, not a column, so it cannot be averaged in the
+        # query; the old query raised and was swallowed, so this section never appeared.)
         try:
-            from examinations.models import StudentMark
-            from django.db.models import Avg
-            subject_avgs = StudentMark.objects.filter(
-                school=self.school, student=student,
-            ).exclude(
-                is_absent=True
-            ).values(
-                'exam_subject__subject__name'
-            ).annotate(
-                avg_pct=Avg('percentage')
-            ).order_by('avg_pct')[:3]
-            weak = [s for s in subject_avgs if s['avg_pct'] is not None and s['avg_pct'] < 60]
+            from collections import defaultdict
+            from . import history
+
+            by_subject = defaultdict(list)
+            for mark in history.exam_marks(student, published_only=True):
+                pct = mark.percentage
+                if pct is not None:
+                    by_subject[mark.exam_subject.subject.name].append(pct)
+            averages = sorted(((sum(v) / len(v), name) for name, v in by_subject.items()))[:3]
+            weak = [(avg, name) for avg, name in averages if avg < 60]
             if weak:
-                weak_lines = [f"  - {s['exam_subject__subject__name']}: {s['avg_pct']:.0f}% avg" for s in weak]
-                parts.append("Subjects needing improvement:\n" + "\n".join(weak_lines))
+                parts.append(
+                    "Subjects needing improvement:\n" + "\n".join(f"  - {name}: {avg:.0f}% avg" for avg, name in weak)
+                )
         except Exception:
             pass
 
@@ -426,10 +427,10 @@ class StudyHelperService:
     # ── Tool Implementations ─────────────────────────────────────────────
 
     def _get_my_marks(self, exam_name=None, subject_name=None):
-        from examinations.models import StudentMark
-        qs = StudentMark.objects.filter(
-            school=self.school, student=self.student,
-        ).select_related('exam_subject__exam', 'exam_subject__subject')
+        from . import history
+
+        # The student's results at every branch they have been at (published only).
+        qs = history.exam_marks(self.student, published_only=True)
 
         if exam_name:
             qs = qs.filter(exam_subject__exam__name__icontains=exam_name)
@@ -507,12 +508,10 @@ class StudyHelperService:
         return {"books": books}
 
     def _get_my_attendance(self, days=30):
-        from attendance.models import AttendanceRecord
+        from . import history
 
         cutoff = timezone.now().date() - timedelta(days=int(days))
-        records = AttendanceRecord.objects.filter(
-            student=self.student, school=self.school, date__gte=cutoff,
-        ).order_by('-date')
+        records = history.attendance_records(self.student).filter(date__gte=cutoff).order_by('-date')
 
         total = records.count()
         present = records.filter(status='PRESENT').count()

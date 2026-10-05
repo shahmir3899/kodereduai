@@ -645,6 +645,15 @@ class StudentComprehensiveReportGenerator(BaseReportGenerator):
         except Student.DoesNotExist:
             return {'error': 'Student not found'}
 
+        # A student transferred in from another branch is reported on across every branch they
+        # have been at (students.timeline): earlier branches' attendance, fees, exams and
+        # remarks are read in place, labelled, and cut at the leaving date. An ordinary
+        # student keeps exactly the single-branch report.
+        from students import timeline
+        segments = timeline.student_timeline(student)
+        has_history = len(segments) > 1
+        earlier_branches = [s.school_name for s in segments if not s.is_current]
+
         enrollment_map = self._get_enrollment_map([student.id])
         class_name = self._resolve_class_name(student, enrollment_map)
         roll_number = self._resolve_roll_number(student, enrollment_map)
@@ -678,7 +687,15 @@ class StudentComprehensiveReportGenerator(BaseReportGenerator):
         # --- Attendance ---
         from attendance.models import AttendanceRecord
         att_qs = AttendanceRecord.objects.filter(student=student)
-        if date_from and date_to:
+        if has_history:
+            # Every branch's own days. Each branch has its own academic-year record, so the
+            # window is by date (the report period, else the resolved academic year).
+            att_qs = AttendanceRecord.objects.filter(timeline.attendance_q(segments))
+            if date_from and date_to:
+                att_qs = att_qs.filter(date__gte=date_from, date__lte=date_to)
+            elif academic_year_obj:
+                att_qs = att_qs.filter(date__gte=academic_year_obj.start_date, date__lte=academic_year_obj.end_date)
+        elif date_from and date_to:
             att_qs = att_qs.filter(date__gte=date_from, date__lte=date_to)
         elif academic_year_id:
             att_qs = att_qs.filter(academic_year_id=academic_year_id)
@@ -717,9 +734,16 @@ class StudentComprehensiveReportGenerator(BaseReportGenerator):
             today = date.today()
             months_list = self._twelve_months_from(date(today.year, today.month, 1))
 
+        fee_rows_qs = FeePayment.objects.filter(student=student, month__gte=1)
+        if has_history:
+            # Both ledgers. The carried row is the same debt as the earlier branch's last row,
+            # so it is left out of the chart rather than counted twice.
+            fee_rows_qs = FeePayment.objects.filter(
+                timeline.fees_q(segments), month__gte=1, carried_from_exit__isnull=True,
+            )
         fee_by_month = {
             (r['year'], r['month']): r
-            for r in FeePayment.objects.filter(student=student, month__gte=1)
+            for r in fee_rows_qs
                 .values('year', 'month')
                 .annotate(
                     total_due=Sum('amount_due'),
@@ -750,7 +774,11 @@ class StudentComprehensiveReportGenerator(BaseReportGenerator):
         # unpaid month rolled into it, so summing per-month balances would count
         # old shortfalls again for every month they remained unpaid.
         months_with_data = [(y, m) for y, m in months_list if (y, m) in fee_by_month]
-        if months_with_data:
+        if has_history:
+            # Owed today is only this branch's (the balance was carried here, once).
+            from finance.student_balance import student_pending_fees
+            fee_outstanding = student_pending_fees(student)['total']
+        elif months_with_data:
             latest_row = fee_by_month[months_with_data[-1]]
             fee_outstanding = (latest_row.get('total_due') or Decimal('0')) - (latest_row.get('total_paid') or Decimal('0'))
         else:
@@ -762,7 +790,14 @@ class StudentComprehensiveReportGenerator(BaseReportGenerator):
         try:
             from examinations.models import StudentMark
             marks = StudentMark.objects.filter(student=student)
-            if date_from and date_to:
+            if has_history:
+                marks = StudentMark.objects.filter(timeline.marks_q(segments))
+                if date_from and date_to:
+                    marks = marks.filter(exam_subject__exam__start_date__range=(date_from, date_to))
+                elif academic_year_obj:
+                    marks = marks.filter(exam_subject__exam__start_date__range=(
+                        academic_year_obj.start_date, academic_year_obj.end_date))
+            elif date_from and date_to:
                 marks = marks.filter(exam_subject__exam__start_date__range=(date_from, date_to))
             elif academic_year_id:
                 marks = marks.filter(enrollment__academic_year_id=academic_year_id)
@@ -772,8 +807,9 @@ class StudentComprehensiveReportGenerator(BaseReportGenerator):
                 total = float(m.exam_subject.total_marks or 0)
                 pct = round(obtained / total * 100, 1) if total > 0 else 0
                 exam_pct_values.append(pct)
+                branch = timeline.branch_tag(segments, m.student_id, m.school_id) if has_history else None
                 exam_rows.append([
-                    m.exam_subject.exam.name,
+                    f"{m.exam_subject.exam.name} ({branch})" if branch else m.exam_subject.exam.name,
                     m.exam_subject.subject.name,
                     f"{obtained:.0f}/{total:.0f}",
                     f"{pct}%",
@@ -856,6 +892,32 @@ class StudentComprehensiveReportGenerator(BaseReportGenerator):
             except Exception:
                 pass
 
+        # A transferred-in student with no assessment at this branch yet: use the latest one
+        # from an earlier branch rather than printing an empty section.
+        if has_history and not assessment_exists:
+            try:
+                from examinations.models import StudentTermAssessment
+                earlier_assessment = (
+                    StudentTermAssessment.objects
+                    .filter(timeline.rows_q([s for s in segments if not s.is_current]))
+                    .order_by('-academic_year__start_date', '-month', '-id').first()
+                )
+                if earlier_assessment:
+                    assessment_exists = True
+                    a = earlier_assessment
+                    skills_ratings = [
+                        ('Listening', a.listening), ('Speaking', a.speaking), ('Writing', a.writing),
+                        ('Reading', a.reading), ('Participation', a.participation), ('Confidence', a.confidence),
+                        ('Social Skills', a.social_skills),
+                    ]
+                    behaviour_ratings = [
+                        ('Discipline', a.discipline), ('Respect', a.respect), ('Teamwork', a.teamwork),
+                        ('Class Participation', a.class_participation), ('Responsibility', a.responsibility),
+                    ]
+                    teacher_remark, principal_remark = a.teacher_remark, a.principal_remark
+            except Exception:
+                pass
+
         # --- Header images (best-effort; report renders fine without them) ---
         photo_bytes = fetch_image_bytes(student.photo_url)
         school_logo_bytes = fetch_image_bytes(self.school.logo)
@@ -888,6 +950,8 @@ class StudentComprehensiveReportGenerator(BaseReportGenerator):
         student_info_rows.append(('Parent Name', student.parent_name or student.guardian_name or '-'))
         student_info_rows.append(('Parent Contact', format_pk_phone(parent_contact) or '-'))
         student_info_rows.append(('Academic Session', academic_session_display))
+        if has_history:
+            student_info_rows.append(('Includes Records From', ', '.join(earlier_branches)))
 
         return {
             'school_name': self.school.name,

@@ -163,11 +163,11 @@ describe('StudentExitWizard', () => {
       const { user } = await renderWizard({ prefill: { exit_type: 'TRANSFERRED', leaving_date: '2026-03-01' } })
 
       expect(await screen.findByRole('option', { name: 'Branch 2' })).toBeInTheDocument()
-      await user.click(screen.getByRole('button', { name: 'Continue' }))
-      expect(screen.getByRole('alert')).toHaveTextContent('Choose the branch the student is transferring to.')
+      expect(screen.getByRole('button', { name: 'Continue' })).toBeDisabled()
 
       await user.selectOptions(screen.getByLabelText('Transferring to'), 'Branch 2')
       await user.selectOptions(await screen.findByLabelText('Class at the new branch'), 'Class 1 - B')
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Continue' })).toBeEnabled())
       await user.click(screen.getByRole('button', { name: 'Continue' }))
 
       await screen.findByTestId('item-FEES')
@@ -226,14 +226,28 @@ describe('StudentExitWizard', () => {
         await waitFor(() => expect(screen.getByLabelText('Roll number at the new branch')).toHaveValue('1'))
       })
 
-      it('needs a class and a roll before continuing', async () => {
+      it('keeps Continue disabled until the class and the roll are both filled', async () => {
         mockApi()
         const { user } = await renderWizard({ prefill: { exit_type: 'TRANSFERRED' } })
-        await chooseBranch(user)
+        const select = await chooseBranch(user)
+        const continueButton = screen.getByRole('button', { name: 'Continue' })
+        expect(continueButton).toBeDisabled()                    // branch only
 
-        await user.click(screen.getByRole('button', { name: 'Continue' }))
-        expect(screen.getByRole('alert')).toHaveTextContent('Choose the class the student will join at the new branch.')
+        await user.selectOptions(select, 'Class 1 - A')
+        await waitFor(() => expect(screen.getByLabelText('Roll number at the new branch')).toHaveValue('3'))
+        expect(continueButton).toBeEnabled()                     // class and the suggested roll
+
+        await user.clear(screen.getByLabelText('Roll number at the new branch'))
+        expect(continueButton).toBeDisabled()                    // roll emptied again
+        await user.type(screen.getByLabelText('Roll number at the new branch'), '9')
+        expect(continueButton).toBeEnabled()
         expect(calls.some((c) => c[0] === 'start')).toBe(false)
+      })
+
+      it('is not held back by the class fields for a withdrawal', async () => {
+        mockApi()
+        await renderWizard({ prefill: { exit_type: 'WITHDRAWN' } })
+        expect(screen.getByRole('button', { name: 'Continue' })).toBeEnabled()
       })
 
       it('clears the class when another branch is chosen', async () => {

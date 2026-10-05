@@ -4,7 +4,7 @@ import { studentsApi, examinationsApi } from '../../../services/api'
 import { useToast } from '../../../components/Toast'
 import Button from '../../../components/ui/Button'
 import { describeAway } from '../../../utils/awayPeriods'
-import { formatMoney } from './profileUtils'
+import { formatDate, formatMoney } from './profileUtils'
 
 // The profile page's tab panels, moved out of StudentProfilePage unchanged.
 
@@ -25,6 +25,19 @@ function StatCard({ label, value, sub, color = 'primary' }) {
 }
 
 // Green/yellow/red for a risk level; neutral when there was not enough data to judge.
+// Marks a row that comes from an EARLIER branch of a transferred student: read-only here.
+export function BranchTag({ branch }) {
+  if (!branch) return null
+  return (
+    <span
+      className="ml-2 px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200 text-[11px] font-medium whitespace-nowrap"
+      title={`From ${branch} (earlier branch, read-only)`}
+    >
+      {branch}
+    </span>
+  )
+}
+
 function riskColor(level) {
   if (level === 'LOW') return 'green'
   if (level === 'MEDIUM') return 'yellow'
@@ -39,6 +52,12 @@ export function OverviewTab({ summary, ai, isLoading, error }) {
 
   return (
     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      {summary.has_earlier_branch_data && (
+        <p className="col-span-full text-xs text-gray-600 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2" role="note">
+          Includes records from {(summary.earlier_branches || []).join(', ') || 'an earlier branch'} (read-only), so these
+          figures cover everything that actually happened.
+        </p>
+      )}
       <StatCard
         label="Attendance"
         value={summary.attendance_rate != null ? `${summary.attendance_rate}%` : 'N/A'}
@@ -100,31 +119,46 @@ export function OverviewTab({ summary, ai, isLoading, error }) {
 }
 
 // Time the student was away (withdrawn, then re-admitted): no attendance exists for it.
-function AwayNotice({ periods, what }) {
-  if (!periods?.length) return null
+function AwayNotice({ periods, what, fromBranch }) {
+  const joined = (periods || []).find((p) => p.joined_from_transfer)
+  const away = (periods || []).filter((p) => !p.joined_from_transfer)
+  if (!joined && away.length === 0) return null
   return (
-    <div className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-700" role="note">
-      <p className="font-medium text-gray-900">Away from school</p>
-      <ul className="mt-1 space-y-0.5">
-        {periods.map((p) => (
-          <li key={p.start}>
-            {describeAway(p)}{p.reason ? ` — ${p.reason}` : ''}
-          </li>
-        ))}
-      </ul>
-      <p className="text-xs text-gray-500 mt-1">{what}</p>
-    </div>
+    <>
+      {joined && (
+        <div className="bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 text-sm text-blue-900" role="note">
+          Joined this branch on {formatDate(joined.end)}{fromBranch ? ` from ${fromBranch}` : ''}. Records before that date
+          come from the earlier branch and are read-only.
+        </div>
+      )}
+      {away.length > 0 && (
+        <div className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-700" role="note">
+          <p className="font-medium text-gray-900">Away from school</p>
+          <ul className="mt-1 space-y-0.5">
+            {away.map((p) => (
+              <li key={p.start}>
+                {describeAway(p)}{p.reason ? ` — ${p.reason}` : ''}
+              </li>
+            ))}
+          </ul>
+          <p className="text-xs text-gray-500 mt-1">{what}</p>
+        </div>
+      )}
+    </>
   )
 }
+
+const earlierBranchOf = (rows) => (rows || []).find((r) => r.branch)?.branch
 
 export function AttendanceTab({ data, isLoading, error, awayPeriods }) {
   if (isLoading) return <div className="text-center py-10 text-gray-500">Loading attendance...</div>
   if (error) return <div className="text-center py-10 text-red-600">Failed to load attendance</div>
   const months = data?.months || []
+  const fromBranch = earlierBranchOf(months)
   if (months.length === 0) {
     return (
       <div className="space-y-4">
-        <AwayNotice periods={awayPeriods} what="No attendance is recorded for these days." />
+        <AwayNotice periods={awayPeriods} what="No attendance is recorded for these days." fromBranch={fromBranch} />
         <div className="text-center py-10 text-gray-500">No attendance records found</div>
       </div>
     )
@@ -132,7 +166,7 @@ export function AttendanceTab({ data, isLoading, error, awayPeriods }) {
 
   return (
     <div className="space-y-4">
-    <AwayNotice periods={awayPeriods} what="No attendance is recorded for these days, so they are not counted as absences." />
+    <AwayNotice periods={awayPeriods} what="No attendance is recorded for these days, so they are not counted as absences." fromBranch={fromBranch} />
     <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
       <div className="overflow-x-auto">
       <table className="min-w-full divide-y divide-gray-200">
@@ -149,7 +183,7 @@ export function AttendanceTab({ data, isLoading, error, awayPeriods }) {
         <tbody className="divide-y divide-gray-200">
           {months.map((m, i) => (
             <tr key={i} className="hover:bg-gray-50">
-              <td className="px-4 py-3 text-sm font-medium text-gray-900">{m.month}</td>
+              <td className="px-4 py-3 text-sm font-medium text-gray-900">{m.month}<BranchTag branch={m.branch} /></td>
               <td className="px-4 py-3 text-sm text-green-600">{m.present}</td>
               <td className="px-4 py-3 text-sm text-red-600">{m.absent}</td>
               <td className="px-4 py-3 text-sm text-yellow-600">{m.late || 0}</td>
@@ -199,6 +233,7 @@ export function FeesTab({ data, isLoading, error }) {
             <tr key={i} className="hover:bg-gray-50">
               <td className="px-4 py-3 text-sm text-gray-900">
                 {p.month_name || `${p.month}/${p.year}`}
+                <BranchTag branch={p.branch} />
               </td>
               <td className="px-4 py-3 text-sm text-gray-600">{p.fee_type_name || p.fee_type || '-'}</td>
               <td className="px-4 py-3 text-sm text-gray-900 text-right">PKR {parseFloat(p.amount_due || 0).toLocaleString()}</td>
@@ -207,6 +242,8 @@ export function FeesTab({ data, isLoading, error }) {
                 <span className={`px-2 py-0.5 rounded text-xs font-medium ${statusColors[p.status] || 'bg-gray-100 text-gray-800'}`}>
                   {p.status}
                 </span>
+                {p.handed_over && <span className="ml-2 text-xs text-blue-700">Balance moved to the new branch</span>}
+                {p.carried && <span className="ml-2 text-xs text-blue-700">Carried from the earlier branch</span>}
               </td>
             </tr>
           ))}
@@ -230,6 +267,7 @@ export function AcademicsTab({ data, isLoading, error }) {
           <div className="px-4 py-3 bg-gray-50 border-b border-gray-200 flex items-baseline justify-between gap-3">
             <h3 className="text-sm font-semibold text-gray-900">
               {exam.exam_name || exam.name || `Exam ${i + 1}`}
+              <BranchTag branch={exam.branch} />
               {exam.exam_date && <span className="ml-2 text-xs font-normal text-gray-500">{exam.exam_date}</span>}
             </h3>
             {exam.average_percentage != null && (
@@ -283,7 +321,7 @@ export function HistoryTab({ data, isLoading, error, awayPeriods }) {
 
   return (
     <div className="space-y-4">
-    <AwayNotice periods={awayPeriods} what="The time away stays empty: nothing is billed, rostered or recorded for it." />
+    <AwayNotice periods={awayPeriods} what="The time away stays empty: nothing is billed, rostered or recorded for it." fromBranch={earlierBranchOf(history)} />
     <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
       <div className="overflow-x-auto">
       <table className="min-w-full divide-y divide-gray-200">
@@ -299,7 +337,7 @@ export function HistoryTab({ data, isLoading, error, awayPeriods }) {
         <tbody className="divide-y divide-gray-200">
           {history.map((e, i) => (
             <tr key={i} className="hover:bg-gray-50">
-              <td className="px-4 py-3 text-sm text-gray-900">{e.academic_year_name || e.academic_year}</td>
+              <td className="px-4 py-3 text-sm text-gray-900">{e.academic_year_name || e.academic_year}<BranchTag branch={e.branch} /></td>
               <td className="px-4 py-3 text-sm text-gray-600">{e.class_name}</td>
               <td className="px-4 py-3 text-sm text-gray-600">{e.section || '-'}</td>
               <td className="px-4 py-3 text-sm text-gray-600">{e.roll_number || '-'}</td>
@@ -338,7 +376,7 @@ const MONTH_NAMES = [
   'July', 'August', 'September', 'October', 'November', 'December',
 ]
 
-export function AssessmentTab({ studentId, academicYearId, month, onMonthChange, data, refetch, isLoading, error }) {
+export function AssessmentTab({ studentId, academicYearId, month, onMonthChange, data, earlier, refetch, isLoading, error }) {
   const { showError, showSuccess } = useToast()
   const [form, setForm] = useState(null)
 
@@ -444,6 +482,38 @@ export function AssessmentTab({ studentId, academicYearId, month, onMonthChange,
           {saveMutation.isPending ? 'Saving...' : 'Save Assessment'}
         </Button>
       </div>
+
+      <EarlierAssessments rows={earlier} />
+    </div>
+  )
+}
+
+const RATING_LABELS = Object.fromEntries(RATING_OPTIONS)
+const FIELD_LABELS = Object.fromEntries([...SKILL_FIELDS, ...BEHAVIOUR_FIELDS])
+
+// Ratings and remarks recorded at an earlier branch: shown for the record, never editable here.
+function EarlierAssessments({ rows }) {
+  if (!rows?.length) return null
+  return (
+    <div className="bg-white rounded-xl border border-blue-200 p-4 space-y-4" data-testid="earlier-assessments">
+      <h3 className="text-sm font-semibold text-gray-900">From earlier branches (read-only)</h3>
+      {rows.map((a) => {
+        const rated = Object.entries(a.ratings || {}).filter(([, value]) => value)
+        return (
+          <div key={a.id} className="border-t border-gray-100 pt-3 first:border-t-0 first:pt-0">
+            <p className="text-sm font-medium text-gray-900">
+              {MONTH_NAMES[a.month - 1]} · {a.academic_year_name}<BranchTag branch={a.branch} />
+            </p>
+            {rated.length > 0 && (
+              <p className="text-xs text-gray-600 mt-1">
+                {rated.map(([field, value]) => `${FIELD_LABELS[field] || field}: ${RATING_LABELS[value] || value}`).join(' · ')}
+              </p>
+            )}
+            {a.teacher_remark && <p className="text-sm text-gray-700 mt-1"><span className="font-medium">Teacher:</span> {a.teacher_remark}</p>}
+            {a.principal_remark && <p className="text-sm text-gray-700 mt-1"><span className="font-medium">Principal:</span> {a.principal_remark}</p>}
+          </div>
+        )
+      })}
     </div>
   )
 }
@@ -514,7 +584,7 @@ export function DocumentsTab({ studentId, data, refetch, isLoading, error }) {
           {docs.map((doc) => (
             <div key={doc.id} className="flex items-center justify-between px-4 py-3">
               <div>
-                <p className="text-sm font-medium text-gray-900">{doc.title}</p>
+                <p className="text-sm font-medium text-gray-900">{doc.title}<BranchTag branch={doc.branch} /></p>
                 <p className="text-xs text-gray-500">
                   {typeLabels[doc.document_type] || doc.document_type} - {new Date(doc.created_at).toLocaleDateString()}
                 </p>
@@ -525,14 +595,14 @@ export function DocumentsTab({ studentId, data, refetch, isLoading, error }) {
                     View
                   </a>
                 )}
-                <button
+                {!doc.read_only && <button
                   type="button"
                   onClick={() => handleDelete(doc.id)}
                   disabled={deletingId === doc.id}
                   className="text-xs text-red-600 hover:text-red-800 disabled:opacity-50"
                 >
                   {deletingId === doc.id ? 'Deleting...' : 'Delete'}
-                </button>
+                </button>}
               </div>
             </div>
           ))}

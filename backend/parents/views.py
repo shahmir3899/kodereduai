@@ -93,7 +93,13 @@ def _verify_child_access(request, student_id):
     """
     role = get_effective_role(request)
     if role in ADMIN_ROLES:
-        return True
+        # An admin sees the children of their OWN schools only. This used to return True
+        # for any student id, so an admin of one school could read another school's child.
+        if request.user.is_super_admin:
+            return True
+        return Student.objects.filter(
+            id=student_id, school_id__in=ensure_tenant_schools(request) or [],
+        ).exists()
     return student_id in get_parent_children_ids(request)
 
 
@@ -168,26 +174,23 @@ class ChildOverviewView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        # Attendance summary
-        from attendance.models import AttendanceRecord
-        att_qs = AttendanceRecord.objects.filter(student=student)
-        total_days = att_qs.count()
-        total_present = att_qs.filter(status='PRESENT').count()
-        total_absent = att_qs.filter(status='ABSENT').count()
-        total_leave = att_qs.filter(status='LEAVE').count()
-        attendance_rate = round(total_present / total_days * 100, 1) if total_days > 0 else 0.0
+        # Attendance summary: every branch the child has been at (students.timeline), each
+        # limited to its own dates. Leave counts as present, as everywhere else.
+        from students import history, timeline
+        segments = timeline.student_timeline(student)
+        att = history.attendance_totals(student, segments)
         attendance_summary = {
-            'total_days': total_days,
-            'present': total_present,
-            'absent': total_absent,
-            'leave': total_leave,
-            'attendance_rate': attendance_rate,
+            'total_days': att['total_days'],
+            'present': att['present_days'] - att['leave'],
+            'absent': att['absent'],
+            'leave': att['leave'],
+            'attendance_rate': att['rate'],
         }
 
         # Fee summary: the shared calculation, so parents see the same figures staff do
         # (summing every monthly row would count a carried-forward balance repeatedly).
         from finance.student_balance import student_fee_summary
-        fees = student_fee_summary(student)
+        fees = student_fee_summary(student, segments)
         fee_summary = {
             'total_due': str(fees['total_due']),
             'total_paid': str(fees['total_paid']),
@@ -195,24 +198,9 @@ class ChildOverviewView(APIView):
         }
 
         # Latest exam
-        latest_exam = None
-        try:
-            from examinations.models import StudentMark
-            latest_mark = StudentMark.objects.filter(
-                student=student,
-            ).select_related(
-                'exam_subject', 'exam_subject__exam', 'exam_subject__subject',
-            ).order_by('-exam_subject__exam__date').first()
-
-            if latest_mark:
-                latest_exam = {
-                    'exam_name': latest_mark.exam_subject.exam.name,
-                    'subject': latest_mark.exam_subject.subject.name,
-                    'marks_obtained': float(latest_mark.marks_obtained) if latest_mark.marks_obtained else None,
-                    'total_marks': float(latest_mark.exam_subject.total_marks) if latest_mark.exam_subject.total_marks else None,
-                }
-        except Exception:
-            pass
+        # The most recent PUBLISHED result at any branch. (This used to sort on a field Exam
+        # does not have, so the error was swallowed and parents never saw a latest exam.)
+        latest_exam = history.latest_exam(student, segments, published_only=True)
 
         from academic_sessions.roster import current_placement, placement_label, placement_roll
 
@@ -246,21 +234,19 @@ class ChildAttendanceView(APIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        from attendance.models import AttendanceRecord
+        from students import history
 
-        qs = AttendanceRecord.objects.filter(
-            student_id=student_id,
-        ).order_by('-date')
+        try:
+            student = Student.objects.select_related('school').get(id=student_id)
+        except Student.DoesNotExist:
+            return Response({'error': 'Student not found.'}, status=status.HTTP_404_NOT_FOUND)
 
+        # Every branch the child has been at; earlier branches' records are tagged.
         month = request.query_params.get('month')
         year = request.query_params.get('year')
-        if month:
-            qs = qs.filter(date__month=int(month))
-        if year:
-            qs = qs.filter(date__year=int(year))
-
-        records = qs.values('id', 'date', 'status', 'source', 'created_at')
-        return Response(list(records))
+        return Response(history.attendance_rows(
+            student, month=int(month) if month else None, year=int(year) if year else None,
+        ))
 
 
 class ChildFeesView(APIView):
@@ -277,14 +263,15 @@ class ChildFeesView(APIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        from finance.models import FeePayment
-        from finance.serializers import FeePaymentSerializer
+        from students import history
 
-        payments = FeePayment.objects.filter(
-            student_id=student_id,
-        ).order_by('-year', '-month')
+        try:
+            student = Student.objects.select_related('school').get(id=student_id)
+        except Student.DoesNotExist:
+            return Response({'error': 'Student not found.'}, status=status.HTTP_404_NOT_FOUND)
 
-        return Response(FeePaymentSerializer(payments, many=True).data)
+        # Both branches' ledgers; what is still owed is only the current branch's.
+        return Response(history.fee_rows(student))
 
 
 class ParentPayFeeView(APIView):
@@ -522,35 +509,17 @@ class ChildExamResultsView(APIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
+        from students import history
+
         try:
-            from examinations.models import Exam, StudentMark
-            marks = StudentMark.objects.filter(
-                student_id=student_id,
-                exam_subject__exam__status=Exam.Status.PUBLISHED,
-            ).select_related(
-                'exam_subject', 'exam_subject__exam', 'exam_subject__subject',
-            ).order_by('-exam_subject__exam__date', 'exam_subject__subject__name')
+            student = Student.objects.select_related('school').get(id=student_id)
+        except Student.DoesNotExist:
+            return Response({'error': 'Student not found.'}, status=status.HTTP_404_NOT_FOUND)
 
-            result = {}
-            for mark in marks:
-                exam_name = mark.exam_subject.exam.name
-                if exam_name not in result:
-                    result[exam_name] = {
-                        'exam_name': exam_name,
-                        'exam_date': str(mark.exam_subject.exam.date) if hasattr(mark.exam_subject.exam, 'date') else None,
-                        'subjects': [],
-                    }
-                result[exam_name]['subjects'].append({
-                    'subject': mark.exam_subject.subject.name,
-                    'marks_obtained': float(mark.marks_obtained) if mark.marks_obtained else None,
-                    'total_marks': float(mark.exam_subject.total_marks) if mark.exam_subject.total_marks else None,
-                    'is_absent': mark.is_absent,
-                    'remarks': mark.remarks,
-                })
-
-            return Response(list(result.values()))
-        except Exception:
-            return Response([])
+        # Published results at every branch the child has been at (earlier ones tagged).
+        # This used to sort on a field Exam does not have; the error was swallowed and
+        # parents always saw an empty list.
+        return Response(history.portal_exam_results(student))
 
 
 class ParentLeaveRequestViewSet(ModuleAccessMixin, viewsets.ModelViewSet):

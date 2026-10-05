@@ -36,7 +36,7 @@ class PromotionAdvisorService:
             academic_year_id=self.academic_year_id,
             class_obj_id=class_id,
             is_active=True,
-        ).select_related('student', 'class_obj')
+        ).select_related('student', 'student__school', 'class_obj')
 
         # Get highest grade_level for this school
         from students.models import Class
@@ -80,6 +80,21 @@ class PromotionAdvisorService:
         for mark in marks_qs:
             student_exam_marks[mark.student_id][mark.exam_subject.exam_id].append(mark)
 
+        # A student transferred in from another branch is judged on the whole year: the
+        # exams, attendance and payments they had at the earlier branch(es), read in place
+        # (students.timeline), count as theirs. Everyone else costs nothing extra.
+        timelines, earlier_by_old, year_window = self._transferred_in(enrollments)
+        if timelines:
+            exam_dates = {e.id: e.start_date for e in exams}
+            for owner, mark in self._earlier_marks(earlier_by_old, year_window):
+                exam = mark.exam_subject.exam
+                student_marks[owner].append(mark)
+                student_exam_marks[owner][exam.id].append(mark)
+                if exam.id not in exam_dates:
+                    exam_dates[exam.id] = exam.start_date
+                    exam_ids.append(exam.id)
+            exam_ids.sort(key=lambda eid: (exam_dates[eid] is None, exam_dates[eid]))
+
         # 4. Fetch attendance data for these students in the academic year
         attendance_stats = {}
         attendance_qs = AttendanceRecord.objects.filter(
@@ -98,6 +113,13 @@ class PromotionAdvisorService:
                 'present_days': present,
                 'rate': round((present / total) * 100, 1) if total > 0 else 0.0,
             }
+        for owner, (total, present) in self._earlier_attendance(earlier_by_old, year_window).items():
+            current = attendance_stats.get(owner, {'total_days': 0, 'present_days': 0})
+            total, present = total + current['total_days'], present + current['present_days']
+            attendance_stats[owner] = {
+                'total_days': total, 'present_days': present,
+                'rate': round((present / total) * 100, 1) if total > 0 else 0.0,
+            }
 
         # 5. Fetch fee payment data for these students in the academic year
         fee_stats = {}
@@ -105,6 +127,9 @@ class PromotionAdvisorService:
             school_id=self.school_id,
             student_id__in=student_ids,
             academic_year_id=self.academic_year_id,
+        ).exclude(
+            # The carried row is the same debt as the earlier branch's last row, counted below.
+            carried_from_exit__isnull=False, student_id__in=list(timelines),
         ).values('student_id').annotate(
             total_records=Count('id'),
             paid_count=Count('id', filter=Q(status='PAID')),
@@ -120,6 +145,15 @@ class PromotionAdvisorService:
                 'paid': paid,
                 'partial': partial,
                 'unpaid': row['unpaid_count'],
+                'rate': round(((paid + partial * 0.5) / total) * 100, 1) if total > 0 else 0.0,
+            }
+
+        for owner, row in self._earlier_fees(earlier_by_old).items():
+            current = fee_stats.get(owner, {'total': 0, 'paid': 0, 'partial': 0, 'unpaid': 0})
+            total = current['total'] + row['total']
+            paid, partial = current['paid'] + row['paid'], current['partial'] + row['partial']
+            fee_stats[owner] = {
+                'total': total, 'paid': paid, 'partial': partial, 'unpaid': current['unpaid'] + row['unpaid'],
                 'rate': round(((paid + partial * 0.5) / total) * 100, 1) if total > 0 else 0.0,
             }
 
@@ -186,6 +220,88 @@ class PromotionAdvisorService:
         recommendations.sort(key=lambda r: (priority.get(r['recommendation'], 4), r['roll_number']))
 
         return recommendations
+
+    def _transferred_in(self, enrollments):
+        """({student_id: segments}, {earlier record id: current student id}, (year start, year end))
+        for the students in ``enrollments`` who were transferred in from another branch."""
+        from academic_sessions.models import AcademicYear
+        from students.timeline import student_timeline
+
+        timelines = {}
+        for enrollment in enrollments:
+            student = enrollment.student
+            if student.transferred_from_id:
+                segments = student_timeline(student)
+                if len(segments) > 1:
+                    timelines[student.id] = segments
+        if not timelines:
+            return {}, {}, None
+        year = AcademicYear.objects.filter(pk=self.academic_year_id).only('start_date', 'end_date').first()
+        earlier_by_old = {
+            seg.student_id: (owner, seg)
+            for owner, segments in timelines.items() for seg in segments if not seg.is_current
+        }
+        return timelines, earlier_by_old, (year.start_date, year.end_date) if year else None
+
+    @staticmethod
+    def _segment_q(earlier_by_old, year_window, date_field):
+        from django.db.models import Q
+
+        query = Q()
+        for _old_id, (_owner, seg) in earlier_by_old.items():
+            part = Q(student_id=seg.student_id, school_id=seg.school_id, **{f'{date_field}__lt': seg.end})
+            if seg.start is not None:
+                part &= Q(**{f'{date_field}__gte': seg.start})
+            if year_window:
+                part &= Q(**{f'{date_field}__gte': year_window[0], f'{date_field}__lte': year_window[1]})
+            query |= part
+        return query
+
+    def _earlier_marks(self, earlier_by_old, year_window):
+        from examinations.models import StudentMark
+
+        marks = StudentMark.objects.filter(
+            self._segment_q(earlier_by_old, year_window, 'exam_subject__exam__start_date'),
+            exam_subject__is_active=True,
+        ).select_related('exam_subject', 'exam_subject__exam', 'exam_subject__subject')
+        return [(earlier_by_old[m.student_id][0], m) for m in marks]
+
+    def _earlier_attendance(self, earlier_by_old, year_window):
+        from attendance.models import AttendanceRecord
+
+        if not earlier_by_old:
+            return {}
+        rows = AttendanceRecord.objects.filter(
+            self._segment_q(earlier_by_old, year_window, 'date'),
+        ).values('student_id').annotate(total=Count('id'), present=Count('id', filter=Q(status='PRESENT')))
+        totals = {}
+        for row in rows:
+            owner = earlier_by_old[row['student_id']][0]
+            total, present = totals.get(owner, (0, 0))
+            totals[owner] = (total + row['total'], present + row['present'])
+        return totals
+
+    def _earlier_fees(self, earlier_by_old):
+        from finance.models import FeePayment
+
+        if not earlier_by_old:
+            return {}
+        from django.db.models import Q as _Q
+
+        query = _Q()
+        for _old_id, (_owner, seg) in earlier_by_old.items():
+            query |= _Q(student_id=seg.student_id, school_id=seg.school_id)
+        rows = FeePayment.objects.filter(query).values('student_id').annotate(
+            total=Count('id'), paid=Count('id', filter=Q(status='PAID')),
+            partial=Count('id', filter=Q(status='PARTIAL')), unpaid=Count('id', filter=Q(status='UNPAID')),
+        )
+        totals = {}
+        for row in rows:
+            owner = earlier_by_old[row['student_id']][0]
+            cur = totals.setdefault(owner, {'total': 0, 'paid': 0, 'partial': 0, 'unpaid': 0})
+            for key in cur:
+                cur[key] += row[key]
+        return totals
 
     def _analyze_exam_performance(self, marks_list: list) -> dict:
         """Analyze exam performance from a list of StudentMark objects."""
