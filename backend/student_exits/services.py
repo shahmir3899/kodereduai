@@ -146,14 +146,17 @@ def refresh_clearance(exit_case):
             item.amount = None
             item.waived_fingerprint = ''
         else:
-            still_waived = (
-                item.state == State.WAIVED and item.waived_fingerprint == result['fingerprint']
+            # A waiver, or a decision to carry the fees to the new branch, holds only
+            # while the situation is the one it was made for.
+            still_decided = (
+                item.state in (State.WAIVED, State.CARRIED)
+                and item.waived_fingerprint == result['fingerprint']
             )
             item.summary = result['summary']
             item.detail = result['detail']
             item.amount = result['amount']
-            if still_waived:
-                item.state = State.WAIVED
+            if still_decided:
+                pass  # state (WAIVED or CARRIED) stays as decided
             else:
                 item.state = State.OPEN
                 item.waived_fingerprint = ''
@@ -187,11 +190,34 @@ def waive_item(exit_case, kind, reason, user):
     return item
 
 
+def carry_item(exit_case, kind, user):
+    """Transfers only, fees only: hand the pending balance to the destination branch.
+    Counts as clearing the item; the receivable is created there when the transfer is
+    finalized."""
+    _require_open(exit_case)
+    if kind != Kind.FEES:
+        raise ExitError('Only pending fees can be carried to the new branch.')
+    if exit_case.exit_type != StudentExit.ExitType.TRANSFERRED or exit_case.destination_school_id is None:
+        raise ExitError('Fees can only be carried to the new branch in a transfer.')
+    refresh_clearance(exit_case)
+    item = exit_case.items.get(kind=kind)
+    if item.state == State.CLEAR:
+        raise ExitError('Nothing to carry: there are no pending fees.')
+    item.state = State.CARRIED
+    item.waiver_reason = f'Carried to {exit_case.destination_school.name}'
+    item.waived_by = user
+    item.waived_at = timezone.now()
+    item.waived_fingerprint = _current_fingerprint(exit_case.student, kind) or ''
+    item.save()
+    return item
+
+
 def unwaive_item(exit_case, kind):
+    """Undo a waiver, or a decision to carry the item to the new branch."""
     _require_open(exit_case)
     item = exit_case.items.get(kind=kind)
-    if item.state != State.WAIVED:
-        raise ExitError('This item is not waived.')
+    if item.state not in (State.WAIVED, State.CARRIED):
+        raise ExitError('This item is not waived or carried.')
     item.state = State.OPEN
     item.waived_fingerprint = ''
     item.waiver_reason = ''
@@ -231,7 +257,8 @@ def _check_leaving_records(student, leaving_date, remove_records):
 
 
 def open_exit(*, student, exit_type, leaving_date, reason='', destination_school=None,
-              remove_records=False, user=None):
+              remove_records=False, user=None, destination_session_class=None,
+              destination_roll_number=''):
     if student.status in DEPARTED_STATUSES:
         raise ExitError(f'{student.name} has already left. Re-admit them before starting another exit.')
     if StudentExit.objects.filter(student=student, status=StudentExit.Status.OPEN).exists():
@@ -240,12 +267,22 @@ def open_exit(*, student, exit_type, leaving_date, reason='', destination_school
         raise ExitError('A leaving date is required.')
     _check_destination(student.school, exit_type, destination_school)
     _check_leaving_records(student, leaving_date, remove_records)
+    if exit_type == StudentExit.ExitType.TRANSFERRED:
+        from . import transfer
+        transfer.check_placement(
+            destination=destination_school, leaving_date=leaving_date,
+            session_class=destination_session_class, roll_number=destination_roll_number,
+        )
+    elif destination_session_class is not None or (destination_roll_number or '').strip():
+        raise ExitError('A class at the new branch applies only to transfers.')
 
     with transaction.atomic():
         exit_case = StudentExit.objects.create(
             school=student.school, student=student, exit_type=exit_type,
             leaving_date=leaving_date, reason=reason or '',
             destination_school=destination_school,
+            destination_session_class=destination_session_class,
+            destination_roll_number=(destination_roll_number or '').strip(),
             remove_records_after_leaving=remove_records, requested_by=user,
         )
         refresh_clearance(exit_case)
@@ -253,13 +290,31 @@ def open_exit(*, student, exit_type, leaving_date, reason='', destination_school
 
 
 def update_exit(exit_case, *, leaving_date=None, reason=None, destination_school=None,
-                destination_given=False, remove_records=None):
+                destination_given=False, remove_records=None, placement_given=False,
+                destination_session_class=None, destination_roll_number=''):
     _require_open(exit_case)
     new_date = leaving_date or exit_case.leaving_date
     new_remove = exit_case.remove_records_after_leaving if remove_records is None else remove_records
     new_destination = destination_school if destination_given else exit_case.destination_school
     _check_destination(exit_case.school, exit_case.exit_type, new_destination)
     _check_leaving_records(exit_case.student, new_date, new_remove)
+
+    if exit_case.exit_type == StudentExit.ExitType.TRANSFERRED:
+        from . import transfer
+        if placement_given:
+            new_class, new_roll = destination_session_class, (destination_roll_number or '').strip()
+        elif new_destination != exit_case.destination_school or new_date != exit_case.leaving_date:
+            # A different branch (or date, hence maybe a different year) invalidates
+            # the class picked before: choose again.
+            new_class, new_roll = None, ''
+        else:
+            new_class, new_roll = exit_case.destination_session_class, exit_case.destination_roll_number
+        transfer.check_placement(
+            destination=new_destination, leaving_date=new_date,
+            session_class=new_class, roll_number=new_roll,
+        )
+        exit_case.destination_session_class = new_class
+        exit_case.destination_roll_number = new_roll
 
     exit_case.leaving_date = new_date
     exit_case.remove_records_after_leaving = new_remove
@@ -340,6 +395,14 @@ def finalize_exit(exit_case, user, request=None):
         if blocking:
             raise ClearanceIncomplete(blocking)
         _check_leaving_records(student, exit_case.leaving_date, exit_case.remove_records_after_leaving)
+        is_transfer = exit_case.exit_type == StudentExit.ExitType.TRANSFERRED
+        if is_transfer:
+            from . import transfer
+            transfer.check_placement(
+                destination=exit_case.destination_school, leaving_date=exit_case.leaving_date,
+                session_class=exit_case.destination_session_class,
+                roll_number=exit_case.destination_roll_number, require=True,
+            )
 
         apply_departure(
             student, exit_case.exit_type, exit_case.leaving_date, exit_case.reason,
@@ -349,7 +412,11 @@ def finalize_exit(exit_case, user, request=None):
         _deactivate_portal_login(student)
         _open_break(exit_case)
 
+        # Taken before the transfer hands the fees over, so the snapshot shows what was
+        # owed at the moment of leaving.
         exit_case.snapshot = _snapshot(exit_case, items)
+        if is_transfer:
+            exit_case.snapshot['transfer'] = transfer.complete_transfer(exit_case)
         exit_case.status = StudentExit.Status.FINALIZED
         exit_case.finalized_by = user
         exit_case.finalized_at = timezone.now()
@@ -360,6 +427,7 @@ def finalize_exit(exit_case, user, request=None):
             'exit_type': exit_case.exit_type,
             'leaving_date': exit_case.leaving_date.isoformat(),
             'destination_school_id': exit_case.destination_school_id,
+            'destination_student_id': exit_case.destination_student_id,
             'clearance': exit_case.snapshot['clearance'],
         })
     return exit_case

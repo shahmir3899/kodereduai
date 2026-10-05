@@ -38,6 +38,19 @@ class StudentExit(models.Model):
         related_name='incoming_exits',
         help_text='Required for TRANSFERRED; must be another school of the same organization.',
     )
+    # Transfers only: where the student will sit at the destination branch. Chosen in
+    # the wizard before finalizing, because the new student record needs a class.
+    destination_session_class = models.ForeignKey(
+        'academic_sessions.SessionClass', null=True, blank=True, on_delete=models.SET_NULL,
+        related_name='+',
+        help_text='Class (section) at the destination branch the student joins.',
+    )
+    destination_roll_number = models.CharField(max_length=20, blank=True, default='')
+    destination_student = models.ForeignKey(
+        'students.Student', null=True, blank=True, on_delete=models.SET_NULL,
+        related_name='transfer_in_exit',
+        help_text='The new student record created at the destination when this transfer is finalized.',
+    )
     remove_records_after_leaving = models.BooleanField(
         default=False,
         help_text='Delete attendance/marks on or after the leaving date when finalizing '
@@ -101,6 +114,9 @@ class ExitClearanceItem(models.Model):
         CLEAR = 'CLEAR', 'Clear'
         OPEN = 'OPEN', 'Open'
         WAIVED = 'WAIVED', 'Waived'
+        # Transfers, fees only: the pending balance is handed to the destination branch
+        # (a receivable is created there when the transfer is finalized).
+        CARRIED = 'CARRIED', 'Carried to new branch'
 
     exit = models.ForeignKey(StudentExit, on_delete=models.CASCADE, related_name='items')
     kind = models.CharField(max_length=20, choices=Kind.choices)

@@ -18,11 +18,17 @@ def _normalize_decimal(value):
     return value if value is not None else Decimal('0')
 
 
+# A row that took over a balance from another branch (branch transfer) is never
+# regenerated or overwritten: treating it as "unchanged" makes every strategy skip it.
 def _is_annual_conflict(existing_payment, expected_amount_due):
+    if existing_payment.carried_from_exit_id:
+        return False
     return _normalize_decimal(existing_payment.amount_due) != _normalize_decimal(expected_amount_due)
 
 
 def _is_monthly_conflict(existing_payment, expected_previous_balance, expected_base_monthly_fee, expected_amount_due):
+    if existing_payment.carried_from_exit_id:
+        return False
     return any([
         _normalize_decimal(existing_payment.previous_balance) != _normalize_decimal(expected_previous_balance),
         _normalize_decimal(existing_payment.base_monthly_fee) != _normalize_decimal(expected_base_monthly_fee),

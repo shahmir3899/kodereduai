@@ -30,6 +30,21 @@ const makeExit = (over = {}) => ({
   remove_records_after_leaving: false, items: [item('FEES'), item('LIBRARY'), item('GATE_PASS')], open_item_count: 0, ...over,
 })
 
+const plan = {
+  destination: 'Branch 2', total: '2000.00',
+  lines: [
+    { fee_type: 'MONTHLY', label: 'Tuition', balance: '1500.00', month: 2, year: 2026, category_exists: false },
+    { fee_type: 'ANNUAL', label: 'Admission Drive', balance: '500.00', month: 0, year: 2026, category_exists: true },
+  ],
+}
+const destinationClasses = {
+  academic_year: { id: 9, name: '2025-2026' },
+  classes: [
+    { id: 11, label: 'Class 1 - A', rolls: ['1', '2'] },
+    { id: 12, label: 'Class 1 - B', rolls: [] },
+  ],
+}
+
 // A tiny stand-in for the API: holds one exit and applies the calls the wizard makes.
 let current
 let calls
@@ -40,11 +55,30 @@ function mockApi({ existing = null, destinations = [{ id: 2, name: 'Branch 2' }]
   server.use(
     http.get('/api/student-exits/', () => HttpResponse.json({ count: current ? 1 : 0, results: current ? [current] : [] })),
     http.get('/api/student-exits/destinations/', () => HttpResponse.json(destinations)),
+    http.get('/api/student-exits/destination-classes/', ({ request }) => {
+      calls.push(['classes', Object.fromEntries(new URL(request.url).searchParams)])
+      return HttpResponse.json(destinationClasses)
+    }),
+    http.post('/api/student-exits/:id/items/:kind/carry/', ({ params }) => {
+      calls.push(['carry', params.kind])
+      current = {
+        ...current, open_item_count: 0,
+        items: current.items.map((i) => (i.kind === params.kind
+          ? { ...i, state: 'CARRIED', waiver_reason: 'Carried to Branch 2', waived_by_name: 'admin', waived_at: '2026-03-02T10:00:00Z' } : i)),
+      }
+      return HttpResponse.json(current)
+    }),
     http.post('/api/student-exits/', async ({ request }) => {
       const body = await request.json()
       calls.push(['start', body])
       if (body.leaving_date === '2026-03-01' && body.__conflict) return HttpResponse.json({}, { status: 400 })
-      current = makeExit({ ...body, exit_type: body.exit_type, items: [feesOpen, item('LIBRARY'), item('GATE_PASS')], open_item_count: 1 })
+      current = makeExit({
+        ...body, exit_type: body.exit_type, items: [feesOpen, item('LIBRARY'), item('GATE_PASS')], open_item_count: 1,
+        ...(body.exit_type === 'TRANSFERRED' ? {
+          destination_school_name: 'Branch 2', fee_carry_plan: plan,
+          destination_class_label: 'Class 1 - A', destination_roll_number: body.destination_roll_number,
+        } : {}),
+      })
       return HttpResponse.json(current, { status: 201 })
     }),
     http.post('/api/student-exits/:id/items/:kind/waive/', async ({ request, params }) => {
@@ -133,10 +167,90 @@ describe('StudentExitWizard', () => {
       expect(screen.getByRole('alert')).toHaveTextContent('Choose the branch the student is transferring to.')
 
       await user.selectOptions(screen.getByLabelText('Transferring to'), 'Branch 2')
+      await user.selectOptions(await screen.findByLabelText('Class at the new branch'), 'Class 1 - B')
       await user.click(screen.getByRole('button', { name: 'Continue' }))
 
       await screen.findByTestId('item-FEES')
-      expect(calls[0][1]).toMatchObject({ exit_type: 'TRANSFERRED', destination_school: 2 })
+      expect(calls.find((c) => c[0] === 'start')[1]).toMatchObject({
+        exit_type: 'TRANSFERRED', destination_school: 2, destination_session_class: 12, destination_roll_number: '1',
+      })
+    })
+
+    describe('class and roll at the new branch', () => {
+      const chooseBranch = async (user) => {
+        await user.selectOptions(await screen.findByLabelText('Transferring to'), 'Branch 2')
+        return screen.findByLabelText('Class at the new branch')
+      }
+
+      it('lists the new branch classes for the year of the leaving date', async () => {
+        mockApi()
+        const { user } = await renderWizard({ prefill: { exit_type: 'TRANSFERRED', leaving_date: '2026-03-01' } })
+        await chooseBranch(user)
+
+        expect(await screen.findByRole('option', { name: 'Class 1 - A' })).toBeInTheDocument()
+        expect(screen.getByText(/2025-2026/)).toBeInTheDocument()
+        expect(calls.find((c) => c[0] === 'classes')[1]).toEqual({ school: '2', leaving_date: '2026-03-01' })
+      })
+
+      it('suggests the next free roll in the chosen class', async () => {
+        mockApi()
+        const { user } = await renderWizard({ prefill: { exit_type: 'TRANSFERRED' } })
+        await user.selectOptions(await chooseBranch(user), 'Class 1 - A')
+
+        await waitFor(() => expect(screen.getByLabelText('Roll number at the new branch')).toHaveValue('3'))
+        expect(screen.getByText('Next free roll in that class: 3')).toBeInTheDocument()
+      })
+
+      it('keeps a roll the admin typed instead of the suggestion', async () => {
+        mockApi()
+        const { user } = await renderWizard({ prefill: { exit_type: 'TRANSFERRED' } })
+        await user.selectOptions(await chooseBranch(user), 'Class 1 - A')
+        const roll = screen.getByLabelText('Roll number at the new branch')
+        await waitFor(() => expect(roll).toHaveValue('3'))
+
+        await user.clear(roll)
+        await user.type(roll, '40')
+
+        expect(roll).toHaveValue('40')
+      })
+
+      it('suggests again for the next class chosen', async () => {
+        mockApi()
+        const { user } = await renderWizard({ prefill: { exit_type: 'TRANSFERRED' } })
+        const select = await chooseBranch(user)
+        await user.selectOptions(select, 'Class 1 - A')
+        await waitFor(() => expect(screen.getByLabelText('Roll number at the new branch')).toHaveValue('3'))
+
+        await user.selectOptions(select, 'Class 1 - B')
+
+        await waitFor(() => expect(screen.getByLabelText('Roll number at the new branch')).toHaveValue('1'))
+      })
+
+      it('needs a class and a roll before continuing', async () => {
+        mockApi()
+        const { user } = await renderWizard({ prefill: { exit_type: 'TRANSFERRED' } })
+        await chooseBranch(user)
+
+        await user.click(screen.getByRole('button', { name: 'Continue' }))
+        expect(screen.getByRole('alert')).toHaveTextContent('Choose the class the student will join at the new branch.')
+        expect(calls.some((c) => c[0] === 'start')).toBe(false)
+      })
+
+      it('clears the class when another branch is chosen', async () => {
+        mockApi({ destinations: [{ id: 2, name: 'Branch 2' }, { id: 3, name: 'Branch 3' }] })
+        const { user } = await renderWizard({ prefill: { exit_type: 'TRANSFERRED' } })
+        await user.selectOptions(await chooseBranch(user), 'Class 1 - A')
+        await user.selectOptions(screen.getByLabelText('Transferring to'), 'Branch 3')
+
+        expect(await screen.findByLabelText('Class at the new branch')).toHaveValue('')
+        expect(screen.getByLabelText('Roll number at the new branch')).toHaveValue('')
+      })
+
+      it('shows nothing about classes for a withdrawal', async () => {
+        mockApi()
+        await renderWizard({ prefill: { exit_type: 'WITHDRAWN' } })
+        expect(screen.queryByLabelText('Class at the new branch')).not.toBeInTheDocument()
+      })
     })
 
     it('says so when the organization has no other branch', async () => {
@@ -261,6 +375,100 @@ describe('StudentExitWizard', () => {
       await user.click(fees.getByRole('button', { name: 'Confirm waiver' }))
 
       expect(await screen.findByRole('alert')).toHaveTextContent('at least 10 characters')
+    })
+
+    describe('carrying the fees to the new branch', () => {
+      const transferCase = (over = {}) => makeExit({
+        exit_type: 'TRANSFERRED', destination_school: 2, destination_school_name: 'Branch 2',
+        destination_class_label: 'Class 1 - A', destination_roll_number: '3',
+        items: [feesOpen, item('LIBRARY'), item('GATE_PASS')], open_item_count: 1, fee_carry_plan: plan, ...over,
+      })
+
+      it('offers Carry next to Waive for a transfer', async () => {
+        mockApi({ existing: transferCase() })
+        await renderWizard()
+        const fees = within(screen.getByTestId('item-FEES'))
+        expect(fees.getByRole('button', { name: /Carry to Branch 2/ })).toBeInTheDocument()
+        expect(fees.getByRole('button', { name: /Waive/ })).toBeInTheDocument()
+      })
+
+      it('does not offer Carry for a withdrawal', async () => {
+        mockApi({ existing: openCase() })
+        await renderWizard()
+        await screen.findByTestId('item-FEES')
+        expect(screen.queryByRole('button', { name: /Carry to/ })).not.toBeInTheDocument()
+      })
+
+      it('previews what the new branch will receive before anything happens', async () => {
+        mockApi({ existing: transferCase() })
+        const { user } = await renderWizard()
+        await user.click(screen.getByRole('button', { name: /Carry to Branch 2/ }))
+
+        const preview = within(await screen.findByTestId('carry-preview'))
+        expect(preview.getByText('What Branch 2 will receive')).toBeInTheDocument()
+        expect(preview.getByText('Yearly charges')).toBeInTheDocument()
+        expect(preview.getByText(/Admission Drive: PKR 500/)).toBeInTheDocument()
+        expect(preview.getByText(/Tuition: PKR 1,500/)).toBeInTheDocument()
+        expect(preview.getByText(/new charge type at Branch 2/)).toBeInTheDocument()
+        expect(preview.getByText('PKR 2,000')).toBeInTheDocument()
+        expect(preview.getByText(/Nothing is marked as paid/)).toBeInTheDocument()
+        expect(calls.some((c) => c[0] === 'carry')).toBe(false)
+      })
+
+      it('lists no yearly charges when none is pending', async () => {
+        const monthlyOnly = { ...plan, total: '1500.00', lines: [plan.lines[0]] }
+        mockApi({ existing: transferCase({ fee_carry_plan: monthlyOnly }) })
+        const { user } = await renderWizard()
+        await user.click(screen.getByRole('button', { name: /Carry to Branch 2/ }))
+
+        const preview = within(await screen.findByTestId('carry-preview'))
+        expect(preview.queryByText('Yearly charges')).not.toBeInTheDocument()
+        expect(preview.getByText(/Tuition: PKR 1,500/)).toBeInTheDocument()
+      })
+
+      it('carries on confirm: the item shows Carried and the exit can be finalized', async () => {
+        mockApi({ existing: transferCase() })
+        const { user } = await renderWizard()
+        await user.click(screen.getByRole('button', { name: /Carry to Branch 2/ }))
+        await user.click(within(await screen.findByTestId('carry-preview')).getByRole('button', { name: 'Carry to Branch 2' }))
+
+        const fees = within(await screen.findByTestId('item-FEES'))
+        expect(await fees.findByText('Carried')).toBeInTheDocument()
+        expect(fees.getByText(/Branch 2's to collect/)).toBeInTheDocument()
+        expect(calls).toContainEqual(['carry', 'FEES'])
+
+        await user.click(screen.getByRole('button', { name: 'Review' }))
+        expect(screen.getByText('Fees carried to Branch 2')).toBeInTheDocument()
+        expect(screen.getByText('Class at the new branch')).toBeInTheDocument()
+        expect(screen.getByRole('button', { name: 'Finalize exit' })).toBeEnabled()
+      })
+
+      it('cancelling the preview changes nothing, and a carry can be undone', async () => {
+        mockApi({ existing: transferCase() })
+        const { user } = await renderWizard()
+        await user.click(screen.getByRole('button', { name: /Carry to Branch 2/ }))
+        await user.click(within(await screen.findByTestId('carry-preview')).getByRole('button', { name: 'Cancel' }))
+        expect(calls.some((c) => c[0] === 'carry')).toBe(false)
+
+        await user.click(screen.getByRole('button', { name: /Carry to Branch 2/ }))
+        await user.click(within(await screen.findByTestId('carry-preview')).getByRole('button', { name: 'Carry to Branch 2' }))
+        await user.click(await screen.findByRole('button', { name: 'Undo' }))
+
+        expect(calls).toContainEqual(['unwaive', 'FEES'])
+        expect(await screen.findByRole('button', { name: /Carry to Branch 2/ })).toBeInTheDocument()
+      })
+
+      it('shows the server message when carrying is refused', async () => {
+        mockApi({ existing: transferCase() })
+        server.use(http.post('/api/student-exits/:id/items/:kind/carry/', () => (
+          HttpResponse.json({ detail: 'Nothing to carry: there are no pending fees.' }, { status: 400 })
+        )))
+        const { user } = await renderWizard()
+        await user.click(screen.getByRole('button', { name: /Carry to Branch 2/ }))
+        await user.click(within(await screen.findByTestId('carry-preview')).getByRole('button', { name: 'Carry to Branch 2' }))
+
+        expect(await screen.findByRole('alert')).toHaveTextContent('Nothing to carry')
+      })
     })
 
     it('refreshes the checklist on request', async () => {

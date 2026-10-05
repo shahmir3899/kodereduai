@@ -584,6 +584,18 @@ class FeePayment(models.Model):
         related_name='fee_payments',
         help_text="Account that received this payment"
     )
+    # Branch transfers: the balance moves from one school's books to another's.
+    # handed_over_to_exit is set on the SOURCE row (it still shows what was billed and
+    # paid, but its balance is no longer owed here); carried_from_exit is set on the
+    # DESTINATION row that took the balance over (never regenerated or overwritten).
+    handed_over_to_exit = models.ForeignKey(
+        'student_exits.StudentExit', null=True, blank=True, on_delete=models.SET_NULL,
+        related_name='handed_over_fee_rows',
+    )
+    carried_from_exit = models.ForeignKey(
+        'student_exits.StudentExit', null=True, blank=True, on_delete=models.SET_NULL,
+        related_name='carried_fee_rows',
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

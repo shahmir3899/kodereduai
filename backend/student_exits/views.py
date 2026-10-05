@@ -1,3 +1,5 @@
+from datetime import date
+
 from django.shortcuts import get_object_or_404
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
@@ -65,11 +67,19 @@ class StudentExitViewSet(
             if destination is None:
                 return Response({'detail': 'Destination school not found.'}, status=status.HTTP_400_BAD_REQUEST)
 
+        destination_class = None
+        if data['destination_session_class'] is not None:
+            destination_class = SessionClass.objects.filter(pk=data['destination_session_class']).first()
+            if destination_class is None:
+                return Response({'detail': 'Class not found.'}, status=status.HTTP_400_BAD_REQUEST)
+
         try:
             exit_case = services.open_exit(
                 student=student, exit_type=data['exit_type'], leaving_date=data['leaving_date'],
                 reason=data['reason'], destination_school=destination,
                 remove_records=data['remove_records_after_leaving'], user=request.user,
+                destination_session_class=destination_class,
+                destination_roll_number=data['destination_roll_number'],
             )
         except services.ExitError as exc:
             return self._error(exc)
@@ -87,11 +97,19 @@ class StudentExitViewSet(
             destination = School.objects.filter(pk=data['destination_school']).first()
             if destination is None:
                 return Response({'detail': 'Destination school not found.'}, status=status.HTTP_400_BAD_REQUEST)
+        placement_given = 'destination_session_class' in data or 'destination_roll_number' in data
+        destination_class = None
+        if data.get('destination_session_class') is not None:
+            destination_class = SessionClass.objects.filter(pk=data['destination_session_class']).first()
+            if destination_class is None:
+                return Response({'detail': 'Class not found.'}, status=status.HTTP_400_BAD_REQUEST)
         try:
             services.update_exit(
                 exit_case, leaving_date=data.get('leaving_date'), reason=data.get('reason'),
                 destination_school=destination, destination_given=destination_given,
                 remove_records=data.get('remove_records_after_leaving'),
+                placement_given=placement_given, destination_session_class=destination_class,
+                destination_roll_number=data.get('destination_roll_number', ''),
             )
             services.refresh_clearance(exit_case)
         except services.ExitError as exc:
@@ -110,6 +128,43 @@ class StudentExitViewSet(
             .exclude(pk=school.pk).order_by('name')
         )
         return Response([{'id': s.id, 'name': s.name} for s in schools])
+
+    @action(detail=False, methods=['get'], url_path='destination-classes')
+    def destination_classes(self, request):
+        """The classes (and the rolls already taken in each) a transferring student can
+        join at a destination branch, for the academic year of the leaving date."""
+        from academic_sessions.models import StudentEnrollment
+        from . import transfer
+
+        school_id = ensure_tenant_school_id(request)
+        school = School.objects.filter(pk=school_id).first() if school_id else None
+        destination = School.objects.filter(pk=request.query_params.get('school') or 0).first()
+        if (school is None or destination is None or not school.organization_id
+                or destination.organization_id != school.organization_id or destination.pk == school.pk):
+            return Response({'detail': 'Choose another branch of your organization.'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            leaving = date.fromisoformat(request.query_params.get('leaving_date') or '')
+        except ValueError:
+            return Response({'detail': 'A leaving date is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        year = transfer.destination_year(destination, leaving)
+        if year is None:
+            return Response({'detail': f'{destination.name} has no academic year covering that date.'},
+                            status=status.HTTP_400_BAD_REQUEST)
+        classes = list(SessionClass.objects.filter(school=destination, academic_year=year, is_active=True)
+                       .select_related('class_obj').order_by('grade_level', 'section'))
+        rolls = {}
+        for class_id, roll in StudentEnrollment.objects.filter(
+            school=destination, academic_year=year, session_class__in=classes,
+        ).values_list('session_class_id', 'roll_number'):
+            rolls.setdefault(class_id, []).append(roll)
+        return Response({
+            'academic_year': {'id': year.id, 'name': year.name},
+            'classes': [
+                {'id': c.id, 'label': c.label or c.display_name, 'rolls': rolls.get(c.id, [])}
+                for c in classes
+            ],
+        })
 
     @action(detail=False, methods=['post'])
     def readmit(self, request):
@@ -159,6 +214,18 @@ class StudentExitViewSet(
         serializer.is_valid(raise_exception=True)
         try:
             services.waive_item(exit_case, kind, serializer.validated_data['reason'], request.user)
+        except services.ExitError as exc:
+            return self._error(exc)
+        return self._respond(exit_case)
+
+    @action(detail=True, methods=['post'], url_path=r'items/(?P<kind>[A-Z_]+)/carry')
+    def carry(self, request, pk=None, kind=None):
+        """Hand the pending fees to the destination branch (transfers only)."""
+        exit_case = self.get_object()
+        if kind not in ExitClearanceItem.Kind.values:
+            return Response({'detail': 'Unknown clearance item.'}, status=status.HTTP_404_NOT_FOUND)
+        try:
+            services.carry_item(exit_case, kind, request.user)
         except services.ExitError as exc:
             return self._error(exc)
         return self._respond(exit_case)

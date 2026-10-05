@@ -53,7 +53,7 @@ def fee_risk_for_students(student_ids):
         'student_id', 'monthly_category_id', 'year', 'month', 'id',
     ).values(
         'student_id', 'fee_type', 'monthly_category_id', 'year', 'month',
-        'amount_due', 'amount_paid', 'previous_balance', 'base_monthly_fee',
+        'amount_due', 'amount_paid', 'previous_balance', 'base_monthly_fee', 'handed_over_to_exit_id',
     ):
         rows_by_student[row['student_id']].append(row)
 
@@ -68,10 +68,14 @@ def fee_risk_for_students(student_ids):
                 latest_monthly[key] = row
                 nothing_paid = (row['amount_paid'] or ZERO) == 0 and (row['amount_due'] or ZERO) > 0
                 unpaid_run[key] = unpaid_run.get(key, 0) + 1 if nothing_paid else 0
-            else:
+            elif not row['handed_over_to_exit_id']:
                 balance = (row['amount_due'] or ZERO) - (row['amount_paid'] or ZERO)
                 if balance > ZERO:
                     other_pending += balance
+
+        # A category handed over to another branch is no longer owed here (its latest
+        # row is flagged; older rows must not stand in for it).
+        latest_monthly = {k: r for k, r in latest_monthly.items() if not r['handed_over_to_exit_id']}
 
         monthly_pending = ZERO
         for row in latest_monthly.values():

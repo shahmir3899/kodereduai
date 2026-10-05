@@ -10,6 +10,10 @@ a family owes today is therefore:
   * for annual and the deprecated one-off fee types, each row's own balance.
 
 Credits (ADVANCE rows, or paid above due) never offset another row's balance.
+
+Rows handed over to another branch in a transfer (handed_over_to_exit) are no longer
+owed here: the balance now lives on the destination branch's carried row. The latest
+monthly row is still picked first, so an older row never takes its place.
 """
 from decimal import Decimal
 
@@ -48,12 +52,16 @@ def student_pending_fees(student):
 
     items = []
     for payment in [*latest_monthly.values(), *others]:
+        if payment.handed_over_to_exit_id:
+            continue
         balance = _balance(payment)
         if balance <= ZERO:
             continue
         category = payment.monthly_category if payment.fee_type == 'MONTHLY' else payment.annual_category
         label = getattr(category, 'name', None) or payment.get_fee_type_display()
         items.append({
+            'payment_id': payment.id,
+            'category_id': payment.monthly_category_id if payment.fee_type == 'MONTHLY' else payment.annual_category_id,
             'fee_type': payment.fee_type,
             'label': label,
             'month': payment.month,

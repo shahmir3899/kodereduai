@@ -143,6 +143,13 @@ class Student(models.Model):
     guardian_address = models.TextField(blank=True, default='')
     emergency_contact = models.CharField(max_length=20, blank=True, default='')
 
+    # Set on the record a transfer creates at the destination branch; the source
+    # record stays (with its history) at the branch the student left.
+    transferred_from = models.ForeignKey(
+        'self', null=True, blank=True, on_delete=models.SET_NULL, related_name='transferred_to',
+        help_text='The student record this one was created from by a branch transfer.',
+    )
+
     # Status
     is_active = models.BooleanField(default=True)
     status = models.CharField(

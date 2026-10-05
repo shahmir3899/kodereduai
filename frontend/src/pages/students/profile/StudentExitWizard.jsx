@@ -1,7 +1,8 @@
-import { useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { useToast } from '../../../components/Toast'
 import { useEscapeKey } from '../../../hooks/useEscapeKey'
-import { useExitDestinations, useStudentExit } from '../../../hooks/useStudentExit'
+import { useRollSuggestion } from '../../../hooks/useRollSuggestion'
+import { useDestinationClasses, useExitDestinations, useStudentExit } from '../../../hooks/useStudentExit'
 import { formatDate, formatMoney, getApiErrorMessage } from './profileUtils'
 import { LeavingConflictNotice } from './StatusUpdateModal'
 
@@ -13,8 +14,9 @@ const STATE_STYLES = {
   CLEAR: 'bg-green-100 text-green-800',
   OPEN: 'bg-red-100 text-red-800',
   WAIVED: 'bg-amber-100 text-amber-800',
+  CARRIED: 'bg-blue-100 text-blue-800',
 }
-const STATE_LABELS = { CLEAR: 'Clear', OPEN: 'Open', WAIVED: 'Waived' }
+const STATE_LABELS = { CLEAR: 'Clear', OPEN: 'Open', WAIVED: 'Waived', CARRIED: 'Carried' }
 
 // Withdraw or transfer a student: details, then a clearance checklist (fees, library
 // books, gate passes) where open items are cleared or waived with a reason, then a
@@ -46,7 +48,11 @@ function WizardBody({ student, prefill = null, onClose }) {
     leaving_date: exitCase?.leaving_date || prefill?.leaving_date || today(),
     reason: exitCase?.reason || prefill?.reason || '',
     remove_records_after_leaving: exitCase?.remove_records_after_leaving || false,
+    destination_session_class: exitCase?.destination_session_class ? String(exitCase.destination_session_class) : '',
+    destination_roll_number: exitCase?.destination_roll_number || '',
   })
+  const [rollTyped, setRollTyped] = useState(!!exitCase?.destination_roll_number)
+  const [carrying, setCarrying] = useState(false) // the fee preview is open
   const [conflict, setConflict] = useState(null)
   const [error, setError] = useState('')
   const [waiving, setWaiving] = useState(null) // { kind, reason }
@@ -54,8 +60,33 @@ function WizardBody({ student, prefill = null, onClose }) {
 
   useEscapeKey(onClose, true)
 
+  const isTransfer = form.exit_type === 'TRANSFERRED'
+  const destinationName = destinations.find((s) => String(s.id) === form.destination_school)?.name
+    || exitCase?.destination_school_name || 'the new branch'
+  const { data: destinationClasses, isLoading: classesLoading, error: classesError } = useDestinationClasses(
+    form.destination_school, form.leaving_date, isTransfer && step === 0,
+  )
+  const targetClass = destinationClasses?.classes?.find((c) => String(c.id) === form.destination_session_class)
+  const occupiedRolls = useMemo(() => targetClass?.rolls || [], [targetClass])
+  const autoFillRoll = useCallback((roll) => setForm((f) => ({ ...f, destination_roll_number: roll })), [])
+  const { recommendedRoll } = useRollSuggestion({
+    enabled: isTransfer,
+    hasClass: !!targetClass,
+    occupiedRolls,
+    currentRoll: form.destination_roll_number,
+    manuallyEdited: rollTyped,
+    onAutoFill: autoFillRoll,
+  })
+
   const set = (name, value) => {
-    setForm((f) => ({ ...f, [name]: value }))
+    setForm((f) => ({
+      ...f,
+      [name]: value,
+      // Another branch (or date, hence maybe another year) means another set of classes.
+      ...(name === 'destination_school' || name === 'leaving_date'
+        ? { destination_session_class: '', destination_roll_number: '' } : {}),
+    }))
+    if (name === 'destination_school' || name === 'leaving_date') setRollTyped(false)
     setConflict(null)
     setError('')
   }
@@ -82,6 +113,10 @@ function WizardBody({ student, prefill = null, onClose }) {
     reason: form.reason,
     destination_school: form.exit_type === 'TRANSFERRED' && form.destination_school ? Number(form.destination_school) : null,
     remove_records_after_leaving: form.remove_records_after_leaving,
+    ...(form.exit_type === 'TRANSFERRED' ? {
+      destination_session_class: form.destination_session_class ? Number(form.destination_session_class) : null,
+      destination_roll_number: form.destination_roll_number.trim(),
+    } : {}),
   })
 
   const handleContinue = async () => {
@@ -93,12 +128,25 @@ function WizardBody({ student, prefill = null, onClose }) {
       setError('Choose the branch the student is transferring to.')
       return
     }
+    if (form.exit_type === 'TRANSFERRED' && !form.destination_session_class) {
+      setError('Choose the class the student will join at the new branch.')
+      return
+    }
+    if (form.exit_type === 'TRANSFERRED' && !form.destination_roll_number.trim()) {
+      setError('Choose a roll number at the new branch.')
+      return
+    }
     const result = await run(() => (
       exitCase
         ? exit.update.mutateAsync({ id: exitCase.id, data: detailsPayload() })
         : exit.start.mutateAsync(detailsPayload())
     ))
     if (result) setStep(1)
+  }
+
+  const handleCarry = async () => {
+    const result = await run(() => exit.carry.mutateAsync({ id: exitCase.id, kind: 'FEES' }))
+    if (result) setCarrying(false)
   }
 
   const handleWaive = async () => {
@@ -187,6 +235,54 @@ function WizardBody({ student, prefill = null, onClose }) {
                 </div>
               )}
 
+              {isTransfer && form.destination_school && (
+                <div className="space-y-3 rounded-lg border border-gray-200 p-3">
+                  <p className="text-sm font-medium text-gray-900">
+                    At {destinationName}
+                    {destinationClasses?.academic_year && (
+                      <span className="font-normal text-gray-500"> · {destinationClasses.academic_year.name}</span>
+                    )}
+                  </p>
+                  {classesError && (
+                    <p role="alert" className="text-xs text-red-700">
+                      {classesError?.response?.data?.detail || 'Could not load the classes of that branch.'}
+                    </p>
+                  )}
+                  <div>
+                    <label htmlFor="exit-dest-class" className="block text-sm font-medium text-gray-700 mb-1">Class at the new branch</label>
+                    <select
+                      id="exit-dest-class" className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                      value={form.destination_session_class} disabled={classesLoading}
+                      onChange={(e) => {
+                        setRollTyped(false)
+                        setForm((f) => ({ ...f, destination_session_class: e.target.value, destination_roll_number: '' }))
+                        setError('')
+                      }}
+                    >
+                      <option value="">Select a class</option>
+                      {(destinationClasses?.classes || []).map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label htmlFor="exit-dest-roll" className="block text-sm font-medium text-gray-700 mb-1">Roll number at the new branch</label>
+                    <input
+                      id="exit-dest-roll" className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                      value={form.destination_roll_number}
+                      onChange={(e) => {
+                        setRollTyped(true)
+                        setForm((f) => ({ ...f, destination_roll_number: e.target.value }))
+                      }}
+                    />
+                    {recommendedRoll && (
+                      <p className="text-xs text-gray-500 mt-1">Next free roll in that class: {recommendedRoll}</p>
+                    )}
+                  </div>
+                  <p className="text-xs text-gray-500">
+                    A new student record is created at {destinationName} from the leaving date. The record here stays.
+                  </p>
+                </div>
+              )}
+
               <div>
                 <label htmlFor="exit-date" className="block text-sm font-medium text-gray-700 mb-1">Leaving date</label>
                 <input
@@ -251,7 +347,32 @@ function WizardBody({ student, prefill = null, onClose }) {
                       </div>
                     )}
 
-                    {item.state === 'OPEN' && (waiving?.kind === item.kind ? (
+                    {item.state === 'CARRIED' && (
+                      <div className="mt-2 text-xs text-blue-900 bg-blue-50 border border-blue-200 rounded p-2">
+                        <p>{item.waiver_reason} ({item.waived_by_name}, {formatDate(item.waived_at)}). It becomes {destinationName}&apos;s to collect.</p>
+                        <button
+                          type="button" disabled={busy} className="mt-1 font-medium text-blue-800 underline"
+                          onClick={() => run(() => exit.unwaive.mutateAsync({ id: exitCase.id, kind: item.kind }))}
+                        >
+                          Undo
+                        </button>
+                      </div>
+                    )}
+
+                    {item.state === 'OPEN' && item.kind === 'FEES' && isTransfer && exitCase.fee_carry_plan && carrying && (
+                      <CarryPreview plan={exitCase.fee_carry_plan} busy={busy} onConfirm={handleCarry} onCancel={() => setCarrying(false)} />
+                    )}
+
+                    {item.state === 'OPEN' && item.kind === 'FEES' && isTransfer && exitCase.fee_carry_plan && !carrying && !waiving && (
+                      <button
+                        type="button" className="mt-2 mr-4 text-sm font-medium text-blue-700 hover:text-blue-800"
+                        onClick={() => setCarrying(true)}
+                      >
+                        Carry to {exitCase.fee_carry_plan.destination}…
+                      </button>
+                    )}
+
+                    {item.state === 'OPEN' && !(carrying && item.kind === 'FEES') && (waiving?.kind === item.kind ? (
                       <div className="mt-2 space-y-2">
                         <label htmlFor={`waive-${item.kind}`} className="block text-xs font-medium text-gray-700">Reason for waiving (at least 10 characters)</label>
                         <textarea
@@ -286,11 +407,23 @@ function WizardBody({ student, prefill = null, onClose }) {
               <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3 text-sm">
                 <Row label="Type" value={exitCase.exit_type_label} />
                 {exitCase.destination_school_name && <Row label="Transferring to" value={exitCase.destination_school_name} />}
+                {exitCase.destination_class_label && (
+                  <Row label="Class at the new branch" value={`${exitCase.destination_class_label} · Roll #${exitCase.destination_roll_number}`} />
+                )}
                 <Row label="Leaving date" value={formatDate(exitCase.leaving_date)} />
                 <Row label="Reason" value={exitCase.reason || '—'} />
               </dl>
               {exitCase.remove_records_after_leaving && (
                 <p className="text-sm text-red-700">Attendance and marks on or after the leaving date will be removed (a copy is kept in the audit log).</p>
+              )}
+              {items.some((i) => i.state === 'CARRIED') && (
+                <div className="text-sm bg-blue-50 border border-blue-200 rounded-lg p-3">
+                  <p className="font-medium text-blue-900">Fees carried to {exitCase.destination_school_name}</p>
+                  <p className="mt-1 text-blue-900">
+                    {items.find((i) => i.state === 'CARRIED')?.summary}. It is created there as unpaid and is no longer
+                    counted here.
+                  </p>
+                </div>
               )}
               {items.some((i) => i.state === 'WAIVED') && (
                 <div className="text-sm bg-amber-50 border border-amber-200 rounded-lg p-3">
@@ -306,6 +439,9 @@ function WizardBody({ student, prefill = null, onClose }) {
                 <p className="font-medium text-gray-900">When you finalize</p>
                 <ul className="list-disc pl-5 mt-1 space-y-0.5">
                   <li>The student is marked {exitCase.exit_type === 'TRANSFERRED' ? 'Transferred' : 'Withdrawn'} and this year&apos;s enrollment is closed.</li>
+                  {exitCase.exit_type === 'TRANSFERRED' && (
+                    <li>A new student record is created at {exitCase.destination_school_name}, starting {formatDate(exitCase.leaving_date)}.</li>
+                  )}
                   <li>Their hostel room is vacated and transport assignment ended.</li>
                   <li>Their own login at this school is switched off.</li>
                   <li>Parents keep read-only access to the history.</li>
@@ -384,6 +520,44 @@ function WizardBody({ student, prefill = null, onClose }) {
             </div>
           )}
         </div>
+      </div>
+    </div>
+  )
+}
+
+// What the new branch will receive: yearly charges (only if something is pending) and
+// one balance per monthly charge, in the new branch's terms.
+function CarryPreview({ plan, busy, onConfirm, onCancel }) {
+  const monthly = plan.lines.filter((l) => l.fee_type === 'MONTHLY')
+  const yearly = plan.lines.filter((l) => l.fee_type !== 'MONTHLY')
+  const group = (title, lines) => lines.length > 0 && (
+    <div>
+      <p className="text-xs font-medium text-gray-700">{title}</p>
+      <ul className="text-xs text-gray-700 space-y-0.5 mt-0.5">
+        {lines.map((l, i) => (
+          <li key={i}>
+            {l.label}: {money(l.balance)}
+            {!l.category_exists && <span className="text-gray-500"> (new charge type at {plan.destination})</span>}
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+  return (
+    <div className="mt-2 space-y-2 border border-blue-200 bg-blue-50/50 rounded-lg p-3" data-testid="carry-preview">
+      <p className="text-sm font-medium text-gray-900">What {plan.destination} will receive</p>
+      {group('Yearly charges', yearly)}
+      {group('Monthly fee (one balance per charge)', monthly)}
+      <p className="text-sm text-gray-900">Total: <strong>{money(plan.total)}</strong></p>
+      <p className="text-xs text-gray-600">
+        It is created there as unpaid and stays with the student. {plan.destination} is responsible for collecting it, and
+        it no longer counts here. Nothing is marked as paid.
+      </p>
+      <div className="flex gap-2">
+        <button type="button" disabled={busy} onClick={onConfirm} className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-sm disabled:opacity-50">
+          Carry to {plan.destination}
+        </button>
+        <button type="button" onClick={onCancel} className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm">Cancel</button>
       </div>
     </div>
   )

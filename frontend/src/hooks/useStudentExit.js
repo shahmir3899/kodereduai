@@ -40,9 +40,23 @@ export function useStudentExit(studentId, { enabled = true } = {}) {
     refresh: useMutation({ mutationFn: (id) => studentExitsApi.refresh(id), onSuccess: store }),
     waive: useMutation({ mutationFn: ({ id, kind, reason }) => studentExitsApi.waive(id, kind, reason), onSuccess: store }),
     unwaive: useMutation({ mutationFn: ({ id, kind }) => studentExitsApi.unwaive(id, kind), onSuccess: store }),
+    // Transfers only: hand the pending fees to the new branch instead of waiving them.
+    carry: useMutation({ mutationFn: ({ id, kind }) => studentExitsApi.carry(id, kind), onSuccess: store }),
     finalize: useMutation({ mutationFn: (id) => studentExitsApi.finalize(id), onSuccess: settle }),
     cancel: useMutation({ mutationFn: ({ id, reason }) => studentExitsApi.cancel(id, reason), onSuccess: settle }),
   }
+}
+
+// The classes (and the rolls already taken) a transferring student can join at the
+// destination branch, for the academic year of the leaving date.
+export function useDestinationClasses(school, leavingDate, enabled) {
+  return useQuery({
+    queryKey: ['studentExitDestinationClasses', String(school), leavingDate],
+    queryFn: async () => (await studentExitsApi.destinationClasses({ school, leaving_date: leavingDate })).data,
+    enabled: !!enabled && !!school && !!leavingDate,
+    staleTime: 60_000,
+    retry: false,
+  })
 }
 
 export function useExitDestinations(enabled) {

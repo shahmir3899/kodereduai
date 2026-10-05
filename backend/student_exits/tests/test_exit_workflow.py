@@ -416,7 +416,11 @@ class TestFinalize:
         assert ParentChild.objects.filter(pk=link.pk).exists()
 
     def test_a_transfer_finalizes_as_transferred_and_keeps_the_destination(self, api, ctx):
-        exit_id = start(api, ctx, exit_type='TRANSFERRED', destination_school=ctx['SID_B']).json()['id']
+        from .transfer_helpers import destination_placement, placement_body
+        placement = destination_placement(ctx)
+        exit_id = start(
+            api, ctx, exit_type='TRANSFERRED', destination_school=ctx['SID_B'], **placement_body(placement),
+        ).json()['id']
         data = self.finalize(api, ctx, exit_id).json()
         ctx['student'].refresh_from_db()
         assert ctx['student'].status == 'TRANSFERRED'

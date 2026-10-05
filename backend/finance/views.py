@@ -691,7 +691,10 @@ class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
         ).first()
 
         if existing_payment:
-            if fee_type == 'MONTHLY':
+            if existing_payment.carried_from_exit_id:
+                # Took over a balance from another branch (transfer): never regenerated.
+                same_computed_values = True
+            elif fee_type == 'MONTHLY':
                 same_computed_values = (
                     (existing_payment.previous_balance or Decimal('0')) == previous_balance
                     and (existing_payment.base_monthly_fee or Decimal('0')) == base_monthly_fee
