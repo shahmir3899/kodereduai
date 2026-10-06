@@ -12,14 +12,14 @@
  */
 
 export function Skeleton({ className = '' }) {
-  return <div className={`animate-pulse rounded bg-gray-200 ${className}`} />
+  return <div className={`animate-pulse rounded bg-gray-200 dark:bg-gray-700 ${className}`} />
 }
 
 export function SkeletonTable({ rows = 5, cols = 4 }) {
   return (
     <tbody>
       {Array.from({ length: rows }).map((_, r) => (
-        <tr key={r} className="border-b border-gray-100">
+        <tr key={r} className="border-b border-gray-100 dark:border-gray-700">
           {Array.from({ length: cols }).map((__, c) => (
             <td key={c} className="px-4 py-3">
               <Skeleton className="h-4 w-full max-w-[10rem]" />

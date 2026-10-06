@@ -1,5 +1,5 @@
 import { useState, useCallback, createContext, useContext } from 'react'
-import { useEscapeKey } from '../hooks/useEscapeKey'
+import Modal from './ui/Modal'
 
 /**
  * Reusable confirmation modal with icon, title, message, and action buttons.
@@ -29,6 +29,17 @@ const VARIANTS = {
     confirmLabel: 'Delete',
     pendingLabel: 'Deleting...',
   },
+  primary: {
+    icon: (
+      <svg className="w-5 h-5 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+      </svg>
+    ),
+    iconBg: 'bg-primary-100',
+    confirmBtn: 'bg-primary-600 text-white hover:bg-primary-700',
+    confirmLabel: 'Confirm',
+    pendingLabel: 'Processing...',
+  },
   warning: {
     icon: (
       <svg className="w-5 h-5 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -43,19 +54,17 @@ const VARIANTS = {
 }
 
 function ConfirmModalUI({ show, title, message, variant = 'danger', confirmLabel, pendingLabel, isPending, onConfirm, onCancel }) {
-  useEscapeKey(onCancel, show)
   if (!show) return null
   const v = VARIANTS[variant] || VARIANTS.danger
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4" onClick={onCancel}>
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl w-full max-w-sm p-6 animate-in fade-in" onClick={e => e.stopPropagation()}>
+    <Modal open onClose={onCancel} size="sm" layer="top">
         <div className="flex items-center gap-3 mb-3">
           <div className={`w-10 h-10 rounded-full ${v.iconBg} flex items-center justify-center shrink-0`}>
             {v.icon}
           </div>
           <div>
             <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100">{title || 'Confirm'}</h3>
-            <p className="text-sm text-gray-500 dark:text-gray-400">This action cannot be undone.</p>
+            {variant === 'danger' && <p className="text-sm text-gray-500 dark:text-gray-400">This action cannot be undone.</p>}
           </div>
         </div>
         <p className="text-sm text-gray-600 dark:text-gray-300 mb-5">{message}</p>
@@ -74,8 +83,7 @@ function ConfirmModalUI({ show, title, message, variant = 'danger', confirmLabel
             {isPending ? (pendingLabel || v.pendingLabel) : (confirmLabel || v.confirmLabel)}
           </button>
         </div>
-      </div>
-    </div>
+    </Modal>
   )
 }
 
