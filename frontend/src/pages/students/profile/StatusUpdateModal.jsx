@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import Button from '../../../components/ui/Button'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { studentsApi } from '../../../services/api'
 import { useToast } from '../../../components/Toast'
@@ -76,7 +77,7 @@ export default function StatusUpdateModal({ student, onClose, onStartExit, onSta
   }
 
   return (
-    <div className="fixed inset-0 z-[60] bg-black/40 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4">
       <div className="bg-white rounded-xl shadow-xl border border-gray-200 w-full max-w-md">
         <div className="px-6 py-4 border-b border-gray-200">
           <h2 className="text-lg font-semibold text-gray-900">Update Student Status</h2>
@@ -88,7 +89,7 @@ export default function StatusUpdateModal({ student, onClose, onStartExit, onSta
             <label htmlFor="status-update-status" className="block text-sm font-medium text-gray-700 mb-1">Status</label>
             <select
               id="status-update-status"
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+              className="input"
               value={form.status}
               onChange={(e) => {
                 setForm((p) => ({ ...p, status: e.target.value }))
@@ -119,7 +120,7 @@ export default function StatusUpdateModal({ student, onClose, onStartExit, onSta
             <input
               id="status-update-date"
               type="date"
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+              className="input"
               value={form.status_date}
               onChange={(e) => {
                 setForm((p) => ({ ...p, status_date: e.target.value }))
@@ -144,7 +145,7 @@ export default function StatusUpdateModal({ student, onClose, onStartExit, onSta
             <textarea
               id="status-update-reason"
               rows={3}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+              className="input"
               value={form.status_reason}
               onChange={(e) => setForm((p) => ({ ...p, status_reason: e.target.value }))}
               placeholder="Brief reason for status change"
@@ -153,7 +154,7 @@ export default function StatusUpdateModal({ student, onClose, onStartExit, onSta
         </div>
 
         <div className="px-6 py-4 border-t border-gray-200 flex justify-end gap-2">
-          <button type="button" onClick={onClose} className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50">Cancel</button>
+          <Button variant="secondary" type="button" onClick={onClose}>Cancel</Button>
           <button
             type="button"
             onClick={handleSubmit}

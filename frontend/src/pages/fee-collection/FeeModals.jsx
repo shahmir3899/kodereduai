@@ -1,4 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
+import Field from '../../components/ui/Field'
+import Button from '../../components/ui/Button'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../../contexts/AuthContext'
 import { useSessionClasses } from '../../hooks/useSessionClasses'
@@ -36,7 +38,7 @@ export function PaymentModal({ payment, form, setForm, onSubmit, onClose, isPend
   if (!payment) return null
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50 p-4">
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4">
       <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
         <div className="p-6">
           <h3 className="text-lg font-semibold mb-1">Record Payment</h3>
@@ -50,24 +52,22 @@ export function PaymentModal({ payment, form, setForm, onSubmit, onClose, isPend
           </p>
 
           <form onSubmit={onSubmit} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Amount</label>
-              <input
+            <Field label="Amount">
+<input
                 type="number" step="0.01"
                 value={form.amount_paid}
                 onChange={(e) => setForm(f => ({ ...f, amount_paid: e.target.value }))}
                 className="input-field" required
               />
-            </div>
+</Field>
             <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Method</label>
-                <select value={form.payment_method} onChange={(e) => setForm(f => ({ ...f, payment_method: e.target.value }))} className="input-field">
+              <Field label="Method">
+<select value={form.payment_method} onChange={(e) => setForm(f => ({ ...f, payment_method: e.target.value }))} className="input-field">
                   {PAYMENT_METHODS.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
                 </select>
-              </div>
+</Field>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Account <span className="text-red-500">*</span></label>
+                <label className="label">Account <span className="text-red-500">*</span></label>
                 <select value={form.account} onChange={(e) => setForm(f => ({ ...f, account: e.target.value }))} className="input-field" required>
                   <option value="">-- Select --</option>
                   {accountsList.filter(a => a.is_active).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
@@ -76,23 +76,23 @@ export function PaymentModal({ payment, form, setForm, onSubmit, onClose, isPend
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Date <span className="text-red-500">*</span></label>
+                <label className="label">Date <span className="text-red-500">*</span></label>
                 <input type="date" value={form.payment_date} onChange={(e) => setForm(f => ({ ...f, payment_date: e.target.value }))} className="input-field" required />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Receipt # <span className="text-gray-400 font-normal">(opt)</span></label>
+                <label className="label">Receipt # <span className="text-gray-400 font-normal">(opt)</span></label>
                 <input type="text" value={form.receipt_number} onChange={(e) => setForm(f => ({ ...f, receipt_number: e.target.value }))} className="input-field" />
               </div>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Notes <span className="text-gray-400 font-normal">(opt)</span></label>
+              <label className="label">Notes <span className="text-gray-400 font-normal">(opt)</span></label>
               <textarea value={form.notes} onChange={(e) => setForm(f => ({ ...f, notes: e.target.value }))} className="input-field" rows={2} />
             </div>
             <div className="flex gap-3 pt-2">
-              <button type="button" onClick={onClose} className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm">Cancel</button>
-              <button type="submit" disabled={isPending} className="flex-1 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm disabled:opacity-50">
+              <Button variant="secondary" type="button" onClick={onClose} className="flex-1">Cancel</Button>
+              <Button type="submit" disabled={isPending} className="flex-1">
                 {isPending ? 'Saving...' : 'Save Payment'}
-              </button>
+              </Button>
             </div>
             {error && <p className="text-sm text-red-600">{getErrorMessage(error, 'Failed to record payment')}</p>}
           </form>
@@ -331,7 +331,7 @@ export function FeeStructureModal({ show, onClose, classList, bulkEffectiveFrom,
   const overrideCount = studentFees.filter(s => s.isOverride).length
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50 p-4">
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4">
       <div className={`bg-white rounded-lg shadow-xl w-full flex flex-col ${
         structureMode === 'student' ? 'max-w-4xl max-h-[95vh]' : 'max-w-lg max-h-[80vh]'
       }`}>
@@ -370,10 +370,9 @@ export function FeeStructureModal({ show, onClose, classList, bulkEffectiveFrom,
             <>
               <p className="text-sm text-gray-600 mb-4">{FEE_TYPE_DESCRIPTIONS[structureFeeType]}</p>
               {!showConfirm && (
-                <div className="mb-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Effective From</label>
-                  <input type="date" value={bulkEffectiveFrom} onChange={(e) => setBulkEffectiveFrom(e.target.value)} className="input-field" />
-                </div>
+                <Field label="Effective From" className="mb-4">
+<input type="date" value={bulkEffectiveFrom} onChange={(e) => setBulkEffectiveFrom(e.target.value)} className="input-field" />
+</Field>
               )}
             </>
           )}
@@ -400,14 +399,14 @@ export function FeeStructureModal({ show, onClose, classList, bulkEffectiveFrom,
                   </div>
                 </div>
                 <div className="p-6 flex gap-3 border-t flex-shrink-0">
-                  <button type="button" onClick={() => setShowConfirm(false)} className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm">Back</button>
-                  <button
-                    onClick={(e) => { onSubmit(e, structureFeeType, currentFees); setShowConfirm(false) }}
-                    disabled={mutation.isPending || feesWithValues.length === 0}
-                    className="flex-1 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm disabled:opacity-50"
-                  >
+                  <Button variant="secondary" type="button" onClick={() => setShowConfirm(false)} className="flex-1">Back</Button>
+                  <Button
+ onClick={(e) => { onSubmit(e, structureFeeType, currentFees); setShowConfirm(false) }}
+ disabled={mutation.isPending || feesWithValues.length === 0}
+ className="flex-1"
+ >
                     {mutation.isPending ? 'Saving...' : 'Confirm & Save'}
-                  </button>
+                  </Button>
                 </div>
                 {mutation.isError && <p className="px-6 pb-4 text-sm text-red-600">{getErrorMessage(mutation.error, 'Failed to save fee structures')}</p>}
                 {mutation.isSuccess && <p className="px-6 pb-4 text-sm text-green-600">Fee structures saved for {mutation.data?.data?.created} classes!</p>}
@@ -440,10 +439,10 @@ export function FeeStructureModal({ show, onClose, classList, bulkEffectiveFrom,
                   </table>
                 </div>
                 <div className="p-6 flex gap-3 border-t flex-shrink-0">
-                  <button type="button" onClick={onClose} className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm">Cancel</button>
-                  <button type="submit" className="flex-1 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm">
+                  <Button variant="secondary" type="button" onClick={onClose} className="flex-1">Cancel</Button>
+                  <Button type="submit" className="flex-1">
                     Review Changes
-                  </button>
+                  </Button>
                 </div>
                 {mutation.isError && <p className="px-6 pb-4 text-sm text-red-600">{getErrorMessage(mutation.error, 'Failed to save fee structures')}</p>}
                 {mutation.isSuccess && <p className="px-6 pb-4 text-sm text-green-600">Fee structures saved for {mutation.data?.data?.created} classes!</p>}
@@ -513,14 +512,14 @@ export function FeeStructureModal({ show, onClose, classList, bulkEffectiveFrom,
                   </div>
                 </div>
                 <div className="px-6 py-3 flex gap-3 border-t flex-shrink-0">
-                  <button type="button" onClick={() => setStudentShowConfirm(false)} className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm">Back</button>
-                  <button
-                    onClick={handleStudentFeeSave}
-                    disabled={studentFeeMutation?.isPending}
-                    className="flex-1 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm disabled:opacity-50"
-                  >
+                  <Button variant="secondary" type="button" onClick={() => setStudentShowConfirm(false)} className="flex-1">Back</Button>
+                  <Button
+ onClick={handleStudentFeeSave}
+ disabled={studentFeeMutation?.isPending}
+ className="flex-1"
+ >
                     {studentFeeMutation?.isPending ? 'Saving...' : 'Confirm & Save'}
-                  </button>
+                  </Button>
                 </div>
                 {studentFeeMutation?.isError && <p className="px-6 pb-3 text-sm text-red-600">{getErrorMessage(studentFeeMutation.error, 'Failed to save student fees')}</p>}
                 {studentFeeMutation?.isSuccess && (
@@ -571,15 +570,15 @@ export function FeeStructureModal({ show, onClose, classList, bulkEffectiveFrom,
                   </div>
                 )}
                 <div className="px-6 py-3 flex gap-3 border-t flex-shrink-0">
-                  <button type="button" onClick={onClose} className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm">Cancel</button>
-                  <button
-                    type="button"
-                    onClick={() => setStudentShowConfirm(true)}
-                    disabled={studentFees.length === 0 || studentFees.every(s => s.amount === '')}
-                    className="flex-1 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm disabled:opacity-50"
-                  >
+                  <Button variant="secondary" type="button" onClick={onClose} className="flex-1">Cancel</Button>
+                  <Button
+ type="button"
+ onClick={() => setStudentShowConfirm(true)}
+ disabled={studentFees.length === 0 || studentFees.every(s => s.amount === '')}
+ className="flex-1"
+ >
                     Review & Save
-                  </button>
+                  </Button>
                 </div>
                 {studentFeeMutation?.isError && <p className="px-6 pb-3 text-sm text-red-600">{getErrorMessage(studentFeeMutation.error, 'Failed to save student fees')}</p>}
                 {studentFeeMutation?.isSuccess && (
@@ -614,7 +613,7 @@ export function IncomeModal({ show, onClose, form, setForm, onSubmit, isPending,
 
   if (!show) return null
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-3 sm:p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
       <div className="w-full max-w-md rounded-xl bg-white shadow-xl" onClick={e => e.stopPropagation()}>
         {/* Header */}
         <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4 sm:px-6">
@@ -651,17 +650,15 @@ export function IncomeModal({ show, onClose, form, setForm, onSubmit, isPending,
 
             {/* Category + Date row */}
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div>
-                <label className="label">Category</label>
-                <select value={form.category} onChange={(e) => setForm(f => ({ ...f, category: e.target.value }))} className="input">
+              <Field label="Category">
+<select value={form.category} onChange={(e) => setForm(f => ({ ...f, category: e.target.value }))} className="input">
                   <option value="">Select category</option>
                   {incomeCategories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
-              </div>
-              <div>
-                <label className="label">Date</label>
-                <input type="date" value={form.date} onChange={(e) => setForm(f => ({ ...f, date: e.target.value }))} className="input" required />
-              </div>
+</Field>
+              <Field label="Date">
+<input type="date" value={form.date} onChange={(e) => setForm(f => ({ ...f, date: e.target.value }))} className="input" required />
+</Field>
             </div>
 
             {/* Quick add category */}
@@ -724,7 +721,7 @@ export function StudentFeeModal({ student, amount, setAmount, onSubmit, onClose,
   useEscapeKey(onClose, !!student)
   if (!student) return null
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50 p-4">
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4">
       <div className="bg-white rounded-lg shadow-xl w-full max-w-sm">
         <div className="p-6">
           <h3 className="text-lg font-semibold mb-1">Set Student Fee</h3>
@@ -733,15 +730,14 @@ export function StudentFeeModal({ student, amount, setAmount, onSubmit, onClose,
             This will apply from next month's generation onwards.
           </p>
           <form onSubmit={onSubmit} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Monthly Fee Amount</label>
-              <input type="number" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} className="input-field" required />
-            </div>
+            <Field label="Monthly Fee Amount">
+<input type="number" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} className="input-field" required />
+</Field>
             <div className="flex gap-3 pt-2">
-              <button type="button" onClick={onClose} className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm">Cancel</button>
-              <button type="submit" disabled={isPending} className="flex-1 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm disabled:opacity-50">
+              <Button variant="secondary" type="button" onClick={onClose} className="flex-1">Cancel</Button>
+              <Button type="submit" disabled={isPending} className="flex-1">
                 {isPending ? 'Saving...' : 'Save'}
-              </button>
+              </Button>
             </div>
             {error && <p className="text-sm text-red-600">{getErrorMessage(error, 'Failed to set student fee')}</p>}
             {isSuccess && <p className="text-sm text-green-600">Student fee override saved! It will apply on next month's generation.</p>}
@@ -892,13 +888,13 @@ export function CreateSingleFeeModal({ show, onClose, onSubmit, isPending, error
   }))
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50 p-4">
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4">
       <div className="bg-white rounded-lg shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto">
         <div className="p-6">
           <h3 className="text-lg font-semibold mb-4">Create Fee Record</h3>
           <form onSubmit={handleSubmit} className="space-y-3">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Class <span className="text-red-500">*</span></label>
+              <label className="label">Class <span className="text-red-500">*</span></label>
               <ClassSelector
                 value={form.classId}
                 onChange={(e) => { setForm(f => ({ ...f, classId: e.target.value, student: '', amount_due: '' })) }}
@@ -907,7 +903,7 @@ export function CreateSingleFeeModal({ show, onClose, onSubmit, isPending, error
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Student <span className="text-red-500">*</span></label>
+              <label className="label">Student <span className="text-red-500">*</span></label>
               <SearchableSelect
                 options={studentOptions}
                 value={form.student}
@@ -920,7 +916,7 @@ export function CreateSingleFeeModal({ show, onClose, onSubmit, isPending, error
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Fee Type <span className="text-red-500">*</span></label>
+                <label className="label">Fee Type <span className="text-red-500">*</span></label>
                 <select
                   value={form.fee_type}
                   onChange={(e) => setForm(f => ({
@@ -938,7 +934,7 @@ export function CreateSingleFeeModal({ show, onClose, onSubmit, isPending, error
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Category <span className="text-red-500">*</span></label>
+                <label className="label">Category <span className="text-red-500">*</span></label>
                 <select
                   value={selectedCategoryId}
                   onChange={(e) => setForm(f => ({
@@ -957,19 +953,17 @@ export function CreateSingleFeeModal({ show, onClose, onSubmit, isPending, error
               </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Year</label>
-                <select value={form.year} onChange={(e) => setForm(f => ({ ...f, year: e.target.value }))} className="input-field">
+              <Field label="Year">
+<select value={form.year} onChange={(e) => setForm(f => ({ ...f, year: e.target.value }))} className="input-field">
                   {[2024, 2025, 2026, 2027].map(y => <option key={y} value={y}>{y}</option>)}
                 </select>
-              </div>
+</Field>
               {isMonthly && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Month</label>
-                  <select value={form.month} onChange={(e) => setForm(f => ({ ...f, month: e.target.value }))} className="input-field">
+                <Field label="Month">
+<select value={form.month} onChange={(e) => setForm(f => ({ ...f, month: e.target.value }))} className="input-field">
                     {MONTHS.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
                   </select>
-                </div>
+</Field>
               )}
             </div>
 
@@ -1011,7 +1005,7 @@ export function CreateSingleFeeModal({ show, onClose, onSubmit, isPending, error
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Base Amount (from structure)</label>
+                <label className="label">Base Amount (from structure)</label>
                 <div className="relative">
                   <input
                     type="number" step="0.01"
@@ -1035,15 +1029,14 @@ export function CreateSingleFeeModal({ show, onClose, onSubmit, isPending, error
                   <p className="text-xs text-gray-500 mt-1">Final amount due includes carry-forward balance from previous month (if any).</p>
                 )}
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Amount Paid</label>
-                <input
+              <Field label="Amount Paid">
+<input
                   type="number" step="0.01"
                   value={form.amount_paid}
                   onChange={(e) => setForm(f => ({ ...f, amount_paid: e.target.value }))}
                   className="input-field" placeholder="0"
                 />
-              </div>
+</Field>
             </div>
 
             {/* Payment fields — shown only when amount_paid > 0 */}
@@ -1051,21 +1044,20 @@ export function CreateSingleFeeModal({ show, onClose, onSubmit, isPending, error
               <div className="space-y-3 p-3 bg-gray-50 border border-gray-200 rounded-lg">
                 <p className="text-xs font-medium text-gray-600 uppercase tracking-wide">Payment Details</p>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Receiving Account <span className="text-red-500">*</span></label>
+                  <label className="label">Receiving Account <span className="text-red-500">*</span></label>
                   <select value={form.account} onChange={(e) => setForm(f => ({ ...f, account: e.target.value }))} className="input-field" required>
                     <option value="">-- Select Account --</option>
                     {accountsList.filter(a => a.is_active).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
                   </select>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Method</label>
-                    <select value={form.payment_method} onChange={(e) => setForm(f => ({ ...f, payment_method: e.target.value }))} className="input-field">
+                  <Field label="Method">
+<select value={form.payment_method} onChange={(e) => setForm(f => ({ ...f, payment_method: e.target.value }))} className="input-field">
                       {PAYMENT_METHODS.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
                     </select>
-                  </div>
+</Field>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Date <span className="text-red-500">*</span></label>
+                    <label className="label">Date <span className="text-red-500">*</span></label>
                     <input type="date" value={form.payment_date} onChange={(e) => setForm(f => ({ ...f, payment_date: e.target.value }))} className="input-field" required />
                   </div>
                 </div>
@@ -1073,7 +1065,7 @@ export function CreateSingleFeeModal({ show, onClose, onSubmit, isPending, error
             )}
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Notes (optional)</label>
+              <label className="label">Notes (optional)</label>
               <textarea
                 value={form.notes}
                 onChange={(e) => setForm(f => ({ ...f, notes: e.target.value }))}
@@ -1082,10 +1074,10 @@ export function CreateSingleFeeModal({ show, onClose, onSubmit, isPending, error
               />
             </div>
             <div className="flex gap-3 pt-2">
-              <button type="button" onClick={handleClose} className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm">Cancel</button>
-              <button type="submit" disabled={isPending || !selectedCategoryId || !form.student} className="flex-1 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm disabled:opacity-50">
+              <Button variant="secondary" type="button" onClick={handleClose} className="flex-1">Cancel</Button>
+              <Button type="submit" disabled={isPending || !selectedCategoryId || !form.student} className="flex-1">
                 {isPending ? 'Creating...' : 'Create'}
-              </button>
+              </Button>
             </div>
             {error && <p className="text-sm text-red-600">{getErrorMessage(error, 'Failed to generate fee record')}</p>}
             {isSuccess && <p className="text-sm text-green-600">Fee record generated successfully.</p>}

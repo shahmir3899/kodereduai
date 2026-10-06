@@ -1,4 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
+import PageHeader from '../../components/ui/PageHeader'
+import EmptyState from '../../components/ui/EmptyState'
 import { Link } from 'react-router-dom'
 import { hrApi, sessionsApi } from '../../services/api'
 import Spinner from '../../components/ui/Spinner'
@@ -52,12 +54,7 @@ export default function HRDashboardPage() {
 
   return (
     <div>
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6 gap-4">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">HR Dashboard</h1>
-          <p className="text-sm text-gray-600">Staff overview and quick actions</p>
-        </div>
-      </div>
+      <PageHeader title="HR Dashboard" subtitle="Staff overview and quick actions" className="mb-6" />
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
@@ -116,7 +113,7 @@ export default function HRDashboardPage() {
           </div>
 
           {departmentBreakdown.length === 0 ? (
-            <p className="text-sm text-gray-400 py-4 text-center">No departments created yet</p>
+            <EmptyState title="No departments created yet" compact />
           ) : (
             <div className="space-y-3">
               {departmentBreakdown.map((dept) => {
@@ -145,7 +142,7 @@ export default function HRDashboardPage() {
           <div className="card">
             <h2 className="text-sm font-semibold text-gray-700 mb-3">By Employment Status</h2>
             {statusBreakdown.length === 0 ? (
-              <p className="text-sm text-gray-400 py-4 text-center">No data</p>
+              <EmptyState title="No data" compact />
             ) : (
               <div className="flex flex-wrap gap-3">
                 {statusBreakdown.map((item) => (
@@ -162,7 +159,7 @@ export default function HRDashboardPage() {
           <div className="card">
             <h2 className="text-sm font-semibold text-gray-700 mb-3">By Employment Type</h2>
             {typeBreakdown.length === 0 ? (
-              <p className="text-sm text-gray-400 py-4 text-center">No data</p>
+              <EmptyState title="No data" compact />
             ) : (
               <div className="flex flex-wrap gap-3">
                 {typeBreakdown.map((item) => (

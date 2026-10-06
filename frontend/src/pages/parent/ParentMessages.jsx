@@ -1,4 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
+import Field from '../../components/ui/Field'
+import PageHeader from '../../components/ui/PageHeader'
 import { Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../../contexts/AuthContext'
@@ -152,22 +154,18 @@ export default function ParentMessages() {
       </Link>
 
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Messages</h1>
-          <p className="text-sm text-gray-500 mt-1">Communicate with teachers</p>
-        </div>
-        <Button onClick={() => setShowNewMessage(true)}>
+      <PageHeader title="Messages" subtitle="Communicate with teachers" actions={<>
+<Button onClick={() => setShowNewMessage(true)}>
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
           </svg>
           <span className="hidden sm:inline">New Message</span>
         </Button>
-      </div>
+</>} />
 
       {/* New Message Modal */}
       {showNewMessage && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4">
           <div className="bg-white rounded-xl w-full max-w-md shadow-xl">
             <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200">
               <h2 className="text-lg font-semibold text-gray-900">New Message</h2>
@@ -181,12 +179,11 @@ export default function ParentMessages() {
               </button>
             </div>
             <form onSubmit={handleNewMessage} className="p-5 space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Regarding Child</label>
-                <select
+              <Field label="Regarding Child">
+<select
                   value={newForm.student_id}
                   onChange={(e) => setNewForm({ ...newForm, student_id: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                  className="input"
                 >
                   <option value="">-- Select child (optional) --</option>
                   {children.map((child) => (
@@ -195,22 +192,22 @@ export default function ParentMessages() {
                     </option>
                   ))}
                 </select>
-              </div>
+</Field>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Recipient</label>
+                <label className="label">Recipient</label>
                 <input
                   type="text"
                   value={newForm.recipient_id}
                   onChange={(e) => setNewForm({ ...newForm, recipient_id: e.target.value })}
                   placeholder="Teacher name or ID"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                  className="input"
                 />
                 <p className="text-xs text-gray-400 mt-1">Enter the teacher name or leave blank to message the class teacher.</p>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Message</label>
+                <label className="label">Message</label>
                 <textarea
                   value={newForm.message}
                   onChange={(e) => setNewForm({ ...newForm, message: e.target.value })}

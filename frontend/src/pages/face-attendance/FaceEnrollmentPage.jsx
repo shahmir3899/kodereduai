@@ -1,4 +1,6 @@
 import { useMemo, useState, useRef, useEffect } from 'react'
+import Field from '../../components/ui/Field'
+import { TONE } from '../../components/ui/statusTones'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../../contexts/AuthContext'
@@ -7,7 +9,7 @@ import { useToast } from '../../components/Toast'
 import { useConfirmModal } from '../../components/ConfirmModal'
 import { useBackgroundTasks } from '../../contexts/BackgroundTaskContext'
 import { faceAttendanceApi, studentsApi } from '../../services/api'
-import LoadingSpinner from '../../components/LoadingSpinner'
+import LoadingState from '../../components/ui/LoadingState'
 import ClassSelector from '../../components/ClassSelector'
 import { useSessionClasses } from '../../hooks/useSessionClasses'
 import useTeacherScopedClasses from '../../hooks/useTeacherScopedClasses'
@@ -236,7 +238,7 @@ export default function FaceEnrollmentPage() {
           >
             <span>&larr;</span> Back
           </button>
-          <h1 className="text-2xl font-bold text-gray-900">Face Enrollment</h1>
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Face Enrollment</h1>
           <p className="text-sm text-gray-500 mt-1">
             Enroll student photos for face recognition
           </p>
@@ -308,7 +310,7 @@ export default function FaceEnrollmentPage() {
 
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Class</label>
+              <label className="label">Class</label>
               <ClassSelector
                 value={selectedClass}
                 onChange={(e) => { setSelectedClass(e.target.value); setSelectedStudent('') }}
@@ -320,12 +322,11 @@ export default function FaceEnrollmentPage() {
               />
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Student</label>
-              <select
+            <Field label="Student">
+<select
                 value={selectedStudent}
                 onChange={(e) => { setSelectedStudent(e.target.value); setOverrideDuplicate(false) }}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                className="input"
                 disabled={!selectedClass}
               >
                 <option value="">Select student...</option>
@@ -336,7 +337,7 @@ export default function FaceEnrollmentPage() {
                   </option>
                 ))}
               </select>
-            </div>
+</Field>
 
             <label className="flex items-start gap-2 text-xs text-gray-600">
               <input
@@ -364,7 +365,7 @@ export default function FaceEnrollmentPage() {
             ) : (
               <>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Student Photo</label>
+              <label className="label">Student Photo</label>
               <p className="text-xs text-gray-500 mb-2">
                 Upload a clear portrait photo with exactly one face visible.
               </p>
@@ -387,7 +388,7 @@ export default function FaceEnrollmentPage() {
             <button
               onClick={handleEnroll}
               disabled={uploading || !selectedStudent || !previewUrl}
-              className="w-full py-2.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+              className="w-full py-2.5 bg-primary-600 text-white rounded-lg text-sm font-medium hover:bg-primary-700 disabled:opacity-50"
             >
               {uploading ? 'Enrolling...' : 'Enroll Face'}
             </button>
@@ -406,7 +407,7 @@ export default function FaceEnrollmentPage() {
           </div>
 
           {enrollmentsLoading ? (
-            <div className="p-8"><LoadingSpinner /></div>
+            <LoadingState />
           ) : sortedEnrollments.length === 0 ? (
             <div className="p-8 text-center text-gray-500 text-sm">
               {selectedClass
@@ -423,8 +424,8 @@ export default function FaceEnrollmentPage() {
                       <span
                         className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
                           enrollment.embedding_version === LIVE_MOBILE_EMBEDDING_VERSION
-                            ? 'bg-purple-100 text-purple-700'
-                            : 'bg-gray-100 text-gray-600'
+                            ? TONE.accent
+                            : TONE.neutral
                         }`}
                       >
                         {enrollment.embedding_version}
@@ -775,7 +776,7 @@ export function LiveEnrollCapture({ selectedStudent, studentPhotoUrl, studentNam
           <button
             onClick={requestCamera}
             disabled={cameraStatus === 'requesting'}
-            className="px-3 py-2 bg-blue-600 text-white rounded-lg text-xs font-medium hover:bg-blue-700 disabled:opacity-50"
+            className="px-3 py-2 bg-primary-600 text-white rounded-lg text-xs font-medium hover:bg-primary-700 disabled:opacity-50"
           >
             {cameraButtonLabel(cameraStatus)}
           </button>
@@ -804,7 +805,7 @@ export function LiveEnrollCapture({ selectedStudent, studentPhotoUrl, studentNam
             onClick={handleCapture}
             disabled={modelStatus !== 'ready' || !selectedStudent || (liveFaceCount > 1 && !selectedFaceBox)}
             title="Shortcut: Space"
-            className="px-3 py-2 bg-blue-600 text-white rounded-lg text-xs font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="px-3 py-2 bg-primary-600 text-white rounded-lg text-xs font-medium hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {liveFaceCount > 1 ? 'Capture Selected Face' : 'Capture Face'}
           </button>

@@ -1,9 +1,12 @@
 import { useState, useMemo } from 'react'
+import Button from '../../components/ui/Button'
+import EmptyState from '../../components/ui/EmptyState'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useToast } from '../../components/Toast'
 import { faceAttendanceApi } from '../../services/api'
-import LoadingSpinner from '../../components/LoadingSpinner'
+import Spinner from '../../components/ui/Spinner'
+import LoadingState from '../../components/ui/LoadingState'
 
 export default function FaceReviewPage() {
   const { sessionId } = useParams()
@@ -131,7 +134,7 @@ export default function FaceReviewPage() {
     return { border: 'border-green-500', bg: 'bg-green-500' } // AUTO_MATCHED / MANUALLY_MATCHED
   }
 
-  if (isLoading) return <LoadingSpinner />
+  if (isLoading) return <LoadingState />
 
   if (!session) {
     return (
@@ -148,7 +151,7 @@ export default function FaceReviewPage() {
   if (session.status === 'PROCESSING' || session.status === 'UPLOADING') {
     return (
       <div className="max-w-4xl mx-auto text-center py-20">
-        <LoadingSpinner />
+        <Spinner size="lg" className="mx-auto" />
         <h2 className="text-xl font-semibold mt-4">Processing Faces...</h2>
         <p className="text-gray-500 mt-2">
           Detecting and matching faces. This usually takes 10-30 seconds.
@@ -168,7 +171,7 @@ export default function FaceReviewPage() {
             <button
               onClick={() => reprocessMutation.mutate()}
               disabled={reprocessMutation.isPending}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+              className="px-4 py-2 bg-primary-600 text-white rounded-lg text-sm font-medium hover:bg-primary-700 disabled:opacity-50"
             >
               {reprocessMutation.isPending ? 'Reprocessing...' : 'Try Again'}
             </button>
@@ -212,7 +215,7 @@ export default function FaceReviewPage() {
           >
             <span>&larr;</span> Back
           </button>
-          <h1 className="text-2xl font-bold text-gray-900">
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">
             Review: {session.class_obj?.name} - {session.date}
           </h1>
           <p className="text-sm text-gray-500 mt-1">
@@ -304,7 +307,7 @@ export default function FaceReviewPage() {
         </div>
         <div className="p-4">
           {detections.length === 0 ? (
-            <p className="text-center text-gray-500 py-4">No faces detected</p>
+            <EmptyState title="No faces detected" compact />
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
               {detections.map((det) => {
@@ -407,17 +410,15 @@ export default function FaceReviewPage() {
       {/* Action buttons */}
       {!isConfirmed && (
         <div className="flex gap-3 justify-end mb-8">
-          <button
-            onClick={() => reprocessMutation.mutate()}
-            disabled={reprocessMutation.isPending}
-            className="px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm hover:bg-gray-50 disabled:opacity-50"
-          >
+          <Button variant="secondary"
+ onClick={() => reprocessMutation.mutate()}
+ disabled={reprocessMutation.isPending}>
             Reprocess
-          </button>
+          </Button>
           <button
             onClick={() => confirmMutation.mutate()}
             disabled={confirmMutation.isPending || !presentIds}
-            className="px-6 py-2.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+            className="px-6 py-2.5 bg-primary-600 text-white rounded-lg text-sm font-medium hover:bg-primary-700 disabled:opacity-50"
           >
             {confirmMutation.isPending ? 'Confirming...' : 'Confirm Attendance'}
           </button>

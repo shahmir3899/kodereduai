@@ -35,7 +35,7 @@ export default function StaticSite() {
             </a>
             <button
               onClick={() => navigate('/login')}
-              className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+              className="bg-primary-600 text-white px-4 py-2 rounded hover:bg-primary-700"
             >
               Login
             </button>
@@ -54,7 +54,7 @@ export default function StaticSite() {
         </p>
         <button
           onClick={() => navigate('/register')}
-          className="bg-blue-600 text-white px-8 py-3 rounded-lg hover:bg-blue-700 text-lg font-medium"
+          className="bg-primary-600 text-white px-8 py-3 rounded-lg hover:bg-primary-700 text-lg font-medium"
         >
           Get Started
         </button>

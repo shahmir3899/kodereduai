@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import EmptyState from '../../components/ui/EmptyState'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
 import { useAuth } from '../../contexts/AuthContext'
@@ -479,7 +480,7 @@ export default function AssessmentsPage() {
                   <th className="px-4 py-3 text-right">Status</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-200 bg-white">
+              <tbody className="divide-y divide-gray-100">
                 {studentRows.map((row) => {
                   const form = getForm(row.student)
                   const isSelected = String(selectedRowId) === String(row.student)
@@ -563,9 +564,7 @@ export default function AssessmentsPage() {
                 })}
                 {studentRows.length === 0 && (
                   <tr>
-                    <td colSpan={5} className="px-4 py-10 text-center text-sm text-gray-500">
-                      No students found for this class and month.
-                    </td>
+                    <td colSpan={5} className="px-4"><EmptyState title="No students found for this class and month." compact /></td>
                   </tr>
                 )}
               </tbody>

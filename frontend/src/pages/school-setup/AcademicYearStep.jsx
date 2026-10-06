@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import Badge from '../../components/ui/Badge'
+import { TONE } from '../../components/ui/statusTones'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { sessionsApi } from '../../services/api'
 import { useToast } from '../../components/Toast'
@@ -107,7 +109,7 @@ export default function AcademicYearStep({ onNext, refetchCompletion }) {
                 <div className="flex items-center gap-2">
                   <span className="text-sm font-medium text-gray-800">{y.name}</span>
                   {y.is_current && (
-                    <span className="px-2 py-0.5 bg-green-100 text-green-700 text-xs font-medium rounded-full">Current</span>
+                    <Badge tone="success">Current</Badge>
                   )}
                 </div>
                 <span className="text-xs text-gray-500">{y.start_date} → {y.end_date}</span>
@@ -228,7 +230,7 @@ export default function AcademicYearStep({ onNext, refetchCompletion }) {
                     <span className="text-sm text-gray-800">{t.name}</span>
                     <span className="text-xs text-gray-400">{t.term_type}</span>
                     {t.is_current && (
-                      <span className="px-2 py-0.5 bg-sky-100 text-sky-700 text-xs rounded-full">Current</span>
+                      <Badge tone="sky">Current</Badge>
                     )}
                   </div>
                   <span className="text-xs text-gray-500">{t.start_date} → {t.end_date}</span>

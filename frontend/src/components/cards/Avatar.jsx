@@ -1,14 +1,15 @@
+import { TONE } from '../ui/statusTones'
 /**
  * Initials avatar for RecordCard's leading slot. Deterministic color-from-name
  * so the same person/entity gets the same tint everywhere it's rendered as a card.
  */
 const PALETTE = [
-  'bg-indigo-100 text-indigo-700',
-  'bg-teal-100 text-teal-700',
-  'bg-amber-100 text-amber-700',
-  'bg-rose-100 text-rose-700',
-  'bg-sky-100 text-sky-700',
-  'bg-violet-100 text-violet-700',
+  TONE.indigo,
+  TONE.teal,
+  TONE.warning,
+  TONE.danger,
+  TONE.sky,
+  TONE.accent,
 ]
 
 function hashName(name) {

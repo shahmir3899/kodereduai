@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import Button from '../../components/ui/Button'
 import { useQuery } from '@tanstack/react-query'
 import { useAuth } from '../../contexts/AuthContext'
 import { useSessionClasses } from '../../hooks/useSessionClasses'
@@ -508,14 +509,14 @@ export default function FeeGenerationSurface({
 			<div className={footerClass}>
 				<div className="flex flex-col gap-3 sm:flex-row">
 					{isModal && (
-						<button type="button" onClick={() => { resetState(); onClose?.() }} className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm">
+						<Button variant="secondary" type="button" onClick={() => { resetState(); onClose?.() }}>
 							Cancel
-						</button>
+						</Button>
 					)}
 					{!isMonthly && showConfirm && (
-						<button type="button" onClick={() => setShowConfirm(false)} className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm">
+						<Button variant="secondary" type="button" onClick={() => setShowConfirm(false)}>
 							Back
-						</button>
+						</Button>
 					)}
 					{!isMonthly && !showConfirm ? (
 						<button
@@ -580,7 +581,7 @@ export default function FeeGenerationSurface({
 	if (!isModal) return content
 
 	return (
-		<div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50 p-4">
+		<div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4">
 			<div className="flex max-h-[85vh] w-full max-w-2xl flex-col overflow-y-auto rounded-lg bg-white shadow-xl">
 				{content}
 			</div>

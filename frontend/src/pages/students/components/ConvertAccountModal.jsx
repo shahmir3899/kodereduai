@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import Modal from '../../../components/ui/Modal'
+import Field from '../../../components/ui/Field'
 import { useQueryClient } from '@tanstack/react-query'
 import { PasswordInput } from '../../../components'
 import { studentsApi } from '../../../services/api'
@@ -49,37 +51,34 @@ export default function ConvertAccountModal({ student, onClose }) {
   }
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
-      <div className="bg-white rounded-xl shadow-xl p-4 sm:p-6 w-full max-w-md mx-4">
+    <Modal open  closeOnBackdrop={false}>
         <h2 className="text-lg font-bold text-gray-900 mb-1">Create User Account</h2>
         <p className="text-sm text-gray-500 mb-4">
           For student: <strong>{student.name}</strong> (Roll #{student.roll_number})
         </p>
 
         <div className="space-y-3">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Username *</label>
-            <input
+          <Field label="Username" required>
+<input
               type="text"
               className="input"
               value={form.username}
               onChange={(e) => setForm((f) => ({ ...f, username: e.target.value }))}
               placeholder="Login username"
             />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-            <input
+</Field>
+          <Field label="Email">
+<input
               type="email"
               className="input"
               value={form.email}
               onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
               placeholder="Email (optional)"
             />
-          </div>
+</Field>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Password *</label>
+              <label className="label">Password *</label>
               <PasswordInput
                 className="input"
                 value={form.password}
@@ -88,7 +87,7 @@ export default function ConvertAccountModal({ student, onClose }) {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Confirm *</label>
+              <label className="label">Confirm *</label>
               <PasswordInput
                 className="input"
                 value={form.confirm_password}
@@ -108,7 +107,6 @@ export default function ConvertAccountModal({ student, onClose }) {
             {isConverting ? 'Creating...' : 'Create Account'}
           </button>
         </div>
-      </div>
-    </div>
+      </Modal>
   )
 }

@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import Field from '../../components/ui/Field'
+import { TONE } from '../../components/ui/statusTones'
 import { Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { parentsApi } from '../../services/api'
@@ -7,10 +9,10 @@ import { RecordCard, CardGrid, ViewToggle } from '../../components/cards'
 import { useViewPreference } from '../../hooks/useViewPreference'
 
 const STATUS_COLORS = {
-  PENDING: 'bg-yellow-100 text-yellow-800',
-  APPROVED: 'bg-green-100 text-green-800',
-  REJECTED: 'bg-red-100 text-red-800',
-  CANCELLED: 'bg-gray-100 text-gray-800',
+  PENDING: TONE.warning,
+  APPROVED: TONE.success,
+  REJECTED: TONE.danger,
+  CANCELLED: TONE.neutral,
 }
 
 const TABS = ['Apply for Leave', 'My Requests']
@@ -170,12 +172,11 @@ export default function LeaveApplication() {
             )}
 
             {/* Child Selection */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Select Child</label>
-              <select
+            <Field label="Select Child">
+<select
                 value={formData.student_id}
                 onChange={(e) => setFormData({ ...formData, student_id: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                className="input"
               >
                 <option value="">-- Select child --</option>
                 {children.map((child) => (
@@ -184,29 +185,27 @@ export default function LeaveApplication() {
                   </option>
                 ))}
               </select>
-            </div>
+</Field>
 
             {/* Date Range */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
-                <input
+              <Field label="Start Date">
+<input
                   type="date"
                   value={formData.start_date}
                   onChange={(e) => setFormData({ ...formData, start_date: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                  className="input"
                 />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">End Date</label>
-                <input
+</Field>
+              <Field label="End Date">
+<input
                   type="date"
                   value={formData.end_date}
                   onChange={(e) => setFormData({ ...formData, end_date: e.target.value })}
                   min={formData.start_date || undefined}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                  className="input"
                 />
-              </div>
+</Field>
             </div>
 
             {formData.start_date && formData.end_date && (
@@ -217,7 +216,7 @@ export default function LeaveApplication() {
 
             {/* Reason */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Reason</label>
+              <label className="label">Reason</label>
               <textarea
                 value={formData.reason}
                 onChange={(e) => setFormData({ ...formData, reason: e.target.value })}
@@ -229,7 +228,7 @@ export default function LeaveApplication() {
 
             {/* Document URL */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="label">
                 Supporting Document URL <span className="text-gray-400 font-normal">(optional)</span>
               </label>
               <input
@@ -237,7 +236,7 @@ export default function LeaveApplication() {
                 value={formData.document_url}
                 onChange={(e) => setFormData({ ...formData, document_url: e.target.value })}
                 placeholder="https://..."
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                className="input"
               />
               <p className="text-xs text-gray-400 mt-1">Upload your document to a cloud service and paste the link here.</p>
             </div>
@@ -302,7 +301,7 @@ export default function LeaveApplication() {
                     key={req.id}
                     title={req.student_name || 'Child'}
                     status={
-                      <span className={`px-2 py-0.5 rounded text-xs font-medium whitespace-nowrap ${STATUS_COLORS[req.status] || 'bg-gray-100 text-gray-800'}`}>
+                      <span className={`px-2 py-0.5 rounded text-xs font-medium whitespace-nowrap ${STATUS_COLORS[req.status] || TONE.neutral}`}>
                         {req.status}
                       </span>
                     }
@@ -341,7 +340,7 @@ export default function LeaveApplication() {
                         <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-gray-200">
+                    <tbody className="divide-y divide-gray-100">
                       {requests.map((req) => (
                         <tr key={req.id} className="hover:bg-gray-50">
                           <td className="px-4 py-3 text-sm font-medium text-gray-900">
@@ -357,7 +356,7 @@ export default function LeaveApplication() {
                             {req.reason}
                           </td>
                           <td className="px-4 py-3">
-                            <span className={`px-2 py-0.5 rounded text-xs font-medium ${STATUS_COLORS[req.status] || 'bg-gray-100 text-gray-800'}`}>
+                            <span className={`px-2 py-0.5 rounded text-xs font-medium ${STATUS_COLORS[req.status] || TONE.neutral}`}>
                               {req.status}
                             </span>
                           </td>

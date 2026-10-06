@@ -1,14 +1,16 @@
 import { useQuery } from '@tanstack/react-query'
+import Badge from '../../components/ui/Badge'
+import { TONE } from '../../components/ui/statusTones'
 import { studentPortalApi } from '../../services/api'
 import Spinner from '../../components/ui/Spinner'
 import { RecordCard, CardGrid, ViewToggle } from '../../components/cards'
 import { useViewPreference } from '../../hooks/useViewPreference'
 
 const statusBadge = {
-  ISSUED: 'bg-blue-100 text-blue-800',
-  RETURNED: 'bg-green-100 text-green-800',
-  OVERDUE: 'bg-red-100 text-red-800',
-  LOST: 'bg-gray-100 text-gray-800',
+  ISSUED: TONE.info,
+  RETURNED: TONE.success,
+  OVERDUE: TONE.danger,
+  LOST: TONE.neutral,
 }
 
 export default function StudentLibrary() {
@@ -95,9 +97,9 @@ export default function StudentLibrary() {
                     title={issue.book_title}
                     meta={issue.book_author}
                     status={
-                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap ${statusBadge[issue.status] || 'bg-gray-100'}`}>
+                      <Badge colors={statusBadge[issue.status] || 'bg-gray-100'}>
                         {issue.status}
-                      </span>
+                      </Badge>
                     }
                     fields={[
                       { label: 'Issued', value: issue.issue_date },
@@ -117,7 +119,7 @@ export default function StudentLibrary() {
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-200">
+                  <tbody className="divide-y divide-gray-100">
                     {past.map((issue) => (
                       <tr key={issue.id} className="hover:bg-gray-50">
                         <td className="px-4 py-3">
@@ -127,9 +129,9 @@ export default function StudentLibrary() {
                         <td className="px-4 py-3 text-sm text-gray-600">{issue.issue_date}</td>
                         <td className="px-4 py-3 text-sm text-gray-600">{issue.return_date || '—'}</td>
                         <td className="px-4 py-3">
-                          <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${statusBadge[issue.status] || 'bg-gray-100'}`}>
+                          <Badge colors={statusBadge[issue.status] || 'bg-gray-100'}>
                             {issue.status}
-                          </span>
+                          </Badge>
                         </td>
                       </tr>
                     ))}

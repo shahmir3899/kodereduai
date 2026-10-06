@@ -1,4 +1,8 @@
 import { useState, useEffect } from 'react'
+import Modal from '../../components/ui/Modal'
+import Badge from '../../components/ui/Badge'
+import { TONE } from '../../components/ui/statusTones'
+import PageHeader from '../../components/ui/PageHeader'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { hrApi } from '../../services/api'
 import { useToast } from '../../components/Toast'
@@ -9,9 +13,9 @@ import { LedgerCard, CardGrid, ViewToggle, TrendStrip } from '../../components/c
 import { useViewPreference } from '../../hooks/useViewPreference'
 
 const statusBadge = {
-  DRAFT: 'bg-yellow-100 text-yellow-800',
-  APPROVED: 'bg-blue-100 text-blue-800',
-  PAID: 'bg-green-100 text-green-800',
+  DRAFT: TONE.warning,
+  APPROVED: TONE.info,
+  PAID: TONE.success,
 }
 
 const MONTHS = [
@@ -171,17 +175,11 @@ export default function PayrollPage() {
 
   return (
     <div>
-      <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Payroll</h1>
-          <p className="text-sm text-gray-600">
-            {MONTHS[month - 1]} {year} &middot; {allPayslips.length} payslip{allPayslips.length !== 1 ? 's' : ''}
-          </p>
-        </div>
-        <button onClick={() => setGenerateConfirm(true)} className="btn btn-primary">
+      <PageHeader title="Payroll" subtitle={<>{MONTHS[month - 1]} {year} &middot; {allPayslips.length} payslip{allPayslips.length !== 1 ? 's' : ''}</>} className="mb-6" actions={<>
+<button onClick={() => setGenerateConfirm(true)} className="btn btn-primary">
           Generate Payslips
         </button>
-      </div>
+</>} />
 
       {/* Month/Year Selector + Filter */}
       <div className="card mb-4">
@@ -286,7 +284,7 @@ export default function PayrollPage() {
                 key={p.id}
                 title={p.staff_member_name}
                 meta={p.staff_employee_id ? `ID: ${p.staff_employee_id}${p.department_name ? ` · ${p.department_name}` : ''}` : p.department_name}
-                status={<span className={`px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap ${statusBadge[p.status]}`}>{p.status_display}</span>}
+                status={<Badge colors={statusBadge[p.status]}>{p.status_display}</Badge>}
                 breakdown={[
                   { label: 'Basic', value: p.basic_salary },
                   { label: 'Allow.', value: p.total_allowances ?? 0 },
@@ -354,9 +352,9 @@ export default function PayrollPage() {
                     <td className="py-3 pr-4 text-sm text-red-600 text-right">{fmt(p.total_deductions)}</td>
                     <td className="py-3 pr-4 text-sm text-gray-900 text-right font-semibold">{fmt(p.net_salary)}</td>
                     <td className="py-3 pr-4">
-                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${statusBadge[p.status]}`}>
+                      <Badge colors={statusBadge[p.status]}>
                         {p.status_display}
-                      </span>
+                      </Badge>
                     </td>
                     <td className="py-3 text-right">
                       <div className="flex justify-end gap-3">
@@ -401,8 +399,7 @@ export default function PayrollPage() {
 
       {/* Generate Confirmation Modal */}
       {generateConfirm && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
-          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm mx-4">
+        <Modal open  size="sm" closeOnBackdrop={false}>
             <h2 className="text-xl font-bold text-gray-900 mb-2">Generate Payslips</h2>
             <p className="text-gray-600 mb-6">
               Generate payslips for <strong>{MONTHS[month - 1]} {year}</strong> from active salary structures?
@@ -418,14 +415,12 @@ export default function PayrollPage() {
                 {generateTask.isSubmitting ? 'Starting...' : 'Generate'}
               </button>
             </div>
-          </div>
-        </div>
+          </Modal>
       )}
 
       {/* Delete Confirmation Modal */}
       {deleteConfirm && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
-          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm mx-4">
+        <Modal open  size="sm" closeOnBackdrop={false}>
             <h2 className="text-xl font-bold text-gray-900 mb-2">
               Delete Payslip{deleteConfirm === 'bulk' ? 's' : ''}
             </h2>
@@ -450,19 +445,17 @@ export default function PayrollPage() {
                 {deleteMutation.isPending || bulkDeleteMutation.isPending ? 'Deleting...' : 'Delete'}
               </button>
             </div>
-          </div>
-        </div>
+          </Modal>
       )}
 
       {/* Detail Modal */}
       {detailSlip && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
-          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md mx-4 max-h-[90vh] overflow-y-auto">
+        <Modal open  closeOnBackdrop={false}>
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-xl font-bold text-gray-900">Payslip Details</h2>
-              <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${statusBadge[detailSlip.status]}`}>
+              <Badge colors={statusBadge[detailSlip.status]}>
                 {detailSlip.status_display}
-              </span>
+              </Badge>
             </div>
 
             <div className="space-y-3 text-sm">
@@ -540,8 +533,7 @@ export default function PayrollPage() {
                 Download PDF
               </button>
             </div>
-          </div>
-        </div>
+          </Modal>
       )}
     </div>
   )

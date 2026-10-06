@@ -1,4 +1,8 @@
 import { useState, useRef, useCallback } from 'react'
+import Modal from '../../components/ui/Modal'
+import Field from '../../components/ui/Field'
+import LoadingState from '../../components/ui/LoadingState'
+import EmptyState from '../../components/ui/EmptyState'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { letterComposerApi, hrApi } from '../../services/api'
 import { useAuth } from '../../contexts/AuthContext'
@@ -370,8 +374,7 @@ export default function LetterComposerPage() {
 
       {/* Update/Create Modal */}
       {showUpdateDialog && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
-          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm mx-4">
+        <Modal open  size="sm" closeOnBackdrop={false}>
             <h2 className="text-lg font-bold text-gray-900 mb-2">
               {isGenerating ? 'Generating...' : 'Save Letter'}
             </h2>
@@ -403,8 +406,7 @@ export default function LetterComposerPage() {
                 Cancel
               </button>
             </div>
-          </div>
-        </div>
+          </Modal>
       )}
 
       {/* Historical Letter Badge */}
@@ -423,9 +425,8 @@ export default function LetterComposerPage() {
       <div className="card">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {/* Template Selector */}
-          <div>
-            <label className="label">Quick Draft Template</label>
-            <select
+          <Field label="Quick Draft Template">
+<select
               value={templateType}
               onChange={(e) => applyTemplate(e.target.value)}
               className="input w-full"
@@ -434,12 +435,11 @@ export default function LetterComposerPage() {
                 <option key={o.value} value={o.value}>{o.label}</option>
               ))}
             </select>
-          </div>
+</Field>
 
           {/* Line Spacing */}
-          <div>
-            <label className="label">Line Spacing</label>
-            <select
+          <Field label="Line Spacing">
+<select
               value={lineSpacing}
               onChange={(e) => setLineSpacing(e.target.value)}
               className="input w-full"
@@ -448,7 +448,7 @@ export default function LetterComposerPage() {
               <option value="1.5">1.5</option>
               <option value="double">Double</option>
             </select>
-          </div>
+</Field>
         </div>
       </div>
 
@@ -600,9 +600,9 @@ export default function LetterComposerPage() {
             <div className="mt-2 bg-white border border-gray-200 rounded-lg max-h-48 overflow-y-auto shadow-sm">
               {recipientMode === 'school' && (
                 loadingSchools ? (
-                  <p className="p-3 text-sm text-gray-500 text-center">Loading schools...</p>
+                  <LoadingState label="Loading schools..." compact />
                 ) : schools.length === 0 ? (
-                  <p className="p-3 text-sm text-gray-500 text-center">No schools found</p>
+                  <EmptyState title="No schools found" compact />
                 ) : (
                   schools.map(s => (
                     <div
@@ -621,9 +621,9 @@ export default function LetterComposerPage() {
               )}
               {recipientMode === 'employee' && (
                 loadingStaff ? (
-                  <p className="p-3 text-sm text-gray-500 text-center">Loading employees...</p>
+                  <LoadingState label="Loading employees..." compact />
                 ) : employees.length === 0 ? (
-                  <p className="p-3 text-sm text-gray-500 text-center">No employees found</p>
+                  <EmptyState title="No employees found" compact />
                 ) : (
                   employees.map(emp => {
                     const name = emp.full_name ||
@@ -674,9 +674,8 @@ export default function LetterComposerPage() {
         </div>
 
         {/* Subject */}
-        <div>
-          <label className="label">Subject</label>
-          <input
+        <Field label="Subject">
+<input
             type="text"
             value={subject}
             onChange={(e) => setSubject(e.target.value)}
@@ -684,7 +683,7 @@ export default function LetterComposerPage() {
             maxLength={200}
             className="input w-full"
           />
-        </div>
+</Field>
       </div>
 
       {/* Editor + Preview */}
@@ -812,7 +811,7 @@ export default function LetterComposerPage() {
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
                 </tr>
               </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
+              <tbody className="divide-y divide-gray-100">
                 {letters.map(letter => (
                   <tr key={letter.id} className="hover:bg-gray-50">
                     <td className="px-4 py-3 text-sm text-gray-900 max-w-[200px] truncate">
@@ -833,7 +832,7 @@ export default function LetterComposerPage() {
                       <div className="flex gap-1">
                         <button
                           onClick={() => loadLetter(letter.id)}
-                          className="px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700"
+                          className="px-2 py-1 text-xs bg-primary-600 text-white rounded hover:bg-primary-700"
                         >
                           Load
                         </button>

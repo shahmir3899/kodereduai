@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import Modal from '../../../components/ui/Modal'
 import { useQueryClient } from '@tanstack/react-query'
 import { PasswordInput } from '../../../components'
 import { studentsApi } from '../../../services/api'
@@ -48,8 +49,7 @@ export default function BulkConvertModal({ studentIds, onConverted, onClose }) {
   }
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
-      <div className="bg-white rounded-xl shadow-xl p-4 sm:p-6 w-full max-w-md mx-4">
+    <Modal open  closeOnBackdrop={false}>
         <h2 className="text-lg font-bold text-gray-900 mb-4">Bulk Create User Accounts</h2>
 
         {!results ? (
@@ -62,7 +62,7 @@ export default function BulkConvertModal({ studentIds, onConverted, onClose }) {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Default Password *</label>
+              <label className="label">Default Password *</label>
               <PasswordInput
                 className="input"
                 value={password}
@@ -124,7 +124,6 @@ export default function BulkConvertModal({ studentIds, onConverted, onClose }) {
             </div>
           </>
         )}
-      </div>
-    </div>
+      </Modal>
   )
 }

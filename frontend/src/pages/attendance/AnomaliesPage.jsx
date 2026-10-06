@@ -1,13 +1,15 @@
 import { useState } from 'react'
+import { TONE } from '../../components/ui/statusTones'
+import LoadingState from '../../components/ui/LoadingState'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { attendanceApi } from '../../services/api'
 import { useToast } from '../../components/Toast'
 import PageHeader from '../../components/ui/PageHeader'
 
 const SEVERITY_STYLES = {
-  HIGH: 'bg-red-100 text-red-800',
-  MEDIUM: 'bg-amber-100 text-amber-800',
-  LOW: 'bg-blue-100 text-blue-800',
+  HIGH: TONE.danger,
+  MEDIUM: TONE.warning,
+  LOW: TONE.info,
 }
 
 const TYPE_LABELS = {
@@ -83,7 +85,7 @@ export default function AnomaliesPage() {
 
       {/* Anomalies List */}
       {isLoading ? (
-        <div className="text-center py-10 text-gray-500">Loading anomalies...</div>
+        <LoadingState label="Loading anomalies..." />
       ) : anomalies.length === 0 ? (
         <div className="card text-center py-12">
           <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">

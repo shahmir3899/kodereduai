@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import EmptyState from '../ui/EmptyState'
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { notificationsApi } from '../../services/api'
@@ -289,7 +290,7 @@ export default function NotificationCarousel({ allSchools = false, showViewAll =
   }
 
   if (!loaded.length && mode === 'all') {
-    return <p className="text-sm text-gray-400 text-center py-4">No notifications</p>
+    return <EmptyState title="No notifications" compact />
   }
 
   const remaining = Math.max(totalCount - loaded.length, 0)

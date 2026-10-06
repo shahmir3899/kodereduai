@@ -1,4 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
+import Modal from '../../components/ui/Modal'
+import { TONE } from '../../components/ui/statusTones'
+import PageHeader from '../../components/ui/PageHeader'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { academicsApi, hrApi } from '../../services/api'
 import { useBackgroundTask } from '../../hooks/useBackgroundTask'
@@ -577,16 +580,11 @@ export default function TimetablePage() {
 
   const isLoading = slotsLoading || (resolvedSelectedClassId && ttLoading)
 
-  const scoreColor = (s) => s >= 80 ? 'bg-green-100 text-green-700' : s >= 60 ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'
+  const scoreColor = (s) => s >= 80 ? TONE.success : s >= 60 ? TONE.warning : TONE.danger
 
   return (
     <div>
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6 gap-4">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Timetable</h1>
-          <p className="text-sm text-gray-600">Build class timetables with AI assistance</p>
-        </div>
-      </div>
+      <PageHeader title="Timetable" subtitle="Build class timetables with AI assistance" className="mb-6" />
 
       {/* Controls */}
       <div className="card mb-4 flex flex-col sm:flex-row items-start sm:items-center gap-3">
@@ -681,7 +679,7 @@ export default function TimetablePage() {
             <button
               type="button"
               onClick={() => setShowSplitConfirm(true)}
-              className="mt-2 px-3 py-1.5 text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              className="mt-2 px-3 py-1.5 text-xs bg-primary-600 text-white rounded-lg hover:bg-primary-700"
             >
               Give each section its own timetable
             </button>
@@ -906,8 +904,7 @@ export default function TimetablePage() {
 
       {/* Cell Edit Modal with Conflict Resolution */}
       {editingCell && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[60] p-4" onClick={() => setEditingCell(null)}>
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto p-6" onClick={e => e.stopPropagation()}>
+        <Modal open onClose={() => setEditingCell(null)}>
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm font-semibold text-gray-900">
                 {DAY_LABELS_FULL[editingCell.day]} &mdash; {editingCell.slotName}
@@ -1018,14 +1015,12 @@ export default function TimetablePage() {
                 <button onClick={saveCellEdit} className="btn-primary px-3 py-1.5 text-sm">Set</button>
               </div>
             </div>
-          </div>
-        </div>
+          </Modal>
       )}
 
       {/* Give-each-section-its-own-timetable Confirm Modal */}
       {showSplitConfirm && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[60] p-4" onClick={() => !splitting && setShowSplitConfirm(false)}>
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6" onClick={e => e.stopPropagation()}>
+        <Modal open onClose={() => !splitting && setShowSplitConfirm(false)}>
             <h3 className="text-sm font-semibold text-gray-900 mb-2">Give each section its own timetable</h3>
             <p className="text-xs text-gray-600 mb-2">
               The shared timetable of this class will be copied into every section as that section's own
@@ -1037,18 +1032,16 @@ export default function TimetablePage() {
             </p>
             <div className="flex justify-end gap-2">
               <button onClick={() => setShowSplitConfirm(false)} disabled={splitting} className="px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded-lg disabled:opacity-50">Cancel</button>
-              <button onClick={handleSplitForSections} disabled={splitting} className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50">
+              <button onClick={handleSplitForSections} disabled={splitting} className="px-3 py-1.5 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50">
                 {splitting ? 'Copying...' : 'Give each section its own'}
               </button>
             </div>
-          </div>
-        </div>
+          </Modal>
       )}
 
       {/* Auto-Generate Confirm Modal */}
       {showAutoGenConfirm && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[60] p-4" onClick={() => setShowAutoGenConfirm(false)}>
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6" onClick={e => e.stopPropagation()}>
+        <Modal open onClose={() => setShowAutoGenConfirm(false)}>
             <h3 className="text-sm font-semibold text-gray-900 mb-2">AI Auto-Generate Timetable</h3>
             <p className="text-xs text-gray-600 mb-4">
               This will generate a new timetable for <strong>{selectedClassName || 'selected class'}</strong> using
@@ -1077,16 +1070,14 @@ export default function TimetablePage() {
 
             <div className="flex justify-end gap-2">
               <button onClick={() => setShowAutoGenConfirm(false)} className="px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">Cancel</button>
-              <button onClick={handleAutoGenerate} className="px-3 py-1.5 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">Generate</button>
+              <button onClick={handleAutoGenerate} className="px-3 py-1.5 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700">Generate</button>
             </div>
-          </div>
-        </div>
+          </Modal>
       )}
 
       {/* Quality Score Modal */}
       {showScoreModal && qualityScore && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[60] p-4" onClick={() => setShowScoreModal(false)}>
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-6" onClick={e => e.stopPropagation()}>
+        <Modal open onClose={() => setShowScoreModal(false)} size="sm">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm font-semibold text-gray-900">Timetable Quality Score</h3>
               <button onClick={() => setShowScoreModal(false)} className="text-gray-400 hover:text-gray-600 text-xl">&times;</button>
@@ -1121,14 +1112,12 @@ export default function TimetablePage() {
                 </div>
               ))}
             </div>
-          </div>
-        </div>
+          </Modal>
       )}
 
       {/* Substitute Teacher Modal */}
       {showSubstituteModal && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[60] p-4" onClick={() => setShowSubstituteModal(false)}>
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-6" onClick={e => e.stopPropagation()}>
+        <Modal open onClose={() => setShowSubstituteModal(false)} size="lg">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm font-semibold text-gray-900">Find Substitute Teacher</h3>
               <button onClick={() => setShowSubstituteModal(false)} className="text-gray-400 hover:text-gray-600 text-xl">&times;</button>
@@ -1176,7 +1165,7 @@ export default function TimetablePage() {
                             {entry.suggested_substitutes.map((sub, j) => (
                               <div key={j} className="flex items-center justify-between text-xs px-2 py-1 bg-white rounded border border-gray-100">
                                 <span className="font-medium text-gray-800">{sub.teacher_name}</span>
-                                <span className={`px-1.5 py-0.5 rounded ${sub.score >= 70 ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}>{sub.reason}</span>
+                                <span className={`px-1.5 py-0.5 rounded ${sub.score >= 70 ? TONE.success : TONE.neutral}`}>{sub.reason}</span>
                               </div>
                             ))}
                           </div>
@@ -1194,14 +1183,12 @@ export default function TimetablePage() {
             {substituteData?.error && (
               <p className="text-xs text-red-600">{substituteData.error}</p>
             )}
-          </div>
-        </div>
+          </Modal>
       )}
 
       {/* Time Slots Modal */}
       {showSlotsModal && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[60] p-4" onClick={() => setShowSlotsModal(false)}>
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-6" onClick={e => e.stopPropagation()}>
+        <Modal open onClose={() => setShowSlotsModal(false)} size="lg">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-semibold text-gray-900">Manage Time Slots</h2>
               <button onClick={() => setShowSlotsModal(false)} className="text-gray-400 hover:text-gray-600 text-xl">&times;</button>
@@ -1246,10 +1233,10 @@ export default function TimetablePage() {
                         <div className="flex items-center gap-2">
                           <span className="text-xs bg-gray-200 text-gray-600 px-1.5 py-0.5 rounded font-mono">{s.order}</span>
                           <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${
-                            s.slot_type === 'PERIOD' ? 'bg-blue-100 text-blue-700' :
-                            s.slot_type === 'BREAK' ? 'bg-yellow-100 text-yellow-700' :
-                            s.slot_type === 'LUNCH' ? 'bg-orange-100 text-orange-700' :
-                            'bg-purple-100 text-purple-700'
+                            s.slot_type === 'PERIOD' ? TONE.info :
+                            s.slot_type === 'BREAK' ? TONE.warning :
+                            s.slot_type === 'LUNCH' ? TONE.orange :
+                            TONE.accent
                           }`}>
                             {s.slot_type}
                           </span>
@@ -1374,7 +1361,7 @@ export default function TimetablePage() {
                   <button
                     onClick={handleSuggestSlots}
                     disabled={loadingSuggest}
-                    className="px-3 py-1.5 text-xs bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50"
+                    className="px-3 py-1.5 text-xs bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50"
                   >
                     {loadingSuggest ? 'Generating...' : 'Generate Slots'}
                   </button>
@@ -1409,9 +1396,9 @@ export default function TimetablePage() {
                             </svg>
                             <span className="font-mono text-gray-400 w-4">{s.order}</span>
                             <span className={`px-1.5 py-0.5 rounded font-medium ${
-                              s.slot_type === 'PERIOD' ? 'bg-blue-100 text-blue-700' :
-                              s.slot_type === 'LUNCH' ? 'bg-orange-100 text-orange-700' :
-                              'bg-yellow-100 text-yellow-700'
+                              s.slot_type === 'PERIOD' ? TONE.info :
+                              s.slot_type === 'LUNCH' ? TONE.orange :
+                              TONE.warning
                             }`}>
                               {s.slot_type}
                             </span>
@@ -1599,8 +1586,7 @@ export default function TimetablePage() {
               </form>
             </div>
             )}
-          </div>
-        </div>
+          </Modal>
       )}
     </div>
   )

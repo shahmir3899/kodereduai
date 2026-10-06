@@ -1,4 +1,8 @@
 import { useState, useEffect } from 'react'
+import Modal from '../components/ui/Modal'
+import Field from '../components/ui/Field'
+import { TONE } from '../components/ui/statusTones'
+import PageHeader from '../components/ui/PageHeader'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../contexts/AuthContext'
 import { useAcademicYear } from '../contexts/AcademicYearContext'
@@ -480,13 +484,8 @@ export default function ClassesGradesPage() {
   return (
     <div>
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6 gap-4">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Classes</h1>
-          <p className="text-sm text-gray-600">Manage classes and sections by master catalog or session</p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="flex bg-blue-50 rounded-lg p-0.5 border border-blue-200">
+      <PageHeader title="Classes" subtitle="Manage classes and sections by master catalog or session" className="mb-6" actions={<>
+<div className="flex bg-blue-50 rounded-lg p-0.5 border border-blue-200">
             <button
               onClick={() => setClassScope('master')}
               className={`px-3 py-1 text-xs rounded-md transition-colors ${classScope === 'master' ? 'bg-white shadow text-blue-900' : 'text-blue-700'}`}
@@ -527,8 +526,7 @@ export default function ClassesGradesPage() {
               + {classScope === 'session' ? 'Session Class' : 'Class'}
             </button>
           )}
-        </div>
-      </div>
+</>} />
 
       {/* Session classes quick panel */}
       <div className="mb-6 rounded-xl border border-blue-200 bg-blue-50/60 p-4">
@@ -575,9 +573,8 @@ export default function ClassesGradesPage() {
 
       {/* Super Admin school selector */}
       {isSuperAdmin && (
-        <div className="mb-6">
-          <label className="label">Select School</label>
-          <select
+        <Field label="Select School" className="mb-6">
+<select
             className="input max-w-full sm:max-w-md"
             value={selectedSchoolId || ''}
             onChange={(e) => setSelectedSchoolId(e.target.value ? parseInt(e.target.value) : null)}
@@ -585,7 +582,7 @@ export default function ClassesGradesPage() {
             <option value="">-- Select a school --</option>
             {schools.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
           </select>
-        </div>
+</Field>
       )}
 
       {!selectedSchoolId && (
@@ -829,7 +826,7 @@ export default function ClassesGradesPage() {
                   </p>
                 </div>
                 <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                  cls.is_active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
+                  cls.is_active ? TONE.success : TONE.neutral
                 }`}>
                   {cls.is_active ? 'Active' : 'Inactive'}
                 </span>
@@ -883,23 +880,17 @@ export default function ClassesGradesPage() {
 
       {/* ───── Class Modal ───── */}
       {showClassModal && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4" onClick={closeClassModal}>
-          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold text-gray-900">{editingClass ? 'Edit Class' : 'Add Class'}</h2>
-              <button onClick={closeClassModal} className="text-gray-400 hover:text-gray-600 text-xl">&times;</button>
-            </div>
+        <Modal open onClose={closeClassModal} title={editingClass ? 'Edit Class' : 'Add Class'}>
 
             <div className="space-y-4">
-              <div>
-                <label className="label">Grade Level</label>
-                <select className="input" value={classForm.grade_level} onChange={(e) => handleGradeLevelChange(e.target.value)}>
+              <Field label="Grade Level">
+<select className="input" value={classForm.grade_level} onChange={(e) => handleGradeLevelChange(e.target.value)}>
                   <option value="">-- Select grade level --</option>
                   {GRADE_PRESETS.map(p => (
                     <option key={p.numeric_level} value={p.numeric_level}>{p.name} (Level {p.numeric_level})</option>
                   ))}
                 </select>
-              </div>
+</Field>
 
               {classScope === 'session' ? (
                 <div>
@@ -963,14 +954,12 @@ export default function ClassesGradesPage() {
                 {isClassSubmitting ? 'Saving...' : (editingClass ? 'Save Changes' : `Add ${classScope === 'session' ? 'Session Class' : 'Class'}`)}
               </button>
             </div>
-          </div>
-        </div>
+          </Modal>
       )}
 
       {/* ───── Delete Confirmation ───── */}
       {deleteConfirm && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4" onClick={() => setDeleteConfirm(null)}>
-          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm" onClick={e => e.stopPropagation()}>
+        <Modal open onClose={() => setDeleteConfirm(null)} size="sm">
             <h2 className="text-lg font-bold text-gray-900 mb-2">Delete Class</h2>
             <p className="text-gray-600 mb-6">
               Are you sure you want to delete <strong>{deleteConfirm.name}</strong>? This action cannot be undone.
@@ -985,18 +974,12 @@ export default function ClassesGradesPage() {
                 {deleteClassMut.isPending || deleteSessionClassMut.isPending ? 'Deleting...' : 'Delete'}
               </button>
             </div>
-          </div>
-        </div>
+          </Modal>
       )}
 
       {/* ───── Link Master Class Picker Modal ───── */}
       {linkPickerModal.open && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4" onClick={closeLinkPicker}>
-          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold text-gray-900">Link Master Class</h2>
-              <button onClick={closeLinkPicker} className="text-gray-400 hover:text-gray-600 text-xl">&times;</button>
-            </div>
+        <Modal open onClose={closeLinkPicker} title="Link Master Class" size="sm">
             <p className="text-sm text-gray-600 mb-4">
               Select a master class to link to{' '}
               <strong>
@@ -1032,8 +1015,7 @@ export default function ClassesGradesPage() {
                 {linkSessionClassMut.isPending ? 'Linking...' : 'Link'}
               </button>
             </div>
-          </div>
-        </div>
+          </Modal>
       )}
 
       {/* ───── Section Allocator Modal ───── */}

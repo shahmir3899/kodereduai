@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import LoadingState from '../../components/ui/LoadingState'
 import { useQuery } from '@tanstack/react-query'
 import { lmsApi } from '../../services/api'
 import QuestionSlotEditor from './QuestionSlotEditor'
@@ -81,7 +82,7 @@ export default function BankFillSource({
             )}
           </div>
           {lessonsLoading ? (
-            <p className="text-sm text-gray-500">Loading lesson plans...</p>
+            <LoadingState label="Loading lesson plans..." compact />
           ) : lessons.length === 0 ? (
             <p className="text-sm text-gray-500">No lesson plans found for this class and subject.</p>
           ) : (

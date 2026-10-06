@@ -1,7 +1,7 @@
+import Modal from '../../../components/ui/Modal'
 export default function DeleteStudentModal({ student, isPending, onCancel, onConfirm }) {
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
-      <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm mx-4">
+    <Modal open  size="sm" closeOnBackdrop={false}>
         <h2 className="text-xl font-bold text-gray-900 mb-2">Delete Student</h2>
         <p className="text-gray-600 mb-6">
           Are you sure you want to delete <strong>{student.name}</strong> (Roll #{student.roll_number})?
@@ -16,7 +16,6 @@ export default function DeleteStudentModal({ student, isPending, onCancel, onCon
             {isPending ? 'Deleting...' : 'Delete'}
           </button>
         </div>
-      </div>
-    </div>
+      </Modal>
   )
 }

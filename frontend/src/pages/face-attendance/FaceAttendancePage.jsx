@@ -1,11 +1,15 @@
 import { useState, useRef, useEffect } from 'react'
+import Field from '../../components/ui/Field'
+import { TONE } from '../../components/ui/statusTones'
+import Button from '../../components/ui/Button'
+import EmptyState from '../../components/ui/EmptyState'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../../contexts/AuthContext'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
 import { useToast } from '../../components/Toast'
 import { faceAttendanceApi } from '../../services/api'
-import LoadingSpinner from '../../components/LoadingSpinner'
+import LoadingState from '../../components/ui/LoadingState'
 import ClassSelector from '../../components/ClassSelector'
 import { useSessionClasses } from '../../hooks/useSessionClasses'
 import useTeacherScopedClasses from '../../hooks/useTeacherScopedClasses'
@@ -15,8 +19,8 @@ import { loadFaceApiModels, detectAllFacesQuick } from '../../utils/faceApiLoade
 import FaceLiveCapturePage from './FaceLiveCapturePage'
 
 const FIXED_CAMERA_STATUS_BADGE = {
-  active: { label: 'Fixed Camera: Active', className: 'bg-green-100 text-green-700' },
-  inactive: { label: 'Fixed Camera: Offline', className: 'bg-gray-100 text-gray-600' },
+  active: { label: 'Fixed Camera: Active', className: TONE.success },
+  inactive: { label: 'Fixed Camera: Offline', className: TONE.neutral },
 }
 
 // Past this many detected faces, matching accuracy in a single photo tends
@@ -185,13 +189,13 @@ export default function FaceAttendancePage() {
 
   const getStatusBadge = (status) => {
     const map = {
-      UPLOADING: 'bg-gray-100 text-gray-700',
-      PROCESSING: 'bg-blue-100 text-blue-700',
-      NEEDS_REVIEW: 'bg-yellow-100 text-yellow-700',
-      CONFIRMED: 'bg-green-100 text-green-700',
-      FAILED: 'bg-red-100 text-red-700',
+      UPLOADING: TONE.neutral,
+      PROCESSING: TONE.info,
+      NEEDS_REVIEW: TONE.warning,
+      CONFIRMED: TONE.success,
+      FAILED: TONE.danger,
     }
-    return map[status] || 'bg-gray-100 text-gray-700'
+    return map[status] || TONE.neutral
   }
 
   return (
@@ -199,7 +203,7 @@ export default function FaceAttendancePage() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-bold text-gray-900">Face Attendance</h1>
+            <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Face Attendance</h1>
             {FIXED_CAMERA_STATUS_BADGE[fixedCameraStatus] && (
               <span
                 title={FIXED_CAMERA_NOTE}
@@ -215,24 +219,18 @@ export default function FaceAttendancePage() {
           )}
         </div>
         <div className="flex gap-2">
-          <button
-            onClick={() => navigate('/face-attendance/bulk-enrollment')}
-            className="px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50"
-          >
+          <Button variant="secondary"
+ onClick={() => navigate('/face-attendance/bulk-enrollment')}>
             Bulk Enrollment
-          </button>
-          <button
-            onClick={() => navigate('/face-attendance/devices')}
-            className="px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50"
-          >
+          </Button>
+          <Button variant="secondary"
+ onClick={() => navigate('/face-attendance/devices')}>
             Capture Devices
-          </button>
-          <button
-            onClick={() => navigate('/face-attendance/enrollment')}
-            className="px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50"
-          >
+          </Button>
+          <Button variant="secondary"
+ onClick={() => navigate('/face-attendance/enrollment')}>
             Manage Enrollments
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -296,7 +294,7 @@ export default function FaceAttendancePage() {
           {/* Class and date selection */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Class</label>
+              <label className="label">Class</label>
               <ClassSelector
                 value={selectedClass}
                 onChange={(e) => setSelectedClass(e.target.value)}
@@ -307,15 +305,14 @@ export default function FaceAttendancePage() {
                 classes={teacherClassOptions || undefined}
               />
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
-              <input
+            <Field label="Date">
+<input
                 type="date"
                 value={selectedDate}
                 onChange={(e) => setSelectedDate(e.target.value)}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                className="input"
               />
-            </div>
+</Field>
           </div>
 
           {/* Image upload area */}
@@ -361,7 +358,7 @@ export default function FaceAttendancePage() {
                   <button
                     onClick={handleCapture}
                     disabled={!!uploadStep}
-                    className="px-6 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+                    className="px-6 py-2 bg-primary-600 text-white rounded-lg text-sm font-medium hover:bg-primary-700 disabled:opacity-50"
                   >
                     {uploadStep === 'uploading' ? 'Uploading...' :
                      uploadStep === 'creating' ? 'Creating session...' :
@@ -389,7 +386,7 @@ export default function FaceAttendancePage() {
                 <button
                   onClick={() => fileInputRef.current?.click()}
                   disabled={!selectedClass}
-                  className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="mt-4 px-4 py-2 bg-primary-600 text-white rounded-lg text-sm font-medium hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {selectedClass ? 'Select or Capture Photo' : 'Select a class first'}
                 </button>
@@ -405,9 +402,9 @@ export default function FaceAttendancePage() {
             <h2 className="text-lg font-semibold">Recent Sessions</h2>
           </div>
           {sessionsLoading ? (
-            <div className="p-8"><LoadingSpinner /></div>
+            <LoadingState />
           ) : sessions.length === 0 ? (
-            <div className="p-8 text-center text-gray-500">No face attendance sessions yet.</div>
+            <EmptyState title="No face attendance sessions yet." />
           ) : (
             <div className="divide-y">
               {sessions.map((session) => (

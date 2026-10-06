@@ -1,4 +1,10 @@
 import { useState, useMemo, useEffect } from 'react'
+import Modal from '../../components/ui/Modal'
+import Field from '../../components/ui/Field'
+import { TONE } from '../../components/ui/statusTones'
+import PageHeader from '../../components/ui/PageHeader'
+import LoadingState from '../../components/ui/LoadingState'
+import EmptyState from '../../components/ui/EmptyState'
 import { useQuery, useQueries, useMutation, useQueryClient } from '@tanstack/react-query'
 import { lmsApi, schoolsApi } from '../../services/api'
 import ClassSelector from '../../components/ClassSelector'
@@ -17,13 +23,12 @@ import BulkLessonPlansModal from './BulkLessonPlansModal'
 import LessonPlanTopicsPickerModal from './LessonPlanTopicsPickerModal'
 import { exportLessonPlansPDF } from './lessonPlansExportPdf'
 import { normalizeLessonPlanText, deriveAutoTitleFromCurriculumSummary } from './lessonPlanTextUtils'
-import Spinner from '../../components/ui/Spinner'
 import StaffFilter from '../../components/StaffFilter'
 import { RecordCard, CardGrid, ViewToggle } from '../../components/cards'
 
 const STATUS_BADGES = {
-  DRAFT: 'bg-gray-100 text-gray-800',
-  PUBLISHED: 'bg-green-100 text-green-800',
+  DRAFT: TONE.neutral,
+  PUBLISHED: TONE.success,
 }
 
 const OBJECTIVE_BLOOM_OPTIONS = [
@@ -36,12 +41,12 @@ const OBJECTIVE_BLOOM_OPTIONS = [
 ]
 
 const BLOOM_BADGE_CLASSES = {
-  remember: 'bg-gray-100 text-gray-700',
-  understand: 'bg-blue-100 text-blue-700',
-  apply: 'bg-green-100 text-green-700',
-  analyze: 'bg-yellow-100 text-yellow-800',
-  evaluate: 'bg-orange-100 text-orange-700',
-  create: 'bg-red-100 text-red-700',
+  remember: TONE.neutral,
+  understand: TONE.info,
+  apply: TONE.success,
+  analyze: TONE.warning,
+  evaluate: TONE.orange,
+  create: TONE.danger,
 }
 
 function makeObjectiveRow(seed = {}) {
@@ -587,15 +592,11 @@ export default function LessonPlansPage() {
   return (
     <div>
       {/* Header */}
-      <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Lesson Plans</h1>
-          <p className="text-sm text-gray-600">Create and manage lesson plans for your classes</p>
-        </div>
-        <button type="button" onClick={() => setShowBulkModal(true)} className="btn btn-primary">
+      <PageHeader title="Lesson Plans" subtitle="Create and manage lesson plans for your classes" className="mb-6" actions={<>
+<button type="button" onClick={() => setShowBulkModal(true)} className="btn btn-primary">
           Add Lesson Plan
         </button>
-      </div>
+</>} />
 
       <div className="mb-6">
         <TeacherScopeSummary compact />
@@ -619,9 +620,8 @@ export default function LessonPlansPage() {
               classes={teacherClassOptions || undefined}
             />
           </div>
-          <div>
-            <label className="label">Subject</label>
-            <select
+          <Field label="Subject">
+<select
               className="input"
               value={filterSubject}
               onChange={(e) => setFilterSubject(e.target.value)}
@@ -640,37 +640,34 @@ export default function LessonPlansPage() {
                 </option>
               ))}
             </select>
-          </div>
-          <div>
-            <label className="label">Search</label>
-            <input
+</Field>
+          <Field label="Search">
+<input
               type="text"
               className="input"
               placeholder="Search by title or description..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
-          </div>
+</Field>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 sm:gap-4 mt-4 pt-4 border-t border-gray-100">
-          <div>
-            <label className="label">Lesson date — from</label>
-            <input
+          <Field label="Lesson date — from">
+<input
               type="date"
               className="input"
               value={exportDateFrom}
               onChange={(e) => setExportDateFrom(e.target.value)}
             />
-          </div>
-          <div>
-            <label className="label">Lesson date — to</label>
-            <input
+</Field>
+          <Field label="Lesson date — to">
+<input
               type="date"
               className="input"
               value={exportDateTo}
               onChange={(e) => setExportDateTo(e.target.value)}
             />
-          </div>
+</Field>
           <div className="flex flex-col justify-end">
             <button
               type="button"
@@ -739,8 +736,7 @@ export default function LessonPlansPage() {
           </div>
         ) : isLoading ? (
           <div className="text-center py-8">
-            <Spinner size="md" className="mx-auto" />
-            <p className="text-gray-500 mt-2">Loading lesson plans...</p>
+            <LoadingState label="Loading lesson plans..." compact />
           </div>
         ) : plans.length === 0 ? (
           allPlans.length === 0 ? (
@@ -755,9 +751,7 @@ export default function LessonPlansPage() {
               </div>
             </div>
           ) : (
-            <div className="text-center py-8 text-gray-500">
-              No lesson plans match your search within the selected date range.
-            </div>
+            <EmptyState title="No lesson plans match your search within the selected date range." />
           )
         ) : (
           <>
@@ -881,7 +875,7 @@ export default function LessonPlansPage() {
                             <span key={objective.id} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-teal-50 text-teal-700 text-xs">
                               <span className="truncate max-w-[170px]">{objective.statement}</span>
                               {objective.bloom_level && (
-                                <span className={`px-1 py-0.5 rounded-full ${BLOOM_BADGE_CLASSES[objective.bloom_level] || 'bg-gray-100 text-gray-700'}`}>
+                                <span className={`px-1 py-0.5 rounded-full ${BLOOM_BADGE_CLASSES[objective.bloom_level] || TONE.neutral}`}>
                                   {OBJECTIVE_BLOOM_OPTIONS.find((option) => option.value === objective.bloom_level)?.label || objective.bloom_level}
                                 </span>
                               )}
@@ -970,7 +964,7 @@ export default function LessonPlansPage() {
                     </th>
                   </tr>
                 </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
+                <tbody className="divide-y divide-gray-100">
                   {plans.map((plan) => (
                     <tr key={plan.id} className="hover:bg-gray-50">
                       <td className="px-4 py-3">
@@ -993,7 +987,7 @@ export default function LessonPlansPage() {
                               <span key={objective.id} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-teal-50 text-teal-700 text-xs">
                                 <span className="truncate max-w-[180px]">{objective.statement}</span>
                                 {objective.bloom_level && (
-                                  <span className={`px-1 py-0.5 rounded-full ${BLOOM_BADGE_CLASSES[objective.bloom_level] || 'bg-gray-100 text-gray-700'}`}>
+                                  <span className={`px-1 py-0.5 rounded-full ${BLOOM_BADGE_CLASSES[objective.bloom_level] || TONE.neutral}`}>
                                     {OBJECTIVE_BLOOM_OPTIONS.find((option) => option.value === objective.bloom_level)?.label || objective.bloom_level}
                                   </span>
                                 )}
@@ -1103,8 +1097,7 @@ export default function LessonPlansPage() {
 
       {/* Create / Edit Modal */}
       {showModal && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
-          <div className="bg-white rounded-xl shadow-xl p-4 sm:p-6 w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto">
+        <Modal open  size="2xl" closeOnBackdrop={false}>
             <h2 className="text-xl font-bold text-gray-900 mb-4">
               {editingPlan ? 'Edit Lesson Plan' : 'Create Lesson Plan'}
             </h2>
@@ -1135,16 +1128,15 @@ export default function LessonPlansPage() {
             <div className="space-y-4">
               {/* Title */}
               {!isMinimal && (
-                <div>
-                  <label className="label">Title *</label>
-                  <input
+                <Field label="Title" required>
+<input
                     type="text"
                     className="input"
                     placeholder="e.g., Introduction to Photosynthesis"
                     value={form.title}
                     onChange={(e) => setForm({ ...form, title: e.target.value })}
                   />
-                </div>
+</Field>
               )}
 
               {/* Class & Subject row */}
@@ -1161,9 +1153,8 @@ export default function LessonPlansPage() {
                     classes={teacherClassOptions || undefined}
                   />
                 </div>
-                <div>
-                  <label className="label">Subject *</label>
-                  <select
+                <Field label="Subject" required>
+<select
                     className="input"
                     value={form.subject}
                     onChange={(e) => setForm({ ...form, subject: e.target.value })}
@@ -1185,7 +1176,7 @@ export default function LessonPlansPage() {
                       </option>
                     ))}
                   </select>
-                </div>
+</Field>
               </div>
 
               <TeacherScopeHint
@@ -1298,19 +1289,17 @@ export default function LessonPlansPage() {
                 <>
                   {/* Duration & Status row */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                      <label className="label">Duration (minutes)</label>
-                      <input
+                    <Field label="Duration (minutes)">
+<input
                         type="number"
                         className="input"
                         min="1"
                         value={form.duration_minutes}
                         onChange={(e) => setForm({ ...form, duration_minutes: e.target.value })}
                       />
-                    </div>
-                    <div>
-                      <label className="label">Status</label>
-                      <select
+</Field>
+                    <Field label="Status">
+<select
                         className="input"
                         value={form.status}
                         onChange={(e) => setForm({ ...form, status: e.target.value })}
@@ -1318,7 +1307,7 @@ export default function LessonPlansPage() {
                         <option value="DRAFT">Draft</option>
                         <option value="PUBLISHED">Published</option>
                       </select>
-                    </div>
+</Field>
                   </div>
 
                   {/* Description */}
@@ -1380,7 +1369,7 @@ export default function LessonPlansPage() {
                 <div className="mt-3">
                   <p className="text-xs font-medium text-gray-600 mb-1">Topic objective suggestions (edit mode)</p>
                   {modalObjectivesLoading ? (
-                    <p className="text-xs text-gray-500">Loading topic objectives...</p>
+                    <LoadingState label="Loading topic objectives..." compact />
                   ) : modalObjectivesError ? (
                     <p className="text-xs text-red-600">Could not load topic objectives.</p>
                   ) : modalAvailableObjectives.length === 0 ? (
@@ -1407,7 +1396,7 @@ export default function LessonPlansPage() {
                         >
                           <span className="truncate max-w-[220px]">{objective.statement}</span>
                           {objective.bloom_level && (
-                            <span className={`px-1.5 py-0.5 rounded-full ${BLOOM_BADGE_CLASSES[objective.bloom_level] || 'bg-gray-100 text-gray-700'}`}>
+                            <span className={`px-1.5 py-0.5 rounded-full ${BLOOM_BADGE_CLASSES[objective.bloom_level] || TONE.neutral}`}>
                               {OBJECTIVE_BLOOM_OPTIONS.find((option) => option.value === objective.bloom_level)?.label || objective.bloom_level}
                             </span>
                           )}
@@ -1464,8 +1453,7 @@ export default function LessonPlansPage() {
                   : 'Create Lesson Plan'}
               </button>
             </div>
-          </div>
-        </div>
+          </Modal>
       )}
 
       <LessonPlanTopicsPickerModal
@@ -1497,8 +1485,7 @@ export default function LessonPlansPage() {
 
       {/* Delete Confirmation Modal */}
       {deleteConfirm && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
-          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm mx-4">
+        <Modal open  size="sm" closeOnBackdrop={false}>
             <h2 className="text-xl font-bold text-gray-900 mb-2">Delete Lesson Plan</h2>
             <p className="text-gray-600 mb-6">
               Are you sure you want to delete <strong>{deleteConfirm.title}</strong>? This action
@@ -1516,14 +1503,12 @@ export default function LessonPlansPage() {
                 {deleteMutation.isPending ? 'Deleting...' : 'Delete'}
               </button>
             </div>
-          </div>
-        </div>
+          </Modal>
       )}
 
       {/* Bulk Delete Confirmation Modal */}
       {bulkDeleteConfirm && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
-          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm mx-4">
+        <Modal open  size="sm" closeOnBackdrop={false}>
             <h2 className="text-xl font-bold text-gray-900 mb-2">Delete Lesson Plans</h2>
             <p className="text-gray-600 mb-6">
               Are you sure you want to delete <strong>{selectedVisibleIds.length}</strong> selected lesson
@@ -1541,8 +1526,7 @@ export default function LessonPlansPage() {
                 {bulkDeleteMutation.isPending ? 'Deleting...' : 'Delete'}
               </button>
             </div>
-          </div>
-        </div>
+          </Modal>
       )}
     </div>
   )

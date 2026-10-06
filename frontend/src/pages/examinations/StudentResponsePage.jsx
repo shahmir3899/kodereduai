@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
+import PageHeader from '../../components/ui/PageHeader'
+import LoadingState from '../../components/ui/LoadingState'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import Toast from '../../components/Toast'
@@ -216,19 +218,15 @@ export default function StudentResponsePage() {
       {toast && <Toast type={toast.type} message={toast.message} onClose={() => setToast(null)} />}
 
       <div className="bg-white border-b border-gray-200 px-6 py-5">
-        <div className="max-w-6xl mx-auto flex items-center justify-between gap-3">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Student Response Entry</h1>
-            <p className="text-sm text-gray-500 mt-1">{paper.paper_title} - {paper.subject_name}</p>
-          </div>
-          <button
+        <PageHeader className="max-w-6xl mx-auto" title="Student Response Entry" subtitle={<>{paper.paper_title} - {paper.subject_name}</>} actions={<>
+<button
             type="button"
             onClick={() => navigate('/academics/papers')}
             className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100"
           >
             Back to Papers
           </button>
-        </div>
+</>} />
       </div>
 
       <div className="max-w-6xl mx-auto p-6 space-y-4">
@@ -244,7 +242,7 @@ export default function StudentResponsePage() {
           <div>
             <p className="text-xs text-gray-500">Progress</p>
             {allResponsesLoading ? (
-              <p className="text-sm text-gray-500">Loading progress...</p>
+              <LoadingState label="Loading progress..." compact />
             ) : allResponsesError ? (
               <p className="text-sm text-red-600">Unable to load progress.</p>
             ) : (
@@ -259,7 +257,7 @@ export default function StudentResponsePage() {
           <label className="block text-sm font-medium text-gray-700">Student</label>
 
           {studentsLoading ? (
-            <p className="text-sm text-gray-500">Loading students...</p>
+            <LoadingState label="Loading students..." compact />
           ) : studentsError ? (
             <p className="text-sm text-red-600">{studentsErrorObj?.response?.data?.detail || 'Failed to load students.'}</p>
           ) : students.length === 0 ? (
@@ -285,7 +283,7 @@ export default function StudentResponsePage() {
           ) : !selectedStudentId ? (
             <div className="p-6 text-sm text-gray-500">Select a student to start entering responses.</div>
           ) : studentResponsesLoading ? (
-            <div className="p-6 text-sm text-gray-500">Loading existing responses...</div>
+            <LoadingState label="Loading existing responses..." />
           ) : studentResponsesError ? (
             <div className="p-6 text-sm text-red-600">{studentResponsesErrorObj?.response?.data?.detail || 'Failed to load student responses.'}</div>
           ) : (
@@ -376,7 +374,7 @@ export default function StudentResponsePage() {
                           value={response.response_text}
                           onChange={(e) => updateResponseDraft(questionId, { response_text: e.target.value })}
                           placeholder="Optional: add student response text"
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                          className="input"
                         />
                       </div>
                     </div>
@@ -392,7 +390,7 @@ export default function StudentResponsePage() {
             type="button"
             onClick={handleSubmit}
             disabled={submitMutation.isPending || !selectedStudentId || paperQuestions.length === 0}
-            className="px-4 py-2 text-sm rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+            className="px-4 py-2 text-sm rounded-lg bg-primary-600 text-white hover:bg-primary-700 disabled:opacity-50"
           >
             {submitMutation.isPending ? 'Saving...' : 'Submit Responses'}
           </button>

@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from 'react'
+import Button from '../../../components/ui/Button'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { studentsApi, studentExitsApi } from '../../../services/api'
 import { useToast } from '../../../components/Toast'
@@ -103,7 +104,7 @@ export default function ReadmitStudentModal({ student, prefill = null, onClose }
   }
 
   return (
-    <div className="fixed inset-0 z-[60] bg-black/40 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4">
       <div className="bg-white rounded-xl shadow-xl border border-gray-200 w-full max-w-lg">
         <div className="px-6 py-4 border-b border-gray-200">
           <h2 className="text-lg font-semibold text-gray-900">Re-admit student</h2>
@@ -120,7 +121,7 @@ export default function ReadmitStudentModal({ student, prefill = null, onClose }
           <div>
             <label htmlFor="readmit-date" className="block text-sm font-medium text-gray-700 mb-1">Return date</label>
             <input
-              id="readmit-date" type="date" className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+              id="readmit-date" type="date" className="input"
               value={form.return_date} onChange={(e) => setForm((f) => ({ ...f, return_date: e.target.value }))}
             />
             <p className="text-xs text-gray-500 mt-1">The first day back. It can be a date in the future.</p>
@@ -128,7 +129,7 @@ export default function ReadmitStudentModal({ student, prefill = null, onClose }
           <div>
             <label htmlFor="readmit-class" className="block text-sm font-medium text-gray-700 mb-1">Class</label>
             <select
-              id="readmit-class" className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+              id="readmit-class" className="input"
               value={form.session_class} disabled={classesLoading}
               onChange={(e) => {
                 if (!form.roll_number.trim()) setRollTyped(false)
@@ -146,7 +147,7 @@ export default function ReadmitStudentModal({ student, prefill = null, onClose }
           <div>
             <label htmlFor="readmit-roll" className="block text-sm font-medium text-gray-700 mb-1">Roll number</label>
             <input
-              id="readmit-roll" className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+              id="readmit-roll" className="input"
               placeholder="Keep their roll number"
               value={form.roll_number}
               onChange={(e) => {
@@ -161,7 +162,7 @@ export default function ReadmitStudentModal({ student, prefill = null, onClose }
           <div>
             <label htmlFor="readmit-reason" className="block text-sm font-medium text-gray-700 mb-1">Reason</label>
             <textarea
-              id="readmit-reason" rows={2} className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+              id="readmit-reason" rows={2} className="input"
               placeholder="Why they are coming back" value={form.reason}
               onChange={(e) => setForm((f) => ({ ...f, reason: e.target.value }))}
             />
@@ -169,13 +170,13 @@ export default function ReadmitStudentModal({ student, prefill = null, onClose }
         </div>
 
         <div className="px-6 py-4 border-t border-gray-200 flex justify-end gap-2">
-          <button type="button" onClick={onClose} className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50">Cancel</button>
-          <button
-            type="button" onClick={handleSubmit} disabled={mutation.isPending}
-            className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50"
-          >
+          <Button variant="secondary" type="button" onClick={onClose}>Cancel</Button>
+          <Button
+ type="button" onClick={handleSubmit} disabled={mutation.isPending}
+ 
+ >
             {mutation.isPending ? 'Re-admitting...' : 'Re-admit student'}
-          </button>
+          </Button>
         </div>
       </div>
     </div>

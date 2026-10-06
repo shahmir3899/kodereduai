@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import PageHeader from '../../components/ui/PageHeader'
 import { useQuery } from '@tanstack/react-query'
 import { academicsApi } from '../../services/api'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
@@ -44,10 +45,7 @@ export default function TeacherTimetablePage() {
 
   return (
     <div>
-      <div className="mb-6">
-        <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Timetable</h1>
-        <p className="text-sm text-gray-600">Your weekly timetable by class and subject</p>
-      </div>
+      <PageHeader title="Timetable" subtitle="Your weekly timetable by class and subject" className="mb-6" />
 
       {!activeAcademicYear?.id && (
         <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-700">

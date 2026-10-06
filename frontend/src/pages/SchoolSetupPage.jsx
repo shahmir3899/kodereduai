@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
+import { TONE } from '../components/ui/statusTones'
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { schoolsApi } from '../services/api'
@@ -236,11 +237,11 @@ export default function SchoolSetupPage() {
                 >
                   <span className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
                     status === 'complete'
-                      ? 'bg-green-100 text-green-700'
+                      ? TONE.success
                       : status === 'partial'
-                        ? 'bg-amber-100 text-amber-700'
+                        ? TONE.warning
                         : isActive
-                          ? 'bg-sky-100 text-sky-700'
+                          ? TONE.sky
                           : 'bg-gray-100 text-gray-500'
                   }`}>
                     {status === 'complete' ? '✓' : step.num}
@@ -264,7 +265,7 @@ export default function SchoolSetupPage() {
                   onClick={() => goToStep(step.num)}
                   className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors ${
                     isActive
-                      ? 'bg-sky-100 text-sky-700'
+                      ? TONE.sky
                       : status === 'complete'
                         ? 'bg-green-50 text-green-700'
                         : 'bg-gray-100 text-gray-500'

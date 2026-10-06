@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import Field from '../../components/ui/Field'
+import { TONE } from '../../components/ui/statusTones'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { sessionsApi } from '../../services/api'
 import { useAuth } from '../../contexts/AuthContext'
@@ -113,7 +115,7 @@ export default function SessionSetupWizard({ onClose }) {
   const isSync = preview?.sync_mode
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40" onClick={onClose}>
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto m-4" onClick={e => e.stopPropagation()}>
         {/* Header */}
         <div className="flex items-center justify-between p-5 border-b border-gray-200">
@@ -139,7 +141,7 @@ export default function SessionSetupWizard({ onClose }) {
               s === step ? 'text-sky-700' : s < step ? 'text-green-600' : 'text-gray-400'
             }`}>
               <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
-                s === step ? 'bg-sky-100 text-sky-700' : s < step ? 'bg-green-100 text-green-700' : 'bg-gray-100'
+                s === step ? TONE.sky : s < step ? TONE.success : 'bg-gray-100'
               }`}>{s < step ? '\u2713' : s}</div>
               <span>{s === 1 ? 'Configure' : s === 2 ? 'Review' : 'Done'}</span>
               {s < 3 && <div className="w-8 h-px bg-gray-300 ml-1" />}
@@ -151,9 +153,8 @@ export default function SessionSetupWizard({ onClose }) {
           {/* Step 1: Configure */}
           {step === 1 && (
             <form onSubmit={handlePreview} className="space-y-4">
-              <div>
-                <label className="label">Copy From (Source Year)</label>
-                <select
+              <Field label="Copy From (Source Year)">
+<select
                   className="input"
                   value={formData.source_year_id}
                   onChange={e => handleSourceChange(e.target.value)}
@@ -166,11 +167,10 @@ export default function SessionSetupWizard({ onClose }) {
                     </option>
                   ))}
                 </select>
-              </div>
+</Field>
 
-              <div>
-                <label className="label">New Year Name</label>
-                <input
+              <Field label="New Year Name">
+<input
                   type="text"
                   className="input"
                   placeholder="e.g. 2026-2027"
@@ -178,29 +178,27 @@ export default function SessionSetupWizard({ onClose }) {
                   onChange={e => setFormData(prev => ({ ...prev, new_year_name: e.target.value }))}
                   required
                 />
-              </div>
+</Field>
 
               <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="label">Start Date</label>
-                  <input
+                <Field label="Start Date">
+<input
                     type="date"
                     className="input"
                     value={formData.new_start_date}
                     onChange={e => setFormData(prev => ({ ...prev, new_start_date: e.target.value }))}
                     required
                   />
-                </div>
-                <div>
-                  <label className="label">End Date</label>
-                  <input
+</Field>
+                <Field label="End Date">
+<input
                     type="date"
                     className="input"
                     value={formData.new_end_date}
                     onChange={e => setFormData(prev => ({ ...prev, new_end_date: e.target.value }))}
                     required
                   />
-                </div>
+</Field>
               </div>
 
               <button type="submit" className="btn-primary w-full" disabled={previewMutation.isPending}>
@@ -266,8 +264,8 @@ export default function SessionSetupWizard({ onClose }) {
                           <span className="font-medium">{t.name}</span>
                           {isSync && t.action && (
                             <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
-                              t.action === 'create' ? 'bg-green-100 text-green-700' :
-                              t.action === 'update' ? 'bg-amber-100 text-amber-700' :
+                              t.action === 'create' ? TONE.success :
+                              t.action === 'update' ? TONE.warning :
                               'bg-gray-100 text-gray-500'
                             }`}>
                               {t.action === 'create' ? 'NEW' : t.action === 'update' ? 'UPDATE' : 'NO CHANGE'}

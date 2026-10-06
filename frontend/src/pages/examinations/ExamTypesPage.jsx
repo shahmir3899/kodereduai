@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import Modal from '../../components/ui/Modal'
+import PageHeader from '../../components/ui/PageHeader'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { examinationsApi } from '../../services/api'
 import { useConfirmModal } from '../../components/ConfirmModal'
@@ -59,13 +61,9 @@ export default function ExamTypesPage() {
 
   return (
     <div>
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6 gap-4">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Exam Types</h1>
-          <p className="text-sm text-gray-600">Define exam categories like Mid-Term, Final, Unit Test</p>
-        </div>
-        {isSchoolAdmin && <button onClick={openCreate} className="btn-primary text-sm px-4 py-2">+ Add Exam Type</button>}
-      </div>
+      <PageHeader title="Exam Types" subtitle="Define exam categories like Mid-Term, Final, Unit Test" className="mb-6" actions={<>
+{isSchoolAdmin && <button onClick={openCreate} className="btn-primary text-sm px-4 py-2">+ Add Exam Type</button>}
+</>} />
 
       {isLoading ? (
         <div className="text-center py-12">
@@ -123,12 +121,7 @@ export default function ExamTypesPage() {
       )}
 
       {isSchoolAdmin && showModal && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[60] p-4" onClick={closeModal}>
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold text-gray-900">{editId ? 'Edit Exam Type' : 'Add Exam Type'}</h2>
-              <button onClick={closeModal} className="text-gray-400 hover:text-gray-600 text-xl">&times;</button>
-            </div>
+        <Modal open onClose={closeModal} title={editId ? 'Edit Exam Type' : 'Add Exam Type'}>
 
             {(errors.detail || errors.non_field_errors) && (
               <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-lg text-sm">
@@ -138,7 +131,7 @@ export default function ExamTypesPage() {
 
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Name *</label>
+                <label className="label">Name *</label>
                 <input
                   type="text" value={form.name}
                   onChange={e => setForm(p => ({ ...p, name: e.target.value }))}
@@ -147,7 +140,7 @@ export default function ExamTypesPage() {
                 {errors.name && <p className="text-xs text-red-600 mt-1">{errors.name}</p>}
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Weight (%)</label>
+                <label className="label">Weight (%)</label>
                 <input
                   type="number" step="0.01" min="0" max="100" value={form.weight}
                   onChange={e => setForm(p => ({ ...p, weight: e.target.value }))}
@@ -173,8 +166,7 @@ export default function ExamTypesPage() {
                 </button>
               </div>
             </form>
-          </div>
-        </div>
+          </Modal>
       )}
 
       <ConfirmModalRoot />

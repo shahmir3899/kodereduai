@@ -1,4 +1,7 @@
 import { useMemo, useRef, useState } from 'react'
+import Modal from '../../components/ui/Modal'
+import PageHeader from '../../components/ui/PageHeader'
+import LoadingState from '../../components/ui/LoadingState'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { classesApi, sessionsApi, examinationsApi } from '../../services/api'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
@@ -506,12 +509,8 @@ export default function AcademicCalendarPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Academic Calendar</h1>
-          <p className="text-sm text-gray-600">Large calendar view for sessions, terms, off-days and school events.</p>
-        </div>
-        {isSchoolAdmin && (
+      <PageHeader title="Academic Calendar" subtitle="Large calendar view for sessions, terms, off-days and school events." actions={<>
+{isSchoolAdmin && (
         <div className="flex flex-wrap items-center gap-2">
           <button className="btn-primary px-4 py-2 text-sm" onClick={openAddModal}>+ Add Event / Off Day</button>
           <button
@@ -522,7 +521,7 @@ export default function AcademicCalendarPage() {
           </button>
         </div>
         )}
-      </div>
+</>} />
 
       <div className="card p-4 sm:p-5">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
@@ -605,7 +604,7 @@ export default function AcademicCalendarPage() {
         </div>
 
         {monthLoading ? (
-          <div className="py-16 text-center text-gray-500">Loading calendar...</div>
+          <LoadingState label="Loading calendar..." />
         ) : (
           <>
             <div className="grid grid-cols-7 gap-2 mb-2">
@@ -619,8 +618,7 @@ export default function AcademicCalendarPage() {
       </div>
 
       {selectedDateKey && selectedDateInfo && (
-        <div className="fixed inset-0 bg-black/40 z-[60] flex items-center justify-center p-4" onClick={closeDayDetailsModal}>
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[92vh] overflow-y-auto p-6" onClick={(e) => e.stopPropagation()}>
+        <Modal open onClose={closeDayDetailsModal} size="2xl">
             <div className="flex items-start justify-between gap-3 mb-4">
               <div>
                 <h3 className="text-lg font-semibold text-gray-900">{selectedDateKey}</h3>
@@ -687,8 +685,7 @@ export default function AcademicCalendarPage() {
               </button>
             </div>
             )}
-          </div>
-        </div>
+          </Modal>
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -711,7 +708,7 @@ export default function AcademicCalendarPage() {
         <div className="card p-4 sm:p-5">
           <h3 className="text-sm font-semibold text-gray-900 mb-3">Entries In This Month</h3>
           {entriesLoading ? (
-            <p className="text-sm text-gray-500">Loading entries...</p>
+            <LoadingState label="Loading entries..." compact />
           ) : visibleEntries.length === 0 ? (
             <p className="text-sm text-gray-500">No custom events or off days in selected month.</p>
           ) : (
@@ -764,8 +761,7 @@ export default function AcademicCalendarPage() {
       </div>
 
       {isSchoolAdmin && showModal && (
-        <div className="fixed inset-0 bg-black/40 z-[60] flex items-center justify-center p-4" onClick={closeModal}>
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[92vh] overflow-y-auto p-6" onClick={(e) => e.stopPropagation()}>
+        <Modal open onClose={closeModal} size="2xl">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">
               {editingEntryId ? 'Edit Event / Off Day' : 'Add Event / Off Day'}
             </h3>
@@ -926,8 +922,7 @@ export default function AcademicCalendarPage() {
                 </button>
               </div>
             </form>
-          </div>
-        </div>
+          </Modal>
       )}
     </div>
   )

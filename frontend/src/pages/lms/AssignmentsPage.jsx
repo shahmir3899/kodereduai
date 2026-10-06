@@ -1,4 +1,10 @@
 import { useState, useMemo, useEffect } from 'react'
+import Modal from '../../components/ui/Modal'
+import Field from '../../components/ui/Field'
+import { TONE } from '../../components/ui/statusTones'
+import PageHeader from '../../components/ui/PageHeader'
+import LoadingState from '../../components/ui/LoadingState'
+import EmptyState from '../../components/ui/EmptyState'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { academicsApi, lmsApi } from '../../services/api'
@@ -13,16 +19,15 @@ import { useToast } from '../../components/Toast'
 import TeacherScopeSummary from '../../components/teacher/TeacherScopeSummary'
 import TeacherScopeBadge, { TeacherScopeHint, useTeacherScopeLookup } from '../../components/teacher/TeacherScopeBadge'
 import LessonPlanTopicsPickerModal from './LessonPlanTopicsPickerModal'
-import Spinner from '../../components/ui/Spinner'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
 import { RecordCard, CardGrid, ViewToggle } from '../../components/cards'
 import { useViewPreference } from '../../hooks/useViewPreference'
 import { filterAssignments } from './assignmentFilters'
 
 const STATUS_BADGES = {
-  DRAFT: 'bg-gray-100 text-gray-800',
-  PUBLISHED: 'bg-green-100 text-green-800',
-  CLOSED: 'bg-red-100 text-red-800',
+  DRAFT: TONE.neutral,
+  PUBLISHED: TONE.success,
+  CLOSED: TONE.danger,
 }
 
 const STRIPE_TONE_BY_STATUS = {
@@ -32,11 +37,11 @@ const STRIPE_TONE_BY_STATUS = {
 }
 
 const TYPE_BADGES = {
-  HOMEWORK: 'bg-blue-100 text-blue-800',
-  DIARY: 'bg-amber-100 text-amber-800',
-  PROJECT: 'bg-purple-100 text-purple-800',
-  CLASSWORK: 'bg-green-100 text-green-800',
-  LAB: 'bg-orange-100 text-orange-800',
+  HOMEWORK: TONE.info,
+  DIARY: TONE.warning,
+  PROJECT: TONE.accent,
+  CLASSWORK: TONE.success,
+  LAB: TONE.orange,
 }
 
 const TYPE_DESCRIPTIONS = {
@@ -533,15 +538,8 @@ export default function AssignmentsPage() {
   return (
     <div>
       {/* Header */}
-      <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Assignments</h1>
-          <p className="text-sm text-gray-600">
-            Create and manage homework, projects, classwork, labs, and diary entries
-          </p>
-        </div>
-        <div className="flex gap-2 flex-wrap">
-          {canCreateDailyDiary && (
+      <PageHeader title="Assignments" subtitle="Create and manage homework, projects, classwork, labs, and diary entries" className="mb-6" actions={<>
+{canCreateDailyDiary && (
             <button onClick={openBulkDiaryModal} className="btn btn-secondary">
               Create Daily Diary
             </button>
@@ -549,8 +547,7 @@ export default function AssignmentsPage() {
           <button onClick={openAddModal} className="btn btn-primary">
             Create Assignment
           </button>
-        </div>
-      </div>
+</>} />
 
       <div className="mb-6">
         <TeacherScopeSummary compact />
@@ -593,9 +590,8 @@ export default function AssignmentsPage() {
               allOptionLabel="All Subjects"
             />
           </div>
-          <div>
-            <label className="label">Status</label>
-            <select
+          <Field label="Status">
+<select
               className="input"
               value={filterStatus}
               onChange={(e) => setFilterStatus(e.target.value)}
@@ -607,10 +603,9 @@ export default function AssignmentsPage() {
                 </option>
               ))}
             </select>
-          </div>
-          <div>
-            <label className="label">Type</label>
-            <select
+</Field>
+          <Field label="Type">
+<select
               className="input"
               value={filterType}
               onChange={(e) => setFilterType(e.target.value)}
@@ -622,17 +617,16 @@ export default function AssignmentsPage() {
                 </option>
               ))}
             </select>
-          </div>
-          <div>
-            <label className="label">Search</label>
-            <input
+</Field>
+          <Field label="Search">
+<input
               type="text"
               className="input"
               placeholder="Search by title..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
-          </div>
+</Field>
         </div>
         <TeacherScopeHint
           className="mt-3"
@@ -647,8 +641,7 @@ export default function AssignmentsPage() {
       <div className="card">
         {isLoading ? (
           <div className="text-center py-8">
-            <Spinner size="md" className="mx-auto" />
-            <p className="text-gray-500 mt-2">Loading assignments...</p>
+            <LoadingState label="Loading assignments..." compact />
           </div>
         ) : assignments.length === 0 ? (
           allAssignments.length === 0 ? (
@@ -677,9 +670,7 @@ export default function AssignmentsPage() {
               </div>
             </div>
           ) : (
-            <div className="text-center py-8 text-gray-500">
-              No assignments match your filters.
-            </div>
+            <EmptyState title="No assignments match your filters." />
           )
         ) : (
           <>
@@ -767,7 +758,7 @@ export default function AssignmentsPage() {
                     </th>
                   </tr>
                 </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
+                <tbody className="divide-y divide-gray-100">
                   {assignments.map((a) => (
                     <tr key={a.id} className="hover:bg-gray-50">
                       <td className="px-4 py-3 text-sm font-medium text-gray-900 max-w-[180px] truncate">
@@ -870,24 +861,22 @@ export default function AssignmentsPage() {
 
       {/* Create / Edit Modal */}
       {showModal && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
-          <div className="bg-white rounded-xl shadow-xl p-4 sm:p-6 w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto">
+        <Modal open  size="2xl" closeOnBackdrop={false}>
             <h2 className="text-xl font-bold text-gray-900 mb-4">
               {editingAssignment ? 'Edit Assignment' : 'Create Assignment'}
             </h2>
 
             <div className="space-y-4">
               {/* Title */}
-              <div>
-                <label className="label">Title *</label>
-                <input
+              <Field label="Title" required>
+<input
                   type="text"
                   className="input"
                   placeholder="e.g., Chapter 5 Homework"
                   value={form.title}
                   onChange={(e) => setForm({ ...form, title: e.target.value })}
                 />
-              </div>
+</Field>
 
               {/* Class & Subject */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -979,19 +968,17 @@ export default function AssignmentsPage() {
                     <p className="text-xs text-amber-600 mt-1">No due date for diary entries.</p>
                   )}
                 </div>
-                <div>
-                  <label className="label">Total Marks</label>
-                  <input
+                <Field label="Total Marks">
+<input
                     type="number"
                     className="input"
                     min="0"
                     value={form.total_marks}
                     onChange={(e) => setForm({ ...form, total_marks: e.target.value })}
                   />
-                </div>
-                <div>
-                  <label className="label">Status</label>
-                  <select
+</Field>
+                <Field label="Status">
+<select
                     className="input"
                     value={form.status}
                     onChange={(e) => setForm({ ...form, status: e.target.value })}
@@ -1002,7 +989,7 @@ export default function AssignmentsPage() {
                       </option>
                     ))}
                   </select>
-                </div>
+</Field>
               </div>
 
               {/* Requires Submission toggle */}
@@ -1078,14 +1065,12 @@ export default function AssignmentsPage() {
                   : 'Create Assignment'}
               </button>
             </div>
-          </div>
-        </div>
+          </Modal>
       )}
 
       {/* Daily diary (multi-subject) modal */}
       {showBulkDiaryModal && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
-          <div className="bg-white rounded-xl shadow-xl p-4 sm:p-6 w-full max-w-3xl mx-4 max-h-[90vh] overflow-y-auto">
+        <Modal open  size="3xl" closeOnBackdrop={false}>
             <h2 className="text-xl font-bold text-gray-900 mb-4">Create Daily Diary</h2>
 
             <div className="space-y-4">
@@ -1137,7 +1122,7 @@ export default function AssignmentsPage() {
                 {!bulkDiaryForm.class_obj ? (
                   <p className="text-sm text-gray-500">Select a class to load subjects.</p>
                 ) : bulkClassSubjectsLoading ? (
-                  <p className="text-sm text-gray-500">Loading subjects...</p>
+                  <LoadingState label="Loading subjects..." compact />
                 ) : bulkDiarySubjects.length === 0 ? (
                   <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-md p-3">
                     No subjects are assigned to this class yet.
@@ -1196,8 +1181,7 @@ export default function AssignmentsPage() {
                 {bulkDiaryMutation.isPending ? 'Submitting...' : 'Submit Daily Diary'}
               </button>
             </div>
-          </div>
-        </div>
+          </Modal>
       )}
 
       <LessonPlanTopicsPickerModal
@@ -1214,8 +1198,7 @@ export default function AssignmentsPage() {
 
       {/* Delete Confirmation Modal */}
       {deleteConfirm && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
-          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm mx-4">
+        <Modal open  size="sm" closeOnBackdrop={false}>
             <h2 className="text-xl font-bold text-gray-900 mb-2">Delete Assignment</h2>
             <p className="text-gray-600 mb-6">
               Are you sure you want to delete <strong>{deleteConfirm.title}</strong>? This will also
@@ -1233,8 +1216,7 @@ export default function AssignmentsPage() {
                 {deleteMutation.isPending ? 'Deleting...' : 'Delete'}
               </button>
             </div>
-          </div>
-        </div>
+          </Modal>
       )}
     </div>
   )

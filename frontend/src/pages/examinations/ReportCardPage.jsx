@@ -1,4 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
+import Button from '../../components/ui/Button'
+import PageHeader from '../../components/ui/PageHeader'
 import { Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { examinationsApi, sessionsApi, schoolsApi } from '../../services/api'
@@ -261,10 +263,7 @@ export default function ReportCardPage() {
 
   return (
     <div>
-      <div className="mb-6">
-        <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Report Cards</h1>
-        <p className="text-sm text-gray-600">View individual student report cards</p>
-      </div>
+      <PageHeader title="Report Cards" subtitle="View individual student report cards" className="mb-6" />
 
       {classId && yearId && students.length > 0 && (
         <div className="flex justify-end items-center gap-2 mb-2 flex-wrap">
@@ -322,12 +321,10 @@ export default function ReportCardPage() {
             Download all ({students.length})
           </button>
           {canEdit && (
-            <button
-              onClick={() => setShowBulk(true)}
-              className="px-3 py-1.5 rounded-lg text-sm border border-gray-300 text-gray-700 hover:bg-gray-50"
-            >
+            <Button variant="secondary" size="sm"
+ onClick={() => setShowBulk(true)}>
               Class bulk edit ({students.length})
-            </button>
+            </Button>
           )}
         </div>
       )}

@@ -1,4 +1,9 @@
 import { useState, useCallback, useEffect } from 'react'
+import Modal from '../components/ui/Modal'
+import Field from '../components/ui/Field'
+import { TONE } from '../components/ui/statusTones'
+import PageHeader from '../components/ui/PageHeader'
+import LoadingState from '../components/ui/LoadingState'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch'
@@ -328,10 +333,9 @@ function UploadTab({ onUploadSuccess }) {
               <p className="text-[11px] text-blue-600 mt-1">Using session classes for {activeAcademicYear?.name}</p>
             )}
           </div>
-          <div>
-            <label className="label">Date</label>
-            <input type="date" className="input" value={selectedDate} onChange={e => setSelectedDate(e.target.value)} max={new Date().toISOString().split('T')[0]} />
-          </div>
+          <Field label="Date">
+<input type="date" className="input" value={selectedDate} onChange={e => setSelectedDate(e.target.value)} max={new Date().toISOString().split('T')[0]} />
+</Field>
         </div>
 
         {error && <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">{error}</div>}
@@ -651,9 +655,9 @@ function ReviewDetail({ uploadId, onBack }) {
         <div className="flex flex-wrap items-center gap-2">
           {upload.pipeline_used && (
             <span className={`px-2 py-0.5 rounded text-xs font-medium ${
-              upload.pipeline_used === 'vote' ? 'bg-blue-100 text-blue-700' :
-              upload.pipeline_used?.includes('fallback') ? 'bg-amber-100 text-amber-700' :
-              'bg-green-100 text-green-700'
+              upload.pipeline_used === 'vote' ? TONE.info :
+              upload.pipeline_used?.includes('fallback') ? TONE.warning :
+              TONE.success
             }`}>
               Processed by: {upload.pipeline_used === 'vote' ? 'Multi-pipeline vote' :
                 upload.pipeline_used?.includes('fallback') ? upload.pipeline_used :
@@ -661,10 +665,10 @@ function ReviewDetail({ uploadId, onBack }) {
                 upload.pipeline_used === 'groq' ? 'Groq Vision' : upload.pipeline_used}
             </span>
           )}
-          <span className={`px-3 py-1 rounded-full text-xs font-medium ${upload.status === 'CONFIRMED' ? 'bg-green-100 text-green-800' : upload.status === 'REVIEW_REQUIRED' ? 'bg-yellow-100 text-yellow-800' : upload.status === 'PROCESSING' ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800'}`}>{upload.status_display}</span>
+          <span className={`px-3 py-1 rounded-full text-xs font-medium ${upload.status === 'CONFIRMED' ? TONE.success : upload.status === 'REVIEW_REQUIRED' ? TONE.warning : upload.status === 'PROCESSING' ? TONE.info : TONE.neutral}`}>{upload.status_display}</span>
           {!isConfirmed && (
             <>
-              <button onClick={handleReprocess} disabled={reprocessing} className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2">
+              <button onClick={handleReprocess} disabled={reprocessing} className="px-3 py-1.5 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 flex items-center gap-2">
                 {reprocessing ? <><svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>Processing...</> : 'Reprocess AI'}
               </button>
               <button onClick={() => setShowDeleteConfirm(upload.id)} className="px-3 py-1.5 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700">Delete</button>
@@ -738,13 +742,13 @@ function ReviewDetail({ uploadId, onBack }) {
                             <button onClick={() => { const s = new Set(selectedAbsent); s.add(student.id); setSelectedAbsent(s) }} className={`px-3 py-1.5 text-sm font-semibold transition-colors ${isAbsent ? 'bg-red-500 text-white' : 'bg-white text-gray-400'}`}>A</button>
                           </div>
                         ) : (
-                          <span className={`px-2 py-1 rounded text-xs font-medium flex-shrink-0 ml-2 ${isAbsent ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>{isAbsent ? 'Absent' : 'Present'}</span>
+                          <span className={`px-2 py-1 rounded text-xs font-medium flex-shrink-0 ml-2 ${isAbsent ? TONE.danger : TONE.success}`}>{isAbsent ? 'Absent' : 'Present'}</span>
                         )}
                       </div>
                       {aiInfo && (
                         <div className="flex flex-wrap gap-2 mt-1 text-xs">
                           {aiInfo.extracted_name && <span className="text-gray-500">AI: &quot;{aiInfo.extracted_name}&quot;{aiInfo.match_score > 0 && <span className={`ml-1 font-medium ${aiInfo.match_score >= 0.7 ? 'text-green-600' : 'text-yellow-600'}`}>{Math.round(aiInfo.match_score * 100)}%</span>}</span>}
-                          {aiInfo.raw_mark && <span className={`px-1 py-0.5 rounded ${aiInfo.ai_status === 'ABSENT' ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'}`}>mark: {aiInfo.raw_mark}</span>}
+                          {aiInfo.raw_mark && <span className={`px-1 py-0.5 rounded ${aiInfo.ai_status === 'ABSENT' ? TONE.danger : TONE.success}`}>mark: {aiInfo.raw_mark}</span>}
                         </div>
                       )}
                     </div>
@@ -811,13 +815,13 @@ function ReviewDetail({ uploadId, onBack }) {
                           </td>
                           <td className="px-2 py-2 border-l border-gray-200">
                             <div className="flex items-center justify-center gap-1">
-                              {aiInfo && <span className={`text-xs px-1 py-0.5 rounded ${aiInfo.ai_status === 'ABSENT' ? 'bg-red-100 text-red-600' : aiInfo.ai_status === 'PRESENT' ? 'bg-green-100 text-green-600' : aiInfo.ai_status === 'LATE' ? 'bg-yellow-100 text-yellow-600' : 'bg-gray-100 text-gray-500'}`} title={`AI: ${aiInfo.ai_status}`}>{aiInfo.raw_mark || aiInfo.ai_status?.[0] || '?'}</span>}
+                              {aiInfo && <span className={`text-xs px-1 py-0.5 rounded ${aiInfo.ai_status === 'ABSENT' ? TONE.danger : aiInfo.ai_status === 'PRESENT' ? TONE.success : aiInfo.ai_status === 'LATE' ? TONE.warning : 'bg-gray-100 text-gray-500'}`} title={`AI: ${aiInfo.ai_status}`}>{aiInfo.raw_mark || aiInfo.ai_status?.[0] || '?'}</span>}
                               {!isConfirmed ? (
                                 <div className="inline-flex rounded-md overflow-hidden border border-gray-300">
                                   <button onClick={() => { const s = new Set(selectedAbsent); s.delete(student.id); setSelectedAbsent(s) }} className={`px-2.5 py-1 text-xs font-semibold transition-colors ${!isAbsent ? 'bg-green-500 text-white' : 'bg-white text-gray-400 hover:bg-green-50 hover:text-green-600'}`}>P</button>
                                   <button onClick={() => { const s = new Set(selectedAbsent); s.add(student.id); setSelectedAbsent(s) }} className={`px-2.5 py-1 text-xs font-semibold transition-colors ${isAbsent ? 'bg-red-500 text-white' : 'bg-white text-gray-400 hover:bg-red-50 hover:text-red-600'}`}>A</button>
                                 </div>
-                              ) : <span className={`px-2 py-1 rounded text-xs font-medium ${isAbsent ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>{isAbsent ? 'A' : 'P'}</span>}
+                              ) : <span className={`px-2 py-1 rounded text-xs font-medium ${isAbsent ? TONE.danger : TONE.success}`}>{isAbsent ? 'A' : 'P'}</span>}
                             </div>
                           </td>
                         </tr>
@@ -853,7 +857,7 @@ function ReviewDetail({ uploadId, onBack }) {
                   <div>
                     <div className="flex items-center justify-between">
                       <span>Google Cloud Vision</span>
-                      <span className={`px-2 py-0.5 rounded ${pipelineStages.google_vision.status === 'completed' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                      <span className={`px-2 py-0.5 rounded ${pipelineStages.google_vision.status === 'completed' ? TONE.success : TONE.danger}`}>
                         {pipelineStages.google_vision.status}{pipelineStages.google_vision.students_found !== undefined && ` (${pipelineStages.google_vision.students_found} students)`}
                       </span>
                     </div>
@@ -862,7 +866,7 @@ function ReviewDetail({ uploadId, onBack }) {
                 {pipelineStages.groq_vision && (
                   <div className="flex items-center justify-between">
                     <span>Groq Vision AI</span>
-                    <span className={`px-2 py-0.5 rounded ${pipelineStages.groq_vision.status === 'completed' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>{pipelineStages.groq_vision.status}</span>
+                    <span className={`px-2 py-0.5 rounded ${pipelineStages.groq_vision.status === 'completed' ? TONE.success : TONE.danger}`}>{pipelineStages.groq_vision.status}</span>
                   </div>
                 )}
               </div>
@@ -889,16 +893,14 @@ function ReviewDetail({ uploadId, onBack }) {
 
       {/* Delete Confirm Modal */}
       {showDeleteConfirm && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
-          <div className="bg-white rounded-lg p-6 max-w-sm w-full mx-4 shadow-xl">
+        <Modal open  size="sm" closeOnBackdrop={false}>
             <h3 className="text-lg font-semibold text-gray-900 mb-2">Delete Upload?</h3>
             <p className="text-gray-600 mb-4">This will permanently delete this attendance upload.</p>
             <div className="flex justify-end gap-3">
               <button onClick={() => setShowDeleteConfirm(null)} className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200">Cancel</button>
               <button onClick={() => deleteMutation.mutate(showDeleteConfirm)} disabled={deleteMutation.isPending} className="px-4 py-2 text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-50">{deleteMutation.isPending ? 'Deleting...' : 'Delete'}</button>
             </div>
-          </div>
-        </div>
+          </Modal>
       )}
 
       {/* Preview Modal */}
@@ -975,7 +977,7 @@ function PendingReviewTab({ initialReviewId }) {
   return (
     <div>
       {isLoading ? (
-        <div className="card text-center py-8"><Spinner size="md" className="mx-auto" /><p className="mt-2 text-gray-500">Loading...</p></div>
+        <div className="card text-center py-8"><LoadingState label="Loading..." compact /></div>
       ) : pendingList?.data?.length === 0 ? (
         <div className="card text-center py-8">
           <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
@@ -992,7 +994,7 @@ function PendingReviewTab({ initialReviewId }) {
                   <p className="text-sm text-gray-500">{item.date}</p>
                 </div>
                 <div className="flex items-center space-x-3">
-                  <span className={`px-3 py-1 rounded-full text-xs font-medium ${item.status === 'REVIEW_REQUIRED' ? 'bg-yellow-100 text-yellow-800' : item.status === 'PROCESSING' ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800'}`}>{item.status_display}</span>
+                  <span className={`px-3 py-1 rounded-full text-xs font-medium ${item.status === 'REVIEW_REQUIRED' ? TONE.warning : item.status === 'PROCESSING' ? TONE.info : TONE.neutral}`}>{item.status_display}</span>
                   <button onClick={e => { e.stopPropagation(); setShowDeleteConfirm(item.id) }} className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors" title="Delete">
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                   </button>
@@ -1005,16 +1007,14 @@ function PendingReviewTab({ initialReviewId }) {
       )}
 
       {showDeleteConfirm && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
-          <div className="bg-white rounded-lg p-6 max-w-sm w-full mx-4 shadow-xl">
+        <Modal open  size="sm" closeOnBackdrop={false}>
             <h3 className="text-lg font-semibold text-gray-900 mb-2">Delete Upload?</h3>
             <p className="text-gray-600 mb-4">This will permanently delete this attendance upload.</p>
             <div className="flex justify-end gap-3">
               <button onClick={() => setShowDeleteConfirm(null)} className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200">Cancel</button>
               <button onClick={() => deleteMutation.mutate(showDeleteConfirm)} disabled={deleteMutation.isPending} className="px-4 py-2 text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-50">{deleteMutation.isPending ? 'Deleting...' : 'Delete'}</button>
             </div>
-          </div>
-        </div>
+          </Modal>
       )}
     </div>
   )
@@ -1056,10 +1056,7 @@ export default function CaptureReviewPage() {
 
   return (
     <div>
-      <div className="mb-4">
-        <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Capture & Review</h1>
-        <p className="text-sm text-gray-600">Upload attendance registers and review AI results</p>
-      </div>
+      <PageHeader title="Capture & Review" subtitle="Upload attendance registers and review AI results" className="mb-4" />
 
       {/* Tabs */}
       <div className="border-b border-gray-200 mb-4 overflow-x-auto">

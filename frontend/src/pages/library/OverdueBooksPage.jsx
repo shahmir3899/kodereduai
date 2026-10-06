@@ -1,8 +1,12 @@
 import { useState } from 'react'
+import Modal from '../../components/ui/Modal'
+import { TONE } from '../../components/ui/statusTones'
+import Button from '../../components/ui/Button'
+import PageHeader from '../../components/ui/PageHeader'
+import LoadingState from '../../components/ui/LoadingState'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { libraryApi } from '../../services/api'
 import { useAuth } from '../../contexts/AuthContext'
-import Spinner from '../../components/ui/Spinner'
 import Badge from '../../components/ui/Badge'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
 import { RecordCard, CardGrid, ViewToggle } from '../../components/cards'
@@ -83,13 +87,9 @@ export default function OverdueBooksPage() {
   if (isLoading) {
     return (
       <div>
-        <div className="mb-6">
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Overdue Books</h1>
-          <p className="text-sm sm:text-base text-gray-600">Track overdue books and manage fines</p>
-        </div>
+        <PageHeader title="Overdue Books" subtitle="Track overdue books and manage fines" className="mb-6" />
         <div className="text-center py-16">
-          <Spinner size="md" className="mx-auto" />
-          <p className="text-gray-500 mt-3">Loading overdue books...</p>
+          <LoadingState label="Loading overdue books..." compact />
         </div>
       </div>
     )
@@ -99,10 +99,7 @@ export default function OverdueBooksPage() {
   if (error) {
     return (
       <div>
-        <div className="mb-6">
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Overdue Books</h1>
-          <p className="text-sm sm:text-base text-gray-600">Track overdue books and manage fines</p>
-        </div>
+        <PageHeader title="Overdue Books" subtitle="Track overdue books and manage fines" className="mb-6" />
         <div className="bg-white rounded-lg shadow-sm p-6 text-center">
           <svg className="w-12 h-12 text-red-400 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
@@ -117,10 +114,7 @@ export default function OverdueBooksPage() {
   return (
     <div>
       {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Overdue Books</h1>
-        <p className="text-sm sm:text-base text-gray-600">Track overdue books and manage fines</p>
-      </div>
+      <PageHeader title="Overdue Books" subtitle="Track overdue books and manage fines" className="mb-6" />
 
       {/* Summary Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
@@ -205,7 +199,7 @@ export default function OverdueBooksPage() {
                       <>
                         {issue.borrower_name || '-'}
                         <span className={`ml-1.5 inline-flex px-1.5 py-0.5 rounded text-xs font-medium ${
-                          issue.borrower_type === 'STUDENT' ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'
+                          issue.borrower_type === 'STUDENT' ? TONE.info : TONE.accent
                         }`}>
                           {issue.borrower_type}
                         </span>
@@ -240,7 +234,7 @@ export default function OverdueBooksPage() {
                     <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
+                <tbody className="divide-y divide-gray-100">
                   {overdueBooks.map((issue) => {
                     const days = getDaysOverdue(issue.due_date)
                     const fine = issue.fine_amount || (days * (issue.fine_per_day || finePerDay))
@@ -255,8 +249,8 @@ export default function OverdueBooksPage() {
                         <td className="px-4 py-3 text-center">
                           <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${
                             issue.borrower_type === 'STUDENT'
-                              ? 'bg-blue-100 text-blue-700'
-                              : 'bg-purple-100 text-purple-700'
+                              ? TONE.info
+                              : TONE.accent
                           }`}>
                             {issue.borrower_type}
                           </span>
@@ -268,8 +262,8 @@ export default function OverdueBooksPage() {
                             days > 14
                               ? 'bg-red-200 text-red-800'
                               : days > 7
-                                ? 'bg-red-100 text-red-700'
-                                : 'bg-amber-100 text-amber-700'
+                                ? TONE.danger
+                                : TONE.warning
                           }`}>
                             {days} days
                           </span>
@@ -305,8 +299,7 @@ export default function OverdueBooksPage() {
 
       {/* ============ Return Confirmation Modal ============ */}
       {returnConfirm && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
-          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm mx-4">
+        <Modal open  size="sm" closeOnBackdrop={false}>
             <h2 className="text-xl font-bold text-gray-900 mb-2">Return Overdue Book</h2>
 
             {(() => {
@@ -349,22 +342,19 @@ export default function OverdueBooksPage() {
             )}
 
             <div className="flex justify-end gap-3">
-              <button
-                onClick={() => setReturnConfirm(null)}
-                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
-              >
+              <Button variant="secondary"
+ onClick={() => setReturnConfirm(null)}>
                 Cancel
-              </button>
+              </Button>
               <button
                 onClick={confirmReturn}
                 disabled={returnMutation.isPending}
-                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {returnMutation.isPending ? 'Processing...' : 'Return with Fine'}
               </button>
             </div>
-          </div>
-        </div>
+          </Modal>
       )}
     </div>
   )

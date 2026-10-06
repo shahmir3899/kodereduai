@@ -1,26 +1,28 @@
 import { useRef, useMemo } from 'react'
+import { TONE } from '../../components/ui/statusTones'
 import { MONTHS } from './FeeFilters'
 import Badge from '../../components/ui/Badge'
+import LoadingState from '../../components/ui/LoadingState'
 
 const statusBadge = (status) => {
   const styles = {
-    PAID: 'bg-green-100 text-green-800',
-    PARTIAL: 'bg-yellow-100 text-yellow-800',
-    UNPAID: 'bg-red-100 text-red-800',
-    ADVANCE: 'bg-blue-100 text-blue-800',
+    PAID: TONE.success,
+    PARTIAL: TONE.warning,
+    UNPAID: TONE.danger,
+    ADVANCE: TONE.info,
   }
   return (
-    <span className={`px-2 py-1 rounded-full text-xs font-medium ${styles[status] || 'bg-gray-100 text-gray-800'}`}>
+    <Badge colors={styles[status] || TONE.neutral}>
       {status}
-    </span>
+    </Badge>
   )
 }
 
 const FEE_TYPE_BADGE = {
-  ADMISSION: 'bg-purple-100 text-purple-700',
-  ANNUAL: 'bg-indigo-100 text-indigo-700',
-  BOOKS: 'bg-amber-100 text-amber-700',
-  FINE: 'bg-red-100 text-red-700',
+  ADMISSION: TONE.accent,
+  ANNUAL: TONE.indigo,
+  BOOKS: TONE.warning,
+  FINE: TONE.danger,
 }
 
 const FEE_TYPE_LABEL = {
@@ -142,7 +144,7 @@ export default function FeeTable({
   const footerTrailingColSpan = 4 + (canWrite ? 1 : 0)
 
   if (isLoading) {
-    return <div className="card"><div className="text-center py-8 text-gray-500">Loading...</div></div>
+    return <div className="card"><LoadingState /></div>
   }
 
   if (paymentList.length === 0) {
@@ -227,7 +229,7 @@ export default function FeeTable({
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-1">
                               {isAllTypes && (
-                                <span className={`px-1.5 py-0.5 text-xs rounded ${payment.fee_type === 'MONTHLY' ? 'bg-green-100 text-green-700' : FEE_TYPE_BADGE[payment.fee_type] || 'bg-gray-100 text-gray-700'}`}>
+                                <span className={`px-1.5 py-0.5 text-xs rounded ${payment.fee_type === 'MONTHLY' ? TONE.success : FEE_TYPE_BADGE[payment.fee_type] || TONE.neutral}`}>
                                   {payment.fee_type_display || payment.fee_type}
                                 </span>
                               )}
@@ -386,7 +388,7 @@ export default function FeeTable({
                       <p className="text-xs text-gray-500">{payment.class_name} - Roll #{payment.student_roll}</p>
                       {isAllTypes && (
                         <div className="flex items-center gap-1 mt-0.5">
-                          <span className={`px-1.5 py-0.5 text-xs rounded ${payment.fee_type === 'MONTHLY' ? 'bg-green-100 text-green-700' : FEE_TYPE_BADGE[payment.fee_type] || 'bg-gray-100 text-gray-700'}`}>
+                          <span className={`px-1.5 py-0.5 text-xs rounded ${payment.fee_type === 'MONTHLY' ? TONE.success : FEE_TYPE_BADGE[payment.fee_type] || TONE.neutral}`}>
                             {payment.fee_type_display || payment.fee_type}
                           </span>
                           {(payment.annual_category_name || payment.monthly_category_name) && (
@@ -552,7 +554,7 @@ export default function FeeTable({
               {canWrite && <th className="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase">Action</th>}
             </tr>
           </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
+          <tbody className="divide-y divide-gray-100">
             {sortedList.map((payment) => {
               const prevBal = Number(payment.previous_balance || 0)
               const monthlyFee = payment.base_monthly_fee !== null && payment.base_monthly_fee !== undefined ? Number(payment.base_monthly_fee) : (Number(payment.amount_due) - prevBal)
@@ -591,7 +593,7 @@ export default function FeeTable({
                     )}
                     {isAllTypes && (
                       <td className="px-3 py-2 text-sm">
-                        <span className={`px-1.5 py-0.5 text-xs rounded ${payment.fee_type === 'MONTHLY' ? 'bg-green-100 text-green-700' : FEE_TYPE_BADGE[payment.fee_type] || 'bg-gray-100 text-gray-700'}`}>
+                        <span className={`px-1.5 py-0.5 text-xs rounded ${payment.fee_type === 'MONTHLY' ? TONE.success : FEE_TYPE_BADGE[payment.fee_type] || TONE.neutral}`}>
                           {payment.fee_type_display || payment.fee_type}
                         </span>
                       </td>

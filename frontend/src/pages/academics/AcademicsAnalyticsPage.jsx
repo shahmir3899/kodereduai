@@ -1,4 +1,7 @@
 import { useState } from 'react'
+import { TONE } from '../../components/ui/statusTones'
+import PageHeader from '../../components/ui/PageHeader'
+import EmptyState from '../../components/ui/EmptyState'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { academicsApi } from '../../services/api'
 import { useAuth } from '../../contexts/AuthContext'
@@ -79,13 +82,8 @@ export default function AcademicsAnalyticsPage() {
 
   return (
     <div>
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6 gap-4">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">AI Analytics</h1>
-          <p className="text-sm text-gray-600">Data-driven insights for academic planning, LMS engagement, and coverage risk</p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2 justify-end">
-          {isSuperAdmin && (
+      <PageHeader title="AI Analytics" subtitle="Data-driven insights for academic planning, LMS engagement, and coverage risk" className="mb-6" actions={<>
+{isSuperAdmin && (
             <select
               value={scope}
               onChange={(e) => setScope(e.target.value)}
@@ -108,8 +106,7 @@ export default function AcademicsAnalyticsPage() {
             onChange={e => setDateTo(e.target.value)}
             className="input text-sm"
           />
-        </div>
-      </div>
+</>} />
       <div className="mb-4">
         <p className="text-xs text-gray-500">
           Role context: <span className="font-medium">{effectiveRole}</span> | Scope: <span className="font-medium uppercase">{data.meta?.scope || scope}</span>
@@ -170,7 +167,7 @@ export default function AcademicsAnalyticsPage() {
             <div className="card">
               <h2 className="text-sm font-semibold text-gray-900 mb-4">Subject Attendance by Weekday</h2>
               {subjectAttendance.length === 0 ? (
-                <p className="text-xs text-gray-400 text-center py-8">No attendance data available for this period</p>
+                <EmptyState title="No attendance data available for this period" />
               ) : (
                 <ResponsiveContainer width="100%" height={300}>
                   <BarChart data={subjectAttendance} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
@@ -194,7 +191,7 @@ export default function AcademicsAnalyticsPage() {
             <div className="card">
               <h2 className="text-sm font-semibold text-gray-900 mb-4">Teacher Effectiveness</h2>
               {teacherEffectiveness.length === 0 ? (
-                <p className="text-xs text-gray-400 text-center py-8">No teacher effectiveness data available</p>
+                <EmptyState title="No teacher effectiveness data available" />
               ) : (
                 <ResponsiveContainer width="100%" height={300}>
                   <BarChart
@@ -245,7 +242,7 @@ export default function AcademicsAnalyticsPage() {
             <div className="card">
               <h2 className="text-sm font-semibold text-gray-900 mb-4">Alerts (Rule-based)</h2>
               {alerts.length === 0 ? (
-                <p className="text-xs text-gray-400 text-center py-4">No active alerts for this filter range.</p>
+                <EmptyState title="No active alerts for this filter range." compact />
               ) : (
                 <div className="space-y-3">
                   {alerts.map((alert, idx) => (
@@ -257,8 +254,8 @@ export default function AcademicsAnalyticsPage() {
                           <p className="text-xs text-gray-500 mt-1">Action: {alert.suggested_action}</p>
                         </div>
                         <span className={`text-[10px] px-2 py-1 rounded-full font-medium ${
-                          alert.severity === 'high' ? 'bg-red-100 text-red-700' :
-                          alert.severity === 'medium' ? 'bg-amber-100 text-amber-700' : 'bg-blue-100 text-blue-700'
+                          alert.severity === 'high' ? TONE.danger :
+                          alert.severity === 'medium' ? TONE.warning : TONE.info
                         }`}>
                           {alert.severity}
                         </span>
@@ -334,7 +331,7 @@ export default function AcademicsAnalyticsPage() {
             <div className="card">
               <h2 className="text-sm font-semibold text-gray-900 mb-4">Top 5 Actions</h2>
               {topActions.length === 0 ? (
-                <p className="text-xs text-gray-400 text-center py-4">No prioritized actions available yet.</p>
+                <EmptyState title="No prioritized actions available yet." compact />
               ) : (
                 <div className="space-y-2">
                   {topActions.map((action, idx) => (
@@ -366,7 +363,7 @@ export default function AcademicsAnalyticsPage() {
               </select>
             </div>
             {trendData.length === 0 ? (
-              <p className="text-xs text-gray-400 text-center py-8">No trend data available yet</p>
+              <EmptyState title="No trend data available yet" />
             ) : (
               <ResponsiveContainer width="100%" height={300}>
                 <LineChart data={trendData} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>

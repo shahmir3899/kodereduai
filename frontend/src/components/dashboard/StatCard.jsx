@@ -1,14 +1,15 @@
 import { Link } from 'react-router-dom'
+import { TONE } from '../ui/statusTones'
 
 const COLOR_MAP = {
-  sky:    { bg: 'bg-sky-50',    text: 'text-sky-700',    icon: 'bg-sky-100 text-sky-600' },
-  green:  { bg: 'bg-green-50',  text: 'text-green-700',  icon: 'bg-green-100 text-green-600' },
-  red:    { bg: 'bg-red-50',    text: 'text-red-700',    icon: 'bg-red-100 text-red-600' },
-  amber:  { bg: 'bg-amber-50',  text: 'text-amber-700',  icon: 'bg-amber-100 text-amber-600' },
-  blue:   { bg: 'bg-blue-50',   text: 'text-blue-700',   icon: 'bg-blue-100 text-blue-600' },
-  purple: { bg: 'bg-purple-50', text: 'text-purple-700', icon: 'bg-purple-100 text-purple-600' },
-  orange: { bg: 'bg-orange-50', text: 'text-orange-700', icon: 'bg-orange-100 text-orange-600' },
-  gray:   { bg: 'bg-gray-50',   text: 'text-gray-700',   icon: 'bg-gray-100 text-gray-600' },
+  sky:    { bg: 'bg-sky-50',    text: 'text-sky-700',    icon: TONE.sky },
+  green:  { bg: 'bg-green-50',  text: 'text-green-700',  icon: TONE.success },
+  red:    { bg: 'bg-red-50',    text: 'text-red-700',    icon: TONE.danger },
+  amber:  { bg: 'bg-amber-50',  text: 'text-amber-700',  icon: TONE.warning },
+  blue:   { bg: 'bg-blue-50',   text: 'text-blue-700',   icon: TONE.info },
+  purple: { bg: 'bg-purple-50', text: 'text-purple-700', icon: TONE.accent },
+  orange: { bg: 'bg-orange-50', text: 'text-orange-700', icon: TONE.orange },
+  gray:   { bg: 'bg-gray-50',   text: 'text-gray-700',   icon: TONE.neutral },
 }
 
 function SkeletonCard() {

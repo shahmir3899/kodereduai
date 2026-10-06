@@ -1,7 +1,8 @@
 import { useState } from 'react'
+import LoadingState from '../ui/LoadingState'
+import EmptyState from '../ui/EmptyState'
 import { useQuery } from '@tanstack/react-query'
 import { attendanceApi } from '../../services/api'
-import Spinner from '../ui/Spinner'
 
 function getAccuracyColor(accuracy) {
   if (accuracy === null || accuracy === undefined) return 'text-gray-500'
@@ -51,8 +52,7 @@ export default function AnalyticsTab({ onGoToConfig }) {
 
       {isLoading ? (
         <div className="card text-center py-12">
-          <Spinner size="h-10 w-10" className="mx-auto" />
-          <p className="mt-4 text-gray-500">Loading accuracy data...</p>
+          <LoadingState label="Loading accuracy data..." compact />
         </div>
       ) : !hasData ? (
         <div className="card text-center py-12">
@@ -98,7 +98,7 @@ export default function AnalyticsTab({ onGoToConfig }) {
           <div className="card">
             <h3 className="font-medium text-gray-900 mb-4">Weekly Accuracy Trend</h3>
             {weeklyTrend.length === 0 ? (
-              <p className="text-gray-500 text-center py-4">No trend data available yet</p>
+              <EmptyState title="No trend data available yet" compact />
             ) : (
               <>
                 <div className="sm:hidden space-y-3">
@@ -124,7 +124,7 @@ export default function AnalyticsTab({ onGoToConfig }) {
                         <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Accuracy</th>
                       </tr>
                     </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
+                    <tbody className="divide-y divide-gray-100">
                       {weeklyTrend.map((week, idx) => (
                         <tr key={idx}>
                           <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">{week.week_start} - {week.week_end}</td>
@@ -148,7 +148,7 @@ export default function AnalyticsTab({ onGoToConfig }) {
               <button onClick={onGoToConfig} className="text-sm text-primary-600 hover:text-primary-700">Fix in Configuration</button>
             </div>
             {commonErrors.length === 0 ? (
-              <p className="text-gray-500 text-center py-4">No OCR errors recorded yet</p>
+              <EmptyState title="No OCR errors recorded yet" compact />
             ) : (
               <div className="space-y-3">
                 {commonErrors.map((err, idx) => (

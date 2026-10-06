@@ -1,4 +1,8 @@
 import { useState, useMemo, useEffect } from 'react'
+import Field from '../../components/ui/Field'
+import Badge from '../../components/ui/Badge'
+import { TONE } from '../../components/ui/statusTones'
+import EmptyState from '../../components/ui/EmptyState'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { examinationsApi, sessionsApi, academicsApi } from '../../services/api'
 import { useClasses } from '../../hooks/useClasses'
@@ -531,7 +535,7 @@ export default function ExamWizard({ onClose, onSuccess }) {
   const dateSheetCount = Object.values(wizardData.date_sheet).filter(v => v?.exam_date).length
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[60] p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b">
@@ -548,8 +552,8 @@ export default function ExamWizard({ onClose, onSuccess }) {
                   s.num === step ? 'text-sky-700' : s.num < step ? 'text-green-600' : 'text-gray-400'
                 }`}>
                   <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
-                    s.num === step ? 'bg-sky-100 text-sky-700'
-                    : s.num < step ? 'bg-green-100 text-green-700'
+                    s.num === step ? TONE.sky
+                    : s.num < step ? TONE.success
                     : 'bg-gray-100'
                   }`}>{s.num < step ? '\u2713' : s.num}</div>
                   <span className="hidden sm:inline">{s.label}</span>
@@ -607,24 +611,23 @@ export default function ExamWizard({ onClose, onSuccess }) {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Academic Year *</label>
+                  <label className="label">Academic Year *</label>
                   <select value={wizardData.academic_year} onChange={e => update('academic_year', e.target.value)} className="input w-full">
                     <option value="">Select...</option>
                     {years.map(y => <option key={y.id} value={y.id}>{y.name}</option>)}
                   </select>
                   {errors.academic_year && <p className="text-xs text-red-600 mt-1">{errors.academic_year}</p>}
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Term</label>
-                  <select value={wizardData.term} onChange={e => update('term', e.target.value)} className="input w-full">
+                <Field label="Term">
+<select value={wizardData.term} onChange={e => update('term', e.target.value)} className="input w-full">
                     <option value="">None</option>
                     {terms.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
                   </select>
-                </div>
+</Field>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Exam Type *</label>
+                <label className="label">Exam Type *</label>
                 <div className="flex gap-2">
                   <select value={wizardData.exam_type} onChange={e => update('exam_type', e.target.value)} className="input flex-1">
                     <option value="">Select...</option>
@@ -672,32 +675,30 @@ export default function ExamWizard({ onClose, onSuccess }) {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Start Date *</label>
+                  <label className="label">Start Date *</label>
                   <input type="date" value={wizardData.start_date} onChange={e => update('start_date', e.target.value)} className="input w-full" />
                   {errors.start_date && <p className="text-xs text-red-600 mt-1">{errors.start_date}</p>}
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">End Date *</label>
+                  <label className="label">End Date *</label>
                   <input type="date" value={wizardData.end_date} onChange={e => update('end_date', e.target.value)} className="input w-full" />
                   {errors.end_date && <p className="text-xs text-red-600 mt-1">{errors.end_date}</p>}
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Default Total Marks</label>
-                  <input type="number" value={wizardData.default_total_marks} onChange={e => update('default_total_marks', e.target.value)}
+                <Field label="Default Total Marks">
+<input type="number" value={wizardData.default_total_marks} onChange={e => update('default_total_marks', e.target.value)}
                     className="input w-full" min="1" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Default Passing Marks</label>
-                  <input type="number" value={wizardData.default_passing_marks} onChange={e => update('default_passing_marks', e.target.value)}
+</Field>
+                <Field label="Default Passing Marks">
+<input type="number" value={wizardData.default_passing_marks} onChange={e => update('default_passing_marks', e.target.value)}
                     className="input w-full" min="0" />
-                </div>
+</Field>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Fail overall if this many subjects (or more) are failed</label>
+                <label className="label">Fail overall if this many subjects (or more) are failed</label>
                 <input type="number" value={wizardData.fail_threshold_subjects} onChange={e => update('fail_threshold_subjects', e.target.value)}
                   className="input w-full max-w-[160px]" min="1" />
                 <FailThresholdExplainer value={wizardData.fail_threshold_subjects} />
@@ -737,9 +738,9 @@ export default function ExamWizard({ onClose, onSuccess }) {
                           className="rounded border-gray-300 text-sky-600 focus:ring-sky-500" />
                         <span className="flex-1 text-sm font-medium text-gray-800">{classLabel(cls)}</span>
                         {subCount > 0 ? (
-                          <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">{subCount} subjects</span>
+                          <Badge tone="success">{subCount} subjects</Badge>
                         ) : (
-                          <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">0 subjects</span>
+                          <Badge tone="warning">0 subjects</Badge>
                         )}
                       </label>
 
@@ -800,9 +801,7 @@ export default function ExamWizard({ onClose, onSuccess }) {
               </div>
 
               {selectedClasses.length === 0 || dateRange.length === 0 ? (
-                <div className="text-center py-8 text-gray-400 text-sm">
-                  No classes selected or no date range set.
-                </div>
+                <EmptyState title="No classes selected or no date range set." />
               ) : (
                 <div className="border border-gray-200 rounded-lg overflow-auto max-h-[360px]">
                   <table className="min-w-full text-sm">

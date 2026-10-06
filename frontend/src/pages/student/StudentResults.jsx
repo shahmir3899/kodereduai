@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { TONE } from '../../components/ui/statusTones'
 import { useQuery } from '@tanstack/react-query'
 import { studentPortalApi } from '../../services/api'
 import Spinner from '../../components/ui/Spinner'
@@ -26,9 +27,9 @@ function barBgColor(pct) {
 }
 
 function statusBadge(pct, isAbsent) {
-  if (isAbsent) return { label: 'Absent', cls: 'bg-gray-100 text-gray-800' }
-  if (pct >= 40) return { label: 'Pass', cls: 'bg-green-100 text-green-800' }
-  return { label: 'Fail', cls: 'bg-red-100 text-red-800' }
+  if (isAbsent) return { label: 'Absent', cls: TONE.neutral }
+  if (pct >= 40) return { label: 'Pass', cls: TONE.success }
+  return { label: 'Fail', cls: TONE.danger }
 }
 
 export default function StudentResults() {

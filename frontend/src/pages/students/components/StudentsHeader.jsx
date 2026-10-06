@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import PageHeader from '../../../components/ui/PageHeader'
 
 // Page title row: export menu, Excel template/upload, Add Student.
 export default function StudentsHeader({
@@ -27,13 +28,8 @@ export default function StudentsHeader({
   }, [showExportMenu])
 
   return (
-    <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-      <div>
-        <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Students</h1>
-        <p className="text-sm sm:text-base text-gray-600">Manage students in your school</p>
-      </div>
-      <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-        {showTools && (
+    <PageHeader title="Students" subtitle="Manage students in your school" className="mb-6" actions={<>
+{showTools && (
           <>
             {hasStudents && (
               <div className="relative" ref={exportRef}>
@@ -92,7 +88,6 @@ export default function StudentsHeader({
         <button onClick={onAdd} className="btn btn-primary" disabled={!hasAcademicYear}>
           Add Student
         </button>
-      </div>
-    </div>
+</>} />
   )
 }

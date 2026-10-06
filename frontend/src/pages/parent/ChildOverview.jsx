@@ -1,4 +1,5 @@
 import { useParams, Link } from 'react-router-dom'
+import { TONE } from '../../components/ui/statusTones'
 import { useQuery } from '@tanstack/react-query'
 import { parentsApi, sessionsApi } from '../../services/api'
 import Spinner from '../../components/ui/Spinner'
@@ -6,10 +7,10 @@ import Spinner from '../../components/ui/Spinner'
 function StatCard({ label, value, sub, color = 'primary', icon }) {
   const colorMap = {
     primary: { bg: 'bg-primary-50', text: 'text-primary-700', icon: 'bg-primary-100 text-primary-600' },
-    green: { bg: 'bg-green-50', text: 'text-green-700', icon: 'bg-green-100 text-green-600' },
-    red: { bg: 'bg-red-50', text: 'text-red-700', icon: 'bg-red-100 text-red-600' },
-    yellow: { bg: 'bg-yellow-50', text: 'text-yellow-700', icon: 'bg-yellow-100 text-yellow-600' },
-    blue: { bg: 'bg-blue-50', text: 'text-blue-700', icon: 'bg-blue-100 text-blue-600' },
+    green: { bg: 'bg-green-50', text: 'text-green-700', icon: TONE.success },
+    red: { bg: 'bg-red-50', text: 'text-red-700', icon: TONE.danger },
+    yellow: { bg: 'bg-yellow-50', text: 'text-yellow-700', icon: TONE.warning },
+    blue: { bg: 'bg-blue-50', text: 'text-blue-700', icon: TONE.info },
   }
   const c = colorMap[color] || colorMap.primary
 

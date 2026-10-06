@@ -159,7 +159,7 @@ export default function LeadershipInsightsPanels({ data, loading, showRoster, sh
                     <th className="px-2 py-2 font-medium tabular-nums">{nextL}</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-50">
+                <tbody className="divide-y divide-gray-100">
                   {lpPreview.map((row) => (
                     <tr key={`${row.teacher_id}-${row.class_id}`} className="hover:bg-gray-50/80">
                       <td className="px-2 py-1.5 text-gray-800 max-w-[120px] truncate">{row.teacher_name}</td>

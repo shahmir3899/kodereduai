@@ -1,12 +1,15 @@
 import { useMemo, useState } from 'react'
+import { TONE } from '../../components/ui/statusTones'
+import PageHeader from '../../components/ui/PageHeader'
+import LoadingState from '../../components/ui/LoadingState'
 import { useQuery } from '@tanstack/react-query'
 import { sessionsApi } from '../../services/api'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
 
 const SEVERITY_STYLES = {
-  HIGH: 'bg-red-100 text-red-800',
-  MEDIUM: 'bg-amber-100 text-amber-800',
-  LOW: 'bg-yellow-100 text-yellow-800',
+  HIGH: TONE.danger,
+  MEDIUM: TONE.warning,
+  LOW: TONE.warning,
 }
 
 const SEVERITY_BORDER = {
@@ -63,15 +66,8 @@ export default function StudentRiskScorePage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Student Risk Score</h1>
-          <p className="text-sm text-gray-500 mt-1">
-            A composite risk score blending attendance, fee default likelihood, and academic performance —
-            flags students who are at risk on any one dimension, even if the blended score looks moderate.
-          </p>
-        </div>
-        {result && (
+      <PageHeader title="Student Risk Score" subtitle="A composite risk score blending attendance, fee default likelihood, and academic performance — flags students who are at risk on any one dimension, even if the blended score looks moderate." actions={<>
+{result && (
           <div className="text-right shrink-0">
             <p className="text-sm text-gray-600">
               <span className="font-semibold text-gray-900">{result.at_risk_count}</span> flagged of{' '}
@@ -82,7 +78,7 @@ export default function StudentRiskScorePage() {
             )}
           </div>
         )}
-      </div>
+</>} />
 
       {/* Filters */}
       <div className="flex flex-wrap gap-3">
@@ -112,7 +108,7 @@ export default function StudentRiskScorePage() {
 
       {/* List */}
       {isLoading ? (
-        <div className="text-center py-10 text-gray-500">Loading student risk scores...</div>
+        <LoadingState label="Loading student risk scores..." />
       ) : filtered.length === 0 ? (
         <div className="card text-center py-12">
           <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">

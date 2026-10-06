@@ -1,4 +1,7 @@
 import { useState, useMemo } from 'react'
+import Badge from '../../components/ui/Badge'
+import { TONE } from '../../components/ui/statusTones'
+import PageHeader from '../../components/ui/PageHeader'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate } from 'react-router-dom'
 import { admissionsApi } from '../../services/api'
@@ -11,10 +14,10 @@ import { RecordCard, CardGrid, ViewToggle } from '../../components/cards'
 import { useViewPreference } from '../../hooks/useViewPreference'
 
 const STATUSES = [
-  { key: 'NEW', label: 'New', color: 'bg-blue-100 text-blue-800' },
-  { key: 'CONFIRMED', label: 'Confirmed', color: 'bg-green-100 text-green-800' },
-  { key: 'CONVERTED', label: 'Converted', color: 'bg-purple-100 text-purple-800' },
-  { key: 'CANCELLED', label: 'Cancelled', color: 'bg-red-100 text-red-700' },
+  { key: 'NEW', label: 'New', color: TONE.info },
+  { key: 'CONFIRMED', label: 'Confirmed', color: TONE.success },
+  { key: 'CONVERTED', label: 'Converted', color: TONE.accent },
+  { key: 'CANCELLED', label: 'Cancelled', color: TONE.danger },
 ]
 
 const STATUS_COLORS = Object.fromEntries(STATUSES.map((s) => [s.key, s.color]))
@@ -154,15 +157,8 @@ export default function EnquiriesPage() {
   return (
     <div>
       {/* Header */}
-      <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Admissions</h1>
-          <p className="text-sm text-gray-600 mt-1">
-            {totalCount} enquir{totalCount === 1 ? 'y' : 'ies'}
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          {selectedConfirmed.length > 0 && (
+      <PageHeader title="Admissions" subtitle={<>{totalCount} enquir{totalCount === 1 ? 'y' : 'ies'}</>} className="mb-6" actions={<>
+{selectedConfirmed.length > 0 && (
             <button
               onClick={() => setShowConvertModal(true)}
               className="btn-primary text-sm px-4 py-2 inline-flex items-center bg-purple-600 hover:bg-purple-700"
@@ -182,8 +178,7 @@ export default function EnquiriesPage() {
             </svg>
             New Enquiry
           </Link>
-        </div>
-      </div>
+</>} />
 
       {/* Flow Pipeline */}
       <div className="card mb-6">
@@ -382,9 +377,9 @@ export default function EnquiriesPage() {
                 title={enquiry.name}
                 meta={`${enquiry.father_name} · ${enquiry.mobile}`}
                 status={
-                  <span className={`px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap ${STATUS_COLORS[enquiry.status] || 'bg-gray-100 text-gray-700'}`}>
+                  <Badge colors={STATUS_COLORS[enquiry.status] || TONE.neutral}>
                     {enquiry.status_display || enquiry.status}
-                  </span>
+                  </Badge>
                 }
                 fields={[
                   { label: 'Grade', value: GRADE_LEVEL_LABELS[enquiry.applying_for_grade_level] || 'N/A' },
@@ -441,7 +436,7 @@ export default function EnquiriesPage() {
                   <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
                 </tr>
               </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
+              <tbody className="divide-y divide-gray-100">
                 {enquiries.map((enquiry) => (
                   <tr key={enquiry.id} className="hover:bg-gray-50">
                     <td className="px-3 py-3">
@@ -463,9 +458,9 @@ export default function EnquiriesPage() {
                       {GRADE_LEVEL_LABELS[enquiry.applying_for_grade_level] || 'N/A'}
                     </td>
                     <td className="px-4 py-3">
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${STATUS_COLORS[enquiry.status] || 'bg-gray-100 text-gray-700'}`}>
+                      <Badge colors={STATUS_COLORS[enquiry.status] || TONE.neutral}>
                         {enquiry.status_display || enquiry.status}
-                      </span>
+                      </Badge>
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-600">
                       {enquiry.source_display || (enquiry.source || '').replace(/_/g, ' ')}

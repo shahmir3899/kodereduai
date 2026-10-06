@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import PageHeader from '../../components/ui/PageHeader'
 import { useAuth } from '../../contexts/AuthContext'
 import { useOtherIncome } from './useOtherIncome'
 import { IncomeModal } from './FeeModals'
@@ -6,6 +7,7 @@ import { MONTHS } from './FeeFilters'
 import { useToast } from '../../components/Toast'
 import { useConfirmModal } from '../../components/ConfirmModal'
 import Button from '../../components/ui/Button'
+import LoadingState from '../../components/ui/LoadingState'
 
 export default function OtherIncomePage() {
   const { user, isStaffMember } = useAuth()
@@ -56,17 +58,13 @@ export default function OtherIncomePage() {
   return (
     <div>
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6 gap-4">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Other Income</h1>
-          <p className="text-sm text-gray-600">Track non-fee income like sales, donations, and other revenue</p>
-        </div>
-        {canWrite && (
+      <PageHeader title="Other Income" subtitle="Track non-fee income like sales, donations, and other revenue" className="mb-6" actions={<>
+{canWrite && (
           <Button onClick={() => setShowIncomeModal(true)}>
             Add Income
           </Button>
         )}
-      </div>
+</>} />
 
       {/* Filters */}
       <div className="flex gap-4 mb-6">
@@ -100,7 +98,7 @@ export default function OtherIncomePage() {
       {/* Income list */}
       <div className="card">
         {data.isLoading ? (
-          <div className="text-center py-8 text-gray-500">Loading...</div>
+          <LoadingState />
         ) : data.incomeList.length === 0 ? (
           <div className="text-center py-8">
             <p className="text-gray-500 mb-2">No other income recorded for {MONTHS[month - 1]} {year}</p>
@@ -142,7 +140,7 @@ export default function OtherIncomePage() {
                     {canWrite && <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Action</th>}
                   </tr>
                 </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
+                <tbody className="divide-y divide-gray-100">
                   {data.incomeList.map((item) => (
                     <tr key={item.id}>
                       <td className="px-4 py-3 text-sm text-gray-500">{item.date}</td>

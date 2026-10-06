@@ -1,4 +1,7 @@
 import { useState } from 'react'
+import Modal from '../../components/ui/Modal'
+import Field from '../../components/ui/Field'
+import PageHeader from '../../components/ui/PageHeader'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { hrApi } from '../../services/api'
 import { useConfirmModal } from '../../components/ConfirmModal'
@@ -247,12 +250,7 @@ export default function StaffDocumentsPage() {
 
   return (
     <div>
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6 gap-4">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Staff Documents</h1>
-          <p className="text-sm text-gray-600">Manage qualifications and documents</p>
-        </div>
-      </div>
+      <PageHeader title="Staff Documents" subtitle="Manage qualifications and documents" className="mb-6" />
 
       {/* Tabs */}
       <div className="flex gap-1 mb-6 bg-gray-100 p-1 rounded-lg w-fit">
@@ -393,12 +391,7 @@ export default function StaffDocumentsPage() {
 
           {/* Qualification Modal */}
           {showQualModal && (
-            <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[60] p-4" onClick={closeQualModal}>
-              <div className="bg-white rounded-xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto p-6" onClick={e => e.stopPropagation()}>
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-lg font-semibold text-gray-900">{editQualId ? 'Edit Qualification' : 'Add Qualification'}</h2>
-                  <button onClick={closeQualModal} className="text-gray-400 hover:text-gray-600 text-xl">&times;</button>
-                </div>
+            <Modal open onClose={closeQualModal} title={editQualId ? 'Edit Qualification' : 'Add Qualification'}>
 
                 {(qualErrors.detail || qualErrors.non_field_errors) && (
                   <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-lg text-sm">{qualErrors.detail || qualErrors.non_field_errors}</div>
@@ -406,7 +399,7 @@ export default function StaffDocumentsPage() {
 
                 <form onSubmit={handleQualSubmit} className="space-y-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Staff Member *</label>
+                    <label className="label">Staff Member *</label>
                     <StaffFilter
                       options={staffList}
                       value={qualForm.staff_member}
@@ -414,30 +407,25 @@ export default function StaffDocumentsPage() {
                       placeholder="Select staff..."
                     />
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Type *</label>
-                    <select value={qualForm.qualification_type} onChange={e => setQualForm(p => ({ ...p, qualification_type: e.target.value }))} className="input w-full" required>
+                  <Field label="Type" required>
+<select value={qualForm.qualification_type} onChange={e => setQualForm(p => ({ ...p, qualification_type: e.target.value }))} className="input w-full" required>
                       <option value="">Select type...</option>
                       {QUAL_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
                     </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Qualification Name *</label>
-                    <input type="text" value={qualForm.qualification_name} onChange={e => setQualForm(p => ({ ...p, qualification_name: e.target.value }))} className="input w-full" required placeholder="e.g. B.Ed, MBA" />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Institution</label>
-                    <input type="text" value={qualForm.institution} onChange={e => setQualForm(p => ({ ...p, institution: e.target.value }))} className="input w-full" placeholder="University or institute name" />
-                  </div>
+</Field>
+                  <Field label="Qualification Name" required>
+<input type="text" value={qualForm.qualification_name} onChange={e => setQualForm(p => ({ ...p, qualification_name: e.target.value }))} className="input w-full" required placeholder="e.g. B.Ed, MBA" />
+</Field>
+                  <Field label="Institution">
+<input type="text" value={qualForm.institution} onChange={e => setQualForm(p => ({ ...p, institution: e.target.value }))} className="input w-full" placeholder="University or institute name" />
+</Field>
                   <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Year of Completion</label>
-                      <input type="number" min="1950" max="2099" value={qualForm.year_of_completion} onChange={e => setQualForm(p => ({ ...p, year_of_completion: e.target.value }))} className="input w-full" placeholder="2020" />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Grade / Percentage</label>
-                      <input type="text" value={qualForm.grade_or_percentage} onChange={e => setQualForm(p => ({ ...p, grade_or_percentage: e.target.value }))} className="input w-full" placeholder="e.g. A+, 85%" />
-                    </div>
+                    <Field label="Year of Completion">
+<input type="number" min="1950" max="2099" value={qualForm.year_of_completion} onChange={e => setQualForm(p => ({ ...p, year_of_completion: e.target.value }))} className="input w-full" placeholder="2020" />
+</Field>
+                    <Field label="Grade / Percentage">
+<input type="text" value={qualForm.grade_or_percentage} onChange={e => setQualForm(p => ({ ...p, grade_or_percentage: e.target.value }))} className="input w-full" placeholder="e.g. A+, 85%" />
+</Field>
                   </div>
                   <div className="flex justify-end gap-3 pt-2">
                     <button type="button" onClick={closeQualModal} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">Cancel</button>
@@ -446,8 +434,7 @@ export default function StaffDocumentsPage() {
                     </button>
                   </div>
                 </form>
-              </div>
-            </div>
+              </Modal>
           )}
         </>
       )}
@@ -608,12 +595,7 @@ export default function StaffDocumentsPage() {
 
           {/* Document Modal */}
           {showDocModal && (
-            <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[60] p-4" onClick={closeDocModal}>
-              <div className="bg-white rounded-xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto p-6" onClick={e => e.stopPropagation()}>
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-lg font-semibold text-gray-900">{editDocId ? 'Edit Document' : 'Add Document'}</h2>
-                  <button onClick={closeDocModal} className="text-gray-400 hover:text-gray-600 text-xl">&times;</button>
-                </div>
+            <Modal open onClose={closeDocModal} title={editDocId ? 'Edit Document' : 'Add Document'}>
 
                 {(docErrors.detail || docErrors.error || docErrors.non_field_errors) && (
                   <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-lg text-sm">{docErrors.detail || docErrors.error || docErrors.non_field_errors}</div>
@@ -621,7 +603,7 @@ export default function StaffDocumentsPage() {
 
                 <form onSubmit={handleDocSubmit} className="space-y-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Staff Member *</label>
+                    <label className="label">Staff Member *</label>
                     <StaffFilter
                       options={staffList}
                       value={docForm.staff_member}
@@ -629,19 +611,17 @@ export default function StaffDocumentsPage() {
                       placeholder="Select staff..."
                     />
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Document Type *</label>
-                    <select value={docForm.document_type} onChange={e => setDocForm(p => ({ ...p, document_type: e.target.value }))} className="input w-full" required>
+                  <Field label="Document Type" required>
+<select value={docForm.document_type} onChange={e => setDocForm(p => ({ ...p, document_type: e.target.value }))} className="input w-full" required>
                       <option value="">Select type...</option>
                       {DOC_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
                     </select>
-                  </div>
+</Field>
+                  <Field label="Title" required>
+<input type="text" value={docForm.title} onChange={e => setDocForm(p => ({ ...p, title: e.target.value }))} className="input w-full" required placeholder="e.g. Aadhaar Card, Employment Contract" />
+</Field>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Title *</label>
-                    <input type="text" value={docForm.title} onChange={e => setDocForm(p => ({ ...p, title: e.target.value }))} className="input w-full" required placeholder="e.g. Aadhaar Card, Employment Contract" />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label className="label">
                       File {editDocId ? '(leave blank to keep the current file)' : '*'}
                     </label>
                     {existingFileUrl && (
@@ -657,12 +637,11 @@ export default function StaffDocumentsPage() {
                       required={!editDocId}
                     />
                   </div>
+                  <Field label="Expiry Date">
+<input type="date" value={docForm.expiry_date} onChange={e => setDocForm(p => ({ ...p, expiry_date: e.target.value }))} className="input w-full" />
+</Field>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Expiry Date</label>
-                    <input type="date" value={docForm.expiry_date} onChange={e => setDocForm(p => ({ ...p, expiry_date: e.target.value }))} className="input w-full" />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
+                    <label className="label">Notes</label>
                     <textarea value={docForm.notes} onChange={e => setDocForm(p => ({ ...p, notes: e.target.value }))} className="input w-full" rows={2} placeholder="Additional notes..." />
                   </div>
                   <div className="flex justify-end gap-3 pt-2">
@@ -672,16 +651,14 @@ export default function StaffDocumentsPage() {
                     </button>
                   </div>
                 </form>
-              </div>
-            </div>
+              </Modal>
           )}
         </>
       )}
 
       {/* Detail Modal (Qualification or Document) */}
       {detailItem && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[60] p-4" onClick={() => setDetailItem(null)}>
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-6" onClick={e => e.stopPropagation()}>
+        <Modal open onClose={() => setDetailItem(null)} size="lg">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-semibold text-gray-900">
                 {detailItem.kind === 'qualification' ? 'Qualification Details' : 'Document Details'}
@@ -770,8 +747,7 @@ export default function StaffDocumentsPage() {
                 )}
               </div>
             )}
-          </div>
-        </div>
+          </Modal>
       )}
 
       <ConfirmModalRoot />

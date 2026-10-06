@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import Modal from '../../components/ui/Modal'
+import PageHeader from '../../components/ui/PageHeader'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { hrApi } from '../../services/api'
 import { useConfirmModal } from '../../components/ConfirmModal'
@@ -168,15 +170,11 @@ export default function PerformanceAppraisalPage() {
 
   return (
     <div>
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6 gap-4">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Performance Appraisals</h1>
-          <p className="text-sm text-gray-600">Track and manage staff performance reviews</p>
-        </div>
-        <button onClick={openCreate} className="btn-primary text-sm px-4 py-2 whitespace-nowrap">
+      <PageHeader title="Performance Appraisals" subtitle="Track and manage staff performance reviews" className="mb-6" actions={<>
+<button onClick={openCreate} className="btn-primary text-sm px-4 py-2 whitespace-nowrap">
           + New Appraisal
         </button>
-      </div>
+</>} />
 
       {/* KPI Summary */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
@@ -316,8 +314,7 @@ export default function PerformanceAppraisalPage() {
 
       {/* Detail Modal */}
       {detailAppraisal && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[60] p-4" onClick={() => setDetailAppraisal(null)}>
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-6" onClick={e => e.stopPropagation()}>
+        <Modal open onClose={() => setDetailAppraisal(null)} size="lg">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-semibold text-gray-900">Appraisal Details</h2>
               <button onClick={() => setDetailAppraisal(null)} className="text-gray-400 hover:text-gray-600 text-xl">&times;</button>
@@ -367,18 +364,12 @@ export default function PerformanceAppraisalPage() {
                 <p className="text-sm">{detailAppraisal.reviewer_name || '-'}</p>
               </div>
             </div>
-          </div>
-        </div>
+          </Modal>
       )}
 
       {/* Create / Edit Modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[60] p-4" onClick={closeModal}>
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-6" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold text-gray-900">{editId ? 'Edit Appraisal' : 'New Appraisal'}</h2>
-              <button onClick={closeModal} className="text-gray-400 hover:text-gray-600 text-xl">&times;</button>
-            </div>
+        <Modal open onClose={closeModal} title={editId ? 'Edit Appraisal' : 'New Appraisal'} size="lg">
 
             {(errors.detail || errors.non_field_errors) && (
               <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-lg text-sm">
@@ -388,7 +379,7 @@ export default function PerformanceAppraisalPage() {
 
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Staff Member *</label>
+                <label className="label">Staff Member *</label>
                 <StaffFilter
                   options={staffList}
                   value={form.staff_member}
@@ -400,7 +391,7 @@ export default function PerformanceAppraisalPage() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Period Start *</label>
+                  <label className="label">Period Start *</label>
                   <input
                     type="date"
                     value={form.review_period_start}
@@ -411,7 +402,7 @@ export default function PerformanceAppraisalPage() {
                   {errors.review_period_start && <p className="text-xs text-red-600 mt-1">{errors.review_period_start}</p>}
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Period End *</label>
+                  <label className="label">Period End *</label>
                   <input
                     type="date"
                     value={form.review_period_end}
@@ -424,13 +415,13 @@ export default function PerformanceAppraisalPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Rating * ({ratingLabels[form.rating] || 'Select'})</label>
+                <label className="label">Rating * ({ratingLabels[form.rating] || 'Select'})</label>
                 <StarRating value={form.rating} onChange={val => setForm(p => ({ ...p, rating: val }))} />
                 {errors.rating && <p className="text-xs text-red-600 mt-1">{errors.rating}</p>}
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Strengths</label>
+                <label className="label">Strengths</label>
                 <textarea
                   value={form.strengths}
                   onChange={e => setForm(p => ({ ...p, strengths: e.target.value }))}
@@ -441,7 +432,7 @@ export default function PerformanceAppraisalPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Areas for Improvement</label>
+                <label className="label">Areas for Improvement</label>
                 <textarea
                   value={form.areas_for_improvement}
                   onChange={e => setForm(p => ({ ...p, areas_for_improvement: e.target.value }))}
@@ -452,7 +443,7 @@ export default function PerformanceAppraisalPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Goals</label>
+                <label className="label">Goals</label>
                 <textarea
                   value={form.goals}
                   onChange={e => setForm(p => ({ ...p, goals: e.target.value }))}
@@ -463,7 +454,7 @@ export default function PerformanceAppraisalPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Comments</label>
+                <label className="label">Comments</label>
                 <textarea
                   value={form.comments}
                   onChange={e => setForm(p => ({ ...p, comments: e.target.value }))}
@@ -486,8 +477,7 @@ export default function PerformanceAppraisalPage() {
                 </button>
               </div>
             </form>
-          </div>
-        </div>
+          </Modal>
       )}
 
       <ConfirmModalRoot />

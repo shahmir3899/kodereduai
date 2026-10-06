@@ -1,7 +1,7 @@
+import Modal from '../../../components/ui/Modal'
 export default function BulkUploadModal({ bulkData, classes, isUploading, onCancel, onConfirm }) {
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
-      <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md mx-4">
+    <Modal open  closeOnBackdrop={false}>
         <h2 className="text-xl font-bold text-gray-900 mb-4">Confirm Bulk Upload</h2>
 
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
@@ -31,7 +31,6 @@ export default function BulkUploadModal({ bulkData, classes, isUploading, onCanc
             {isUploading ? 'Uploading...' : 'Upload Students'}
           </button>
         </div>
-      </div>
-    </div>
+      </Modal>
   )
 }

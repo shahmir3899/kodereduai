@@ -1,7 +1,8 @@
 import { useState, useRef, useEffect } from 'react'
+import PageHeader from '../../components/ui/PageHeader'
+import LoadingState from '../../components/ui/LoadingState'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { studentPortalApi } from '../../services/api'
-import Spinner from '../../components/ui/Spinner'
 
 const SUGGESTIONS = [
   'Help me understand fractions',
@@ -125,12 +126,8 @@ export default function StudentStudyHelper() {
   return (
     <div className="flex flex-col h-[calc(100vh-10rem)] max-w-4xl mx-auto">
       {/* Header */}
-      <div className="flex items-center justify-between mb-4">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">AI Study Helper</h1>
-          <p className="text-sm text-gray-500 mt-1">Your personal AI tutor</p>
-        </div>
-        {messages.length > 0 && (
+      <PageHeader title="AI Study Helper" subtitle="Your personal AI tutor" className="mb-4" actions={<>
+{messages.length > 0 && (
           <button
             onClick={() => clearMutation.mutate()}
             disabled={clearMutation.isPending}
@@ -139,7 +136,7 @@ export default function StudentStudyHelper() {
             {clearMutation.isPending ? 'Clearing...' : 'Clear Chat'}
           </button>
         )}
-      </div>
+</>} />
 
       {/* Error Toast */}
       {errorToast && (
@@ -164,8 +161,7 @@ export default function StudentStudyHelper() {
         {historyLoading ? (
           <div className="flex items-center justify-center h-full">
             <div className="text-center">
-              <Spinner size="md" className="mx-auto mb-3" />
-              <p className="text-sm text-gray-400">Loading chat history...</p>
+              <LoadingState label="Loading chat history..." compact />
             </div>
           </div>
         ) : messages.length === 0 ? (
@@ -270,7 +266,7 @@ export default function StudentStudyHelper() {
           <button
             onClick={() => handleSend()}
             disabled={!input.trim() || sendMutation.isPending || input.length > 2000}
-            className="px-4 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex-shrink-0"
+            className="px-4 py-2.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex-shrink-0"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />

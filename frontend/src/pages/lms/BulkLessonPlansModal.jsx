@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
+import Field from '../../components/ui/Field'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   format,
@@ -405,7 +406,7 @@ export default function BulkLessonPlansModal({ onClose, onSuccess, onCreateSingl
   }
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 z-[60] flex items-center justify-center p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
       <div
         className="bg-white rounded-xl shadow-xl w-full max-w-4xl max-h-[90vh] overflow-y-auto p-6"
         onClick={(e) => e.stopPropagation()}
@@ -492,14 +493,12 @@ export default function BulkLessonPlansModal({ onClose, onSuccess, onCreateSingl
               </button>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="label">From *</label>
-                <input type="date" className="input w-full" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
-              </div>
-              <div>
-                <label className="label">To *</label>
-                <input type="date" className="input w-full" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
-              </div>
+              <Field label="From" required>
+<input type="date" className="input w-full" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
+</Field>
+              <Field label="To" required>
+<input type="date" className="input w-full" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
+</Field>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
@@ -518,9 +517,8 @@ export default function BulkLessonPlansModal({ onClose, onSuccess, onCreateSingl
                   classes={teacherClassOptions || undefined}
                 />
               </div>
-              <div>
-                <label className="label">Subject *</label>
-                <select
+              <Field label="Subject" required>
+<select
                   className="input w-full"
                   value={selectedSubject}
                   onChange={(e) => setSelectedSubject(e.target.value)}
@@ -533,7 +531,7 @@ export default function BulkLessonPlansModal({ onClose, onSuccess, onCreateSingl
                     </option>
                   ))}
                 </select>
-              </div>
+</Field>
             </div>
             {(!isMinimal || !selectedTeacher) && (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -550,16 +548,15 @@ export default function BulkLessonPlansModal({ onClose, onSuccess, onCreateSingl
                   />
                 </div>
                 {!isMinimal && (
-                  <div>
-                    <label className="label">Duration (minutes)</label>
-                    <input
+                  <Field label="Duration (minutes)">
+<input
                       type="number"
                       min={1}
                       className="input w-full sm:max-w-[12rem]"
                       value={duration}
                       onChange={(e) => setDuration(e.target.value)}
                     />
-                  </div>
+</Field>
                 )}
               </div>
             )}

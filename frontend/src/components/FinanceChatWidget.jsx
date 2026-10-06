@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
+import Button from './ui/Button'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { financeApi } from '../services/api'
 import { useDraggableWidget } from '../hooks/useDraggableWidget'
@@ -191,15 +192,13 @@ export default function FinanceChatWidget() {
               className="flex-1 input-field text-sm py-1.5"
               disabled={sendMutation.isPending}
             />
-            <button
-              onClick={() => handleSend()}
-              disabled={!input.trim() || sendMutation.isPending}
-              className="px-3 py-1.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
+            <Button
+ onClick={() => handleSend()}
+ disabled={!input.trim() || sendMutation.isPending}>
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
               </svg>
-            </button>
+            </Button>
           </div>
         </div>
       )}

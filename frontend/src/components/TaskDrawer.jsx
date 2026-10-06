@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import EmptyState from './ui/EmptyState'
 import { useBackgroundTasks } from '../contexts/BackgroundTaskContext'
 import { downloadGeneratedReport } from '../utils/downloadReport'
 import { useEscapeKey } from '../hooks/useEscapeKey'
@@ -76,7 +77,7 @@ function TaskDrawerPanel({ onClose }) {
         {/* Task list */}
         <div className="flex-1 overflow-y-auto p-4 space-y-3">
           {tasks.length === 0 ? (
-            <p className="text-sm text-gray-500 text-center py-8">No tasks</p>
+            <EmptyState title="No tasks" />
           ) : (
             tasks.map(task => (
               <TaskItem key={task.celery_task_id} task={task} onDismiss={dismissTask} onCancel={cancelTask} />

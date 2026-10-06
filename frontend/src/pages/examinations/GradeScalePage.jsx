@@ -1,4 +1,7 @@
 import { useState } from 'react'
+import Modal from '../../components/ui/Modal'
+import Field from '../../components/ui/Field'
+import PageHeader from '../../components/ui/PageHeader'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { examinationsApi } from '../../services/api'
 import { useConfirmModal } from '../../components/ConfirmModal'
@@ -105,13 +108,9 @@ export default function GradeScalePage() {
 
   return (
     <div>
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6 gap-4">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Grade Scale</h1>
-          <p className="text-sm text-gray-600">Define grade boundaries for result calculation</p>
-        </div>
-        <button onClick={openCreate} className="btn-primary text-sm px-4 py-2">+ Add Grade</button>
-      </div>
+      <PageHeader title="Grade Scale" subtitle="Define grade boundaries for result calculation" className="mb-6" actions={<>
+<button onClick={openCreate} className="btn-primary text-sm px-4 py-2">+ Add Grade</button>
+</>} />
 
       {isLoading ? (
         <div className="text-center py-12">
@@ -195,12 +194,7 @@ export default function GradeScalePage() {
 
       {/* Modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[60] p-4" onClick={closeModal}>
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold text-gray-900">{editId ? 'Edit Grade' : 'Add Grade'}</h2>
-              <button onClick={closeModal} className="text-gray-400 hover:text-gray-600 text-xl">&times;</button>
-            </div>
+        <Modal open onClose={closeModal} title={editId ? 'Edit Grade' : 'Add Grade'}>
 
             {(errors.detail || errors.non_field_errors) && (
               <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-lg text-sm">
@@ -211,38 +205,35 @@ export default function GradeScalePage() {
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Grade Label *</label>
+                  <label className="label">Grade Label *</label>
                   <input type="text" value={form.grade_label} onChange={e => setForm(p => ({ ...p, grade_label: e.target.value }))}
                     className="input w-full" required maxLength={5} placeholder="e.g. A+" />
                   {errors.grade_label && <p className="text-xs text-red-600 mt-1">{errors.grade_label}</p>}
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Order</label>
-                  <input type="number" min="0" value={form.order} onChange={e => setForm(p => ({ ...p, order: e.target.value }))}
+                <Field label="Order">
+<input type="number" min="0" value={form.order} onChange={e => setForm(p => ({ ...p, order: e.target.value }))}
                     className="input w-full" placeholder="0" />
-                </div>
+</Field>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Min % *</label>
+                  <label className="label">Min % *</label>
                   <input type="number" step="0.01" min="0" max="100" value={form.min_percentage}
                     onChange={e => setForm(p => ({ ...p, min_percentage: e.target.value }))}
                     className="input w-full" required />
                   {errors.min_percentage && <p className="text-xs text-red-600 mt-1">{errors.min_percentage}</p>}
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Max % *</label>
-                  <input type="number" step="0.01" min="0" max="100" value={form.max_percentage}
+                <Field label="Max %" required>
+<input type="number" step="0.01" min="0" max="100" value={form.max_percentage}
                     onChange={e => setForm(p => ({ ...p, max_percentage: e.target.value }))}
                     className="input w-full" required />
-                </div>
+</Field>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">GPA Points</label>
-                <input type="number" step="0.1" min="0" max="5" value={form.gpa_points}
+              <Field label="GPA Points">
+<input type="number" step="0.1" min="0" max="5" value={form.gpa_points}
                   onChange={e => setForm(p => ({ ...p, gpa_points: e.target.value }))}
                   className="input w-32" placeholder="e.g. 4.0" />
-              </div>
+</Field>
               <div className="flex justify-end gap-3 pt-2">
                 <button type="button" onClick={closeModal} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">Cancel</button>
                 <button type="submit" disabled={createMut.isPending || updateMut.isPending} className="btn-primary px-4 py-2 text-sm disabled:opacity-50">
@@ -250,8 +241,7 @@ export default function GradeScalePage() {
                 </button>
               </div>
             </form>
-          </div>
-        </div>
+          </Modal>
       )}
     </div>
   )

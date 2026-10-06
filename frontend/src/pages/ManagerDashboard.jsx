@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom'
+import PageHeader from '../components/ui/PageHeader'
 import { useQuery } from '@tanstack/react-query'
 import { useAuth } from '../contexts/AuthContext'
 import { lmsApi, examinationsApi } from '../services/api'
@@ -76,12 +77,7 @@ export default function ManagerDashboard() {
   return (
     <div>
       {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Manager Dashboard</h1>
-        <p className="text-sm text-gray-500">
-          Welcome back, {[user?.first_name, user?.last_name].filter(Boolean).join(' ') || user?.username}
-        </p>
-      </div>
+      <PageHeader title="Manager Dashboard" subtitle={<>Welcome back, {[user?.first_name, user?.last_name].filter(Boolean).join(' ') || user?.username}</>} className="mb-6" />
 
       {/* KPI Stats — Content (LMS / exam content) */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">

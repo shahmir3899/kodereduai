@@ -1,4 +1,5 @@
 import { useMemo } from 'react'
+import { TONE } from '../../components/ui/statusTones'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
@@ -372,9 +373,9 @@ export default function TeacherDashboard() {
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
                       <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${
-                        exam.status === 'PUBLISHED' ? 'bg-green-100 text-green-700'
-                          : exam.status === 'SCHEDULED' ? 'bg-blue-100 text-blue-700'
-                            : 'bg-gray-100 text-gray-600'
+                        exam.status === 'PUBLISHED' ? TONE.success
+                          : exam.status === 'SCHEDULED' ? TONE.info
+                            : TONE.neutral
                       }`}>
                         {exam.status}
                       </span>
@@ -459,8 +460,8 @@ export default function TeacherDashboard() {
                       <p className="text-xs text-gray-400">{plan.subject_name || ''} {plan.class_name ? `— ${plan.class_name}` : ''}</p>
                     </div>
                     <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium shrink-0 ml-2 ${
-                      plan.status === 'COMPLETED' || plan.is_completed ? 'bg-green-100 text-green-700'
-                        : plan.status === 'PUBLISHED' ? 'bg-blue-100 text-blue-700'
+                      plan.status === 'COMPLETED' || plan.is_completed ? TONE.success
+                        : plan.status === 'PUBLISHED' ? TONE.info
                           : 'bg-gray-100 text-gray-500'
                     }`}>
                       {plan.status === 'COMPLETED' || plan.is_completed ? 'Done' : plan.status || 'Draft'}

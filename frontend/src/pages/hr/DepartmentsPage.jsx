@@ -1,4 +1,7 @@
 import { useState } from 'react'
+import Modal from '../../components/ui/Modal'
+import Field from '../../components/ui/Field'
+import PageHeader from '../../components/ui/PageHeader'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { hrApi } from '../../services/api'
 import { useToast } from '../../components/Toast'
@@ -303,10 +306,7 @@ export default function DepartmentsPage() {
 
   return (
     <div>
-      <div className="mb-6">
-        <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Departments & Designations</h1>
-        <p className="text-sm text-gray-600">Manage organizational structure</p>
-      </div>
+      <PageHeader title="Departments & Designations" subtitle="Manage organizational structure" className="mb-6" />
 
       {/* ── Departments Section ─────────────────────────────────────────── */}
       <div className="mb-8">
@@ -326,7 +326,7 @@ export default function DepartmentsPage() {
                 <button
                   onClick={quickAddAllDepts}
                   disabled={quickAdding.allDepts}
-                  className="text-xs px-3 py-1 bg-blue-600 text-white rounded-full hover:bg-blue-700 disabled:opacity-50"
+                  className="text-xs px-3 py-1 bg-primary-600 text-white rounded-full hover:bg-primary-700 disabled:opacity-50"
                 >
                   {quickAdding.allDepts ? 'Adding...' : `Add All (${remainingDepts.length})`}
                 </button>
@@ -480,22 +480,20 @@ export default function DepartmentsPage() {
 
       {/* ── Department Modal ────────────────────────────────────────────── */}
       {showDeptModal && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
-          <div className="bg-white rounded-xl shadow-xl p-4 sm:p-6 w-full max-w-md mx-4">
+        <Modal open  closeOnBackdrop={false}>
             <h2 className="text-xl font-bold text-gray-900 mb-4">
               {editingDept ? 'Edit Department' : 'Add Department'}
             </h2>
             <div className="space-y-4">
-              <div>
-                <label className="label">Department Name *</label>
-                <input
+              <Field label="Department Name" required>
+<input
                   type="text"
                   className="input"
                   placeholder="e.g., Science, Administration"
                   value={deptForm.name}
                   onChange={(e) => setDeptForm({ ...deptForm, name: e.target.value })}
                 />
-              </div>
+</Field>
               <div>
                 <label className="label">Description (Optional)</label>
                 <textarea
@@ -517,31 +515,27 @@ export default function DepartmentsPage() {
                 {isDeptSubmitting ? 'Saving...' : (editingDept ? 'Save Changes' : 'Add Department')}
               </button>
             </div>
-          </div>
-        </div>
+          </Modal>
       )}
 
       {/* ── Designation Modal ───────────────────────────────────────────── */}
       {showDesigModal && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
-          <div className="bg-white rounded-xl shadow-xl p-4 sm:p-6 w-full max-w-md mx-4">
+        <Modal open  closeOnBackdrop={false}>
             <h2 className="text-xl font-bold text-gray-900 mb-4">
               {editingDesig ? 'Edit Designation' : 'Add Designation'}
             </h2>
             <div className="space-y-4">
-              <div>
-                <label className="label">Designation Name *</label>
-                <input
+              <Field label="Designation Name" required>
+<input
                   type="text"
                   className="input"
                   placeholder="e.g., Senior Teacher, Lab Technician"
                   value={desigForm.name}
                   onChange={(e) => setDesigForm({ ...desigForm, name: e.target.value })}
                 />
-              </div>
-              <div>
-                <label className="label">Department (Optional)</label>
-                <select
+</Field>
+              <Field label="Department (Optional)">
+<select
                   className="input"
                   value={desigForm.department}
                   onChange={(e) => setDesigForm({ ...desigForm, department: e.target.value })}
@@ -551,7 +545,7 @@ export default function DepartmentsPage() {
                     <option key={d.id} value={d.id}>{d.name}</option>
                   ))}
                 </select>
-              </div>
+</Field>
             </div>
             <div className="flex justify-end space-x-3 mt-6">
               <button onClick={closeDesigModal} className="btn btn-secondary">Cancel</button>
@@ -563,14 +557,12 @@ export default function DepartmentsPage() {
                 {isDesigSubmitting ? 'Saving...' : (editingDesig ? 'Save Changes' : 'Add Designation')}
               </button>
             </div>
-          </div>
-        </div>
+          </Modal>
       )}
 
       {/* ── Delete Department Confirmation ──────────────────────────────── */}
       {deleteDeptConfirm && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
-          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm mx-4">
+        <Modal open  size="sm" closeOnBackdrop={false}>
             <h2 className="text-xl font-bold text-gray-900 mb-2">Delete Department</h2>
             <p className="text-gray-600 mb-6">
               Are you sure you want to delete <strong>{deleteDeptConfirm.name}</strong>? This will deactivate it.
@@ -585,14 +577,12 @@ export default function DepartmentsPage() {
                 {deleteDeptMutation.isPending ? 'Deleting...' : 'Delete'}
               </button>
             </div>
-          </div>
-        </div>
+          </Modal>
       )}
 
       {/* ── Delete Designation Confirmation ─────────────────────────────── */}
       {deleteDesigConfirm && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
-          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm mx-4">
+        <Modal open  size="sm" closeOnBackdrop={false}>
             <h2 className="text-xl font-bold text-gray-900 mb-2">Delete Designation</h2>
             <p className="text-gray-600 mb-6">
               Are you sure you want to delete <strong>{deleteDesigConfirm.name}</strong>? This will deactivate it.
@@ -607,8 +597,7 @@ export default function DepartmentsPage() {
                 {deleteDesigMutation.isPending ? 'Deleting...' : 'Delete'}
               </button>
             </div>
-          </div>
-        </div>
+          </Modal>
       )}
     </div>
   )

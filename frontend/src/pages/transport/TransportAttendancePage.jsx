@@ -1,8 +1,10 @@
 import { useState, useMemo } from 'react'
+import Field from '../../components/ui/Field'
+import PageHeader from '../../components/ui/PageHeader'
+import LoadingState from '../../components/ui/LoadingState'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { transportApi } from '../../services/api'
 import { useAuth } from '../../contexts/AuthContext'
-import Spinner from '../../components/ui/Spinner'
 import { RecordCard, CardGrid, ViewToggle } from '../../components/cards'
 import { useViewPreference } from '../../hooks/useViewPreference'
 
@@ -148,26 +150,21 @@ export default function TransportAttendancePage() {
 
   return (
     <div>
-      <div className="mb-6">
-        <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Transport Attendance</h1>
-        <p className="text-sm sm:text-base text-gray-600">Mark daily transport boarding attendance</p>
-      </div>
+      <PageHeader title="Transport Attendance" subtitle="Mark daily transport boarding attendance" className="mb-6" />
 
       {/* Filters */}
       <div className="card mb-6">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <label className="label">Date</label>
-            <input
+          <Field label="Date">
+<input
               type="date"
               className="input"
               value={selectedDate}
               onChange={(e) => handleDateChange(e.target.value)}
             />
-          </div>
-          <div>
-            <label className="label">Route</label>
-            <select
+</Field>
+          <Field label="Route">
+<select
               className="input"
               value={selectedRoute}
               onChange={(e) => handleRouteChange(e.target.value)}
@@ -177,7 +174,7 @@ export default function TransportAttendancePage() {
                 <option key={route.id} value={route.id}>{route.name}</option>
               ))}
             </select>
-          </div>
+</Field>
         </div>
       </div>
 
@@ -190,8 +187,7 @@ export default function TransportAttendancePage() {
         </div>
       ) : isLoading ? (
         <div className="card text-center py-8">
-          <Spinner size="md" className="mx-auto" />
-          <p className="text-gray-500 mt-2">Loading students...</p>
+          <LoadingState label="Loading students..." compact />
         </div>
       ) : assignments.length === 0 ? (
         <div className="card text-center py-12">
@@ -308,7 +304,7 @@ export default function TransportAttendancePage() {
                     <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Boarding Status</th>
                   </tr>
                 </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
+                <tbody className="divide-y divide-gray-100">
                   {assignments.map((assignment) => {
                     const currentStatus = attendanceMap[assignment.student]
                     return (

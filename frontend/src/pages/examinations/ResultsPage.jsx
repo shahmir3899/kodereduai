@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react'
+import { TONE } from '../../components/ui/statusTones'
+import PageHeader from '../../components/ui/PageHeader'
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query'
 import { examinationsApi } from '../../services/api'
 import ClassSelector from '../../components/ClassSelector'
@@ -52,9 +54,9 @@ function CommentProgressBar({ job, onCancel, cancelling }) {
 
 const SOURCE_LABELS = { AI: 'AI', FALLBACK: 'Template', EDITED: 'Edited' }
 const SOURCE_STYLES = {
-  AI: 'bg-indigo-100 text-indigo-700',
-  FALLBACK: 'bg-gray-100 text-gray-600',
-  EDITED: 'bg-emerald-100 text-emerald-700',
+  AI: TONE.indigo,
+  FALLBACK: TONE.neutral,
+  EDITED: TONE.success,
 }
 
 // One editable comment line (overall or per subject): view, edit in place, regenerate.
@@ -302,10 +304,7 @@ export default function ResultsPage() {
 
   return (
     <div>
-      <div className="mb-6">
-        <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Exam Results</h1>
-        <p className="text-sm text-gray-600">View ranked results with pass/fail analysis</p>
-      </div>
+      <PageHeader title="Exam Results" subtitle="View ranked results with pass/fail analysis" className="mb-6" />
 
       {/* Selection */}
       <div className="card mb-4">
@@ -346,7 +345,7 @@ export default function ResultsPage() {
               <button
                 onClick={() => { setCommentMsg(''); generateCommentsMut.mutate({ examId: selectedExamId, force: false }) }}
                 disabled={generateCommentsMut.isPending || jobActive}
-                className="px-3 py-1.5 text-xs bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 whitespace-nowrap"
+                className="px-3 py-1.5 text-xs bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 whitespace-nowrap"
               >
                 {generateCommentsMut.isPending || jobActive ? 'Generating...' : 'Generate Comments'}
               </button>
@@ -374,7 +373,7 @@ export default function ResultsPage() {
           <div className="flex items-center gap-3 flex-wrap">
             {/* Step 1: Class */}
             <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm ${
-              classFilter ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700 ring-2 ring-blue-300'
+              classFilter ? TONE.success : 'bg-blue-100 text-blue-700 ring-2 ring-blue-300'
             }`}>
               <span className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold ${
                 classFilter ? 'bg-green-500 text-white' : 'bg-blue-500 text-white'
@@ -514,11 +513,11 @@ export default function ResultsPage() {
                             </td>
                             <td className="px-3 py-2 text-center">
                               {getStatus(r) === 'pass' ? (
-                                <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded-full text-xs">Pass</span>
+                                <Badge tone="success">Pass</Badge>
                               ) : getStatus(r) === 'fail' ? (
-                                <span className="px-2 py-0.5 bg-red-100 text-red-700 rounded-full text-xs">Fail</span>
+                                <Badge tone="danger">Fail</Badge>
                               ) : (
-                                <span className="px-2 py-0.5 bg-amber-100 text-amber-700 rounded-full text-xs">Incomplete</span>
+                                <Badge tone="warning">Incomplete</Badge>
                               )}
                             </td>
                           </tr>
@@ -568,11 +567,11 @@ export default function ResultsPage() {
                           </div>
                         </div>
                         {getStatus(r) === 'pass' ? (
-                          <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded-full text-xs">Pass</span>
+                          <Badge tone="success">Pass</Badge>
                         ) : getStatus(r) === 'fail' ? (
-                          <span className="px-2 py-0.5 bg-red-100 text-red-700 rounded-full text-xs">Fail</span>
+                          <Badge tone="danger">Fail</Badge>
                         ) : (
-                          <span className="px-2 py-0.5 bg-amber-100 text-amber-700 rounded-full text-xs">Incomplete</span>
+                          <Badge tone="warning">Incomplete</Badge>
                         )}
                       </div>
                       <div className="flex items-center gap-3 text-xs text-gray-600">

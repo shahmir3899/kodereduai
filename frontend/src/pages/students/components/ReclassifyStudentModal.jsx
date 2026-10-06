@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from 'react'
+import Button from '../../../components/ui/Button'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { studentsApi } from '../../../services/api'
 import { useToast } from '../../../components/Toast'
@@ -112,7 +113,7 @@ export default function ReclassifyStudentModal({ student, onClose }) {
   }
 
   return (
-    <div className="fixed inset-0 z-[60] bg-black/40 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4">
       <div className="bg-white rounded-xl shadow-xl border border-gray-200 w-full max-w-xl">
         <div className="px-6 py-4 border-b border-gray-200">
           <h2 className="text-lg font-semibold text-gray-900">Reclassify Student</h2>
@@ -133,7 +134,7 @@ export default function ReclassifyStudentModal({ student, onClose }) {
             <label htmlFor="reclassify-class" className="block text-sm font-medium text-gray-700 mb-1">Target Class</label>
             <select
               id="reclassify-class"
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+              className="input"
               value={form.target_session_class_id}
               onChange={(e) => handleClassChange(e.target.value)}
               disabled={!activeAcademicYear?.id || classesLoading}
@@ -152,7 +153,7 @@ export default function ReclassifyStudentModal({ student, onClose }) {
             <label htmlFor="reclassify-roll" className="block text-sm font-medium text-gray-700 mb-1">New Roll Number (optional)</label>
             <input
               id="reclassify-roll"
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+              className="input"
               value={form.new_roll_number}
               onChange={(e) => {
                 setRollTyped(true)
@@ -182,7 +183,7 @@ export default function ReclassifyStudentModal({ student, onClose }) {
             <textarea
               id="reclassify-reason"
               rows={3}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+              className="input"
               value={form.reason}
               onChange={(e) => setForm((p) => ({ ...p, reason: e.target.value }))}
               placeholder="Why this correction is required"
@@ -191,15 +192,15 @@ export default function ReclassifyStudentModal({ student, onClose }) {
         </div>
 
         <div className="px-6 py-4 border-t border-gray-200 flex justify-end gap-2">
-          <button type="button" onClick={onClose} className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50">Cancel</button>
-          <button
-            type="button"
-            onClick={handleSubmit}
-            disabled={mutation.isPending}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
-          >
+          <Button variant="secondary" type="button" onClick={onClose}>Cancel</Button>
+          <Button
+ type="button"
+ onClick={handleSubmit}
+ disabled={mutation.isPending}
+ 
+ >
             {mutation.isPending ? 'Applying...' : 'Apply Reclassification'}
-          </button>
+          </Button>
         </div>
       </div>
     </div>

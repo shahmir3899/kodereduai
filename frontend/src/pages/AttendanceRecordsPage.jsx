@@ -1,4 +1,6 @@
 import { useState, useMemo, useEffect } from 'react'
+import PageHeader from '../components/ui/PageHeader'
+import LoadingState from '../components/ui/LoadingState'
 import { useQuery } from '@tanstack/react-query'
 import { attendanceApi, sessionsApi, studentsApi } from '../services/api'
 import { useAuth } from '../contexts/AuthContext'
@@ -6,7 +8,6 @@ import { useToast } from '../components/Toast'
 import ClassSelector from '../components/ClassSelector'
 import { useAcademicYear } from '../contexts/AcademicYearContext'
 import useTeacherScopedClasses from '../hooks/useTeacherScopedClasses'
-import Spinner from '../components/ui/Spinner'
 import { awayDaysInMonth } from '../utils/awayPeriods'
 
 function getDaysInMonth(year, month) {
@@ -278,12 +279,7 @@ export default function AttendanceRecordsPage() {
   return (
     <div>
       {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Attendance Register</h1>
-        <p className="text-sm sm:text-base text-gray-600">
-          Monthly attendance view — select a class to see the register
-        </p>
-      </div>
+      <PageHeader title="Attendance Register" subtitle="Monthly attendance view — select a class to see the register" className="mb-6" />
 
       {/* Filters */}
       <div className="card mb-6">
@@ -353,8 +349,7 @@ export default function AttendanceRecordsPage() {
         </div>
       ) : isLoading ? (
         <div className="card text-center py-12">
-          <Spinner size="h-10 w-10" className="mx-auto" />
-          <p className="mt-4 text-gray-500">Loading register...</p>
+          <LoadingState label="Loading register..." compact />
         </div>
       ) : (
         <div className="space-y-6">

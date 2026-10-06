@@ -1,4 +1,8 @@
 import { useEffect, useState } from 'react'
+import { TONE } from '../../../components/ui/statusTones'
+import ErrorState from '../../../components/ui/ErrorState'
+import LoadingState from '../../../components/ui/LoadingState'
+import EmptyState from '../../../components/ui/EmptyState'
 import { useMutation } from '@tanstack/react-query'
 import { studentsApi, examinationsApi } from '../../../services/api'
 import { useToast } from '../../../components/Toast'
@@ -46,9 +50,9 @@ function riskColor(level) {
 }
 
 export function OverviewTab({ summary, ai, isLoading, error }) {
-  if (isLoading) return <div className="text-center py-10 text-gray-500">Loading summary...</div>
-  if (error) return <div className="text-center py-10 text-red-600">Failed to load summary</div>
-  if (!summary) return <div className="text-center py-10 text-gray-500">No summary available</div>
+  if (isLoading) return <LoadingState label="Loading summary..." />
+  if (error) return <ErrorState message="Failed to load summary" compact />
+  if (!summary) return <EmptyState title="No summary available" />
 
   return (
     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -151,15 +155,15 @@ function AwayNotice({ periods, what, fromBranch }) {
 const earlierBranchOf = (rows) => (rows || []).find((r) => r.branch)?.branch
 
 export function AttendanceTab({ data, isLoading, error, awayPeriods }) {
-  if (isLoading) return <div className="text-center py-10 text-gray-500">Loading attendance...</div>
-  if (error) return <div className="text-center py-10 text-red-600">Failed to load attendance</div>
+  if (isLoading) return <LoadingState label="Loading attendance..." />
+  if (error) return <ErrorState message="Failed to load attendance" compact />
   const months = data?.months || []
   const fromBranch = earlierBranchOf(months)
   if (months.length === 0) {
     return (
       <div className="space-y-4">
         <AwayNotice periods={awayPeriods} what="No attendance is recorded for these days." fromBranch={fromBranch} />
-        <div className="text-center py-10 text-gray-500">No attendance records found</div>
+        <EmptyState title="No attendance records found" />
       </div>
     )
   }
@@ -180,7 +184,7 @@ export function AttendanceTab({ data, isLoading, error, awayPeriods }) {
             <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Rate</th>
           </tr>
         </thead>
-        <tbody className="divide-y divide-gray-200">
+        <tbody className="divide-y divide-gray-100">
           {months.map((m, i) => (
             <tr key={i} className="hover:bg-gray-50">
               <td className="px-4 py-3 text-sm font-medium text-gray-900">{m.month}<BranchTag branch={m.branch} /></td>
@@ -204,15 +208,15 @@ export function AttendanceTab({ data, isLoading, error, awayPeriods }) {
 }
 
 export function FeesTab({ data, isLoading, error }) {
-  if (isLoading) return <div className="text-center py-10 text-gray-500">Loading fee records...</div>
-  if (error) return <div className="text-center py-10 text-red-600">Failed to load fee records</div>
+  if (isLoading) return <LoadingState label="Loading fee records..." />
+  if (error) return <ErrorState message="Failed to load fee records" compact />
   const payments = data?.payments || data || []
-  if (payments.length === 0) return <div className="text-center py-10 text-gray-500">No fee records found</div>
+  if (payments.length === 0) return <EmptyState title="No fee records found" />
 
   const statusColors = {
-    PAID: 'bg-green-100 text-green-800',
-    PARTIAL: 'bg-yellow-100 text-yellow-800',
-    PENDING: 'bg-red-100 text-red-800',
+    PAID: TONE.success,
+    PARTIAL: TONE.warning,
+    PENDING: TONE.danger,
   }
 
   return (
@@ -228,7 +232,7 @@ export function FeesTab({ data, isLoading, error }) {
             <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
           </tr>
         </thead>
-        <tbody className="divide-y divide-gray-200">
+        <tbody className="divide-y divide-gray-100">
           {payments.map((p, i) => (
             <tr key={i} className="hover:bg-gray-50">
               <td className="px-4 py-3 text-sm text-gray-900">
@@ -239,7 +243,7 @@ export function FeesTab({ data, isLoading, error }) {
               <td className="px-4 py-3 text-sm text-gray-900 text-right">PKR {parseFloat(p.amount_due || 0).toLocaleString()}</td>
               <td className="px-4 py-3 text-sm text-gray-900 text-right">PKR {parseFloat(p.amount_paid || 0).toLocaleString()}</td>
               <td className="px-4 py-3">
-                <span className={`px-2 py-0.5 rounded text-xs font-medium ${statusColors[p.status] || 'bg-gray-100 text-gray-800'}`}>
+                <span className={`px-2 py-0.5 rounded text-xs font-medium ${statusColors[p.status] || TONE.neutral}`}>
                   {p.status}
                 </span>
                 {p.handed_over && <span className="ml-2 text-xs text-blue-700">Balance moved to the new branch</span>}
@@ -255,10 +259,10 @@ export function FeesTab({ data, isLoading, error }) {
 }
 
 export function AcademicsTab({ data, isLoading, error }) {
-  if (isLoading) return <div className="text-center py-10 text-gray-500">Loading exam results...</div>
-  if (error) return <div className="text-center py-10 text-red-600">Failed to load exam results</div>
+  if (isLoading) return <LoadingState label="Loading exam results..." />
+  if (error) return <ErrorState message="Failed to load exam results" compact />
   const exams = data?.exams || data || []
-  if (exams.length === 0) return <div className="text-center py-10 text-gray-500">No exam results found</div>
+  if (exams.length === 0) return <EmptyState title="No exam results found" />
 
   return (
     <div className="space-y-4">
@@ -314,10 +318,10 @@ export function AcademicsTab({ data, isLoading, error }) {
 }
 
 export function HistoryTab({ data, isLoading, error, awayPeriods }) {
-  if (isLoading) return <div className="text-center py-10 text-gray-500">Loading enrollment history...</div>
-  if (error) return <div className="text-center py-10 text-red-600">Failed to load enrollment history</div>
+  if (isLoading) return <LoadingState label="Loading enrollment history..." />
+  if (error) return <ErrorState message="Failed to load enrollment history" compact />
   const history = data?.enrollments || data || []
-  if (history.length === 0) return <div className="text-center py-10 text-gray-500">No enrollment history found</div>
+  if (history.length === 0) return <EmptyState title="No enrollment history found" />
 
   return (
     <div className="space-y-4">
@@ -334,7 +338,7 @@ export function HistoryTab({ data, isLoading, error, awayPeriods }) {
             <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
           </tr>
         </thead>
-        <tbody className="divide-y divide-gray-200">
+        <tbody className="divide-y divide-gray-100">
           {history.map((e, i) => (
             <tr key={i} className="hover:bg-gray-50">
               <td className="px-4 py-3 text-sm text-gray-900">{e.academic_year_name || e.academic_year}<BranchTag branch={e.branch} /></td>
@@ -343,9 +347,9 @@ export function HistoryTab({ data, isLoading, error, awayPeriods }) {
               <td className="px-4 py-3 text-sm text-gray-600">{e.roll_number || '-'}</td>
               <td className="px-4 py-3 text-sm">
                 <span className={`px-2 py-0.5 rounded text-xs font-medium ${
-                  e.status === 'ACTIVE' ? 'bg-green-100 text-green-800' :
-                  e.status === 'PROMOTED' ? 'bg-blue-100 text-blue-800' :
-                  'bg-gray-100 text-gray-800'
+                  e.status === 'ACTIVE' ? TONE.success :
+                  e.status === 'PROMOTED' ? TONE.info :
+                  TONE.neutral
                 }`}>
                   {e.status}
                 </span>
@@ -398,8 +402,8 @@ export function AssessmentTab({ studentId, academicYearId, month, onMonthChange,
     onError: () => showError('Failed to save assessment'),
   })
 
-  if (isLoading || !form) return <div className="text-center py-10 text-gray-500">Loading assessment...</div>
-  if (error) return <div className="text-center py-10 text-red-600">Failed to load assessment</div>
+  if (isLoading || !form) return <LoadingState label="Loading assessment..." />
+  if (error) return <ErrorState message="Failed to load assessment" compact />
 
   const setField = (field, value) => setForm((prev) => ({ ...prev, [field]: value }))
 
@@ -432,7 +436,7 @@ export function AssessmentTab({ studentId, academicYearId, month, onMonthChange,
   return (
     <div className="space-y-6">
       <div className="bg-white rounded-xl border border-gray-200 p-4">
-        <label className="block text-sm font-medium text-gray-700 mb-1">Month</label>
+        <label className="label">Month</label>
         <select
           value={month}
           onChange={(e) => onMonthChange(e.target.value)}
@@ -457,22 +461,22 @@ export function AssessmentTab({ studentId, academicYearId, month, onMonthChange,
 
       <div className="bg-white rounded-xl border border-gray-200 p-4 space-y-4">
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Teacher Remark</label>
+          <label className="label">Teacher Remark</label>
           <textarea
             rows={3}
             value={form.teacher_remark}
             onChange={(e) => setField('teacher_remark', e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+            className="input"
             placeholder="e.g. Aly is an active student who participates enthusiastically..."
           />
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Principal Remark</label>
+          <label className="label">Principal Remark</label>
           <textarea
             rows={3}
             value={form.principal_remark}
             onChange={(e) => setField('principal_remark', e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+            className="input"
           />
         </div>
       </div>
@@ -565,8 +569,8 @@ export function DocumentsTab({ studentId, data, refetch, isLoading, error }) {
     }
   }
 
-  if (isLoading) return <div className="text-center py-10 text-gray-500">Loading documents...</div>
-  if (error) return <div className="text-center py-10 text-red-600">Failed to load documents</div>
+  if (isLoading) return <LoadingState label="Loading documents..." />
+  if (error) return <ErrorState message="Failed to load documents" compact />
 
   return (
     <div className="space-y-4">
@@ -578,7 +582,7 @@ export function DocumentsTab({ studentId, data, refetch, isLoading, error }) {
       </div>
 
       {docs.length === 0 ? (
-        <div className="text-center py-10 text-gray-500">No documents uploaded</div>
+        <EmptyState title="No documents uploaded" />
       ) : (
         <div className="bg-white rounded-xl border border-gray-200 divide-y divide-gray-200">
           {docs.map((doc) => (

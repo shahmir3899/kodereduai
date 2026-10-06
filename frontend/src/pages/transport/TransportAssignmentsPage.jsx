@@ -1,4 +1,9 @@
 import { useState, useMemo } from 'react'
+import Modal from '../../components/ui/Modal'
+import Field from '../../components/ui/Field'
+import { TONE } from '../../components/ui/statusTones'
+import PageHeader from '../../components/ui/PageHeader'
+import LoadingState from '../../components/ui/LoadingState'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { transportApi, studentsApi } from '../../services/api'
 import ClassSelector from '../../components/ClassSelector'
@@ -6,7 +11,6 @@ import { useAuth } from '../../contexts/AuthContext'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
 import { useSessionClasses } from '../../hooks/useSessionClasses'
 import { getClassSelectorScope, getResolvedMasterClassId } from '../../utils/classScope'
-import Spinner from '../../components/ui/Spinner'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
 import { RecordCard, CardGrid, ViewToggle } from '../../components/cards'
 import { useViewPreference } from '../../hooks/useViewPreference'
@@ -284,13 +288,13 @@ export default function TransportAssignmentsPage() {
   const getTransportTypeBadge = (type) => {
     switch (type) {
       case 'PICKUP':
-        return 'bg-blue-100 text-blue-800'
+        return TONE.info
       case 'DROP':
-        return 'bg-orange-100 text-orange-800'
+        return TONE.orange
       case 'BOTH':
-        return 'bg-green-100 text-green-800'
+        return TONE.success
       default:
-        return 'bg-gray-100 text-gray-800'
+        return TONE.neutral
     }
   }
 
@@ -308,13 +312,8 @@ export default function TransportAssignmentsPage() {
 
   return (
     <div>
-      <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Transport Assignments</h1>
-          <p className="text-sm sm:text-base text-gray-600">Assign students to routes and stops</p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {selectedStudents.length > 0 && (
+      <PageHeader title="Transport Assignments" subtitle="Assign students to routes and stops" className="mb-6" actions={<>
+{selectedStudents.length > 0 && (
             <button onClick={openBulkModal} className="btn btn-secondary">
               Bulk Assign ({selectedStudents.length})
             </button>
@@ -322,15 +321,13 @@ export default function TransportAssignmentsPage() {
           <button onClick={openAddModal} className="btn btn-primary">
             New Assignment
           </button>
-        </div>
-      </div>
+</>} />
 
       {/* Filters */}
       <div className="card mb-6">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div>
-            <label className="label">Filter by Route</label>
-            <select
+          <Field label="Filter by Route">
+<select
               className="input"
               value={filterRoute}
               onChange={(e) => setFilterRoute(e.target.value)}
@@ -340,7 +337,7 @@ export default function TransportAssignmentsPage() {
                 <option key={route.id} value={route.id}>{route.name}</option>
               ))}
             </select>
-          </div>
+</Field>
           <div>
             <label className="label">Filter by Class</label>
             <ClassSelector
@@ -352,9 +349,8 @@ export default function TransportAssignmentsPage() {
               academicYearId={activeAcademicYear?.id}
             />
           </div>
-          <div>
-            <label className="label">Filter by Transport Type</label>
-            <select
+          <Field label="Filter by Transport Type">
+<select
               className="input"
               value={filterTransportType}
               onChange={(e) => setFilterTransportType(e.target.value)}
@@ -364,7 +360,7 @@ export default function TransportAssignmentsPage() {
                 <option key={t.value} value={t.value}>{t.label}</option>
               ))}
             </select>
-          </div>
+</Field>
         </div>
       </div>
 
@@ -378,8 +374,7 @@ export default function TransportAssignmentsPage() {
 
         {isLoading ? (
           <div className="text-center py-8">
-            <Spinner size="md" className="mx-auto" />
-            <p className="text-gray-500 mt-2">Loading assignments...</p>
+            <LoadingState label="Loading assignments..." compact />
           </div>
         ) : assignments.length === 0 ? (
           <div className="text-center py-12">
@@ -456,7 +451,7 @@ export default function TransportAssignmentsPage() {
                     <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
+                <tbody className="divide-y divide-gray-100">
                   {assignments.map((assignment) => (
                     <tr key={assignment.id} className="hover:bg-gray-50">
                       <td className="px-4 py-3">
@@ -499,8 +494,7 @@ export default function TransportAssignmentsPage() {
 
       {/* New Assignment Modal */}
       {showModal && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
-          <div className="bg-white rounded-xl shadow-xl p-4 sm:p-6 w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
+        <Modal open  size="lg" closeOnBackdrop={false}>
             <h2 className="text-xl font-bold text-gray-900 mb-4">New Transport Assignment</h2>
 
             <div className="space-y-4">
@@ -592,9 +586,8 @@ export default function TransportAssignmentsPage() {
               </div>
 
               {/* Route */}
-              <div>
-                <label className="label">Route *</label>
-                <select
+              <Field label="Route" required>
+<select
                   className="input"
                   value={assignForm.route}
                   onChange={(e) => setAssignForm({ ...assignForm, route: e.target.value, stop: '', vehicle: '' })}
@@ -604,7 +597,7 @@ export default function TransportAssignmentsPage() {
                     <option key={route.id} value={route.id}>{route.name}</option>
                   ))}
                 </select>
-              </div>
+</Field>
 
               {/* Stop (filtered by route) */}
               <div>
@@ -643,9 +636,8 @@ export default function TransportAssignmentsPage() {
               </div>
 
               {/* Transport Type */}
-              <div>
-                <label className="label">Transport Type</label>
-                <select
+              <Field label="Transport Type">
+<select
                   className="input"
                   value={assignForm.transport_type}
                   onChange={(e) => setAssignForm({ ...assignForm, transport_type: e.target.value })}
@@ -654,7 +646,7 @@ export default function TransportAssignmentsPage() {
                     <option key={t.value} value={t.value}>{t.label}</option>
                   ))}
                 </select>
-              </div>
+</Field>
             </div>
 
             {(createMutation.isError || bulkAssignMutation.isError) && (
@@ -680,14 +672,12 @@ export default function TransportAssignmentsPage() {
                   : `Assign ${modalSelectedStudents.length || ''} Student${modalSelectedStudents.length !== 1 ? 's' : ''}`}
               </button>
             </div>
-          </div>
-        </div>
+          </Modal>
       )}
 
       {/* Bulk Assign Modal */}
       {showBulkModal && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
-          <div className="bg-white rounded-xl shadow-xl p-4 sm:p-6 w-full max-w-md mx-4">
+        <Modal open  closeOnBackdrop={false}>
             <h2 className="text-xl font-bold text-gray-900 mb-4">Bulk Assign Students</h2>
 
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
@@ -697,9 +687,8 @@ export default function TransportAssignmentsPage() {
             </div>
 
             <div className="space-y-4">
-              <div>
-                <label className="label">Route *</label>
-                <select
+              <Field label="Route" required>
+<select
                   className="input"
                   value={bulkForm.route}
                   onChange={(e) => setBulkForm({ ...bulkForm, route: e.target.value, stop: '', vehicle: '' })}
@@ -709,11 +698,10 @@ export default function TransportAssignmentsPage() {
                     <option key={route.id} value={route.id}>{route.name}</option>
                   ))}
                 </select>
-              </div>
+</Field>
 
-              <div>
-                <label className="label">Stop</label>
-                <select
+              <Field label="Stop">
+<select
                   className="input"
                   value={bulkForm.stop}
                   onChange={(e) => setBulkForm({ ...bulkForm, stop: e.target.value })}
@@ -724,11 +712,10 @@ export default function TransportAssignmentsPage() {
                     <option key={stop.id} value={stop.id}>#{stop.order} {stop.name}</option>
                   ))}
                 </select>
-              </div>
+</Field>
 
-              <div>
-                <label className="label">Vehicle</label>
-                <select
+              <Field label="Vehicle">
+<select
                   className="input"
                   value={bulkForm.vehicle}
                   onChange={(e) => setBulkForm({ ...bulkForm, vehicle: e.target.value })}
@@ -741,11 +728,10 @@ export default function TransportAssignmentsPage() {
                     </option>
                   ))}
                 </select>
-              </div>
+</Field>
 
-              <div>
-                <label className="label">Transport Type</label>
-                <select
+              <Field label="Transport Type">
+<select
                   className="input"
                   value={bulkForm.transport_type}
                   onChange={(e) => setBulkForm({ ...bulkForm, transport_type: e.target.value })}
@@ -754,7 +740,7 @@ export default function TransportAssignmentsPage() {
                     <option key={t.value} value={t.value}>{t.label}</option>
                   ))}
                 </select>
-              </div>
+</Field>
             </div>
 
             {bulkAssignMutation.isError && (
@@ -775,14 +761,12 @@ export default function TransportAssignmentsPage() {
                 {bulkAssignMutation.isPending ? 'Assigning...' : `Assign ${selectedStudents.length} Students`}
               </button>
             </div>
-          </div>
-        </div>
+          </Modal>
       )}
 
       {/* Delete Confirmation Modal */}
       {deleteConfirm && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
-          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm mx-4">
+        <Modal open  size="sm" closeOnBackdrop={false}>
             <h2 className="text-xl font-bold text-gray-900 mb-2">Remove Assignment</h2>
             <p className="text-gray-600 mb-6">
               Are you sure you want to remove the transport assignment for <strong>{deleteConfirm.student_name}</strong>?
@@ -806,8 +790,7 @@ export default function TransportAssignmentsPage() {
                 {deleteMutation.isPending ? 'Removing...' : 'Remove'}
               </button>
             </div>
-          </div>
-        </div>
+          </Modal>
       )}
     </div>
   )

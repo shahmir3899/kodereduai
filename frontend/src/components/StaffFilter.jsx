@@ -1,4 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { TONE } from './ui/statusTones'
+import LoadingState from './ui/LoadingState'
+import EmptyState from './ui/EmptyState'
 import { useQuery } from '@tanstack/react-query'
 import { hrApi } from '../services/api'
 
@@ -15,23 +18,23 @@ import { hrApi } from '../services/api'
  */
 
 const ROLE_BADGE_STYLES = {
-  TEACHER: 'bg-blue-100 text-blue-700',
-  SCHOOL_ADMIN: 'bg-purple-100 text-purple-700',
-  PRINCIPAL: 'bg-purple-100 text-purple-700',
-  MANAGER: 'bg-purple-100 text-purple-700',
-  ACCOUNTANT: 'bg-green-100 text-green-700',
-  STAFF: 'bg-gray-100 text-gray-700',
-  DRIVER: 'bg-orange-100 text-orange-700',
+  TEACHER: TONE.info,
+  SCHOOL_ADMIN: TONE.accent,
+  PRINCIPAL: TONE.accent,
+  MANAGER: TONE.accent,
+  ACCOUNTANT: TONE.success,
+  STAFF: TONE.neutral,
+  DRIVER: TONE.orange,
 }
 
 const ROLE_AVATAR_STYLES = {
-  TEACHER: 'bg-blue-100 text-blue-700',
-  SCHOOL_ADMIN: 'bg-purple-100 text-purple-700',
-  PRINCIPAL: 'bg-purple-100 text-purple-700',
-  MANAGER: 'bg-purple-100 text-purple-700',
-  ACCOUNTANT: 'bg-green-100 text-green-700',
-  STAFF: 'bg-gray-100 text-gray-700',
-  DRIVER: 'bg-orange-100 text-orange-700',
+  TEACHER: TONE.info,
+  SCHOOL_ADMIN: TONE.accent,
+  PRINCIPAL: TONE.accent,
+  MANAGER: TONE.accent,
+  ACCOUNTANT: TONE.success,
+  STAFF: TONE.neutral,
+  DRIVER: TONE.orange,
 }
 
 function initials(name) {
@@ -177,14 +180,14 @@ export default function StaffFilter({
               </button>
             )}
             {isLoading ? (
-              <p className="px-3 py-4 text-sm text-gray-500 text-center">Loading staff...</p>
+              <LoadingState label="Loading staff..." compact />
             ) : filteredStaff.length === 0 ? (
-              <p className="px-3 py-4 text-sm text-gray-500 text-center">No staff found.</p>
+              <EmptyState title="No staff found." compact />
             ) : (
               filteredStaff.map((s) => {
                 const name = s.full_name || s.user_name || `Staff #${s.id}`
-                const badgeStyle = ROLE_BADGE_STYLES[s.user_role] || 'bg-gray-100 text-gray-700'
-                const avatarStyle = ROLE_AVATAR_STYLES[s.user_role] || 'bg-gray-100 text-gray-700'
+                const badgeStyle = ROLE_BADGE_STYLES[s.user_role] || TONE.neutral
+                const avatarStyle = ROLE_AVATAR_STYLES[s.user_role] || TONE.neutral
                 const isSelected = String(s.id) === String(value)
                 return (
                   <button

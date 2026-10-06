@@ -1,12 +1,15 @@
 import { useMemo, useState } from 'react'
+import { TONE } from '../../components/ui/statusTones'
+import PageHeader from '../../components/ui/PageHeader'
+import LoadingState from '../../components/ui/LoadingState'
 import { useQuery } from '@tanstack/react-query'
 import { examinationsApi } from '../../services/api'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
 
 const SEVERITY_STYLES = {
-  HIGH: 'bg-red-100 text-red-800',
-  MEDIUM: 'bg-amber-100 text-amber-800',
-  LOW: 'bg-yellow-100 text-yellow-800',
+  HIGH: TONE.danger,
+  MEDIUM: TONE.warning,
+  LOW: TONE.warning,
 }
 
 const SEVERITY_BORDER = {
@@ -52,15 +55,8 @@ export default function AcademicRiskPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Academic Risk</h1>
-          <p className="text-sm text-gray-500 mt-1">
-            Students flagged by the AI Academic Risk Predictor as trending toward failing grades, based on marks
-            across exams this academic year.
-          </p>
-        </div>
-        {result && (
+      <PageHeader title="Academic Risk" subtitle="Students flagged by the AI Academic Risk Predictor as trending toward failing grades, based on marks across exams this academic year." actions={<>
+{result && (
           <div className="text-right shrink-0">
             <p className="text-sm text-gray-600">
               <span className="font-semibold text-gray-900">{result.at_risk_count}</span> at risk of{' '}
@@ -68,7 +64,7 @@ export default function AcademicRiskPage() {
             </p>
           </div>
         )}
-      </div>
+</>} />
 
       {/* Filters */}
       <div className="flex flex-wrap gap-3">
@@ -98,7 +94,7 @@ export default function AcademicRiskPage() {
 
       {/* List */}
       {isLoading ? (
-        <div className="text-center py-10 text-gray-500">Loading academic risk...</div>
+        <LoadingState label="Loading academic risk..." />
       ) : filtered.length === 0 ? (
         <div className="card text-center py-12">
           <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">

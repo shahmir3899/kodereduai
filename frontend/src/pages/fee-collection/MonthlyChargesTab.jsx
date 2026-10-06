@@ -1,4 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
+import Button from '../../components/ui/Button'
+import EmptyState from '../../components/ui/EmptyState'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
 import { useSessionClasses } from '../../hooks/useSessionClasses'
@@ -269,10 +271,10 @@ export default function MonthlyChargesTab() {
                 </div>
               </div>
               <div className="flex gap-3">
-                <button type="button" onClick={() => setShowConfirm(false)} className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm">Back</button>
-                <button onClick={handleStudentFeeSave} disabled={bulkStudentFeeMutation.isPending}
-                  className="flex-1 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm disabled:opacity-50"
-                >{bulkStudentFeeMutation.isPending ? 'Saving...' : 'Confirm & Save'}</button>
+                <Button variant="secondary" type="button" onClick={() => setShowConfirm(false)} className="flex-1">Back</Button>
+                <Button onClick={handleStudentFeeSave} disabled={bulkStudentFeeMutation.isPending}
+ className="flex-1"
+ >{bulkStudentFeeMutation.isPending ? 'Saving...' : 'Confirm & Save'}</Button>
               </div>
               {bulkStudentFeeMutation.isError && <p className="mt-3 text-sm text-red-600">{getErrorMessage(bulkStudentFeeMutation.error, 'Failed to save student fees')}</p>}
               {bulkStudentFeeMutation.isSuccess && <p className="mt-3 text-sm text-green-600">Student fees saved! {bulkStudentFeeMutation.data?.data?.created} fee structure(s) set.</p>}
@@ -280,7 +282,7 @@ export default function MonthlyChargesTab() {
           ) : (
             <>
               {studentFees.length === 0 ? (
-                <div className="text-center py-12 text-gray-400 text-sm">No enrolled students found in this class</div>
+                <EmptyState title="No enrolled students found in this class" />
               ) : (
                 <>
                   {!studentEditMode && (
@@ -331,12 +333,10 @@ export default function MonthlyChargesTab() {
               )}
               {studentEditMode && studentFees.length > 0 && (
                 <div className="flex gap-3 mt-4">
-                  <button type="button" onClick={() => {
-                    setStudentEditMode(false)
-                    setLocalEdits(prev => { const next = { ...prev }; delete next.MONTHLY; return next })
-                  }}
-                    className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm"
-                  >Cancel</button>
+                  <Button variant="secondary" type="button" onClick={() => {
+ setStudentEditMode(false)
+ setLocalEdits(prev => { const next = { ...prev }; delete next.MONTHLY; return next })
+ }}>Cancel</Button>
                   <button type="button" onClick={() => setShowConfirm(true)}
                     disabled={editedStudentRows.length === 0}
                     className="px-6 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm disabled:opacity-50"

@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react'
+import Modal from '../../components/ui/Modal'
+import Field from '../../components/ui/Field'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { lmsApi } from '../../services/api'
 import { useToast } from '../../components/Toast'
@@ -115,8 +117,7 @@ export default function AddBookModal({
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50 p-4">
-      <div className="bg-white rounded-xl shadow-xl p-4 sm:p-6 w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto">
+    <Modal open  size="2xl" closeOnBackdrop={false}>
         <h2 className="text-xl font-bold text-gray-900 mb-2">Add Book</h2>
         <p className="text-sm text-gray-600 mb-4">Choose the target class and subject here, then enter the book details.</p>
 
@@ -158,9 +159,8 @@ export default function AddBookModal({
             </div>
           </div>
 
-          <div>
-            <label className="label">Title *</label>
-            <input
+          <Field label="Title" required>
+<input
               type="text"
               className="input"
               placeholder="e.g., Mathematics Grade 5"
@@ -168,43 +168,39 @@ export default function AddBookModal({
               value={bookForm.title}
               onChange={(e) => setBookForm({ ...bookForm, title: e.target.value })}
             />
-          </div>
+</Field>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="label">Author</label>
-              <input
+            <Field label="Author">
+<input
                 type="text"
                 className="input"
                 value={bookForm.author}
                 onChange={(e) => setBookForm({ ...bookForm, author: e.target.value })}
               />
-            </div>
-            <div>
-              <label className="label">Publisher</label>
-              <input
+</Field>
+            <Field label="Publisher">
+<input
                 type="text"
                 className="input"
                 value={bookForm.publisher}
                 onChange={(e) => setBookForm({ ...bookForm, publisher: e.target.value })}
               />
-            </div>
+</Field>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="label">Edition</label>
-              <input
+            <Field label="Edition">
+<input
                 type="text"
                 className="input"
                 placeholder="e.g., 3rd Edition"
                 value={bookForm.edition}
                 onChange={(e) => setBookForm({ ...bookForm, edition: e.target.value })}
               />
-            </div>
-            <div>
-              <label className="label">Language</label>
-              <select
+</Field>
+            <Field label="Language">
+<select
                 className="input"
                 value={bookForm.language}
                 onChange={(e) => setBookForm({ ...bookForm, language: e.target.value })}
@@ -215,7 +211,7 @@ export default function AddBookModal({
                   </option>
                 ))}
               </select>
-            </div>
+</Field>
           </div>
 
           <div>
@@ -239,7 +235,6 @@ export default function AddBookModal({
             </button>
           </div>
         </form>
-      </div>
-    </div>
+      </Modal>
   )
 }

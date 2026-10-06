@@ -1,4 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
+import { TONE } from '../../components/ui/statusTones'
+import PageHeader from '../../components/ui/PageHeader'
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query'
 import { examinationsApi, studentsApi } from '../../services/api'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
@@ -335,10 +337,7 @@ export default function MarksEntryPage() {
 
   return (
     <div>
-      <div className="mb-6">
-        <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Marks Entry</h1>
-        <p className="text-sm text-gray-600">Enter marks for students in a spreadsheet-style grid</p>
-      </div>
+      <PageHeader title="Marks Entry" subtitle="Enter marks for students in a spreadsheet-style grid" className="mb-6" />
 
       <div className="mb-4">
         <TeacherScopeSummary compact />
@@ -453,7 +452,7 @@ export default function MarksEntryPage() {
           <div className="flex items-center gap-3 flex-wrap">
             {/* Step 1: Class */}
             <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm ${
-              classFilter ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700 ring-2 ring-blue-300'
+              classFilter ? TONE.success : 'bg-blue-100 text-blue-700 ring-2 ring-blue-300'
             }`}>
               <span className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold ${
                 classFilter ? 'bg-green-500 text-white' : 'bg-blue-500 text-white'
@@ -463,7 +462,7 @@ export default function MarksEntryPage() {
             <svg className="w-4 h-4 text-gray-300 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
             {/* Step 2: Exam Type */}
             <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm ${
-              selectedExamType ? 'bg-green-100 text-green-700' : classFilter ? 'bg-blue-100 text-blue-700 ring-2 ring-blue-300' : 'bg-gray-100 text-gray-400'
+              selectedExamType ? TONE.success : classFilter ? 'bg-blue-100 text-blue-700 ring-2 ring-blue-300' : 'bg-gray-100 text-gray-400'
             }`}>
               <span className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold ${
                 selectedExamType ? 'bg-green-500 text-white' : classFilter ? 'bg-blue-500 text-white' : 'bg-gray-300 text-white'
@@ -473,7 +472,7 @@ export default function MarksEntryPage() {
             <svg className="w-4 h-4 text-gray-300 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
             {/* Step 3: Exam */}
             <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm ${
-              selectedExamId ? 'bg-green-100 text-green-700' : selectedExamType ? 'bg-blue-100 text-blue-700 ring-2 ring-blue-300' : 'bg-gray-100 text-gray-400'
+              selectedExamId ? TONE.success : selectedExamType ? 'bg-blue-100 text-blue-700 ring-2 ring-blue-300' : 'bg-gray-100 text-gray-400'
             }`}>
               <span className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold ${
                 selectedExamId ? 'bg-green-500 text-white' : selectedExamType ? 'bg-blue-500 text-white' : 'bg-gray-300 text-white'

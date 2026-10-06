@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
+import Button from '../../components/ui/Button'
 import { useMutation } from '@tanstack/react-query'
 import { useAuth } from '../../contexts/AuthContext'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
@@ -379,7 +380,7 @@ export default function FaceLiveCapturePage() {
         )}
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
+          <label className="label">
             Class {isTeacher ? '' : '(optional — leave blank to scan the whole school)'}
           </label>
           <ClassSelector
@@ -437,22 +438,20 @@ export default function FaceLiveCapturePage() {
             <button
               onClick={requestCamera}
               disabled={cameraStatus === 'requesting'}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+              className="px-4 py-2 bg-primary-600 text-white rounded-lg text-sm font-medium hover:bg-primary-700 disabled:opacity-50"
             >
               {cameraButtonLabel(cameraStatus)}
             </button>
           ) : scanning ? (
-            <button
-              onClick={stopScanning}
-              className="px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50"
-            >
+            <Button variant="secondary"
+ onClick={stopScanning}>
               Stop Scanning
-            </button>
+            </Button>
           ) : (
             <button
               onClick={startScanning}
               disabled={!canStartScanning}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="px-4 py-2 bg-primary-600 text-white rounded-lg text-sm font-medium hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Start Scanning
             </button>

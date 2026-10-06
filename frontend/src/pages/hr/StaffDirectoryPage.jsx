@@ -1,4 +1,8 @@
 import { useState, useMemo, useRef, useCallback } from 'react'
+import Modal from '../../components/ui/Modal'
+import Field from '../../components/ui/Field'
+import { TONE } from '../../components/ui/statusTones'
+import PageHeader from '../../components/ui/PageHeader'
 import { PasswordInput } from '../../components'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
@@ -17,19 +21,19 @@ import { RecordCard, CardGrid, ViewToggle } from '../../components/cards'
 import { useViewPreference } from '../../hooks/useViewPreference'
 
 const statusBadge = {
-  ACTIVE: 'bg-green-100 text-green-800',
-  ON_LEAVE: 'bg-yellow-100 text-yellow-800',
-  TERMINATED: 'bg-red-100 text-red-800',
-  RESIGNED: 'bg-gray-100 text-gray-800',
-  RETIRED: 'bg-blue-100 text-blue-800',
+  ACTIVE: TONE.success,
+  ON_LEAVE: TONE.warning,
+  TERMINATED: TONE.danger,
+  RESIGNED: TONE.neutral,
+  RETIRED: TONE.info,
 }
 
 const typeBadge = {
-  FULL_TIME: 'bg-blue-100 text-blue-800',
-  PART_TIME: 'bg-purple-100 text-purple-800',
-  CONTRACT: 'bg-orange-100 text-orange-800',
-  TEMPORARY: 'bg-yellow-100 text-yellow-800',
-  INTERN: 'bg-teal-100 text-teal-800',
+  FULL_TIME: TONE.info,
+  PART_TIME: TONE.accent,
+  CONTRACT: TONE.orange,
+  TEMPORARY: TONE.warning,
+  INTERN: TONE.teal,
 }
 
 const QUICK_ROLE_LABELS = { MANAGER: 'Manager', ACCOUNTANT: 'Accountant', TEACHER: 'Teacher', STAFF: 'Staff' }
@@ -583,15 +587,8 @@ export default function StaffDirectoryPage() {
   return (
     <div>
       <ConfirmModalRoot />
-      <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Staff Directory</h1>
-          <p className="text-sm text-gray-600">
-            {filteredStaff.length} shown &middot; {allStaff.length} total &middot; {totalActive} active &middot; {inactiveStaffCount} inactive
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <button
+      <PageHeader title="Staff Directory" subtitle={<>{filteredStaff.length} shown &middot; {allStaff.length} total &middot; {totalActive} active &middot; {inactiveStaffCount} inactive</>} className="mb-6" actions={<>
+<button
             onClick={() => setShowBulkImport(true)}
             className="px-3 py-2 text-sm border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
           >
@@ -606,8 +603,7 @@ export default function StaffDirectoryPage() {
           <Link to="/hr/staff/new" className="btn btn-primary">
             Full Form
           </Link>
-        </div>
-      </div>
+</>} />
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
         <button
@@ -759,9 +755,9 @@ export default function StaffDirectoryPage() {
               title={`${member.first_name} ${member.last_name}`}
               meta={member.employee_id ? `ID: ${member.employee_id}` : undefined}
               status={
-                <span className={`px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap ${statusBadge[member.employment_status] || 'bg-gray-100 text-gray-800'}`}>
+                <Badge colors={statusBadge[member.employment_status] || TONE.neutral}>
                   {member.employment_status}
-                </span>
+                </Badge>
               }
               fields={[
                 { label: 'Department', value: member.department_name || '—' },
@@ -869,9 +865,9 @@ export default function StaffDirectoryPage() {
                       {member.designation_name || '—'}
                     </td>
                     <td className="py-3 pr-4">
-                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${typeBadge[member.employment_type] || 'bg-gray-100 text-gray-800'}`}>
+                      <Badge colors={typeBadge[member.employment_type] || TONE.neutral}>
                         {member.employment_type}
-                      </span>
+                      </Badge>
                     </td>
                     <td className="py-3 pr-4">
                       {member.user ? (
@@ -883,9 +879,9 @@ export default function StaffDirectoryPage() {
                       )}
                     </td>
                     <td className="py-3 pr-4">
-                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${statusBadge[member.employment_status] || 'bg-gray-100 text-gray-800'}`}>
+                      <Badge colors={statusBadge[member.employment_status] || TONE.neutral}>
                         {member.employment_status}
-                      </span>
+                      </Badge>
                     </td>
                     <td className="py-3 pr-4">
                       <div className="text-sm">
@@ -967,7 +963,7 @@ export default function StaffDirectoryPage() {
 
       {/* View Staff Detail Modal */}
       {viewMember && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50 p-4" onClick={() => setViewMember(null)}>
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4" onClick={() => setViewMember(null)}>
           <div className="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             {/* Header */}
             <div className="flex items-center justify-between p-6 border-b border-gray-200">
@@ -997,12 +993,12 @@ export default function StaffDirectoryPage() {
             <div className="p-6 space-y-5">
               {/* Status badges */}
               <div className="flex flex-wrap gap-2">
-                <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${statusBadge[viewMember.employment_status] || 'bg-gray-100 text-gray-800'}`}>
+                <Badge colors={statusBadge[viewMember.employment_status] || TONE.neutral}>
                   {viewMember.employment_status}
-                </span>
-                <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${typeBadge[viewMember.employment_type] || 'bg-gray-100 text-gray-800'}`}>
+                </Badge>
+                <Badge colors={typeBadge[viewMember.employment_type] || TONE.neutral}>
                   {viewMember.employment_type}
-                </span>
+                </Badge>
                 {viewMember.user ? (
                   <Badge tone="success">Account: {viewMember.user_username}</Badge>
                 ) : (
@@ -1095,7 +1091,7 @@ export default function StaffDirectoryPage() {
               </button>
               <Link
                 to={`/hr/staff/${viewMember.id}/edit`}
-                className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium"
+                className="px-4 py-2 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 font-medium"
               >
                 Edit
               </Link>
@@ -1106,8 +1102,7 @@ export default function StaffDirectoryPage() {
 
       {/* Delete Confirmation Modal */}
       {deleteConfirm && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
-          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm mx-4">
+        <Modal open  size="sm" closeOnBackdrop={false}>
             <h2 className="text-xl font-bold text-gray-900 mb-2">Deactivate Staff Member</h2>
             <p className="text-gray-600 mb-6">
               Are you sure you want to deactivate <strong>{deleteConfirm.first_name} {deleteConfirm.last_name}</strong>?
@@ -1125,14 +1120,12 @@ export default function StaffDirectoryPage() {
                 {deleteMutation.isPending ? 'Deactivating...' : 'Deactivate'}
               </button>
             </div>
-          </div>
-        </div>
+          </Modal>
       )}
 
       {/* Quick Add Modal */}
       {showQuickAdd && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4" onClick={() => setShowQuickAdd(false)}>
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6" onClick={e => e.stopPropagation()}>
+        <Modal open onClose={() => setShowQuickAdd(false)}>
             <div className="flex items-center justify-between mb-4">
               <div>
                 <h2 className="text-lg font-semibold text-gray-900">Quick Add Staff</h2>
@@ -1173,9 +1166,8 @@ export default function StaffDirectoryPage() {
 
             <form onSubmit={handleQuickSubmit} className="space-y-3">
               <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="label">First Name *</label>
-                  <input
+                <Field label="First Name" required>
+<input
                     type="text"
                     className="input"
                     placeholder="e.g., Ahmed"
@@ -1184,10 +1176,9 @@ export default function StaffDirectoryPage() {
                     autoFocus
                     required
                   />
-                </div>
-                <div>
-                  <label className="label">Last Name *</label>
-                  <input
+</Field>
+                <Field label="Last Name" required>
+<input
                     type="text"
                     className="input"
                     placeholder="e.g., Khan"
@@ -1195,7 +1186,7 @@ export default function StaffDirectoryPage() {
                     onChange={e => setQuickForm(p => ({ ...p, last_name: e.target.value }))}
                     required
                   />
-                </div>
+</Field>
               </div>
 
               <div>
@@ -1214,20 +1205,18 @@ export default function StaffDirectoryPage() {
               </div>
 
               <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="label">Department</label>
-                  <select className="input" value={quickForm.department} onChange={e => setQuickForm(p => ({ ...p, department: e.target.value }))}>
+                <Field label="Department">
+<select className="input" value={quickForm.department} onChange={e => setQuickForm(p => ({ ...p, department: e.target.value }))}>
                     <option value="">-- None --</option>
                     {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
                   </select>
-                </div>
-                <div>
-                  <label className="label">Designation</label>
-                  <select className="input" value={quickForm.designation} onChange={e => handleQuickDesigChange(e.target.value)}>
+</Field>
+                <Field label="Designation">
+<select className="input" value={quickForm.designation} onChange={e => handleQuickDesigChange(e.target.value)}>
                     <option value="">-- None --</option>
                     {designations.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
                   </select>
-                </div>
+</Field>
               </div>
 
               {/* Create User Account */}
@@ -1283,8 +1272,7 @@ export default function StaffDirectoryPage() {
                 </button>
               </div>
             </form>
-          </div>
-        </div>
+          </Modal>
       )}
 
       {/* Floating Bulk Convert Action Bar */}
@@ -1314,26 +1302,23 @@ export default function StaffDirectoryPage() {
 
       {/* Individual Convert Modal */}
       {showConvertModal && convertMember && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
-          <div className="bg-white rounded-xl shadow-xl p-4 sm:p-6 w-full max-w-md mx-4">
+        <Modal open  closeOnBackdrop={false}>
             <h2 className="text-lg font-bold text-gray-900 mb-1">Create User Account</h2>
             <p className="text-sm text-gray-500 mb-4">
               For: <strong>{convertMember.first_name} {convertMember.last_name}</strong> ({convertMember.employee_id})
             </p>
 
             <div className="space-y-3">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Username *</label>
-                <input
+              <Field label="Username" required>
+<input
                   type="text"
                   className="input"
                   value={convertForm.username}
                   onChange={(e) => setConvertForm(f => ({ ...f, username: e.target.value }))}
                 />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Role *</label>
-                <select
+</Field>
+              <Field label="Role" required>
+<select
                   className="input"
                   value={convertForm.user_role}
                   onChange={(e) => setConvertForm(f => ({ ...f, user_role: e.target.value }))}
@@ -1342,10 +1327,10 @@ export default function StaffDirectoryPage() {
                     <option key={r} value={r}>{QUICK_ROLE_LABELS[r] || r}</option>
                   ))}
                 </select>
-              </div>
+</Field>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Password *</label>
+                  <label className="label">Password *</label>
                   <PasswordInput
                     className="input"
                     value={convertForm.password}
@@ -1354,7 +1339,7 @@ export default function StaffDirectoryPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Confirm *</label>
+                  <label className="label">Confirm *</label>
                   <PasswordInput
                     className="input"
                     value={convertForm.confirm_password}
@@ -1382,30 +1367,27 @@ export default function StaffDirectoryPage() {
                 {isConverting ? 'Creating...' : 'Create Account'}
               </button>
             </div>
-          </div>
-        </div>
+          </Modal>
       )}
 
       {/* Link Existing User Modal */}
       {showLinkModal && linkMember && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
-          <div className="bg-white rounded-xl shadow-xl p-4 sm:p-6 w-full max-w-md mx-4">
+        <Modal open  closeOnBackdrop={false}>
             <h2 className="text-lg font-bold text-gray-900 mb-1">Link Existing User Account</h2>
             <p className="text-sm text-gray-500 mb-4">
               For: <strong>{linkMember.first_name} {linkMember.last_name}</strong> ({linkMember.employee_id})
             </p>
 
             <div className="space-y-3">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Search Users</label>
-                <input
+              <Field label="Search Users">
+<input
                   type="text"
                   className="input"
                   placeholder="Type username, name, or email..."
                   value={linkSearch}
                   onChange={(e) => handleLinkSearch(e.target.value)}
                 />
-              </div>
+</Field>
 
               {linkSearching && (
                 <p className="text-sm text-gray-400">Searching...</p>
@@ -1446,16 +1428,14 @@ export default function StaffDirectoryPage() {
                 Cancel
               </button>
             </div>
-          </div>
-        </div>
+          </Modal>
       )}
 
       {/* Reset Password Modal — school-scoped: backend enforces ROLE_HIERARCHY
           (a SCHOOL_ADMIN/PRINCIPAL can only reset roles they're allowed to
           create, and only within their own school). */}
       {resetPwdMember && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
-          <div className="bg-white rounded-xl shadow-xl p-4 sm:p-6 w-full max-w-md mx-4">
+        <Modal open  closeOnBackdrop={false}>
             <h2 className="text-lg font-bold text-gray-900 mb-1">Reset Password</h2>
             <p className="text-sm text-gray-500 mb-4">
               For: <strong>{resetPwdMember.first_name} {resetPwdMember.last_name}</strong> (@{resetPwdMember.user_username})
@@ -1496,7 +1476,7 @@ export default function StaffDirectoryPage() {
                 {resetPwdMode === 'set' ? (
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">New Password *</label>
+                      <label className="label">New Password *</label>
                       <PasswordInput
                         className="input"
                         value={resetPwdForm.new_password}
@@ -1505,7 +1485,7 @@ export default function StaffDirectoryPage() {
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Confirm *</label>
+                      <label className="label">Confirm *</label>
                       <PasswordInput
                         className="input"
                         value={resetPwdForm.confirm_password}
@@ -1548,14 +1528,12 @@ export default function StaffDirectoryPage() {
                 </div>
               </>
             )}
-          </div>
-        </div>
+          </Modal>
       )}
 
       {/* Bulk Convert Modal */}
       {showBulkConvertModal && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
-          <div className="bg-white rounded-xl shadow-xl p-4 sm:p-6 w-full max-w-md mx-4">
+        <Modal open  closeOnBackdrop={false}>
             <h2 className="text-lg font-bold text-gray-900 mb-4">Bulk Create User Accounts</h2>
 
             {!convertResults ? (
@@ -1568,9 +1546,8 @@ export default function StaffDirectoryPage() {
                 </div>
 
                 <div className="space-y-3">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Default Role *</label>
-                    <select
+                  <Field label="Default Role" required>
+<select
                       className="input"
                       value={bulkConvertRole}
                       onChange={(e) => setBulkConvertRole(e.target.value)}
@@ -1579,9 +1556,9 @@ export default function StaffDirectoryPage() {
                         <option key={r} value={r}>{QUICK_ROLE_LABELS[r] || r}</option>
                       ))}
                     </select>
-                  </div>
+</Field>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Default Password *</label>
+                    <label className="label">Default Password *</label>
                     <PasswordInput
                       className="input"
                       value={bulkConvertPassword}
@@ -1655,14 +1632,12 @@ export default function StaffDirectoryPage() {
                 </div>
               </>
             )}
-          </div>
-        </div>
+          </Modal>
       )}
 
       {/* Bulk Import Modal */}
       {showBulkImport && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4" onClick={closeBulkImport}>
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-6" onClick={e => e.stopPropagation()}>
+        <Modal open onClose={closeBulkImport} size="lg">
             <div className="flex items-center justify-between mb-4">
               <div>
                 <h2 className="text-lg font-semibold text-gray-900">Import Staff from CSV</h2>
@@ -1757,8 +1732,7 @@ export default function StaffDirectoryPage() {
                 </button>
               )}
             </div>
-          </div>
-        </div>
+          </Modal>
       )}
     </div>
   )

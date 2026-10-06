@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import Field from '../../components/ui/Field'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { admissionsApi } from '../../services/api'
@@ -151,7 +152,7 @@ export default function EnquiryForm() {
       </Link>
 
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 sm:p-6">
-        <h1 className="text-xl font-bold text-gray-900 mb-6">
+        <h1 className="text-xl sm:text-2xl font-bold text-gray-900 mb-6">
           {isEdit ? 'Edit Enquiry' : 'New Enquiry'}
         </h1>
 
@@ -166,7 +167,7 @@ export default function EnquiryForm() {
           {/* Name */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="label">
                 Student Name <span className="text-red-500">*</span>
               </label>
               <input
@@ -180,7 +181,7 @@ export default function EnquiryForm() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="label">
                 Father Name <span className="text-red-500">*</span>
               </label>
               <input
@@ -197,7 +198,7 @@ export default function EnquiryForm() {
           {/* Mobile & Grade */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="label">
                 Mobile <span className="text-red-500">*</span>
               </label>
               <input
@@ -211,7 +212,7 @@ export default function EnquiryForm() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Grade Applied For</label>
+              <label className="label">Grade Applied For</label>
               <select
                 value={form.applying_for_grade_level}
                 onChange={(e) => handleChange('applying_for_grade_level', e.target.value)}
@@ -228,9 +229,8 @@ export default function EnquiryForm() {
 
           {/* Source & Follow-up */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Source</label>
-              <select
+            <Field label="Source">
+<select
                 value={form.source}
                 onChange={(e) => handleChange('source', e.target.value)}
                 className="input w-full"
@@ -239,22 +239,21 @@ export default function EnquiryForm() {
                   <option key={s.value} value={s.value}>{s.label}</option>
                 ))}
               </select>
-            </div>
+</Field>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Next Follow-up Date</label>
-              <input
+            <Field label="Next Follow-up Date">
+<input
                 type="date"
                 value={form.next_followup_date}
                 onChange={(e) => handleChange('next_followup_date', e.target.value)}
                 className="input w-full"
               />
-            </div>
+</Field>
           </div>
 
           {/* Notes */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
+            <label className="label">Notes</label>
             <textarea
               value={form.notes}
               onChange={(e) => handleChange('notes', e.target.value)}

@@ -1,4 +1,11 @@
 import { useState, useMemo, useEffect } from 'react'
+import Modal from '../../components/ui/Modal'
+import Field from '../../components/ui/Field'
+import Badge from '../../components/ui/Badge'
+import { TONE } from '../../components/ui/statusTones'
+import Button from '../../components/ui/Button'
+import PageHeader from '../../components/ui/PageHeader'
+import LoadingState from '../../components/ui/LoadingState'
 import { useLocation } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { questionPaperApi, lmsApi } from '../../services/api'
@@ -16,13 +23,13 @@ import { useEscapeKey } from '../../hooks/useEscapeKey'
 // ─── Constants ───────────────────────────────────────────────────────────────
 
 const QUESTION_TYPES = [
-  { value: 'MCQ', label: 'Multiple Choice', color: 'bg-blue-100 text-blue-700' },
-  { value: 'TRUE_FALSE', label: 'True / False', color: 'bg-green-100 text-green-700' },
-  { value: 'FILL_BLANK', label: 'Fill in Blank', color: 'bg-yellow-100 text-yellow-700' },
-  { value: 'SHORT', label: 'Short Answer', color: 'bg-orange-100 text-orange-700' },
-  { value: 'LONG', label: 'Long Answer', color: 'bg-red-100 text-red-700' },
-  { value: 'ESSAY', label: 'Essay', color: 'bg-purple-100 text-purple-700' },
-  { value: 'MATCHING', label: 'Matching', color: 'bg-indigo-100 text-indigo-700' },
+  { value: 'MCQ', label: 'Multiple Choice', color: TONE.info },
+  { value: 'TRUE_FALSE', label: 'True / False', color: TONE.success },
+  { value: 'FILL_BLANK', label: 'Fill in Blank', color: TONE.warning },
+  { value: 'SHORT', label: 'Short Answer', color: TONE.orange },
+  { value: 'LONG', label: 'Long Answer', color: TONE.danger },
+  { value: 'ESSAY', label: 'Essay', color: TONE.accent },
+  { value: 'MATCHING', label: 'Matching', color: TONE.indigo },
 ]
 
 const DIFFICULTY_LEVELS = [
@@ -32,19 +39,19 @@ const DIFFICULTY_LEVELS = [
 ]
 
 const BLOOM_LEVELS = [
-  { value: 'remember', label: 'Remember', color: 'bg-gray-100 text-gray-700' },
-  { value: 'understand', label: 'Understand', color: 'bg-blue-100 text-blue-700' },
-  { value: 'apply', label: 'Apply', color: 'bg-green-100 text-green-700' },
-  { value: 'analyze', label: 'Analyze', color: 'bg-yellow-100 text-yellow-700' },
-  { value: 'evaluate', label: 'Evaluate', color: 'bg-orange-100 text-orange-700' },
-  { value: 'create', label: 'Create', color: 'bg-red-100 text-red-700' },
+  { value: 'remember', label: 'Remember', color: TONE.neutral },
+  { value: 'understand', label: 'Understand', color: TONE.info },
+  { value: 'apply', label: 'Apply', color: TONE.success },
+  { value: 'analyze', label: 'Analyze', color: TONE.warning },
+  { value: 'evaluate', label: 'Evaluate', color: TONE.orange },
+  { value: 'create', label: 'Create', color: TONE.danger },
 ]
 
 const TAG_TYPE_COLORS = {
-  concept: 'bg-blue-100 text-blue-700',
-  skill: 'bg-green-100 text-green-700',
-  keyword: 'bg-amber-100 text-amber-700',
-  standard: 'bg-purple-100 text-purple-700',
+  concept: TONE.info,
+  skill: TONE.success,
+  keyword: TONE.warning,
+  standard: TONE.accent,
 }
 
 const TYPE_COLOR = Object.fromEntries(QUESTION_TYPES.map((t) => [t.value, t.color]))
@@ -436,7 +443,7 @@ function TopicPicker({ classId, subjectId, selectedTopics, onChange, initialBook
               setSelectedChapter('')
               onChange([])
             }}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+            className="input"
           >
             <option value="">-- Select a book to browse topics --</option>
             {books.map((b) => (
@@ -453,7 +460,7 @@ function TopicPicker({ classId, subjectId, selectedTopics, onChange, initialBook
                 setSelectedChapter(e.target.value)
                 onChange([])
               }}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+              className="input"
             >
               <option value="">-- All Chapters --</option>
               {chapters.map((ch) => (
@@ -749,7 +756,7 @@ function QuestionModal({ editQuestion, initialClassFilterId, initialSubject, ini
             {/* Context */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="label">
                   Class <span className="text-red-500">*</span>
                 </label>
                 <ClassSelector
@@ -775,7 +782,7 @@ function QuestionModal({ editQuestion, initialClassFilterId, initialSubject, ini
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="label">
                   Subject <span className="text-red-500">*</span>
                 </label>
                 <select
@@ -787,7 +794,7 @@ function QuestionModal({ editQuestion, initialClassFilterId, initialSubject, ini
                     setModalChapterId('')
                     setForm({ ...form, subject: nextSubject, tested_topics: [] })
                   }}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+                  className="input"
                   disabled={!resolvedModalClassId || modalSubjectOptions.length === 0}
                   required
                 >
@@ -809,16 +816,15 @@ function QuestionModal({ editQuestion, initialClassFilterId, initialSubject, ini
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Book</label>
-                <select
+              <Field label="Book">
+<select
                   value={modalBookId}
                   onChange={(e) => {
                     setModalBookId(e.target.value)
                     setModalChapterId('')
                     setForm({ ...form, tested_topics: [] })
                   }}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+                  className="input"
                   disabled={!resolvedModalClassId || !form.subject || modalBooks.length === 0}
                 >
                   <option value="">{modalBooks.length > 0 ? 'All Books' : 'No books found'}</option>
@@ -828,17 +834,16 @@ function QuestionModal({ editQuestion, initialClassFilterId, initialSubject, ini
                     </option>
                   ))}
                 </select>
-              </div>
+</Field>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Chapter</label>
-                <select
+              <Field label="Chapter">
+<select
                   value={modalChapterId}
                   onChange={(e) => {
                     setModalChapterId(e.target.value)
                     setForm({ ...form, tested_topics: [] })
                   }}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+                  className="input"
                   disabled={!modalBookId || modalChaptersLoading}
                 >
                   <option value="">
@@ -856,16 +861,15 @@ function QuestionModal({ editQuestion, initialClassFilterId, initialSubject, ini
                     </option>
                   ))}
                 </select>
-              </div>
+</Field>
             </div>
 
             {/* Search page filters are independent; modal has its own context selectors above. */}
 
             {/* Type + Difficulty + Bloom + Marks */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Type</label>
-                <select
+              <Field label="Type">
+<select
                   value={form.question_type}
                   onChange={(e) =>
                     setForm({
@@ -875,7 +879,7 @@ function QuestionModal({ editQuestion, initialClassFilterId, initialSubject, ini
                       answer_text: '',
                     })
                   }
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+                  className="input"
                 >
                   {QUESTION_TYPES.map((t) => (
                     <option key={t.value} value={t.value}>
@@ -883,14 +887,13 @@ function QuestionModal({ editQuestion, initialClassFilterId, initialSubject, ini
                     </option>
                   ))}
                 </select>
-              </div>
+</Field>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Difficulty</label>
-                <select
+              <Field label="Difficulty">
+<select
                   value={form.difficulty_level}
                   onChange={(e) => setForm({ ...form, difficulty_level: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+                  className="input"
                 >
                   {DIFFICULTY_LEVELS.map((d) => (
                     <option key={d.value} value={d.value}>
@@ -898,14 +901,13 @@ function QuestionModal({ editQuestion, initialClassFilterId, initialSubject, ini
                     </option>
                   ))}
                 </select>
-              </div>
+</Field>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Bloom&apos;s Level</label>
-                <select
+              <Field label="Bloom&apos;s Level">
+<select
                   value={form.bloom_level}
                   onChange={(e) => setForm({ ...form, bloom_level: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+                  className="input"
                 >
                   <option value="">Not set</option>
                   {BLOOM_LEVELS.map((level) => (
@@ -914,24 +916,23 @@ function QuestionModal({ editQuestion, initialClassFilterId, initialSubject, ini
                     </option>
                   ))}
                 </select>
-              </div>
+</Field>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Marks</label>
-                <input
+              <Field label="Marks">
+<input
                   type="number"
                   value={form.marks}
                   onChange={(e) => setForm({ ...form, marks: e.target.value })}
                   min={0.5}
                   step={0.5}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+                  className="input"
                 />
-              </div>
+</Field>
             </div>
 
             {/* Question Text */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="label">
                 Question Text <span className="text-red-500">*</span>
               </label>
               <textarea
@@ -1004,7 +1005,7 @@ function QuestionModal({ editQuestion, initialClassFilterId, initialSubject, ini
                     value={sourceSearch}
                     onChange={(e) => setSourceSearch(e.target.value)}
                     placeholder="Search source block by type or text..."
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+                    className="input"
                   />
                   {sourceBlocks.length === 0 ? (
                     <p className="text-xs text-gray-500 bg-gray-50 border border-gray-200 rounded px-3 py-2">
@@ -1014,7 +1015,7 @@ function QuestionModal({ editQuestion, initialClassFilterId, initialSubject, ini
                     <select
                       value={form.source_content_block || ''}
                       onChange={(e) => setForm({ ...form, source_content_block: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+                      className="input"
                     >
                       <option value="">No source linked</option>
                       {filteredSourceBlocks.map((block) => (
@@ -1042,11 +1043,11 @@ function QuestionModal({ editQuestion, initialClassFilterId, initialSubject, ini
                     value={tagSearch}
                     onChange={(e) => setTagSearch(e.target.value)}
                     placeholder="Search tags..."
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+                    className="input"
                   />
 
                   {modalTagsLoading ? (
-                    <p className="text-xs text-gray-500">Loading tags...</p>
+                    <LoadingState label="Loading tags..." compact />
                   ) : (
                     <>
                       <div className="max-h-28 overflow-y-auto border border-gray-200 rounded-lg p-2 bg-gray-50">
@@ -1091,7 +1092,7 @@ function QuestionModal({ editQuestion, initialClassFilterId, initialSubject, ini
                                 type="button"
                                 key={tagId}
                                 onClick={() => handleRemoveTag(tagId)}
-                                className="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 border border-blue-200"
+                                className={`text-xs px-2 py-0.5 rounded-full ${TONE.info} border border-blue-200`}
                                 title="Remove tag"
                               >
                                 {tagObj?.name || `Tag #${tagId}`} ×
@@ -1108,17 +1109,15 @@ function QuestionModal({ editQuestion, initialClassFilterId, initialSubject, ini
 
             {/* Footer */}
             <div className="flex justify-end gap-3 pt-2 border-t border-gray-100">
-              <button
-                type="button"
-                onClick={onClose}
-                className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 text-sm"
-              >
+              <Button variant="secondary"
+ type="button"
+ onClick={onClose}>
                 Cancel
-              </button>
+              </Button>
               <button
                 type="submit"
                 disabled={saveMutation.isPending}
-                className="px-5 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-60 text-sm font-medium"
+                className="px-5 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-60 text-sm font-medium"
               >
                 {saveMutation.isPending ? 'Saving...' : isEdit ? 'Update Question' : 'Add Question'}
               </button>
@@ -1133,7 +1132,7 @@ function QuestionModal({ editQuestion, initialClassFilterId, initialSubject, ini
 // ─── Question Card ────────────────────────────────────────────────────────────
 
 function QuestionCard({ question, onEdit, onDelete, onOpenSource, onVerify, isVerifying }) {
-  const typeColor = TYPE_COLOR[question.question_type] || 'bg-gray-100 text-gray-600'
+  const typeColor = TYPE_COLOR[question.question_type] || TONE.neutral
   const typeLabel = TYPE_LABEL[question.question_type] || question.question_type
   const diff = DIFFICULTY_LEVELS.find((d) => d.value === question.difficulty_level)
   const bloom = BLOOM_LEVELS.find((level) => level.value === question.bloom_level)
@@ -1210,7 +1209,7 @@ function QuestionCard({ question, onEdit, onDelete, onOpenSource, onVerify, isVe
             )}
             {hasDifficultyMismatch && (
               <span
-                className="text-xs px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700"
+                className={`text-xs px-1.5 py-0.5 rounded-full ${TONE.warning}`}
                 title="Difficulty mismatch between stated and real difficulty"
               >
                 Mismatch
@@ -1222,7 +1221,7 @@ function QuestionCard({ question, onEdit, onDelete, onOpenSource, onVerify, isVe
               </span>
             )}
             {isAiGenerated && (
-              <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${isAiVerified ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
+              <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${isAiVerified ? TONE.success : TONE.warning}`}>
                 {isAiVerified ? 'AI · Verified' : 'AI · Unverified'}
               </span>
             )}
@@ -1297,7 +1296,7 @@ function QuestionCard({ question, onEdit, onDelete, onOpenSource, onVerify, isVe
               {visibleTags.map((tag) => (
                 <span
                   key={tag.id}
-                  className={`text-[11px] px-2 py-0.5 rounded-full ${TAG_TYPE_COLORS[tag.tag_type] || 'bg-gray-100 text-gray-700'}`}
+                  className={`text-[11px] px-2 py-0.5 rounded-full ${TAG_TYPE_COLORS[tag.tag_type] || TONE.neutral}`}
                 >
                   {tag.name}
                 </span>
@@ -1388,7 +1387,7 @@ function SourceContentBlockModal({ contentBlockId, onClose }) {
 
           <div className="p-6">
             {isLoading && (
-              <p className="text-sm text-gray-500">Loading source content block...</p>
+              <LoadingState label="Loading source content block..." compact />
             )}
             {isError && (
               <p className="text-sm text-red-600">
@@ -1401,9 +1400,9 @@ function SourceContentBlockModal({ contentBlockId, onClose }) {
             {!isLoading && !isError && block && (
               <div className="space-y-3">
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700">
+                  <Badge tone="indigo">
                     {(block.block_type || 'text').replace(/_/g, ' ')}
-                  </span>
+                  </Badge>
                   {block.chapter_title && (
                     <span className="text-xs text-gray-500">{block.chapter_title}</span>
                   )}
@@ -1417,7 +1416,7 @@ function SourceContentBlockModal({ contentBlockId, onClose }) {
           </div>
 
           <div className="px-6 py-4 border-t border-gray-200 flex justify-end">
-            <button onClick={onClose} className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 text-sm">Close</button>
+            <Button variant="secondary" onClick={onClose}>Close</Button>
           </div>
         </div>
       </div>
@@ -1430,19 +1429,16 @@ function SourceContentBlockModal({ contentBlockId, onClose }) {
 function DeleteConfirm({ question, onCancel, onConfirm, isLoading }) {
   useEscapeKey(onCancel)
   return (
-    <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm p-6">
+    <Modal open  size="sm" closeOnBackdrop={false}>
         <h3 className="text-base font-bold text-gray-900 mb-2">Delete Question?</h3>
         <p className="text-sm text-gray-600 mb-5 line-clamp-3">
           {question.question_text.replace(/<[^>]+>/g, '') || 'This question'}
         </p>
         <div className="flex justify-end gap-3">
-          <button
-            onClick={onCancel}
-            className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 text-sm"
-          >
+          <Button variant="secondary"
+ onClick={onCancel}>
             Cancel
-          </button>
+          </Button>
           <button
             onClick={onConfirm}
             disabled={isLoading}
@@ -1451,8 +1447,7 @@ function DeleteConfirm({ question, onCancel, onConfirm, isLoading }) {
             {isLoading ? 'Deleting...' : 'Delete'}
           </button>
         </div>
-      </div>
-    </div>
+      </Modal>
   )
 }
 
@@ -1684,21 +1679,15 @@ export default function QuestionsPage() {
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
       <div className="bg-white border-b border-gray-200 px-6 py-5">
-        <div className="max-w-6xl mx-auto flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Question Bank</h1>
-            <p className="text-gray-500 text-sm mt-0.5">
-              Manage reusable questions for paper builder and curriculum coverage
-            </p>
-          </div>
-          <button
+        <PageHeader className="max-w-6xl mx-auto" title="Question Bank" subtitle="Manage reusable questions for paper builder and curriculum coverage" actions={<>
+<button
             onClick={handleOpenCreateModal}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium text-sm shadow-sm disabled:opacity-60 disabled:cursor-not-allowed"
+            className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 font-medium text-sm shadow-sm disabled:opacity-60 disabled:cursor-not-allowed"
             title="Add Question"
           >
             + Add Question
           </button>
-        </div>
+</>} />
       </div>
 
       {toast && <Toast type={toast.type} message={toast.message} onClose={() => setToast(null)} />}
@@ -1740,7 +1729,7 @@ export default function QuestionsPage() {
                   setFilterTopicId('')
                   setPage(1)
                 }}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+                className="input"
                 disabled={!resolvedClassId || classSubjectsLoading}
               >
                 <option value="">
@@ -1770,7 +1759,7 @@ export default function QuestionsPage() {
                   setFilterTopicId('')
                   setPage(1)
                 }}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+                className="input"
                 disabled={!resolvedClassId || !filterSubject || booksLoading}
               >
                 <option value="">
@@ -1799,7 +1788,7 @@ export default function QuestionsPage() {
                   setFilterTopicId('')
                   setPage(1)
                 }}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+                className="input"
                 disabled={!filterBookId || chaptersLoading}
               >
                 <option value="">
@@ -1826,7 +1815,7 @@ export default function QuestionsPage() {
                 value={filterSearch}
                 onChange={handleFilterChange(setFilterSearch)}
                 placeholder="Search questions..."
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+                className="input"
               />
               <div className="mt-2 inline-flex rounded-lg border border-gray-300 overflow-hidden">
                 <button
@@ -1853,7 +1842,7 @@ export default function QuestionsPage() {
               <select
                 value={filterType}
                 onChange={handleFilterChange(setFilterType)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+                className="input"
               >
                 <option value="">All Types</option>
                 {QUESTION_TYPES.map((t) => (
@@ -1869,7 +1858,7 @@ export default function QuestionsPage() {
               <select
                 value={filterDifficulty}
                 onChange={handleFilterChange(setFilterDifficulty)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+                className="input"
               >
                 <option value="">All Levels</option>
                 {DIFFICULTY_LEVELS.map((d) => (
@@ -1885,7 +1874,7 @@ export default function QuestionsPage() {
               <select
                 value={filterBloom}
                 onChange={handleFilterChange(setFilterBloom)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+                className="input"
               >
                 <option value="">All Bloom Levels</option>
                 {BLOOM_LEVELS.map((level) => (
@@ -1901,7 +1890,7 @@ export default function QuestionsPage() {
               <select
                 value={filterSource}
                 onChange={handleFilterChange(setFilterSource)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+                className="input"
               >
                 <option value="ALL">All</option>
                 <option value="HUMAN">Human</option>
@@ -1922,7 +1911,7 @@ export default function QuestionsPage() {
               <select
                 value={filterTagId}
                 onChange={handleFilterChange(setFilterTagId)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+                className="input"
                 disabled={filterTagsLoading}
               >
                 <option value="">All Tags</option>
@@ -2030,12 +2019,12 @@ export default function QuestionsPage() {
                   : 'Add your first question to get started'}
             </p>
             {!(filterSubject || filterType || filterDifficulty || filterBloom || filterTagId || filterSearch || filterSource !== 'ALL') && (
-              <button
-                onClick={handleOpenCreateModal}
-                className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm"
-              >
+              <Button
+ onClick={handleOpenCreateModal}
+ className="mt-4"
+ >
                 Add Question
-              </button>
+              </Button>
             )}
           </div>
         ) : (

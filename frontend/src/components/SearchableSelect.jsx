@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useMemo } from 'react'
+import LoadingState from './ui/LoadingState'
 
 /**
  * Lightweight searchable select dropdown (zero external dependencies).
@@ -166,7 +167,7 @@ export default function SearchableSelect({
       {open && (
         <div className="absolute z-50 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
           {isLoading ? (
-            <div className="px-3 py-2 text-sm text-gray-400">Loading...</div>
+            <LoadingState label="Loading..." compact />
           ) : filtered.length === 0 ? (
             <div className="px-3 py-2 text-sm text-gray-400">
               {search ? 'No matches found' : 'No options available'}

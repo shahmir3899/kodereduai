@@ -1,4 +1,8 @@
 import { useState } from 'react'
+import Modal from '../../components/ui/Modal'
+import { TONE } from '../../components/ui/statusTones'
+import Button from '../../components/ui/Button'
+import PageHeader from '../../components/ui/PageHeader'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { inventoryApi } from '../../services/api'
 import { useConfirmModal } from '../../components/ConfirmModal'
@@ -286,9 +290,9 @@ export default function InventoryItemsPage() {
   }
 
   const getStockBadge = (item) => {
-    if (item.current_stock <= 0) return { label: 'Out of Stock', cls: 'bg-red-100 text-red-700' }
-    if (item.current_stock <= (item.minimum_stock || 0)) return { label: 'Low Stock', cls: 'bg-amber-100 text-amber-700' }
-    return { label: 'In Stock', cls: 'bg-green-100 text-green-700' }
+    if (item.current_stock <= 0) return { label: 'Out of Stock', cls: TONE.danger }
+    if (item.current_stock <= (item.minimum_stock || 0)) return { label: 'Low Stock', cls: TONE.warning }
+    return { label: 'In Stock', cls: TONE.success }
   }
 
   const errorMessage = (err) => {
@@ -303,13 +307,8 @@ export default function InventoryItemsPage() {
   return (
     <div>
       {/* Header */}
-      <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Inventory Items</h1>
-          <p className="text-sm sm:text-base text-gray-600">Manage items, categories & vendors</p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <button
+      <PageHeader title="Inventory Items" subtitle="Manage items, categories & vendors" className="mb-6" actions={<>
+<button
             onClick={() => setManageTab(manageTab === 'categories' ? null : 'categories')}
             className={`px-3 py-2 text-sm font-medium rounded-lg border transition-colors ${
               manageTab === 'categories' ? 'bg-blue-50 border-blue-300 text-blue-700' : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
@@ -336,12 +335,11 @@ export default function InventoryItemsPage() {
           </button>
           <button
             onClick={() => openItemModal()}
-            className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors"
+            className="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 transition-colors"
           >
             + Add Item
           </button>
-        </div>
-      </div>
+</>} />
 
       {/* Categories / Vendors Panel */}
       {manageTab && (
@@ -416,7 +414,7 @@ export default function InventoryItemsPage() {
             <input
               type="text"
               placeholder="Search items..."
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="input"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
@@ -424,7 +422,7 @@ export default function InventoryItemsPage() {
           <div>
             <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Category</label>
             <select
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="input"
               value={categoryFilter}
               onChange={(e) => setCategoryFilter(e.target.value)}
             >
@@ -437,7 +435,7 @@ export default function InventoryItemsPage() {
           <div>
             <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Stock Status</label>
             <select
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="input"
               value={stockFilter}
               onChange={(e) => setStockFilter(e.target.value)}
             >
@@ -533,7 +531,7 @@ export default function InventoryItemsPage() {
                     <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-200">
+                <tbody className="divide-y divide-gray-100">
                   {items.map((item) => {
                     const badge = getStockBadge(item)
                     return (
@@ -575,8 +573,7 @@ export default function InventoryItemsPage() {
 
       {/* ============ Item Modal ============ */}
       {showItemModal && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
-          <div className="bg-white rounded-xl shadow-xl p-4 sm:p-6 w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
+        <Modal open  size="lg" closeOnBackdrop={false}>
             <h2 className="text-xl font-bold text-gray-900 mb-4">
               {editingItem ? 'Edit Item' : 'Add Item'}
             </h2>
@@ -590,13 +587,13 @@ export default function InventoryItemsPage() {
             <form onSubmit={handleItemSubmit} className="space-y-4">
               <div>
                 <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Name *</label>
-                <input type="text" required className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                <input type="text" required className="input"
                   value={itemForm.name} onChange={(e) => setItemForm({ ...itemForm, name: e.target.value })} />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Category</label>
-                  <select className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  <select className="input"
                     value={itemForm.category} onChange={(e) => setItemForm({ ...itemForm, category: e.target.value })}>
                     <option value="">-- None --</option>
                     {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
@@ -604,59 +601,57 @@ export default function InventoryItemsPage() {
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-500 uppercase mb-1">SKU</label>
-                  <input type="text" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  <input type="text" className="input"
                     value={itemForm.sku} onChange={(e) => setItemForm({ ...itemForm, sku: e.target.value })} />
                 </div>
               </div>
               <div className="grid grid-cols-3 gap-4">
                 <div>
                   <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Unit</label>
-                  <select className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  <select className="input"
                     value={itemForm.unit} onChange={(e) => setItemForm({ ...itemForm, unit: e.target.value })}>
                     {UNIT_CHOICES.map((u) => <option key={u.value} value={u.value}>{u.label}</option>)}
                   </select>
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Current Stock</label>
-                  <input type="number" min="0" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  <input type="number" min="0" className="input"
                     value={itemForm.current_stock} onChange={(e) => setItemForm({ ...itemForm, current_stock: e.target.value })} />
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Min Stock</label>
-                  <input type="number" min="0" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  <input type="number" min="0" className="input"
                     value={itemForm.minimum_stock} onChange={(e) => setItemForm({ ...itemForm, minimum_stock: e.target.value })} />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Unit Price (Rs)</label>
-                  <input type="number" min="0" step="0.01" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  <input type="number" min="0" step="0.01" className="input"
                     value={itemForm.unit_price} onChange={(e) => setItemForm({ ...itemForm, unit_price: e.target.value })} />
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Storage Location</label>
-                  <input type="text" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  <input type="text" className="input"
                     placeholder="e.g. Store Room A"
                     value={itemForm.location} onChange={(e) => setItemForm({ ...itemForm, location: e.target.value })} />
                 </div>
               </div>
 
               <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
-                <button type="button" onClick={closeItemModal} className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">Cancel</button>
+                <Button variant="secondary" type="button" onClick={closeItemModal}>Cancel</Button>
                 <button type="submit" disabled={saveItemMutation.isPending}
-                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed">
+                  className="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed">
                   {saveItemMutation.isPending ? 'Saving...' : (editingItem ? 'Update' : 'Create')}
                 </button>
               </div>
             </form>
-          </div>
-        </div>
+          </Modal>
       )}
 
       {/* ============ Category Modal ============ */}
       {showCategoryModal && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
-          <div className="bg-white rounded-xl shadow-xl p-4 sm:p-6 w-full max-w-md mx-4">
+        <Modal open  closeOnBackdrop={false}>
             <h2 className="text-xl font-bold text-gray-900 mb-4">
               {editingCategory ? 'Edit Category' : 'Add Category'}
             </h2>
@@ -668,30 +663,28 @@ export default function InventoryItemsPage() {
             <form onSubmit={handleCategorySubmit} className="space-y-4">
               <div>
                 <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Name *</label>
-                <input type="text" required className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                <input type="text" required className="input"
                   value={categoryForm.name} onChange={(e) => setCategoryForm({ ...categoryForm, name: e.target.value })} />
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Description</label>
-                <textarea rows={2} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                <textarea rows={2} className="input"
                   value={categoryForm.description} onChange={(e) => setCategoryForm({ ...categoryForm, description: e.target.value })} />
               </div>
               <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
-                <button type="button" onClick={closeCategoryModal} className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">Cancel</button>
+                <Button variant="secondary" type="button" onClick={closeCategoryModal}>Cancel</Button>
                 <button type="submit" disabled={saveCategoryMutation.isPending}
-                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed">
+                  className="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed">
                   {saveCategoryMutation.isPending ? 'Saving...' : (editingCategory ? 'Update' : 'Create')}
                 </button>
               </div>
             </form>
-          </div>
-        </div>
+          </Modal>
       )}
 
       {/* ============ Vendor Modal ============ */}
       {showVendorModal && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
-          <div className="bg-white rounded-xl shadow-xl p-4 sm:p-6 w-full max-w-md mx-4 max-h-[90vh] overflow-y-auto">
+        <Modal open  closeOnBackdrop={false}>
             <h2 className="text-xl font-bold text-gray-900 mb-4">
               {editingVendor ? 'Edit Vendor' : 'Add Vendor'}
             </h2>
@@ -703,47 +696,45 @@ export default function InventoryItemsPage() {
             <form onSubmit={handleVendorSubmit} className="space-y-4">
               <div>
                 <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Name *</label>
-                <input type="text" required className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                <input type="text" required className="input"
                   value={vendorForm.name} onChange={(e) => setVendorForm({ ...vendorForm, name: e.target.value })} />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Contact Person</label>
-                  <input type="text" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  <input type="text" className="input"
                     value={vendorForm.contact_person} onChange={(e) => setVendorForm({ ...vendorForm, contact_person: e.target.value })} />
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Phone</label>
-                  <input type="text" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  <input type="text" className="input"
                     value={vendorForm.phone} onChange={(e) => setVendorForm({ ...vendorForm, phone: e.target.value })} />
                 </div>
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Email</label>
-                <input type="email" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                <input type="email" className="input"
                   value={vendorForm.email} onChange={(e) => setVendorForm({ ...vendorForm, email: e.target.value })} />
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Address</label>
-                <textarea rows={2} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                <textarea rows={2} className="input"
                   value={vendorForm.address} onChange={(e) => setVendorForm({ ...vendorForm, address: e.target.value })} />
               </div>
               <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
-                <button type="button" onClick={closeVendorModal} className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">Cancel</button>
+                <Button variant="secondary" type="button" onClick={closeVendorModal}>Cancel</Button>
                 <button type="submit" disabled={saveVendorMutation.isPending}
-                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed">
+                  className="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed">
                   {saveVendorMutation.isPending ? 'Saving...' : (editingVendor ? 'Update' : 'Create')}
                 </button>
               </div>
             </form>
-          </div>
-        </div>
+          </Modal>
       )}
 
       {/* ============ AI Suggest Modal ============ */}
       {showAISuggestModal && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
-          <div className="bg-white rounded-xl shadow-xl p-4 sm:p-6 w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto">
+        <Modal open  size="2xl" closeOnBackdrop={false}>
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
                 <svg className="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -905,10 +896,9 @@ export default function InventoryItemsPage() {
 
                 {/* Actions */}
                 <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
-                  <button type="button" onClick={closeAISuggestModal}
-                    className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">
+                  <Button variant="secondary" type="button" onClick={closeAISuggestModal}>
                     Cancel
-                  </button>
+                  </Button>
                   <button
                     onClick={handleAddSelected}
                     disabled={aiAdding || (
@@ -925,8 +915,7 @@ export default function InventoryItemsPage() {
                 </div>
               </>
             )}
-          </div>
-        </div>
+          </Modal>
       )}
 
       <ConfirmModalRoot />

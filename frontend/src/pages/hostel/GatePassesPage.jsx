@@ -1,8 +1,12 @@
 import { useState } from 'react'
+import Modal from '../../components/ui/Modal'
+import { TONE } from '../../components/ui/statusTones'
+import Button from '../../components/ui/Button'
+import PageHeader from '../../components/ui/PageHeader'
+import LoadingState from '../../components/ui/LoadingState'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { hostelApi } from '../../services/api'
 import { useAuth } from '../../contexts/AuthContext'
-import Spinner from '../../components/ui/Spinner'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
 
 function formatDate(dateStr) {
@@ -162,19 +166,19 @@ export default function GatePassesPage() {
   // ---- Status badge colors ----
 
   const statusColors = {
-    PENDING: 'bg-yellow-100 text-yellow-700',
-    APPROVED: 'bg-blue-100 text-blue-700',
-    REJECTED: 'bg-red-100 text-red-700',
-    CHECKED_OUT: 'bg-purple-100 text-purple-700',
-    RETURNED: 'bg-green-100 text-green-700',
-    EXPIRED: 'bg-gray-100 text-gray-700',
+    PENDING: TONE.warning,
+    APPROVED: TONE.info,
+    REJECTED: TONE.danger,
+    CHECKED_OUT: TONE.accent,
+    RETURNED: TONE.success,
+    EXPIRED: TONE.neutral,
   }
 
   const passTypeColors = {
-    DAY: 'bg-sky-100 text-sky-700',
-    OVERNIGHT: 'bg-indigo-100 text-indigo-700',
-    WEEKEND: 'bg-violet-100 text-violet-700',
-    VACATION: 'bg-teal-100 text-teal-700',
+    DAY: TONE.sky,
+    OVERNIGHT: TONE.indigo,
+    WEEKEND: TONE.accent,
+    VACATION: TONE.teal,
   }
 
   // ---- Determine available actions for a pass ----
@@ -208,18 +212,14 @@ export default function GatePassesPage() {
   return (
     <div>
       {/* Header */}
-      <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Gate Passes</h1>
-          <p className="text-sm sm:text-base text-gray-600">Manage student gate passes and leave requests</p>
-        </div>
-        <button
+      <PageHeader title="Gate Passes" subtitle="Manage student gate passes and leave requests" className="mb-6" actions={<>
+<button
           onClick={openModal}
-          className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors"
+          className="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 transition-colors"
         >
           New Gate Pass
         </button>
-      </div>
+</>} />
 
       {/* Filters */}
       <div className="bg-white rounded-lg shadow-sm p-4 mb-6">
@@ -227,7 +227,7 @@ export default function GatePassesPage() {
           <div>
             <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Status</label>
             <select
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="input"
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
             >
@@ -243,7 +243,7 @@ export default function GatePassesPage() {
           <div>
             <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Pass Type</label>
             <select
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="input"
               value={passTypeFilter}
               onChange={(e) => setPassTypeFilter(e.target.value)}
             >
@@ -261,8 +261,7 @@ export default function GatePassesPage() {
       <div className="bg-white rounded-lg shadow-sm">
         {isLoading ? (
           <div className="text-center py-16">
-            <Spinner size="md" className="mx-auto" />
-            <p className="text-gray-500 mt-3">Loading gate passes...</p>
+            <LoadingState label="Loading gate passes..." compact />
           </div>
         ) : gatePasses.length === 0 ? (
           <div className="text-center py-16">
@@ -293,12 +292,12 @@ export default function GatePassesPage() {
                       </div>
                       <div className="flex-shrink-0 ml-2 flex flex-col items-end gap-1">
                         <span className={`px-2 py-0.5 rounded text-xs font-medium ${
-                          statusColors[pass.status?.toUpperCase()] || 'bg-gray-100 text-gray-700'
+                          statusColors[pass.status?.toUpperCase()] || TONE.neutral
                         }`}>
                           {pass.status}
                         </span>
                         <span className={`px-2 py-0.5 rounded text-xs font-medium ${
-                          passTypeColors[pass.pass_type?.toUpperCase()] || 'bg-gray-100 text-gray-700'
+                          passTypeColors[pass.pass_type?.toUpperCase()] || TONE.neutral
                         }`}>
                           {pass.pass_type}
                         </span>
@@ -343,7 +342,7 @@ export default function GatePassesPage() {
                     <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
+                <tbody className="divide-y divide-gray-100">
                   {gatePasses.map((pass) => {
                     const actions = getActions(pass)
                     return (
@@ -356,7 +355,7 @@ export default function GatePassesPage() {
                         </td>
                         <td className="px-4 py-3">
                           <span className={`inline-flex px-2 py-0.5 rounded text-xs font-medium ${
-                            passTypeColors[pass.pass_type?.toUpperCase()] || 'bg-gray-100 text-gray-700'
+                            passTypeColors[pass.pass_type?.toUpperCase()] || TONE.neutral
                           }`}>
                             {pass.pass_type}
                           </span>
@@ -372,7 +371,7 @@ export default function GatePassesPage() {
                         </td>
                         <td className="px-4 py-3 text-center">
                           <span className={`inline-flex px-2 py-0.5 rounded text-xs font-medium ${
-                            statusColors[pass.status?.toUpperCase()] || 'bg-gray-100 text-gray-700'
+                            statusColors[pass.status?.toUpperCase()] || TONE.neutral
                           }`}>
                             {pass.status}
                           </span>
@@ -401,8 +400,7 @@ export default function GatePassesPage() {
 
       {/* ============ New Gate Pass Modal ============ */}
       {showModal && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
-          <div className="bg-white rounded-xl shadow-xl p-4 sm:p-6 w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
+        <Modal open  size="lg" closeOnBackdrop={false}>
             <h2 className="text-xl font-bold text-gray-900 mb-4">New Gate Pass</h2>
 
             {createMutation.error && (
@@ -420,7 +418,7 @@ export default function GatePassesPage() {
                   <input
                     type="number"
                     required
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="input"
                     placeholder="Enter student ID"
                     value={gatePassForm.student}
                     onChange={(e) => setGatePassForm({ ...gatePassForm, student: e.target.value })}
@@ -431,7 +429,7 @@ export default function GatePassesPage() {
                   <input
                     type="number"
                     required
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="input"
                     placeholder="Enter allocation ID"
                     value={gatePassForm.allocation}
                     onChange={(e) => setGatePassForm({ ...gatePassForm, allocation: e.target.value })}
@@ -443,7 +441,7 @@ export default function GatePassesPage() {
                 <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Pass Type *</label>
                 <select
                   required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="input"
                   value={gatePassForm.pass_type}
                   onChange={(e) => setGatePassForm({ ...gatePassForm, pass_type: e.target.value })}
                 >
@@ -459,7 +457,7 @@ export default function GatePassesPage() {
                 <textarea
                   rows={2}
                   required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="input"
                   placeholder="Reason for leave"
                   value={gatePassForm.reason}
                   onChange={(e) => setGatePassForm({ ...gatePassForm, reason: e.target.value })}
@@ -472,7 +470,7 @@ export default function GatePassesPage() {
                   <input
                     type="text"
                     required
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="input"
                     placeholder="Destination"
                     value={gatePassForm.going_to}
                     onChange={(e) => setGatePassForm({ ...gatePassForm, going_to: e.target.value })}
@@ -482,7 +480,7 @@ export default function GatePassesPage() {
                   <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Contact at Destination</label>
                   <input
                     type="text"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="input"
                     placeholder="Phone number"
                     value={gatePassForm.contact_at_destination}
                     onChange={(e) => setGatePassForm({ ...gatePassForm, contact_at_destination: e.target.value })}
@@ -496,7 +494,7 @@ export default function GatePassesPage() {
                   <input
                     type="datetime-local"
                     required
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="input"
                     value={gatePassForm.departure_date}
                     onChange={(e) => setGatePassForm({ ...gatePassForm, departure_date: e.target.value })}
                   />
@@ -506,7 +504,7 @@ export default function GatePassesPage() {
                   <input
                     type="datetime-local"
                     required
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="input"
                     value={gatePassForm.expected_return}
                     onChange={(e) => setGatePassForm({ ...gatePassForm, expected_return: e.target.value })}
                   />
@@ -514,30 +512,26 @@ export default function GatePassesPage() {
               </div>
 
               <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
-                <button
-                  type="button"
-                  onClick={closeModal}
-                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
-                >
+                <Button variant="secondary"
+ type="button"
+ onClick={closeModal}>
                   Cancel
-                </button>
+                </Button>
                 <button
                   type="submit"
                   disabled={createMutation.isPending}
-                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {createMutation.isPending ? 'Creating...' : 'Create Gate Pass'}
                 </button>
               </div>
             </form>
-          </div>
-        </div>
+          </Modal>
       )}
 
       {/* ============ Approve/Reject Modal ============ */}
       {actionModal && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
-          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm mx-4">
+        <Modal open  size="sm" closeOnBackdrop={false}>
             <h2 className="text-xl font-bold text-gray-900 mb-2">
               {actionModal.type === 'approve' ? 'Approve' : 'Reject'} Gate Pass
             </h2>
@@ -568,7 +562,7 @@ export default function GatePassesPage() {
               <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Remarks</label>
               <textarea
                 rows={2}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className="input"
                 placeholder="Optional remarks..."
                 value={actionRemark}
                 onChange={(e) => setActionRemark(e.target.value)}
@@ -582,12 +576,10 @@ export default function GatePassesPage() {
             )}
 
             <div className="flex justify-end gap-3">
-              <button
-                onClick={closeActionModal}
-                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
-              >
+              <Button variant="secondary"
+ onClick={closeActionModal}>
                 Cancel
-              </button>
+              </Button>
               <button
                 onClick={handleAction}
                 disabled={actionPending}
@@ -604,8 +596,7 @@ export default function GatePassesPage() {
                     : 'Reject'}
               </button>
             </div>
-          </div>
-        </div>
+          </Modal>
       )}
     </div>
   )

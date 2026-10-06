@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import LoadingState from '../../components/ui/LoadingState'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { financeApi } from '../../services/api'
 import { useToast } from '../../components/Toast'
@@ -92,7 +93,7 @@ export default function CategoryManagerModal({ onClose }) {
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4">
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4">
       <div className="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b">
@@ -105,7 +106,7 @@ export default function CategoryManagerModal({ onClose }) {
           <div>
             <h3 className="text-sm font-semibold text-gray-700 mb-2">Your Categories</h3>
             {isLoading ? (
-              <p className="text-sm text-gray-400">Loading…</p>
+              <LoadingState label="Loading…" compact />
             ) : categories.length === 0 ? (
               <p className="text-sm text-gray-400 italic">No categories yet. Add one below or pick a suggestion.</p>
             ) : (

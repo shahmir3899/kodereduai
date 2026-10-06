@@ -1,4 +1,7 @@
 import { useState, useMemo, useEffect } from 'react'
+import { TONE } from '../components/ui/statusTones'
+import LoadingState from '../components/ui/LoadingState'
+import EmptyState from '../components/ui/EmptyState'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router-dom'
 import { attendanceApi, schoolsApi, sessionsApi } from '../services/api'
@@ -229,8 +232,7 @@ function RegisterTab() {
         </div>
       ) : isLoading ? (
         <div className="card text-center py-12">
-          <Spinner size="h-10 w-10" className="mx-auto" />
-          <p className="mt-4 text-gray-500">Loading register...</p>
+          <LoadingState label="Loading register..." compact />
         </div>
       ) : (
         <>
@@ -249,11 +251,11 @@ function RegisterTab() {
             <span className="text-xs text-gray-500">View:</span>
             <button
               onClick={() => setMobileView('cards')}
-              className={`px-3 py-1.5 text-xs rounded-lg font-medium ${mobileView === 'cards' ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-600'}`}
+              className={`px-3 py-1.5 text-xs rounded-lg font-medium ${mobileView === 'cards' ? 'bg-primary-600 text-white' : TONE.neutral}`}
             >Cards</button>
             <button
               onClick={() => setMobileView('grid')}
-              className={`px-3 py-1.5 text-xs rounded-lg font-medium ${mobileView === 'grid' ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-600'}`}
+              className={`px-3 py-1.5 text-xs rounded-lg font-medium ${mobileView === 'grid' ? 'bg-primary-600 text-white' : TONE.neutral}`}
             >Grid</button>
           </div>
 
@@ -369,7 +371,7 @@ function RegisterTab() {
                     key={i}
                     onClick={() => setActiveWeek(i)}
                     className={`flex-shrink-0 px-3 py-1.5 text-xs rounded-lg font-medium ${
-                      activeWeek === i ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-600'
+                      activeWeek === i ? 'bg-primary-600 text-white' : TONE.neutral
                     }`}
                   >
                     {week[0]}-{week[week.length - 1]}
@@ -470,8 +472,7 @@ function AnalyticsTab({ onGoToConfig }) {
 
       {isLoading ? (
         <div className="card text-center py-12">
-          <Spinner size="h-10 w-10" className="mx-auto" />
-          <p className="mt-4 text-gray-500">Loading accuracy data...</p>
+          <LoadingState label="Loading accuracy data..." compact />
         </div>
       ) : !hasData ? (
         <div className="card text-center py-12">
@@ -517,7 +518,7 @@ function AnalyticsTab({ onGoToConfig }) {
           <div className="card">
             <h3 className="font-medium text-gray-900 mb-4">Weekly Accuracy Trend</h3>
             {weeklyTrend.length === 0 ? (
-              <p className="text-gray-500 text-center py-4">No trend data available yet</p>
+              <EmptyState title="No trend data available yet" compact />
             ) : (
               <>
                 <div className="sm:hidden space-y-3">
@@ -543,7 +544,7 @@ function AnalyticsTab({ onGoToConfig }) {
                         <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Accuracy</th>
                       </tr>
                     </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
+                    <tbody className="divide-y divide-gray-100">
                       {weeklyTrend.map((week, idx) => (
                         <tr key={idx}>
                           <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">{week.week_start} - {week.week_end}</td>
@@ -567,7 +568,7 @@ function AnalyticsTab({ onGoToConfig }) {
               <button onClick={onGoToConfig} className="text-sm text-primary-600 hover:text-primary-700">Fix in Configuration</button>
             </div>
             {commonErrors.length === 0 ? (
-              <p className="text-gray-500 text-center py-4">No OCR errors recorded yet</p>
+              <EmptyState title="No OCR errors recorded yet" compact />
             ) : (
               <div className="space-y-3">
                 {commonErrors.map((err, idx) => (

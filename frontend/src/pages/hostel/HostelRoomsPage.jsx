@@ -1,8 +1,12 @@
 import { useState } from 'react'
+import Modal from '../../components/ui/Modal'
+import { TONE } from '../../components/ui/statusTones'
+import Button from '../../components/ui/Button'
+import PageHeader from '../../components/ui/PageHeader'
+import LoadingState from '../../components/ui/LoadingState'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { hostelApi } from '../../services/api'
 import { useAuth } from '../../contexts/AuthContext'
-import Spinner from '../../components/ui/Spinner'
 import Badge from '../../components/ui/Badge'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
 import { RecordCard, CardGrid, ViewToggle } from '../../components/cards'
@@ -245,9 +249,9 @@ export default function HostelRoomsPage() {
   const deleteError = deleteHostelMutation.error || deleteRoomMutation.error
 
   const hostelTypeColors = {
-    BOYS: 'bg-sky-100 text-sky-700',
-    GIRLS: 'bg-pink-100 text-pink-700',
-    MIXED: 'bg-purple-100 text-purple-700',
+    BOYS: TONE.sky,
+    GIRLS: TONE.pink,
+    MIXED: TONE.accent,
   }
 
   const tabs = [
@@ -258,16 +262,11 @@ export default function HostelRoomsPage() {
   return (
     <div>
       {/* Header */}
-      <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Hostels & Rooms</h1>
-          <p className="text-sm sm:text-base text-gray-600">Manage hostels and room inventory</p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {activeTab === 'hostels' && (
+      <PageHeader title="Hostels & Rooms" subtitle="Manage hostels and room inventory" className="mb-6" actions={<>
+{activeTab === 'hostels' && (
             <button
               onClick={openAddHostel}
-              className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors"
+              className="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 transition-colors"
             >
               Add Hostel
             </button>
@@ -275,13 +274,12 @@ export default function HostelRoomsPage() {
           {activeTab === 'rooms' && selectedHostel && (
             <button
               onClick={openAddRoom}
-              className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors"
+              className="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 transition-colors"
             >
               Add Room
             </button>
           )}
-        </div>
-      </div>
+</>} />
 
       {/* Tabs */}
       <div className="border-b border-gray-200 mb-6">
@@ -307,8 +305,7 @@ export default function HostelRoomsPage() {
         <div className="bg-white rounded-lg shadow-sm">
           {hostelsLoading ? (
             <div className="text-center py-16">
-              <Spinner size="md" className="mx-auto" />
-              <p className="text-gray-500 mt-3">Loading hostels...</p>
+              <LoadingState label="Loading hostels..." compact />
             </div>
           ) : hostels.length === 0 ? (
             <div className="text-center py-16">
@@ -331,13 +328,13 @@ export default function HostelRoomsPage() {
                     key={hostel.id}
                     title={hostel.name}
                     meta={
-                      <span className={`inline-flex px-2 py-0.5 rounded text-xs font-medium ${hostelTypeColors[hostel.hostel_type] || 'bg-gray-100 text-gray-700'}`}>
+                      <span className={`inline-flex px-2 py-0.5 rounded text-xs font-medium ${hostelTypeColors[hostel.hostel_type] || TONE.neutral}`}>
                         {hostel.hostel_type}
                       </span>
                     }
                     status={
                       <span className={`flex-shrink-0 px-2 py-0.5 rounded text-xs font-medium whitespace-nowrap ${
-                        hostel.is_active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                        hostel.is_active ? TONE.success : TONE.danger
                       }`}>
                         {hostel.is_active ? 'Active' : 'Inactive'}
                       </span>
@@ -369,12 +366,12 @@ export default function HostelRoomsPage() {
                       <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
                     </tr>
                   </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
+                  <tbody className="divide-y divide-gray-100">
                     {hostels.map((hostel) => (
                       <tr key={hostel.id} className="hover:bg-gray-50">
                         <td className="px-4 py-3 text-sm font-medium text-gray-900">{hostel.name}</td>
                         <td className="px-4 py-3">
-                          <span className={`inline-flex px-2 py-0.5 rounded text-xs font-medium ${hostelTypeColors[hostel.hostel_type] || 'bg-gray-100 text-gray-700'}`}>
+                          <span className={`inline-flex px-2 py-0.5 rounded text-xs font-medium ${hostelTypeColors[hostel.hostel_type] || TONE.neutral}`}>
                             {hostel.hostel_type}
                           </span>
                         </td>
@@ -383,7 +380,7 @@ export default function HostelRoomsPage() {
                         <td className="px-4 py-3 text-sm text-gray-500">{hostel.warden_name || '-'}</td>
                         <td className="px-4 py-3 text-center">
                           <span className={`inline-flex px-2 py-0.5 rounded text-xs font-medium ${
-                            hostel.is_active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                            hostel.is_active ? TONE.success : TONE.danger
                           }`}>
                             {hostel.is_active ? 'Active' : 'Inactive'}
                           </span>
@@ -449,8 +446,7 @@ export default function HostelRoomsPage() {
             <div className="bg-white rounded-lg shadow-sm">
               {roomsLoading ? (
                 <div className="text-center py-16">
-                  <Spinner size="md" className="mx-auto" />
-                  <p className="text-gray-500 mt-3">Loading rooms...</p>
+                  <LoadingState label="Loading rooms..." compact />
                 </div>
               ) : rooms.length === 0 ? (
                 <div className="text-center py-16">
@@ -475,7 +471,7 @@ export default function HostelRoomsPage() {
                         meta={`Floor ${room.floor} · ${room.room_type}`}
                         status={
                           <span className={`flex-shrink-0 px-2 py-0.5 rounded text-xs font-medium whitespace-nowrap ${
-                            room.is_available ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                            room.is_available ? TONE.success : TONE.danger
                           }`}>
                             {room.is_available ? 'Available' : 'Full'}
                           </span>
@@ -505,7 +501,7 @@ export default function HostelRoomsPage() {
                           <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
                         </tr>
                       </thead>
-                      <tbody className="bg-white divide-y divide-gray-200">
+                      <tbody className="divide-y divide-gray-100">
                         {rooms.map((room) => (
                           <tr key={room.id} className="hover:bg-gray-50">
                             <td className="px-4 py-3 text-sm font-medium text-gray-900">{room.room_number}</td>
@@ -519,7 +515,7 @@ export default function HostelRoomsPage() {
                             <td className="px-4 py-3 text-sm text-center text-gray-700">{room.current_occupancy ?? room.occupancy ?? 0}</td>
                             <td className="px-4 py-3 text-center">
                               <span className={`inline-flex px-2 py-0.5 rounded text-xs font-medium ${
-                                room.is_available ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                                room.is_available ? TONE.success : TONE.danger
                               }`}>
                                 {room.is_available ? 'Available' : 'Full'}
                               </span>
@@ -553,8 +549,7 @@ export default function HostelRoomsPage() {
 
       {/* ============ Add/Edit Hostel Modal ============ */}
       {showHostelModal && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
-          <div className="bg-white rounded-xl shadow-xl p-4 sm:p-6 w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
+        <Modal open  size="lg" closeOnBackdrop={false}>
             <h2 className="text-xl font-bold text-gray-900 mb-4">
               {editingHostel ? 'Edit Hostel' : 'Add Hostel'}
             </h2>
@@ -571,7 +566,7 @@ export default function HostelRoomsPage() {
                 <input
                   type="text"
                   required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="input"
                   value={hostelForm.name}
                   onChange={(e) => setHostelForm({ ...hostelForm, name: e.target.value })}
                 />
@@ -582,7 +577,7 @@ export default function HostelRoomsPage() {
                   <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Hostel Type *</label>
                   <select
                     required
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="input"
                     value={hostelForm.hostel_type}
                     onChange={(e) => setHostelForm({ ...hostelForm, hostel_type: e.target.value })}
                   >
@@ -597,7 +592,7 @@ export default function HostelRoomsPage() {
                     type="number"
                     min="1"
                     required
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="input"
                     value={hostelForm.capacity}
                     onChange={(e) => setHostelForm({ ...hostelForm, capacity: e.target.value })}
                   />
@@ -608,7 +603,7 @@ export default function HostelRoomsPage() {
                 <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Address</label>
                 <textarea
                   rows={2}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="input"
                   value={hostelForm.address}
                   onChange={(e) => setHostelForm({ ...hostelForm, address: e.target.value })}
                 />
@@ -619,7 +614,7 @@ export default function HostelRoomsPage() {
                   <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Contact Number</label>
                   <input
                     type="text"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="input"
                     value={hostelForm.contact_number}
                     onChange={(e) => setHostelForm({ ...hostelForm, contact_number: e.target.value })}
                   />
@@ -628,7 +623,7 @@ export default function HostelRoomsPage() {
                   <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Warden (Staff ID)</label>
                   <input
                     type="text"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="input"
                     placeholder="Optional"
                     value={hostelForm.warden}
                     onChange={(e) => setHostelForm({ ...hostelForm, warden: e.target.value })}
@@ -648,30 +643,26 @@ export default function HostelRoomsPage() {
               </div>
 
               <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
-                <button
-                  type="button"
-                  onClick={closeHostelModal}
-                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
-                >
+                <Button variant="secondary"
+ type="button"
+ onClick={closeHostelModal}>
                   Cancel
-                </button>
+                </Button>
                 <button
                   type="submit"
                   disabled={hostelMutationPending}
-                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {hostelMutationPending ? 'Saving...' : (editingHostel ? 'Save Changes' : 'Add Hostel')}
                 </button>
               </div>
             </form>
-          </div>
-        </div>
+          </Modal>
       )}
 
       {/* ============ Add/Edit Room Modal ============ */}
       {showRoomModal && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
-          <div className="bg-white rounded-xl shadow-xl p-4 sm:p-6 w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
+        <Modal open  size="lg" closeOnBackdrop={false}>
             <h2 className="text-xl font-bold text-gray-900 mb-4">
               {editingRoom ? 'Edit Room' : 'Add Room'}
             </h2>
@@ -687,7 +678,7 @@ export default function HostelRoomsPage() {
                 <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Hostel *</label>
                 <select
                   required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="input"
                   value={roomForm.hostel}
                   onChange={(e) => setRoomForm({ ...roomForm, hostel: e.target.value })}
                 >
@@ -704,7 +695,7 @@ export default function HostelRoomsPage() {
                   <input
                     type="text"
                     required
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="input"
                     placeholder="e.g. 101"
                     value={roomForm.room_number}
                     onChange={(e) => setRoomForm({ ...roomForm, room_number: e.target.value })}
@@ -716,7 +707,7 @@ export default function HostelRoomsPage() {
                     type="number"
                     min="0"
                     required
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="input"
                     value={roomForm.floor}
                     onChange={(e) => setRoomForm({ ...roomForm, floor: e.target.value })}
                   />
@@ -728,7 +719,7 @@ export default function HostelRoomsPage() {
                   <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Room Type *</label>
                   <select
                     required
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="input"
                     value={roomForm.room_type}
                     onChange={(e) => setRoomForm({ ...roomForm, room_type: e.target.value })}
                   >
@@ -745,7 +736,7 @@ export default function HostelRoomsPage() {
                     type="number"
                     min="1"
                     required
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="input"
                     value={roomForm.capacity}
                     onChange={(e) => setRoomForm({ ...roomForm, capacity: e.target.value })}
                   />
@@ -764,30 +755,26 @@ export default function HostelRoomsPage() {
               </div>
 
               <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
-                <button
-                  type="button"
-                  onClick={closeRoomModal}
-                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
-                >
+                <Button variant="secondary"
+ type="button"
+ onClick={closeRoomModal}>
                   Cancel
-                </button>
+                </Button>
                 <button
                   type="submit"
                   disabled={roomMutationPending}
-                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {roomMutationPending ? 'Saving...' : (editingRoom ? 'Save Changes' : 'Add Room')}
                 </button>
               </div>
             </form>
-          </div>
-        </div>
+          </Modal>
       )}
 
       {/* ============ Delete Confirmation Modal ============ */}
       {deleteConfirm && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
-          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm mx-4">
+        <Modal open  size="sm" closeOnBackdrop={false}>
             <h2 className="text-xl font-bold text-gray-900 mb-2">
               Delete {deleteType === 'hostel' ? 'Hostel' : 'Room'}
             </h2>
@@ -804,12 +791,10 @@ export default function HostelRoomsPage() {
             )}
 
             <div className="flex justify-end gap-3">
-              <button
-                onClick={() => { setDeleteConfirm(null); setDeleteType(null) }}
-                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
-              >
+              <Button variant="secondary"
+ onClick={() => { setDeleteConfirm(null); setDeleteType(null) }}>
                 Cancel
-              </button>
+              </Button>
               <button
                 onClick={handleDelete}
                 disabled={deletePending}
@@ -818,8 +803,7 @@ export default function HostelRoomsPage() {
                 {deletePending ? 'Deleting...' : 'Delete'}
               </button>
             </div>
-          </div>
-        </div>
+          </Modal>
       )}
     </div>
   )

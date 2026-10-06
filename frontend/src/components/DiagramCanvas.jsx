@@ -1,4 +1,5 @@
 import { useEffect, useReducer, useRef, useState } from 'react'
+import { useConfirmModal } from './ConfirmModal'
 
 // Diagram Mode's drawing surface — pen/shapes/eraser/text on a fixed-resolution
 // canvas, plus a paste/drop "Import" tab for figures copied in from elsewhere.
@@ -217,6 +218,7 @@ function redraw(ctx, actions, draft) {
  */
 export default function DiagramCanvas({ onInsert, onClose, targetLabel }) {
   const [activeTab, setActiveTab] = useState('draw')
+  const { confirm, ConfirmModalRoot } = useConfirmModal()
 
   // --- Draw tab state ---
   const canvasRef = useRef(null)
@@ -327,9 +329,10 @@ export default function DiagramCanvas({ onInsert, onClose, targetLabel }) {
     bump()
   }
 
-  const handleClear = () => {
+  const handleClear = async () => {
     if (!actionsRef.current.length) return
-    if (!window.confirm('Clear the whole drawing? This cannot be undone.')) return
+    const ok = await confirm({ title: 'Clear Drawing', message: 'Clear the whole drawing? This cannot be undone.', confirmLabel: 'Clear' })
+    if (!ok) return
     actionsRef.current = []
     redoStackRef.current = []
     redraw(ctxRef.current, actionsRef.current, null)
@@ -576,6 +579,7 @@ export default function DiagramCanvas({ onInsert, onClose, targetLabel }) {
           </div>
         </div>
       )}
+      <ConfirmModalRoot />
     </div>
   )
 }

@@ -1,7 +1,11 @@
 import { useState } from 'react'
+import Modal from '../../components/ui/Modal'
+import { TONE } from '../../components/ui/statusTones'
+import Button from '../../components/ui/Button'
+import PageHeader from '../../components/ui/PageHeader'
+import LoadingState from '../../components/ui/LoadingState'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { inventoryApi } from '../../services/api'
-import Spinner from '../../components/ui/Spinner'
 import { useDebounce } from '../../hooks/useDebounce'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
 import { RecordCard, CardGrid, ViewToggle } from '../../components/cards'
@@ -120,10 +124,10 @@ export default function ItemAssignmentsPage() {
   }
 
   const conditionColors = {
-    NEW: 'bg-green-100 text-green-700',
-    GOOD: 'bg-blue-100 text-blue-700',
-    FAIR: 'bg-amber-100 text-amber-700',
-    POOR: 'bg-red-100 text-red-700',
+    NEW: TONE.success,
+    GOOD: TONE.info,
+    FAIR: TONE.warning,
+    POOR: TONE.danger,
   }
 
   const errorMessage = (err) => {
@@ -138,18 +142,14 @@ export default function ItemAssignmentsPage() {
   return (
     <div>
       {/* Header */}
-      <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Item Assignments</h1>
-          <p className="text-sm sm:text-base text-gray-600">Assign inventory items to staff & track returns</p>
-        </div>
-        <button
+      <PageHeader title="Item Assignments" subtitle="Assign inventory items to staff & track returns" className="mb-6" actions={<>
+<button
           onClick={openAssignModal}
-          className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors"
+          className="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 transition-colors"
         >
           + Assign Item
         </button>
-      </div>
+</>} />
 
       {/* Tabs + Search */}
       <div className="bg-white rounded-lg shadow-sm p-4 mb-6">
@@ -176,7 +176,7 @@ export default function ItemAssignmentsPage() {
             <input
               type="text"
               placeholder="Search by user or item..."
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="input"
               value={searchUser}
               onChange={(e) => setSearchUser(e.target.value)}
             />
@@ -188,8 +188,7 @@ export default function ItemAssignmentsPage() {
       <div className="bg-white rounded-lg shadow-sm">
         {isLoading ? (
           <div className="text-center py-16">
-            <Spinner size="md" className="mx-auto" />
-            <p className="text-gray-500 mt-3">Loading assignments...</p>
+            <LoadingState label="Loading assignments..." compact />
           </div>
         ) : assignments.length === 0 ? (
           <div className="text-center py-16">
@@ -216,7 +215,7 @@ export default function ItemAssignmentsPage() {
                   meta={`Assigned to: ${a.assigned_to_name || a.assigned_to?.username || '-'}`}
                   status={
                     <span className={`flex-shrink-0 px-2 py-0.5 rounded text-xs font-medium whitespace-nowrap ${
-                      a.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'
+                      a.is_active ? TONE.success : TONE.neutral
                     }`}>
                       {a.is_active ? 'Active' : 'Returned'}
                     </span>
@@ -256,14 +255,14 @@ export default function ItemAssignmentsPage() {
                     )}
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-200">
+                <tbody className="divide-y divide-gray-100">
                   {assignments.map((a) => (
                     <tr key={a.id} className="hover:bg-gray-50">
                       <td className="px-4 py-3 text-sm font-medium text-gray-900">{a.item_name || a.item?.name || '-'}</td>
                       <td className="px-4 py-3 text-sm text-gray-600">{a.assigned_to_name || a.assigned_to?.username || '-'}</td>
                       <td className="px-4 py-3 text-sm text-right font-medium">{a.quantity}</td>
                       <td className="px-4 py-3 text-center">
-                        <span className={`inline-flex px-2 py-0.5 rounded text-xs font-medium ${conditionColors[a.condition_on_assign] || 'bg-gray-100 text-gray-700'}`}>
+                        <span className={`inline-flex px-2 py-0.5 rounded text-xs font-medium ${conditionColors[a.condition_on_assign] || TONE.neutral}`}>
                           {a.condition_on_assign}
                         </span>
                       </td>
@@ -272,7 +271,7 @@ export default function ItemAssignmentsPage() {
                         <>
                           <td className="px-4 py-3 text-sm text-gray-500">{formatDate(a.returned_date)}</td>
                           <td className="px-4 py-3 text-center">
-                            <span className={`inline-flex px-2 py-0.5 rounded text-xs font-medium ${conditionColors[a.condition_on_return] || 'bg-gray-100 text-gray-700'}`}>
+                            <span className={`inline-flex px-2 py-0.5 rounded text-xs font-medium ${conditionColors[a.condition_on_return] || TONE.neutral}`}>
                               {a.condition_on_return || '-'}
                             </span>
                           </td>
@@ -301,8 +300,7 @@ export default function ItemAssignmentsPage() {
 
       {/* ============ Assign Item Modal ============ */}
       {showAssignModal && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
-          <div className="bg-white rounded-xl shadow-xl p-4 sm:p-6 w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
+        <Modal open  size="lg" closeOnBackdrop={false}>
             <h2 className="text-xl font-bold text-gray-900 mb-4">Assign Item</h2>
 
             {createAssignmentMutation.error && (
@@ -315,7 +313,7 @@ export default function ItemAssignmentsPage() {
               <div>
                 <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Item *</label>
                 <select required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="input"
                   value={assignForm.item} onChange={(e) => setAssignForm({ ...assignForm, item: e.target.value })}>
                   <option value="">-- Select Item --</option>
                   {items.filter(i => i.current_stock > 0).map((i) => (
@@ -327,7 +325,7 @@ export default function ItemAssignmentsPage() {
               <div>
                 <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Assign To *</label>
                 <select required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="input"
                   value={assignForm.assigned_to} onChange={(e) => setAssignForm({ ...assignForm, assigned_to: e.target.value })}>
                   <option value="">-- Select User --</option>
                   {users.map((u) => (
@@ -340,13 +338,13 @@ export default function ItemAssignmentsPage() {
                 <div>
                   <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Quantity *</label>
                   <input type="number" required min="1"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="input"
                     value={assignForm.quantity} onChange={(e) => setAssignForm({ ...assignForm, quantity: e.target.value })} />
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Condition</label>
                   <select
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="input"
                     value={assignForm.condition_on_assign} onChange={(e) => setAssignForm({ ...assignForm, condition_on_assign: e.target.value })}>
                     {CONDITION_CHOICES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
                   </select>
@@ -356,27 +354,25 @@ export default function ItemAssignmentsPage() {
               <div>
                 <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Notes</label>
                 <textarea rows={2}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="input"
                   placeholder="e.g. Laptop serial number, purpose of assignment..."
                   value={assignForm.notes} onChange={(e) => setAssignForm({ ...assignForm, notes: e.target.value })} />
               </div>
 
               <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
-                <button type="button" onClick={closeAssignModal} className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">Cancel</button>
+                <Button variant="secondary" type="button" onClick={closeAssignModal}>Cancel</Button>
                 <button type="submit" disabled={createAssignmentMutation.isPending}
-                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed">
+                  className="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed">
                   {createAssignmentMutation.isPending ? 'Assigning...' : 'Assign'}
                 </button>
               </div>
             </form>
-          </div>
-        </div>
+          </Modal>
       )}
 
       {/* ============ Return Confirmation Modal ============ */}
       {returnConfirm && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
-          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm mx-4">
+        <Modal open  size="sm" closeOnBackdrop={false}>
             <h2 className="text-xl font-bold text-gray-900 mb-2">Return Item</h2>
             <p className="text-gray-600 mb-4">
               Mark <strong>{returnConfirm.item_name || returnConfirm.item?.name}</strong> as returned from{' '}
@@ -397,7 +393,7 @@ export default function ItemAssignmentsPage() {
             <div className="mb-4">
               <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Condition on Return *</label>
               <select
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className="input"
                 value={returnCondition} onChange={(e) => setReturnCondition(e.target.value)}>
                 {CONDITION_CHOICES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
               </select>
@@ -410,17 +406,15 @@ export default function ItemAssignmentsPage() {
             )}
 
             <div className="flex justify-end gap-3">
-              <button onClick={() => setReturnConfirm(null)}
-                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">
+              <Button variant="secondary" onClick={() => setReturnConfirm(null)}>
                 Cancel
-              </button>
+              </Button>
               <button onClick={handleReturn} disabled={returnItemMutation.isPending}
                 className="px-4 py-2 text-sm font-medium text-white bg-orange-600 rounded-lg hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed">
                 {returnItemMutation.isPending ? 'Processing...' : 'Confirm Return'}
               </button>
             </div>
-          </div>
-        </div>
+          </Modal>
       )}
     </div>
   )

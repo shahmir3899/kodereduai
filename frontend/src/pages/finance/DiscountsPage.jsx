@@ -1,4 +1,9 @@
 import { useState, useEffect, useMemo } from 'react'
+import Modal from '../../components/ui/Modal'
+import Field from '../../components/ui/Field'
+import { TONE } from '../../components/ui/statusTones'
+import PageHeader from '../../components/ui/PageHeader'
+import LoadingState from '../../components/ui/LoadingState'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../../contexts/AuthContext'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
@@ -8,29 +13,28 @@ import ClassSelector from '../../components/ClassSelector'
 import { useToast } from '../../components/Toast'
 import { GRADE_PRESETS, GRADE_LEVEL_LABELS } from '../../constants/gradePresets'
 import { getClassSelectorScope, getResolvedMasterClassId } from '../../utils/classScope'
-import Spinner from '../../components/ui/Spinner'
 import Badge from '../../components/ui/Badge'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
 
 // ── Badge color maps ──────────────────────────────────────────────────────────
 
 const discountTypeBadge = {
-  PERCENTAGE: 'bg-blue-100 text-blue-800',
-  FIXED: 'bg-green-100 text-green-800',
+  PERCENTAGE: TONE.info,
+  FIXED: TONE.success,
 }
 
 const scholarshipTypeBadge = {
-  MERIT: 'bg-purple-100 text-purple-800',
-  NEED: 'bg-orange-100 text-orange-800',
-  SPORTS: 'bg-teal-100 text-teal-800',
-  STAFF_CHILD: 'bg-indigo-100 text-indigo-800',
-  OTHER: 'bg-gray-100 text-gray-800',
+  MERIT: TONE.accent,
+  NEED: TONE.orange,
+  SPORTS: TONE.teal,
+  STAFF_CHILD: TONE.indigo,
+  OTHER: TONE.neutral,
 }
 
 const coverageBadge = {
-  FULL: 'bg-emerald-100 text-emerald-800',
-  PERCENTAGE: 'bg-blue-100 text-blue-800',
-  FIXED: 'bg-green-100 text-green-800',
+  FULL: TONE.success,
+  PERCENTAGE: TONE.info,
+  FIXED: TONE.success,
 }
 
 // ── Empty form states ─────────────────────────────────────────────────────────
@@ -669,12 +673,7 @@ export default function DiscountsPage() {
   return (
     <div>
       {/* Header */}
-      <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Discounts & Scholarships</h1>
-          <p className="text-sm text-gray-600">Manage discount rules, scholarship programs, and student assignments</p>
-        </div>
-      </div>
+      <PageHeader title="Discounts & Scholarships" subtitle="Manage discount rules, scholarship programs, and student assignments" className="mb-6" />
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 mb-6">
@@ -751,8 +750,7 @@ export default function DiscountsPage() {
           <div className="card">
             {discountsLoading ? (
               <div className="text-center py-8">
-                <Spinner size="md" className="mx-auto" />
-                <p className="text-gray-500 mt-2">Loading discounts...</p>
+                <LoadingState label="Loading discounts..." compact />
               </div>
             ) : filteredDiscounts.length === 0 ? (
               <div className="text-center py-8 text-gray-500">
@@ -770,16 +768,16 @@ export default function DiscountsPage() {
                         <div className="min-w-0 flex-1">
                           <p className="font-medium text-sm text-gray-900 truncate">{discount.name}</p>
                           <div className="flex items-center gap-2 mt-1 flex-wrap">
-                            <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${discountTypeBadge[discount.discount_type] || 'bg-gray-100 text-gray-800'}`}>
+                            <Badge colors={discountTypeBadge[discount.discount_type] || TONE.neutral}>
                               {discount.discount_type}
-                            </span>
+                            </Badge>
                             <span className="text-xs text-gray-600 font-medium">
                               {formatValue(discount.discount_type, discount.value)}
                             </span>
                           </div>
                         </div>
                         <span className={`px-2 py-0.5 rounded-full text-xs flex-shrink-0 ml-2 ${
-                          discount.is_active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
+                          discount.is_active ? TONE.success : TONE.neutral
                         }`}>
                           {discount.is_active ? 'Active' : 'Inactive'}
                         </span>
@@ -812,7 +810,7 @@ export default function DiscountsPage() {
                         <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
                       </tr>
                     </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
+                    <tbody className="divide-y divide-gray-100">
                       {filteredDiscounts.map((discount) => (
                         <tr key={discount.id} className="hover:bg-gray-50">
                           <td className="px-4 py-3 text-sm font-medium text-gray-900">
@@ -826,9 +824,9 @@ export default function DiscountsPage() {
                             </div>
                           </td>
                           <td className="px-4 py-3">
-                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${discountTypeBadge[discount.discount_type] || 'bg-gray-100 text-gray-800'}`}>
+                            <Badge colors={discountTypeBadge[discount.discount_type] || TONE.neutral}>
                               {discount.discount_type}
-                            </span>
+                            </Badge>
                           </td>
                           <td className="px-4 py-3 text-sm text-gray-700 font-medium">
                             {formatValue(discount.discount_type, discount.value)}
@@ -838,7 +836,7 @@ export default function DiscountsPage() {
                           </td>
                           <td className="px-4 py-3">
                             <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                              discount.is_active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
+                              discount.is_active ? TONE.success : TONE.neutral
                             }`}>
                               {discount.is_active ? 'Active' : 'Inactive'}
                             </span>
@@ -898,8 +896,7 @@ export default function DiscountsPage() {
           <div className="card">
             {scholarshipsLoading ? (
               <div className="text-center py-8">
-                <Spinner size="md" className="mx-auto" />
-                <p className="text-gray-500 mt-2">Loading scholarships...</p>
+                <LoadingState label="Loading scholarships..." compact />
               </div>
             ) : filteredScholarships.length === 0 ? (
               <div className="text-center py-8 text-gray-500">
@@ -917,16 +914,16 @@ export default function DiscountsPage() {
                         <div className="min-w-0 flex-1">
                           <p className="font-medium text-sm text-gray-900 truncate">{sc.name}</p>
                           <div className="flex items-center gap-2 mt-1 flex-wrap">
-                            <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${scholarshipTypeBadge[sc.type] || 'bg-gray-100 text-gray-800'}`}>
+                            <Badge colors={scholarshipTypeBadge[sc.type] || TONE.neutral}>
                               {sc.type}
-                            </span>
-                            <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${coverageBadge[sc.coverage] || 'bg-gray-100 text-gray-800'}`}>
+                            </Badge>
+                            <Badge colors={coverageBadge[sc.coverage] || TONE.neutral}>
                               {sc.coverage === 'FULL' ? 'Full Coverage' : formatValue(sc.coverage, sc.value)}
-                            </span>
+                            </Badge>
                           </div>
                         </div>
                         <span className={`px-2 py-0.5 rounded-full text-xs flex-shrink-0 ml-2 ${
-                          sc.is_active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
+                          sc.is_active ? TONE.success : TONE.neutral
                         }`}>
                           {sc.is_active ? 'Active' : 'Inactive'}
                         </span>
@@ -959,7 +956,7 @@ export default function DiscountsPage() {
                         <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
                       </tr>
                     </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
+                    <tbody className="divide-y divide-gray-100">
                       {filteredScholarships.map((sc) => (
                         <tr key={sc.id} className="hover:bg-gray-50">
                           <td className="px-4 py-3">
@@ -971,14 +968,14 @@ export default function DiscountsPage() {
                             </div>
                           </td>
                           <td className="px-4 py-3">
-                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${scholarshipTypeBadge[sc.type] || 'bg-gray-100 text-gray-800'}`}>
+                            <Badge colors={scholarshipTypeBadge[sc.type] || TONE.neutral}>
                               {sc.type?.replace('_', ' ')}
-                            </span>
+                            </Badge>
                           </td>
                           <td className="px-4 py-3">
-                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${coverageBadge[sc.coverage] || 'bg-gray-100 text-gray-800'}`}>
+                            <Badge colors={coverageBadge[sc.coverage] || TONE.neutral}>
                               {sc.coverage}
-                            </span>
+                            </Badge>
                           </td>
                           <td className="px-4 py-3 text-sm text-gray-700 font-medium">
                             {sc.coverage === 'FULL' ? '100%' : formatValue(sc.coverage, sc.value)}
@@ -988,7 +985,7 @@ export default function DiscountsPage() {
                           </td>
                           <td className="px-4 py-3">
                             <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                              sc.is_active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
+                              sc.is_active ? TONE.success : TONE.neutral
                             }`}>
                               {sc.is_active ? 'Active' : 'Inactive'}
                             </span>
@@ -1049,8 +1046,7 @@ export default function DiscountsPage() {
           <div className="card">
             {assignmentsLoading ? (
               <div className="text-center py-8">
-                <Spinner size="md" className="mx-auto" />
-                <p className="text-gray-500 mt-2">Loading assignments...</p>
+                <LoadingState label="Loading assignments..." compact />
               </div>
             ) : filteredAssignments.length === 0 ? (
               <div className="text-center py-8 text-gray-500">
@@ -1075,7 +1071,7 @@ export default function DiscountsPage() {
                           <p className="text-xs text-gray-500">{a.class_name || '--'}</p>
                         </div>
                         <span className={`px-2 py-0.5 rounded-full text-xs flex-shrink-0 ml-2 ${
-                          a.is_active !== false ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
+                          a.is_active !== false ? TONE.success : TONE.neutral
                         }`}>
                           {a.is_active !== false ? 'Active' : 'Inactive'}
                         </span>
@@ -1085,9 +1081,9 @@ export default function DiscountsPage() {
                           <Badge tone="info">{a.discount_name}</Badge>
                         )}
                         {a.scholarship_name && (
-                          <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+                          <Badge tone="accent">
                             {a.scholarship_name}
-                          </span>
+                          </Badge>
                         )}
                       </div>
                       {a.academic_year_name && (
@@ -1113,7 +1109,7 @@ export default function DiscountsPage() {
                         <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
                       </tr>
                     </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
+                    <tbody className="divide-y divide-gray-100">
                       {filteredAssignments.map((a) => (
                         <tr key={a.id} className="hover:bg-gray-50">
                           <td className="px-4 py-3 text-sm font-medium text-gray-900">
@@ -1127,9 +1123,9 @@ export default function DiscountsPage() {
                               <Badge tone="info">{a.discount_name}</Badge>
                             )}
                             {a.scholarship_name && (
-                              <span className="px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+                              <Badge tone="accent">
                                 {a.scholarship_name}
-                              </span>
+                              </Badge>
                             )}
                             {!a.discount_name && !a.scholarship_name && (
                               <span className="text-gray-400 italic text-sm">--</span>
@@ -1140,7 +1136,7 @@ export default function DiscountsPage() {
                           </td>
                           <td className="px-4 py-3">
                             <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                              a.is_active !== false ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
+                              a.is_active !== false ? TONE.success : TONE.neutral
                             }`}>
                               {a.is_active !== false ? 'Active' : 'Inactive'}
                             </span>
@@ -1168,16 +1164,14 @@ export default function DiscountsPage() {
           DISCOUNT MODAL
           ═══════════════════════════════════════════════════════════════════════ */}
       {showDiscountModal && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
-          <div className="bg-white rounded-xl shadow-xl p-4 sm:p-6 w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
+        <Modal open  size="lg" closeOnBackdrop={false}>
             <h2 className="text-xl font-bold text-gray-900 mb-4">
               {editingDiscount ? 'Edit Discount' : 'Create Discount'}
             </h2>
 
             <form onSubmit={handleDiscountSubmit} className="space-y-4">
-              <div>
-                <label className="label">Discount Name *</label>
-                <input
+              <Field label="Discount Name" required>
+<input
                   type="text"
                   className="input"
                   value={discountForm.name}
@@ -1185,12 +1179,11 @@ export default function DiscountsPage() {
                   placeholder="e.g., Early Bird Discount, Sibling Discount"
                   required
                 />
-              </div>
+</Field>
 
               <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="label">Type *</label>
-                  <select
+                <Field label="Type" required>
+<select
                     className="input"
                     value={discountForm.discount_type}
                     onChange={(e) => setDiscountForm({ ...discountForm, discount_type: e.target.value })}
@@ -1198,10 +1191,9 @@ export default function DiscountsPage() {
                     <option value="PERCENTAGE">Percentage (%)</option>
                     <option value="FIXED">Fixed Amount (Rs.)</option>
                   </select>
-                </div>
-                <div>
-                  <label className="label">Value *</label>
-                  <input
+</Field>
+                <Field label="Value" required>
+<input
                     type="number"
                     className="input"
                     value={discountForm.value}
@@ -1212,12 +1204,11 @@ export default function DiscountsPage() {
                     step="any"
                     required
                   />
-                </div>
+</Field>
               </div>
 
-              <div>
-                <label className="label">Applies To</label>
-                <select
+              <Field label="Applies To">
+<select
                   className="input"
                   value={discountForm.applies_to}
                   onChange={(e) => setDiscountForm({ ...discountForm, applies_to: e.target.value, target_grade_level: '', target_class: '' })}
@@ -1227,12 +1218,11 @@ export default function DiscountsPage() {
                   <option value="CLASS">Specific Class</option>
                   <option value="SIBLING">Siblings</option>
                 </select>
-              </div>
+</Field>
 
               {discountForm.applies_to === 'GRADE_LEVEL' && (
-                <div>
-                  <label className="label">Target Grade Level</label>
-                  <select
+                <Field label="Target Grade Level">
+<select
                     className="input"
                     value={discountForm.target_grade_level}
                     onChange={(e) => setDiscountForm({ ...discountForm, target_grade_level: e.target.value })}
@@ -1242,7 +1232,7 @@ export default function DiscountsPage() {
                       <option key={p.numeric_level} value={p.numeric_level}>{p.name}</option>
                     ))}
                   </select>
-                </div>
+</Field>
               )}
 
               {discountForm.applies_to === 'CLASS' && (
@@ -1260,24 +1250,22 @@ export default function DiscountsPage() {
               )}
 
               <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="label">Start Date</label>
-                  <input
+                <Field label="Start Date">
+<input
                     type="date"
                     className="input"
                     value={discountForm.start_date}
                     onChange={(e) => setDiscountForm({ ...discountForm, start_date: e.target.value })}
                   />
-                </div>
-                <div>
-                  <label className="label">End Date</label>
-                  <input
+</Field>
+                <Field label="End Date">
+<input
                     type="date"
                     className="input"
                     value={discountForm.end_date}
                     onChange={(e) => setDiscountForm({ ...discountForm, end_date: e.target.value })}
                   />
-                </div>
+</Field>
               </div>
 
               <div className="flex items-center gap-4">
@@ -1319,24 +1307,21 @@ export default function DiscountsPage() {
                 </button>
               </div>
             </form>
-          </div>
-        </div>
+          </Modal>
       )}
 
       {/* ═══════════════════════════════════════════════════════════════════════
           SCHOLARSHIP MODAL
           ═══════════════════════════════════════════════════════════════════════ */}
       {showScholarshipModal && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
-          <div className="bg-white rounded-xl shadow-xl p-4 sm:p-6 w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
+        <Modal open  size="lg" closeOnBackdrop={false}>
             <h2 className="text-xl font-bold text-gray-900 mb-4">
               {editingScholarship ? 'Edit Scholarship' : 'Create Scholarship'}
             </h2>
 
             <form onSubmit={handleScholarshipSubmit} className="space-y-4">
-              <div>
-                <label className="label">Scholarship Name *</label>
-                <input
+              <Field label="Scholarship Name" required>
+<input
                   type="text"
                   className="input"
                   value={scholarshipForm.name}
@@ -1344,12 +1329,11 @@ export default function DiscountsPage() {
                   placeholder="e.g., Academic Excellence Scholarship"
                   required
                 />
-              </div>
+</Field>
 
               <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="label">Scholarship Type *</label>
-                  <select
+                <Field label="Scholarship Type" required>
+<select
                     className="input"
                     value={scholarshipForm.type}
                     onChange={(e) => setScholarshipForm({ ...scholarshipForm, type: e.target.value })}
@@ -1360,10 +1344,9 @@ export default function DiscountsPage() {
                     <option value="STAFF_CHILD">Staff Child</option>
                     <option value="OTHER">Other</option>
                   </select>
-                </div>
-                <div>
-                  <label className="label">Coverage *</label>
-                  <select
+</Field>
+                <Field label="Coverage" required>
+<select
                     className="input"
                     value={scholarshipForm.coverage}
                     onChange={(e) => setScholarshipForm({ ...scholarshipForm, coverage: e.target.value, value: e.target.value === 'FULL' ? '100' : scholarshipForm.value })}
@@ -1372,13 +1355,12 @@ export default function DiscountsPage() {
                     <option value="PERCENTAGE">Percentage</option>
                     <option value="FIXED">Fixed Amount</option>
                   </select>
-                </div>
+</Field>
               </div>
 
               {scholarshipForm.coverage !== 'FULL' && (
-                <div>
-                  <label className="label">Value *</label>
-                  <input
+                <Field label="Value" required>
+<input
                     type="number"
                     className="input"
                     value={scholarshipForm.value}
@@ -1389,7 +1371,7 @@ export default function DiscountsPage() {
                     step="any"
                     required
                   />
-                </div>
+</Field>
               )}
 
               <div>
@@ -1403,9 +1385,8 @@ export default function DiscountsPage() {
                 />
               </div>
 
-              <div>
-                <label className="label">Max Recipients</label>
-                <input
+              <Field label="Max Recipients">
+<input
                   type="number"
                   className="input"
                   value={scholarshipForm.max_recipients}
@@ -1413,7 +1394,7 @@ export default function DiscountsPage() {
                   placeholder="Leave empty for unlimited"
                   min="1"
                 />
-              </div>
+</Field>
 
               <div className="flex items-center gap-4">
                 <label className="flex items-center gap-2 cursor-pointer">
@@ -1442,16 +1423,14 @@ export default function DiscountsPage() {
                 </button>
               </div>
             </form>
-          </div>
-        </div>
+          </Modal>
       )}
 
       {/* ═══════════════════════════════════════════════════════════════════════
           ASSIGN MODAL (Single Student)
           ═══════════════════════════════════════════════════════════════════════ */}
       {showAssignModal && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
-          <div className="bg-white rounded-xl shadow-xl p-4 sm:p-6 w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
+        <Modal open  size="lg" closeOnBackdrop={false}>
             <h2 className="text-xl font-bold text-gray-900 mb-4">Assign Discount / Scholarship</h2>
 
             <form onSubmit={handleAssignSubmit} className="space-y-4">
@@ -1506,9 +1485,8 @@ export default function DiscountsPage() {
               </div>
 
               {/* Discount selection */}
-              <div>
-                <label className="label">Discount</label>
-                <select
+              <Field label="Discount">
+<select
                   className="input"
                   value={assignForm.discount}
                   onChange={(e) => setAssignForm({ ...assignForm, discount: e.target.value, scholarship: '' })}
@@ -1521,7 +1499,7 @@ export default function DiscountsPage() {
                     </option>
                   ))}
                 </select>
-              </div>
+</Field>
 
               {/* OR divider */}
               <div className="flex items-center gap-3">
@@ -1531,9 +1509,8 @@ export default function DiscountsPage() {
               </div>
 
               {/* Scholarship selection */}
-              <div>
-                <label className="label">Scholarship</label>
-                <select
+              <Field label="Scholarship">
+<select
                   className="input"
                   value={assignForm.scholarship}
                   onChange={(e) => setAssignForm({ ...assignForm, scholarship: e.target.value, discount: '' })}
@@ -1546,12 +1523,11 @@ export default function DiscountsPage() {
                     </option>
                   ))}
                 </select>
-              </div>
+</Field>
 
               {/* Academic Year */}
-              <div>
-                <label className="label">Academic Year *</label>
-                <select
+              <Field label="Academic Year" required>
+<select
                   className="input"
                   value={assignForm.academic_year}
                   onChange={(e) => setAssignForm({ ...assignForm, academic_year: e.target.value })}
@@ -1564,7 +1540,7 @@ export default function DiscountsPage() {
                     </option>
                   ))}
                 </select>
-              </div>
+</Field>
 
               {/* Notes */}
               <div>
@@ -1591,16 +1567,14 @@ export default function DiscountsPage() {
                 </button>
               </div>
             </form>
-          </div>
-        </div>
+          </Modal>
       )}
 
       {/* ═══════════════════════════════════════════════════════════════════════
           BULK ASSIGN MODAL
           ═══════════════════════════════════════════════════════════════════════ */}
       {showBulkAssignModal && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
-          <div className="bg-white rounded-xl shadow-xl p-4 sm:p-6 w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
+        <Modal open  size="lg" closeOnBackdrop={false}>
             <h2 className="text-xl font-bold text-gray-900 mb-2">Bulk Assign</h2>
             <p className="text-sm text-gray-500 mb-4">
               Assign a discount or scholarship to all students in a class or grade at once.
@@ -1608,9 +1582,8 @@ export default function DiscountsPage() {
 
             <form onSubmit={handleBulkAssignSubmit} className="space-y-4">
               {/* Discount selection */}
-              <div>
-                <label className="label">Discount</label>
-                <select
+              <Field label="Discount">
+<select
                   className="input"
                   value={bulkAssignForm.discount_id}
                   onChange={(e) => setBulkAssignForm({ ...bulkAssignForm, discount_id: e.target.value, scholarship_id: '' })}
@@ -1623,7 +1596,7 @@ export default function DiscountsPage() {
                     </option>
                   ))}
                 </select>
-              </div>
+</Field>
 
               <div className="flex items-center gap-3">
                 <hr className="flex-1 border-gray-200" />
@@ -1632,9 +1605,8 @@ export default function DiscountsPage() {
               </div>
 
               {/* Scholarship selection */}
-              <div>
-                <label className="label">Scholarship</label>
-                <select
+              <Field label="Scholarship">
+<select
                   className="input"
                   value={bulkAssignForm.scholarship_id}
                   onChange={(e) => setBulkAssignForm({ ...bulkAssignForm, scholarship_id: e.target.value, discount_id: '' })}
@@ -1647,13 +1619,12 @@ export default function DiscountsPage() {
                     </option>
                   ))}
                 </select>
-              </div>
+</Field>
 
               {/* Target: Grade Level or Class */}
               <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="label">Grade Level</label>
-                  <select
+                <Field label="Grade Level">
+<select
                     className="input"
                     value={bulkAssignForm.grade_level}
                     onChange={(e) => setBulkAssignForm({ ...bulkAssignForm, grade_level: e.target.value, class_id: '' })}
@@ -1664,7 +1635,7 @@ export default function DiscountsPage() {
                       <option key={p.numeric_level} value={p.numeric_level}>{p.name}</option>
                     ))}
                   </select>
-                </div>
+</Field>
                 <div>
                   <label className="label">Class</label>
                   <ClassSelector
@@ -1681,9 +1652,8 @@ export default function DiscountsPage() {
               <p className="text-xs text-gray-400 -mt-2">Choose either a grade level or a specific class, not both.</p>
 
               {/* Academic Year */}
-              <div>
-                <label className="label">Academic Year *</label>
-                <select
+              <Field label="Academic Year" required>
+<select
                   className="input"
                   value={bulkAssignForm.academic_year_id}
                   onChange={(e) => setBulkAssignForm({ ...bulkAssignForm, academic_year_id: e.target.value })}
@@ -1696,7 +1666,7 @@ export default function DiscountsPage() {
                     </option>
                   ))}
                 </select>
-              </div>
+</Field>
 
               {/* Warning */}
               <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
@@ -1719,16 +1689,14 @@ export default function DiscountsPage() {
                 </button>
               </div>
             </form>
-          </div>
-        </div>
+          </Modal>
       )}
 
       {/* ═══════════════════════════════════════════════════════════════════════
           DELETE DISCOUNT CONFIRMATION
           ═══════════════════════════════════════════════════════════════════════ */}
       {deleteDiscountConfirm && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
-          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm mx-4">
+        <Modal open  size="sm" closeOnBackdrop={false}>
             <h2 className="text-xl font-bold text-gray-900 mb-2">Delete Discount</h2>
             <p className="text-gray-600 mb-6">
               Are you sure you want to delete <strong>{deleteDiscountConfirm.name}</strong>?
@@ -1746,16 +1714,14 @@ export default function DiscountsPage() {
                 {deleteDiscountMutation.isPending ? 'Deleting...' : 'Delete'}
               </button>
             </div>
-          </div>
-        </div>
+          </Modal>
       )}
 
       {/* ═══════════════════════════════════════════════════════════════════════
           DELETE SCHOLARSHIP CONFIRMATION
           ═══════════════════════════════════════════════════════════════════════ */}
       {deleteScholarshipConfirm && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
-          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm mx-4">
+        <Modal open  size="sm" closeOnBackdrop={false}>
             <h2 className="text-xl font-bold text-gray-900 mb-2">Delete Scholarship</h2>
             <p className="text-gray-600 mb-6">
               Are you sure you want to delete <strong>{deleteScholarshipConfirm.name}</strong>?
@@ -1773,16 +1739,14 @@ export default function DiscountsPage() {
                 {deleteScholarshipMutation.isPending ? 'Deleting...' : 'Delete'}
               </button>
             </div>
-          </div>
-        </div>
+          </Modal>
       )}
 
       {/* ═══════════════════════════════════════════════════════════════════════
           REMOVE ASSIGNMENT CONFIRMATION
           ═══════════════════════════════════════════════════════════════════════ */}
       {removeAssignConfirm && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
-          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm mx-4">
+        <Modal open  size="sm" closeOnBackdrop={false}>
             <h2 className="text-xl font-bold text-gray-900 mb-2">Remove Assignment</h2>
             <p className="text-gray-600 mb-6">
               Are you sure you want to remove the{' '}
@@ -1801,8 +1765,7 @@ export default function DiscountsPage() {
                 {removeAssignMutation.isPending ? 'Removing...' : 'Remove'}
               </button>
             </div>
-          </div>
-        </div>
+          </Modal>
       )}
     </div>
   )

@@ -1,4 +1,11 @@
 import { useState } from 'react'
+import Modal from '../../components/ui/Modal'
+import Field from '../../components/ui/Field'
+import { TONE } from '../../components/ui/statusTones'
+import Button from '../../components/ui/Button'
+import PageHeader from '../../components/ui/PageHeader'
+import LoadingState from '../../components/ui/LoadingState'
+import EmptyState from '../../components/ui/EmptyState'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { sessionsApi } from '../../services/api'
 import { useBackgroundTask } from '../../hooks/useBackgroundTask'
@@ -26,7 +33,7 @@ function RecBadge({ rec }) {
     REPEAT: 'Repeat',
   }
   return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border ${styles[rec] || 'bg-gray-100 text-gray-700'}`}>
+    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border ${styles[rec] || TONE.neutral}`}>
       {labels[rec] || rec}
     </span>
   )
@@ -592,7 +599,7 @@ export default function PromotionPage() {
   const handlePromote = () => {
     const included = promotions.filter(p => p.include && (p.target_class_id || p.action === 'GRADUATE'))
     if (included.length === 0) {
-      alert('Please select target classes for at least one student or mark as Graduate.')
+      showError('Please select target classes for at least one student or mark as Graduate.')
       return
     }
 
@@ -605,7 +612,7 @@ export default function PromotionPage() {
       const targetClassId = String(promo.target_class_id || '').trim()
       const roll = String(promo.new_roll_number || '').trim()
       if (!targetClassId || !roll) {
-        alert('Each promoted/repeat student must have a target class and roll number.')
+        showError('Each promoted/repeat student must have a target class and roll number.')
         return
       }
 
@@ -619,8 +626,8 @@ export default function PromotionPage() {
     }
 
     if (duplicateRollConflicts.length > 0) {
-      const preview = duplicateRollConflicts.slice(0, 5).join('\n')
-      alert(`Duplicate roll numbers detected in the same target class:\n${preview}${duplicateRollConflicts.length > 5 ? '\n...' : ''}\n\nPlease fix before promoting.`)
+      const preview = duplicateRollConflicts.slice(0, 5).join('; ')
+      showError(`Duplicate roll numbers in the same target class: ${preview}${duplicateRollConflicts.length > 5 ? '; ...' : ''}. Please fix before promoting.`)
       return
     }
 
@@ -695,7 +702,7 @@ export default function PromotionPage() {
 
   const acceptAllRecommendations = (targetClassId) => {
     if (!targetClassId) {
-      alert('Please select a target class first using "Set all target class" before accepting recommendations.')
+      showError('Please select a target class first using "Set all target class" before accepting recommendations.')
       return
     }
     // Build promotions from advisor data, sorted by roll number
@@ -724,19 +731,15 @@ export default function PromotionPage() {
   return (
     <div>
       <ConfirmModalRoot />
-      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Student Promotion</h1>
-          <p className="text-sm text-gray-600">Promote students from one academic year to the next</p>
-        </div>
-        <button
+      <PageHeader title="Student Promotion" subtitle="Promote students from one academic year to the next" className="mb-6" actions={<>
+<button
           type="button"
           onClick={() => setStep(4)}
           className="self-start px-4 py-2 text-sm rounded-lg border border-primary-300 text-primary-700 bg-primary-50 hover:bg-primary-100"
         >
           History & Corrections
         </button>
-      </div>
+</>} />
 
       {/* Progress Steps */}
       <div className="flex items-center gap-2 mb-6">
@@ -758,20 +761,18 @@ export default function PromotionPage() {
         <div className="card max-w-lg">
           <h2 className="text-lg font-semibold text-gray-900 mb-4">Select Academic Years</h2>
           <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Source Year (promote from) *</label>
-              <select value={sourceYearId} onChange={e => setSourceYearId(e.target.value)} className="input w-full">
+            <Field label="Source Year (promote from)" required>
+<select value={sourceYearId} onChange={e => setSourceYearId(e.target.value)} className="input w-full">
                 <option value="">Select source year...</option>
                 {years.map(y => <option key={y.id} value={y.id}>{y.name}</option>)}
               </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Target Year (promote to) *</label>
-              <select value={targetYearId} onChange={e => setTargetYearId(e.target.value)} className="input w-full">
+</Field>
+            <Field label="Target Year (promote to)" required>
+<select value={targetYearId} onChange={e => setTargetYearId(e.target.value)} className="input w-full">
                 <option value="">Select target year...</option>
                 {years.filter(y => y.id !== parseInt(sourceYearId)).map(y => <option key={y.id} value={y.id}>{y.name}</option>)}
               </select>
-            </div>
+</Field>
             <div className="flex justify-end pt-2">
               <button
                 onClick={() => setStep(2)}
@@ -792,7 +793,7 @@ export default function PromotionPage() {
           </p>
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Class *</label>
+              <label className="label">Class *</label>
               <ClassSelector value={sourceClassId} onChange={e => setSourceClassId(e.target.value)} className="input w-full" classes={sourceClassOptions} />
               <p className="text-xs text-gray-500 mt-1">
                 Source class list: {sourceSessionClasses?.length > 0 ? 'Session classes' : 'Master classes'}
@@ -840,8 +841,7 @@ export default function PromotionPage() {
           const candidateCount = targetSetupPreview?.target_plan?.candidates?.length || 0
 
           return (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[60] p-4">
-          <div className="bg-white rounded-xl shadow-xl max-w-lg w-full p-5">
+        <Modal open  size="lg" closeOnBackdrop={false}>
             <div className="flex items-start justify-between gap-3 mb-3">
               <div>
                 <h3 className="text-lg font-semibold text-gray-900">Prepare Target Class</h3>
@@ -892,7 +892,7 @@ export default function PromotionPage() {
                           <span className={`inline-block w-2 h-2 rounded-full ${String(candidate.id) === String(selectedTargetCandidateId) ? 'bg-blue-600' : 'bg-gray-300'}`} />
                           {candidate.label}
                         </span>
-                        <span className={`text-xs px-2 py-0.5 rounded-full ${candidate.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-700'}`}>
+                        <span className={`text-xs px-2 py-0.5 rounded-full ${candidate.is_active ? TONE.success : 'bg-gray-200 text-gray-700'}`}>
                           {candidate.is_active ? 'Active' : 'Inactive'}
                         </span>
                       </button>
@@ -931,8 +931,7 @@ export default function PromotionPage() {
                 Automatic setup is blocked because multiple valid targets exist. Select the correct class above to continue.
               </p>
             )}
-          </div>
-        </div>
+          </Modal>
           )
         })()
       )}
@@ -983,7 +982,7 @@ export default function PromotionPage() {
                 </div>
 
                 {recommendations.length === 0 ? (
-                  <p className="text-sm text-gray-500 text-center py-6">No student data found for this class and academic year.</p>
+                  <EmptyState title="No student data found for this class and academic year." compact />
                 ) : (
                   <>
                     {/* Desktop Advisor Table */}
@@ -1037,7 +1036,7 @@ export default function PromotionPage() {
                                     {r.risk_flags.length === 0 && <span className="text-xs text-green-500">None</span>}
                                     {r.risk_flags.map((flag, i) => (
                                       <span key={i} className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-medium ${
-                                        flag.startsWith('Critical') ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'
+                                        flag.startsWith('Critical') ? TONE.danger : TONE.warning
                                       }`}>{flag}</span>
                                     ))}
                                   </div>
@@ -1087,7 +1086,7 @@ export default function PromotionPage() {
                               <div className="flex flex-wrap gap-1 mb-2">
                                 {r.risk_flags.map((flag, i) => (
                                   <span key={i} className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-medium ${
-                                    flag.startsWith('Critical') ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'
+                                    flag.startsWith('Critical') ? TONE.danger : TONE.warning
                                   }`}>{flag}</span>
                                 ))}
                               </div>
@@ -1434,7 +1433,7 @@ export default function PromotionPage() {
               )}
             </div>
           ) : historyLoading ? (
-            <p className="text-sm text-gray-500 py-4">Loading history...</p>
+            <LoadingState label="Loading history..." compact />
           ) : promotionHistory.length === 0 ? (
             <p className="text-sm text-gray-500 py-4">No records match the current filters.</p>
           ) : (
@@ -1473,13 +1472,13 @@ export default function PromotionPage() {
                   {promotionHistory.map(row => {
                     const canCorrect = ['PROMOTED', 'REPEATED', 'GRADUATED'].includes(row.event_type)
                     const eventStyle = {
-                      PROMOTED: 'bg-green-100 text-green-800',
-                      REPEATED: 'bg-purple-100 text-purple-800',
-                      GRADUATED: 'bg-blue-100 text-blue-800',
-                      REVERSED: 'bg-amber-100 text-amber-800',
-                      SKIPPED: 'bg-gray-100 text-gray-600',
-                      FAILED: 'bg-red-100 text-red-800',
-                    }[row.event_type] || 'bg-gray-100 text-gray-600'
+                      PROMOTED: TONE.success,
+                      REPEATED: TONE.accent,
+                      GRADUATED: TONE.info,
+                      REVERSED: TONE.warning,
+                      SKIPPED: TONE.neutral,
+                      FAILED: TONE.danger,
+                    }[row.event_type] || TONE.neutral
                     return (
                       <tr key={row.id} className={`hover:bg-gray-50 ${selectedHistoryIds.includes(row.id) ? 'bg-primary-50/40' : ''}`}>
                         <td className="px-3 py-2 text-center">
@@ -1645,7 +1644,7 @@ export default function PromotionPage() {
 
       {/* Single Correction Modal */}
       {singleCorrectionModal && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4">
           <div className="w-full max-w-lg rounded-xl bg-white shadow-xl border border-gray-200">
             <div className="px-5 py-4 border-b border-gray-100">
               <h3 className="text-lg font-semibold text-gray-900">Edit Promotion Result</h3>
@@ -1705,10 +1704,8 @@ export default function PromotionPage() {
             </div>
 
             <div className="px-5 py-4 border-t border-gray-100 flex justify-end gap-2">
-              <button
-                onClick={() => setSingleCorrectionModal(null)}
-                className="px-4 py-2 text-sm rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50"
-              >Cancel</button>
+              <Button variant="secondary"
+ onClick={() => setSingleCorrectionModal(null)}>Cancel</Button>
               <button
                 onClick={submitSingleCorrection}
                 disabled={singleCorrectionMut.isSubmitting}

@@ -1,8 +1,10 @@
 import { useState } from 'react'
+import PageHeader from '../components/ui/PageHeader'
+import LoadingState from '../components/ui/LoadingState'
+import EmptyState from '../components/ui/EmptyState'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { attendanceApi } from '../services/api'
-import Spinner from '../components/ui/Spinner'
 
 export default function AccuracyDashboardPage() {
   const [days, setDays] = useState(30)
@@ -73,16 +75,9 @@ export default function AccuracyDashboardPage() {
 
   return (
     <div>
-      <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">AI Accuracy Dashboard</h1>
-          <p className="text-sm sm:text-base text-gray-600">
-            Track how well AI predictions match human confirmations
-            {stats.school_name && <span className="ml-1">- {stats.school_name}</span>}
-          </p>
-        </div>
-        <div className="flex items-center gap-2 sm:gap-3">
-          <select
+      <PageHeader title="AI Accuracy Dashboard" subtitle={<>Track how well AI predictions match human confirmations
+            {stats.school_name && <span className="ml-1">- {stats.school_name}</span>}</>} className="mb-6" actions={<>
+<select
             value={days}
             onChange={(e) => setDays(parseInt(e.target.value))}
             className="input"
@@ -94,13 +89,11 @@ export default function AccuracyDashboardPage() {
           <Link to="/settings" className="btn btn-secondary">
             Configure Mappings
           </Link>
-        </div>
-      </div>
+</>} />
 
       {isLoading ? (
         <div className="card text-center py-12">
-          <Spinner size="h-10 w-10" className="mx-auto" />
-          <p className="mt-4 text-gray-500">Loading accuracy data...</p>
+          <LoadingState label="Loading accuracy data..." compact />
         </div>
       ) : !hasData ? (
         <div className="card text-center py-12">
@@ -219,7 +212,7 @@ export default function AccuracyDashboardPage() {
                     <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Default</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-200">
+                <tbody className="divide-y divide-gray-100">
                   {Object.entries(defaults).map(([key, defaultVal]) => (
                     <tr key={key}>
                       <td className="px-3 py-2 text-gray-700">{key.replace(/_/g, ' ')}</td>
@@ -347,7 +340,7 @@ export default function AccuracyDashboardPage() {
           <div className="card">
             <h3 className="font-medium text-gray-900 mb-4">Weekly Accuracy Trend</h3>
             {weeklyTrend.length === 0 ? (
-              <p className="text-gray-500 text-center py-4">No trend data available yet</p>
+              <EmptyState title="No trend data available yet" compact />
             ) : (
               <>
               {/* Mobile card view */}
@@ -377,7 +370,7 @@ export default function AccuracyDashboardPage() {
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Accuracy</th>
                     </tr>
                   </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
+                  <tbody className="divide-y divide-gray-100">
                     {weeklyTrend.map((week, idx) => (
                       <tr key={idx}>
                         <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
@@ -415,7 +408,7 @@ export default function AccuracyDashboardPage() {
               </Link>
             </div>
             {commonErrors.length === 0 ? (
-              <p className="text-gray-500 text-center py-4">No OCR errors recorded yet</p>
+              <EmptyState title="No OCR errors recorded yet" compact />
             ) : (
               <div className="space-y-3">
                 {commonErrors.map((err, idx) => (

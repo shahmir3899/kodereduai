@@ -1,4 +1,9 @@
 import { useState } from 'react'
+import Modal from '../../components/ui/Modal'
+import { TONE } from '../../components/ui/statusTones'
+import Button from '../../components/ui/Button'
+import PageHeader from '../../components/ui/PageHeader'
+import LoadingState from '../../components/ui/LoadingState'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { libraryApi } from '../../services/api'
 import { useAuth } from '../../contexts/AuthContext'
@@ -175,10 +180,7 @@ export default function BookIssuePage() {
   return (
     <div>
       {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Issue / Return Books</h1>
-        <p className="text-sm sm:text-base text-gray-600">Issue books to borrowers and process returns</p>
-      </div>
+      <PageHeader title="Issue / Return Books" subtitle="Issue books to borrowers and process returns" className="mb-6" />
 
       {/* Tabs */}
       <div className="border-b border-gray-200 mb-6">
@@ -321,7 +323,7 @@ export default function BookIssuePage() {
                   </label>
                   <input
                     type="text"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="input"
                     placeholder={`Search ${issueForm.borrower_type === 'STUDENT' ? 'student' : 'staff'} by name...`}
                     value={borrowerSearch}
                     onChange={(e) => {
@@ -360,7 +362,7 @@ export default function BookIssuePage() {
                   <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Book *</label>
                   <input
                     type="text"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="input"
                     placeholder="Search book by title..."
                     value={bookSearch}
                     onChange={(e) => {
@@ -398,7 +400,7 @@ export default function BookIssuePage() {
                   <input
                     type="date"
                     required
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="input"
                     value={issueForm.due_date}
                     onChange={(e) => setIssueForm({ ...issueForm, due_date: e.target.value })}
                   />
@@ -407,7 +409,7 @@ export default function BookIssuePage() {
                   <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Notes</label>
                   <input
                     type="text"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="input"
                     placeholder="Optional notes..."
                     value={issueForm.notes}
                     onChange={(e) => setIssueForm({ ...issueForm, notes: e.target.value })}
@@ -419,7 +421,7 @@ export default function BookIssuePage() {
                 <button
                   type="submit"
                   disabled={issueMutation.isPending || !issueForm.borrower_id || !issueForm.book_id}
-                  className="px-6 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="px-6 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {issueMutation.isPending ? 'Issuing...' : 'Issue Book'}
                 </button>
@@ -435,8 +437,7 @@ export default function BookIssuePage() {
             </div>
             {issuesLoading ? (
               <div className="text-center py-12">
-                <Spinner size="md" className="mx-auto" />
-                <p className="text-gray-500 mt-3">Loading issues...</p>
+                <LoadingState label="Loading issues..." compact />
               </div>
             ) : activeIssues.length === 0 ? (
               <div className="text-center py-12 text-gray-400">
@@ -486,7 +487,7 @@ export default function BookIssuePage() {
                         <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
                       </tr>
                     </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
+                    <tbody className="divide-y divide-gray-100">
                       {activeIssues.map((issue) => {
                         const days = getDaysOverdue(issue.due_date)
                         return (
@@ -500,8 +501,8 @@ export default function BookIssuePage() {
                             <td className="px-4 py-3">
                               <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${
                                 issue.borrower_type === 'STUDENT'
-                                  ? 'bg-blue-100 text-blue-700'
-                                  : 'bg-purple-100 text-purple-700'
+                                  ? TONE.info
+                                  : TONE.accent
                               }`}>
                                 {issue.borrower_type}
                               </span>
@@ -546,7 +547,7 @@ export default function BookIssuePage() {
             <h3 className="text-lg font-semibold text-gray-900 mb-3">Search Issued Books</h3>
             <input
               type="text"
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="input"
               placeholder="Search by student name, staff name, or book title..."
               value={returnSearch}
               onChange={(e) => setReturnSearch(e.target.value)}
@@ -617,7 +618,7 @@ export default function BookIssuePage() {
                         <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
                       </tr>
                     </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
+                    <tbody className="divide-y divide-gray-100">
                       {returnIssues.map((issue) => {
                         const days = getDaysOverdue(issue.due_date)
                         const fineAmount = issue.fine_amount || (days > 0 ? days * (issue.fine_per_day || 0) : 0)
@@ -630,8 +631,8 @@ export default function BookIssuePage() {
                               <span>{issue.borrower_name || '-'}</span>
                               <span className={`ml-2 inline-flex px-1.5 py-0.5 rounded text-xs font-medium ${
                                 issue.borrower_type === 'STUDENT'
-                                  ? 'bg-blue-100 text-blue-700'
-                                  : 'bg-purple-100 text-purple-700'
+                                  ? TONE.info
+                                  : TONE.accent
                               }`}>
                                 {issue.borrower_type}
                               </span>
@@ -677,8 +678,7 @@ export default function BookIssuePage() {
 
       {/* ============ Return Confirmation Modal ============ */}
       {returnConfirm && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
-          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm mx-4">
+        <Modal open  size="sm" closeOnBackdrop={false}>
             <h2 className="text-xl font-bold text-gray-900 mb-2">Confirm Return</h2>
 
             <div className="space-y-2 mb-4">
@@ -719,22 +719,19 @@ export default function BookIssuePage() {
             )}
 
             <div className="flex justify-end gap-3">
-              <button
-                onClick={() => setReturnConfirm(null)}
-                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
-              >
+              <Button variant="secondary"
+ onClick={() => setReturnConfirm(null)}>
                 Cancel
-              </button>
+              </Button>
               <button
                 onClick={confirmReturn}
                 disabled={returnMutation.isPending}
-                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {returnMutation.isPending ? 'Processing...' : 'Confirm Return'}
               </button>
             </div>
-          </div>
-        </div>
+          </Modal>
       )}
     </div>
   )

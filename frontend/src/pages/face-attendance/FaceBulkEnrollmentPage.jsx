@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
+import Button from '../../components/ui/Button'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
 import { useToast } from '../../components/Toast'
 import { faceAttendanceApi, studentsApi } from '../../services/api'
-import LoadingSpinner from '../../components/LoadingSpinner'
+import LoadingState from '../../components/ui/LoadingState'
 import ClassSelector from '../../components/ClassSelector'
 import { useSessionClasses } from '../../hooks/useSessionClasses'
 import useTeacherScopedClasses from '../../hooks/useTeacherScopedClasses'
@@ -202,7 +203,7 @@ export default function FaceBulkEnrollmentPage() {
         >
           <span>&larr;</span> Back
         </button>
-        <h1 className="text-2xl font-bold text-gray-900">Bulk Face Enrollment</h1>
+        <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Bulk Face Enrollment</h1>
         <p className="text-sm text-gray-500 mt-1">
           Capture faceapi_v1 faces for a whole class, one student after another, without reselecting each one.
         </p>
@@ -211,7 +212,7 @@ export default function FaceBulkEnrollmentPage() {
       {phase === 'setup' && (
         <div className="bg-white rounded-lg border p-6 space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Class</label>
+            <label className="label">Class</label>
             <ClassSelector
               value={selectedClass}
               onChange={(e) => setSelectedClass(e.target.value)}
@@ -226,7 +227,7 @@ export default function FaceBulkEnrollmentPage() {
           {!resolvedSelectedClass ? (
             <p className="text-sm text-gray-500">Select a class to see its roster.</p>
           ) : studentsLoading || enrollmentsLoading ? (
-            <div className="p-8"><LoadingSpinner /></div>
+            <LoadingState />
           ) : sortedStudents.length === 0 ? (
             <p className="text-sm text-gray-500">No active students in this class.</p>
           ) : (
@@ -270,7 +271,7 @@ export default function FaceBulkEnrollmentPage() {
                 <button
                   onClick={handleStartQueue}
                   disabled={pendingStudents.length === 0}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="px-4 py-2 bg-primary-600 text-white rounded-lg text-sm font-medium hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Start Bulk Capture
                 </button>
@@ -363,15 +364,13 @@ export default function FaceBulkEnrollmentPage() {
           )}
 
           <div className="flex gap-3">
-            <button
-              onClick={handleStartOver}
-              className="px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50"
-            >
+            <Button variant="secondary"
+ onClick={handleStartOver}>
               Run Another Class
-            </button>
+            </Button>
             <button
               onClick={() => navigate('/face-attendance/enrollment')}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700"
+              className="px-4 py-2 bg-primary-600 text-white rounded-lg text-sm font-medium hover:bg-primary-700"
             >
               Back to Enrollments
             </button>

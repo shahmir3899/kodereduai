@@ -1,3 +1,4 @@
+import Field from '../../../components/ui/Field'
 // Filter card: school picker (super admin), search, Current/Left/All, class chips, gender summary.
 // Current = enrolled now. Left = withdrawn + transferred + graduated together; each of
 // those, and the still-enrolled special states, also has its own filter. All = everyone.
@@ -41,9 +42,8 @@ export default function StudentFilters({
     <div className="card mb-6">
       <div className={`grid grid-cols-1 gap-3 sm:gap-4 ${isSuperAdmin ? 'sm:grid-cols-2' : ''}`}>
         {isSuperAdmin && (
-          <div>
-            <label className="label">School</label>
-            <select
+          <Field label="School">
+<select
               className="input"
               value={selectedSchoolId || ''}
               onChange={(e) => onSchoolChange(e.target.value ? parseInt(e.target.value) : null)}
@@ -55,7 +55,7 @@ export default function StudentFilters({
                 </option>
               ))}
             </select>
-          </div>
+</Field>
         )}
         <div className={isSuperAdmin ? '' : 'w-full'}>
           <label className="label">Search</label>

@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import Field from '../../components/ui/Field'
+import LoadingState from '../../components/ui/LoadingState'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { lmsApi } from '../../services/api'
 import ClassSelector from '../../components/ClassSelector'
@@ -90,9 +92,8 @@ export default function CurriculumCoveragePage() {
               classes={teacherClassOptions || undefined}
             />
           </div>
-          <div>
-            <label className="label">Subject</label>
-            <select
+          <Field label="Subject">
+<select
               value={subjectId}
               onChange={(e) => setSubjectId(e.target.value)}
               className="input"
@@ -113,17 +114,16 @@ export default function CurriculumCoveragePage() {
                 </option>
               ))}
             </select>
-          </div>
-          <div>
-            <label className="label">Coverage Filter</label>
-            <select className="input" value={coverage} onChange={(e) => setCoverage(e.target.value)}>
+</Field>
+          <Field label="Coverage Filter">
+<select className="input" value={coverage} onChange={(e) => setCoverage(e.target.value)}>
               <option value="">All topics</option>
               <option value="taught_only">Taught only</option>
               <option value="tested_only">Tested only</option>
               <option value="both">Taught & tested</option>
               <option value="uncovered">Uncovered</option>
             </select>
-          </div>
+</Field>
         </div>
       </div>
 
@@ -148,7 +148,7 @@ export default function CurriculumCoveragePage() {
         {!classId || !subjectId ? (
           <p className="text-sm text-gray-500">Select class and subject to view coverage.</p>
         ) : isLoading ? (
-          <p className="text-sm text-gray-500">Loading topics...</p>
+          <LoadingState label="Loading topics..." compact />
         ) : topics.length === 0 ? (
           <p className="text-sm text-gray-500">No topics found for selected filters.</p>
         ) : (
@@ -204,7 +204,7 @@ export default function CurriculumCoveragePage() {
                   <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Questions</th>
                 </tr>
               </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
+              <tbody className="divide-y divide-gray-100">
                 {topics.map((topic) => (
                   <tr key={topic.id}>
                     <td className="px-4 py-3 text-sm text-gray-900">

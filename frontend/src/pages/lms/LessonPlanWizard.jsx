@@ -1,4 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
+import Field from '../../components/ui/Field'
+import { TONE } from '../../components/ui/statusTones'
+import LoadingState from '../../components/ui/LoadingState'
 import { useQuery, useQueries, useMutation, useQueryClient } from '@tanstack/react-query'
 import { lmsApi, academicsApi } from '../../services/api'
 import { useAuth } from '../../contexts/AuthContext'
@@ -12,7 +15,6 @@ import { useEscapeKey } from '../../hooks/useEscapeKey'
 import { getClassSelectorScope, getResolvedMasterClassId } from '../../utils/classScope'
 import LessonPlanAIModal from './LessonPlanAIModal'
 import { normalizeLessonPlanText } from './lessonPlanTextUtils'
-import Spinner from '../../components/ui/Spinner'
 import StaffFilter from '../../components/StaffFilter'
 
 const STEPS = [
@@ -32,12 +34,12 @@ const OBJECTIVE_BLOOM_OPTIONS = [
 ]
 
 const BLOOM_BADGE_CLASSES = {
-  remember: 'bg-gray-100 text-gray-700',
-  understand: 'bg-blue-100 text-blue-700',
-  apply: 'bg-green-100 text-green-700',
-  analyze: 'bg-yellow-100 text-yellow-800',
-  evaluate: 'bg-orange-100 text-orange-700',
-  create: 'bg-red-100 text-red-700',
+  remember: TONE.neutral,
+  understand: TONE.info,
+  apply: TONE.success,
+  analyze: TONE.warning,
+  evaluate: TONE.orange,
+  create: TONE.danger,
 }
 
 function makeObjectiveRow(seed = {}) {
@@ -497,7 +499,7 @@ export default function LessonPlanWizard({ onClose, onSuccess, editingPlan }) {
   const isSaving = createMutation.isPending || updateMutation.isPending
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 z-[60] flex items-center justify-center p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
       <div
         className="bg-white rounded-xl shadow-xl w-full max-w-4xl max-h-[90vh] overflow-y-auto p-6"
         onClick={(e) => e.stopPropagation()}
@@ -559,9 +561,8 @@ export default function LessonPlanWizard({ onClose, onSuccess, editingPlan }) {
                   classes={teacherClassOptions || undefined}
                 />
               </div>
-              <div>
-                <label className="label">Subject *</label>
-                <select
+              <Field label="Subject" required>
+<select
                   className="input w-full"
                   value={selectedSubject}
                   onChange={(e) => {
@@ -577,7 +578,7 @@ export default function LessonPlanWizard({ onClose, onSuccess, editingPlan }) {
                     </option>
                   ))}
                 </select>
-              </div>
+</Field>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -591,27 +592,25 @@ export default function LessonPlanWizard({ onClose, onSuccess, editingPlan }) {
                   placeholder="Select Teacher"
                 />
               </div>
-              <div>
-                <label className="label">Lesson Date *</label>
-                <input
+              <Field label="Lesson Date" required>
+<input
                   type="date"
                   className="input w-full"
                   value={lessonDate}
                   onChange={(e) => setLessonDate(e.target.value)}
                 />
-              </div>
+</Field>
             </div>
 
-            <div>
-              <label className="label">Duration (minutes)</label>
-              <input
+            <Field label="Duration (minutes)">
+<input
                 type="number"
                 className="input w-32"
                 min="1"
                 value={duration}
                 onChange={(e) => setDuration(e.target.value)}
               />
-            </div>
+</Field>
 
             <div>
               <label className="label mb-2">Content Mode</label>
@@ -657,8 +656,7 @@ export default function LessonPlanWizard({ onClose, onSuccess, editingPlan }) {
 
             {booksLoading ? (
               <div className="text-center py-8">
-                <Spinner size="md" className="mx-auto" />
-                <p className="text-gray-500 mt-2 text-sm">Loading curriculum books...</p>
+                <LoadingState label="Loading curriculum books..." compact />
               </div>
             ) : !Array.isArray(books) || books.length === 0 ? (
               <div className="text-center py-8 bg-gray-50 rounded-lg border border-gray-200">
@@ -695,7 +693,7 @@ export default function LessonPlanWizard({ onClose, onSuccess, editingPlan }) {
                         <span className="text-sm font-medium text-gray-800">{book.title}</span>
                         {book.language && (
                           <span className={`text-xs px-1.5 py-0.5 rounded ${
-                            isRTLLanguage(book.language) ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
+                            isRTLLanguage(book.language) ? TONE.accent : TONE.info
                           }`}>
                             {book.language.toUpperCase()}
                           </span>
@@ -913,16 +911,15 @@ export default function LessonPlanWizard({ onClose, onSuccess, editingPlan }) {
         {/* Step 4: Review & Save */}
         {step === 4 && (
           <div className="space-y-4">
-            <div>
-              <label className="label">Title *</label>
-              <input
+            <Field label="Title" required>
+<input
                 type="text"
                 className="input w-full"
                 placeholder="e.g., Introduction to Photosynthesis"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
               />
-            </div>
+</Field>
 
             <div>
               <label className="label">Description</label>
@@ -988,7 +985,7 @@ export default function LessonPlanWizard({ onClose, onSuccess, editingPlan }) {
               <div className="mt-3">
                 <p className="text-xs font-medium text-gray-600 mb-1">Topic objective suggestions</p>
                 {isTopicObjectivesLoading ? (
-                  <p className="text-xs text-gray-500">Loading topic objectives...</p>
+                  <LoadingState label="Loading topic objectives..." compact />
                 ) : topicObjectivesError ? (
                   <p className="text-xs text-red-600">Could not load topic objectives.</p>
                 ) : availableObjectives.length === 0 ? (
@@ -1012,7 +1009,7 @@ export default function LessonPlanWizard({ onClose, onSuccess, editingPlan }) {
                       >
                         <span className="truncate max-w-[220px]">{objective.statement}</span>
                         {objective.bloom_level && (
-                          <span className={`px-1.5 py-0.5 rounded-full ${BLOOM_BADGE_CLASSES[objective.bloom_level] || 'bg-gray-100 text-gray-700'}`}>
+                          <span className={`px-1.5 py-0.5 rounded-full ${BLOOM_BADGE_CLASSES[objective.bloom_level] || TONE.neutral}`}>
                             {OBJECTIVE_BLOOM_OPTIONS.find((opt) => opt.value === objective.bloom_level)?.label || objective.bloom_level}
                           </span>
                         )}
@@ -1104,7 +1101,7 @@ export default function LessonPlanWizard({ onClose, onSuccess, editingPlan }) {
                     return (
                       <span
                         key={id}
-                        className="inline-flex items-center bg-gray-100 text-gray-700 text-xs px-2.5 py-1 rounded-full"
+                        className={`inline-flex items-center ${TONE.neutral} text-xs px-2.5 py-1 rounded-full`}
                       >
                         {topic?.title || `Topic #${id}`}
                       </span>

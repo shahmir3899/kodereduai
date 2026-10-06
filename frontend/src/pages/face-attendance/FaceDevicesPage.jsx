@@ -3,7 +3,7 @@ import { useNavigate, Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useToast } from '../../components/Toast'
 import { faceAttendanceApi } from '../../services/api'
-import LoadingSpinner from '../../components/LoadingSpinner'
+import LoadingState from '../../components/ui/LoadingState'
 import ClassSelector from '../../components/ClassSelector'
 
 // A device that hasn't posted a match in this long is shown as offline.
@@ -92,7 +92,7 @@ function DeviceEditForm({ device, onCancel, onSave, saving }) {
         <button
           onClick={handleSave}
           disabled={saving || !name || (scopeType === 'CLASS' && !classObj)}
-          className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-medium hover:bg-blue-700 disabled:opacity-50"
+          className="px-3 py-1.5 bg-primary-600 text-white rounded-lg text-xs font-medium hover:bg-primary-700 disabled:opacity-50"
         >
           {saving ? 'Saving...' : 'Save'}
         </button>
@@ -142,7 +142,7 @@ export default function FaceDevicesPage() {
         >
           <span>&larr;</span> Back
         </button>
-        <h1 className="text-2xl font-bold text-gray-900">Capture Devices</h1>
+        <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Capture Devices</h1>
         <p className="text-sm text-gray-500 mt-1">
           Fixed on-prem cameras registered for this school (Fixed Camera capture). New devices are provisioned by KoderEduAI support.
         </p>
@@ -162,7 +162,7 @@ export default function FaceDevicesPage() {
 
       <div className="bg-white rounded-lg border">
         {isLoading ? (
-          <div className="p-8"><LoadingSpinner /></div>
+          <LoadingState />
         ) : devices.length === 0 ? (
           <div className="p-8 text-center text-gray-500 text-sm">
             No capture devices registered yet. Contact KoderEduAI support to set up a fixed camera.

@@ -1,4 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
+import Badge from './ui/Badge'
+import { TONE } from './ui/statusTones'
 import { useAcademicYear } from '../contexts/AcademicYearContext'
 import { sessionsApi } from '../services/api'
 
@@ -55,9 +57,9 @@ export default function SessionHealthWidget() {
           Session Health: {report.academic_year?.name}
         </h2>
         {summary?.source === 'ai' && (
-          <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full font-medium">
+          <Badge tone="accent">
             AI Summary
-          </span>
+          </Badge>
         )}
       </div>
 

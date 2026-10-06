@@ -1,9 +1,10 @@
 import { useState, useMemo } from 'react'
+import { TONE } from '../ui/statusTones'
+import LoadingState from '../ui/LoadingState'
 import { useQuery } from '@tanstack/react-query'
 import { attendanceApi, sessionsApi } from '../../services/api'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
 import ClassSelector from '../ClassSelector'
-import Spinner from '../ui/Spinner'
 import useResetStaleClassFilter from '../../hooks/useResetStaleClassFilter'
 
 function getDaysInMonth(year, month) {
@@ -179,8 +180,7 @@ export default function RegisterTab() {
         </div>
       ) : isLoading ? (
         <div className="card text-center py-12">
-          <Spinner size="h-10 w-10" className="mx-auto" />
-          <p className="mt-4 text-gray-500">Loading register...</p>
+          <LoadingState label="Loading register..." compact />
         </div>
       ) : (
         <>
@@ -196,8 +196,8 @@ export default function RegisterTab() {
           {/* Mobile View Toggle */}
           <div className="md:hidden flex items-center justify-end gap-2">
             <span className="text-xs text-gray-500">View:</span>
-            <button onClick={() => setMobileView('cards')} className={`px-3 py-1.5 text-xs rounded-lg font-medium ${mobileView === 'cards' ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-600'}`}>Cards</button>
-            <button onClick={() => setMobileView('grid')} className={`px-3 py-1.5 text-xs rounded-lg font-medium ${mobileView === 'grid' ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-600'}`}>Grid</button>
+            <button onClick={() => setMobileView('cards')} className={`px-3 py-1.5 text-xs rounded-lg font-medium ${mobileView === 'cards' ? 'bg-primary-600 text-white' : TONE.neutral}`}>Cards</button>
+            <button onClick={() => setMobileView('grid')} className={`px-3 py-1.5 text-xs rounded-lg font-medium ${mobileView === 'grid' ? 'bg-primary-600 text-white' : TONE.neutral}`}>Grid</button>
           </div>
 
           {/* ── Desktop: Full month table ── */}
@@ -301,7 +301,7 @@ export default function RegisterTab() {
                   <button
                     key={i}
                     onClick={() => setActiveWeek(i)}
-                    className={`flex-shrink-0 px-3 py-1.5 text-xs rounded-lg font-medium ${activeWeek === i ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-600'}`}
+                    className={`flex-shrink-0 px-3 py-1.5 text-xs rounded-lg font-medium ${activeWeek === i ? 'bg-primary-600 text-white' : TONE.neutral}`}
                   >
                     {week[0]}-{week[week.length - 1]}
                   </button>

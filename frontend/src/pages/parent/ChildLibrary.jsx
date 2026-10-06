@@ -1,4 +1,6 @@
 import { useParams, Link } from 'react-router-dom'
+import Badge from '../../components/ui/Badge'
+import { TONE } from '../../components/ui/statusTones'
 import { useQuery } from '@tanstack/react-query'
 import { parentsApi } from '../../services/api'
 import Spinner from '../../components/ui/Spinner'
@@ -6,10 +8,10 @@ import { RecordCard, CardGrid, ViewToggle } from '../../components/cards'
 import { useViewPreference } from '../../hooks/useViewPreference'
 
 const statusBadge = {
-  ISSUED: 'bg-blue-100 text-blue-800',
-  RETURNED: 'bg-green-100 text-green-800',
-  OVERDUE: 'bg-red-100 text-red-800',
-  LOST: 'bg-gray-100 text-gray-800',
+  ISSUED: TONE.info,
+  RETURNED: TONE.success,
+  OVERDUE: TONE.danger,
+  LOST: TONE.neutral,
 }
 
 export default function ChildLibrary() {
@@ -89,9 +91,9 @@ export default function ChildLibrary() {
                     title={issue.book_title}
                     meta={issue.book_author}
                     status={
-                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap ${statusBadge[issue.status] || 'bg-gray-100'}`}>
+                      <Badge colors={statusBadge[issue.status] || 'bg-gray-100'}>
                         {issue.status}
-                      </span>
+                      </Badge>
                     }
                     fields={[
                       { label: 'Issued', value: issue.issue_date },
@@ -121,9 +123,9 @@ export default function ChildLibrary() {
                         <td className="py-2 pr-4 text-gray-600">{issue.issue_date}</td>
                         <td className="py-2 pr-4 text-gray-600">{issue.return_date || '—'}</td>
                         <td className="py-2">
-                          <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${statusBadge[issue.status] || 'bg-gray-100'}`}>
+                          <Badge colors={statusBadge[issue.status] || 'bg-gray-100'}>
                             {issue.status}
-                          </span>
+                          </Badge>
                         </td>
                       </tr>
                     ))}

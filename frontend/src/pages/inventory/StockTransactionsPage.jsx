@@ -1,7 +1,11 @@
 import { useState } from 'react'
+import Modal from '../../components/ui/Modal'
+import { TONE } from '../../components/ui/statusTones'
+import Button from '../../components/ui/Button'
+import PageHeader from '../../components/ui/PageHeader'
+import LoadingState from '../../components/ui/LoadingState'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { inventoryApi } from '../../services/api'
-import Spinner from '../../components/ui/Spinner'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
 import { RecordCard, CardGrid, ViewToggle } from '../../components/cards'
 import { useViewPreference } from '../../hooks/useViewPreference'
@@ -106,11 +110,11 @@ export default function StockTransactionsPage() {
   }
 
   const txTypeColors = {
-    PURCHASE: 'bg-green-100 text-green-700',
-    ISSUE: 'bg-red-100 text-red-700',
-    RETURN: 'bg-blue-100 text-blue-700',
-    ADJUSTMENT: 'bg-gray-100 text-gray-700',
-    DISPOSAL: 'bg-orange-100 text-orange-700',
+    PURCHASE: TONE.success,
+    ISSUE: TONE.danger,
+    RETURN: TONE.info,
+    ADJUSTMENT: TONE.neutral,
+    DISPOSAL: TONE.orange,
   }
 
   const errorMessage = (err) => {
@@ -125,18 +129,14 @@ export default function StockTransactionsPage() {
   return (
     <div>
       {/* Header */}
-      <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Stock Transactions</h1>
-          <p className="text-sm sm:text-base text-gray-600">Record and view stock movements</p>
-        </div>
-        <button
+      <PageHeader title="Stock Transactions" subtitle="Record and view stock movements" className="mb-6" actions={<>
+<button
           onClick={openModal}
-          className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors"
+          className="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 transition-colors"
         >
           + Record Transaction
         </button>
-      </div>
+</>} />
 
       {/* Filters */}
       <div className="bg-white rounded-lg shadow-sm p-4 mb-6">
@@ -144,7 +144,7 @@ export default function StockTransactionsPage() {
           <div>
             <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Type</label>
             <select
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="input"
               value={typeFilter}
               onChange={(e) => setTypeFilter(e.target.value)}
             >
@@ -159,13 +159,13 @@ export default function StockTransactionsPage() {
           <div>
             <label className="block text-xs font-medium text-gray-500 uppercase mb-1">From Date</label>
             <input type="date"
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="input"
               value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-500 uppercase mb-1">To Date</label>
             <input type="date"
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="input"
               value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
           </div>
         </div>
@@ -175,8 +175,7 @@ export default function StockTransactionsPage() {
       <div className="bg-white rounded-lg shadow-sm">
         {isLoading ? (
           <div className="text-center py-16">
-            <Spinner size="md" className="mx-auto" />
-            <p className="text-gray-500 mt-3">Loading transactions...</p>
+            <LoadingState label="Loading transactions..." compact />
           </div>
         ) : transactions.length === 0 ? (
           <div className="text-center py-16">
@@ -202,7 +201,7 @@ export default function StockTransactionsPage() {
                   title={tx.item_name || tx.item?.name || '-'}
                   meta={formatDate(tx.date)}
                   status={
-                    <span className={`flex-shrink-0 px-2 py-0.5 rounded text-xs font-medium whitespace-nowrap ${txTypeColors[tx.transaction_type] || 'bg-gray-100 text-gray-700'}`}>
+                    <span className={`flex-shrink-0 px-2 py-0.5 rounded text-xs font-medium whitespace-nowrap ${txTypeColors[tx.transaction_type] || TONE.neutral}`}>
                       {tx.transaction_type}
                     </span>
                   }
@@ -235,13 +234,13 @@ export default function StockTransactionsPage() {
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">By</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-200">
+                <tbody className="divide-y divide-gray-100">
                   {transactions.map((tx) => (
                     <tr key={tx.id} className="hover:bg-gray-50">
                       <td className="px-4 py-3 text-sm text-gray-500">{formatDate(tx.date)}</td>
                       <td className="px-4 py-3 text-sm font-medium text-gray-900">{tx.item_name || tx.item?.name || '-'}</td>
                       <td className="px-4 py-3 text-center">
-                        <span className={`inline-flex px-2 py-0.5 rounded text-xs font-medium ${txTypeColors[tx.transaction_type] || 'bg-gray-100 text-gray-700'}`}>
+                        <span className={`inline-flex px-2 py-0.5 rounded text-xs font-medium ${txTypeColors[tx.transaction_type] || TONE.neutral}`}>
                           {tx.transaction_type}
                         </span>
                       </td>
@@ -267,8 +266,7 @@ export default function StockTransactionsPage() {
 
       {/* ============ Record Transaction Modal ============ */}
       {showModal && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
-          <div className="bg-white rounded-xl shadow-xl p-4 sm:p-6 w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
+        <Modal open  size="lg" closeOnBackdrop={false}>
             <h2 className="text-xl font-bold text-gray-900 mb-4">Record Transaction</h2>
 
             {createTxMutation.error && (
@@ -302,7 +300,7 @@ export default function StockTransactionsPage() {
               <div>
                 <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Item *</label>
                 <select required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="input"
                   value={txForm.item} onChange={(e) => setTxForm({ ...txForm, item: e.target.value })}>
                   <option value="">-- Select Item --</option>
                   {items.map((i) => <option key={i.id} value={i.id}>{i.name} (Stock: {i.current_stock} {i.unit})</option>)}
@@ -315,13 +313,13 @@ export default function StockTransactionsPage() {
                     Quantity * {txForm.transaction_type === 'ADJUSTMENT' && '(negative to reduce)'}
                   </label>
                   <input type="number" required
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="input"
                     value={txForm.quantity} onChange={(e) => setTxForm({ ...txForm, quantity: e.target.value })} />
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Unit Price (Rs)</label>
                   <input type="number" min="0" step="0.01"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="input"
                     value={txForm.unit_price} onChange={(e) => setTxForm({ ...txForm, unit_price: e.target.value })} />
                 </div>
               </div>
@@ -330,7 +328,7 @@ export default function StockTransactionsPage() {
                 <div>
                   <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Vendor</label>
                   <select
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="input"
                     value={txForm.vendor} onChange={(e) => setTxForm({ ...txForm, vendor: e.target.value })}>
                     <option value="">-- Select Vendor --</option>
                     {vendors.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
@@ -342,13 +340,13 @@ export default function StockTransactionsPage() {
                 <div>
                   <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Date *</label>
                   <input type="date" required
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="input"
                     value={txForm.date} onChange={(e) => setTxForm({ ...txForm, date: e.target.value })} />
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Reference #</label>
                   <input type="text" placeholder="Invoice/PO number"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="input"
                     value={txForm.reference_number} onChange={(e) => setTxForm({ ...txForm, reference_number: e.target.value })} />
                 </div>
               </div>
@@ -356,20 +354,19 @@ export default function StockTransactionsPage() {
               <div>
                 <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Remarks</label>
                 <textarea rows={2}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="input"
                   value={txForm.remarks} onChange={(e) => setTxForm({ ...txForm, remarks: e.target.value })} />
               </div>
 
               <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
-                <button type="button" onClick={closeModal} className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">Cancel</button>
+                <Button variant="secondary" type="button" onClick={closeModal}>Cancel</Button>
                 <button type="submit" disabled={createTxMutation.isPending}
-                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed">
+                  className="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed">
                   {createTxMutation.isPending ? 'Saving...' : 'Record Transaction'}
                 </button>
               </div>
             </form>
-          </div>
-        </div>
+          </Modal>
       )}
     </div>
   )

@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import { TONE } from '../components/ui/statusTones'
+import PageHeader from '../components/ui/PageHeader'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { schoolsApi, usersApi, organizationsApi, membershipsApi, activityLogApi } from '../services/api'
 import { PasswordInput } from '../components'
@@ -592,12 +594,7 @@ export default function SuperAdminDashboard() {
 
   return (
     <div>
-      <div className="mb-6 flex items-center justify-between">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Platform Administration</h1>
-          <p className="text-sm sm:text-base text-gray-600">Manage schools, users, and organizations</p>
-        </div>
-      </div>
+      <PageHeader title="Platform Administration" subtitle="Manage schools, users, and organizations" className="mb-6" />
 
       {/* Tabs */}
       <div className="border-b border-gray-200 mb-6">
@@ -671,7 +668,7 @@ export default function SuperAdminDashboard() {
             {demoStats.logins_by_role?.length > 0 && (
               <div className="flex flex-wrap gap-2 mt-4">
                 {demoStats.logins_by_role.map((r) => (
-                  <span key={r.role || 'unknown'} className="px-2 py-1 bg-gray-100 text-gray-700 text-xs rounded-full font-medium">
+                  <span key={r.role || 'unknown'} className={`px-2 py-1 ${TONE.neutral} text-xs rounded-full font-medium`}>
                     {r.role || 'Unknown'}: {r.count}
                   </span>
                 ))}
@@ -727,7 +724,7 @@ export default function SuperAdminDashboard() {
                       <TH></TH>
                     </tr>
                   </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
+                  <tbody className="divide-y divide-gray-100">
                     {pStats.school_breakdown.map((s) => (
                       <tr key={s.id} className="hover:bg-gray-50">
                         <td className="px-4 py-3 font-medium text-gray-900">{s.name}</td>
@@ -919,7 +916,7 @@ export default function SuperAdminDashboard() {
                       <TH>Actions</TH>
                     </tr>
                   </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
+                  <tbody className="divide-y divide-gray-100">
                     {schools.map((school) => (
                       <tr key={school.id} className="hover:bg-gray-50">
                         <td className="px-4 py-3">
@@ -1070,7 +1067,7 @@ export default function SuperAdminDashboard() {
                       <TH>Actions</TH>
                     </tr>
                   </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
+                  <tbody className="divide-y divide-gray-100">
                     {users.map((user) => (
                       <tr key={user.id} className="hover:bg-gray-50">
                         <td className="px-4 py-3">
@@ -1195,7 +1192,7 @@ export default function SuperAdminDashboard() {
                       <TH>Actions</TH>
                     </tr>
                   </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
+                  <tbody className="divide-y divide-gray-100">
                     {orgs.map((org) => (
                       <tr key={org.id} className="hover:bg-gray-50">
                         <td className="px-4 py-3 font-medium text-gray-900">{org.name}</td>
@@ -1308,7 +1305,7 @@ export default function SuperAdminDashboard() {
                       <TH>Actions</TH>
                     </tr>
                   </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
+                  <tbody className="divide-y divide-gray-100">
                     {memberships.map((mem) => (
                       <tr key={mem.id} className="hover:bg-gray-50">
                         <td className="px-4 py-3">
@@ -1404,7 +1401,7 @@ export default function SuperAdminDashboard() {
                       <TH>When</TH>
                     </tr>
                   </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
+                  <tbody className="divide-y divide-gray-100">
                     {activityLog.map((entry) => (
                       <tr key={entry.id} className="hover:bg-gray-50">
                         <td className="px-4 py-3 text-sm font-medium text-gray-900"><ActionBadge action={entry.action} /></td>
@@ -1899,7 +1896,7 @@ function Empty({ text }) {
 function StatusBadge({ active }) {
   return (
     <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-      active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+      active ? TONE.success : TONE.danger
     }`}>
       {active ? 'Active' : 'Inactive'}
     </span>
@@ -1907,9 +1904,9 @@ function StatusBadge({ active }) {
 }
 
 function RoleBadge({ role, display }) {
-  const cls = role === 'SUPER_ADMIN' ? 'bg-purple-100 text-purple-800'
-    : role === 'SCHOOL_ADMIN' ? 'bg-blue-100 text-blue-800'
-    : 'bg-gray-100 text-gray-800'
+  const cls = role === 'SUPER_ADMIN' ? TONE.accent
+    : role === 'SCHOOL_ADMIN' ? TONE.info
+    : TONE.neutral
   return (
     <span className={`px-2 py-1 rounded-full text-xs font-medium ${cls}`}>
       {display || (role === 'SCHOOL_ADMIN' ? 'School Admin' : role === 'STAFF' ? 'Staff' : role)}
@@ -1985,7 +1982,7 @@ function DemoActivityFeed({ recipients = [], logins = [] }) {
       {events.map((e, i) => (
         <li key={i} className="py-2 flex items-center justify-between gap-3 text-sm">
           <span className="flex items-center gap-2 min-w-0">
-            <span className={`px-2 py-0.5 rounded-full text-xs font-medium shrink-0 ${e.kind === 'email' ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700'}`}>
+            <span className={`px-2 py-0.5 rounded-full text-xs font-medium shrink-0 ${e.kind === 'email' ? TONE.info : TONE.success}`}>
               {e.kind === 'email' ? 'Email' : 'Login'}
             </span>
             <span className="text-gray-700 truncate">{e.label}</span>
@@ -2009,7 +2006,7 @@ function Field({ label, children }) {
 function Modal({ title, onClose, children, scroll }) {
   useEscapeKey(onClose)
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4">
       {/* Full-screen sheet below sm (cramped forms — e.g. the User modal's school
           checkbox list — need the room); centered card at sm+ like before. */}
       <div

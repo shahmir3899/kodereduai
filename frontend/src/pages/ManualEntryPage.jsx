@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
+import LoadingState from '../components/ui/LoadingState'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router-dom'
 import { attendanceApi, sessionsApi } from '../services/api'
@@ -7,7 +8,6 @@ import ClassSelector from '../components/ClassSelector'
 import useTeacherScopedClasses from '../hooks/useTeacherScopedClasses'
 import { useSessionClasses } from '../hooks/useSessionClasses'
 import { buildSessionOrMasterClassParams } from '../utils/classScope'
-import Spinner from '../components/ui/Spinner'
 import PageHeader from '../components/ui/PageHeader'
 
 export default function ManualEntryPage() {
@@ -245,8 +245,7 @@ export default function ManualEntryPage() {
         </div>
       ) : isDataLoading ? (
         <div className="card text-center py-12">
-          <Spinner size="h-10 w-10" className="mx-auto" />
-          <p className="mt-4 text-gray-500">Loading students...</p>
+          <LoadingState label="Loading students..." compact />
         </div>
       ) : attendanceData.length === 0 ? (
         <div className="card text-center py-12">

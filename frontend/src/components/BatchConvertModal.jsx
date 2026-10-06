@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import LoadingState from './ui/LoadingState'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { admissionsApi, sessionsApi } from '../services/api'
 import ClassSelector from './ClassSelector'
@@ -110,11 +111,11 @@ export default function BatchConvertModal({ enquiryIds, onClose, onSuccess }) {
         <div className="space-y-4">
           {/* Academic Year */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="label">
               Academic Year <span className="text-red-500">*</span>
             </label>
             {yearsLoading ? (
-              <div className="text-sm text-gray-400">Loading...</div>
+              <LoadingState label="Loading..." compact />
             ) : (
               <select
                 value={academicYearId}
@@ -133,7 +134,7 @@ export default function BatchConvertModal({ enquiryIds, onClose, onSuccess }) {
 
           {/* Class */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="label">
               Class <span className="text-red-500">*</span>
             </label>
             <ClassSelector

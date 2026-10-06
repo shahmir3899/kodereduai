@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import Button from '../../../components/ui/Button'
 import { useMutation } from '@tanstack/react-query'
 import { parentsApi } from '../../../services/api'
 import { useToast } from '../../../components/Toast'
@@ -27,7 +28,7 @@ export default function ParentInviteModal({ student, onClose }) {
   const link = invite ? `${window.location.origin}/parent/register?code=${invite.invite_code}` : ''
 
   return (
-    <div className="fixed inset-0 z-[60] bg-black/40 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4">
       <div className="bg-white rounded-xl shadow-xl border border-gray-200 w-full max-w-md">
         <div className="px-6 py-4 border-b border-gray-200">
           <h2 className="text-lg font-semibold text-gray-900">Generate Parent Invite</h2>
@@ -80,7 +81,7 @@ export default function ParentInviteModal({ student, onClose }) {
               <label htmlFor="invite-relation" className="block text-sm font-medium text-gray-700 mb-1">Relation to Student</label>
               <select
                 id="invite-relation"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                className="input"
                 value={form.relation}
                 onChange={(e) => setForm((p) => ({ ...p, relation: e.target.value }))}
               >
@@ -95,7 +96,7 @@ export default function ParentInviteModal({ student, onClose }) {
               <input
                 id="invite-phone"
                 type="text"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                className="input"
                 value={form.parent_phone}
                 onChange={(e) => setForm((p) => ({ ...p, parent_phone: e.target.value }))}
                 placeholder="For verification during registration"
@@ -105,18 +106,18 @@ export default function ParentInviteModal({ student, onClose }) {
         )}
 
         <div className="px-6 py-4 border-t border-gray-200 flex justify-end gap-2">
-          <button type="button" onClick={onClose} className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50">
+          <Button variant="secondary" type="button" onClick={onClose}>
             {invite ? 'Done' : 'Cancel'}
-          </button>
+          </Button>
           {!invite && (
-            <button
-              type="button"
-              onClick={() => mutation.mutate(form)}
-              disabled={mutation.isPending}
-              className="px-4 py-2 bg-sky-600 text-white rounded-lg hover:bg-sky-700 disabled:opacity-50"
-            >
+            <Button
+ type="button"
+ onClick={() => mutation.mutate(form)}
+ disabled={mutation.isPending}
+ 
+ >
               {mutation.isPending ? 'Generating...' : 'Generate Invite'}
-            </button>
+            </Button>
           )}
         </div>
       </div>

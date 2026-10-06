@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import PageHeader from '../../components/ui/PageHeader'
 import { useParams, Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { parentsApi, sessionsApi } from '../../services/api'
@@ -160,12 +161,7 @@ export default function ChildAttendance() {
       </Link>
 
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Attendance Calendar</h1>
-          <p className="text-sm text-gray-500 mt-1">Monthly attendance view</p>
-        </div>
-      </div>
+      <PageHeader title="Attendance Calendar" subtitle="Monthly attendance view" />
 
       {/* Month Navigation */}
       <div className="flex items-center justify-between bg-white rounded-xl border border-gray-200 px-4 py-3">

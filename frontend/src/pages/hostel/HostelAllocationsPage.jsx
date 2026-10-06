@@ -1,8 +1,12 @@
 import { useState } from 'react'
+import Modal from '../../components/ui/Modal'
+import { TONE } from '../../components/ui/statusTones'
+import Button from '../../components/ui/Button'
+import PageHeader from '../../components/ui/PageHeader'
+import LoadingState from '../../components/ui/LoadingState'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { hostelApi } from '../../services/api'
 import { useAuth } from '../../contexts/AuthContext'
-import Spinner from '../../components/ui/Spinner'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
 
 function formatDate(dateStr) {
@@ -110,27 +114,23 @@ export default function HostelAllocationsPage() {
   }
 
   const statusColors = {
-    active: 'bg-green-100 text-green-700',
-    ACTIVE: 'bg-green-100 text-green-700',
-    vacated: 'bg-gray-100 text-gray-700',
-    VACATED: 'bg-gray-100 text-gray-700',
+    active: TONE.success,
+    ACTIVE: TONE.success,
+    vacated: TONE.neutral,
+    VACATED: TONE.neutral,
   }
 
   return (
     <div>
       {/* Header */}
-      <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Room Allocations</h1>
-          <p className="text-sm sm:text-base text-gray-600">Manage student-to-room allocations</p>
-        </div>
-        <button
+      <PageHeader title="Room Allocations" subtitle="Manage student-to-room allocations" className="mb-6" actions={<>
+<button
           onClick={openModal}
-          className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors"
+          className="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 transition-colors"
         >
           Allocate Student
         </button>
-      </div>
+</>} />
 
       {/* Filters */}
       <div className="bg-white rounded-lg shadow-sm p-4 mb-6">
@@ -138,7 +138,7 @@ export default function HostelAllocationsPage() {
           <div>
             <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Hostel</label>
             <select
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="input"
               value={hostelFilter}
               onChange={(e) => setHostelFilter(e.target.value)}
             >
@@ -151,7 +151,7 @@ export default function HostelAllocationsPage() {
           <div>
             <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Status</label>
             <select
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="input"
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
             >
@@ -167,8 +167,7 @@ export default function HostelAllocationsPage() {
       <div className="bg-white rounded-lg shadow-sm">
         {isLoading ? (
           <div className="text-center py-16">
-            <Spinner size="md" className="mx-auto" />
-            <p className="text-gray-500 mt-3">Loading allocations...</p>
+            <LoadingState label="Loading allocations..." compact />
           </div>
         ) : allocations.length === 0 ? (
           <div className="text-center py-16">
@@ -196,7 +195,7 @@ export default function HostelAllocationsPage() {
                       </p>
                     </div>
                     <span className={`flex-shrink-0 ml-2 px-2 py-0.5 rounded text-xs font-medium ${
-                      statusColors[alloc.status] || 'bg-gray-100 text-gray-700'
+                      statusColors[alloc.status] || TONE.neutral
                     }`}>
                       {alloc.status}
                     </span>
@@ -236,7 +235,7 @@ export default function HostelAllocationsPage() {
                     <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
+                <tbody className="divide-y divide-gray-100">
                   {allocations.map((alloc) => (
                     <tr key={alloc.id} className="hover:bg-gray-50">
                       <td className="px-4 py-3 text-sm font-medium text-gray-900">
@@ -256,7 +255,7 @@ export default function HostelAllocationsPage() {
                       </td>
                       <td className="px-4 py-3 text-center">
                         <span className={`inline-flex px-2 py-0.5 rounded text-xs font-medium ${
-                          statusColors[alloc.status] || 'bg-gray-100 text-gray-700'
+                          statusColors[alloc.status] || TONE.neutral
                         }`}>
                           {alloc.status}
                         </span>
@@ -285,8 +284,7 @@ export default function HostelAllocationsPage() {
 
       {/* ============ Allocate Student Modal ============ */}
       {showModal && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
-          <div className="bg-white rounded-xl shadow-xl p-4 sm:p-6 w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
+        <Modal open  size="lg" closeOnBackdrop={false}>
             <h2 className="text-xl font-bold text-gray-900 mb-4">Allocate Student</h2>
 
             {createAllocationMutation.error && (
@@ -303,7 +301,7 @@ export default function HostelAllocationsPage() {
                 <input
                   type="number"
                   required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="input"
                   placeholder="Enter student ID"
                   value={allocationForm.student}
                   onChange={(e) => setAllocationForm({ ...allocationForm, student: e.target.value })}
@@ -314,7 +312,7 @@ export default function HostelAllocationsPage() {
                 <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Hostel *</label>
                 <select
                   required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="input"
                   value={allocationForm.hostel_for_room || ''}
                   onChange={(e) => setAllocationForm({ ...allocationForm, hostel_for_room: e.target.value, room: '' })}
                 >
@@ -329,7 +327,7 @@ export default function HostelAllocationsPage() {
                 <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Room *</label>
                 <select
                   required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="input"
                   value={allocationForm.room}
                   onChange={(e) => setAllocationForm({ ...allocationForm, room: e.target.value })}
                   disabled={!allocationForm.hostel_for_room}
@@ -353,7 +351,7 @@ export default function HostelAllocationsPage() {
                 <input
                   type="text"
                   required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="input"
                   placeholder="e.g. 2025-2026"
                   value={allocationForm.academic_year}
                   onChange={(e) => setAllocationForm({ ...allocationForm, academic_year: e.target.value })}
@@ -361,30 +359,26 @@ export default function HostelAllocationsPage() {
               </div>
 
               <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
-                <button
-                  type="button"
-                  onClick={closeModal}
-                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
-                >
+                <Button variant="secondary"
+ type="button"
+ onClick={closeModal}>
                   Cancel
-                </button>
+                </Button>
                 <button
                   type="submit"
                   disabled={createAllocationMutation.isPending}
-                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {createAllocationMutation.isPending ? 'Allocating...' : 'Allocate'}
                 </button>
               </div>
             </form>
-          </div>
-        </div>
+          </Modal>
       )}
 
       {/* ============ Vacate Confirmation Modal ============ */}
       {vacateConfirm && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
-          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm mx-4">
+        <Modal open  size="sm" closeOnBackdrop={false}>
             <h2 className="text-xl font-bold text-gray-900 mb-2">Vacate Student</h2>
             <p className="text-gray-600 mb-4">
               Are you sure you want to vacate{' '}
@@ -410,12 +404,10 @@ export default function HostelAllocationsPage() {
             )}
 
             <div className="flex justify-end gap-3">
-              <button
-                onClick={() => setVacateConfirm(null)}
-                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
-              >
+              <Button variant="secondary"
+ onClick={() => setVacateConfirm(null)}>
                 Cancel
-              </button>
+              </Button>
               <button
                 onClick={() => vacateAllocationMutation.mutate(vacateConfirm.id)}
                 disabled={vacateAllocationMutation.isPending}
@@ -424,8 +416,7 @@ export default function HostelAllocationsPage() {
                 {vacateAllocationMutation.isPending ? 'Processing...' : 'Vacate'}
               </button>
             </div>
-          </div>
-        </div>
+          </Modal>
       )}
     </div>
   )

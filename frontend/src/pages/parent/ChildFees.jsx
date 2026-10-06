@@ -1,19 +1,24 @@
 import { useState } from 'react'
+import Modal from '../../components/ui/Modal'
+import { TONE } from '../../components/ui/statusTones'
+import PageHeader from '../../components/ui/PageHeader'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import { parentsApi } from '../../services/api'
 import Spinner from '../../components/ui/Spinner'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
-import { LedgerCard, CardGrid, ViewToggle, TrendStrip } from '../../components/cards'
+import { LedgerCard, ViewToggle, TrendStrip } from '../../components/cards'
+import DataTable from '../../components/ui/DataTable'
+import Badge from '../../components/ui/Badge'
 import { useViewPreference } from '../../hooks/useViewPreference'
 
 const STATUS_COLORS = {
-  PAID: 'bg-green-100 text-green-800',
-  PARTIAL: 'bg-yellow-100 text-yellow-800',
-  UNPAID: 'bg-red-100 text-red-800',
-  PENDING: 'bg-red-100 text-red-800',
-  ADVANCE: 'bg-blue-100 text-blue-800',
-  OVERDUE: 'bg-red-100 text-red-800',
+  PAID: TONE.success,
+  PARTIAL: TONE.warning,
+  UNPAID: TONE.danger,
+  PENDING: TONE.danger,
+  ADVANCE: TONE.info,
+  OVERDUE: TONE.danger,
 }
 
 const TREND_TONE = {
@@ -136,13 +141,8 @@ export default function ChildFees() {
       </Link>
 
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Fee Details</h1>
-          <p className="text-sm text-gray-500 mt-1">Payment history and outstanding balance</p>
-        </div>
-        <div className="flex items-center gap-3">
-          <select
+      <PageHeader title="Fee Details" subtitle="Payment history and outstanding balance" actions={<>
+<select
             value={filterYear}
             onChange={(e) => setFilterYear(Number(e.target.value))}
             className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
@@ -151,8 +151,7 @@ export default function ChildFees() {
               <option key={y} value={y}>{y}</option>
             ))}
           </select>
-        </div>
-      </div>
+</>} />
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -184,7 +183,7 @@ export default function ChildFees() {
         </div>
         <div className="bg-white rounded-xl border border-gray-200 p-5">
           <div className="flex items-center gap-3">
-            <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${outstanding > 0 ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'}`}>
+            <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${outstanding > 0 ? TONE.danger : TONE.success}`}>
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
@@ -235,64 +234,30 @@ export default function ChildFees() {
             <ViewToggle view={view} onChange={setView} />
           </div>
 
-          {view === 'cards' ? (
-          <CardGrid>
-            {payments.map((payment, idx) => (
+          <DataTable
+            view={view}
+            rows={payments}
+            rowKey={(p, i) => p.id || i}
+            columns={[
+              { key: 'period', header: 'Month / Type', mobile: 'title', cellClassName: 'font-medium', render: (p) => p.month_name || p.fee_type_name || `${p.month}/${p.year}` },
+              { key: 'due', header: 'Amount Due', align: 'right', render: (p) => `PKR ${parseFloat(p.amount_due || 0).toLocaleString()}` },
+              { key: 'paid', header: 'Amount Paid', align: 'right', cellClassName: 'text-green-700 font-medium', render: (p) => `PKR ${parseFloat(p.amount_paid || 0).toLocaleString()}` },
+              { key: 'status', header: 'Status', mobile: 'status', render: (p) => <Badge colors={STATUS_COLORS[p.status]}>{p.status}</Badge> },
+              { key: 'date', header: 'Payment Date', cellClassName: 'text-gray-500', render: (p) => (p.payment_date ? new Date(p.payment_date).toLocaleDateString() : '-') },
+            ]}
+            renderCard={(payment) => (
               <LedgerCard
-                key={payment.id || idx}
                 title={payment.month_name || payment.fee_type_name || `${payment.month}/${payment.year}`}
                 meta={payment.payment_date ? `Paid ${new Date(payment.payment_date).toLocaleDateString()}` : undefined}
-                status={<span className={`px-2 py-0.5 rounded text-xs font-medium whitespace-nowrap ${STATUS_COLORS[payment.status] || 'bg-gray-100 text-gray-800'}`}>{payment.status}</span>}
+                status={<Badge colors={STATUS_COLORS[payment.status]}>{payment.status}</Badge>}
                 breakdown={[
                   { label: 'Due', value: parseFloat(payment.amount_due || 0) },
                   { label: 'Paid', value: parseFloat(payment.amount_paid || 0), emphasis: true },
                 ]}
                 trend={<TrendStrip points={trendPoints} currentLabel={(payment.month_name || '').slice(0, 3)} formatValue={(v) => `${(v / 1000).toFixed(0)}k`} />}
               />
-            ))}
-          </CardGrid>
-          ) : (
-          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Month / Type</th>
-                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Amount Due</th>
-                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Amount Paid</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Payment Date</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200">
-                  {payments.map((payment, idx) => (
-                    <tr key={payment.id || idx} className="hover:bg-gray-50">
-                      <td className="px-4 py-3 text-sm font-medium text-gray-900">
-                        {payment.month_name || payment.fee_type_name || `${payment.month}/${payment.year}`}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-gray-900 text-right">
-                        PKR {parseFloat(payment.amount_due || 0).toLocaleString()}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-green-700 text-right font-medium">
-                        PKR {parseFloat(payment.amount_paid || 0).toLocaleString()}
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className={`px-2 py-0.5 rounded text-xs font-medium ${STATUS_COLORS[payment.status] || 'bg-gray-100 text-gray-800'}`}>
-                          {payment.status}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-sm text-gray-500">
-                        {payment.payment_date
-                          ? new Date(payment.payment_date).toLocaleDateString()
-                          : '-'}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-          )}
+            )}
+          />
         </>
       )}
 
@@ -345,8 +310,7 @@ export default function ChildFees() {
 
       {/* Pay Modal */}
       {showPayModal && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
-          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm mx-4">
+        <Modal open  size="sm" closeOnBackdrop={false}>
             <h2 className="text-lg font-bold text-gray-900 mb-4">Choose Payment Method</h2>
             <div className="space-y-2 mb-4">
               {gateways.map((gw) => (
@@ -378,8 +342,7 @@ export default function ChildFees() {
                 {payMutation.isPending ? 'Processing...' : 'Proceed to Pay'}
               </button>
             </div>
-          </div>
-        </div>
+          </Modal>
       )}
     </div>
   )

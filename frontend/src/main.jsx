@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react'
+import LoadingState from './components/ui/LoadingState'
 import ReactDOM from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -10,7 +11,6 @@ import { ToastProvider } from './components/Toast.jsx'
 import { BackgroundTaskProvider } from './contexts/BackgroundTaskContext.jsx'
 import { schoolsApi } from './services/api'
 import './index.css'
-import Spinner from './components/ui/Spinner'
 import { installFinanceQueryRules } from './financeQueryRules'
 
 const VITE_PRELOAD_RELOAD_KEY = 'vite-preload-reloaded-once'
@@ -113,8 +113,7 @@ function AppWithSubdomain() {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
-          <Spinner size="lg" className="mx-auto" />
-          <p className="mt-4 text-gray-600">Loading school...</p>
+          <LoadingState label="Loading school..." compact />
         </div>
       </div>
     )

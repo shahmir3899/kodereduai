@@ -185,7 +185,7 @@ export default function StudentFormModal({
   )
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4">
       <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl mx-4 max-h-[92vh] flex flex-col">
         <div className="p-4 sm:p-6 overflow-y-auto">
           <h2 className="text-xl font-bold text-gray-900 mb-4">{isEdit ? 'Edit Student' : 'Add Student'}</h2>

@@ -1,8 +1,10 @@
 import { useQuery } from '@tanstack/react-query'
+import { TONE } from '../../components/ui/statusTones'
+import PageHeader from '../../components/ui/PageHeader'
+import LoadingState from '../../components/ui/LoadingState'
 import { Link } from 'react-router-dom'
 import { inventoryApi } from '../../services/api'
 import { useAuth } from '../../contexts/AuthContext'
-import Spinner from '../../components/ui/Spinner'
 
 export default function InventoryDashboard() {
   const { user } = useAuth()
@@ -60,13 +62,9 @@ export default function InventoryDashboard() {
   if (isLoading) {
     return (
       <div>
-        <div className="mb-6">
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Inventory & Store</h1>
-          <p className="text-sm sm:text-base text-gray-600">Inventory management overview</p>
-        </div>
+        <PageHeader title="Inventory & Store" subtitle="Inventory management overview" className="mb-6" />
         <div className="text-center py-16">
-          <Spinner size="md" className="mx-auto" />
-          <p className="text-gray-500 mt-3">Loading inventory stats...</p>
+          <LoadingState label="Loading inventory stats..." compact />
         </div>
       </div>
     )
@@ -75,10 +73,7 @@ export default function InventoryDashboard() {
   if (error) {
     return (
       <div>
-        <div className="mb-6">
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Inventory & Store</h1>
-          <p className="text-sm sm:text-base text-gray-600">Inventory management overview</p>
-        </div>
+        <PageHeader title="Inventory & Store" subtitle="Inventory management overview" className="mb-6" />
         <div className="bg-white rounded-lg shadow-sm p-6 text-center">
           <svg className="w-12 h-12 text-red-400 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
@@ -94,22 +89,17 @@ export default function InventoryDashboard() {
   const lowStockItems = stats.low_stock_items || []
 
   const txTypeColors = {
-    PURCHASE: 'bg-green-100 text-green-700',
-    ISSUE: 'bg-red-100 text-red-700',
-    RETURN: 'bg-blue-100 text-blue-700',
-    ADJUSTMENT: 'bg-gray-100 text-gray-700',
-    DISPOSAL: 'bg-orange-100 text-orange-700',
+    PURCHASE: TONE.success,
+    ISSUE: TONE.danger,
+    RETURN: TONE.info,
+    ADJUSTMENT: TONE.neutral,
+    DISPOSAL: TONE.orange,
   }
 
   return (
     <div>
       {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Inventory & Store</h1>
-        <p className="text-sm sm:text-base text-gray-600">
-          Inventory management overview &mdash; Welcome, {user?.username}
-        </p>
-      </div>
+      <PageHeader title="Inventory & Store" subtitle={<>Inventory management overview &mdash; Welcome, {user?.username}</>} className="mb-6" />
 
       {/* Stats Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
@@ -257,7 +247,7 @@ export default function InventoryDashboard() {
                   <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Amount</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-200">
+              <tbody className="divide-y divide-gray-100">
                 {recentTransactions.map((tx) => (
                   <tr key={tx.id} className="hover:bg-gray-50">
                     <td className="px-4 py-3 text-sm text-gray-500">
@@ -265,7 +255,7 @@ export default function InventoryDashboard() {
                     </td>
                     <td className="px-4 py-3 text-sm font-medium text-gray-900">{tx.item_name || tx.item?.name || '-'}</td>
                     <td className="px-4 py-3 text-center">
-                      <span className={`inline-flex px-2 py-0.5 rounded text-xs font-medium ${txTypeColors[tx.transaction_type] || 'bg-gray-100 text-gray-700'}`}>
+                      <span className={`inline-flex px-2 py-0.5 rounded text-xs font-medium ${txTypeColors[tx.transaction_type] || TONE.neutral}`}>
                         {tx.transaction_type}
                       </span>
                     </td>

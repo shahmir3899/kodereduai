@@ -1,4 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
+import Field from '../../components/ui/Field'
+import { TONE } from '../../components/ui/statusTones'
+import PageHeader from '../../components/ui/PageHeader'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../../contexts/AuthContext'
 import { messagingApi } from '../../services/api'
@@ -24,18 +27,18 @@ const AUDIENCE_TABS = [
 ]
 
 const ROLE_BADGES = {
-  SCHOOL_ADMIN: { label: 'Admin', color: 'bg-purple-100 text-purple-700' },
-  PRINCIPAL: { label: 'Principal', color: 'bg-indigo-100 text-indigo-700' },
-  TEACHER: { label: 'Teacher', color: 'bg-blue-100 text-blue-700' },
-  PARENT: { label: 'Parent', color: 'bg-green-100 text-green-700' },
-  STUDENT: { label: 'Student', color: 'bg-amber-100 text-amber-700' },
-  MANAGER: { label: 'Manager', color: 'bg-rose-100 text-rose-700' },
-  ACCOUNTANT: { label: 'Accountant', color: 'bg-teal-100 text-teal-700' },
-  STAFF: { label: 'Staff', color: 'bg-gray-100 text-gray-700' },
+  SCHOOL_ADMIN: { label: 'Admin', color: TONE.accent },
+  PRINCIPAL: { label: 'Principal', color: TONE.indigo },
+  TEACHER: { label: 'Teacher', color: TONE.info },
+  PARENT: { label: 'Parent', color: TONE.success },
+  STUDENT: { label: 'Student', color: TONE.warning },
+  MANAGER: { label: 'Manager', color: TONE.danger },
+  ACCOUNTANT: { label: 'Accountant', color: TONE.teal },
+  STAFF: { label: 'Staff', color: TONE.neutral },
 }
 
 function RoleBadge({ role }) {
-  const badge = ROLE_BADGES[role] || { label: role, color: 'bg-gray-100 text-gray-600' }
+  const badge = ROLE_BADGES[role] || { label: role, color: TONE.neutral }
   return (
     <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${badge.color}`}>
       {badge.label}
@@ -281,22 +284,18 @@ export default function MessagesPage() {
   return (
     <div className="space-y-4">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Messages</h1>
-          <p className="text-sm text-gray-500 mt-0.5">Send and receive messages</p>
-        </div>
-        <Button onClick={() => setShowNewMessage(true)}>
+      <PageHeader title="Messages" subtitle="Send and receive messages" actions={<>
+<Button onClick={() => setShowNewMessage(true)}>
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
           </svg>
           <span className="hidden sm:inline">New Message</span>
         </Button>
-      </div>
+</>} />
 
       {/* New Message Modal */}
       {showNewMessage && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4">
           <div className="bg-white rounded-xl w-full max-w-md shadow-xl">
             <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200">
               <h2 className="text-lg font-semibold text-gray-900">New Message</h2>
@@ -312,7 +311,7 @@ export default function MessagesPage() {
             <form onSubmit={handleNewMessage} className="p-5 space-y-4">
               {/* Recipient Picker */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">To</label>
+                <label className="label">To</label>
                 {recipientsLoading ? (
                   <div className="flex items-center gap-2 py-2">
                     <Spinner size="xs" />
@@ -365,16 +364,15 @@ export default function MessagesPage() {
               </div>
 
               {/* Subject (optional) */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Subject (optional)</label>
-                <input
+              <Field label="Subject (optional)">
+<input
                   type="text"
                   value={newForm.subject}
                   onChange={(e) => setNewForm({ ...newForm, subject: e.target.value })}
                   placeholder="e.g. Regarding attendance"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                  className="input"
                 />
-              </div>
+</Field>
 
               {/* Student context info */}
               {newForm.student_id && (
@@ -389,7 +387,7 @@ export default function MessagesPage() {
 
               {/* Message */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Message</label>
+                <label className="label">Message</label>
                 <textarea
                   value={newForm.message}
                   onChange={(e) => setNewForm({ ...newForm, message: e.target.value })}

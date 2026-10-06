@@ -1,4 +1,9 @@
 import { useState, useEffect, useMemo } from 'react'
+import Modal from '../../components/ui/Modal'
+import Field from '../../components/ui/Field'
+import { TONE } from '../../components/ui/statusTones'
+import PageHeader from '../../components/ui/PageHeader'
+import EmptyState from '../../components/ui/EmptyState'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { examinationsApi, sessionsApi, academicsApi, classesApi } from '../../services/api'
 import ClassSelector from '../../components/ClassSelector'
@@ -27,11 +32,11 @@ const createEmptyForm = (academicYearId = '', termId = '') => ({
 })
 
 const STATUS_STYLES = {
-  SCHEDULED: 'bg-gray-100 text-gray-700',
-  IN_PROGRESS: 'bg-blue-100 text-blue-700',
-  MARKS_ENTRY: 'bg-yellow-100 text-yellow-700',
-  COMPLETED: 'bg-green-100 text-green-700',
-  PUBLISHED: 'bg-purple-100 text-purple-700',
+  SCHEDULED: TONE.neutral,
+  IN_PROGRESS: TONE.info,
+  MARKS_ENTRY: TONE.warning,
+  COMPLETED: TONE.success,
+  PUBLISHED: TONE.accent,
 }
 
 // Pivots the date-sheet GET response (subjects -> their per-class dates) into a
@@ -364,8 +369,7 @@ export function DateSheetModal({ groupId, onClose: closeDateSheet, queryClient, 
   }, [openCell])
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[60] p-4" onClick={closeDateSheet}>
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl max-h-[85vh] overflow-y-auto p-6" onClick={e => e.stopPropagation()}>
+    <Modal open onClose={closeDateSheet} size="4xl">
         <div className="flex items-start justify-between gap-2 mb-1">
           <div className="min-w-0">
             <h2 className="text-lg font-semibold text-gray-900">Date Sheet</h2>
@@ -404,7 +408,7 @@ export function DateSheetModal({ groupId, onClose: closeDateSheet, queryClient, 
             <Spinner size="sm" className="mx-auto" />
           </div>
         ) : localRows.length === 0 ? (
-          <p className="text-sm text-gray-500 text-center py-8">No subjects found in this exam group.</p>
+          <EmptyState title="No subjects found in this exam group." />
         ) : viewMode === 'calendar' ? (
           <div className="overflow-auto mt-4">
             <table className="min-w-full text-sm border border-gray-200">
@@ -600,8 +604,7 @@ export function DateSheetModal({ groupId, onClose: closeDateSheet, queryClient, 
             </table>
           </div>
         )}
-      </div>
-    </div>
+      </Modal>
   )
 }
 
@@ -609,7 +612,7 @@ export function DateSheetModal({ groupId, onClose: closeDateSheet, queryClient, 
 function PublishBadge({ label, onText, offText, done, total, onClass }) {
   if (total === 0) return null
   const state = done === 0 ? 'none' : done === total ? 'all' : 'mixed'
-  const style = state === 'all' ? onClass : state === 'mixed' ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-500'
+  const style = state === 'all' ? onClass : state === 'mixed' ? TONE.warning : 'bg-gray-100 text-gray-500'
   const text = state === 'all' ? onText : state === 'mixed' ? `${onText} for ${done}/${total} classes` : offText
   return (
     <span className={`px-2 py-0.5 rounded-full text-[11px] font-medium ${style}`}>
@@ -632,12 +635,7 @@ function ExamViewModal({ exam, examClassLabel, onClose }) {
   const subjects = subjectsRes?.data?.results || subjectsRes?.data || []
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[60] p-4" onClick={onClose}>
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-6" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-gray-900">{exam.name}</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl">&times;</button>
-        </div>
+    <Modal open onClose={onClose} title={exam.name} size="lg">
 
         <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm mb-4">
           <div><dt className="text-gray-500">Class</dt><dd className="font-medium text-gray-900">{examClassLabel}</dd></div>
@@ -690,8 +688,7 @@ function ExamViewModal({ exam, examClassLabel, onClose }) {
         <div className="flex justify-end pt-4">
           <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">Close</button>
         </div>
-      </div>
-    </div>
+      </Modal>
   )
 }
 
@@ -1286,12 +1283,8 @@ export default function ExamsPage() {
   return (
     <div className="pb-24">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6 gap-4">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Exams & Tests</h1>
-          <p className="text-sm text-gray-600">Create and manage exams and tests</p>
-        </div>
-        {isSchoolAdmin && (activeTab === 'exams' ? (
+      <PageHeader title="Exams & Tests" subtitle="Create and manage exams and tests" className="mb-6" actions={<>
+{isSchoolAdmin && (activeTab === 'exams' ? (
           <button
             onClick={() => setShowWizard(true)}
             onMouseEnter={prefetchWizardData}
@@ -1305,7 +1298,7 @@ export default function ExamsPage() {
             + Create Test
           </button>
         ))}
-      </div>
+</>} />
 
       {/* Year Filter + Status Filter + Tabs */}
       <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-4">
@@ -1550,7 +1543,7 @@ export default function ExamsPage() {
                                       <th className="px-4 py-2 text-right">Actions</th>
                                     </tr>
                                   </thead>
-                                  <tbody className="divide-y divide-gray-50">
+                                  <tbody className="divide-y divide-gray-100">
                                     {exams.map(exam => (
                                       <tr key={exam.id} className={exam.is_active ? 'hover:bg-gray-50/50' : 'bg-gray-50 text-gray-400 opacity-75'}>
                                         <td className="px-4 py-2 text-gray-900 font-medium">{getExamClassLabel(exam)}</td>
@@ -1861,7 +1854,7 @@ export default function ExamsPage() {
                           <p className="text-xs text-gray-500">{exam.exam_type_name} · {getExamClassLabel(exam)}</p>
                         </div>
                       </div>
-                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${exam.is_active ? (STATUS_STYLES[exam.status] || 'bg-gray-100 text-gray-700') : 'bg-gray-100 text-gray-500'}`}>
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${exam.is_active ? (STATUS_STYLES[exam.status] || TONE.neutral) : 'bg-gray-100 text-gray-500'}`}>
                         {exam.is_active ? exam.status.replace('_', ' ') : 'Inactive'}
                       </span>
                     </div>
@@ -2012,12 +2005,7 @@ export default function ExamsPage() {
 
       {/* ── Quick Create / Edit Modal ── */}
       {isSchoolAdmin && showModal && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[60] p-4" onClick={closeModal}>
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-6" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold text-gray-900">{editId ? (activeTab === 'exams' ? 'Edit Exam' : 'Edit Test') : 'Create Test'}</h2>
-              <button onClick={closeModal} className="text-gray-400 hover:text-gray-600 text-xl">&times;</button>
-            </div>
+        <Modal open onClose={closeModal} title={editId ? (activeTab === 'exams' ? 'Edit Exam' : 'Edit Test') : 'Create Test'} size="lg">
 
             {(errors.detail || errors.non_field_errors) && (
               <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-lg text-sm">
@@ -2027,37 +2015,34 @@ export default function ExamsPage() {
 
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Exam Name *</label>
+                <label className="label">Exam Name *</label>
                 <input type="text" value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))}
                   className="input w-full" required placeholder="e.g. Unit Test 1 - Class 5-A" />
                 {errors.name && <p className="text-xs text-red-600 mt-1">{errors.name}</p>}
               </div>
               <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Academic Year *</label>
-                  <select value={form.academic_year} onChange={e => setForm(p => ({ ...p, academic_year: e.target.value, term: '' }))} className="input w-full" required>
+                <Field label="Academic Year" required>
+<select value={form.academic_year} onChange={e => setForm(p => ({ ...p, academic_year: e.target.value, term: '' }))} className="input w-full" required>
                     <option value="">Select...</option>
                     {years.map(y => <option key={y.id} value={y.id}>{y.name}</option>)}
                   </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Term</label>
-                  <select value={form.term} onChange={e => setForm(p => ({ ...p, term: e.target.value }))} className="input w-full">
+</Field>
+                <Field label="Term">
+<select value={form.term} onChange={e => setForm(p => ({ ...p, term: e.target.value }))} className="input w-full">
                     <option value="">None</option>
                     {terms.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
                   </select>
-                </div>
+</Field>
               </div>
               <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Exam Type *</label>
-                  <select value={form.exam_type} onChange={e => setForm(p => ({ ...p, exam_type: e.target.value }))} className="input w-full" required>
+                <Field label="Exam Type" required>
+<select value={form.exam_type} onChange={e => setForm(p => ({ ...p, exam_type: e.target.value }))} className="input w-full" required>
                     <option value="">Select...</option>
                     {examTypes.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
                   </select>
-                </div>
+</Field>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Class *</label>
+                  <label className="label">Class *</label>
                   <ClassSelector
                     value={form.class_obj}
                     onChange={e => { setForm(p => ({ ...p, class_obj: e.target.value })); setSelectedSubjects([]) }}
@@ -2145,7 +2130,7 @@ export default function ExamsPage() {
                           No subjects assigned to this class. Select subjects below to auto-assign them.
                         </span>
                       </div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Select Subjects *</label>
+                      <label className="label">Select Subjects *</label>
                       <div className="border border-gray-300 rounded-lg max-h-48 overflow-y-auto p-2 space-y-1">
                         {allSubjects.length === 0 ? (
                           <p className="text-sm text-gray-400 p-1">No subjects available. Create subjects first in Academics &gt; Subjects.</p>
@@ -2265,29 +2250,26 @@ export default function ExamsPage() {
               )}
 
               <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
-                  <input type="date" value={form.start_date} onChange={e => setForm(p => ({ ...p, start_date: e.target.value }))} className="input w-full" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">End Date</label>
-                  <input type="date" value={form.end_date} onChange={e => setForm(p => ({ ...p, end_date: e.target.value }))} className="input w-full" />
-                </div>
+                <Field label="Start Date">
+<input type="date" value={form.start_date} onChange={e => setForm(p => ({ ...p, start_date: e.target.value }))} className="input w-full" />
+</Field>
+                <Field label="End Date">
+<input type="date" value={form.end_date} onChange={e => setForm(p => ({ ...p, end_date: e.target.value }))} className="input w-full" />
+</Field>
               </div>
               {editId && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
-                  <select value={form.status} onChange={e => setForm(p => ({ ...p, status: e.target.value }))} className="input w-full">
+                <Field label="Status">
+<select value={form.status} onChange={e => setForm(p => ({ ...p, status: e.target.value }))} className="input w-full">
                     <option value="SCHEDULED">Scheduled</option>
                     <option value="IN_PROGRESS">In Progress</option>
                     <option value="MARKS_ENTRY">Marks Entry</option>
                     <option value="COMPLETED">Completed</option>
                     <option value="PUBLISHED">Published</option>
                   </select>
-                </div>
+</Field>
               )}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Fail overall if this many subjects (or more) are failed</label>
+                <label className="label">Fail overall if this many subjects (or more) are failed</label>
                 <input type="number" min="1" value={form.fail_threshold_subjects}
                   onChange={e => setForm(p => ({ ...p, fail_threshold_subjects: e.target.value }))}
                   className="input w-full max-w-[160px]" />
@@ -2300,8 +2282,7 @@ export default function ExamsPage() {
                 </button>
               </div>
             </form>
-          </div>
-        </div>
+          </Modal>
       )}
     </div>
   )

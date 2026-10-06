@@ -1,4 +1,5 @@
 import { Fragment, useState } from 'react'
+import { TONE } from '../../components/ui/statusTones'
 import { Link } from 'react-router-dom'
 import { getPaymentClassKey } from './feeUtils'
 import { getLifecycleLabel, getLifecycleStyle, isLeftStatus } from '../../utils/studentLifecycle'
@@ -132,9 +133,9 @@ export function ClassBreakdown({ summaryData, allPayments, month, year, showColl
                   <span className="text-gray-400 w-6">#{s.student_roll}</span>
                   <span className="text-gray-900">{s.student_name}</span>
                   <span className={`px-1.5 py-0.5 rounded ${
-                    s.status === 'PAID' ? 'bg-green-100 text-green-700' :
-                    s.status === 'PARTIAL' ? 'bg-yellow-100 text-yellow-700' :
-                    s.status === 'UNPAID' ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'
+                    s.status === 'PAID' ? TONE.success :
+                    s.status === 'PARTIAL' ? TONE.warning :
+                    s.status === 'UNPAID' ? TONE.danger : TONE.info
                   }`}>{s.status}</span>
                 </div>
                 <span className={sBal > 0 ? 'text-orange-700 font-medium' : 'text-green-700'}>{sBal > 0 ? sBal.toLocaleString() : 'Paid'}</span>
@@ -223,9 +224,9 @@ export function ClassBreakdown({ summaryData, allPayments, month, year, showColl
                     </td>
                     <td className="py-1.5 px-4 text-xs text-center">
                       <span className={`px-1.5 py-0.5 rounded-full text-xs ${
-                        s.status === 'PAID' ? 'bg-green-100 text-green-700' :
-                        s.status === 'PARTIAL' ? 'bg-yellow-100 text-yellow-700' :
-                        s.status === 'UNPAID' ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'
+                        s.status === 'PAID' ? TONE.success :
+                        s.status === 'PARTIAL' ? TONE.warning :
+                        s.status === 'UNPAID' ? TONE.danger : TONE.info
                       }`}>{s.status}</span>
                     </td>
                     <td className="py-1.5 px-4 text-xs text-gray-500 text-right">
@@ -362,7 +363,7 @@ export function PendingStudents({ paymentList = [] }) {
                           <span className="text-gray-400 text-xs w-6">#{s.student_roll}</span>
                           <span className="text-gray-900">{s.student_name}</span>
                           <span className={`text-xs px-1.5 py-0.5 rounded ${
-                            s.status === 'UNPAID' ? 'bg-red-100 text-red-700' : 'bg-orange-100 text-orange-700'
+                            s.status === 'UNPAID' ? TONE.danger : TONE.orange
                           }`}>
                             {s.status}
                           </span>

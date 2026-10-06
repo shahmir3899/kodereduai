@@ -1,17 +1,19 @@
 import { useState, useMemo } from 'react'
+import { TONE } from '../../components/ui/statusTones'
+import LoadingState from '../../components/ui/LoadingState'
+import EmptyState from '../../components/ui/EmptyState'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { lmsApi } from '../../services/api'
 import { useAuth } from '../../contexts/AuthContext'
 import { useToast } from '../../components/Toast'
-import Spinner from '../../components/ui/Spinner'
 
 const STATUS_BADGES = {
-  SUBMITTED: 'bg-blue-100 text-blue-800',
-  LATE: 'bg-orange-100 text-orange-800',
-  GRADED: 'bg-green-100 text-green-800',
-  RETURNED: 'bg-purple-100 text-purple-800',
-  PENDING: 'bg-gray-100 text-gray-800',
+  SUBMITTED: TONE.info,
+  LATE: TONE.orange,
+  GRADED: TONE.success,
+  RETURNED: TONE.accent,
+  PENDING: TONE.neutral,
 }
 
 export default function SubmissionReviewPage() {
@@ -168,8 +170,7 @@ export default function SubmissionReviewPage() {
 
       {isLoading ? (
         <div className="text-center py-12">
-          <Spinner size="md" className="mx-auto" />
-          <p className="text-gray-500 mt-2">Loading...</p>
+          <LoadingState label="Loading..." compact />
         </div>
       ) : !assignment ? (
         <div className="card text-center py-8 text-gray-500">
@@ -242,9 +243,7 @@ export default function SubmissionReviewPage() {
           {/* Submissions Table */}
           <div className="card">
             {submissions.length === 0 ? (
-              <div className="text-center py-8 text-gray-500">
-                No submissions received yet for this assignment.
-              </div>
+              <EmptyState title="No submissions received yet for this assignment." />
             ) : (
               <>
                 {/* Mobile card view */}
@@ -395,7 +394,7 @@ export default function SubmissionReviewPage() {
                         </th>
                       </tr>
                     </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
+                    <tbody className="divide-y divide-gray-100">
                       {submissions.map((sub) => (
                         <tr key={sub.id} className="hover:bg-gray-50">
                           <td className="px-4 py-3 text-sm font-medium text-gray-900">

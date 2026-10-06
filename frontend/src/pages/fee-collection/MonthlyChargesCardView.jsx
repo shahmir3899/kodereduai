@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from 'react'
+import LoadingState from '../../components/ui/LoadingState'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { financeApi } from '../../services/api'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
@@ -164,7 +165,7 @@ export default function MonthlyChargesCardView() {
   if (structuresLoading && classOptions.length > 0) {
     return (
       <div className="space-y-4">
-        <p className="text-sm text-gray-400">Loading monthly charges for all classes...</p>
+        <LoadingState label="Loading monthly charges for all classes..." compact />
       </div>
     )
   }

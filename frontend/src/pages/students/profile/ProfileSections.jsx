@@ -1,4 +1,5 @@
 import { useCallback, useState } from 'react'
+import Button from '../../../components/ui/Button'
 import { useStudentForm } from '../../../hooks/useStudentForm'
 import { useClassmateRolls } from '../../../hooks/useClassmateRolls'
 import { useRollSuggestion } from '../../../hooks/useRollSuggestion'
@@ -167,14 +168,12 @@ function SectionEditor({ sectionKey, student, onSave, onDone }) {
         disabled={saving}
       />
       <div className="flex justify-end gap-2">
-        <button
-          type="button"
-          onClick={onDone}
-          disabled={saving}
-          className="px-4 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50"
-        >
+        <Button variant="secondary"
+ type="button"
+ onClick={onDone}
+ disabled={saving}>
           Cancel
-        </button>
+        </Button>
         <button
           type="button"
           onClick={handleSave}

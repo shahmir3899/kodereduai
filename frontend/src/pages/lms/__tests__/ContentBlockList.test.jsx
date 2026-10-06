@@ -196,7 +196,7 @@ describe('ContentBlock List View', () => {
     await waitFor(() => {
       const definitionBadge = screen.getByText('Definition')
       const exampleBadge = screen.getByText('Example')
-      expect(definitionBadge.className).toContain('bg-blue-100')
+      expect(definitionBadge.className).toContain('bg-primary-100')
       expect(exampleBadge.className).toContain('bg-green-100')
     })
   })

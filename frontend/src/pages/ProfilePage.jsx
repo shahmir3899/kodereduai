@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import PageHeader from '../components/ui/PageHeader'
 import { PasswordInput } from '../components'
 import { useMutation } from '@tanstack/react-query'
 import { useAuth } from '../contexts/AuthContext'
@@ -323,10 +324,7 @@ export default function ProfilePage() {
   return (
     <div>
       {/* Page header */}
-      <div className="mb-6">
-        <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Profile & Settings</h1>
-        <p className="text-sm text-gray-500 mt-1">Manage your personal information and security</p>
-      </div>
+      <PageHeader title="Profile & Settings" subtitle="Manage your personal information and security" className="mb-6" />
 
       {/* Tabs */}
       <div className="flex gap-1 mb-6 bg-gray-100 rounded-lg p-1 w-fit">

@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
+import Field from '../../components/ui/Field'
+import { TONE } from '../../components/ui/statusTones'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { academicsApi, examinationsApi, sessionsApi } from '../../services/api'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
@@ -210,7 +212,7 @@ export default function BulkTestModal({ onClose, onSuccess }) {
   }
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[60] p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-5xl max-h-[90vh] overflow-y-auto" onClick={(event) => event.stopPropagation()}>
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
           <div>
@@ -223,7 +225,7 @@ export default function BulkTestModal({ onClose, onSuccess }) {
         <div className="flex items-center gap-2 px-6 py-4 bg-gray-50 border-b border-gray-200 overflow-x-auto">
           {STEPS.map((item) => (
             <div key={item.id} className="flex items-center gap-2 min-w-fit">
-              <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${item.id === step ? 'bg-primary-100 text-primary-700' : item.id < step ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-500'}`}>
+              <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${item.id === step ? 'bg-primary-100 text-primary-700' : item.id < step ? TONE.success : 'bg-gray-200 text-gray-500'}`}>
                 {item.id < step ? '✓' : item.id}
               </div>
               <span className={`text-sm font-medium ${item.id === step ? 'text-primary-700' : 'text-gray-500'}`}>{item.label}</span>
@@ -241,22 +243,21 @@ export default function BulkTestModal({ onClose, onSuccess }) {
           <div className="p-6 space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Academic Year *</label>
+                <label className="label">Academic Year *</label>
                 <select value={form.academic_year} onChange={(event) => updateForm('academic_year', event.target.value)} className="input w-full">
                   <option value="">Select...</option>
                   {years.map((year) => <option key={year.id} value={year.id}>{year.name}</option>)}
                 </select>
                 {errors.academic_year && <p className="text-xs text-red-600 mt-1">{errors.academic_year}</p>}
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Term</label>
-                <select value={form.term} onChange={(event) => updateForm('term', event.target.value)} className="input w-full">
+              <Field label="Term">
+<select value={form.term} onChange={(event) => updateForm('term', event.target.value)} className="input w-full">
                   <option value="">None</option>
                   {terms.map((term) => <option key={term.id} value={term.id}>{term.name}</option>)}
                 </select>
-              </div>
+</Field>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Exam Type *</label>
+                <label className="label">Exam Type *</label>
                 <select value={form.exam_type} onChange={(event) => updateForm('exam_type', event.target.value)} className="input w-full">
                   <option value="">Select...</option>
                   {examTypes.map((examType) => <option key={examType.id} value={examType.id}>{examType.name}</option>)}
@@ -264,7 +265,7 @@ export default function BulkTestModal({ onClose, onSuccess }) {
                 {errors.exam_type && <p className="text-xs text-red-600 mt-1">{errors.exam_type}</p>}
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Class *</label>
+                <label className="label">Class *</label>
                 <ClassSelector
                   value={form.class_obj}
                   onChange={(event) => {
@@ -449,7 +450,7 @@ export default function BulkTestModal({ onClose, onSuccess }) {
                       <td className="px-4 py-3 text-gray-700">{row.exam_date}</td>
                       <td className="px-4 py-3 text-gray-700">{row.total_marks}</td>
                       <td className="px-4 py-3">
-                        <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${row.status === 'create' ? 'bg-green-100 text-green-700' : row.status === 'conflict' ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'}`}>
+                        <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${row.status === 'create' ? TONE.success : row.status === 'conflict' ? TONE.warning : TONE.danger}`}>
                           {row.status}
                         </span>
                       </td>

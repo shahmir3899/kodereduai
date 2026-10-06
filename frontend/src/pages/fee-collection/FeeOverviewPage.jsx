@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import PageHeader from '../../components/ui/PageHeader'
+import LoadingState from '../../components/ui/LoadingState'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
@@ -6,7 +8,6 @@ import { useFeeOverview } from './useFeeOverview'
 import { MONTHS } from './FeeFilters'
 import FeeSummaryCards, { ClassBreakdown, PendingStudents } from './FeeSummaryCards'
 import FeeCharts from './FeeCharts'
-import Spinner from '../../components/ui/Spinner'
 
 export default function FeeOverviewPage() {
   const { isStaffMember } = useAuth()
@@ -83,15 +84,8 @@ export default function FeeOverviewPage() {
   return (
     <div>
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6 gap-4">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Fee Overview</h1>
-          <p className="text-sm text-gray-600">
-            {feeType === 'ANNUAL' ? 'Annual fee status at a glance' : 'Monthly fee status at a glance'}
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <div className="flex items-center rounded-lg border border-gray-200 overflow-hidden">
+      <PageHeader title="Fee Overview" subtitle={feeType === 'ANNUAL' ? 'Annual fee status at a glance' : 'Monthly fee status at a glance'} className="mb-6" actions={<>
+<div className="flex items-center rounded-lg border border-gray-200 overflow-hidden">
             <button
               onClick={() => handleFeeTypeChange('MONTHLY')}
               className={`px-3 py-2 text-sm font-medium transition-colors ${
@@ -127,8 +121,7 @@ export default function FeeOverviewPage() {
               Fee Setup
             </Link>
           )}
-        </div>
-      </div>
+</>} />
 
       {/* Month/Year Selector */}
       {feeType === 'MONTHLY' ? (
@@ -228,8 +221,7 @@ export default function FeeOverviewPage() {
       {/* Loading state */}
       {isLoading && (
         <div className="text-center py-12">
-          <Spinner size="md" className="mx-auto mb-3" />
-          <p className="text-sm text-gray-500">Loading fee data...</p>
+          <LoadingState label="Loading fee data..." compact />
         </div>
       )}
 

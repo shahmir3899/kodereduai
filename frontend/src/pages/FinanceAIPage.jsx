@@ -1,4 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
+import PageHeader from '../components/ui/PageHeader'
+import LoadingState from '../components/ui/LoadingState'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../contexts/AuthContext'
 import { financeApi } from '../services/api'
@@ -84,12 +86,8 @@ export default function FinanceAIPage() {
   return (
     <div className="flex flex-col h-[calc(100vh-10rem)]">
       {/* Header */}
-      <div className="flex items-center justify-between mb-4">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">AI Finance Assistant</h1>
-          <p className="text-sm text-gray-600">Ask questions about your school's finances</p>
-        </div>
-        {messages.length > 0 && (
+      <PageHeader title="AI Finance Assistant" subtitle="Ask questions about your school's finances" className="mb-4" actions={<>
+{messages.length > 0 && (
           <button
             onClick={() => clearMutation.mutate()}
             disabled={clearMutation.isPending}
@@ -98,12 +96,12 @@ export default function FinanceAIPage() {
             Clear Chat
           </button>
         )}
-      </div>
+</>} />
 
       {/* Chat Area */}
       <div className="flex-1 overflow-y-auto bg-white rounded-lg border border-gray-200 p-4 mb-4">
         {historyLoading ? (
-          <div className="text-center py-8 text-gray-400">Loading chat history...</div>
+          <LoadingState label="Loading chat history..." />
         ) : messages.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-center">
             <div className="w-16 h-16 bg-primary-100 rounded-full flex items-center justify-center mb-4">

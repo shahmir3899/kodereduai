@@ -1,4 +1,7 @@
 import { useCallback, useMemo, useState } from 'react'
+import Badge from '../../../components/ui/Badge'
+import { TONE } from '../../../components/ui/statusTones'
+import Button from '../../../components/ui/Button'
 import { useToast } from '../../../components/Toast'
 import { useEscapeKey } from '../../../hooks/useEscapeKey'
 import { useRollSuggestion } from '../../../hooks/useRollSuggestion'
@@ -11,10 +14,10 @@ const money = (value) => `PKR ${formatMoney(value)}`
 const today = () => new Date().toISOString().slice(0, 10)
 
 const STATE_STYLES = {
-  CLEAR: 'bg-green-100 text-green-800',
-  OPEN: 'bg-red-100 text-red-800',
-  WAIVED: 'bg-amber-100 text-amber-800',
-  CARRIED: 'bg-blue-100 text-blue-800',
+  CLEAR: TONE.success,
+  OPEN: TONE.danger,
+  WAIVED: TONE.warning,
+  CARRIED: TONE.info,
 }
 const STATE_LABELS = { CLEAR: 'Clear', OPEN: 'Open', WAIVED: 'Waived', CARRIED: 'Carried' }
 
@@ -27,7 +30,7 @@ export default function StudentExitWizard(props) {
   const { isLoading } = useStudentExit(props.student.id)
   if (isLoading) {
     return (
-      <div className="fixed inset-0 z-[60] bg-black/40 flex items-center justify-center p-4">
+      <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4">
         <div className="bg-white rounded-xl shadow-xl px-6 py-4 text-sm text-gray-600" role="status">Loading…</div>
       </div>
     )
@@ -192,7 +195,7 @@ function WizardBody({ student, prefill = null, onClose }) {
   )
 
   return (
-    <div className="fixed inset-0 z-[60] bg-black/40 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4">
       <div className="bg-white rounded-xl shadow-xl border border-gray-200 w-full max-w-2xl max-h-[92vh] flex flex-col">
         <div className="px-6 py-4 border-b border-gray-200">
           <h2 className="text-lg font-semibold text-gray-900">Student exit</h2>
@@ -228,7 +231,7 @@ function WizardBody({ student, prefill = null, onClose }) {
                 <div>
                   <label htmlFor="exit-destination" className="block text-sm font-medium text-gray-700 mb-1">Transferring to</label>
                   <select
-                    id="exit-destination" className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                    id="exit-destination" className="input"
                     value={form.destination_school} onChange={(e) => set('destination_school', e.target.value)}
                   >
                     <option value="">Select a branch</option>
@@ -256,7 +259,7 @@ function WizardBody({ student, prefill = null, onClose }) {
                   <div>
                     <label htmlFor="exit-dest-class" className="block text-sm font-medium text-gray-700 mb-1">Class at the new branch</label>
                     <select
-                      id="exit-dest-class" className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                      id="exit-dest-class" className="input"
                       value={form.destination_session_class} disabled={classesLoading}
                       onChange={(e) => {
                         setRollTyped(false)
@@ -271,7 +274,7 @@ function WizardBody({ student, prefill = null, onClose }) {
                   <div>
                     <label htmlFor="exit-dest-roll" className="block text-sm font-medium text-gray-700 mb-1">Roll number at the new branch</label>
                     <input
-                      id="exit-dest-roll" className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                      id="exit-dest-roll" className="input"
                       value={form.destination_roll_number}
                       onChange={(e) => {
                         setRollTyped(true)
@@ -291,7 +294,7 @@ function WizardBody({ student, prefill = null, onClose }) {
               <div>
                 <label htmlFor="exit-date" className="block text-sm font-medium text-gray-700 mb-1">Leaving date</label>
                 <input
-                  id="exit-date" type="date" className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                  id="exit-date" type="date" className="input"
                   value={form.leaving_date} onChange={(e) => set('leaving_date', e.target.value)}
                 />
                 <p className="text-xs text-gray-500 mt-1">The first day the student is gone.</p>
@@ -312,7 +315,7 @@ function WizardBody({ student, prefill = null, onClose }) {
               <div>
                 <label htmlFor="exit-reason" className="block text-sm font-medium text-gray-700 mb-1">Reason</label>
                 <textarea
-                  id="exit-reason" rows={3} className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                  id="exit-reason" rows={3} className="input"
                   placeholder="Brief reason" value={form.reason} onChange={(e) => set('reason', e.target.value)}
                 />
               </div>
@@ -333,9 +336,9 @@ function WizardBody({ student, prefill = null, onClose }) {
                         <p className="text-sm font-medium text-gray-900">{item.kind_label}</p>
                         <p className="text-sm text-gray-600">{item.summary || 'Nothing outstanding'}</p>
                       </div>
-                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${STATE_STYLES[item.state]}`}>
+                      <Badge colors={STATE_STYLES[item.state]}>
                         {STATE_LABELS[item.state]}
-                      </span>
+                      </Badge>
                     </div>
 
                     <ItemDetail item={item} />
@@ -381,7 +384,7 @@ function WizardBody({ student, prefill = null, onClose }) {
                       <div className="mt-2 space-y-2">
                         <label htmlFor={`waive-${item.kind}`} className="block text-xs font-medium text-gray-700">Reason for waiving (at least 10 characters)</label>
                         <textarea
-                          id={`waive-${item.kind}`} rows={2} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                          id={`waive-${item.kind}`} rows={2} className="input"
                           value={waiving.reason} onChange={(e) => setWaiving({ kind: item.kind, reason: e.target.value })}
                         />
                         <div className="flex gap-2">
@@ -466,7 +469,7 @@ function WizardBody({ student, prefill = null, onClose }) {
             <div className="space-y-2">
               <label htmlFor="exit-cancel-reason" className="block text-sm font-medium text-gray-700">Why is this exit being cancelled? (optional)</label>
               <input
-                id="exit-cancel-reason" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                id="exit-cancel-reason" className="input"
                 value={cancelling} onChange={(e) => setCancelling(e.target.value)}
               />
               <div className="flex justify-end gap-2">
@@ -484,21 +487,19 @@ function WizardBody({ student, prefill = null, onClose }) {
                 )}
               </div>
               <div className="flex gap-2">
-                <button type="button" onClick={onClose} className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 text-sm">
+                <Button variant="secondary" type="button" onClick={onClose}>
                   {exitCase ? 'Close' : 'Cancel'}
-                </button>
+                </Button>
                 {step > 0 && (
-                  <button type="button" onClick={() => setStep(step - 1)} className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 text-sm">
+                  <Button variant="secondary" type="button" onClick={() => setStep(step - 1)}>
                     Back
-                  </button>
+                  </Button>
                 )}
                 {step === 1 && (
-                  <button
-                    type="button" disabled={busy} onClick={() => run(() => exit.refresh.mutateAsync(exitCase.id))}
-                    className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 text-sm"
-                  >
+                  <Button variant="secondary"
+ type="button" disabled={busy} onClick={() => run(() => exit.refresh.mutateAsync(exitCase.id))}>
                     Refresh
-                  </button>
+                  </Button>
                 )}
                 {step === 0 && (
                   <button

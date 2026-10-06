@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import PageHeader from '../components/ui/PageHeader'
+import LoadingState from '../components/ui/LoadingState'
 import { useQuery } from '@tanstack/react-query'
 import { useAuth } from '../contexts/AuthContext'
 import { financeApi } from '../services/api'
@@ -64,10 +66,7 @@ export default function FinancialReportsPage() {
 
   return (
     <div>
-      <div className="mb-6">
-        <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Financial Reports</h1>
-        <p className="text-sm text-gray-600">Overview of school financial health</p>
-      </div>
+      <PageHeader title="Financial Reports" subtitle="Overview of school financial health" className="mb-6" />
 
       {/* Period Selector */}
       <div className="card mb-6">
@@ -193,7 +192,7 @@ export default function FinancialReportsPage() {
                   <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Entries</th>
                 </tr>
               </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
+              <tbody className="divide-y divide-gray-100">
                 {categories.map((cat) => (
                   <tr key={cat.category}>
                     <td className="px-4 py-3 text-sm font-medium text-gray-900">{cat.category_display}</td>
@@ -219,7 +218,7 @@ export default function FinancialReportsPage() {
       )}
 
       {summaryLoading && (
-        <div className="text-center py-12 text-gray-500">Loading reports...</div>
+        <LoadingState label="Loading reports..." />
       )}
     </div>
   )

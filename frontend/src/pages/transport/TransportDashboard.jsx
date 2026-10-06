@@ -1,8 +1,10 @@
 import { useQuery } from '@tanstack/react-query'
+import { TONE } from '../../components/ui/statusTones'
+import PageHeader from '../../components/ui/PageHeader'
+import LoadingState from '../../components/ui/LoadingState'
 import { Link } from 'react-router-dom'
 import { transportApi } from '../../services/api'
 import { useAuth } from '../../contexts/AuthContext'
-import Spinner from '../../components/ui/Spinner'
 
 export default function TransportDashboard() {
   const { user } = useAuth()
@@ -24,7 +26,7 @@ export default function TransportDashboard() {
     {
       name: 'Total Routes',
       value: stats.total_routes || 0,
-      color: 'bg-blue-100 text-blue-800',
+      color: TONE.info,
       icon: (
         <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
@@ -34,7 +36,7 @@ export default function TransportDashboard() {
     {
       name: 'Total Vehicles',
       value: stats.total_vehicles || 0,
-      color: 'bg-green-100 text-green-800',
+      color: TONE.success,
       icon: (
         <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
@@ -44,7 +46,7 @@ export default function TransportDashboard() {
     {
       name: 'Students Assigned',
       value: stats.students_assigned || 0,
-      color: 'bg-purple-100 text-purple-800',
+      color: TONE.accent,
       icon: (
         <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
@@ -54,7 +56,7 @@ export default function TransportDashboard() {
     {
       name: "Today's Attendance",
       value: stats.today_attendance || 0,
-      color: 'bg-yellow-100 text-yellow-800',
+      color: TONE.warning,
       icon: (
         <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
@@ -128,10 +130,7 @@ export default function TransportDashboard() {
 
   return (
     <div>
-      <div className="mb-6">
-        <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Transport Management</h1>
-        <p className="text-sm sm:text-base text-gray-600">Overview of school transport operations</p>
-      </div>
+      <PageHeader title="Transport Management" subtitle="Overview of school transport operations" className="mb-6" />
 
       {/* Stats Grid */}
       {isLoading ? (
@@ -197,8 +196,7 @@ export default function TransportDashboard() {
 
         {isLoading ? (
           <div className="text-center py-8">
-            <Spinner size="md" className="mx-auto" />
-            <p className="text-gray-500 mt-2">Loading routes...</p>
+            <LoadingState label="Loading routes..." compact />
           </div>
         ) : recentRoutes.length === 0 ? (
           <div className="text-center py-8">
@@ -244,7 +242,7 @@ export default function TransportDashboard() {
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Students</th>
                   </tr>
                 </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
+                <tbody className="divide-y divide-gray-100">
                   {recentRoutes.slice(0, 5).map((route) => (
                     <tr key={route.id} className="hover:bg-gray-50">
                       <td className="px-4 py-3 text-sm font-medium text-gray-900">{route.name}</td>

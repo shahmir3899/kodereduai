@@ -1,4 +1,6 @@
 import { Fragment, useMemo, useState } from 'react'
+import Field from '../../components/ui/Field'
+import Button from '../../components/ui/Button'
 import RichTextEditor from '../../components/RichTextEditor'
 import DiagramCanvas from '../../components/DiagramCanvas'
 import QuestionBankPicker, { QUESTION_TYPES, getQuestionReuseCount, toDraftQuestionFromBank } from './QuestionBankPicker'
@@ -462,11 +464,8 @@ export default function QuestionSlotEditor({
 
       {/* Question Type and Marks */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Question Type
-          </label>
-          <select
+        <Field label="Question Type">
+<select
             value={currentQuestion.question_type}
             onChange={(e) =>
               setCurrentQuestion({ ...currentQuestion, question_type: e.target.value })
@@ -479,13 +478,10 @@ export default function QuestionSlotEditor({
               </option>
             ))}
           </select>
-        </div>
+</Field>
 
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Marks
-          </label>
-          <input
+        <Field label="Marks">
+<input
             type="number"
             value={currentQuestion.marks}
             onChange={(e) =>
@@ -495,7 +491,7 @@ export default function QuestionSlotEditor({
             step="0.5"
             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           />
-        </div>
+</Field>
 
         <div className="flex items-end">
           <div className="text-sm text-gray-600">
@@ -506,7 +502,7 @@ export default function QuestionSlotEditor({
 
       {/* Question Text */}
       <div className="mb-4">
-        <label className="block text-sm font-medium text-gray-700 mb-1">
+        <label className="label">
           Question Text *
         </label>
         <RichTextEditor
@@ -791,13 +787,13 @@ export default function QuestionSlotEditor({
         >
           Reset
         </button>
-        <button
-          onClick={handleSaveQuestion}
-          type="button"
-          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-        >
+        <Button
+ onClick={handleSaveQuestion}
+ type="button"
+ 
+ >
           {currentQuestion.local_id ? 'Save Question' : 'Add Question'}
-        </button>
+        </Button>
       </div>
     </div>
   )
@@ -819,7 +815,7 @@ export default function QuestionSlotEditor({
                 type="button"
                 onClick={() => openBankPicker(section)}
                 disabled={!classId || !subjectId}
-                className="px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed"
+                className="px-2 py-1 text-xs bg-primary-600 text-white rounded hover:bg-primary-700 disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 Add from bank
               </button>

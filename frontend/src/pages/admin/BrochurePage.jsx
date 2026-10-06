@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react'
+import LoadingState from '../../components/ui/LoadingState'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
@@ -7,6 +8,7 @@ import TableRow from '@tiptap/extension-table-row'
 import TableHeader from '@tiptap/extension-table-header'
 import TableCell from '@tiptap/extension-table-cell'
 import { brochureApi } from '../../services/api'
+import { useToast } from '../../components/Toast'
 
 // ─── Toolbar ──────────────────────────────────────────────────────────────────
 
@@ -202,9 +204,7 @@ function PreviewPanel() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-full text-gray-400">
-        Loading preview…
-      </div>
+      <LoadingState label="Loading preview…" compact />
     )
   }
 
@@ -237,6 +237,7 @@ function PreviewPanel() {
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function BrochurePage() {
+  const { showError } = useToast()
   const [activeTab, setActiveTab] = useState('edit')
   const [activeSectionId, setActiveSectionId] = useState(null)
   const [savedMsg, setSavedMsg] = useState('')
@@ -262,7 +263,7 @@ export default function BrochurePage() {
       a.click()
       URL.revokeObjectURL(url)
     } catch {
-      alert('PDF generation failed. Make sure WeasyPrint is installed on the server.')
+      showError('PDF generation failed. Make sure WeasyPrint is installed on the server.')
     } finally {
       setDownloading(false)
     }
@@ -276,9 +277,7 @@ export default function BrochurePage() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-64 text-gray-400">
-        Loading brochure sections…
-      </div>
+      <LoadingState label="Loading brochure sections…" compact />
     )
   }
 

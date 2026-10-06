@@ -1,4 +1,7 @@
 import { useState } from 'react'
+import Field from '../../components/ui/Field'
+import { TONE } from '../../components/ui/statusTones'
+import Button from '../../components/ui/Button'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { studentPortalApi } from '../../services/api'
 import Spinner from '../../components/ui/Spinner'
@@ -6,20 +9,20 @@ import Badge from '../../components/ui/Badge'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
 
 const TYPE_COLORS = {
-  HOMEWORK: 'bg-blue-100 text-blue-800',
-  DIARY: 'bg-amber-100 text-amber-800',
-  PROJECT: 'bg-purple-100 text-purple-800',
-  TEST: 'bg-red-100 text-red-800',
-  QUIZ: 'bg-amber-100 text-amber-800',
-  LAB: 'bg-green-100 text-green-800',
+  HOMEWORK: TONE.info,
+  DIARY: TONE.warning,
+  PROJECT: TONE.accent,
+  TEST: TONE.danger,
+  QUIZ: TONE.warning,
+  LAB: TONE.success,
   CLASSWORK: 'bg-cyan-100 text-cyan-800',
 }
 
 const SUBMISSION_STATUS = {
-  NOT_SUBMITTED: { label: 'Not Submitted', cls: 'bg-gray-100 text-gray-800' },
-  SUBMITTED: { label: 'Submitted', cls: 'bg-green-100 text-green-800' },
-  LATE: { label: 'Late', cls: 'bg-yellow-100 text-yellow-800' },
-  GRADED: { label: 'Graded', cls: 'bg-blue-100 text-blue-800' },
+  NOT_SUBMITTED: { label: 'Not Submitted', cls: TONE.neutral },
+  SUBMITTED: { label: 'Submitted', cls: TONE.success },
+  LATE: { label: 'Late', cls: TONE.warning },
+  GRADED: { label: 'Graded', cls: TONE.info },
 }
 
 export default function StudentAssignments() {
@@ -158,7 +161,7 @@ export default function StudentAssignments() {
                     <div className="flex items-center gap-2 flex-wrap">
                       <h3 className="text-sm font-semibold text-gray-900">{assignment.title}</h3>
                       {assignment.assignment_type && (
-                        <span className={`px-2 py-0.5 rounded text-xs font-medium ${TYPE_COLORS[assignment.assignment_type] || 'bg-gray-100 text-gray-800'}`}>
+                        <span className={`px-2 py-0.5 rounded text-xs font-medium ${TYPE_COLORS[assignment.assignment_type] || TONE.neutral}`}>
                           {assignment.assignment_type}
                         </span>
                       )}
@@ -231,7 +234,7 @@ export default function StudentAssignments() {
                     {subStatus === 'NOT_SUBMITTED' && (
                       <button
                         onClick={() => openSubmitModal(assignment)}
-                        className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
+                        className="px-4 py-2 bg-primary-600 text-white rounded-lg text-sm font-medium hover:bg-primary-700 transition-colors"
                       >
                         Submit
                       </button>
@@ -262,7 +265,7 @@ export default function StudentAssignments() {
 
       {/* Submit Modal */}
       {showModal && selectedAssignment && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4">
           <div className="bg-white rounded-xl w-full max-w-lg shadow-xl">
             {/* Modal Header */}
             <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200">
@@ -283,7 +286,7 @@ export default function StudentAssignments() {
             {/* Modal Body */}
             <form onSubmit={handleSubmit} className="px-5 py-4 space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="label">
                   Submission Text <span className="text-red-500">*</span>
                 </label>
                 <textarea
@@ -297,31 +300,28 @@ export default function StudentAssignments() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="label">
                   File URL (optional)
                 </label>
                 <input
                   type="text"
                   value={fileUrl}
                   onChange={(e) => setFileUrl(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="input"
                   placeholder="https://drive.google.com/..."
                 />
                 <p className="text-xs text-gray-400 mt-1">Link to your file on Google Drive, OneDrive, etc.</p>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  File Name (optional)
-                </label>
-                <input
+              <Field label="File Name (optional)">
+<input
                   type="text"
                   value={fileName}
                   onChange={(e) => setFileName(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="input"
                   placeholder="my-assignment.pdf"
                 />
-              </div>
+</Field>
 
               {/* Error */}
               {submitMutation.isError && (
@@ -334,17 +334,15 @@ export default function StudentAssignments() {
 
               {/* Actions */}
               <div className="flex items-center justify-end gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setShowModal(false)}
-                  className="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
-                >
+                <Button variant="secondary"
+ type="button"
+ onClick={() => setShowModal(false)}>
                   Cancel
-                </button>
+                </Button>
                 <button
                   type="submit"
                   disabled={submitMutation.isPending || !submissionText.trim()}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  className="px-4 py-2 bg-primary-600 text-white rounded-lg text-sm font-medium hover:bg-primary-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                 >
                   {submitMutation.isPending && (
                     <Spinner size="xs" />

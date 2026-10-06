@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
+import { TONE } from '../../components/ui/statusTones'
 import { Link } from 'react-router-dom'
 import { studentPortalApi, sessionsApi } from '../../services/api'
 import { useAuth } from '../../contexts/AuthContext'
@@ -271,10 +272,10 @@ export default function StudentDashboard() {
                       </div>
                       {assignment.type && (
                         <span className={`px-2 py-0.5 rounded text-xs font-medium flex-shrink-0 ${
-                          assignment.type === 'HOMEWORK' ? 'bg-blue-100 text-blue-800' :
-                          assignment.type === 'PROJECT' ? 'bg-purple-100 text-purple-800' :
-                          assignment.type === 'TEST' ? 'bg-red-100 text-red-800' :
-                          'bg-gray-100 text-gray-800'
+                          assignment.type === 'HOMEWORK' ? TONE.info :
+                          assignment.type === 'PROJECT' ? TONE.accent :
+                          assignment.type === 'TEST' ? TONE.danger :
+                          TONE.neutral
                         }`}>
                           {assignment.type}
                         </span>
@@ -321,10 +322,10 @@ export default function StudentDashboard() {
                         )}
                         {pct != null && (
                           <span className={`text-sm font-bold px-2 py-0.5 rounded ${
-                            pct >= 80 ? 'bg-green-100 text-green-700' :
-                            pct >= 60 ? 'bg-blue-100 text-blue-700' :
-                            pct >= 40 ? 'bg-yellow-100 text-yellow-700' :
-                            'bg-red-100 text-red-700'
+                            pct >= 80 ? TONE.success :
+                            pct >= 60 ? TONE.info :
+                            pct >= 40 ? TONE.warning :
+                            TONE.danger
                           }`}>
                             {Math.round(pct)}%
                           </span>

@@ -1,4 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
+import { TONE } from '../components/ui/statusTones'
+import PageHeader from '../components/ui/PageHeader'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { useAcademicYear } from '../contexts/AcademicYearContext'
@@ -62,9 +64,9 @@ const icons = {
 }
 
 const ACCOUNT_TYPE_COLORS = {
-  CASH: 'bg-green-100 text-green-700',
-  BANK: 'bg-blue-100 text-blue-700',
-  PERSON: 'bg-purple-100 text-purple-700',
+  CASH: TONE.success,
+  BANK: TONE.info,
+  PERSON: TONE.accent,
 }
 
 export default function AccountantDashboard() {
@@ -144,12 +146,7 @@ export default function AccountantDashboard() {
   return (
     <div>
       {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Finance Dashboard</h1>
-        <p className="text-sm text-gray-500">
-          {activeSchool?.name || 'Welcome back'} — {now.toLocaleString('default', { month: 'long', year: 'numeric' })}
-        </p>
-      </div>
+      <PageHeader title="Finance Dashboard" subtitle={<>{activeSchool?.name || 'Welcome back'} — {now.toLocaleString('default', { month: 'long', year: 'numeric' })}</>} className="mb-6" />
 
       {/* KPI Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
@@ -222,9 +219,9 @@ export default function AccountantDashboard() {
                           <td className="py-2 text-right text-gray-700">{cCollected.toLocaleString()}</td>
                           <td className="py-2 text-right">
                             <span className={`text-xs font-medium px-1.5 py-0.5 rounded-full ${
-                              cRate >= 80 ? 'bg-green-100 text-green-700'
-                                : cRate >= 50 ? 'bg-amber-100 text-amber-700'
-                                  : 'bg-red-100 text-red-700'
+                              cRate >= 80 ? TONE.success
+                                : cRate >= 50 ? TONE.warning
+                                  : TONE.danger
                             }`}>
                               {cRate}%
                             </span>
@@ -342,7 +339,7 @@ export default function AccountantDashboard() {
                   <div key={a.id} className="flex items-center justify-between py-2 px-3 bg-gray-50 rounded-lg">
                     <div className="flex items-center gap-2 min-w-0">
                       <span className="text-sm font-medium text-gray-800 truncate">{a.name}</span>
-                      <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${ACCOUNT_TYPE_COLORS[a.account_type] || 'bg-gray-100 text-gray-600'}`}>
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${ACCOUNT_TYPE_COLORS[a.account_type] || TONE.neutral}`}>
                         {a.account_type}
                       </span>
                     </div>

@@ -1,4 +1,6 @@
 import { useMemo } from 'react'
+import { TONE } from '../../components/ui/statusTones'
+import PageHeader from '../../components/ui/PageHeader'
 import { useQuery } from '@tanstack/react-query'
 import { useAuth } from '../../contexts/AuthContext'
 import { hrApi, notificationsApi, transportApi } from '../../services/api'
@@ -202,9 +204,9 @@ export default function DriverDashboard() {
       const status = calendarData[dateStr]
       const isToday = d === todayDate
       let bg = 'bg-gray-50 text-gray-400'
-      if (status === 'PRESENT') bg = 'bg-green-100 text-green-700'
-      else if (status === 'ABSENT') bg = 'bg-red-100 text-red-700'
-      else if (status === 'ON_LEAVE' || status === 'LEAVE') bg = 'bg-amber-100 text-amber-700'
+      if (status === 'PRESENT') bg = TONE.success
+      else if (status === 'ABSENT') bg = TONE.danger
+      else if (status === 'ON_LEAVE' || status === 'LEAVE') bg = TONE.warning
 
       cells.push(
         <div
@@ -240,12 +242,7 @@ export default function DriverDashboard() {
   return (
     <div>
       {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Driver Dashboard</h1>
-        <p className="text-sm text-gray-500">
-          Welcome back, {[user?.first_name, user?.last_name].filter(Boolean).join(' ') || user?.username}
-        </p>
-      </div>
+      <PageHeader title="Driver Dashboard" subtitle={<>Welcome back, {[user?.first_name, user?.last_name].filter(Boolean).join(' ') || user?.username}</>} className="mb-6" />
 
       {/* KPI Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
@@ -325,7 +322,7 @@ export default function DriverDashboard() {
                   <div className="space-y-2">
                     {stops.map((stop) => (
                       <div key={stop.id} className="flex items-start gap-3 py-1.5 border-b border-gray-50 last:border-0">
-                        <span className="w-6 h-6 rounded-full bg-sky-100 text-sky-700 text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">
+                        <span className={`w-6 h-6 rounded-full ${TONE.sky} text-xs font-bold flex items-center justify-center shrink-0 mt-0.5`}>
                           {stop.stop_order}
                         </span>
                         <div className="min-w-0">
@@ -431,9 +428,9 @@ export default function DriverDashboard() {
                           : 'Payslip'}
                       </p>
                       <span className={`text-xs px-1.5 py-0.5 rounded-full ${
-                        p.status === 'PAID' ? 'bg-green-100 text-green-700'
-                          : p.status === 'APPROVED' ? 'bg-blue-100 text-blue-700'
-                            : 'bg-gray-100 text-gray-600'
+                        p.status === 'PAID' ? TONE.success
+                          : p.status === 'APPROVED' ? TONE.info
+                            : TONE.neutral
                       }`}>
                         {p.status}
                       </span>

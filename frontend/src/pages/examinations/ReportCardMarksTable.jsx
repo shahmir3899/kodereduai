@@ -1,4 +1,5 @@
 import { shortExamName } from './reportCardData'
+import EmptyState from '../../components/ui/EmptyState'
 
 const dash = '—'
 
@@ -22,7 +23,7 @@ function PassText({ pass }) {
 export default function MarksTable({ report }) {
   const subjects = report.subjects || []
   if (!subjects.length) {
-    return <p className="text-center text-gray-500 text-sm py-4">No subject marks available.</p>
+    return <EmptyState title="No subject marks available." compact />
   }
 
   const exams = report.exams || []

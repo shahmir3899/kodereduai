@@ -1,10 +1,11 @@
 import { Link } from 'react-router-dom'
+import { TONE } from '../ui/statusTones'
 import SectionCard from './SectionCard'
 
 const SEVERITY = {
-  HIGH: 'bg-red-100 text-red-700',
-  MEDIUM: 'bg-amber-100 text-amber-700',
-  LOW: 'bg-sky-100 text-sky-700',
+  HIGH: TONE.danger,
+  MEDIUM: TONE.warning,
+  LOW: TONE.sky,
 }
 
 function Group({ title, block, metric }) {

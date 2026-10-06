@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import PageHeader from '../../components/ui/PageHeader'
 import { useQuery } from '@tanstack/react-query'
 import { studentPortalApi, sessionsApi } from '../../services/api'
 import Spinner from '../../components/ui/Spinner'
@@ -131,13 +132,8 @@ export default function StudentAttendance() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">My Attendance</h1>
-          <p className="text-sm text-gray-500 mt-1">Monthly attendance calendar view</p>
-        </div>
-        <div className="flex items-center gap-3">
-          <select
+      <PageHeader title="My Attendance" subtitle="Monthly attendance calendar view" actions={<>
+<select
             value={selectedMonth}
             onChange={(e) => setSelectedMonth(Number(e.target.value))}
             className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -155,8 +151,7 @@ export default function StudentAttendance() {
               <option key={y} value={y}>{y}</option>
             ))}
           </select>
-        </div>
-      </div>
+</>} />
 
       {/* Summary Bar */}
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">

@@ -1,13 +1,14 @@
 import { useQuery } from '@tanstack/react-query'
+import { TONE } from './ui/statusTones'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { useAcademicYear } from '../contexts/AcademicYearContext'
 import { sessionsApi, examinationsApi, admissionsApi, hrApi, inventoryApi } from '../services/api'
 
 const SEVERITY_STYLES = {
-  HIGH: 'bg-red-100 text-red-800',
-  MEDIUM: 'bg-amber-100 text-amber-800',
-  LOW: 'bg-yellow-100 text-yellow-800',
+  HIGH: TONE.danger,
+  MEDIUM: TONE.warning,
+  LOW: TONE.warning,
 }
 
 const SEVERITY_DOT = {

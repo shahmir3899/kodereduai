@@ -1,4 +1,8 @@
 import { useEffect, useState, useMemo } from 'react'
+import Modal from '../../components/ui/Modal'
+import { TONE } from '../../components/ui/statusTones'
+import Button from '../../components/ui/Button'
+import EmptyState from '../../components/ui/EmptyState'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../../contexts/AuthContext'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
@@ -360,16 +364,16 @@ export default function FeeSetupPage() {
         <div className="card">
           <p className="mb-4 text-sm text-gray-500">Generate fee payment records for students. <strong>Monthly fees</strong> are recurring; <strong>annual fees</strong> use categories defined in the <strong>Annual Charges</strong> tab.</p>
           <div className="mb-4">
-            <button
-              type="button"
-              onClick={() => {
-                data.createFeePaymentMutation.reset()
-                setShowCreateFeeModal(true)
-              }}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm"
-            >
+            <Button
+ type="button"
+ onClick={() => {
+ data.createFeePaymentMutation.reset()
+ setShowCreateFeeModal(true)
+ }}
+ 
+ >
               Create Single Fee Record
-            </button>
+            </Button>
           </div>
           <FeeGenerationSurface
             mode="inline"
@@ -392,7 +396,7 @@ export default function FeeSetupPage() {
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Class <span className="text-red-500">*</span></label>
+                <label className="label">Class <span className="text-red-500">*</span></label>
                 <ClassSelector
                   value={singleStructForm.classId}
                   onChange={(e) => setSingleStructForm(prev => ({
@@ -407,7 +411,7 @@ export default function FeeSetupPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Student <span className="text-red-500">*</span></label>
+                <label className="label">Student <span className="text-red-500">*</span></label>
                 <select
                   value={singleStructForm.studentId}
                   onChange={(e) => setSingleStructForm(prev => ({ ...prev, studentId: e.target.value }))}
@@ -422,7 +426,7 @@ export default function FeeSetupPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Fee Type <span className="text-red-500">*</span></label>
+                <label className="label">Fee Type <span className="text-red-500">*</span></label>
                 <select
                   value={singleStructForm.feeType}
                   onChange={(e) => setSingleStructForm(prev => ({
@@ -440,7 +444,7 @@ export default function FeeSetupPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Category <span className="text-red-500">*</span></label>
+                <label className="label">Category <span className="text-red-500">*</span></label>
                 <select
                   value={selectedSingleStructCategoryId}
                   onChange={(e) => setSingleStructForm(prev => ({
@@ -459,7 +463,7 @@ export default function FeeSetupPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Amount <span className="text-red-500">*</span></label>
+                <label className="label">Amount <span className="text-red-500">*</span></label>
                 <input
                   type="number"
                   step="0.01"
@@ -471,7 +475,7 @@ export default function FeeSetupPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Effective From <span className="text-red-500">*</span></label>
+                <label className="label">Effective From <span className="text-red-500">*</span></label>
                 <input
                   type="date"
                   value={singleStructForm.effectiveFrom}
@@ -563,7 +567,7 @@ export default function FeeSetupPage() {
               <Spinner size="sm" className="mx-auto" />
             </div>
           ) : discGrid.length === 0 ? (
-            <div className="text-center py-12 text-gray-400 text-sm">No enrolled students found in this class</div>
+            <EmptyState title="No enrolled students found in this class" />
           ) : (
             <div className="overflow-x-auto max-h-[60vh] overflow-y-auto">
               <table className="min-w-full">
@@ -589,7 +593,7 @@ export default function FeeSetupPage() {
                       </td>
                       <td className="px-3 py-2">
                         {s.label ? (
-                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${s.discount ? 'bg-blue-100 text-blue-800' : 'bg-purple-100 text-purple-800'}`}>
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${s.discount ? TONE.info : TONE.accent}`}>
                             {s.label}
                           </span>
                         ) : (
@@ -653,8 +657,7 @@ export default function FeeSetupPage() {
 
       {/* === ASSIGN MODAL === */}
       {assignModal && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[60] p-4" onClick={() => setAssignModal(null)}>
-          <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-5" onClick={e => e.stopPropagation()}>
+        <Modal open onClose={() => setAssignModal(null)}>
             <h3 className="text-lg font-semibold text-gray-900 mb-1">Assign Discount</h3>
             <p className="text-sm text-gray-600 mb-4">Student: <span className="font-medium">{assignModal.studentName}</span></p>
 
@@ -698,19 +701,17 @@ export default function FeeSetupPage() {
             {assignMutation.isError && <p className="mb-3 text-sm text-red-600">{getErrorMessage(assignMutation.error, 'Failed to assign')}</p>}
 
             <div className="flex gap-3">
-              <button type="button" onClick={() => setAssignModal(null)} className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm">Cancel</button>
-              <button type="button" onClick={handleAssignSubmit} disabled={!assignSelectedId || assignMutation.isPending}
-                className="flex-1 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm disabled:opacity-50"
-              >{assignMutation.isPending ? 'Assigning...' : 'Assign'}</button>
+              <Button variant="secondary" type="button" onClick={() => setAssignModal(null)} className="flex-1">Cancel</Button>
+              <Button type="button" onClick={handleAssignSubmit} disabled={!assignSelectedId || assignMutation.isPending}
+ className="flex-1"
+ >{assignMutation.isPending ? 'Assigning...' : 'Assign'}</Button>
             </div>
-          </div>
-        </div>
+          </Modal>
       )}
 
       {/* === BULK ASSIGN MODAL === */}
       {bulkModal && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[60] p-4" onClick={() => setBulkModal(false)}>
-          <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-5" onClick={e => e.stopPropagation()}>
+        <Modal open onClose={() => setBulkModal(false)}>
             <h3 className="text-lg font-semibold text-gray-900 mb-1">Bulk Assign to Class</h3>
             <p className="text-sm text-gray-600 mb-4">
               Assign to all {discGrid.length} students in <span className="font-medium">{selectedDiscountClassLabel}</span>
@@ -755,30 +756,27 @@ export default function FeeSetupPage() {
             )}
 
             <div className="flex gap-3">
-              <button type="button" onClick={() => setBulkModal(false)} className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm">Cancel</button>
-              <button type="button" onClick={handleBulkAssignSubmit} disabled={!bulkSelectedId || bulkAssignMutation.isPending}
-                className="flex-1 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm disabled:opacity-50"
-              >{bulkAssignMutation.isPending ? 'Assigning...' : 'Assign to All'}</button>
+              <Button variant="secondary" type="button" onClick={() => setBulkModal(false)} className="flex-1">Cancel</Button>
+              <Button type="button" onClick={handleBulkAssignSubmit} disabled={!bulkSelectedId || bulkAssignMutation.isPending}
+ className="flex-1"
+ >{bulkAssignMutation.isPending ? 'Assigning...' : 'Assign to All'}</Button>
             </div>
-          </div>
-        </div>
+          </Modal>
       )}
 
       {/* === REMOVE CONFIRMATION === */}
       {removeConfirm && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[60] p-4" onClick={() => setRemoveConfirm(null)}>
-          <div className="bg-white rounded-xl shadow-xl max-w-sm w-full p-5" onClick={e => e.stopPropagation()}>
+        <Modal open onClose={() => setRemoveConfirm(null)} size="sm">
             <h3 className="text-lg font-semibold text-gray-900 mb-2">Remove Discount?</h3>
             <p className="text-sm text-gray-600 mb-4">This will remove the discount/scholarship assignment from this student.</p>
             {removeMutation.isError && <p className="mb-3 text-sm text-red-600">{getErrorMessage(removeMutation.error, 'Failed to remove')}</p>}
             <div className="flex gap-3">
-              <button type="button" onClick={() => setRemoveConfirm(null)} className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm">Cancel</button>
+              <Button variant="secondary" type="button" onClick={() => setRemoveConfirm(null)} className="flex-1">Cancel</Button>
               <button type="button" onClick={() => removeMutation.mutate(removeConfirm)} disabled={removeMutation.isPending}
                 className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm disabled:opacity-50"
               >{removeMutation.isPending ? 'Removing...' : 'Remove'}</button>
             </div>
-          </div>
-        </div>
+          </Modal>
       )}
     </div>
   )

@@ -1,9 +1,13 @@
 import { useState } from 'react'
+import Modal from '../../components/ui/Modal'
+import { TONE } from '../../components/ui/statusTones'
+import Button from '../../components/ui/Button'
+import PageHeader from '../../components/ui/PageHeader'
+import LoadingState from '../../components/ui/LoadingState'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { libraryApi } from '../../services/api'
 import { useAuth } from '../../contexts/AuthContext'
 import { useDebounce } from '../../hooks/useDebounce'
-import Spinner from '../../components/ui/Spinner'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
 import { RecordCard, CardGrid, ViewToggle } from '../../components/cards'
 import { useViewPreference } from '../../hooks/useViewPreference'
@@ -249,20 +253,14 @@ export default function BookCatalogPage() {
   return (
     <div>
       {/* Header */}
-      <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Book Catalog</h1>
-          <p className="text-sm sm:text-base text-gray-600">Browse and manage your library collection</p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <button onClick={openAddCategory} className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
+      <PageHeader title="Book Catalog" subtitle="Browse and manage your library collection" className="mb-6" actions={<>
+<Button variant="secondary" onClick={openAddCategory}>
             Manage Categories
-          </button>
-          <button onClick={openAddBook} className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors">
+          </Button>
+          <button onClick={openAddBook} className="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 transition-colors">
             Add Book
           </button>
-        </div>
-      </div>
+</>} />
 
       {/* Filters */}
       <div className="bg-white rounded-lg shadow-sm p-4 mb-6">
@@ -271,7 +269,7 @@ export default function BookCatalogPage() {
             <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Search</label>
             <input
               type="text"
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="input"
               placeholder="Search by title, author, or ISBN..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
@@ -280,7 +278,7 @@ export default function BookCatalogPage() {
           <div>
             <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Category</label>
             <select
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="input"
               value={categoryFilter}
               onChange={(e) => setCategoryFilter(e.target.value)}
             >
@@ -297,8 +295,7 @@ export default function BookCatalogPage() {
       <div className="bg-white rounded-lg shadow-sm">
         {booksLoading ? (
           <div className="text-center py-16">
-            <Spinner size="md" className="mx-auto" />
-            <p className="text-gray-500 mt-3">Loading books...</p>
+            <LoadingState label="Loading books..." compact />
           </div>
         ) : books.length === 0 ? (
           search || categoryFilter ? (
@@ -349,7 +346,7 @@ export default function BookCatalogPage() {
                     meta={book.author}
                     status={
                       <span className={`flex-shrink-0 px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap ${
-                        available > 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                        available > 0 ? TONE.success : TONE.danger
                       }`}>
                         {available} avail.
                       </span>
@@ -384,7 +381,7 @@ export default function BookCatalogPage() {
                     <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
+                <tbody className="divide-y divide-gray-100">
                   {books.map((book) => {
                     const available = (book.available_copies ?? (book.total_copies - (book.issued_copies || 0)))
                     return (
@@ -397,7 +394,7 @@ export default function BookCatalogPage() {
                         <td className="px-4 py-3 text-sm text-center text-gray-700">{book.total_copies}</td>
                         <td className="px-4 py-3 text-center">
                           <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-semibold ${
-                            available > 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                            available > 0 ? TONE.success : TONE.danger
                           }`}>
                             {available}
                           </span>
@@ -438,8 +435,7 @@ export default function BookCatalogPage() {
 
       {/* ============ Add/Edit Book Modal ============ */}
       {showBookModal && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
-          <div className="bg-white rounded-xl shadow-xl p-4 sm:p-6 w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
+        <Modal open  size="lg" closeOnBackdrop={false}>
             <h2 className="text-xl font-bold text-gray-900 mb-4">
               {editingBook ? 'Edit Book' : 'Add Book'}
             </h2>
@@ -456,7 +452,7 @@ export default function BookCatalogPage() {
                 <input
                   type="text"
                   required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="input"
                   value={bookForm.title}
                   onChange={(e) => setBookForm({ ...bookForm, title: e.target.value })}
                 />
@@ -467,7 +463,7 @@ export default function BookCatalogPage() {
                   <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Author</label>
                   <input
                     type="text"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="input"
                     value={bookForm.author}
                     onChange={(e) => setBookForm({ ...bookForm, author: e.target.value })}
                   />
@@ -476,7 +472,7 @@ export default function BookCatalogPage() {
                   <label className="block text-xs font-medium text-gray-500 uppercase mb-1">ISBN</label>
                   <input
                     type="text"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="input"
                     value={bookForm.isbn}
                     onChange={(e) => setBookForm({ ...bookForm, isbn: e.target.value })}
                   />
@@ -488,7 +484,7 @@ export default function BookCatalogPage() {
                   <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Publisher</label>
                   <input
                     type="text"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="input"
                     value={bookForm.publisher}
                     onChange={(e) => setBookForm({ ...bookForm, publisher: e.target.value })}
                   />
@@ -496,7 +492,7 @@ export default function BookCatalogPage() {
                 <div>
                   <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Category</label>
                   <select
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="input"
                     value={bookForm.category}
                     onChange={(e) => setBookForm({ ...bookForm, category: e.target.value })}
                   >
@@ -515,7 +511,7 @@ export default function BookCatalogPage() {
                     type="number"
                     min="1"
                     required
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="input"
                     value={bookForm.total_copies}
                     onChange={(e) => setBookForm({ ...bookForm, total_copies: e.target.value })}
                   />
@@ -524,7 +520,7 @@ export default function BookCatalogPage() {
                   <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Shelf Location</label>
                   <input
                     type="text"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="input"
                     placeholder="e.g. A-12"
                     value={bookForm.shelf_location}
                     onChange={(e) => setBookForm({ ...bookForm, shelf_location: e.target.value })}
@@ -533,30 +529,26 @@ export default function BookCatalogPage() {
               </div>
 
               <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
-                <button
-                  type="button"
-                  onClick={closeBookModal}
-                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
-                >
+                <Button variant="secondary"
+ type="button"
+ onClick={closeBookModal}>
                   Cancel
-                </button>
+                </Button>
                 <button
                   type="submit"
                   disabled={bookMutationPending}
-                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {bookMutationPending ? 'Saving...' : (editingBook ? 'Save Changes' : 'Add Book')}
                 </button>
               </div>
             </form>
-          </div>
-        </div>
+          </Modal>
       )}
 
       {/* ============ Add/Edit Category Modal ============ */}
       {showCategoryModal && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
-          <div className="bg-white rounded-xl shadow-xl p-4 sm:p-6 w-full max-w-md mx-4">
+        <Modal open  closeOnBackdrop={false}>
             <h2 className="text-xl font-bold text-gray-900 mb-4">
               {editingCategory ? 'Edit Category' : 'Add Category'}
             </h2>
@@ -573,7 +565,7 @@ export default function BookCatalogPage() {
                 <input
                   type="text"
                   required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="input"
                   value={categoryForm.name}
                   onChange={(e) => setCategoryForm({ ...categoryForm, name: e.target.value })}
                 />
@@ -582,7 +574,7 @@ export default function BookCatalogPage() {
                 <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Description</label>
                 <textarea
                   rows={3}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="input"
                   value={categoryForm.description}
                   onChange={(e) => setCategoryForm({ ...categoryForm, description: e.target.value })}
                 />
@@ -613,30 +605,26 @@ export default function BookCatalogPage() {
               )}
 
               <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
-                <button
-                  type="button"
-                  onClick={closeCategoryModal}
-                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
-                >
+                <Button variant="secondary"
+ type="button"
+ onClick={closeCategoryModal}>
                   Cancel
-                </button>
+                </Button>
                 <button
                   type="submit"
                   disabled={catMutationPending}
-                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {catMutationPending ? 'Saving...' : (editingCategory ? 'Save Changes' : 'Add Category')}
                 </button>
               </div>
             </form>
-          </div>
-        </div>
+          </Modal>
       )}
 
       {/* ============ Delete Confirmation Modal ============ */}
       {deleteConfirm && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
-          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm mx-4">
+        <Modal open  size="sm" closeOnBackdrop={false}>
             <h2 className="text-xl font-bold text-gray-900 mb-2">Delete Book</h2>
             <p className="text-gray-600 mb-6">
               Are you sure you want to delete <strong>{deleteConfirm.title}</strong>?
@@ -650,12 +638,10 @@ export default function BookCatalogPage() {
             )}
 
             <div className="flex justify-end gap-3">
-              <button
-                onClick={() => setDeleteConfirm(null)}
-                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
-              >
+              <Button variant="secondary"
+ onClick={() => setDeleteConfirm(null)}>
                 Cancel
-              </button>
+              </Button>
               <button
                 onClick={() => deleteBookMutation.mutate(deleteConfirm.id)}
                 disabled={deleteBookMutation.isPending}
@@ -664,14 +650,12 @@ export default function BookCatalogPage() {
                 {deleteBookMutation.isPending ? 'Deleting...' : 'Delete'}
               </button>
             </div>
-          </div>
-        </div>
+          </Modal>
       )}
 
       {/* ============ Quick Issue Book Modal ============ */}
       {showIssueModal && issueBook && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
-          <div className="bg-white rounded-xl shadow-xl p-4 sm:p-6 w-full max-w-md mx-4">
+        <Modal open  closeOnBackdrop={false}>
             <h2 className="text-xl font-bold text-gray-900 mb-1">Issue Book</h2>
             <p className="text-sm text-gray-500 mb-4">
               Issuing: <span className="font-medium text-gray-700">{issueBook.title}</span>
@@ -719,7 +703,7 @@ export default function BookCatalogPage() {
                 <input
                   type="number"
                   required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="input"
                   placeholder={`Enter ${issueForm.borrower_type === 'STUDENT' ? 'student' : 'staff'} ID`}
                   value={issueForm.borrower_id}
                   onChange={(e) => setIssueForm({ ...issueForm, borrower_id: e.target.value })}
@@ -731,7 +715,7 @@ export default function BookCatalogPage() {
                 <input
                   type="date"
                   required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="input"
                   value={issueForm.due_date}
                   onChange={(e) => setIssueForm({ ...issueForm, due_date: e.target.value })}
                 />
@@ -741,31 +725,28 @@ export default function BookCatalogPage() {
                 <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Notes</label>
                 <textarea
                   rows={2}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="input"
                   value={issueForm.notes}
                   onChange={(e) => setIssueForm({ ...issueForm, notes: e.target.value })}
                 />
               </div>
 
               <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
-                <button
-                  type="button"
-                  onClick={closeIssueModal}
-                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
-                >
+                <Button variant="secondary"
+ type="button"
+ onClick={closeIssueModal}>
                   Cancel
-                </button>
+                </Button>
                 <button
                   type="submit"
                   disabled={createIssueMutation.isPending}
-                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {createIssueMutation.isPending ? 'Issuing...' : 'Issue Book'}
                 </button>
               </div>
             </form>
-          </div>
-        </div>
+          </Modal>
       )}
     </div>
   )

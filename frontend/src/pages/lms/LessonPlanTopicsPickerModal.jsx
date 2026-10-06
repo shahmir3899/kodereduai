@@ -1,4 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
+import { TONE } from '../../components/ui/statusTones'
+import LoadingState from '../../components/ui/LoadingState'
+import EmptyState from '../../components/ui/EmptyState'
 import { useQuery } from '@tanstack/react-query'
 import { lmsApi } from '../../services/api'
 import { isRTLLanguage } from '../../components/RTLWrapper'
@@ -275,7 +278,7 @@ export default function LessonPlanTopicsPickerModal({
   }
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 z-[60] flex items-center justify-center p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
       <div
         className="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[85vh] overflow-hidden flex flex-col"
         onClick={(e) => e.stopPropagation()}
@@ -291,9 +294,9 @@ export default function LessonPlanTopicsPickerModal({
         </div>
         <div className="flex-1 overflow-y-auto p-4">
           {isLoading ? (
-            <div className="text-center py-12 text-gray-500 text-sm">Loading books…</div>
+            <LoadingState label="Loading books…" />
           ) : !Array.isArray(books) || books.length === 0 ? (
-            <p className="text-sm text-gray-600 text-center py-8">No curriculum books for this class and subject.</p>
+            <EmptyState title="No curriculum books for this class and subject." />
           ) : (
             <div className="border border-gray-200 rounded-lg divide-y divide-gray-100">
               {books.map((book) => (
@@ -307,7 +310,7 @@ export default function LessonPlanTopicsPickerModal({
                     {book.language && (
                       <span
                         className={`text-xs px-1.5 py-0.5 rounded ${
-                          isRTLLanguage(book.language) ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
+                          isRTLLanguage(book.language) ? TONE.accent : TONE.info
                         }`}
                       >
                         {String(book.language).toUpperCase()}

@@ -168,7 +168,7 @@ export default function StudentsList({
                 <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
               </tr>
             </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
+            <tbody className="divide-y divide-gray-100">
               {students.map((student) => (
                 <tr key={student.id} className={`hover:bg-gray-50 ${selectedIds.has(student.id) ? 'bg-purple-50' : ''}`}>
                   <td className="px-3 py-3">

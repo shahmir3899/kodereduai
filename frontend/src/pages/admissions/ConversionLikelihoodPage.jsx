@@ -1,11 +1,14 @@
 import { useState } from 'react'
+import { TONE } from '../../components/ui/statusTones'
+import PageHeader from '../../components/ui/PageHeader'
+import LoadingState from '../../components/ui/LoadingState'
 import { useQuery } from '@tanstack/react-query'
 import { admissionsApi } from '../../services/api'
 
 const LIKELIHOOD_STYLES = {
-  HIGH: 'bg-green-100 text-green-800',
-  MEDIUM: 'bg-amber-100 text-amber-800',
-  LOW: 'bg-gray-100 text-gray-700',
+  HIGH: TONE.success,
+  MEDIUM: TONE.warning,
+  LOW: TONE.neutral,
 }
 
 const LIKELIHOOD_BORDER = {
@@ -32,22 +35,15 @@ export default function ConversionLikelihoodPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Conversion Likelihood</h1>
-          <p className="text-sm text-gray-500 mt-1">
-            Open enquiries scored by the AI Conversion Likelihood Predictor, based on source history, response
-            time, follow-up activity, and next-followup adherence.
-          </p>
-        </div>
-        {result && (
+      <PageHeader title="Conversion Likelihood" subtitle="Open enquiries scored by the AI Conversion Likelihood Predictor, based on source history, response time, follow-up activity, and next-followup adherence." actions={<>
+{result && (
           <div className="text-right shrink-0">
             <p className="text-sm text-gray-600">
               <span className="font-semibold text-gray-900">{result.total_open}</span> open enquiries scored
             </p>
           </div>
         )}
-      </div>
+</>} />
 
       {/* Filters */}
       <div className="flex flex-wrap gap-3">
@@ -65,7 +61,7 @@ export default function ConversionLikelihoodPage() {
 
       {/* List */}
       {isLoading ? (
-        <div className="text-center py-10 text-gray-500">Loading conversion likelihood...</div>
+        <LoadingState label="Loading conversion likelihood..." />
       ) : filtered.length === 0 ? (
         <div className="card text-center py-12">
           <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">

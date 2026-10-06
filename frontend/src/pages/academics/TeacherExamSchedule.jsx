@@ -1,4 +1,5 @@
 import { useMemo } from 'react'
+import PageHeader from '../../components/ui/PageHeader'
 import { useQuery } from '@tanstack/react-query'
 import { examinationsApi } from '../../services/api'
 import Spinner from '../../components/ui/Spinner'
@@ -46,10 +47,7 @@ export default function TeacherExamSchedule() {
 
   return (
     <div>
-      <div className="mb-6">
-        <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Exam Schedule</h1>
-        <p className="text-sm text-gray-600">Published exam dates for your classes and subjects</p>
-      </div>
+      <PageHeader title="Exam Schedule" subtitle="Published exam dates for your classes and subjects" className="mb-6" />
 
       {exams.length === 0 ? (
         <div className="card text-center py-8 text-gray-500">
@@ -93,7 +91,7 @@ export default function TeacherExamSchedule() {
                         <th className="px-2 py-1 text-left">Date</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-gray-50">
+                    <tbody className="divide-y divide-gray-100">
                       {subjectsByExam[exam.id].map(s => (
                         <tr key={s.id}>
                           <td className="px-2 py-1 text-gray-800">{s.subject_code || s.subject_name}</td>

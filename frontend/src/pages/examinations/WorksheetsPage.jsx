@@ -1,4 +1,10 @@
 import { useMemo, useState } from 'react'
+import Badge from '../../components/ui/Badge'
+import { TONE } from '../../components/ui/statusTones'
+import Button from '../../components/ui/Button'
+import PageHeader from '../../components/ui/PageHeader'
+import LoadingState from '../../components/ui/LoadingState'
+import EmptyState from '../../components/ui/EmptyState'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { worksheetApi } from '../../services/api'
@@ -22,9 +28,9 @@ const STATUS_OPTIONS = [
 ]
 
 const STATUS_STYLE = {
-  DRAFT: 'bg-yellow-100 text-yellow-800',
-  READY: 'bg-blue-100 text-blue-800',
-  PUBLISHED: 'bg-green-100 text-green-800',
+  DRAFT: TONE.warning,
+  READY: TONE.info,
+  PUBLISHED: TONE.success,
 }
 
 /** Worksheets list -- filter/table/download shell mirrors ExamPapersPage, minus
@@ -139,19 +145,15 @@ export default function WorksheetsPage() {
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="bg-white border-b border-gray-200 px-6 py-5">
-        <div className="max-w-6xl mx-auto flex items-center justify-between gap-3">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Worksheets</h1>
-            <p className="text-gray-500 text-sm mt-0.5">Practice/homework sheets -- author manually, from the question bank, or by scanning a printed sheet.</p>
-          </div>
-          <button
-            type="button"
-            onClick={() => navigate('/academics/worksheets/new')}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium"
-          >
+        <PageHeader className="max-w-6xl mx-auto" title="Worksheets" subtitle="Practice/homework sheets -- author manually, from the question bank, or by scanning a printed sheet." actions={<>
+<Button
+ type="button"
+ onClick={() => navigate('/academics/worksheets/new')}
+ 
+ >
             + New Worksheet
-          </button>
-        </div>
+          </Button>
+</>} />
       </div>
 
       <div className="max-w-6xl mx-auto px-6 py-6 space-y-4">
@@ -242,9 +244,9 @@ export default function WorksheetsPage() {
 
         <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
           {isLoading ? (
-            <div className="p-8 text-center text-gray-500">Loading worksheets...</div>
+            <LoadingState label="Loading worksheets..." />
           ) : worksheets.length === 0 ? (
-            <div className="p-8 text-center text-gray-500">No worksheets found for the selected filters.</div>
+            <EmptyState title="No worksheets found for the selected filters." />
           ) : view === 'cards' ? (
             <CardGrid className="p-3">
               {worksheets.map((worksheet) => (
@@ -253,9 +255,9 @@ export default function WorksheetsPage() {
                   title={worksheet.title}
                   meta={`${worksheet.class_name}${worksheet.subject_name ? ` · ${worksheet.subject_name}` : ''}`}
                   status={
-                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap ${STATUS_STYLE[worksheet.status] || 'bg-gray-100 text-gray-700'}`}>
+                    <Badge colors={STATUS_STYLE[worksheet.status] || TONE.neutral}>
                       {worksheet.status}
-                    </span>
+                    </Badge>
                   }
                   fields={[
                     { label: 'Items', value: worksheet.item_count || 0 },
@@ -296,9 +298,9 @@ export default function WorksheetsPage() {
                       <td className="px-4 py-3 text-sm text-center text-gray-700">{worksheet.item_count || 0}</td>
                       <td className="px-4 py-3 text-sm text-center text-gray-500">{worksheet.source}</td>
                       <td className="px-4 py-3 text-center">
-                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_STYLE[worksheet.status] || 'bg-gray-100 text-gray-700'}`}>
+                        <Badge colors={STATUS_STYLE[worksheet.status] || TONE.neutral}>
                           {worksheet.status}
-                        </span>
+                        </Badge>
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-600">{worksheet.updated_at ? new Date(worksheet.updated_at).toLocaleString() : '—'}</td>
                       <td className="px-4 py-3 text-right">

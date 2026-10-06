@@ -106,7 +106,7 @@ export default function ChildExamSchedule() {
                       <th className="px-4 py-2 text-left">Time</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-50">
+                  <tbody className="divide-y divide-gray-100">
                     {exam.subjects.map((s, i) => (
                       <tr key={i}>
                         <td className="px-4 py-2 text-gray-800">{s.subject_name}</td>

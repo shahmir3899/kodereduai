@@ -1,4 +1,8 @@
 import { useState } from 'react'
+import Field from '../components/ui/Field'
+import { TONE } from '../components/ui/statusTones'
+import PageHeader from '../components/ui/PageHeader'
+import LoadingState from '../components/ui/LoadingState'
 import { PasswordInput } from '../components'
 import { useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
@@ -6,6 +10,7 @@ import { schoolsApi, usersApi } from '../services/api'
 import { useAuth } from '../contexts/AuthContext'
 import { getErrorMessage } from '../utils/errorUtils'
 import { useConfirmModal } from '../components/ConfirmModal'
+import { useToast } from '../components/Toast'
 import Spinner from '../components/ui/Spinner'
 import Button from '../components/ui/Button'
 import { useEscapeKey } from '../hooks/useEscapeKey'
@@ -17,6 +22,7 @@ export default function SettingsPage() {
   const queryClient = useQueryClient()
   const { isSchoolAdmin, isSuperAdmin, getAllowableRoles } = useAuth()
   const { confirm, ConfirmModalRoot } = useConfirmModal()
+  const { showError } = useToast()
   const { validate: validatePassword } = usePasswordPolicy()
   const canManageUsers = isSchoolAdmin && !isSuperAdmin
   const [searchParams, setSearchParams] = useSearchParams()
@@ -115,11 +121,11 @@ export default function SettingsPage() {
     if (!file) return
     const allowed = ['image/jpeg', 'image/png', 'image/webp', 'image/svg+xml']
     if (!allowed.includes(file.type)) {
-      alert('Please upload a JPG, PNG, WebP, or SVG file.')
+      showError('Please upload a JPG, PNG, WebP, or SVG file.')
       return
     }
     if (file.size > 5 * 1024 * 1024) {
-      alert('File must be under 5MB.')
+      showError('File must be under 5MB.')
       return
     }
     const previewUrl = URL.createObjectURL(file)
@@ -241,16 +247,16 @@ export default function SettingsPage() {
   }
 
   const ROLE_COLORS = {
-    SUPER_ADMIN: 'bg-red-100 text-red-800',
-    SCHOOL_ADMIN: 'bg-purple-100 text-purple-800',
-    PRINCIPAL: 'bg-indigo-100 text-indigo-800',
-    MANAGER: 'bg-orange-100 text-orange-800',
+    SUPER_ADMIN: TONE.danger,
+    SCHOOL_ADMIN: TONE.accent,
+    PRINCIPAL: TONE.indigo,
+    MANAGER: TONE.orange,
     ACCOUNTANT: 'bg-cyan-100 text-cyan-800',
-    TEACHER: 'bg-green-100 text-green-800',
-    STAFF: 'bg-gray-100 text-gray-800',
-    DRIVER: 'bg-teal-100 text-teal-800',
-    STUDENT: 'bg-blue-100 text-blue-800',
-    PARENT: 'bg-yellow-100 text-yellow-800',
+    TEACHER: TONE.success,
+    STAFF: TONE.neutral,
+    DRIVER: TONE.teal,
+    STUDENT: TONE.info,
+    PARENT: TONE.warning,
   }
 
   // Role filter dropdown is school-scoped — Super Admin is a platform-level
@@ -259,10 +265,7 @@ export default function SettingsPage() {
 
   return (
     <div>
-      <div className="mb-6">
-        <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Settings</h1>
-        <p className="text-sm sm:text-base text-gray-600">School profile and user settings</p>
-      </div>
+      <PageHeader title="Settings" subtitle="School profile and user settings" className="mb-6" />
 
       {/* Tabs */}
       <div className="border-b border-gray-200 mb-6">
@@ -557,7 +560,7 @@ export default function SettingsPage() {
               {!usersLoading && filteredUsers.length > 0 && <ViewToggle view={view} onChange={setView} />}
             </div>
             {usersLoading ? (
-              <div className="text-center py-8 text-gray-500">Loading...</div>
+              <LoadingState label="Loading..." />
             ) : filteredUsers.length === 0 ? (
               <div className="text-center py-8">
                 <p className="text-gray-500 mb-2">No users found</p>
@@ -571,7 +574,7 @@ export default function SettingsPage() {
                     title={u.first_name || u.last_name ? `${u.first_name} ${u.last_name}`.trim() : u.username}
                     meta={u.email || `@${u.username}`}
                     status={
-                      <span className={`px-2 py-0.5 rounded text-xs font-medium whitespace-nowrap ${ROLE_COLORS[u.role] || 'bg-gray-100 text-gray-800'}`}>
+                      <span className={`px-2 py-0.5 rounded text-xs font-medium whitespace-nowrap ${ROLE_COLORS[u.role] || TONE.neutral}`}>
                         {ROLE_LABELS[u.role] || u.role}
                       </span>
                     }
@@ -579,7 +582,7 @@ export default function SettingsPage() {
                       {
                         label: 'Status',
                         value: (
-                          <span className={`px-2 py-0.5 rounded text-xs font-medium ${u.is_active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'}`}>
+                          <span className={`px-2 py-0.5 rounded text-xs font-medium ${u.is_active ? TONE.success : TONE.neutral}`}>
                             {u.is_active ? 'Active' : 'Inactive'}
                           </span>
                         ),
@@ -604,7 +607,7 @@ export default function SettingsPage() {
                         <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Actions</th>
                       </tr>
                     </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
+                    <tbody className="divide-y divide-gray-100">
                       {filteredUsers.map((u) => (
                         <tr key={u.id}>
                           <td className="px-4 py-3">
@@ -613,12 +616,12 @@ export default function SettingsPage() {
                           </td>
                           <td className="px-4 py-3 text-sm text-gray-600">{u.email || '-'}</td>
                           <td className="px-4 py-3 text-center">
-                            <span className={`px-2 py-0.5 rounded text-xs font-medium ${ROLE_COLORS[u.role] || 'bg-gray-100 text-gray-800'}`}>
+                            <span className={`px-2 py-0.5 rounded text-xs font-medium ${ROLE_COLORS[u.role] || TONE.neutral}`}>
                               {ROLE_LABELS[u.role] || u.role}
                             </span>
                           </td>
                           <td className="px-4 py-3 text-center">
-                            <span className={`px-2 py-0.5 rounded text-xs font-medium ${u.is_active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'}`}>
+                            <span className={`px-2 py-0.5 rounded text-xs font-medium ${u.is_active ? TONE.success : TONE.neutral}`}>
                               {u.is_active ? 'Active' : 'Inactive'}
                             </span>
                           </td>
@@ -649,59 +652,53 @@ export default function SettingsPage() {
 
       {/* Add/Edit User Modal */}
       {showUserModal && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50 p-4">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4">
           <div className="bg-white rounded-lg shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto">
             <div className="p-6">
               <h3 className="text-lg font-semibold mb-4">{editingUser ? 'Edit User' : 'Add User'}</h3>
               <form onSubmit={handleUserSubmit} className="space-y-4">
                 <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">First Name</label>
-                    <input type="text" value={userForm.first_name} onChange={(e) => setUserForm(f => ({ ...f, first_name: e.target.value }))} className="input-field" placeholder="First name" />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Last Name</label>
-                    <input type="text" value={userForm.last_name} onChange={(e) => setUserForm(f => ({ ...f, last_name: e.target.value }))} className="input-field" placeholder="Last name" />
-                  </div>
+                  <Field label="First Name">
+<input type="text" value={userForm.first_name} onChange={(e) => setUserForm(f => ({ ...f, first_name: e.target.value }))} className="input-field" placeholder="First name" />
+</Field>
+                  <Field label="Last Name">
+<input type="text" value={userForm.last_name} onChange={(e) => setUserForm(f => ({ ...f, last_name: e.target.value }))} className="input-field" placeholder="Last name" />
+</Field>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Username *</label>
-                  <input type="text" value={userForm.username} onChange={(e) => setUserForm(f => ({ ...f, username: e.target.value }))} className="input-field" required disabled={!!editingUser} placeholder="Username for login" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-                  <input type="email" value={userForm.email} onChange={(e) => setUserForm(f => ({ ...f, email: e.target.value }))} className="input-field" placeholder="Email address" />
-                </div>
+                <Field label="Username" required>
+<input type="text" value={userForm.username} onChange={(e) => setUserForm(f => ({ ...f, username: e.target.value }))} className="input-field" required disabled={!!editingUser} placeholder="Username for login" />
+</Field>
+                <Field label="Email">
+<input type="email" value={userForm.email} onChange={(e) => setUserForm(f => ({ ...f, email: e.target.value }))} className="input-field" placeholder="Email address" />
+</Field>
                 {!editingUser && (
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Password *</label>
+                      <label className="label">Password *</label>
                       <PasswordInput value={userForm.password} onChange={(e) => setUserForm(f => ({ ...f, password: e.target.value }))} className="input-field" required placeholder="Min 8 characters" />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Confirm Password *</label>
+                      <label className="label">Confirm Password *</label>
                       <PasswordInput value={userForm.confirm_password} onChange={(e) => setUserForm(f => ({ ...f, confirm_password: e.target.value }))} className="input-field" required placeholder="Confirm" />
                     </div>
                   </div>
                 )}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Role *</label>
-                  <select value={userForm.role} onChange={(e) => setUserForm(f => ({ ...f, role: e.target.value }))} className="input-field" required>
+                <Field label="Role" required>
+<select value={userForm.role} onChange={(e) => setUserForm(f => ({ ...f, role: e.target.value }))} className="input-field" required>
                     {allowableRoles.map(role => (
                       <option key={role} value={role}>{ROLE_LABELS[role] || role}</option>
                     ))}
                   </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
-                  <input type="text" value={userForm.phone} onChange={(e) => setUserForm(f => ({ ...f, phone: e.target.value }))} className="input-field" placeholder="Phone number" />
-                </div>
+</Field>
+                <Field label="Phone">
+<input type="text" value={userForm.phone} onChange={(e) => setUserForm(f => ({ ...f, phone: e.target.value }))} className="input-field" placeholder="Phone number" />
+</Field>
                 {userError && <p className="text-sm text-red-600">{userError}</p>}
                 <div className="flex gap-3 pt-2">
-                  <button type="button" onClick={closeUserModal} className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm">Cancel</button>
-                  <button type="submit" disabled={createUserMutation.isPending || updateUserMutation.isPending} className="flex-1 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm disabled:opacity-50">
+                  <Button variant="secondary" type="button" onClick={closeUserModal} className="flex-1">Cancel</Button>
+                  <Button type="submit" disabled={createUserMutation.isPending || updateUserMutation.isPending} className="flex-1">
                     {(createUserMutation.isPending || updateUserMutation.isPending) ? 'Saving...' : editingUser ? 'Update' : 'Create User'}
-                  </button>
+                  </Button>
                 </div>
               </form>
             </div>

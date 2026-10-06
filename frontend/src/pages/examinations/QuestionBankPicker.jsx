@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import LoadingState from '../../components/ui/LoadingState'
 import { useQuery } from '@tanstack/react-query'
 import { questionPaperApi } from '../../services/api'
 import { useDebounce } from '../../hooks/useDebounce'
@@ -168,7 +169,7 @@ export default function QuestionBankPicker({
           {!classId || !subjectId ? (
             <div className="text-sm text-gray-500">Select class and subject in paper setup to load the bank.</div>
           ) : bankLoading ? (
-            <div className="text-sm text-gray-500">Loading questions...</div>
+            <LoadingState label="Loading questions..." compact />
           ) : bankQuestions.length === 0 ? (
             <div className="text-sm text-gray-500">No questions found for these filters.</div>
           ) : (
@@ -227,7 +228,7 @@ export default function QuestionBankPicker({
               type="button"
               onClick={handleAttach}
               disabled={selectedIds.length === 0}
-              className="px-3 py-1.5 bg-blue-600 text-white rounded text-sm hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed"
+              className="px-3 py-1.5 bg-primary-600 text-white rounded text-sm hover:bg-primary-700 disabled:opacity-40 disabled:cursor-not-allowed"
             >
               Attach Selected
             </button>

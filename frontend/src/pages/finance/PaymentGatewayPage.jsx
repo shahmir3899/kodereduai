@@ -1,8 +1,12 @@
 import { useState, useMemo } from 'react'
+import Modal from '../../components/ui/Modal'
+import Field from '../../components/ui/Field'
+import { TONE } from '../../components/ui/statusTones'
+import PageHeader from '../../components/ui/PageHeader'
+import LoadingState from '../../components/ui/LoadingState'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { paymentApi } from '../../services/api'
 import { useToast } from '../../components/Toast'
-import Spinner from '../../components/ui/Spinner'
 import Badge from '../../components/ui/Badge'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
 
@@ -12,35 +16,35 @@ const GATEWAY_META = {
   STRIPE: {
     name: 'Stripe',
     description: 'International card payments',
-    badgeColor: 'bg-purple-100 text-purple-800',
+    badgeColor: TONE.accent,
     iconBg: 'bg-purple-50',
     iconColor: 'text-purple-600',
   },
   RAZORPAY: {
     name: 'Razorpay',
     description: 'Indian payment gateway',
-    badgeColor: 'bg-blue-100 text-blue-800',
+    badgeColor: TONE.info,
     iconBg: 'bg-blue-50',
     iconColor: 'text-blue-600',
   },
   JAZZCASH: {
     name: 'JazzCash',
     description: 'Pakistani mobile payments',
-    badgeColor: 'bg-red-100 text-red-800',
+    badgeColor: TONE.danger,
     iconBg: 'bg-red-50',
     iconColor: 'text-red-600',
   },
   EASYPAISA: {
     name: 'Easypaisa',
     description: 'Pakistani mobile wallet',
-    badgeColor: 'bg-green-100 text-green-800',
+    badgeColor: TONE.success,
     iconBg: 'bg-green-50',
     iconColor: 'text-green-600',
   },
   MANUAL: {
     name: 'Manual / Offline',
     description: 'Bank transfer & cash payments',
-    badgeColor: 'bg-gray-100 text-gray-800',
+    badgeColor: TONE.neutral,
     iconBg: 'bg-gray-50',
     iconColor: 'text-gray-600',
   },
@@ -349,18 +353,14 @@ export default function PaymentGatewayPage() {
   return (
     <div>
       {/* Page Header */}
-      <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Payment Gateways</h1>
-          <p className="text-sm text-gray-600">Configure payment gateways for online fee collection</p>
-        </div>
-        {availableTypes.length > 0 && (
+      <PageHeader title="Payment Gateways" subtitle="Configure payment gateways for online fee collection" className="mb-6" actions={<>
+{availableTypes.length > 0 && (
           <button onClick={openAddModal} className="btn btn-primary flex items-center gap-1.5">
             <PlusIcon className="w-4 h-4" />
             Add Gateway
           </button>
         )}
-      </div>
+</>} />
 
       {/* Security banner */}
       <div className="mb-6 p-3 bg-blue-50 border border-blue-200 rounded-lg flex items-start gap-2">
@@ -374,8 +374,7 @@ export default function PaymentGatewayPage() {
       {/* Loading */}
       {isLoading && (
         <div className="text-center py-12">
-          <Spinner size="md" className="mx-auto" />
-          <p className="text-gray-500 mt-2 text-sm">Loading gateway configurations...</p>
+          <LoadingState label="Loading gateway configurations..." compact />
         </div>
       )}
 
@@ -422,7 +421,7 @@ export default function PaymentGatewayPage() {
                         </Badge>
                       )}
                       <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                        gw.is_active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
+                        gw.is_active ? TONE.success : TONE.neutral
                       }`}>
                         {gw.is_active ? 'Active' : 'Inactive'}
                       </span>
@@ -518,8 +517,7 @@ export default function PaymentGatewayPage() {
 
       {/* ── Add / Edit Modal ──────────────────────────────────────────────── */}
       {showModal && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
-          <div className="bg-white rounded-xl shadow-xl p-4 sm:p-6 w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
+        <Modal open  size="lg" closeOnBackdrop={false}>
             <h2 className="text-xl font-bold text-gray-900 mb-1">
               {editingGateway
                 ? `Edit ${GATEWAY_META[editingGateway.gateway]?.name || editingGateway.gateway}`
@@ -534,9 +532,8 @@ export default function PaymentGatewayPage() {
             <form onSubmit={handleFormSubmit} className="space-y-4">
               {/* Gateway type selector (create only) */}
               {!editingGateway && (
-                <div>
-                  <label className="label">Gateway Type *</label>
-                  <select
+                <Field label="Gateway Type" required>
+<select
                     className="input"
                     value={form.gateway}
                     onChange={(e) => setForm({ ...form, gateway: e.target.value, config: {} })}
@@ -547,7 +544,7 @@ export default function PaymentGatewayPage() {
                       <option key={g} value={g}>{GATEWAY_META[g]?.name || g}</option>
                     ))}
                   </select>
-                </div>
+</Field>
               )}
 
               {/* Dynamic config fields */}
@@ -643,9 +640,8 @@ export default function PaymentGatewayPage() {
 
               {/* Currency & Test Connection */}
               <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="label">Currency</label>
-                  <select
+                <Field label="Currency">
+<select
                     className="input"
                     value={form.currency}
                     onChange={(e) => setForm({ ...form, currency: e.target.value })}
@@ -654,7 +650,7 @@ export default function PaymentGatewayPage() {
                       <option key={c} value={c}>{c}</option>
                     ))}
                   </select>
-                </div>
+</Field>
                 <div className="flex items-end pb-0.5">
                   {editingGateway && (
                     <button
@@ -708,14 +704,12 @@ export default function PaymentGatewayPage() {
                 </button>
               </div>
             </form>
-          </div>
-        </div>
+          </Modal>
       )}
 
       {/* ── Delete Confirmation ───────────────────────────────────────────── */}
       {deleteConfirm && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
-          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm mx-4">
+        <Modal open  size="sm" closeOnBackdrop={false}>
             <h2 className="text-xl font-bold text-gray-900 mb-2">Delete Gateway</h2>
             <p className="text-gray-600 mb-6">
               Are you sure you want to delete the{' '}
@@ -734,8 +728,7 @@ export default function PaymentGatewayPage() {
                 {deleteMutation.isPending ? 'Deleting...' : 'Delete'}
               </button>
             </div>
-          </div>
-        </div>
+          </Modal>
       )}
     </div>
   )

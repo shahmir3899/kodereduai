@@ -1,4 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
+import Badge from '../../components/ui/Badge'
+import { TONE } from '../../components/ui/statusTones'
+import PageHeader from '../../components/ui/PageHeader'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { hrApi, sessionsApi } from '../../services/api'
 import { useToast } from '../../components/Toast'
@@ -15,11 +18,11 @@ const STATUS_OPTIONS = [
 ]
 
 const statusColors = {
-  PRESENT: 'bg-green-100 text-green-800',
-  ABSENT: 'bg-red-100 text-red-800',
-  LATE: 'bg-yellow-100 text-yellow-800',
-  HALF_DAY: 'bg-orange-100 text-orange-800',
-  ON_LEAVE: 'bg-blue-100 text-blue-800',
+  PRESENT: TONE.success,
+  ABSENT: TONE.danger,
+  LATE: TONE.warning,
+  HALF_DAY: TONE.orange,
+  ON_LEAVE: TONE.info,
 }
 
 function formatDate(date) {
@@ -53,10 +56,7 @@ function MyAttendanceView() {
 
   return (
     <div>
-      <div className="mb-6">
-        <h1 className="text-xl sm:text-2xl font-bold text-gray-900">My Attendance</h1>
-        <p className="text-sm text-gray-600">View your own attendance record</p>
-      </div>
+      <PageHeader title="My Attendance" subtitle="View your own attendance record" className="mb-6" />
 
       <div className="card mb-4 flex flex-col sm:flex-row items-center gap-3">
         <label className="text-sm text-gray-600">From:</label>
@@ -104,9 +104,9 @@ function MyAttendanceView() {
                 <tr key={r.id}>
                   <td className="py-2 pr-4 text-sm text-gray-900">{r.date}</td>
                   <td className="py-2 pr-4">
-                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${statusColors[r.status] || 'bg-gray-100 text-gray-800'}`}>
+                    <Badge colors={statusColors[r.status] || TONE.neutral}>
                       {r.status_display || r.status}
-                    </span>
+                    </Badge>
                   </td>
                   <td className="py-2 pr-4 text-sm text-gray-600">{r.check_in || '-'}</td>
                   <td className="py-2 pr-4 text-sm text-gray-600">{r.check_out || '-'}</td>
@@ -348,26 +348,20 @@ function StaffAttendanceAdminView() {
 
   return (
     <div>
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6 gap-4">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Staff Attendance</h1>
-          <p className="text-sm text-gray-600">Mark daily attendance for staff members</p>
-        </div>
-        <div className="flex gap-2">
-          <button
+      <PageHeader title="Staff Attendance" subtitle="Mark daily attendance for staff members" className="mb-6" actions={<>
+<button
             onClick={() => setViewMode('mark')}
-            className={`px-3 py-1.5 text-sm rounded-lg ${viewMode === 'mark' ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-700'}`}
+            className={`px-3 py-1.5 text-sm rounded-lg ${viewMode === 'mark' ? 'bg-primary-600 text-white' : TONE.neutral}`}
           >
             Daily Mark
           </button>
           <button
             onClick={() => setViewMode('summary')}
-            className={`px-3 py-1.5 text-sm rounded-lg ${viewMode === 'summary' ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-700'}`}
+            className={`px-3 py-1.5 text-sm rounded-lg ${viewMode === 'summary' ? 'bg-primary-600 text-white' : TONE.neutral}`}
           >
             Summary
           </button>
-        </div>
-      </div>
+</>} />
 
       {viewMode === 'mark' ? (
         <>
@@ -389,7 +383,7 @@ function StaffAttendanceAdminView() {
               {new Date(selectedDate + 'T00:00:00').toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
             </span>
             {selectedDayIsOff && (
-              <span className="text-xs font-semibold px-2 py-1 rounded-full bg-rose-100 text-rose-700 border border-rose-200">
+              <span className={`text-xs font-semibold px-2 py-1 rounded-full ${TONE.danger} border border-rose-200`}>
                 OFF Day{selectedDayOffTypes.length ? `: ${selectedDayOffTypes.join(', ')}` : ''}
               </span>
             )}
@@ -439,7 +433,7 @@ function StaffAttendanceAdminView() {
               <button
                 onClick={applyBulkCheckIn}
                 disabled={!bulkCheckIn}
-                className="px-2 py-0.5 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 whitespace-nowrap"
+                className="px-2 py-0.5 text-xs bg-primary-600 text-white rounded hover:bg-primary-700 disabled:opacity-50 whitespace-nowrap"
               >
                 Apply All
               </button>
@@ -563,9 +557,9 @@ function StaffAttendanceAdminView() {
                           <p className="text-xs text-gray-500">{staff.employee_id} {staff.department_name ? `| ${staff.department_name}` : ''}</p>
                         </div>
                         {data.status && (
-                          <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${statusColors[data.status] || 'bg-gray-100 text-gray-800'}`}>
+                          <Badge colors={statusColors[data.status] || TONE.neutral}>
                             {data.status}
-                          </span>
+                          </Badge>
                         )}
                       </div>
                       <div className="grid grid-cols-2 gap-2">

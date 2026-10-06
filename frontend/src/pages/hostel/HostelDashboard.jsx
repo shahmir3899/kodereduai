@@ -1,8 +1,9 @@
 import { useQuery } from '@tanstack/react-query'
+import PageHeader from '../../components/ui/PageHeader'
+import LoadingState from '../../components/ui/LoadingState'
 import { Link } from 'react-router-dom'
 import { hostelApi } from '../../services/api'
 import { useAuth } from '../../contexts/AuthContext'
-import Spinner from '../../components/ui/Spinner'
 
 export default function HostelDashboard() {
   const { user } = useAuth()
@@ -110,13 +111,9 @@ export default function HostelDashboard() {
   if (isLoading) {
     return (
       <div>
-        <div className="mb-6">
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Hostel Management</h1>
-          <p className="text-sm sm:text-base text-gray-600">Hostel management overview</p>
-        </div>
+        <PageHeader title="Hostel Management" subtitle="Hostel management overview" className="mb-6" />
         <div className="text-center py-16">
-          <Spinner size="md" className="mx-auto" />
-          <p className="text-gray-500 mt-3">Loading hostel stats...</p>
+          <LoadingState label="Loading hostel stats..." compact />
         </div>
       </div>
     )
@@ -125,10 +122,7 @@ export default function HostelDashboard() {
   if (error) {
     return (
       <div>
-        <div className="mb-6">
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Hostel Management</h1>
-          <p className="text-sm sm:text-base text-gray-600">Hostel management overview</p>
-        </div>
+        <PageHeader title="Hostel Management" subtitle="Hostel management overview" className="mb-6" />
         <div className="bg-white rounded-lg shadow-sm p-6 text-center">
           <svg className="w-12 h-12 text-red-400 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
@@ -143,12 +137,7 @@ export default function HostelDashboard() {
   return (
     <div>
       {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Hostel Management</h1>
-        <p className="text-sm sm:text-base text-gray-600">
-          Hostel management overview &mdash; Welcome, {user?.username}
-        </p>
-      </div>
+      <PageHeader title="Hostel Management" subtitle={<>Hostel management overview &mdash; Welcome, {user?.username}</>} className="mb-6" />
 
       {/* Stats Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 mb-8">

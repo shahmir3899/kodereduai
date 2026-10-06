@@ -1,4 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import Field from '../../components/ui/Field'
+import PageHeader from '../../components/ui/PageHeader'
+import LoadingState from '../../components/ui/LoadingState'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { questionPaperApi, examinationsApi, lmsApi } from '../../services/api'
@@ -965,12 +968,7 @@ export default function QuestionPaperBuilderPage() {
       <ConfirmModalRoot />
       {/* Header */}
       <div className="bg-white border-b border-gray-200 px-4 sm:px-6 py-4 sm:py-6">
-        <div className="max-w-6xl mx-auto">
-          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Question Paper Builder</h1>
-          <p className="text-gray-600 mt-1 text-sm sm:text-base">
-            Create exam papers by uploading handwritten questions or typing manually
-          </p>
-        </div>
+        <PageHeader className="max-w-6xl mx-auto" title="Question Paper Builder" subtitle="Create exam papers by uploading handwritten questions or typing manually" />
       </div>
 
       {/* Main Content */}
@@ -1027,7 +1025,7 @@ export default function QuestionPaperBuilderPage() {
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="label">
                   Class *
                 </label>
                 <ClassSelector
@@ -1045,11 +1043,8 @@ export default function QuestionPaperBuilderPage() {
                 />
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Subject *
-                </label>
-                <select
+              <Field label="Subject" required>
+<select
                   value={paperMetadata.subject}
                   onChange={(e) =>
                     setPaperMetadata({ ...paperMetadata, subject: e.target.value })
@@ -1073,13 +1068,10 @@ export default function QuestionPaperBuilderPage() {
                     </option>
                   ))}
                 </select>
-              </div>
+</Field>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Exam (Optional)
-                </label>
-                <select
+              <Field label="Exam (Optional)">
+<select
                   value={paperMetadata.exam}
                   onChange={(e) =>
                     setPaperMetadata({ ...paperMetadata, exam: e.target.value })
@@ -1102,12 +1094,12 @@ export default function QuestionPaperBuilderPage() {
                     </option>
                   ))}
                 </select>
-              </div>
+</Field>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="label">
                   Paper Title *
                 </label>
                 <input
@@ -1126,35 +1118,29 @@ export default function QuestionPaperBuilderPage() {
                 )}
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Total Marks
-                </label>
-                <input
+              <Field label="Total Marks">
+<input
                   type="number"
                   value={manualDraft.total_marks || '100'}
                   onChange={(e) => handleManualDraftChange({ ...manualDraft, total_marks: e.target.value })}
                   disabled={isReadOnlyPaper}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
-              </div>
+</Field>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Duration (minutes)
-                </label>
-                <input
+              <Field label="Duration (minutes)">
+<input
                   type="number"
                   value={manualDraft.duration_minutes || '60'}
                   onChange={(e) => handleManualDraftChange({ ...manualDraft, duration_minutes: e.target.value })}
                   disabled={isReadOnlyPaper}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
-              </div>
+</Field>
             </div>
 
             <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="label">
                 Instructions
               </label>
               <textarea
@@ -1184,7 +1170,7 @@ export default function QuestionPaperBuilderPage() {
               <button
                 type="button"
                 onClick={() => setWizardStep(2)}
-                className="px-6 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700"
+                className="px-6 py-2 bg-primary-600 text-white rounded-lg font-medium hover:bg-primary-700"
               >
                 Next: Paper Structure
               </button>
@@ -1214,7 +1200,7 @@ export default function QuestionPaperBuilderPage() {
               <button
                 type="button"
                 onClick={handleGoToAddQuestions}
-                className="px-6 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700"
+                className="px-6 py-2 bg-primary-600 text-white rounded-lg font-medium hover:bg-primary-700"
               >
                 Next: Add Questions
               </button>
@@ -1360,7 +1346,7 @@ export default function QuestionPaperBuilderPage() {
                 {!draftId ? (
                   <p className="text-xs text-gray-500">Start building a draft to see coverage stats.</p>
                 ) : coverageLoading ? (
-                  <p className="text-xs text-gray-500">Loading coverage data...</p>
+                  <LoadingState label="Loading coverage data..." compact />
                 ) : coverageError ? (
                   <p className="text-xs text-red-600">Failed to load coverage stats.</p>
                 ) : (

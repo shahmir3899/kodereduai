@@ -1,4 +1,9 @@
 import { useMemo, useState } from 'react'
+import { TONE } from '../components/ui/statusTones'
+import Button from '../components/ui/Button'
+import PageHeader from '../components/ui/PageHeader'
+import LoadingState from '../components/ui/LoadingState'
+import EmptyState from '../components/ui/EmptyState'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { financeApi } from '../services/api'
@@ -13,9 +18,9 @@ import {
 import { exportFinanceReport } from './finance/financeReportExport'
 
 const typeColors = {
-  CASH: 'bg-green-100 text-green-800',
-  BANK: 'bg-blue-100 text-blue-800',
-  PERSON: 'bg-purple-100 text-purple-800',
+  CASH: TONE.success,
+  BANK: TONE.info,
+  PERSON: TONE.accent,
 }
 
 const EXPENSE_COLORS = ['#dc2626', '#ea580c', '#f59e0b', '#8b5cf6', '#06b6d4', '#6b7280']
@@ -221,15 +226,8 @@ export default function FinanceDashboardPage() {
   return (
     <div>
       {/* --- Header with Period Selector + PDF Button --- */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 gap-3">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Finance Dashboard</h1>
-          <p className="text-sm text-gray-600">
-            {useCustom ? 'Custom period' : PERIODS[periodIdx].label} overview
-          </p>
-        </div>
-        <div className="flex items-center gap-1.5 flex-wrap">
-          {PERIODS.map((p, i) => (
+      <PageHeader title="Finance Dashboard" subtitle={<>{useCustom ? 'Custom period' : PERIODS[periodIdx].label} overview</>} className="mb-4" actions={<>
+{PERIODS.map((p, i) => (
             <button
               key={p.label}
               onClick={() => { setPeriodIdx(i); setUseCustom(false) }}
@@ -259,8 +257,7 @@ export default function FinanceDashboardPage() {
             </svg>
             PDF
           </button>
-        </div>
-      </div>
+</>} />
 
       {/* Custom date range inputs */}
       {useCustom && (
@@ -378,7 +375,7 @@ export default function FinanceDashboardPage() {
                           <span className="text-green-700">{Number(school.total_collected).toLocaleString()}</span>
                           <span className="text-gray-400">/</span>
                           <span className="text-gray-600">{Number(school.total_due).toLocaleString()}</span>
-                          <span className={`text-xs font-semibold px-1.5 py-0.5 rounded ${rate >= 80 ? 'bg-green-100 text-green-700' : rate >= 50 ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'}`}>
+                          <span className={`text-xs font-semibold px-1.5 py-0.5 rounded ${rate >= 80 ? TONE.success : rate >= 50 ? TONE.warning : TONE.danger}`}>
                             {rate}%
                           </span>
                         </div>
@@ -406,7 +403,7 @@ export default function FinanceDashboardPage() {
                 </div>
               </div>
             ) : (
-              <div className="text-center py-4 text-gray-400 text-sm">Loading...</div>
+              <LoadingState label="Loading..." compact />
             )
           )}
         </div>
@@ -421,7 +418,7 @@ export default function FinanceDashboardPage() {
           </div>
 
           {annualSummary.by_category.length === 0 ? (
-            <p className="text-sm text-gray-400 py-4 text-center">No annual fee records for this academic year</p>
+            <EmptyState title="No annual fee records for this academic year" compact />
           ) : (
             <div>
               <div className="grid grid-cols-3 gap-3">
@@ -471,9 +468,9 @@ export default function FinanceDashboardPage() {
 
           {!hasMultipleSchools ? (
             balancesLoading ? (
-              <div className="text-center py-4 text-gray-400 text-sm">Loading...</div>
+              <LoadingState label="Loading..." compact />
             ) : balances.length === 0 ? (
-              <p className="text-sm text-gray-400 py-4 text-center">No accounts created yet</p>
+              <EmptyState title="No accounts created yet" compact />
             ) : (
               <div>
                 <div className="space-y-2">
@@ -504,9 +501,9 @@ export default function FinanceDashboardPage() {
             )
           ) : (
             balancesAllLoading ? (
-              <div className="text-center py-4 text-gray-400 text-sm">Loading...</div>
+              <LoadingState label="Loading..." compact />
             ) : (balanceGroups.length === 0 && balanceShared.accounts.length === 0) ? (
-              <p className="text-sm text-gray-400 py-4 text-center">No accounts created yet</p>
+              <EmptyState title="No accounts created yet" compact />
             ) : (
               <div>
                 {balanceGroups.map((group) => (
@@ -573,7 +570,7 @@ export default function FinanceDashboardPage() {
           </div>
 
           {categories.length === 0 ? (
-            <p className="text-sm text-gray-400 py-4 text-center">No expenses in this period</p>
+            <EmptyState title="No expenses in this period" compact />
           ) : (
             <div>
               {/* Donut Chart */}
@@ -609,7 +606,7 @@ export default function FinanceDashboardPage() {
                       <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">%</th>
                     </tr>
                   </thead>
-                  <tbody className="bg-white divide-y divide-gray-100">
+                  <tbody className="divide-y divide-gray-100">
                     {categories.map((cat) => (
                       <tr key={cat.category}>
                         <td className="px-3 py-1.5 text-sm text-gray-900">{cat.category_display}</td>
@@ -643,7 +640,7 @@ export default function FinanceDashboardPage() {
           </div>
 
           {recentTransfers.length === 0 ? (
-            <p className="text-sm text-gray-400 py-4 text-center">No transfers recorded</p>
+            <EmptyState title="No transfers recorded" compact />
           ) : (
             <div className="space-y-2">
               {recentTransfers.map((tfr) => (
@@ -709,14 +706,14 @@ export default function FinanceDashboardPage() {
                   <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">By</th>
                 </tr>
               </thead>
-              <tbody className="bg-white divide-y divide-gray-100">
+              <tbody className="divide-y divide-gray-100">
                 {recentEntries.map((entry) => {
                   const typeBadge = {
-                    fee_payment: { label: entry.fee_type_label || 'Fee', cls: 'bg-green-100 text-green-800' },
-                    other_income: { label: 'Income', cls: 'bg-blue-100 text-blue-800' },
-                    expense: { label: 'Expense', cls: 'bg-red-100 text-red-800' },
-                    transfer: { label: 'Transfer', cls: 'bg-purple-100 text-purple-800' },
-                  }[entry.type] || { label: entry.type, cls: 'bg-gray-100 text-gray-800' }
+                    fee_payment: { label: entry.fee_type_label || 'Fee', cls: TONE.success },
+                    other_income: { label: 'Income', cls: TONE.info },
+                    expense: { label: 'Expense', cls: TONE.danger },
+                    transfer: { label: 'Transfer', cls: TONE.accent },
+                  }[entry.type] || { label: entry.type, cls: TONE.neutral }
                   return (
                     <tr key={`${entry.type}-${entry.id}`}>
                       <td className="px-3 py-2">
@@ -792,9 +789,9 @@ export default function FinanceDashboardPage() {
             </div>
             <div className="px-4 sm:px-6 py-3 sm:py-4 overflow-y-auto flex-1 min-h-0">
               {previewLedgerLoading ? (
-                <div className="text-center py-8 text-gray-500">Loading...</div>
+                <LoadingState label="Loading..." />
               ) : previewEntries.length === 0 ? (
-                <p className="text-center py-6 text-gray-500 text-sm">No transactions yet for this account</p>
+                <EmptyState title="No transactions yet for this account" compact />
               ) : (
                 <>
                   {/* Current balance banner */}
@@ -838,12 +835,11 @@ export default function FinanceDashboardPage() {
               )}
             </div>
             <div className="px-4 sm:px-6 pb-4 sm:pb-5 pt-2 border-t border-gray-100 flex gap-3 flex-shrink-0">
-              <button
-                onClick={() => setLedgerPreviewAccount(null)}
-                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm"
-              >
+              <Button variant="secondary"
+ onClick={() => setLedgerPreviewAccount(null)}
+ className="flex-1">
                 Close
-              </button>
+              </Button>
               <Link
                 to="/finance/accounts"
                 className="flex-1 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm text-center"

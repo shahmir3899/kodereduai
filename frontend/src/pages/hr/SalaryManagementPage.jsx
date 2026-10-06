@@ -1,4 +1,8 @@
 import { useState, useMemo } from 'react'
+import Modal from '../../components/ui/Modal'
+import Field from '../../components/ui/Field'
+import { TONE } from '../../components/ui/statusTones'
+import PageHeader from '../../components/ui/PageHeader'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { hrApi } from '../../services/api'
 import { useToast } from '../../components/Toast'
@@ -221,17 +225,11 @@ export default function SalaryManagementPage() {
 
   return (
     <div>
-      <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Salary Management</h1>
-          <p className="text-sm text-gray-600">
-            {filteredSalaries.length} salary structure{filteredSalaries.length !== 1 ? 's' : ''}
-          </p>
-        </div>
-        <button onClick={openCreate} className="btn btn-primary">
+      <PageHeader title="Salary Management" subtitle={<>{filteredSalaries.length} salary structure{filteredSalaries.length !== 1 ? 's' : ''}</>} className="mb-6" actions={<>
+<button onClick={openCreate} className="btn btn-primary">
           Add Salary Structure
         </button>
-      </div>
+</>} />
 
       {/* Stat Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
@@ -330,7 +328,7 @@ export default function SalaryManagementPage() {
                     <p className="font-semibold text-gray-900">{s.staff_member_name}</p>
                     {s.staff_employee_id && <p className="text-xs text-gray-500">ID: {s.staff_employee_id}</p>}
                   </div>
-                  <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${s.is_active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>
+                  <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${s.is_active ? TONE.success : TONE.neutral}`}>
                     {s.is_active ? 'Active' : 'Inactive'}
                   </span>
                 </div>
@@ -394,8 +392,7 @@ export default function SalaryManagementPage() {
 
       {/* Create/Edit Modal */}
       {modalOpen && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
-          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
+        <Modal open  size="lg" closeOnBackdrop={false}>
             <h2 className="text-xl font-bold text-gray-900 mb-4">
               {editId ? 'Edit Salary Structure' : 'Add Salary Structure'}
             </h2>
@@ -411,16 +408,15 @@ export default function SalaryManagementPage() {
                 />
               </div>
 
-              <div>
-                <label className="label">Basic Salary *</label>
-                <input
+              <Field label="Basic Salary" required>
+<input
                   type="number"
                   step="0.01"
                   className="input"
                   value={form.basic_salary}
                   onChange={(e) => setForm({ ...form, basic_salary: e.target.value })}
                 />
-              </div>
+</Field>
 
               <KeyValueEditor
                 label="Allowances"
@@ -435,24 +431,22 @@ export default function SalaryManagementPage() {
               />
 
               <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="label">Effective From *</label>
-                  <input
+                <Field label="Effective From" required>
+<input
                     type="date"
                     className="input"
                     value={form.effective_from}
                     onChange={(e) => setForm({ ...form, effective_from: e.target.value })}
                   />
-                </div>
-                <div>
-                  <label className="label">Effective To</label>
-                  <input
+</Field>
+                <Field label="Effective To">
+<input
                     type="date"
                     className="input"
                     value={form.effective_to}
                     onChange={(e) => setForm({ ...form, effective_to: e.target.value })}
                   />
-                </div>
+</Field>
               </div>
 
               {/* Summary */}
@@ -490,8 +484,7 @@ export default function SalaryManagementPage() {
                 </button>
               </div>
             </form>
-          </div>
-        </div>
+          </Modal>
       )}
     </div>
   )

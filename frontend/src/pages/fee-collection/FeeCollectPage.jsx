@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
+import PageHeader from '../../components/ui/PageHeader'
 import { useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
@@ -246,23 +247,18 @@ export default function FeeCollectPage() {
   return (
     <div>
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6 gap-4">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Collect Payments</h1>
-          <p className="text-sm text-gray-600">Record student fee payments</p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {canManageFeeRecords && (
+      <PageHeader title="Collect Payments" subtitle="Record student fee payments" className="mb-6" actions={<>
+{canManageFeeRecords && (
             <>
-              <button
-                onClick={() => {
-                  data.createFeePaymentMutation.reset()
-                  setShowCreateFeeModal(true)
-                }}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm"
-              >
+              <Button
+ onClick={() => {
+ data.createFeePaymentMutation.reset()
+ setShowCreateFeeModal(true)
+ }}
+ 
+ >
                 Generate Single Fee Record
-              </button>
+              </Button>
               <Button onClick={() => setShowGenerateModal(true)}>
                 Generate Multiple Fee Records
               </Button>
@@ -276,8 +272,7 @@ export default function FeeCollectPage() {
               Export PDF
             </button>
           )}
-        </div>
-      </div>
+</>} />
 
       {/* Sticky Toolbar: Filters (Export lives in the header with the other actions to free filter width) */}
       <div className="mb-4 rounded-xl border border-gray-200 bg-white/95 p-2 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-white/80 sm:p-3 lg:sticky lg:top-0 lg:z-20">

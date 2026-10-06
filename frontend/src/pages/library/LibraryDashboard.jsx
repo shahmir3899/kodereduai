@@ -1,8 +1,10 @@
 import { useQuery } from '@tanstack/react-query'
+import { TONE } from '../../components/ui/statusTones'
+import PageHeader from '../../components/ui/PageHeader'
+import LoadingState from '../../components/ui/LoadingState'
 import { Link } from 'react-router-dom'
 import { libraryApi } from '../../services/api'
 import { useAuth } from '../../contexts/AuthContext'
-import Spinner from '../../components/ui/Spinner'
 
 export default function LibraryDashboard() {
   const { user } = useAuth()
@@ -72,13 +74,9 @@ export default function LibraryDashboard() {
   if (isLoading) {
     return (
       <div>
-        <div className="mb-6">
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Library</h1>
-          <p className="text-sm sm:text-base text-gray-600">Library management overview</p>
-        </div>
+        <PageHeader title="Library" subtitle="Library management overview" className="mb-6" />
         <div className="text-center py-16">
-          <Spinner size="md" className="mx-auto" />
-          <p className="text-gray-500 mt-3">Loading library stats...</p>
+          <LoadingState label="Loading library stats..." compact />
         </div>
       </div>
     )
@@ -87,10 +85,7 @@ export default function LibraryDashboard() {
   if (error) {
     return (
       <div>
-        <div className="mb-6">
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Library</h1>
-          <p className="text-sm sm:text-base text-gray-600">Library management overview</p>
-        </div>
+        <PageHeader title="Library" subtitle="Library management overview" className="mb-6" />
         <div className="bg-white rounded-lg shadow-sm p-6 text-center">
           <svg className="w-12 h-12 text-red-400 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
@@ -105,12 +100,7 @@ export default function LibraryDashboard() {
   return (
     <div>
       {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Library</h1>
-        <p className="text-sm sm:text-base text-gray-600">
-          Library management overview &mdash; Welcome, {user?.username}
-        </p>
-      </div>
+      <PageHeader title="Library" subtitle={<>Library management overview &mdash; Welcome, {user?.username}</>} className="mb-6" />
 
       {/* Stats Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 mb-8">
@@ -148,9 +138,9 @@ export default function LibraryDashboard() {
                   <div key={book.id || index} className="flex items-center justify-between py-2 px-3 rounded-lg hover:bg-gray-50">
                     <div className="flex items-center gap-3 min-w-0">
                       <span className={`flex-shrink-0 w-7 h-7 flex items-center justify-center rounded-full text-xs font-bold ${
-                        index === 0 ? 'bg-yellow-100 text-yellow-700' :
-                        index === 1 ? 'bg-gray-100 text-gray-700' :
-                        index === 2 ? 'bg-orange-100 text-orange-700' :
+                        index === 0 ? TONE.warning :
+                        index === 1 ? TONE.neutral :
+                        index === 2 ? TONE.orange :
                         'bg-blue-50 text-blue-600'
                       }`}>
                         {index + 1}

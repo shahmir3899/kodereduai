@@ -1,4 +1,9 @@
 import { useState, useMemo } from 'react'
+import Modal from '../../components/ui/Modal'
+import Field from '../../components/ui/Field'
+import Badge from '../../components/ui/Badge'
+import { TONE } from '../../components/ui/statusTones'
+import PageHeader from '../../components/ui/PageHeader'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { hrApi } from '../../services/api'
 import { useToast } from '../../components/Toast'
@@ -17,19 +22,19 @@ const STRIPE_TONE_BY_STATUS = {
 }
 
 const statusBadge = {
-  PENDING: 'bg-yellow-100 text-yellow-800',
-  APPROVED: 'bg-green-100 text-green-800',
-  REJECTED: 'bg-red-100 text-red-800',
-  CANCELLED: 'bg-gray-100 text-gray-800',
+  PENDING: TONE.warning,
+  APPROVED: TONE.success,
+  REJECTED: TONE.danger,
+  CANCELLED: TONE.neutral,
 }
 
 const leaveTypeBadge = {
-  ANNUAL: 'bg-blue-100 text-blue-800',
-  SICK: 'bg-red-100 text-red-800',
-  CASUAL: 'bg-purple-100 text-purple-800',
-  MATERNITY: 'bg-pink-100 text-pink-800',
-  UNPAID: 'bg-gray-100 text-gray-800',
-  OTHER: 'bg-teal-100 text-teal-800',
+  ANNUAL: TONE.info,
+  SICK: TONE.danger,
+  CASUAL: TONE.accent,
+  MATERNITY: TONE.pink,
+  UNPAID: TONE.neutral,
+  OTHER: TONE.teal,
 }
 
 const EMPTY_APPLICATION = {
@@ -266,10 +271,7 @@ export default function LeaveManagementPage() {
 
   return (
     <div>
-      <div className="mb-6">
-        <h1 className="text-xl sm:text-2xl font-bold text-gray-900">{isSelfService ? 'My Leave' : 'Leave Management'}</h1>
-        <p className="text-sm text-gray-600">{isSelfService ? 'Apply for and track your own leave' : 'Manage leave applications and policies'}</p>
-      </div>
+      <PageHeader title={isSelfService ? 'My Leave' : 'Leave Management'} subtitle={isSelfService ? 'Apply for and track your own leave' : 'Manage leave applications and policies'} className="mb-6" />
 
       {/* Tabs — Policies management is admin/Manager-only */}
       {!isSelfService && (
@@ -351,9 +353,9 @@ export default function LeaveManagementPage() {
                     title={a.staff_member_name}
                     meta={a.leave_policy_name}
                     status={
-                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap ${statusBadge[a.status]}`}>
+                      <Badge colors={statusBadge[a.status]}>
                         {a.status_display}
-                      </span>
+                      </Badge>
                     }
                     fields={[
                       ...(a.leave_type ? [{ label: 'Type', value: a.leave_type_display || a.leave_type }] : []),
@@ -394,9 +396,9 @@ export default function LeaveManagementPage() {
                           {a.staff_employee_id && <p className="text-xs text-gray-500">{a.staff_employee_id}</p>}
                         </td>
                         <td className="py-3 pr-4">
-                          <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${leaveTypeBadge[a.leave_type] || 'bg-gray-100'}`}>
+                          <Badge colors={leaveTypeBadge[a.leave_type] || 'bg-gray-100'}>
                             {a.leave_type_display || a.leave_policy_name || '—'}
-                          </span>
+                          </Badge>
                         </td>
                         <td className="py-3 pr-4 text-sm text-gray-600">
                           {a.start_date} — {a.end_date}
@@ -404,9 +406,9 @@ export default function LeaveManagementPage() {
                         <td className="py-3 pr-4 text-sm text-gray-900 font-medium">{a.total_days}</td>
                         <td className="py-3 pr-4 text-sm text-gray-600 max-w-[200px] truncate">{a.reason}</td>
                         <td className="py-3 pr-4">
-                          <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${statusBadge[a.status]}`}>
+                          <Badge colors={statusBadge[a.status]}>
                             {a.status_display}
-                          </span>
+                          </Badge>
                         </td>
                         <td className="py-3 text-right">
                           <div className="flex justify-end gap-3">
@@ -447,8 +449,7 @@ export default function LeaveManagementPage() {
 
           {/* Apply Leave Modal */}
           {applyModal && (
-            <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
-              <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md mx-4">
+            <Modal open  closeOnBackdrop={false}>
                 <h2 className="text-xl font-bold text-gray-900 mb-4">Apply Leave</h2>
                 <form onSubmit={handleApplySubmit} className="space-y-4">
                   {!isSelfService && (
@@ -462,9 +463,8 @@ export default function LeaveManagementPage() {
                       />
                     </div>
                   )}
-                  <div>
-                    <label className="label">Leave Policy *</label>
-                    <select
+                  <Field label="Leave Policy" required>
+<select
                       className="input"
                       value={appForm.leave_policy}
                       onChange={(e) => setAppForm({ ...appForm, leave_policy: e.target.value })}
@@ -476,26 +476,24 @@ export default function LeaveManagementPage() {
                         </option>
                       ))}
                     </select>
-                  </div>
+</Field>
                   <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="label">Start Date *</label>
-                      <input
+                    <Field label="Start Date" required>
+<input
                         type="date"
                         className="input"
                         value={appForm.start_date}
                         onChange={(e) => setAppForm({ ...appForm, start_date: e.target.value })}
                       />
-                    </div>
-                    <div>
-                      <label className="label">End Date *</label>
-                      <input
+</Field>
+                    <Field label="End Date" required>
+<input
                         type="date"
                         className="input"
                         value={appForm.end_date}
                         onChange={(e) => setAppForm({ ...appForm, end_date: e.target.value })}
                       />
-                    </div>
+</Field>
                   </div>
                   {appForm.start_date && appForm.end_date && (
                     <p className="text-sm text-gray-500">
@@ -518,14 +516,12 @@ export default function LeaveManagementPage() {
                     </button>
                   </div>
                 </form>
-              </div>
-            </div>
+              </Modal>
           )}
 
           {/* Approve/Reject Modal */}
           {actionModal && (
-            <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
-              <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm mx-4">
+            <Modal open  size="sm" closeOnBackdrop={false}>
                 <h2 className="text-xl font-bold text-gray-900 mb-2">
                   {actionModal.type === 'approve' ? 'Approve Leave' : 'Reject Leave'}
                 </h2>
@@ -554,8 +550,7 @@ export default function LeaveManagementPage() {
                     {(approveMutation.isPending || rejectMutation.isPending) ? 'Processing...' : actionModal.type === 'approve' ? 'Approve' : 'Reject'}
                   </button>
                 </div>
-              </div>
-            </div>
+              </Modal>
           )}
         </>
       )}
@@ -583,9 +578,9 @@ export default function LeaveManagementPage() {
                 <div key={p.id} className="card">
                   <div className="flex items-center justify-between mb-3">
                     <h3 className="text-sm font-semibold text-gray-900">{p.name}</h3>
-                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${leaveTypeBadge[p.leave_type] || 'bg-gray-100'}`}>
+                    <Badge colors={leaveTypeBadge[p.leave_type] || 'bg-gray-100'}>
                       {p.leave_type_display}
-                    </span>
+                    </Badge>
                   </div>
                   <div className="space-y-2 text-sm text-gray-600">
                     <div className="flex justify-between">
@@ -614,24 +609,21 @@ export default function LeaveManagementPage() {
 
           {/* Policy Create/Edit Modal */}
           {policyModal && (
-            <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
-              <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm mx-4">
+            <Modal open  size="sm" closeOnBackdrop={false}>
                 <h2 className="text-xl font-bold text-gray-900 mb-4">
                   {policyEditId ? 'Edit Leave Policy' : 'Add Leave Policy'}
                 </h2>
                 <form onSubmit={handlePolicySubmit} className="space-y-4">
-                  <div>
-                    <label className="label">Policy Name *</label>
-                    <input
+                  <Field label="Policy Name" required>
+<input
                       type="text"
                       className="input"
                       value={policyForm.name}
                       onChange={(e) => setPolicyForm({ ...policyForm, name: e.target.value })}
                     />
-                  </div>
-                  <div>
-                    <label className="label">Leave Type *</label>
-                    <select
+</Field>
+                  <Field label="Leave Type" required>
+<select
                       className="input"
                       value={policyForm.leave_type}
                       onChange={(e) => setPolicyForm({ ...policyForm, leave_type: e.target.value })}
@@ -643,16 +635,15 @@ export default function LeaveManagementPage() {
                       <option value="UNPAID">Unpaid Leave</option>
                       <option value="OTHER">Other</option>
                     </select>
-                  </div>
-                  <div>
-                    <label className="label">Days Allowed *</label>
-                    <input
+</Field>
+                  <Field label="Days Allowed" required>
+<input
                       type="number"
                       className="input"
                       value={policyForm.days_allowed}
                       onChange={(e) => setPolicyForm({ ...policyForm, days_allowed: e.target.value })}
                     />
-                  </div>
+</Field>
                   <div className="flex items-center gap-2">
                     <input
                       type="checkbox"
@@ -674,8 +665,7 @@ export default function LeaveManagementPage() {
                     </button>
                   </div>
                 </form>
-              </div>
-            </div>
+              </Modal>
           )}
         </>
       )}

@@ -1,10 +1,15 @@
 import { useState, useMemo } from 'react'
+import Modal from '../../components/ui/Modal'
+import Field from '../../components/ui/Field'
+import { TONE } from '../../components/ui/statusTones'
+import PageHeader from '../../components/ui/PageHeader'
+import LoadingState from '../../components/ui/LoadingState'
+import EmptyState from '../../components/ui/EmptyState'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { transportApi } from '../../services/api'
 import { useAuth } from '../../contexts/AuthContext'
 import LocationPickerMap from '../../components/LocationPickerMap'
 import RouteMapView from '../../components/RouteMapView'
-import Spinner from '../../components/ui/Spinner'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
 import { RouteCard, ViewToggle } from '../../components/cards'
 import { useViewPreference } from '../../hooks/useViewPreference'
@@ -21,7 +26,7 @@ function haversineKm(lat1, lon1, lat2, lon2) {
 function CapacityBadge({ students, capacity }) {
   if (!capacity) return <span className="text-gray-400">--</span>
   const pct = capacity > 0 ? (students / capacity) * 100 : 0
-  const color = pct > 90 ? 'bg-red-100 text-red-800' : pct > 70 ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800'
+  const color = pct > 90 ? TONE.danger : pct > 70 ? TONE.warning : TONE.success
   return <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${color}`}>{students}/{capacity}</span>
 }
 
@@ -248,7 +253,7 @@ export default function RoutesPage() {
     <>
       {!stopsLoading && <RouteMapView route={route} stops={stops} />}
       {stopsLoading ? (
-        <p className="text-xs text-gray-400 py-2">Loading stops...</p>
+        <LoadingState label="Loading stops..." compact />
       ) : stops.length === 0 ? (
         <p className="text-xs text-gray-400 py-2">No stops added yet.</p>
       ) : (
@@ -285,21 +290,16 @@ export default function RoutesPage() {
 
   return (
     <div>
-      <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Transport Routes</h1>
-          <p className="text-sm sm:text-base text-gray-600">Manage routes and their stops</p>
-        </div>
-        <button onClick={openAddRouteModal} className="btn btn-primary">
+      <PageHeader title="Transport Routes" subtitle="Manage routes and their stops" className="mb-6" actions={<>
+<button onClick={openAddRouteModal} className="btn btn-primary">
           Add Route
         </button>
-      </div>
+</>} />
 
       <div className="card">
         {isLoading ? (
           <div className="text-center py-8">
-            <Spinner size="md" className="mx-auto" />
-            <p className="text-gray-500 mt-2">Loading routes...</p>
+            <LoadingState label="Loading routes..." compact />
           </div>
         ) : routes.length === 0 ? (
           <div className="card p-4 sm:p-6">
@@ -368,7 +368,7 @@ export default function RoutesPage() {
                     <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
+                <tbody className="divide-y divide-gray-100">
                   {routes.map((route) => (
                     <>
                       <tr key={route.id} className="hover:bg-gray-50">
@@ -427,11 +427,10 @@ export default function RoutesPage() {
 
                               {stopsLoading ? (
                                 <div className="text-center py-4">
-                                  <Spinner size="sm" className="mx-auto" />
-                                  <p className="text-gray-500 mt-1 text-xs">Loading stops...</p>
+                                  <LoadingState label="Loading stops..." compact />
                                 </div>
                               ) : stops.length === 0 ? (
-                                <p className="text-sm text-gray-400 text-center py-4">No stops added to this route yet.</p>
+                                <EmptyState title="No stops added to this route yet." compact />
                               ) : (
                                 <table className="min-w-full divide-y divide-gray-200">
                                   <thead className="bg-white">
@@ -487,23 +486,21 @@ export default function RoutesPage() {
 
       {/* Route Create/Edit Modal */}
       {showModal && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
-          <div className="bg-white rounded-xl shadow-xl p-4 sm:p-6 w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
+        <Modal open  size="lg" closeOnBackdrop={false}>
             <h2 className="text-xl font-bold text-gray-900 mb-4">
               {editingRoute ? 'Edit Route' : 'Create Route'}
             </h2>
 
             <div className="space-y-4">
-              <div>
-                <label className="label">Route Name *</label>
-                <input
+              <Field label="Route Name" required>
+<input
                   type="text"
                   className="input"
                   placeholder="e.g. Route A - North Sector"
                   value={routeForm.name}
                   onChange={(e) => setRouteForm({ ...routeForm, name: e.target.value })}
                 />
-              </div>
+</Field>
 
               <div>
                 <label className="label">Description</label>
@@ -517,26 +514,24 @@ export default function RoutesPage() {
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="label">Start Location</label>
-                  <input
+                <Field label="Start Location">
+<input
                     type="text"
                     className="input"
                     placeholder="e.g. Main Campus"
                     value={routeForm.start_location}
                     onChange={(e) => setRouteForm({ ...routeForm, start_location: e.target.value })}
                   />
-                </div>
-                <div>
-                  <label className="label">End Location</label>
-                  <input
+</Field>
+                <Field label="End Location">
+<input
                     type="text"
                     className="input"
                     placeholder="e.g. DHA Phase 6"
                     value={routeForm.end_location}
                     onChange={(e) => setRouteForm({ ...routeForm, end_location: e.target.value })}
                   />
-                </div>
+</Field>
               </div>
 
               {/* Start Point Map */}
@@ -616,16 +611,15 @@ export default function RoutesPage() {
                     onChange={(e) => setRouteForm({ ...routeForm, distance_km: e.target.value })}
                   />
                 </div>
-                <div>
-                  <label className="label">Estimated Duration (minutes)</label>
-                  <input
+                <Field label="Estimated Duration (minutes)">
+<input
                     type="number"
                     className="input"
                     placeholder="e.g. 45"
                     value={routeForm.estimated_duration_minutes}
                     onChange={(e) => setRouteForm({ ...routeForm, estimated_duration_minutes: e.target.value })}
                   />
-                </div>
+</Field>
               </div>
             </div>
 
@@ -651,40 +645,36 @@ export default function RoutesPage() {
                   : editingRoute ? 'Save Changes' : 'Create Route'}
               </button>
             </div>
-          </div>
-        </div>
+          </Modal>
       )}
 
       {/* Stop Create/Edit Modal */}
       {showStopModal && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
-          <div className="bg-white rounded-xl shadow-xl p-4 sm:p-6 w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
+        <Modal open  size="lg" closeOnBackdrop={false}>
             <h2 className="text-xl font-bold text-gray-900 mb-4">
               {editingStop ? 'Edit Stop' : 'Add Stop'}
             </h2>
 
             <div className="space-y-4">
-              <div>
-                <label className="label">Stop Name *</label>
-                <input
+              <Field label="Stop Name" required>
+<input
                   type="text"
                   className="input"
                   placeholder="e.g. Main Gate, Sector F"
                   value={stopForm.name}
                   onChange={(e) => setStopForm({ ...stopForm, name: e.target.value })}
                 />
-              </div>
+</Field>
 
-              <div>
-                <label className="label">Address</label>
-                <input
+              <Field label="Address">
+<input
                   type="text"
                   className="input"
                   placeholder="Full address"
                   value={stopForm.address}
                   onChange={(e) => setStopForm({ ...stopForm, address: e.target.value })}
                 />
-              </div>
+</Field>
 
               {/* Stop Location Map */}
               <div>
@@ -710,36 +700,33 @@ export default function RoutesPage() {
                 )}
               </div>
 
-              <div>
-                <label className="label">Order</label>
-                <input
+              <Field label="Order">
+<input
                   type="number"
                   className="input"
                   placeholder="Stop order (1, 2, 3...)"
                   value={stopForm.stop_order}
                   onChange={(e) => setStopForm({ ...stopForm, stop_order: e.target.value })}
                 />
-              </div>
+</Field>
 
               <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="label">Pickup Time</label>
-                  <input
+                <Field label="Pickup Time">
+<input
                     type="time"
                     className="input"
                     value={stopForm.pickup_time}
                     onChange={(e) => setStopForm({ ...stopForm, pickup_time: e.target.value })}
                   />
-                </div>
-                <div>
-                  <label className="label">Drop Time</label>
-                  <input
+</Field>
+                <Field label="Drop Time">
+<input
                     type="time"
                     className="input"
                     value={stopForm.drop_time}
                     onChange={(e) => setStopForm({ ...stopForm, drop_time: e.target.value })}
                   />
-                </div>
+</Field>
               </div>
             </div>
 
@@ -765,14 +752,12 @@ export default function RoutesPage() {
                   : editingStop ? 'Save Changes' : 'Add Stop'}
               </button>
             </div>
-          </div>
-        </div>
+          </Modal>
       )}
 
       {/* Delete Confirmation Modal */}
       {deleteConfirm && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
-          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm mx-4">
+        <Modal open  size="sm" closeOnBackdrop={false}>
             <h2 className="text-xl font-bold text-gray-900 mb-2">Delete Route</h2>
             <p className="text-gray-600 mb-6">
               Are you sure you want to delete route <strong>{deleteConfirm.name}</strong>?
@@ -797,8 +782,7 @@ export default function RoutesPage() {
                 {deleteRouteMutation.isPending ? 'Deleting...' : 'Delete'}
               </button>
             </div>
-          </div>
-        </div>
+          </Modal>
       )}
     </div>
   )

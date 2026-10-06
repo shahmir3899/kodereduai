@@ -1,4 +1,8 @@
 import { useEffect, useState } from 'react'
+import Field from '../components/ui/Field'
+import { TONE } from '../components/ui/statusTones'
+import PageHeader from '../components/ui/PageHeader'
+import EmptyState from '../components/ui/EmptyState'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { financeApi } from '../services/api'
 import { useAuth } from '../contexts/AuthContext'
@@ -9,6 +13,7 @@ import Badge from '../components/ui/Badge'
 import { Skeleton, SkeletonTable } from '../components/ui/Skeleton'
 import { useEscapeKey } from '../hooks/useEscapeKey'
 import Button from '../components/ui/Button'
+import LoadingState from '../components/ui/LoadingState'
 
 const ACCOUNT_TYPES = [
   { value: 'CASH', label: 'Cash' },
@@ -17,9 +22,9 @@ const ACCOUNT_TYPES = [
 ]
 
 const typeColors = {
-  CASH: 'bg-green-100 text-green-800',
-  BANK: 'bg-blue-100 text-blue-800',
-  PERSON: 'bg-purple-100 text-purple-800',
+  CASH: TONE.success,
+  BANK: TONE.info,
+  PERSON: TONE.accent,
 }
 
 export default function AccountsPage() {
@@ -336,13 +341,8 @@ export default function AccountsPage() {
 
   return (
     <div>
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6 gap-4">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Accounts</h1>
-          <p className="text-sm text-gray-600">Track where money flows</p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {canManageAccounts && (activeTab === 'balances' || activeTab === 'accounts') && (
+      <PageHeader title="Accounts" subtitle="Track where money flows" className="mb-6" actions={<>
+{canManageAccounts && (activeTab === 'balances' || activeTab === 'accounts') && (
             <button
               onClick={() => setShowCloseMonthModal(true)}
               className="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 text-sm"
@@ -360,8 +360,7 @@ export default function AccountsPage() {
               Record Transfer
             </Button>
           )}
-        </div>
-      </div>
+</>} />
 
       {/* Tabs */}
       <div className="flex gap-1 mb-6 bg-gray-100 rounded-lg p-1 w-fit">
@@ -455,7 +454,7 @@ export default function AccountsPage() {
       {activeTab === 'manage' && (
         <div className="card">
           {accountsLoading ? (
-            <div className="text-center py-8 text-gray-500">Loading...</div>
+            <LoadingState />
           ) : accountList.length === 0 ? (
             <div className="p-4 sm:p-6">
               <div className="flex items-center gap-3 flex-wrap">
@@ -523,7 +522,7 @@ export default function AccountsPage() {
                       {canManageAccounts && <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Actions</th>}
                     </tr>
                   </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
+                  <tbody className="divide-y divide-gray-100">
                     {accountList.map((account) => (
                       <tr key={account.id}>
                         <td className="px-4 py-3 text-sm font-medium text-gray-900">{account.name}</td>
@@ -534,13 +533,13 @@ export default function AccountsPage() {
                         </td>
                         <td className="px-4 py-3 text-sm text-gray-700 text-right">{Number(account.opening_balance).toLocaleString()}</td>
                         <td className="px-4 py-3 text-center">
-                          <span className={`px-2 py-0.5 rounded text-xs font-medium ${account.is_active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'}`}>
+                          <span className={`px-2 py-0.5 rounded text-xs font-medium ${account.is_active ? TONE.success : TONE.neutral}`}>
                             {account.is_active ? 'Active' : 'Inactive'}
                           </span>
                         </td>
                         {canManageAccounts && (
                           <td className="px-4 py-3 text-center">
-                            <span className={`px-2 py-0.5 rounded text-xs font-medium ${account.staff_visible ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>
+                            <span className={`px-2 py-0.5 rounded text-xs font-medium ${account.staff_visible ? TONE.success : TONE.warning}`}>
                               {account.staff_visible ? 'Yes' : 'Hidden'}
                             </span>
                           </td>
@@ -579,7 +578,7 @@ export default function AccountsPage() {
 
           <div className="card">
             {transfersLoading ? (
-              <div className="text-center py-8 text-gray-500">Loading...</div>
+              <LoadingState />
             ) : transferList.length === 0 ? (
               <div className="text-center py-8">
                 <p className="text-gray-500 mb-2">No transfers recorded</p>
@@ -621,7 +620,7 @@ export default function AccountsPage() {
                         {canManageAccounts && <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Actions</th>}
                       </tr>
                     </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
+                    <tbody className="divide-y divide-gray-100">
                       {transferList.map((tfr) => (
                         <tr key={tfr.id}>
                           <td className="px-4 py-3 text-sm text-gray-500">{tfr.date}</td>
@@ -740,14 +739,13 @@ export default function AccountsPage() {
 
       {/* Add/Edit Account Modal */}
       {showAccountModal && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50 p-4">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4">
           <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
             <div className="p-6">
               <h3 className="text-lg font-semibold mb-4">{editingAccount ? 'Edit Account' : 'Add Account'}</h3>
               <form onSubmit={handleAccountSubmit} className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Account Name</label>
-                  <input
+                <Field label="Account Name">
+<input
                     type="text"
                     value={accountForm.name}
                     onChange={(e) => setAccountForm(f => ({ ...f, name: e.target.value }))}
@@ -755,20 +753,18 @@ export default function AccountsPage() {
                     required
                     placeholder="e.g. Principal Branch 1"
                   />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Type</label>
-                  <select
+</Field>
+                <Field label="Type">
+<select
                     value={accountForm.account_type}
                     onChange={(e) => setAccountForm(f => ({ ...f, account_type: e.target.value }))}
                     className="input-field"
                   >
                     {ACCOUNT_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
                   </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Opening Balance (BBF)</label>
-                  <input
+</Field>
+                <Field label="Opening Balance (BBF)">
+<input
                     type="number"
                     step="0.01"
                     value={accountForm.opening_balance}
@@ -776,7 +772,7 @@ export default function AccountsPage() {
                     className="input-field"
                     placeholder="0.00"
                   />
-                </div>
+</Field>
                 {editingAccount && (
                   <div>
                     <label className="flex items-center gap-2 text-sm">
@@ -803,16 +799,16 @@ export default function AccountsPage() {
                   <p className="text-xs text-gray-400 mt-1 ml-6">Staff members can see this account and its transactions</p>
                 </div>
                 <div className="flex gap-3 pt-2">
-                  <button type="button" onClick={closeAccountModal} className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm">
+                  <Button variant="secondary" type="button" onClick={closeAccountModal} className="flex-1">
                     Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={createAccountMutation.isPending || updateAccountMutation.isPending}
-                    className="flex-1 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm disabled:opacity-50"
-                  >
+                  </Button>
+                  <Button
+ type="submit"
+ disabled={createAccountMutation.isPending || updateAccountMutation.isPending}
+ className="flex-1"
+ >
                     {(createAccountMutation.isPending || updateAccountMutation.isPending) ? 'Saving...' : 'Save'}
-                  </button>
+                  </Button>
                 </div>
                 {(createAccountMutation.isError || updateAccountMutation.isError) && (
                   <p className="text-sm text-red-600">{getErrorMessage(createAccountMutation.error || updateAccountMutation.error, 'Failed to save account')}</p>
@@ -826,7 +822,7 @@ export default function AccountsPage() {
       {/* Record Transfer Modal */}
       {/* Close Month Modal */}
       {showCloseMonthModal && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50 p-4">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4">
           <div className="bg-white rounded-lg shadow-xl w-full max-w-sm">
             <div className="p-6">
               <h3 className="text-lg font-semibold mb-4">Close Month</h3>
@@ -836,9 +832,8 @@ export default function AccountsPage() {
               </p>
               <div className="space-y-4">
                 <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Month</label>
-                    <select
+                  <Field label="Month">
+<select
                       value={closeMonthForm.month}
                       onChange={(e) => { setCloseMonthForm(f => ({ ...f, month: parseInt(e.target.value) })); setCloseMonthConfirmed(false) }}
                       className="input-field"
@@ -847,17 +842,16 @@ export default function AccountsPage() {
                         <option key={i + 1} value={i + 1}>{name}</option>
                       ))}
                     </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Year</label>
-                    <input
+</Field>
+                  <Field label="Year">
+<input
                       type="number"
                       value={closeMonthForm.year}
                       onChange={(e) => { setCloseMonthForm(f => ({ ...f, year: parseInt(e.target.value) })); setCloseMonthConfirmed(false) }}
                       className="input-field"
                       min={2020} max={2100}
                     />
-                  </div>
+</Field>
                 </div>
                 {lastClosed && (
                   <p className="text-xs text-gray-400">
@@ -874,13 +868,12 @@ export default function AccountsPage() {
                   </label>
                 </div>
                 <div className="flex gap-3 pt-2">
-                  <button
-                    type="button"
-                    onClick={() => { setShowCloseMonthModal(false); setCloseMonthConfirmed(false) }}
-                    className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm"
-                  >
+                  <Button variant="secondary"
+ type="button"
+ onClick={() => { setShowCloseMonthModal(false); setCloseMonthConfirmed(false) }}
+ className="flex-1">
                     Cancel
-                  </button>
+                  </Button>
                   <button
                     onClick={() => closeMonthMutation.mutate(closeMonthForm)}
                     disabled={closeMonthMutation.isPending || !closeMonthConfirmed}
@@ -899,7 +892,7 @@ export default function AccountsPage() {
       )}
 
       {showTransferModal && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50 p-4">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4">
           <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
             <div className="p-6">
               <h3 className="text-lg font-semibold mb-4">Record Transfer</h3>
@@ -916,14 +909,14 @@ export default function AccountsPage() {
                     </div>
                   </div>
                   <div className="flex gap-3">
-                    <button onClick={() => setTransferConfirmStep(false)} className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm">Back</button>
-                    <button
-                      onClick={() => { handleTransferSubmit({ preventDefault: () => {} }); setTransferConfirmStep(false) }}
-                      disabled={createTransferMutation.isPending}
-                      className="flex-1 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm disabled:opacity-50"
-                    >
+                    <Button variant="secondary" onClick={() => setTransferConfirmStep(false)} className="flex-1">Back</Button>
+                    <Button
+ onClick={() => { handleTransferSubmit({ preventDefault: () => {} }); setTransferConfirmStep(false) }}
+ disabled={createTransferMutation.isPending}
+ className="flex-1"
+ >
                       {createTransferMutation.isPending ? 'Saving...' : 'Confirm Transfer'}
-                    </button>
+                    </Button>
                   </div>
                   {createTransferMutation.isError && (
                     <p className="text-sm text-red-600">{getErrorMessage(createTransferMutation.error, 'Failed to record transfer')}</p>
@@ -931,9 +924,8 @@ export default function AccountsPage() {
                 </div>
               ) : (
                 <form onSubmit={(e) => { e.preventDefault(); setTransferConfirmStep(true) }} className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">From Account</label>
-                    <select
+                  <Field label="From Account">
+<select
                       value={transferForm.from_account}
                       onChange={(e) => setTransferForm(f => ({ ...f, from_account: e.target.value }))}
                       className="input-field"
@@ -942,10 +934,9 @@ export default function AccountsPage() {
                       <option value="">-- Select Account --</option>
                       {fromAccountList.filter(a => a.is_active).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
                     </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">To Account</label>
-                    <select
+</Field>
+                  <Field label="To Account">
+<select
                       value={transferForm.to_account}
                       onChange={(e) => setTransferForm(f => ({ ...f, to_account: e.target.value }))}
                       className="input-field"
@@ -954,10 +945,9 @@ export default function AccountsPage() {
                       <option value="">-- Select Account --</option>
                       {accountListAll.filter(a => a.is_active).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
                     </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Amount</label>
-                    <input
+</Field>
+                  <Field label="Amount">
+<input
                       type="number"
                       step="0.01"
                       value={transferForm.amount}
@@ -965,19 +955,18 @@ export default function AccountsPage() {
                       className="input-field"
                       required
                     />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
-                    <input
+</Field>
+                  <Field label="Date">
+<input
                       type="date"
                       value={transferForm.date}
                       onChange={(e) => setTransferForm(f => ({ ...f, date: e.target.value }))}
                       className="input-field"
                       required
                     />
-                  </div>
+</Field>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Description (optional)</label>
+                    <label className="label">Description (optional)</label>
                     <textarea
                       value={transferForm.description}
                       onChange={(e) => setTransferForm(f => ({ ...f, description: e.target.value }))}
@@ -987,15 +976,15 @@ export default function AccountsPage() {
                     />
                   </div>
                   <div className="flex gap-3 pt-2">
-                    <button type="button" onClick={closeTransferModal} className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm">
+                    <Button variant="secondary" type="button" onClick={closeTransferModal} className="flex-1">
                       Cancel
-                    </button>
-                    <button
-                      type="submit"
-                      className="flex-1 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm"
-                    >
+                    </Button>
+                    <Button
+ type="submit"
+ className="flex-1"
+ >
                       Review Transfer
-                    </button>
+                    </Button>
                   </div>
                   {createTransferMutation.isError && (
                     <p className="text-sm text-red-600">{getErrorMessage(createTransferMutation.error, 'Failed to record transfer')}</p>
@@ -1057,7 +1046,7 @@ function BalanceCardMobile({ acct }) {
 }
 
 function SingleSchoolBalances({ balances, grandTotal, isLoading }) {
-  if (isLoading) return <div className="card text-center py-8 text-gray-500">Loading...</div>
+  if (isLoading) return <div className="card"><LoadingState /></div>
   if (balances.length === 0) return (
     <div className="card text-center py-8">
       <p className="text-gray-500 mb-2">No accounts created yet</p>
@@ -1081,7 +1070,7 @@ function SingleSchoolBalances({ balances, grandTotal, isLoading }) {
           <thead className="bg-gray-50">
             <tr>{BALANCE_COLS.map(c => <th key={c} className="px-3 py-3 text-xs font-medium text-gray-500 uppercase" style={{ textAlign: c === 'Account' || c === 'Type' ? 'left' : 'right' }}>{c}</th>)}</tr>
           </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
+          <tbody className="divide-y divide-gray-100">
             {balances.map((acct, idx) => <BalanceRow key={idx} acct={acct} />)}
           </tbody>
           <tfoot className="bg-gray-50">
@@ -1097,7 +1086,7 @@ function SingleSchoolBalances({ balances, grandTotal, isLoading }) {
 }
 
 function PrincipalAccountsView({ balances, grandTotal, isLoading, onEdit, onDelete }) {
-  if (isLoading) return <div className="card text-center py-8 text-gray-500">Loading...</div>
+  if (isLoading) return <div className="card"><LoadingState /></div>
   if (balances.length === 0) return (
     <div className="card text-center py-8">
       <p className="text-gray-500 mb-2">No accounts created yet</p>
@@ -1150,7 +1139,7 @@ function PrincipalAccountsView({ balances, grandTotal, isLoading, onEdit, onDele
               ))}
             </tr>
           </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
+          <tbody className="divide-y divide-gray-100">
             {balances.map((acct, idx) => (
               <tr key={idx}>
                 <td className="px-3 py-2 text-sm font-medium text-gray-900">{acct.name}</td>
@@ -1185,7 +1174,7 @@ function PrincipalAccountsView({ balances, grandTotal, isLoading, onEdit, onDele
 }
 
 function MultiSchoolBalances({ groups, shared, grandTotal, isLoading }) {
-  if (isLoading) return <div className="card text-center py-8 text-gray-500">Loading...</div>
+  if (isLoading) return <div className="card"><LoadingState /></div>
   if (groups.length === 0 && shared.accounts.length === 0) return (
     <div className="card text-center py-8">
       <p className="text-gray-500 mb-2">No accounts created yet</p>
@@ -1216,7 +1205,7 @@ function MultiSchoolBalances({ groups, shared, grandTotal, isLoading }) {
                   <thead className="bg-gray-50">
                     <tr>{BALANCE_COLS.map(c => <th key={c} className="px-3 py-2 text-xs font-medium text-gray-500 uppercase" style={{ textAlign: c === 'Account' || c === 'Type' ? 'left' : 'right' }}>{c}</th>)}</tr>
                   </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
+                  <tbody className="divide-y divide-gray-100">
                     {group.accounts.map((acct, idx) => <BalanceRow key={idx} acct={acct} />)}
                   </tbody>
                   <tfoot className="bg-gray-50">
@@ -1249,7 +1238,7 @@ function MultiSchoolBalances({ groups, shared, grandTotal, isLoading }) {
               <thead className="bg-gray-50">
                 <tr>{BALANCE_COLS.map(c => <th key={c} className="px-3 py-2 text-xs font-medium text-gray-500 uppercase" style={{ textAlign: c === 'Account' || c === 'Type' ? 'left' : 'right' }}>{c}</th>)}</tr>
               </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
+              <tbody className="divide-y divide-gray-100">
                 {shared.accounts.map((acct, idx) => <BalanceRow key={idx} acct={acct} />)}
               </tbody>
               <tfoot className="bg-gray-50">
@@ -1361,7 +1350,7 @@ function LedgerView({ payload, isLoading, isError, error, accountSelected }) {
 
       <div className="card">
         {entries.length === 0 ? (
-          <div className="text-center py-8 text-gray-500">No transactions in selected range.</div>
+          <EmptyState title="No transactions in selected range." />
         ) : (
           <>
             <div className="sm:hidden space-y-3">
@@ -1396,7 +1385,7 @@ function LedgerView({ payload, isLoading, isError, error, accountSelected }) {
                     <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase">Running Balance</th>
                   </tr>
                 </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
+                <tbody className="divide-y divide-gray-100">
                   {entries.map((entry) => (
                     <tr key={`${entry.type}-${entry.id}`}>
                       <td className="px-3 py-2 text-sm text-gray-700">{payload?.account?.name || '—'}</td>

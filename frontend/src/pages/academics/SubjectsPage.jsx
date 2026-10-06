@@ -1,4 +1,7 @@
 import { useState, useMemo } from 'react'
+import Modal from '../../components/ui/Modal'
+import { TONE } from '../../components/ui/statusTones'
+import PageHeader from '../../components/ui/PageHeader'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { academicsApi } from '../../services/api'
 import { useSessionClasses } from '../../hooks/useSessionClasses'
@@ -17,10 +20,10 @@ import Badge from '../../components/ui/Badge'
 import StaffFilter from '../../components/StaffFilter'
 
 const SEVERITY_STYLES = {
-  red: { bg: 'bg-red-50', border: 'border-red-200', badge: 'bg-red-100 text-red-700', icon: 'text-red-500' },
-  orange: { bg: 'bg-orange-50', border: 'border-orange-200', badge: 'bg-orange-100 text-orange-700', icon: 'text-orange-500' },
-  yellow: { bg: 'bg-yellow-50', border: 'border-yellow-200', badge: 'bg-yellow-100 text-yellow-700', icon: 'text-yellow-500' },
-  blue: { bg: 'bg-blue-50', border: 'border-blue-200', badge: 'bg-blue-100 text-blue-700', icon: 'text-blue-500' },
+  red: { bg: 'bg-red-50', border: 'border-red-200', badge: TONE.danger, icon: 'text-red-500' },
+  orange: { bg: 'bg-orange-50', border: 'border-orange-200', badge: TONE.orange, icon: 'text-orange-500' },
+  yellow: { bg: 'bg-yellow-50', border: 'border-yellow-200', badge: TONE.warning, icon: 'text-yellow-500' },
+  blue: { bg: 'bg-blue-50', border: 'border-blue-200', badge: TONE.info, icon: 'text-blue-500' },
 }
 
 const PRESET_SUBJECTS = [
@@ -467,12 +470,7 @@ export default function SubjectsPage() {
 
   return (
     <div>
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6 gap-4">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Subjects</h1>
-          <p className="text-sm text-gray-600">Manage subjects, subject teachers, and class teachers</p>
-        </div>
-      </div>
+      <PageHeader title="Subjects" subtitle="Manage subjects, subject teachers, and class teachers" className="mb-6" />
 
       {/* Tabs */}
       <div className="flex gap-1 mb-6 bg-gray-100 p-1 rounded-lg w-fit">
@@ -676,12 +674,7 @@ export default function SubjectsPage() {
 
           {/* Subject Modal */}
           {isSchoolAdmin && showSubjectModal && (
-            <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[60] p-4" onClick={closeSubjectModal}>
-              <div className="bg-white rounded-xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto p-6" onClick={e => e.stopPropagation()}>
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-lg font-semibold text-gray-900">{editSubjectId ? 'Edit Subject' : 'Add Subject'}</h2>
-                  <button onClick={closeSubjectModal} className="text-gray-400 hover:text-gray-600 text-xl">&times;</button>
-                </div>
+            <Modal open onClose={closeSubjectModal} title={editSubjectId ? 'Edit Subject' : 'Add Subject'}>
 
                 {(subjectErrors.detail || subjectErrors.non_field_errors) && (
                   <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-lg text-sm">
@@ -691,7 +684,7 @@ export default function SubjectsPage() {
 
                 <form onSubmit={handleSubjectSubmit} className="space-y-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Subject Name *</label>
+                    <label className="label">Subject Name *</label>
                     <input
                       type="text"
                       value={subjectForm.name}
@@ -703,7 +696,7 @@ export default function SubjectsPage() {
                     {subjectErrors.name && <p className="text-xs text-red-600 mt-1">{subjectErrors.name}</p>}
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Code * <span className="text-xs text-gray-400 font-normal">(auto-generated, editable)</span></label>
+                    <label className="label">Code * <span className="text-xs text-gray-400 font-normal">(auto-generated, editable)</span></label>
                     <input
                       type="text"
                       value={subjectForm.code}
@@ -716,7 +709,7 @@ export default function SubjectsPage() {
                     {subjectErrors.code && <p className="text-xs text-red-600 mt-1">{subjectErrors.code}</p>}
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                    <label className="label">Description</label>
                     <textarea
                       value={subjectForm.description}
                       onChange={e => setSubjectForm(p => ({ ...p, description: e.target.value }))}
@@ -742,8 +735,7 @@ export default function SubjectsPage() {
                     </button>
                   </div>
                 </form>
-              </div>
-            </div>
+              </Modal>
           )}
         </>
       )}
@@ -847,12 +839,7 @@ export default function SubjectsPage() {
 
           {/* Assignment Modal */}
           {isSchoolAdmin && showAssignModal && (
-            <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[60] p-4" onClick={closeAssignModal}>
-              <div className="bg-white rounded-xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto p-6" onClick={e => e.stopPropagation()}>
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-lg font-semibold text-gray-900">{editAssignId ? 'Edit Assignment' : 'Assign Subject to Class'}</h2>
-                  <button onClick={closeAssignModal} className="text-gray-400 hover:text-gray-600 text-xl">&times;</button>
-                </div>
+            <Modal open onClose={closeAssignModal} title={editAssignId ? 'Edit Assignment' : 'Assign Subject to Class'}>
 
                 {(assignErrors.detail || assignErrors.non_field_errors) && (
                   <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-lg text-sm">
@@ -862,7 +849,7 @@ export default function SubjectsPage() {
 
                 <form onSubmit={handleAssignSubmit} className="space-y-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Class Section *</label>
+                    <label className="label">Class Section *</label>
                     <ClassSelector
                       value={assignForm.session_class}
                       onChange={e => setAssignForm(p => ({ ...p, session_class: e.target.value }))}
@@ -873,7 +860,7 @@ export default function SubjectsPage() {
                     <p className="text-xs text-gray-500 mt-1">Assign subjects to a specific session class section for the active academic year.</p>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label className="label">
                       {editAssignId ? 'Subject *' : 'Subjects *'}
                     </label>
                     {editAssignId ? (
@@ -972,7 +959,7 @@ export default function SubjectsPage() {
                     )}
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Teacher</label>
+                    <label className="label">Teacher</label>
                     <StaffFilter
                       status="ACTIVE"
                       value={assignForm.teacher}
@@ -1003,8 +990,7 @@ export default function SubjectsPage() {
                     </div>
                   </div>
                 </form>
-              </div>
-            </div>
+              </Modal>
           )}
         </>
       )}
@@ -1106,12 +1092,7 @@ export default function SubjectsPage() {
           )}
 
           {showClassTeacherModal && (
-            <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[60] p-4" onClick={closeClassTeacherModal}>
-              <div className="bg-white rounded-xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto p-6" onClick={e => e.stopPropagation()}>
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-lg font-semibold text-gray-900">{editClassTeacherId ? 'Edit Class Teacher' : 'Assign Class Teacher'}</h2>
-                  <button onClick={closeClassTeacherModal} className="text-gray-400 hover:text-gray-600 text-xl">&times;</button>
-                </div>
+            <Modal open onClose={closeClassTeacherModal} title={editClassTeacherId ? 'Edit Class Teacher' : 'Assign Class Teacher'}>
 
                 {(classTeacherErrors.detail || classTeacherErrors.non_field_errors) && (
                   <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-lg text-sm">
@@ -1121,7 +1102,7 @@ export default function SubjectsPage() {
 
                 <form onSubmit={handleClassTeacherSubmit} className="space-y-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Class Section *</label>
+                    <label className="label">Class Section *</label>
                     <ClassSelector
                       value={classTeacherForm.session_class}
                       onChange={e => setClassTeacherForm(p => ({ ...p, session_class: e.target.value }))}
@@ -1134,7 +1115,7 @@ export default function SubjectsPage() {
                     </p>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Teacher *</label>
+                    <label className="label">Teacher *</label>
                     <StaffFilter
                       role="TEACHER"
                       status="ACTIVE"
@@ -1171,8 +1152,7 @@ export default function SubjectsPage() {
                     </div>
                   </div>
                 </form>
-              </div>
-            </div>
+              </Modal>
           )}
         </>
       )}
@@ -1256,11 +1236,11 @@ export default function SubjectsPage() {
                                 <p className="text-xs text-gray-500">{t.subjects_taught} subjects · {t.classes_taught} classes</p>
                               </div>
                               {t.overloaded ? (
-                                <span className="px-2 py-0.5 bg-red-100 text-red-700 rounded-full text-xs">Overloaded</span>
+                                <Badge tone="danger">Overloaded</Badge>
                               ) : t.underloaded ? (
-                                <span className="px-2 py-0.5 bg-yellow-100 text-yellow-700 rounded-full text-xs">Underloaded</span>
+                                <Badge tone="warning">Underloaded</Badge>
                               ) : (
-                                <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded-full text-xs">Balanced</span>
+                                <Badge tone="success">Balanced</Badge>
                               )}
                             </div>
                             <div className="flex gap-4 mt-2 text-xs text-gray-600">

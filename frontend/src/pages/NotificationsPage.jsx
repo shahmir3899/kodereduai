@@ -1,4 +1,6 @@
 import { useState, useEffect } from 'react'
+import Modal from '../components/ui/Modal'
+import EmptyState from '../components/ui/EmptyState'
 import { useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { notificationsApi } from '../services/api'
@@ -102,7 +104,7 @@ export default function NotificationsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">Notifications</h1>
+        <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Notifications</h1>
         <p className="text-sm text-gray-500 mt-1">Manage notifications and communication templates</p>
       </div>
 
@@ -236,7 +238,7 @@ function InboxTab() {
       </div>
 
       {notifications.length === 0 ? (
-        <div className="text-center py-10 text-gray-500">No notifications</div>
+        <EmptyState title="No notifications" />
       ) : (
         <div className="space-y-5">
           {groupByDay(bundleNotifications(notifications)).map((group) => (
@@ -285,8 +287,7 @@ function InboxTab() {
 
       {/* Mark All Read confirmation */}
       {confirmMarkAll && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
-          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm mx-4">
+        <Modal open  size="sm" closeOnBackdrop={false}>
             <h2 className="text-lg font-bold text-gray-900 mb-2">Mark All as Read</h2>
             <p className="text-gray-600 mb-6">
               Are you sure you want to mark all notifications as read? This cannot be undone.
@@ -301,8 +302,7 @@ function InboxTab() {
                 {markAllMutation.isPending ? 'Marking...' : 'Confirm'}
               </button>
             </div>
-          </div>
-        </div>
+          </Modal>
       )}
     </div>
   )
@@ -526,8 +526,7 @@ function TemplatesTab() {
 
       {/* Delete confirmation modal */}
       {deleteConfirm && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
-          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm mx-4">
+        <Modal open  size="sm" closeOnBackdrop={false}>
             <h2 className="text-lg font-bold text-gray-900 mb-2">Delete Template</h2>
             <p className="text-gray-600 mb-6">
               Are you sure you want to delete <strong>{deleteConfirm.name}</strong>? This cannot be undone.
@@ -542,13 +541,11 @@ function TemplatesTab() {
                 {deleteMutation.isPending ? 'Deleting...' : 'Delete'}
               </button>
             </div>
-          </div>
-        </div>
+          </Modal>
       )}
 
       {previewTemplate && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
-          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-xl mx-4">
+        <Modal open  size="xl" closeOnBackdrop={false}>
             <h2 className="text-lg font-bold text-gray-900 mb-1">Template Preview</h2>
             <p className="text-xs text-gray-500 mb-4">
               Sample placeholder values are used for this preview.
@@ -575,8 +572,7 @@ function TemplatesTab() {
                 Close
               </button>
             </div>
-          </div>
-        </div>
+          </Modal>
       )}
     </div>
   )
@@ -964,8 +960,7 @@ function SendTab() {
       </div>
 
       {placeholderWarning && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
-          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-xl mx-4">
+        <Modal open  size="xl" closeOnBackdrop={false}>
             <h2 className="text-lg font-bold text-gray-900 mb-2">Placeholder Warning</h2>
             <p className="text-sm text-gray-600 mb-3">
               This send contains placeholders. Manual sends do not auto-populate student-specific values unless you replace them before sending.
@@ -1008,13 +1003,11 @@ function SendTab() {
                 Send Anyway
               </button>
             </div>
-          </div>
-        </div>
+          </Modal>
       )}
 
       {confirmSendOpen && mode === 'broadcast' && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
-          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-lg mx-4">
+        <Modal open  size="lg" closeOnBackdrop={false}>
             <h2 className="text-lg font-bold text-gray-900 mb-2">Confirm Broadcast</h2>
             <p className="text-sm text-gray-600 mb-4">
               Review audience size before sending this broadcast.
@@ -1047,8 +1040,7 @@ function SendTab() {
                 {broadcastMutation.isPending ? 'Sending...' : 'Confirm Send'}
               </button>
             </div>
-          </div>
-        </div>
+          </Modal>
       )}
     </div>
   )

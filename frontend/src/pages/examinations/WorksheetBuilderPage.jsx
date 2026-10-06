@@ -1,4 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import Field from '../../components/ui/Field'
+import Button from '../../components/ui/Button'
+import EmptyState from '../../components/ui/EmptyState'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { worksheetApi, questionPaperApi } from '../../services/api'
@@ -91,19 +94,18 @@ function NewWorksheetForm() {
   return (
     <div className="min-h-screen bg-gray-50 flex items-start justify-center pt-16">
       <div className="bg-white border border-gray-200 rounded-lg p-6 w-full max-w-md space-y-4">
-        <h1 className="text-xl font-bold text-gray-900">New Worksheet</h1>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Title</label>
-          <input
+        <h1 className="text-xl sm:text-2xl font-bold text-gray-900">New Worksheet</h1>
+        <Field label="Title">
+<input
             type="text"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             placeholder="e.g. Fractions Practice Sheet"
             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           />
-        </div>
+</Field>
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Class</label>
+          <label className="label">Class</label>
           <ClassSelector
             value={classId}
             onChange={(e) => { setClassId(e.target.value); setSubjectId('') }}
@@ -112,9 +114,8 @@ function NewWorksheetForm() {
             academicYearId={activeAcademicYear?.id}
           />
         </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Subject (optional)</label>
-          <select
+        <Field label="Subject (optional)">
+<select
             value={subjectId}
             onChange={(e) => setSubjectId(e.target.value)}
             disabled={!classId || subjectsLoading}
@@ -125,12 +126,12 @@ function NewWorksheetForm() {
               <option key={subject.id} value={subject.id}>{subject.name}</option>
             ))}
           </select>
-        </div>
+</Field>
         <button
           type="button"
           onClick={() => createMutation.mutate()}
           disabled={!classId || createMutation.isPending}
-          className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 text-sm font-medium"
+          className="w-full px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 text-sm font-medium"
         >
           {createMutation.isPending ? 'Creating…' : 'Create Worksheet'}
         </button>
@@ -467,7 +468,7 @@ function WorksheetBuilderInner({ worksheetId }) {
 
       <div className="max-w-5xl mx-auto px-6 py-6 space-y-6">
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Instructions</label>
+          <label className="label">Instructions</label>
           <textarea
             value={draft.instructions}
             onChange={(e) => setDraft((prev) => ({ ...prev, instructions: e.target.value }))}
@@ -566,25 +567,25 @@ function WorksheetBuilderInner({ worksheetId }) {
               />
             </div>
 
-            <button
-              type="button"
-              onClick={handleAddItem}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium"
-            >
+            <Button
+ type="button"
+ onClick={handleAddItem}
+ 
+ >
               + Add to Worksheet
-            </button>
+            </Button>
           </div>
         )}
 
         {activeTab === 'bank' && !isReadOnly && (
           <div className="bg-white border border-gray-200 rounded-lg p-4">
-            <button
-              type="button"
-              onClick={() => setShowBankPicker(true)}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium"
-            >
+            <Button
+ type="button"
+ onClick={() => setShowBankPicker(true)}
+ 
+ >
               Browse Question Bank
-            </button>
+            </Button>
             <QuestionBankPicker
               open={showBankPicker}
               onClose={() => setShowBankPicker(false)}
@@ -605,7 +606,7 @@ function WorksheetBuilderInner({ worksheetId }) {
         {activeTab === 'items' && (
           <div className="bg-white border border-gray-200 rounded-lg divide-y divide-gray-100">
             {items.length === 0 ? (
-              <div className="p-8 text-center text-gray-500">No items yet -- add some manually, from the bank, or by scanning a sheet.</div>
+              <EmptyState title="No items yet -- add some manually, from the bank, or by scanning a sheet." />
             ) : items.map((item, index) => (
               <div key={item.local_id} className="p-4 flex items-start justify-between gap-4">
                 <div className="flex-1">

@@ -1,11 +1,14 @@
 import { useMemo, useState } from 'react'
+import { TONE } from '../../components/ui/statusTones'
+import PageHeader from '../../components/ui/PageHeader'
+import LoadingState from '../../components/ui/LoadingState'
 import { useQuery } from '@tanstack/react-query'
 import { inventoryApi } from '../../services/api'
 
 const SEVERITY_STYLES = {
-  HIGH: 'bg-red-100 text-red-800',
-  MEDIUM: 'bg-amber-100 text-amber-800',
-  LOW: 'bg-yellow-100 text-yellow-800',
+  HIGH: TONE.danger,
+  MEDIUM: TONE.warning,
+  LOW: TONE.warning,
 }
 
 const SEVERITY_BORDER = {
@@ -45,15 +48,8 @@ export default function ReorderPredictionPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Reorder Prediction</h1>
-          <p className="text-sm text-gray-500 mt-1">
-            Items flagged by the AI Reorder Prediction service as low on stock or projected to stock out soon,
-            based on recent consumption trends.
-          </p>
-        </div>
-        {result && (
+      <PageHeader title="Reorder Prediction" subtitle="Items flagged by the AI Reorder Prediction service as low on stock or projected to stock out soon, based on recent consumption trends." actions={<>
+{result && (
           <div className="text-right shrink-0">
             <p className="text-sm text-gray-600">
               <span className="font-semibold text-gray-900">{result.at_risk_count}</span> to reorder of{' '}
@@ -61,7 +57,7 @@ export default function ReorderPredictionPage() {
             </p>
           </div>
         )}
-      </div>
+</>} />
 
       {/* Filters */}
       <div className="flex flex-wrap gap-3">
@@ -91,7 +87,7 @@ export default function ReorderPredictionPage() {
 
       {/* List */}
       {isLoading ? (
-        <div className="text-center py-10 text-gray-500">Loading reorder predictions...</div>
+        <LoadingState label="Loading reorder predictions..." />
       ) : filtered.length === 0 ? (
         <div className="card text-center py-12">
           <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">

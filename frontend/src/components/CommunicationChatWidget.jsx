@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
+import { TONE } from './ui/statusTones'
 import { useMutation } from '@tanstack/react-query'
 import { notificationsApi } from '../services/api'
 import { useDraggableWidget } from '../hooks/useDraggableWidget'
@@ -52,7 +53,7 @@ export default function CommunicationChatWidget() {
     return (
       <button
         onClick={() => setIsOpen(true)}
-        className="fixed bottom-6 right-6 z-50 w-14 h-14 bg-indigo-600 text-white rounded-full shadow-lg hover:bg-indigo-700 flex items-center justify-center transition-all hover:scale-105"
+        className="fixed bottom-6 right-6 z-50 w-14 h-14 bg-primary-600 text-white rounded-full shadow-lg hover:bg-primary-700 flex items-center justify-center transition-all hover:scale-105"
         title="Communication AI Assistant"
       >
         <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -105,7 +106,7 @@ export default function CommunicationChatWidget() {
             <div className={`max-w-[80%] rounded-lg px-3 py-2 text-sm whitespace-pre-wrap ${
               m.role === 'user'
                 ? 'bg-indigo-600 text-white'
-                : 'bg-gray-100 text-gray-800'
+                : TONE.neutral
             }`}>
               {m.content}
             </div>
@@ -133,7 +134,7 @@ export default function CommunicationChatWidget() {
           <button
             onClick={() => handleSend()}
             disabled={sendMutation.isPending || !input.trim()}
-            className="px-3 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 text-sm"
+            className="px-3 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 text-sm"
           >
             Send
           </button>

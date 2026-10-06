@@ -1,27 +1,32 @@
 import { useState } from 'react'
+import Field from '../components/ui/Field'
+import { TONE } from '../components/ui/statusTones'
+import PageHeader from '../components/ui/PageHeader'
 import { useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../contexts/AuthContext'
 import { financeApi } from '../services/api'
 import TransferModal from '../components/TransferModal'
 import { useConfirmModal } from '../components/ConfirmModal'
+import { useToast } from '../components/Toast'
 import ExpenseCategoryManagerModal from './ExpenseCategoryManagerModal'
 import Button from '../components/ui/Button'
+import LoadingState from '../components/ui/LoadingState'
 import { useEscapeKey } from '../hooks/useEscapeKey'
 import { LedgerCard, CardGrid, ViewToggle } from '../components/cards'
 import { useViewPreference } from '../hooks/useViewPreference'
 
 const COLOR_PALETTE = [
-  'bg-blue-100 text-blue-800',
-  'bg-purple-100 text-purple-800',
-  'bg-yellow-100 text-yellow-800',
-  'bg-green-100 text-green-800',
-  'bg-orange-100 text-orange-800',
-  'bg-pink-100 text-pink-800',
-  'bg-teal-100 text-teal-800',
-  'bg-indigo-100 text-indigo-800',
-  'bg-red-100 text-red-800',
-  'bg-gray-100 text-gray-800',
+  TONE.info,
+  TONE.accent,
+  TONE.warning,
+  TONE.success,
+  TONE.orange,
+  TONE.pink,
+  TONE.teal,
+  TONE.indigo,
+  TONE.danger,
+  TONE.neutral,
 ]
 
 export default function ExpensesPage() {
@@ -29,6 +34,7 @@ export default function ExpensesPage() {
   const canWrite = !isStaffMember
   const queryClient = useQueryClient()
   const { confirm, ConfirmModalRoot } = useConfirmModal()
+  const { showError } = useToast()
   const [searchParams, setSearchParams] = useSearchParams()
 
   const initialTab = searchParams.get('tab') === 'transfers' ? 'transfers' : 'expenses'
@@ -258,11 +264,11 @@ export default function ExpensesPage() {
   const handleSubmit = (e) => {
     e.preventDefault()
     if (!form.account) {
-      alert('Please select account')
+      showError('Please select an account')
       return
     }
     if (!form.category) {
-      alert('Please select a category')
+      showError('Please select a category')
       return
     }
     const data = { ...form, amount: parseFloat(form.amount), account: parseInt(form.account), category: parseInt(form.category) }
@@ -291,17 +297,12 @@ export default function ExpensesPage() {
 
   return (
     <div>
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6 gap-4">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Expenses & Transfers</h1>
-          <p className="text-sm text-gray-600">Track expenditures and fund movements</p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {canWrite && activeTab === 'expenses' && (
+      <PageHeader title="Expenses & Transfers" subtitle="Track expenditures and fund movements" className="mb-6" actions={<>
+{canWrite && activeTab === 'expenses' && (
             <>
-              <button onClick={() => setShowCategoryModal(true)} className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 text-sm">
+              <Button variant="secondary" onClick={() => setShowCategoryModal(true)}>
                 ⚙ Categories
-              </button>
+              </Button>
               <Button onClick={() => setShowModal(true)}>
                 Add Expense
               </Button>
@@ -312,8 +313,7 @@ export default function ExpensesPage() {
               Record Transfer
             </Button>
           )}
-        </div>
-      </div>
+</>} />
 
       {/* Tabs */}
       <div className="flex gap-1 mb-6 bg-gray-100 rounded-lg p-1 w-fit">
@@ -404,7 +404,7 @@ export default function ExpensesPage() {
           {/* Expenses Table */}
           <div className="card">
             {isLoading ? (
-              <div className="text-center py-8 text-gray-500">Loading...</div>
+              <LoadingState />
             ) : expenseList.length === 0 ? (
               <div className="text-center py-8">
                 <p className="text-gray-500">No expenses recorded yet</p>
@@ -452,7 +452,7 @@ export default function ExpensesPage() {
                         {canWrite && <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Actions</th>}
                       </tr>
                     </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
+                    <tbody className="divide-y divide-gray-100">
                       {expenseList.map((expense) => (
                         <tr key={expense.id}>
                           <td className="px-4 py-3 text-sm text-gray-900">{expense.date}</td>
@@ -516,7 +516,7 @@ export default function ExpensesPage() {
 
           <div className="card">
             {transfersLoading ? (
-              <div className="text-center py-8 text-gray-500">Loading...</div>
+              <LoadingState />
             ) : transferList.length === 0 ? (
               <div className="text-center py-8">
                 <p className="text-gray-500 mb-2">No transfers recorded</p>
@@ -567,7 +567,7 @@ export default function ExpensesPage() {
                         {canWrite && <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Actions</th>}
                       </tr>
                     </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
+                    <tbody className="divide-y divide-gray-100">
                       {transferList.map((tfr) => (
                         <tr key={tfr.id}>
                           <td className="px-4 py-3 text-sm text-gray-500">{tfr.date}</td>
@@ -606,7 +606,7 @@ export default function ExpensesPage() {
 
       {/* Add/Edit Expense Modal */}
       {showModal && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-3 sm:p-4" onClick={closeModal}>
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4" onClick={closeModal}>
           <div className="w-full max-w-md rounded-xl bg-white shadow-xl" onClick={e => e.stopPropagation()}>
             {/* Header */}
             <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4 sm:px-6">
@@ -643,17 +643,15 @@ export default function ExpensesPage() {
 
                 {/* Category + Date row */}
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                  <div>
-                    <label className="label">Category</label>
-                    <select value={form.category} onChange={(e) => setForm(f => ({ ...f, category: e.target.value }))} className="input" required>
+                  <Field label="Category">
+<select value={form.category} onChange={(e) => setForm(f => ({ ...f, category: e.target.value }))} className="input" required>
                       <option value="">Select category</option>
                       {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                     </select>
-                  </div>
-                  <div>
-                    <label className="label">Date</label>
-                    <input type="date" value={form.date} onChange={(e) => setForm(f => ({ ...f, date: e.target.value }))} className="input" required />
-                  </div>
+</Field>
+                  <Field label="Date">
+<input type="date" value={form.date} onChange={(e) => setForm(f => ({ ...f, date: e.target.value }))} className="input" required />
+</Field>
                 </div>
 
                 {/* Quick add category */}

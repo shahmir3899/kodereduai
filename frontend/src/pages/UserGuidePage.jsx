@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
+import PageHeader from '../components/ui/PageHeader'
 import { useSearchParams } from 'react-router-dom'
 import { useDebounce } from '../hooks/useDebounce'
 import { useToast } from '../components/Toast'
@@ -386,15 +387,8 @@ export default function UserGuidePage() {
   return (
     <div className="space-y-4">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">User Guide</h1>
-          <p className="text-sm text-gray-500 mt-0.5">
-            {guideData.meta.version} &middot; Updated {formatDate(guideData.meta.generatedAt)}
-          </p>
-        </div>
-
-        {/* Search */}
+      <PageHeader title="User Guide" subtitle={<>{guideData.meta.version} &middot; Updated {formatDate(guideData.meta.generatedAt)}</>} actions={<>
+{/* Search */}
         <div className="relative w-full sm:w-80">
           <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none text-gray-400">
             <SearchIcon />
@@ -415,7 +409,7 @@ export default function UserGuidePage() {
             </button>
           )}
         </div>
-      </div>
+</>} />
 
       {/* Search results count */}
       {isSearchMode && (

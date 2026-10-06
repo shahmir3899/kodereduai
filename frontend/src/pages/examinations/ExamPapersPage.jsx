@@ -1,4 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
+import Badge from '../../components/ui/Badge'
+import { TONE } from '../../components/ui/statusTones'
+import Button from '../../components/ui/Button'
+import PageHeader from '../../components/ui/PageHeader'
+import LoadingState from '../../components/ui/LoadingState'
+import EmptyState from '../../components/ui/EmptyState'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { questionPaperApi, lmsApi } from '../../services/api'
@@ -22,9 +28,9 @@ const STATUS_OPTIONS = [
 ]
 
 const STATUS_STYLE = {
-  DRAFT: 'bg-yellow-100 text-yellow-800',
-  READY: 'bg-blue-100 text-blue-800',
-  PUBLISHED: 'bg-green-100 text-green-800',
+  DRAFT: TONE.warning,
+  READY: TONE.info,
+  PUBLISHED: TONE.success,
 }
 
 export default function ExamPapersPage() {
@@ -188,19 +194,15 @@ export default function ExamPapersPage() {
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="bg-white border-b border-gray-200 px-6 py-5">
-        <div className="max-w-6xl mx-auto flex items-center justify-between gap-3">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Question Papers</h1>
-            <p className="text-gray-500 text-sm mt-0.5">Resume drafts, review ready papers, and export published papers.</p>
-          </div>
-          <button
-            type="button"
-            onClick={() => navigate('/academics/paper-builder')}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium"
-          >
+        <PageHeader className="max-w-6xl mx-auto" title="Question Papers" subtitle="Resume drafts, review ready papers, and export published papers." actions={<>
+<Button
+ type="button"
+ onClick={() => navigate('/academics/paper-builder')}
+ 
+ >
             + New Paper
-          </button>
-        </div>
+          </Button>
+</>} />
       </div>
 
       <div className="max-w-6xl mx-auto px-6 py-6 space-y-4">
@@ -291,9 +293,9 @@ export default function ExamPapersPage() {
 
         <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
           {isLoading ? (
-            <div className="p-8 text-center text-gray-500">Loading papers...</div>
+            <LoadingState label="Loading papers..." />
           ) : papers.length === 0 ? (
-            <div className="p-8 text-center text-gray-500">No papers found for the selected filters.</div>
+            <EmptyState title="No papers found for the selected filters." />
           ) : view === 'cards' ? (
             <CardGrid className="p-3">
               {papers.map((paper) => (
@@ -312,9 +314,9 @@ export default function ExamPapersPage() {
                   title={paper.paper_title}
                   meta={`${paper.class_name} · ${paper.subject_name}`}
                   status={
-                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap ${STATUS_STYLE[paper.status] || 'bg-gray-100 text-gray-700'}`}>
+                    <Badge colors={STATUS_STYLE[paper.status] || TONE.neutral}>
                       {paper.status}
-                    </span>
+                    </Badge>
                   }
                   fields={[
                     { label: 'Duration · Marks', value: `${paper.duration_minutes} min · ${paper.total_marks} marks` },
@@ -372,9 +374,9 @@ export default function ExamPapersPage() {
                       <td className="px-4 py-3 text-sm text-gray-700">{paper.class_name} • {paper.subject_name}</td>
                       <td className="px-4 py-3 text-sm text-center text-gray-700">{paper.question_count || 0}</td>
                       <td className="px-4 py-3 text-center">
-                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_STYLE[paper.status] || 'bg-gray-100 text-gray-700'}`}>
+                        <Badge colors={STATUS_STYLE[paper.status] || TONE.neutral}>
                           {paper.status}
-                        </span>
+                        </Badge>
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-600">{paper.updated_at ? new Date(paper.updated_at).toLocaleString() : '—'}</td>
                       <td className="px-4 py-3 text-right">
@@ -461,13 +463,11 @@ export default function ExamPapersPage() {
           >
             {bulkDeleteMutation.isPending ? 'Deleting…' : `Delete Selected (${selectedIds.size})`}
           </button>
-          <button
-            type="button"
-            onClick={() => setSelectedIds(new Set())}
-            className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50"
-          >
+          <Button variant="secondary" size="sm"
+ type="button"
+ onClick={() => setSelectedIds(new Set())}>
             Clear
-          </button>
+          </Button>
         </div>
       )}
 

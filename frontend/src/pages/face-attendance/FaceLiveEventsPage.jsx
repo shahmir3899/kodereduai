@@ -1,8 +1,9 @@
 import { useState } from 'react'
+import EmptyState from '../../components/ui/EmptyState'
 import { useNavigate, Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { faceAttendanceApi } from '../../services/api'
-import LoadingSpinner from '../../components/LoadingSpinner'
+import LoadingState from '../../components/ui/LoadingState'
 import { RecordCard, CardGrid, ViewToggle } from '../../components/cards'
 import { useViewPreference } from '../../hooks/useViewPreference'
 
@@ -49,7 +50,7 @@ export default function FaceLiveEventsPage() {
         >
           <span>&larr;</span> Back
         </button>
-        <h1 className="text-2xl font-bold text-gray-900">Live Events</h1>
+        <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Live Events</h1>
         <p className="text-sm text-gray-500 mt-1">
           Every match attempt from Fixed Camera capture devices — use this to check a camera is detecting people and matching correctly.
         </p>
@@ -108,9 +109,9 @@ export default function FaceLiveEventsPage() {
 
       <div className={`bg-white rounded-lg border ${view === 'cards' ? '' : 'overflow-x-auto'}`}>
         {isLoading ? (
-          <div className="p-8"><LoadingSpinner /></div>
+          <LoadingState />
         ) : events.length === 0 ? (
-          <div className="p-8 text-center text-gray-500 text-sm">No live events for this filter.</div>
+          <EmptyState title="No live events for this filter." />
         ) : view === 'cards' ? (
           <CardGrid className="p-3">
             {events.map((event) => (

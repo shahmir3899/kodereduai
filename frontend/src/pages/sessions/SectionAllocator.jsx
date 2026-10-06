@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import { TONE } from '../../components/ui/statusTones'
+import LoadingState from '../../components/ui/LoadingState'
 import { useMutation } from '@tanstack/react-query'
 import { sessionsApi } from '../../services/api'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
@@ -84,7 +86,7 @@ export default function SectionAllocator({ onClose }) {
   const selectedClass = classes.find(c => c.id === parseInt(classId))
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40" onClick={onClose}>
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto m-4" onClick={e => e.stopPropagation()}>
         {/* Header */}
         <div className="flex items-center justify-between p-5 border-b border-gray-200">
@@ -110,7 +112,7 @@ export default function SectionAllocator({ onClose }) {
               s === step ? 'text-sky-700' : s < step ? 'text-green-600' : 'text-gray-400'
             }`}>
               <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
-                s === step ? 'bg-sky-100 text-sky-700' : s < step ? 'bg-green-100 text-green-700' : 'bg-gray-100'
+                s === step ? TONE.sky : s < step ? TONE.success : 'bg-gray-100'
               }`}>{s < step ? '\u2713' : s}</div>
               <span>{s === 1 ? 'Configure' : s === 2 ? 'Preview' : 'Done'}</span>
               {s < 3 && <div className="w-8 h-px bg-gray-300 ml-1" />}
@@ -123,9 +125,9 @@ export default function SectionAllocator({ onClose }) {
           {step === 1 && (
             <form onSubmit={handlePreview} className="space-y-5">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Class to Split</label>
+                <label className="label">Class to Split</label>
                 {classesLoading ? (
-                  <div className="text-sm text-gray-400">Loading classes...</div>
+                  <LoadingState label="Loading classes..." compact />
                 ) : classes.length === 0 ? (
                   <div className="text-sm text-gray-400">No classes found. Create classes first.</div>
                 ) : (
@@ -151,7 +153,7 @@ export default function SectionAllocator({ onClose }) {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Academic Year</label>
+                <label className="label">Academic Year</label>
                 <input
                   type="text"
                   className="input w-full bg-gray-50"

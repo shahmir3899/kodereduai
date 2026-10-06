@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import Badge from '../../components/ui/Badge'
+import { TONE } from '../../components/ui/statusTones'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { financeApi, sessionsApi } from '../../services/api'
 import { useToast } from '../../components/Toast'
@@ -6,9 +8,9 @@ import { useAuth } from '../../contexts/AuthContext'
 import { useClasses } from '../../hooks/useClasses'
 
 const ACCOUNT_TYPES = [
-  { value: 'CASH', label: 'Cash', color: 'bg-green-100 text-green-800' },
-  { value: 'BANK', label: 'Bank', color: 'bg-blue-100 text-blue-800' },
-  { value: 'PERSON', label: 'Person', color: 'bg-purple-100 text-purple-800' },
+  { value: 'CASH', label: 'Cash', color: TONE.success },
+  { value: 'BANK', label: 'Bank', color: TONE.info },
+  { value: 'PERSON', label: 'Person', color: TONE.accent },
 ]
 
 const FEE_TYPES = [
@@ -139,11 +141,11 @@ export default function FinanceStep({ onNext, refetchCompletion }) {
                   <div key={a.id} className="flex items-center justify-between py-2 px-3 bg-gray-50 rounded-lg">
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-medium text-gray-800">{a.name}</span>
-                      <span className={`px-2 py-0.5 text-xs rounded-full ${typeInfo?.color || 'bg-gray-100 text-gray-600'}`}>
+                      <span className={`px-2 py-0.5 text-xs rounded-full ${typeInfo?.color || TONE.neutral}`}>
                         {a.account_type}
                       </span>
                       {a.is_default && (
-                        <span className="px-2 py-0.5 text-xs rounded-full bg-sky-100 text-sky-700">Default</span>
+                        <Badge tone="sky">Default</Badge>
                       )}
                     </div>
                   </div>

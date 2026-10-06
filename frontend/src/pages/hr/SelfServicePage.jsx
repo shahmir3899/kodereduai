@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import PageHeader from '../../components/ui/PageHeader'
 import LeaveManagementPage from './LeaveManagementPage'
 import StaffAttendancePage from './StaffAttendancePage'
 
@@ -17,10 +18,7 @@ export default function SelfServicePage() {
 
   return (
     <div>
-      <div className="mb-6">
-        <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Self Service</h1>
-        <p className="text-sm text-gray-600">Your own leave and attendance</p>
-      </div>
+      <PageHeader title="Self Service" subtitle="Your own leave and attendance" className="mb-6" />
 
       <div className="flex gap-1 mb-6 bg-gray-100 rounded-lg p-1 w-fit">
         {TABS.map((t) => (

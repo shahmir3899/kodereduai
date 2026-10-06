@@ -1,4 +1,8 @@
 import { useRef, useState, useEffect } from 'react'
+import Modal from '../../components/ui/Modal'
+import Field from '../../components/ui/Field'
+import { TONE } from '../../components/ui/statusTones'
+import PageHeader from '../../components/ui/PageHeader'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { sessionsApi } from '../../services/api'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
@@ -273,12 +277,7 @@ export default function AcademicYearsPage() {
 
   return (
     <div>
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6 gap-4">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Academic Sessions</h1>
-          <p className="text-sm text-gray-600">Manage academic years and terms</p>
-        </div>
-      </div>
+      <PageHeader title="Academic Sessions" subtitle="Manage academic years and terms" className="mb-6" />
 
       {/* Tabs */}
       <div className="flex gap-1 mb-6 bg-gray-100 p-1 rounded-lg w-fit">
@@ -400,12 +399,7 @@ export default function AcademicYearsPage() {
 
           {/* Year Modal */}
           {showYearModal && (
-            <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[60] p-4" onClick={closeYearModal}>
-              <div className="bg-white rounded-xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto p-6" onClick={e => e.stopPropagation()}>
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-lg font-semibold text-gray-900">{editYearId ? 'Edit Academic Year' : 'Add Academic Year'}</h2>
-                  <button onClick={closeYearModal} className="text-gray-400 hover:text-gray-600 text-xl">&times;</button>
-                </div>
+            <Modal open onClose={closeYearModal} title={editYearId ? 'Edit Academic Year' : 'Add Academic Year'}>
 
                 {(yearErrors.detail || yearErrors.non_field_errors) && (
                   <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-lg text-sm">
@@ -415,7 +409,7 @@ export default function AcademicYearsPage() {
 
                 <form onSubmit={handleYearSubmit} className="space-y-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Name *</label>
+                    <label className="label">Name *</label>
                     <input
                       type="text"
                       value={yearForm.name}
@@ -427,7 +421,7 @@ export default function AcademicYearsPage() {
                     {yearErrors.name && <p className="text-xs text-red-600 mt-1">{yearErrors.name}</p>}
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Start Date *</label>
+                    <label className="label">Start Date *</label>
                     <input
                       type="date"
                       value={yearForm.start_date}
@@ -438,7 +432,7 @@ export default function AcademicYearsPage() {
                     {yearErrors.start_date && <p className="text-xs text-red-600 mt-1">{yearErrors.start_date}</p>}
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">End Date *</label>
+                    <label className="label">End Date *</label>
                     <input
                       type="date"
                       value={yearForm.end_date}
@@ -455,8 +449,7 @@ export default function AcademicYearsPage() {
                     </button>
                   </div>
                 </form>
-              </div>
-            </div>
+              </Modal>
           )}
         </>
       )}
@@ -516,7 +509,7 @@ export default function AcademicYearsPage() {
                         <td className="px-4 py-2 text-sm text-gray-600">{t.start_date}</td>
                         <td className="px-4 py-2 text-sm text-gray-600">{t.end_date}</td>
                         <td className="px-4 py-2 text-center">
-                          {t.is_current && <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded-full text-xs">Current</span>}
+                          {t.is_current && <Badge tone="success">Current</Badge>}
                         </td>
                         <td className="px-4 py-2 text-right">
                           <button onClick={() => openEditTerm(t)} className="text-xs text-primary-600 hover:underline mr-2">Edit</button>
@@ -564,12 +557,7 @@ export default function AcademicYearsPage() {
 
           {/* Term Modal */}
           {showTermModal && (
-            <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[60] p-4" onClick={closeTermModal}>
-              <div className="bg-white rounded-xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto p-6" onClick={e => e.stopPropagation()}>
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-lg font-semibold text-gray-900">{editTermId ? 'Edit Term' : 'Add Term'}</h2>
-                  <button onClick={closeTermModal} className="text-gray-400 hover:text-gray-600 text-xl">&times;</button>
-                </div>
+            <Modal open onClose={closeTermModal} title={editTermId ? 'Edit Term' : 'Add Term'}>
 
                 {(termErrors.detail || termErrors.non_field_errors) && (
                   <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-lg text-sm">
@@ -579,7 +567,7 @@ export default function AcademicYearsPage() {
 
                 <form onSubmit={handleTermSubmit} className="space-y-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Academic Year *</label>
+                    <label className="label">Academic Year *</label>
                     <select
                       value={termForm.academic_year}
                       onChange={e => setTermForm(p => ({ ...p, academic_year: e.target.value ? parseInt(e.target.value) : '' }))}
@@ -592,7 +580,7 @@ export default function AcademicYearsPage() {
                     {termErrors.academic_year && <p className="text-xs text-red-600 mt-1">{termErrors.academic_year}</p>}
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Name *</label>
+                    <label className="label">Name *</label>
                     <input
                       type="text"
                       value={termForm.name}
@@ -604,9 +592,8 @@ export default function AcademicYearsPage() {
                     {termErrors.name && <p className="text-xs text-red-600 mt-1">{termErrors.name}</p>}
                   </div>
                   <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Type</label>
-                      <select
+                    <Field label="Type">
+<select
                         value={termForm.term_type}
                         onChange={e => setTermForm(p => ({ ...p, term_type: e.target.value }))}
                         className="input w-full"
@@ -615,9 +602,9 @@ export default function AcademicYearsPage() {
                         <option value="SEMESTER">Semester</option>
                         <option value="QUARTER">Quarter</option>
                       </select>
-                    </div>
+</Field>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Order</label>
+                      <label className="label">Order</label>
                       <input
                         type="number"
                         min="1"
@@ -629,7 +616,7 @@ export default function AcademicYearsPage() {
                     </div>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Start Date *</label>
+                    <label className="label">Start Date *</label>
                     <input type="date" value={termForm.start_date} min={termFormYear?.start_date} max={termFormYear?.end_date} onChange={e => setTermForm(p => ({ ...p, start_date: e.target.value }))} className="input w-full" required />
                     {termFormYear && (
                       <p className="text-xs text-gray-500 mt-1">
@@ -639,7 +626,7 @@ export default function AcademicYearsPage() {
                     {termErrors.start_date && <p className="text-xs text-red-600 mt-1">{termErrors.start_date}</p>}
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">End Date *</label>
+                    <label className="label">End Date *</label>
                     <input type="date" value={termForm.end_date} min={termFormYear?.start_date} max={termFormYear?.end_date} onChange={e => setTermForm(p => ({ ...p, end_date: e.target.value }))} className="input w-full" required />
                     {termErrors.end_date && <p className="text-xs text-red-600 mt-1">{termErrors.end_date}</p>}
                   </div>
@@ -650,17 +637,11 @@ export default function AcademicYearsPage() {
                     </button>
                   </div>
                 </form>
-              </div>
-            </div>
+              </Modal>
           )}
 
           {showImportModal && (
-            <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[60] p-4" onClick={closeImportModal}>
-              <div className="bg-white rounded-xl shadow-xl w-full max-w-3xl max-h-[90vh] overflow-y-auto p-6" onClick={e => e.stopPropagation()}>
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-lg font-semibold text-gray-900">Import Terms From Previous Session</h2>
-                  <button onClick={closeImportModal} className="text-gray-400 hover:text-gray-600 text-xl">&times;</button>
-                </div>
+            <Modal open onClose={closeImportModal} title="Import Terms From Previous Session" size="3xl">
 
                 {(importErrors.detail || importErrors.non_field_errors) && (
                   <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-lg text-sm">
@@ -671,7 +652,7 @@ export default function AcademicYearsPage() {
                 <form onSubmit={handleImportPreview} className="space-y-4">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Source Academic Year *</label>
+                      <label className="label">Source Academic Year *</label>
                       <select
                         value={importForm.source_academic_year_id}
                         onChange={e => setImportForm(p => ({ ...p, source_academic_year_id: e.target.value ? parseInt(e.target.value) : '' }))}
@@ -686,7 +667,7 @@ export default function AcademicYearsPage() {
                       {importErrors.source_academic_year_id && <p className="text-xs text-red-600 mt-1">{importErrors.source_academic_year_id}</p>}
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Target Academic Year *</label>
+                      <label className="label">Target Academic Year *</label>
                       <select
                         value={importForm.target_academic_year_id}
                         onChange={e => setImportForm(p => ({ ...p, target_academic_year_id: e.target.value ? parseInt(e.target.value) : '' }))}
@@ -703,9 +684,8 @@ export default function AcademicYearsPage() {
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Conflict Mode</label>
-                      <select
+                    <Field label="Conflict Mode">
+<select
                         value={importForm.conflict_mode}
                         onChange={e => setImportForm(p => ({ ...p, conflict_mode: e.target.value }))}
                         className="input w-full"
@@ -713,7 +693,7 @@ export default function AcademicYearsPage() {
                         <option value="skip">Skip existing terms</option>
                         <option value="update">Update existing terms</option>
                       </select>
-                    </div>
+</Field>
                     <div className="flex items-end">
                       <label className="inline-flex items-center gap-2 text-sm text-gray-700 mb-2">
                         <input
@@ -768,7 +748,7 @@ export default function AcademicYearsPage() {
                               <td className="px-3 py-2 text-gray-600">{row.source_start_date} to {row.source_end_date}</td>
                               <td className="px-3 py-2 text-gray-600">{row.start_date} to {row.end_date}</td>
                               <td className="px-3 py-2">
-                                <span className={`px-2 py-0.5 rounded-full text-xs ${row.action === 'create' ? 'bg-green-100 text-green-700' : row.action === 'update' ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-700'}`}>
+                                <span className={`px-2 py-0.5 rounded-full text-xs ${row.action === 'create' ? TONE.success : row.action === 'update' ? TONE.warning : TONE.neutral}`}>
                                   {row.action}
                                 </span>
                                 {row.reason && <p className="text-xs text-gray-500 mt-1">{row.reason}</p>}
@@ -792,8 +772,7 @@ export default function AcademicYearsPage() {
                     </div>
                   </div>
                 )}
-              </div>
-            </div>
+              </Modal>
           )}
         </>
       )}

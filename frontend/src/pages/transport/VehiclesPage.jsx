@@ -1,8 +1,13 @@
 import { useState } from 'react'
+import Modal from '../../components/ui/Modal'
+import Field from '../../components/ui/Field'
+import Badge from '../../components/ui/Badge'
+import { TONE } from '../../components/ui/statusTones'
+import PageHeader from '../../components/ui/PageHeader'
+import LoadingState from '../../components/ui/LoadingState'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { transportApi } from '../../services/api'
 import { useAuth } from '../../contexts/AuthContext'
-import Spinner from '../../components/ui/Spinner'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
 import { RecordCard, CardGrid, ViewToggle } from '../../components/cards'
 import { useViewPreference } from '../../hooks/useViewPreference'
@@ -14,9 +19,9 @@ const VEHICLE_TYPES = [
 ]
 
 const VEHICLE_TYPE_BADGES = {
-  BUS: 'bg-blue-100 text-blue-800',
-  VAN: 'bg-green-100 text-green-800',
-  CAR: 'bg-purple-100 text-purple-800',
+  BUS: TONE.info,
+  VAN: TONE.success,
+  CAR: TONE.accent,
 }
 
 const emptyForm = {
@@ -149,21 +154,16 @@ export default function VehiclesPage() {
 
   return (
     <div>
-      <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Vehicles</h1>
-          <p className="text-sm sm:text-base text-gray-600">Manage vehicles and driver information</p>
-        </div>
-        <button onClick={openAddModal} className="btn btn-primary">
+      <PageHeader title="Vehicles" subtitle="Manage vehicles and driver information" className="mb-6" actions={<>
+<button onClick={openAddModal} className="btn btn-primary">
           Add Vehicle
         </button>
-      </div>
+</>} />
 
       <div className="card">
         {isLoading ? (
           <div className="text-center py-8">
-            <Spinner size="md" className="mx-auto" />
-            <p className="text-gray-500 mt-2">Loading vehicles...</p>
+            <LoadingState label="Loading vehicles..." compact />
           </div>
         ) : vehicles.length === 0 ? (
           <div className="text-center py-12">
@@ -187,9 +187,9 @@ export default function VehiclesPage() {
                   title={vehicle.vehicle_number}
                   meta={vehicle.make_model || 'No make/model'}
                   status={
-                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap ${VEHICLE_TYPE_BADGES[vehicle.vehicle_type] || 'bg-gray-100 text-gray-800'}`}>
+                    <Badge colors={VEHICLE_TYPE_BADGES[vehicle.vehicle_type] || TONE.neutral}>
                       {vehicle.vehicle_type}
-                    </span>
+                    </Badge>
                   }
                   fields={[
                     { label: 'Capacity', value: vehicle.capacity || '--' },
@@ -218,14 +218,14 @@ export default function VehiclesPage() {
                     <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
+                <tbody className="divide-y divide-gray-100">
                   {vehicles.map((vehicle) => (
                     <tr key={vehicle.id} className="hover:bg-gray-50">
                       <td className="px-4 py-3 text-sm font-medium text-gray-900">{vehicle.vehicle_number}</td>
                       <td className="px-4 py-3">
-                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${VEHICLE_TYPE_BADGES[vehicle.vehicle_type] || 'bg-gray-100 text-gray-800'}`}>
+                        <Badge colors={VEHICLE_TYPE_BADGES[vehicle.vehicle_type] || TONE.neutral}>
                           {vehicle.vehicle_type}
-                        </span>
+                        </Badge>
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-500">{vehicle.capacity || '--'}</td>
                       <td className="px-4 py-3 text-sm text-gray-500">{vehicle.make_model || '--'}</td>
@@ -258,27 +258,24 @@ export default function VehiclesPage() {
 
       {/* Create/Edit Modal */}
       {showModal && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
-          <div className="bg-white rounded-xl shadow-xl p-4 sm:p-6 w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
+        <Modal open  size="lg" closeOnBackdrop={false}>
             <h2 className="text-xl font-bold text-gray-900 mb-4">
               {editingVehicle ? 'Edit Vehicle' : 'Add Vehicle'}
             </h2>
 
             <div className="space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="label">Vehicle Number *</label>
-                  <input
+                <Field label="Vehicle Number" required>
+<input
                     type="text"
                     className="input"
                     placeholder="e.g. ABC-1234"
                     value={vehicleForm.vehicle_number}
                     onChange={(e) => setVehicleForm({ ...vehicleForm, vehicle_number: e.target.value })}
                   />
-                </div>
-                <div>
-                  <label className="label">Vehicle Type</label>
-                  <select
+</Field>
+                <Field label="Vehicle Type">
+<select
                     className="input"
                     value={vehicleForm.vehicle_type}
                     onChange={(e) => setVehicleForm({ ...vehicleForm, vehicle_type: e.target.value })}
@@ -287,74 +284,68 @@ export default function VehiclesPage() {
                       <option key={t.value} value={t.value}>{t.label}</option>
                     ))}
                   </select>
-                </div>
+</Field>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="label">Capacity</label>
-                  <input
+                <Field label="Capacity">
+<input
                     type="number"
                     className="input"
                     placeholder="e.g. 40"
                     value={vehicleForm.capacity}
                     onChange={(e) => setVehicleForm({ ...vehicleForm, capacity: e.target.value })}
                   />
-                </div>
-                <div>
-                  <label className="label">Make / Model</label>
-                  <input
+</Field>
+                <Field label="Make / Model">
+<input
                     type="text"
                     className="input"
                     placeholder="e.g. Toyota Coaster"
                     value={vehicleForm.make_model}
                     onChange={(e) => setVehicleForm({ ...vehicleForm, make_model: e.target.value })}
                   />
-                </div>
+</Field>
               </div>
 
               <hr className="border-gray-200" />
               <p className="text-sm font-medium text-gray-700">Driver Information</p>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="label">Driver Name</label>
-                  <input
+                <Field label="Driver Name">
+<input
                     type="text"
                     className="input"
                     placeholder="Full name"
                     value={vehicleForm.driver_name}
                     onChange={(e) => setVehicleForm({ ...vehicleForm, driver_name: e.target.value })}
                   />
-                </div>
-                <div>
-                  <label className="label">Driver Phone</label>
-                  <input
+</Field>
+                <Field label="Driver Phone">
+<input
                     type="text"
                     className="input"
                     placeholder="0300-1234567"
                     value={vehicleForm.driver_phone}
                     onChange={(e) => setVehicleForm({ ...vehicleForm, driver_phone: e.target.value })}
                   />
-                </div>
+</Field>
               </div>
 
-              <div>
-                <label className="label">Driver License Number</label>
-                <input
+              <Field label="Driver License Number">
+<input
                   type="text"
                   className="input"
                   placeholder="License number"
                   value={vehicleForm.driver_license}
                   onChange={(e) => setVehicleForm({ ...vehicleForm, driver_license: e.target.value })}
                 />
-              </div>
+</Field>
 
               <hr className="border-gray-200" />
 
-              <div>
-                <label className="label">Assigned Route</label>
-                <select
+              <Field label="Assigned Route">
+<select
                   className="input"
                   value={vehicleForm.assigned_route}
                   onChange={(e) => setVehicleForm({ ...vehicleForm, assigned_route: e.target.value })}
@@ -364,7 +355,7 @@ export default function VehiclesPage() {
                     <option key={route.id} value={route.id}>{route.name}</option>
                   ))}
                 </select>
-              </div>
+</Field>
             </div>
 
             {(createMutation.isError || updateMutation.isError) && (
@@ -391,14 +382,12 @@ export default function VehiclesPage() {
                   : editingVehicle ? 'Save Changes' : 'Add Vehicle'}
               </button>
             </div>
-          </div>
-        </div>
+          </Modal>
       )}
 
       {/* Delete Confirmation Modal */}
       {deleteConfirm && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
-          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm mx-4">
+        <Modal open  size="sm" closeOnBackdrop={false}>
             <h2 className="text-xl font-bold text-gray-900 mb-2">Delete Vehicle</h2>
             <p className="text-gray-600 mb-6">
               Are you sure you want to delete vehicle <strong>{deleteConfirm.vehicle_number}</strong>?
@@ -423,8 +412,7 @@ export default function VehiclesPage() {
                 {deleteMutation.isPending ? 'Deleting...' : 'Delete'}
               </button>
             </div>
-          </div>
-        </div>
+          </Modal>
       )}
     </div>
   )

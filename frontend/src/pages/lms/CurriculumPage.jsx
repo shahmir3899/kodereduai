@@ -1,4 +1,9 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
+import Modal from '../../components/ui/Modal'
+import Field from '../../components/ui/Field'
+import { TONE } from '../../components/ui/statusTones'
+import PageHeader from '../../components/ui/PageHeader'
+import LoadingState from '../../components/ui/LoadingState'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useQueries, useMutation, useQueryClient } from '@tanstack/react-query'
 import ReactCrop from 'react-image-crop'
@@ -17,7 +22,6 @@ import { useEscapeKey } from '../../hooks/useEscapeKey'
 import { getClassSelectorScope, getResolvedMasterClassId } from '../../utils/classScope'
 import { compressImageForTocOcr } from '../../utils/compressImageForUpload'
 import AddBookModal from './AddBookModal'
-import Spinner from '../../components/ui/Spinner'
 import Badge from '../../components/ui/Badge'
 
 const LANGUAGES = [
@@ -2605,16 +2609,16 @@ export default function CurriculumPage() {
 
   const getContentBlockTypeBadgeClass = (type) => {
     const toneByType = {
-      definition: 'bg-blue-100 text-blue-700',
-      example: 'bg-green-100 text-green-700',
-      exercise: 'bg-orange-100 text-orange-700',
-      summary: 'bg-purple-100 text-purple-700',
-      formula: 'bg-indigo-100 text-indigo-700',
-      key_point: 'bg-amber-100 text-amber-700',
+      definition: TONE.info,
+      example: TONE.success,
+      exercise: TONE.orange,
+      summary: TONE.accent,
+      formula: TONE.indigo,
+      key_point: TONE.warning,
       diagram_desc: 'bg-cyan-100 text-cyan-700',
-      text: 'bg-gray-100 text-gray-700',
+      text: TONE.neutral,
     }
-    return toneByType[type] || 'bg-gray-100 text-gray-700'
+    return toneByType[type] || TONE.neutral
   }
 
   const getContentBlockTypeLabel = (type) => {
@@ -2642,12 +2646,12 @@ export default function CurriculumPage() {
 
   const getContentBlockTagClass = (tagType) => {
     const map = {
-      concept: 'bg-blue-100 text-blue-700',
-      skill: 'bg-green-100 text-green-700',
-      keyword: 'bg-amber-100 text-amber-700',
-      standard: 'bg-purple-100 text-purple-700',
+      concept: TONE.info,
+      skill: TONE.success,
+      keyword: TONE.warning,
+      standard: TONE.accent,
     }
-    return map[tagType] || 'bg-gray-100 text-gray-700'
+    return map[tagType] || TONE.neutral
   }
 
   const handleAddTagToContentBlock = (block, topicId) => {
@@ -2711,15 +2715,11 @@ export default function CurriculumPage() {
   return (
     <div>
       {/* Header */}
-      <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Curriculum Management</h1>
-          <p className="text-sm text-gray-600">Manage books, chapters, and topics for your classes</p>
-        </div>
-        <button onClick={openAddBook} className="btn btn-primary">
+      <PageHeader title="Curriculum Management" subtitle="Manage books, chapters, and topics for your classes" className="mb-6" actions={<>
+<button onClick={openAddBook} className="btn btn-primary">
           Add Book
         </button>
-      </div>
+</>} />
 
       {/* Filters */}
       <div className="card mb-4">
@@ -2775,7 +2775,7 @@ export default function CurriculumPage() {
                         className="w-full text-left px-3 py-3 hover:bg-gray-50"
                       >
                         <div className="flex items-center gap-2 mb-1">
-                          <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700">{resultBlockType}</span>
+                          <Badge tone="indigo">{resultBlockType}</Badge>
                         </div>
                         <p className="text-sm text-gray-800 line-clamp-2">{resultText || 'No content text.'}</p>
                         <p className="text-xs text-gray-500 mt-1">{bookTitle} › {chapterTitle} › {topicTitle}</p>
@@ -2829,7 +2829,7 @@ export default function CurriculumPage() {
             {/* Step 1 */}
             <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm ${
               selectedClass
-                ? 'bg-green-100 text-green-700'
+                ? TONE.success
                 : 'bg-blue-100 text-blue-700 ring-2 ring-blue-300'
             }`}>
               <span className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold ${
@@ -2843,7 +2843,7 @@ export default function CurriculumPage() {
             {/* Step 2 */}
             <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm ${
               selectedSubject
-                ? 'bg-green-100 text-green-700'
+                ? TONE.success
                 : selectedClass
                   ? 'bg-blue-100 text-blue-700 ring-2 ring-blue-300'
                   : 'bg-gray-100 text-gray-400'
@@ -2883,8 +2883,7 @@ export default function CurriculumPage() {
       {!filtersSelected ? null : booksLoading ? (
         <div className="card">
           <div className="text-center py-8">
-            <Spinner size="md" className="mx-auto" />
-            <p className="text-gray-500 mt-2">Loading books...</p>
+            <LoadingState label="Loading books..." compact />
           </div>
         </div>
       ) : (
@@ -2974,8 +2973,7 @@ export default function CurriculumPage() {
             ) : treeLoading ? (
               <div className="card">
                 <div className="text-center py-8">
-                  <Spinner size="md" className="mx-auto" />
-                  <p className="text-gray-500 mt-2">Loading book details...</p>
+                  <LoadingState label="Loading book details..." compact />
                 </div>
               </div>
             ) : bookTree ? (
@@ -3325,7 +3323,7 @@ export default function CurriculumPage() {
                                                       {isTagEditorOpen && (
                                                         <div className="mt-2 rounded border border-gray-200 bg-gray-50 px-2 py-2">
                                                           {curriculumTagsLoading ? (
-                                                            <p className="text-[11px] text-gray-500">Loading tags...</p>
+                                                            <LoadingState label="Loading tags..." compact />
                                                           ) : curriculumTags.length === 0 ? (
                                                             <p className="text-[11px] text-gray-500">No tags found for this subject.</p>
                                                           ) : (
@@ -3343,7 +3341,7 @@ export default function CurriculumPage() {
                                                               <button
                                                                 type="button"
                                                                 onClick={() => handleAddTagToContentBlock(block, topic.id)}
-                                                                className="text-xs px-2 py-1 rounded bg-indigo-600 text-white hover:bg-indigo-700"
+                                                                className="text-xs px-2 py-1 rounded bg-primary-600 text-white hover:bg-primary-700"
                                                               >
                                                                 Add Tag
                                                               </button>
@@ -3428,16 +3426,14 @@ export default function CurriculumPage() {
 
       {/* ============ Book Form Modal ============ */}
       {showBookModal && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
-          <div className="bg-white rounded-xl shadow-xl p-4 sm:p-6 w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
+        <Modal open  size="lg" closeOnBackdrop={false}>
             <h2 className="text-xl font-bold text-gray-900 mb-4">
               {editingBook ? 'Edit Book' : 'Add Book'}
             </h2>
 
             <div className="space-y-4">
-              <div>
-                <label className="label">Title *</label>
-                <input
+              <Field label="Title" required>
+<input
                   type="text"
                   className="input"
                   placeholder="e.g., Mathematics Grade 5"
@@ -3445,42 +3441,38 @@ export default function CurriculumPage() {
                   value={bookForm.title}
                   onChange={(e) => setBookForm({ ...bookForm, title: e.target.value })}
                 />
-              </div>
+</Field>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="label">Author</label>
-                  <input
+                <Field label="Author">
+<input
                     type="text"
                     className="input"
                     value={bookForm.author}
                     onChange={(e) => setBookForm({ ...bookForm, author: e.target.value })}
                   />
-                </div>
-                <div>
-                  <label className="label">Publisher</label>
-                  <input
+</Field>
+                <Field label="Publisher">
+<input
                     type="text"
                     className="input"
                     value={bookForm.publisher}
                     onChange={(e) => setBookForm({ ...bookForm, publisher: e.target.value })}
                   />
-                </div>
+</Field>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="label">Edition</label>
-                  <input
+                <Field label="Edition">
+<input
                     type="text"
                     className="input"
                     placeholder="e.g., 3rd Edition"
                     value={bookForm.edition}
                     onChange={(e) => setBookForm({ ...bookForm, edition: e.target.value })}
                   />
-                </div>
-                <div>
-                  <label className="label">Language</label>
-                  <select
+</Field>
+                <Field label="Language">
+<select
                     className="input"
                     value={bookForm.language}
                     onChange={(e) => setBookForm({ ...bookForm, language: e.target.value })}
@@ -3491,7 +3483,7 @@ export default function CurriculumPage() {
                       </option>
                     ))}
                   </select>
-                </div>
+</Field>
               </div>
 
               <div>
@@ -3519,8 +3511,7 @@ export default function CurriculumPage() {
                 {bookMutationPending ? 'Saving...' : editingBook ? 'Save Changes' : 'Add Book'}
               </button>
             </div>
-          </div>
-        </div>
+          </Modal>
       )}
 
       <AddBookModal
@@ -3552,7 +3543,7 @@ export default function CurriculumPage() {
 
             <div className="p-4 space-y-4">
               {contentBlockRevisionsLoading ? (
-                <p className="text-sm text-gray-500">Loading revision history...</p>
+                <LoadingState label="Loading revision history..." compact />
               ) : contentBlockRevisionsError ? (
                 <div className="rounded border border-red-200 bg-red-50 px-3 py-3">
                   <p className="text-sm text-red-700">
@@ -3634,34 +3625,31 @@ export default function CurriculumPage() {
 
       {/* ============ Chapter Form Modal ============ */}
       {showChapterModal && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
-          <div className="bg-white rounded-xl shadow-xl p-4 sm:p-6 w-full max-w-md mx-4 max-h-[90vh] overflow-y-auto">
+        <Modal open  closeOnBackdrop={false}>
             <h2 className="text-xl font-bold text-gray-900 mb-4">
               {editingChapter ? 'Edit Chapter' : 'Add Chapter'}
             </h2>
 
             <div className="space-y-4">
-              <div>
-                <label className="label">Title *</label>
-                <input
+              <Field label="Title" required>
+<input
                   type="text"
                   className="input"
                   placeholder="e.g., Introduction to Algebra"
                   value={chapterForm.title}
                   onChange={(e) => setChapterForm({ ...chapterForm, title: e.target.value })}
                 />
-              </div>
+</Field>
 
-              <div>
-                <label className="label">Chapter Number</label>
-                <input
+              <Field label="Chapter Number">
+<input
                   type="number"
                   className="input"
                   min="1"
                   value={chapterForm.chapter_number}
                   onChange={(e) => setChapterForm({ ...chapterForm, chapter_number: e.target.value })}
                 />
-              </div>
+</Field>
 
               <div>
                 <label className="label">Description</label>
@@ -3687,51 +3675,46 @@ export default function CurriculumPage() {
                 {chapterMutationPending ? 'Saving...' : editingChapter ? 'Save Changes' : 'Add Chapter'}
               </button>
             </div>
-          </div>
-        </div>
+          </Modal>
       )}
 
       {/* ============ Topic Form Modal ============ */}
       {showTopicModal && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
-          <div className="bg-white rounded-xl shadow-xl p-4 sm:p-6 w-full max-w-md mx-4 max-h-[90vh] overflow-y-auto">
+        <Modal open  closeOnBackdrop={false}>
             <h2 className="text-xl font-bold text-gray-900 mb-4">
               {editingTopic ? 'Edit Topic' : 'Add Topic'}
             </h2>
 
             <div className="space-y-4">
-              <div>
-                <label className="label">Title *</label>
-                <input
+              <Field label="Title" required>
+<input
                   type="text"
                   className="input"
                   placeholder="e.g., Linear Equations"
                   value={topicForm.title}
                   onChange={(e) => setTopicForm({ ...topicForm, title: e.target.value })}
                 />
-              </div>
+</Field>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="label">Topic Number</label>
-                  <input
+                <Field label="Topic Number">
+<input
                     type="number"
                     className="input"
                     min="1"
                     value={topicForm.topic_number}
                     onChange={(e) => setTopicForm({ ...topicForm, topic_number: e.target.value })}
                   />
-                </div>
-                <div>
-                  <label className="label">Estimated Periods</label>
-                  <input
+</Field>
+                <Field label="Estimated Periods">
+<input
                     type="number"
                     className="input"
                     min="1"
                     value={topicForm.estimated_periods}
                     onChange={(e) => setTopicForm({ ...topicForm, estimated_periods: e.target.value })}
                   />
-                </div>
+</Field>
               </div>
 
               <div>
@@ -3758,23 +3741,20 @@ export default function CurriculumPage() {
                 {topicMutationPending ? 'Saving...' : editingTopic ? 'Save Changes' : 'Add Topic'}
               </button>
             </div>
-          </div>
-        </div>
+          </Modal>
       )}
 
       {/* ============ Content Block Form Modal ============ */}
       {showContentBlockModal && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
-          <div className="bg-white rounded-xl shadow-xl p-4 sm:p-6 w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto">
+        <Modal open  size="2xl" closeOnBackdrop={false}>
             <h2 className="text-xl font-bold text-gray-900 mb-4">
               {editingContentBlock ? 'Edit Content Block' : 'Add Content Block'}
             </h2>
 
             <div className="space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="label">Block Type *</label>
-                  <select
+                <Field label="Block Type" required>
+<select
                     className="input"
                     value={contentBlockForm.block_type}
                     onChange={(e) => setContentBlockForm({ ...contentBlockForm, block_type: e.target.value })}
@@ -3783,17 +3763,16 @@ export default function CurriculumPage() {
                       <option key={option.value} value={option.value}>{option.label}</option>
                     ))}
                   </select>
-                </div>
-                <div>
-                  <label className="label">Sequence Order</label>
-                  <input
+</Field>
+                <Field label="Sequence Order">
+<input
                     type="number"
                     className="input"
                     min="0"
                     value={contentBlockForm.sequence_order}
                     onChange={(e) => setContentBlockForm({ ...contentBlockForm, sequence_order: e.target.value })}
                   />
-                </div>
+</Field>
               </div>
 
               <div>
@@ -3808,9 +3787,8 @@ export default function CurriculumPage() {
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="label">Difficulty Level</label>
-                  <select
+                <Field label="Difficulty Level">
+<select
                     className="input"
                     value={contentBlockForm.difficulty_level}
                     onChange={(e) => setContentBlockForm({ ...contentBlockForm, difficulty_level: e.target.value })}
@@ -3820,10 +3798,9 @@ export default function CurriculumPage() {
                       <option key={level} value={level}>{level}</option>
                     ))}
                   </select>
-                </div>
-                <div>
-                  <label className="label">Estimated Minutes</label>
-                  <input
+</Field>
+                <Field label="Estimated Minutes">
+<input
                     type="number"
                     className="input"
                     min="0"
@@ -3831,7 +3808,7 @@ export default function CurriculumPage() {
                     onChange={(e) => setContentBlockForm({ ...contentBlockForm, estimated_minutes: e.target.value })}
                     placeholder="Optional"
                   />
-                </div>
+</Field>
               </div>
 
               <div className="border border-gray-200 rounded-lg">
@@ -3876,14 +3853,12 @@ export default function CurriculumPage() {
                 {contentBlockMutationPending ? 'Saving...' : editingContentBlock ? 'Save Changes' : 'Add Content Block'}
               </button>
             </div>
-          </div>
-        </div>
+          </Modal>
       )}
 
       {/* ============ Sub-topic Content Modal ============ */}
       {showSubtopicContentModal && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
-          <div className="bg-white rounded-xl shadow-xl p-4 sm:p-6 w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
+        <Modal open  size="lg" closeOnBackdrop={false}>
             <h2 className="text-xl font-bold text-gray-900 mb-1">Edit Sub-topic Content</h2>
             <p className="text-sm text-gray-500 mb-4">{editingSubtopic?.title || 'Sub-topic'}</p>
 
@@ -3899,9 +3874,8 @@ export default function CurriculumPage() {
                 />
               </div>
 
-              <div>
-                <label className="label">Estimated Minutes</label>
-                <input
+              <Field label="Estimated Minutes">
+<input
                   type="number"
                   className="input"
                   min="0"
@@ -3909,7 +3883,7 @@ export default function CurriculumPage() {
                   value={subtopicContentForm.estimated_minutes}
                   onChange={(e) => setSubtopicContentForm({ ...subtopicContentForm, estimated_minutes: e.target.value })}
                 />
-              </div>
+</Field>
             </div>
 
             <div className="flex justify-end space-x-3 mt-6">
@@ -3924,13 +3898,12 @@ export default function CurriculumPage() {
                 {subtopicContentMutationPending ? 'Saving...' : 'Save'}
               </button>
             </div>
-          </div>
-        </div>
+          </Modal>
       )}
 
       {/* ============ Table of Contents Import Modal ============ */}
       {showTocModal && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4">
           <div ref={tocModalBodyRef} className="bg-white rounded-xl shadow-xl w-full max-w-2xl mx-4 max-h-[90vh] overflow-hidden flex flex-col">
             <div className="p-4 sm:p-6 border-b border-gray-200">
               <div className="flex items-start justify-between gap-3">
@@ -4446,7 +4419,7 @@ export default function CurriculumPage() {
                                             <div className="flex items-center gap-1 shrink-0">
                                               <button
                                                 onClick={() => handleUseSuggestion(item)}
-                                                className="text-[9px] px-1.5 py-0.5 rounded bg-blue-600 text-white hover:bg-blue-700"
+                                                className="text-[9px] px-1.5 py-0.5 rounded bg-primary-600 text-white hover:bg-primary-700"
                                               >
                                                 {item.kind === 'chapter' ? 'Chapter' : 'Topic'}
                                               </button>
@@ -4459,7 +4432,7 @@ export default function CurriculumPage() {
                                             </div>
                                           ) : (
                                             <span className={`text-[9px] px-1.5 py-0.5 rounded-full shrink-0 ${
-                                              item.status === 'used' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
+                                              item.status === 'used' ? TONE.success : 'bg-gray-100 text-gray-500'
                                             }`}>
                                               {item.status === 'used' ? '✓ Used' : 'Ignored'}
                                             </span>

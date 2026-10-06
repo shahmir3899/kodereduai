@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import Field from '../../components/ui/Field'
 import { PasswordInput } from '../../components'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
@@ -312,37 +313,34 @@ export default function StaffFormPage() {
                 />
               )}
               <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="label">First Name *</label>
-                  <input
+                <Field label="First Name" required>
+<input
                     type="text"
                     className="input"
                     value={form.first_name}
                     onChange={(e) => handleChange('first_name', e.target.value)}
                     required
                   />
-                </div>
-                <div>
-                  <label className="label">Last Name *</label>
-                  <input
+</Field>
+                <Field label="Last Name" required>
+<input
                     type="text"
                     className="input"
                     value={form.last_name}
                     onChange={(e) => handleChange('last_name', e.target.value)}
                     required
                   />
-                </div>
+</Field>
               </div>
 
-              <div>
-                <label className="label">Email</label>
-                <input
+              <Field label="Email">
+<input
                   type="email"
                   className="input"
                   value={form.email}
                   onChange={(e) => handleChange('email', e.target.value)}
                 />
-              </div>
+</Field>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -359,9 +357,8 @@ export default function StaffFormPage() {
                   </div>
                   <p className="text-xs text-gray-500 mt-1">Use +92 format for WhatsApp</p>
                 </div>
-                <div>
-                  <label className="label">Gender</label>
-                  <select
+                <Field label="Gender">
+<select
                     className="input"
                     value={form.gender}
                     onChange={(e) => handleChange('gender', e.target.value)}
@@ -371,18 +368,17 @@ export default function StaffFormPage() {
                     <option value="FEMALE">Female</option>
                     <option value="OTHER">Other</option>
                   </select>
-                </div>
+</Field>
               </div>
 
-              <div>
-                <label className="label">Date of Birth</label>
-                <input
+              <Field label="Date of Birth">
+<input
                   type="date"
                   className="input"
                   value={form.date_of_birth}
                   onChange={(e) => handleChange('date_of_birth', e.target.value)}
                 />
-              </div>
+</Field>
 
               <div>
                 <label className="label">Address</label>
@@ -406,18 +402,16 @@ export default function StaffFormPage() {
               ) : (
                 <div className="space-y-4">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>
-                      <label className="label">Linked Username</label>
-                      <input
+                    <Field label="Linked Username">
+<input
                         type="text"
                         className="input bg-gray-50 text-gray-600"
                         value={staffData?.data?.user_username || ''}
                         readOnly
                       />
-                    </div>
-                    <div>
-                      <label className="label">ERP Role</label>
-                      <select
+</Field>
+                    <Field label="ERP Role">
+<select
                         className="input"
                         value={erpUserRole}
                         onChange={(e) => setErpUserRole(e.target.value)}
@@ -427,7 +421,7 @@ export default function StaffFormPage() {
                           <option key={role} value={role}>{ROLE_LABELS[role] || role}</option>
                         ))}
                       </select>
-                    </div>
+</Field>
                   </div>
 
                   <div className="rounded-lg bg-blue-50 px-3 py-2 text-xs text-blue-700">
@@ -496,9 +490,8 @@ export default function StaffFormPage() {
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="label">Employment Type</label>
-                    <select
+                  <Field label="Employment Type">
+<select
                       className="input"
                       value={form.employment_type}
                       onChange={(e) => handleChange('employment_type', e.target.value)}
@@ -509,10 +502,9 @@ export default function StaffFormPage() {
                       <option value="TEMPORARY">Temporary</option>
                       <option value="INTERN">Intern</option>
                     </select>
-                  </div>
-                  <div>
-                    <label className="label">Employment Status</label>
-                    <select
+</Field>
+                  <Field label="Employment Status">
+<select
                       className="input"
                       value={form.employment_status}
                       onChange={(e) => handleChange('employment_status', e.target.value)}
@@ -523,18 +515,17 @@ export default function StaffFormPage() {
                       <option value="RESIGNED">Resigned</option>
                       <option value="RETIRED">Retired</option>
                     </select>
-                  </div>
+</Field>
                 </div>
 
-                <div>
-                  <label className="label">Date of Joining</label>
-                  <input
+                <Field label="Date of Joining">
+<input
                     type="date"
                     className="input"
                     value={form.date_of_joining}
                     onChange={(e) => handleChange('date_of_joining', e.target.value)}
                   />
-                </div>
+</Field>
               </div>
             </div>
 
@@ -542,15 +533,14 @@ export default function StaffFormPage() {
             <div className="card">
               <h2 className="text-sm font-semibold text-gray-700 mb-4">Emergency Contact</h2>
               <div className="space-y-4">
-                <div>
-                  <label className="label">Contact Name</label>
-                  <input
+                <Field label="Contact Name">
+<input
                     type="text"
                     className="input"
                     value={form.emergency_contact_name}
                     onChange={(e) => handleChange('emergency_contact_name', e.target.value)}
                   />
-                </div>
+</Field>
                 <div>
                   <label className="label">Contact Phone</label>
                   <div className="flex items-center gap-1">
@@ -604,9 +594,8 @@ export default function StaffFormPage() {
             {createUserAccount && (
               <div className="mt-4 ml-6 space-y-3 p-4 bg-gray-50 rounded-lg">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="label">Username *</label>
-                    <input
+                  <Field label="Username" required>
+<input
                       type="text"
                       className="input"
                       value={staffUserForm.username}
@@ -614,10 +603,9 @@ export default function StaffFormPage() {
                       placeholder="Login username"
                       required
                     />
-                  </div>
-                  <div>
-                    <label className="label">User Role *</label>
-                    <select
+</Field>
+                  <Field label="User Role" required>
+<select
                       className="input"
                       value={staffUserForm.user_role}
                       onChange={(e) => setStaffUserForm(f => ({ ...f, user_role: e.target.value }))}
@@ -626,7 +614,7 @@ export default function StaffFormPage() {
                         <option key={role} value={role}>{ROLE_LABELS[role] || role}</option>
                       ))}
                     </select>
-                  </div>
+</Field>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
