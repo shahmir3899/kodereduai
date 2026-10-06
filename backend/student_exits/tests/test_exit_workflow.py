@@ -532,7 +532,7 @@ class TestOldPathAndSummary:
 
     @override_settings(STUDENT_EXIT_WORKFLOW_ENFORCED=True)
     def test_enforcement_leaves_other_statuses_alone(self, api, ctx):
-        assert self.patch_status(api, ctx, 'SUSPENDED').status_code == 200
+        assert self.patch_status(api, ctx, 'REPEAT').status_code == 200
 
     def test_profile_summary_shows_pending_fee_and_the_waiver(self, api, ctx, category):
         monthly_payment(ctx, category, 1, '1000', '0')

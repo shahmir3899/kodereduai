@@ -82,7 +82,7 @@ describe('StudentsPage — list, edit, delete, add', () => {
     expect(screen.getAllByText('Sara Khan').length).toBeGreaterThanOrEqual(1)
   })
 
-  describe('current / left / all', () => {
+  describe('current / left / graduated / repeat / all', () => {
     const current = { id: 1, school: 1, class_obj: 1, class_name: 'Class 1A', roll_number: '1', name: 'Ali Hassan', is_active: true, status: 'ACTIVE', has_user_account: true, user_username: 'ali' }
     const withdrawn = { id: 9, school: 1, class_obj: 1, class_name: 'Class 1A', roll_number: '9', name: 'Zara Left', is_active: true, status: 'WITHDRAWN', left_date: '2026-01-10', has_user_account: false, transferred_to: null }
     const transferred = {
@@ -92,7 +92,7 @@ describe('StudentsPage — list, edit, delete, add', () => {
     }
     let requests
 
-    // The server decides who is listed: the default asks for current students only.
+    // The server decides who is listed: the default asks for the current scope only.
     const serve = () => {
       requests = []
       server.use(http.get('/api/students/', ({ request }) => {
@@ -104,13 +104,13 @@ describe('StudentsPage — list, edit, delete, add', () => {
       }))
     }
 
-    it('lists only current students by default and does not ask the server for more', async () => {
+    it('lists only current students by default and asks the server only for that scope', async () => {
       serve()
       renderWithProviders(<StudentsPage />)
       await waitFor(() => expect(screen.getAllByText('Ali Hassan').length).toBeGreaterThanOrEqual(1))
 
       expect(screen.queryAllByText('Zara Left')).toHaveLength(0)
-      expect(requests).toEqual([null])
+      expect(requests).toEqual(['current'])
       expect(screen.getByRole('radio', { name: 'Current' })).toHaveAttribute('aria-checked', 'true')
     })
 
@@ -129,18 +129,17 @@ describe('StudentsPage — list, edit, delete, add', () => {
       expect(screen.getByTestId('left-note-9')).toHaveTextContent('2026')
     })
 
-    it('has a filter for every status, not only Left', async () => {
+    it('offers only Current, Left, Graduated, Repeat and All', async () => {
       serve()
       renderWithProviders(<StudentsPage />)
       await waitFor(() => expect(screen.getAllByText('Ali Hassan').length).toBeGreaterThanOrEqual(1))
 
       const names = screen.getAllByRole('radio').map((r) => r.textContent)
-      expect(names).toEqual(['Current', 'Left', 'Withdrawn', 'Transferred', 'Graduated', 'Suspended', 'Repeat', 'All'])
+      expect(names).toEqual(['Current', 'Left', 'Graduated', 'Repeat', 'All'])
     })
 
     it.each([
-      ['Withdrawn', 'withdrawn'], ['Transferred', 'transferred'], ['Graduated', 'graduated'],
-      ['Suspended', 'suspended'], ['Repeat', 'repeat'],
+      ['Graduated', 'graduated'], ['Repeat', 'repeat'],
     ])('asks the server for exactly %s students', async (label, scope) => {
       serve()
       const user = userEvent.setup()

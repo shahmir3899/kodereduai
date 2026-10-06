@@ -92,7 +92,6 @@ class Student(models.Model):
         WITHDRAWN = 'WITHDRAWN', 'Withdrawn'
         GRADUATED = 'GRADUATED', 'Graduated'
         REPEAT = 'REPEAT', 'Repeat'
-        SUSPENDED = 'SUSPENDED', 'Suspended'
 
     STATUS_CHOICES = Status.choices
 

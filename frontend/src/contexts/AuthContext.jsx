@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { useQueryClient, useIsRestoring } from '@tanstack/react-query'
+import { feeMonthSummaryKey, MONTHLY_FEE_PARAMS } from '../utils/feeMonthSummary'
 import api, {
   authApi,
   academicsApi,
@@ -571,17 +572,10 @@ export function AuthProvider({ children }) {
             queryClient.setQueryData(['hrDashboardStats'], { data: data.hr })
           }
           if (data.finance != null) {
-            // Two separate consumers read this same payload under different keys:
-            // DashboardPage.jsx's compact finance tile (`financeSummaryDashboard`)
-            // and FinanceDashboardPage.jsx's fuller view (`feeSummaryDashboard`,
-            // note the extra 'MONTHLY' segment). Both must be seeded or one of the
-            // two pages silently cold-fetches on every visit.
+            // Every dashboard reads the month's fee numbers through
+            // useFeeMonthSummary, so one seeded key covers them all.
             queryClient.setQueryData(
-              ['financeSummaryDashboard', currentMonth, currentYear, activeAcademicYearId],
-              { data: data.finance },
-            )
-            queryClient.setQueryData(
-              ['feeSummaryDashboard', currentMonth, currentYear, 'MONTHLY', activeAcademicYearId],
+              feeMonthSummaryKey('single', currentMonth, currentYear, activeAcademicYearId),
               { data: data.finance },
             )
           }
@@ -685,8 +679,8 @@ export function AuthProvider({ children }) {
         const dateTo = today
         addPrefetch(['accountBalances'], () => financeApi.getAccountBalances())
         addPrefetch(
-          ['feeSummary', currentMonth, currentYear, activeAcademicYearId],
-          () => financeApi.getMonthlySummary({ month: currentMonth, year: currentYear, ...(activeAcademicYearId && { academic_year: activeAcademicYearId }) }),
+          feeMonthSummaryKey('single', currentMonth, currentYear, activeAcademicYearId),
+          () => financeApi.getMonthlySummary({ month: currentMonth, year: currentYear, ...MONTHLY_FEE_PARAMS, ...(activeAcademicYearId && { academic_year: activeAcademicYearId }) }),
         )
         addPrefetch(['financeSummaryDash', dateFrom, dateTo], () => financeApi.getFinanceSummary({ date_from: dateFrom, date_to: dateTo }))
         addPrefetch(['recentEntries'], () => financeApi.getRecentEntries({ limit: 8 }))
@@ -764,8 +758,8 @@ export function AuthProvider({ children }) {
       }
       if (isModuleAvailable({ moduleKey: 'finance', enabledModules, isSuperAdmin })) {
         addPrefetch(
-          ['financeSummaryDashboard', currentMonth, currentYear, activeAcademicYearId],
-          () => financeApi.getMonthlySummary({ month: currentMonth, year: currentYear, ...(activeAcademicYearId && { academic_year: activeAcademicYearId }) }),
+          feeMonthSummaryKey('single', currentMonth, currentYear, activeAcademicYearId),
+          () => financeApi.getMonthlySummary({ month: currentMonth, year: currentYear, ...MONTHLY_FEE_PARAMS, ...(activeAcademicYearId && { academic_year: activeAcademicYearId }) }),
         )
       }
       if (isModuleAvailable({ moduleKey: 'hr', enabledModules, isSuperAdmin })) {

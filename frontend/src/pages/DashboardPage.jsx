@@ -1,9 +1,11 @@
 import { useState } from 'react'
+import { TONE } from '../components/ui/statusTones'
+import PageHeader from '../components/ui/PageHeader'
 import { useQuery } from '@tanstack/react-query'
 import { useAuth } from '../contexts/AuthContext'
 import { useAcademicYear } from '../contexts/AcademicYearContext'
 import {
-  attendanceApi, financeApi, tasksApi, hrApi,
+  attendanceApi, tasksApi, hrApi,
   admissionsApi, examinationsApi, transportApi,
   libraryApi, hostelApi, inventoryApi, notificationsApi,
   bootstrapApi,
@@ -13,6 +15,8 @@ import { Link } from 'react-router-dom'
 import SessionHealthWidget from '../components/SessionHealthWidget'
 import AIInsightsWidget from '../components/AIInsightsWidget'
 import StatCard from '../components/dashboard/StatCard'
+import AttendanceBreakdown from '../components/dashboard/AttendanceBreakdown'
+import { useFeeMonthSummary } from '../hooks/useFeeMonthSummary'
 import ModuleHealthCard from '../components/dashboard/ModuleHealthCard'
 import QuickActionGrid from '../components/dashboard/QuickActionGrid'
 import NotificationsFeed from '../components/dashboard/NotificationsFeed'
@@ -139,12 +143,7 @@ export default function DashboardPage({ variant }) {
   // const { data: pendingReviews } = useQuery({ ... })
 
   // Finance
-  const { data: financeSummary, isLoading: loadingFinance } = useQuery({
-    queryKey: ['financeSummaryDashboard', currentMonth, currentYear, activeAcademicYear?.id],
-    queryFn: () => financeApi.getMonthlySummary({
-      month: currentMonth, year: currentYear,
-      ...(activeAcademicYear?.id && { academic_year: activeAcademicYear.id }),
-    }),
+  const { summary: fin, isLoading: loadingFinance } = useFeeMonthSummary({
     enabled: !!activeSchool?.id && isModuleEnabled('finance'),
   })
 
@@ -211,7 +210,6 @@ export default function DashboardPage({ variant }) {
   // ─── Computed Values ────────────────────────────────────────────────────────
 
   const report = dailyReport?.data
-  const fin = financeSummary?.data
   const hr = hrStats?.data
   const pendingCount = 0 // OCR pending reviews removed 2026-05-13
   const admissionsCount = admissionsData?.data?.count || 0
@@ -220,13 +218,9 @@ export default function DashboardPage({ variant }) {
 
   const attendanceRate = !attendanceIsOffDay && report?.total_students > 0
     ? Math.round((report.present_count / report.total_students) * 100) : null
-  const collectionRate = fin?.total_due > 0
-    ? Math.round((Number(fin.total_collected) / Number(fin.total_due)) * 100) : null
+  const collectionRate = fin?.rate ?? null
   const staffPresentPct = !attendanceIsOffDay && hr?.active_staff > 0
     ? Math.round(((hr.attendance_present_today || 0) / hr.active_staff) * 100) : null
-  const notMarkedCount = report
-    ? Math.max((report.total_students || 0) - (report.present_count || 0) - (report.absent_count || 0), 0)
-    : 0
 
   // ─── Quick Actions ──────────────────────────────────────────────────────────
 
@@ -343,14 +337,9 @@ export default function DashboardPage({ variant }) {
   return (
     <div>
       {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Dashboard</h1>
-        <p className="text-sm text-gray-500 mt-0.5">
-          {activeSchool?.name || 'Welcome back'}
+      <PageHeader title="Dashboard" subtitle={<>{activeSchool?.name || 'Welcome back'}
           {activeAcademicYear && <span className="text-gray-400"> — {activeAcademicYear.name}</span>}
-          {currentTerm && <span className="text-gray-400"> | {currentTerm.name}</span>}
-        </p>
-      </div>
+          {currentTerm && <span className="text-gray-400"> | {currentTerm.name}</span>}</>} className="mb-6" />
 
       {/* Academic Session Warning */}
       {!academicYearLoading && !hasAcademicYear && (
@@ -387,9 +376,9 @@ export default function DashboardPage({ variant }) {
           loading={isModuleEnabled('attendance') && loadingAttendance}
         />
         <StatCard
-          label="Fee Collection"
+          label="Monthly Fee Collection"
           value={collectionRate != null ? `${collectionRate}%` : '—'}
-          subtitle={fin ? `Rs. ${Number(fin.total_collected || 0).toLocaleString()} collected` : undefined}
+          subtitle={fin ? `Monthly fees · Rs. ${fin.totalPending.toLocaleString()} pending` : undefined}
           icon={icons.finance}
           color={collectionRate >= 80 ? 'green' : collectionRate >= 50 ? 'amber' : 'orange'}
           href="/finance"
@@ -451,40 +440,7 @@ export default function DashboardPage({ variant }) {
               {/* Horizontal bar */}
               {!attendanceIsOffDay ? (
                 <>
-                  <div className="flex items-center gap-3 mb-3">
-                    <div className="flex-1 h-3 bg-gray-100 rounded-full overflow-hidden flex">
-                      {report.total_students > 0 && (
-                        <>
-                          <div
-                            className="bg-green-500 h-full transition-all duration-500"
-                            style={{ width: `${(report.present_count / report.total_students) * 100}%` }}
-                          />
-                          <div
-                            className="bg-red-400 h-full transition-all duration-500"
-                            style={{ width: `${(report.absent_count / report.total_students) * 100}%` }}
-                          />
-                        </>
-                      )}
-                    </div>
-                    <span className="text-xs text-gray-500 shrink-0 tabular-nums">
-                      {report.present_count}/{report.total_students}
-                    </span>
-                  </div>
-                  <div className="flex gap-4 text-xs">
-                    <span className="flex items-center gap-1.5">
-                      <span className="w-2.5 h-2.5 rounded-full bg-green-500" />
-                      Present: {report.present_count}
-                    </span>
-                    <span className="flex items-center gap-1.5">
-                      <span className="w-2.5 h-2.5 rounded-full bg-red-400" />
-                      Absent: {report.absent_count}
-                    </span>
-                    <span className="flex items-center gap-1.5">
-                      <span className="w-2.5 h-2.5 rounded-full bg-gray-400" />
-                      Not Marked: {notMarkedCount}
-                    </span>
-                    {/* pending OCR review link removed 2026-05-13 */}
-                  </div>
+                  <AttendanceBreakdown report={report} />
                 </>
               ) : (
                 <p className="text-sm text-gray-600">Attendance is not applicable today.</p>
@@ -496,17 +452,17 @@ export default function DashboardPage({ variant }) {
           {isModuleEnabled('finance') && fin && (
             <div className="card">
               <div className="flex items-center justify-between mb-3">
-                <h2 className="text-sm font-semibold text-gray-900">Finance — This Month</h2>
+                <h2 className="text-sm font-semibold text-gray-900">Monthly Fees — This Month</h2>
                 <Link to="/finance/fees" className="text-xs text-sky-600 hover:text-sky-700 font-medium">View Details</Link>
               </div>
               <div className="grid grid-cols-3 gap-3">
                 <div className="text-center p-3 bg-green-50 rounded-lg">
                   <p className="text-xs text-green-600 mb-0.5">Collected</p>
-                  <p className="text-base font-bold text-green-700">Rs. {Number(fin.total_collected || 0).toLocaleString()}</p>
+                  <p className="text-base font-bold text-green-700">Rs. {fin.totalCollected.toLocaleString()}</p>
                 </div>
                 <div className="text-center p-3 bg-orange-50 rounded-lg">
                   <p className="text-xs text-orange-600 mb-0.5">Pending</p>
-                  <p className="text-base font-bold text-orange-700">Rs. {Number(fin.total_pending || 0).toLocaleString()}</p>
+                  <p className="text-base font-bold text-orange-700">Rs. {fin.totalPending.toLocaleString()}</p>
                 </div>
                 <div className="text-center p-3 bg-blue-50 rounded-lg">
                   <p className="text-xs text-blue-600 mb-0.5">Collection Rate</p>
@@ -583,10 +539,10 @@ export function AIInsightsCard() {
   }
 
   const MODULE_COLORS = {
-    attendance: 'bg-sky-100 text-sky-700',
-    finance: 'bg-green-100 text-green-700',
-    academics: 'bg-purple-100 text-purple-700',
-    hr: 'bg-orange-100 text-orange-700',
+    attendance: TONE.sky,
+    finance: TONE.success,
+    academics: TONE.accent,
+    hr: TONE.orange,
   }
 
   const visible = expanded ? insights : insights.slice(0, 3)
@@ -615,7 +571,7 @@ export function AIInsightsCard() {
               <div className="flex items-center gap-1.5 flex-wrap">
                 <p className="text-sm font-medium">{insight.title}</p>
                 {insight.module && (
-                  <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${MODULE_COLORS[insight.module] || 'bg-gray-100 text-gray-600'}`}>
+                  <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${MODULE_COLORS[insight.module] || TONE.neutral}`}>
                     {insight.module}
                   </span>
                 )}

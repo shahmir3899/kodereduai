@@ -9,7 +9,6 @@ export const LIFECYCLE_LABELS = {
   TRANSFERRED: 'Transferred',
   WITHDRAWN: 'Withdrawn',
   GRADUATED: 'Graduated',
-  SUSPENDED: 'Suspended',
 }
 
 export const LIFECYCLE_STYLES = {
@@ -18,13 +17,17 @@ export const LIFECYCLE_STYLES = {
   TRANSFERRED: 'bg-sky-100 text-sky-800',
   WITHDRAWN: 'bg-rose-100 text-rose-800',
   GRADUATED: 'bg-indigo-100 text-indigo-800',
-  SUSPENDED: 'bg-red-100 text-red-800',
 }
 
 export const getLifecycleLabel = (status) => LIFECYCLE_LABELS[status] || status || 'Unknown'
 export const getLifecycleStyle = (status) => LIFECYCLE_STYLES[status] || 'bg-gray-100 text-gray-700'
 
-// A student counts as "left" (no longer currently enrolled) for any status
-// other than ACTIVE/REPEAT — mirrors the is_left check in
+// Mirrors backend/students/status_groups.py — keep the two in step.
+export const ENROLLED_STATUSES = ['ACTIVE', 'REPEAT']
+// Left the school (churn). Graduating is not here.
+export const DEPARTED_STATUSES = ['WITHDRAWN', 'TRANSFERRED']
+export const ALUMNI_STATUSES = ['GRADUATED']
+
+// No longer on the roll (departed or graduated) — mirrors the is_left check in
 // backend/finance/views.py's fee_summary by_class breakdown.
-export const isLeftStatus = (status) => !!status && status !== 'ACTIVE' && status !== 'REPEAT'
+export const isLeftStatus = (status) => !!status && !ENROLLED_STATUSES.includes(status)

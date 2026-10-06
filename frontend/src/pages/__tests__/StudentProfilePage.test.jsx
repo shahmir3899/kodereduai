@@ -524,7 +524,7 @@ describe('StudentProfilePage', () => {
       expect(await screen.findByRole('heading', { name: 'Re-admit student' })).toBeInTheDocument()
     })
 
-    it.each(['ACTIVE', 'SUSPENDED'])('does not offer Re-admit for a %s student', async (status) => {
+    it.each(['ACTIVE', 'REPEAT'])('does not offer Re-admit for a %s student', async (status) => {
       useStudentApi({ status })
       await renderProfile()
 
@@ -834,13 +834,13 @@ describe('StudentProfilePage', () => {
 
       await user.click(screen.getByRole('button', { name: 'Update Status' }))
       const modal = modalFor('Update Student Status')
-      await user.selectOptions(modal.getByLabelText('Status'), 'SUSPENDED')
+      await user.selectOptions(modal.getByLabelText('Status'), 'REPEAT')
       await user.type(modal.getByLabelText('Effective Date'), '2026-03-01')
-      await user.type(modal.getByLabelText('Reason'), 'Disciplinary')
+      await user.type(modal.getByLabelText('Reason'), 'Failed the year')
       await user.click(modal.getByRole('button', { name: 'Save Status' }))
 
       await waitFor(() => expect(patches).toHaveLength(1))
-      expect(patches[0]).toEqual({ status: 'SUSPENDED', status_date: '2026-03-01', status_reason: 'Disciplinary' })
+      expect(patches[0]).toEqual({ status: 'REPEAT', status_date: '2026-03-01', status_reason: 'Failed the year' })
       await waitFor(() => expect(mockShowSuccess).toHaveBeenCalledWith('Student status updated successfully'))
       expect(screen.queryByRole('heading', { name: 'Update Student Status' })).not.toBeInTheDocument()
     })

@@ -4,9 +4,8 @@ Intended for SCHOOL_ADMIN / PRINCIPAL / MANAGER to minimise login-time round tri
 """
 
 from datetime import date, timedelta
-from decimal import Decimal
 
-from django.db.models import Count, Q, Sum
+from django.db.models import Count, Q
 from django.utils.dateparse import parse_date
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -20,43 +19,10 @@ _ALLOWED_ROLES = {'SCHOOL_ADMIN', 'PRINCIPAL', 'MANAGER'}
 
 
 def _get_attendance_section(school_id, date_obj, academic_year_id):
-    """Return daily attendance summary — mirrors AttendanceRecordViewSet.daily_report."""
-    from academic_sessions.calendar_rules import is_off_day_for_date, off_day_types_for_date
-    from attendance.models import AttendanceRecord
-    from attendance.serializers import AttendanceRecordSerializer
-    from students.models import Student
+    """Return daily attendance summary — same helper as AttendanceRecordViewSet.daily_report."""
+    from attendance.summary import daily_attendance_summary
 
-    students_qs = Student.objects.filter(school_id=school_id, is_active=True)
-    if academic_year_id:
-        students_qs = students_qs.filter(
-            enrollments__academic_year_id=academic_year_id,
-            enrollments__is_active=True,
-        )
-    total = students_qs.values('id').distinct().count()
-
-    records = AttendanceRecord.objects.filter(
-        school_id=school_id,
-        date=date_obj,
-    ).select_related('student', 'student__class_obj', 'academic_year')
-
-    counts = records.aggregate(
-        present_count=Count('id', filter=Q(status=AttendanceRecord.AttendanceStatus.PRESENT)),
-        absent_count=Count('id', filter=Q(status=AttendanceRecord.AttendanceStatus.ABSENT)),
-        leave_count=Count('id', filter=Q(status=AttendanceRecord.AttendanceStatus.LEAVE)),
-    )
-    absent_records = records.filter(status=AttendanceRecord.AttendanceStatus.ABSENT)
-
-    is_off_day = is_off_day_for_date(school_id, date_obj)
-    return {
-        'date': str(date_obj),
-        'is_off_day': is_off_day,
-        'off_day_types': off_day_types_for_date(school_id, date_obj),
-        'total_students': total,
-        'present_count': counts.get('present_count') or 0,
-        'absent_count': counts.get('absent_count') or 0,
-        'leave_count': counts.get('leave_count') or 0,
-        'absent_students': AttendanceRecordSerializer(absent_records, many=True).data,
-    }
+    return daily_attendance_summary(school_id, date_obj, academic_year_id)
 
 
 def _get_pending_reviews_count(school_id, academic_year_id):
@@ -121,55 +87,15 @@ def _get_hr_section(school_id):
 
 
 def _get_finance_section(school_id, month, year, academic_year_id):
-    """Return finance monthly summary — mirrors FeePaymentViewSet.monthly_summary."""
-    from finance.models import FeePayment
-
-    payments = FeePayment.objects.filter(school_id=school_id, month=month, year=year)
-    if academic_year_id:
-        payments = payments.filter(academic_year_id=academic_year_id)
-
-    totals = payments.aggregate(
-        total_due=Sum('amount_due'),
-        total_collected=Sum('amount_paid'),
-    )
-    total_due = totals['total_due'] or Decimal('0')
-    total_collected = totals['total_collected'] or Decimal('0')
-
-    status_counts = payments.values('status').annotate(count=Count('id'))
-    counts = {item['status']: item['count'] for item in status_counts}
-
-    # Per-category breakdown (monthly categories) — same shape as
-    # FeePaymentViewSet.monthly_summary's by_category, since FinanceDashboardPage
-    # reads this field from whichever of the two responses populated its cache.
-    by_category = payments.filter(
-        fee_type='MONTHLY', monthly_category__isnull=False
-    ).values(
-        'monthly_category__id', 'monthly_category__name'
-    ).annotate(
-        total_due=Sum('amount_due'),
-        total_collected=Sum('amount_paid'),
-        count=Count('id'),
-    ).order_by('monthly_category__name')
+    """Return finance monthly summary — same helper as FeePaymentViewSet.monthly_summary."""
+    from finance.fee_month_summary import month_payments, summarize
 
     return {
         'month': month,
         'year': year,
-        'total_due': str(total_due),
-        'total_collected': str(total_collected),
-        'total_pending': str(max(Decimal('0'), total_due - total_collected)),
-        'paid_count': counts.get('PAID', 0),
-        'partial_count': counts.get('PARTIAL', 0),
-        'unpaid_count': counts.get('UNPAID', 0),
-        'by_category': [
-            {
-                'category_id': item['monthly_category__id'],
-                'category_name': item['monthly_category__name'],
-                'total_due': str(item['total_due']),
-                'total_collected': str(item['total_collected']),
-                'count': item['count'],
-            }
-            for item in by_category
-        ],
+        # Monthly fees only: the dashboards label this "monthly", and annual fees
+        # have their own card on the finance dashboard.
+        **summarize(month_payments([school_id], month, year, academic_year_id, fee_type='MONTHLY')),
     }
 
 

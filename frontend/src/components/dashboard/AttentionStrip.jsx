@@ -22,6 +22,7 @@ export function buildAttentionItems({
   notMarkedStudents,
   unpaidFees,
   partialFees,
+  feesAllSchools = false,
   pendingLeave,
   pendingPayroll,
   staffUnmarked,
@@ -39,8 +40,10 @@ export function buildAttentionItems({
     add('att', notMarkedStudents, 'students not marked today', '/attendance/register', 'red')
   }
   if (isModuleEnabled('finance')) {
-    add('unpaid', unpaidFees, 'fees unpaid this month', '/finance/fees', 'red')
-    add('partial', partialFees, 'fees partially paid', '/finance/fees', 'amber')
+    // The link is scoped to the active school, so say so when the count spans several.
+    const scope = feesAllSchools ? ' (all schools)' : ''
+    add('unpaid', unpaidFees, `monthly fees unpaid this month${scope}`, '/finance/fees', 'red')
+    add('partial', partialFees, `monthly fees partially paid${scope}`, '/finance/fees', 'amber')
   }
   if (isModuleEnabled('hr')) {
     add('leave', pendingLeave, 'leave requests pending', '/hr/leave', 'amber')

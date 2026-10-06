@@ -1,4 +1,5 @@
 import { sortClassOptions } from '../../utils/classOrdering'
+import { isLeftStatus } from '../../utils/studentLifecycle'
 
 // Pure list logic extracted from StudentsPage so it can be tested without
 // rendering the page. Behaviour is unchanged from the inline useMemos.
@@ -124,10 +125,9 @@ export function sortStudents(students, { selectedClassIds, resolvedSelectedClass
   })
 }
 
-const LEFT_STATUSES = ['WITHDRAWN', 'TRANSFERRED', 'GRADUATED']
 
 // "Left" = no longer here: withdrawn, transferred, graduated, or switched off.
-export const hasLeft = (student) => LEFT_STATUSES.includes(student.status) || !student.is_active
+export const hasLeft = (student) => isLeftStatus(student.status) || !student.is_active
 
 export function computeStats(students) {
   const active = students.filter((s) => !hasLeft(s)).length

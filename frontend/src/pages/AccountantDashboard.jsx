@@ -3,7 +3,7 @@ import { TONE } from '../components/ui/statusTones'
 import PageHeader from '../components/ui/PageHeader'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
-import { useAcademicYear } from '../contexts/AcademicYearContext'
+import { useFeeMonthSummary } from '../hooks/useFeeMonthSummary'
 import { financeApi } from '../services/api'
 import StatCard from '../components/dashboard/StatCard'
 import QuickActionGrid from '../components/dashboard/QuickActionGrid'
@@ -71,7 +71,6 @@ const ACCOUNT_TYPE_COLORS = {
 
 export default function AccountantDashboard() {
   const { user, activeSchool } = useAuth()
-  const { activeAcademicYear } = useAcademicYear()
   const now = new Date()
   const currentMonth = now.getMonth() + 1
   const currentYear = now.getFullYear()
@@ -87,15 +86,7 @@ export default function AccountantDashboard() {
   })
   const accounts = balancesRes?.data || []
 
-  const { data: feeSummaryRes, isLoading: loadingFees } = useQuery({
-    queryKey: ['feeSummary', currentMonth, currentYear, activeAcademicYear?.id],
-    queryFn: () => financeApi.getMonthlySummary({
-      month: currentMonth, year: currentYear,
-      ...(activeAcademicYear?.id && { academic_year: activeAcademicYear.id }),
-    }),
-    enabled: !!activeSchool?.id,
-  })
-  const feeData = feeSummaryRes?.data || {}
+  const { summary: feeData, isLoading: loadingFees } = useFeeMonthSummary({ enabled: !!activeSchool?.id })
 
   const { data: financeSummaryRes } = useQuery({
     queryKey: ['financeSummaryDash', dateFrom, dateTo],
@@ -121,14 +112,13 @@ export default function AccountantDashboard() {
   // ─── Computed ─────────────────────────────────────────────────────────────────
 
   const grandBalance = Array.isArray(accounts) ? accounts.reduce((sum, a) => sum + Number(a.balance || 0), 0) : 0
-  const collected = Number(feeData.total_collected || 0)
-  const pendingAmt = Number(feeData.total_pending || 0)
-  const totalDue = Number(feeData.total_due || 0)
-  const collectionRate = totalDue > 0 ? Math.round((collected / totalDue) * 100) : 0
+  const collected = feeData?.totalCollected ?? 0
+  const pendingAmt = feeData?.totalPending ?? 0
+  const collectionRate = feeData?.rate ?? 0
   const totalIncome = Number(finData.total_income || 0)
   const totalExpenses = Number(finData.total_expenses || 0)
 
-  const byClass = feeData.by_class || []
+  const byClass = feeData?.byClass || []
 
   // ─── Quick Actions ──────────────────────────────────────────────────────────
 
@@ -159,7 +149,7 @@ export default function AccountantDashboard() {
           loading={loadingBalances}
         />
         <StatCard
-          label="Fee Collected"
+          label="Monthly Fee Collected"
           value={`Rs. ${collected.toLocaleString()}`}
           subtitle="this month"
           icon={icons.collected}
@@ -167,7 +157,7 @@ export default function AccountantDashboard() {
           loading={loadingFees}
         />
         <StatCard
-          label="Fee Pending"
+          label="Monthly Fee Pending"
           value={`Rs. ${pendingAmt.toLocaleString()}`}
           subtitle="this month"
           icon={icons.pending}
@@ -175,7 +165,7 @@ export default function AccountantDashboard() {
           loading={loadingFees}
         />
         <StatCard
-          label="Collection Rate"
+          label="Monthly Collection Rate"
           value={`${collectionRate}%`}
           subtitle={collectionRate >= 80 ? 'on track' : collectionRate >= 50 ? 'needs attention' : 'critical'}
           icon={icons.rate}

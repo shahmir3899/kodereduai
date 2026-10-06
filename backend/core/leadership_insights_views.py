@@ -2,7 +2,7 @@
 Leadership academic insights — aggregates for SCHOOL_ADMIN / PRINCIPAL dashboards.
 
 Uses Student.created_at for new admissions (all creation paths).
-Uses StudentEnrollment for departures (WITHDRAWN, TRANSFERRED, GRADUATED);
+Uses StudentEnrollment for departures (WITHDRAWN, TRANSFERRED);
 updated_at is the interim effective date filter (see docs/LEADERSHIP_INSIGHTS_ENGINEERING_TICKETS.md).
 
 Date semantics: compares ORM __date lookups in the server's default timezone unless USE_TZ
@@ -21,9 +21,11 @@ from rest_framework.views import APIView
 
 from core.mixins import ensure_tenant_school_id
 from core.permissions import HasSchoolAccess, get_effective_role
+from students.status_groups import DEPARTED_STATUSES
 
 _LEAD_ROLES = {'SCHOOL_ADMIN', 'PRINCIPAL'}
-_LEAVING_ENROLLMENT_STATUSES = ('WITHDRAWN', 'TRANSFERRED', 'GRADUATED')
+# Graduating is completion, not churn, so it is not a departure.
+_LEAVING_ENROLLMENT_STATUSES = DEPARTED_STATUSES
 
 
 def _module_on(enabled: dict, key: str) -> bool:
@@ -370,7 +372,7 @@ class LeadershipAcademicInsightsView(APIView):
                 'admissions.session: Student.created_date in [year start, year end] '
                 'and has StudentEnrollment for that academic year.',
                 'admissions.rolling_*d: Student.created_at date within trailing window.',
-                'departures: StudentEnrollment statuses WITHDRAWN, TRANSFERRED, GRADUATED; '
+                'departures: StudentEnrollment statuses WITHDRAWN, TRANSFERRED; '
                 'filtered by enrollment.updated_at date (approximate leave date).',
             ],
         }

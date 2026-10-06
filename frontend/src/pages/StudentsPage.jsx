@@ -57,7 +57,8 @@ export default function StudentsPage() {
   const [selectedClassIds, setSelectedClassIds] = useState([])
   const [search, setSearch] = useState('')
   const debouncedSearch = useDebounce(search, 300)
-  // 'current' (enrolled now), 'left' (withdrawn/transferred/graduated this year) or 'all'.
+  // 'current' (enrolled now), 'left' (withdrawn/transferred this year), 'graduated',
+  // 'repeat' or 'all'.
   const [statusScope, setStatusScope] = useState('current')
   const [showModal, setShowModal] = useState(false)
   const [editingStudent, setEditingStudent] = useState(null)
@@ -108,7 +109,7 @@ export default function StudentsPage() {
       school_id: selectedSchoolId,
       page_size: 9999,
       ...(activeAcademicYear?.id && { academic_year: activeAcademicYear.id }),
-      ...(statusScope !== 'current' && { status_scope: statusScope }),
+      status_scope: statusScope,
     }),
     enabled: !!selectedSchoolId,
   })

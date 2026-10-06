@@ -1,4 +1,4 @@
-"""Students list: status_scope=current|left|all.
+"""Students list: status_scope=current|left|graduated|repeat|all.
 
 Left students have an inactive enrollment, so the default "enrolled and active" list
 never returned them and there was no way to find them from the Students page.
@@ -20,8 +20,9 @@ def ctx(seed_data):
     one transferred (to School Beta, with a new record there) and one graduated."""
     year, school = seed_data['academic_year'], seed_data['school_a']
     students = seed_data['students'][:4]
+    # Promotion stamps a graduate's enrollment GRADUATED but leaves it active.
     plan = [('ACTIVE', True, None), ('WITHDRAWN', False, date(2026, 1, 10)),
-            ('TRANSFERRED', False, date(2026, 2, 1)), ('GRADUATED', False, date(2026, 3, 1))]
+            ('TRANSFERRED', False, date(2026, 2, 1)), ('GRADUATED', True, date(2026, 3, 1))]
     for student, (status, active, left) in zip(students, plan):
         StudentEnrollment.objects.create(
             school=school, student=student, academic_year=year, class_obj=student.class_obj,
@@ -47,22 +48,22 @@ class TestStatusScope:
     def test_the_default_still_lists_only_current_students(self, api, ctx):
         rows = ids(api, ctx, academic_year=ctx['academic_year'].id)
         assert ctx['active'].id in rows
-        assert not {ctx['withdrawn'].id, ctx['transferred'].id, ctx['graduated'].id} & set(rows)
+        # A graduate's enrollment stays active, so only the departed are absent here.
+        assert not {ctx['withdrawn'].id, ctx['transferred'].id} & set(rows)
 
     def test_current_is_the_same_as_the_default(self, api, ctx):
         assert set(ids(api, ctx, academic_year=ctx['academic_year'].id, status_scope='current')) == \
             set(ids(api, ctx, academic_year=ctx['academic_year'].id))
 
-    def test_left_lists_withdrawn_transferred_and_graduated_but_not_current(self, api, ctx):
+    def test_left_lists_withdrawn_and_transferred_but_not_current_or_graduated(self, api, ctx):
         rows = ids(api, ctx, academic_year=ctx['academic_year'].id, status_scope='left')
-        assert {ctx['withdrawn'].id, ctx['transferred'].id, ctx['graduated'].id} <= set(rows)
-        assert ctx['active'].id not in rows
+        assert {ctx['withdrawn'].id, ctx['transferred'].id} <= set(rows)
+        assert not {ctx['active'].id, ctx['graduated'].id} & set(rows)
 
     def test_left_rows_carry_status_and_leaving_date(self, api, ctx):
         rows = ids(api, ctx, academic_year=ctx['academic_year'].id, status_scope='left')
         assert (rows[ctx['withdrawn'].id]['status'], rows[ctx['withdrawn'].id]['left_date']) == ('WITHDRAWN', '2026-01-10')
         assert rows[ctx['transferred'].id]['status'] == 'TRANSFERRED'
-        assert rows[ctx['graduated'].id]['status'] == 'GRADUATED'
 
     def test_all_lists_everyone_enrolled_in_the_year(self, api, ctx):
         rows = ids(api, ctx, academic_year=ctx['academic_year'].id, status_scope='all')
@@ -165,56 +166,63 @@ class TestTransferredStudentsCannotBeDeleted:
         assert resp.status_code == 204 and not Student.objects.filter(pk=ctx['active'].pk).exists()
 
 
+def next_year(ctx):
+    return AcademicYear.objects.create(
+        school=ctx['school_a'], name='PYTEST_Next_Year', start_date=date(2027, 4, 1), end_date=date(2028, 3, 31),
+    )
+
+
 @pytest.mark.django_db
-class TestExactStatuses:
-    """Every status has its own filter, not only the combined Left."""
+class TestGraduatedAndRepeat:
+    """Graduated is an alumni view: it only fills once the next academic year exists."""
 
     @pytest.fixture
-    def extra(self, ctx):
-        year, school = ctx['academic_year'], ctx['school_a']
-        suspended, repeat = ctx['students'][4], ctx['students'][5]
-        for student, status in ((suspended, 'SUSPENDED'), (repeat, 'REPEAT')):
-            StudentEnrollment.objects.create(
-                school=school, student=student, academic_year=year, class_obj=student.class_obj,
-                roll_number=student.roll_number, status='ACTIVE', is_active=True,
-            )
-            student.status = status
-            student.save(update_fields=['status'])
-        return {**ctx, 'suspended': suspended, 'repeat': repeat}
+    def repeat(self, ctx):
+        student = ctx['students'][4]
+        StudentEnrollment.objects.create(
+            school=ctx['school_a'], student=student, academic_year=ctx['academic_year'], class_obj=student.class_obj,
+            roll_number=student.roll_number, status='ACTIVE', is_active=True,
+        )
+        student.status = 'REPEAT'
+        student.save(update_fields=['status'])
+        return student
 
-    def scope(self, api, extra, name):
-        return set(ids(api, extra, academic_year=extra['academic_year'].id, status_scope=name))
+    def scope(self, api, ctx, name, year=None):
+        return set(ids(api, ctx, academic_year=(year or ctx['academic_year']).id, status_scope=name))
 
-    def test_withdrawn_lists_only_withdrawn_students(self, api, extra):
-        assert self.scope(api, extra, 'withdrawn') == {extra['withdrawn'].id}
+    def test_graduates_are_not_graduated_until_the_next_year_exists(self, api, ctx):
+        assert self.scope(api, ctx, 'graduated') == set()
 
-    def test_transferred_lists_only_transferred_students(self, api, extra):
-        assert self.scope(api, extra, 'transferred') == {extra['transferred'].id}
+    def test_graduates_stay_in_current_until_the_next_year_exists(self, api, ctx):
+        # Promotion only stamps the enrollment; the student is still on this year's roll.
+        assert ctx['graduated'].id in self.scope(api, ctx, 'current')
 
-    def test_graduated_lists_only_graduated_students(self, api, extra):
-        assert self.scope(api, extra, 'graduated') == {extra['graduated'].id}
+    def test_graduated_lists_them_once_the_next_year_exists(self, api, ctx):
+        next_year(ctx)
+        assert self.scope(api, ctx, 'graduated') == {ctx['graduated'].id}
 
-    def test_suspended_lists_students_who_are_still_enrolled_but_suspended(self, api, extra):
-        assert self.scope(api, extra, 'suspended') == {extra['suspended'].id}
+    def test_current_in_a_past_year_hides_its_graduates(self, api, ctx):
+        next_year(ctx)
+        current = self.scope(api, ctx, 'current')
+        assert ctx['graduated'].id not in current and ctx['active'].id in current
 
-    def test_repeat_lists_students_repeating_the_year(self, api, extra):
-        assert self.scope(api, extra, 'repeat') == {extra['repeat'].id}
+    def test_graduates_never_appear_in_the_new_year(self, api, ctx):
+        assert ctx['graduated'].id not in self.scope(api, ctx, 'graduated', year=next_year(ctx))
 
-    def test_left_is_exactly_the_three_leaving_statuses_together(self, api, extra):
-        left = self.scope(api, extra, 'left')
-        assert left == self.scope(api, extra, 'withdrawn') | self.scope(api, extra, 'transferred') | self.scope(api, extra, 'graduated')
-        assert not {extra['suspended'].id, extra['repeat'].id, extra['active'].id} & left
+    def test_left_never_includes_graduates(self, api, ctx):
+        next_year(ctx)
+        assert not self.scope(api, ctx, 'left') & self.scope(api, ctx, 'graduated')
 
-    def test_the_exact_filters_do_not_overlap(self, api, extra):
-        names = ('withdrawn', 'transferred', 'graduated', 'suspended', 'repeat')
-        sets = [self.scope(api, extra, n) for n in names]
-        assert sum(len(s) for s in sets) == len(set().union(*sets))
+    def test_all_still_lists_graduates(self, api, ctx):
+        assert ctx['graduated'].id in self.scope(api, ctx, 'all')
 
-    def test_status_scope_is_case_insensitive(self, api, extra):
-        assert self.scope(api, extra, 'Withdrawn') == {extra['withdrawn'].id}
+    def test_repeat_lists_students_repeating_the_year(self, api, ctx, repeat):
+        assert self.scope(api, ctx, 'repeat') == {repeat.id}
 
-    def test_without_an_academic_year_the_current_year_is_used(self, api, extra):
-        assert set(ids(api, extra, status_scope='transferred')) == {extra['transferred'].id}
+    def test_withdrawn_and_transferred_are_no_longer_separate_scopes(self, api, ctx):
+        # Unknown scopes fall back to the default current listing.
+        assert ctx['withdrawn'].id not in self.scope(api, ctx, 'withdrawn')
+        assert ctx['transferred'].id not in self.scope(api, ctx, 'transferred')
 
-    def test_a_status_with_nobody_in_it_is_just_empty(self, api, ctx):
-        assert set(ids(api, ctx, academic_year=ctx['academic_year'].id, status_scope='suspended')) == set()
+    def test_suspended_is_no_longer_a_status(self):
+        assert 'SUSPENDED' not in Student.Status.values

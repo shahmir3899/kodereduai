@@ -1,10 +1,11 @@
 import { useState } from 'react'
+import PageHeader from '../../components/ui/PageHeader'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
 import {
-  attendanceApi, financeApi, tasksApi, hrApi,
+  attendanceApi, tasksApi, hrApi,
   admissionsApi, libraryApi, inventoryApi, bootstrapApi,
 } from '../../services/api'
 
@@ -13,12 +14,15 @@ import StatCard from '../../components/dashboard/StatCard'
 import QuickActionGrid from '../../components/dashboard/QuickActionGrid'
 import NotificationsFeed from '../../components/dashboard/NotificationsFeed'
 import AttentionStrip, { buildAttentionItems } from '../../components/dashboard/AttentionStrip'
+import AttendanceBreakdown from '../../components/dashboard/AttendanceBreakdown'
+import FeeCategoryBreakdown from '../../components/dashboard/FeeCategoryBreakdown'
+import { useFeeMonthSummary } from '../../hooks/useFeeMonthSummary'
 import LeadershipInsightsPanels from '../../components/dashboard/LeadershipInsightsPanels'
 import { icons, AIInsightsCard } from '../DashboardPage'
 
 // SCHOOL_ADMIN dashboard. PRINCIPAL and the other roles still use DashboardPage.
 // Query keys below match the ones AuthContext's login-time bootstrap prefetch seeds
-// (dailyReport, hrDashboardStats, financeSummaryDashboard) — changing them would
+// (dailyReport, hrDashboardStats; fee numbers via useFeeMonthSummary) — changing them would
 // silently turn those cache hits into cold fetches.
 export default function AdminDashboard() {
   const { activeSchool, isModuleEnabled } = useAuth()
@@ -26,8 +30,6 @@ export default function AdminDashboard() {
   const [insightsOpen, setInsightsOpen] = useState(false)
 
   const today = new Date().toISOString().split('T')[0]
-  const currentMonth = new Date().getMonth() + 1
-  const currentYear = new Date().getFullYear()
   const schoolReady = !!activeSchool?.id
 
   const attendanceOn = isModuleEnabled('attendance')
@@ -40,14 +42,7 @@ export default function AdminDashboard() {
     enabled: schoolReady && attendanceOn,
   })
 
-  const { data: financeSummary, isLoading: loadingFinance } = useQuery({
-    queryKey: ['financeSummaryDashboard', currentMonth, currentYear, activeAcademicYear?.id],
-    queryFn: () => financeApi.getMonthlySummary({
-      month: currentMonth, year: currentYear,
-      ...(activeAcademicYear?.id && { academic_year: activeAcademicYear.id }),
-    }),
-    enabled: schoolReady && financeOn,
-  })
+  const { summary: fee, isLoading: loadingFinance } = useFeeMonthSummary({ enabled: schoolReady && financeOn })
 
   const { data: hrStats, isLoading: loadingHR } = useQuery({
     queryKey: ['hrDashboardStats'],
@@ -95,27 +90,23 @@ export default function AdminDashboard() {
   // ─── Derived values ─────────────────────────────────────────────────────────
 
   const report = dailyReport?.data
-  const fin = financeSummary?.data
   const hr = hrStats?.data
   const isOffDay = !!report?.is_off_day
 
   const attendanceRate = !isOffDay && report?.total_students > 0
     ? Math.round((report.present_count / report.total_students) * 100) : null
-  const collectionRate = fin?.total_due > 0
-    ? Math.round((Number(fin.total_collected) / Number(fin.total_due)) * 100) : null
+  const collectionRate = fee?.rate ?? null
   const staffPresentPct = !isOffDay && hr?.active_staff > 0
     ? Math.round(((hr.attendance_present_today || 0) / hr.active_staff) * 100) : null
-  const notMarkedCount = report
-    ? Math.max((report.total_students || 0) - (report.present_count || 0) - (report.absent_count || 0), 0)
-    : 0
 
   const attentionLoading = (attendanceOn && loadingAttendance) || (financeOn && loadingFinance) || (hrOn && loadingHR)
   const attentionItems = buildAttentionItems({
     isModuleEnabled,
     isOffDay,
-    notMarkedStudents: report ? notMarkedCount : undefined,
-    unpaidFees: fin?.unpaid_count,
-    partialFees: fin?.partial_count,
+    notMarkedStudents: report ? (report.not_marked_count ?? 0) : undefined,
+    unpaidFees: fee?.unpaidCount,
+    partialFees: fee?.partialCount,
+    feesAllSchools: fee?.isMulti,
     pendingLeave: hr?.pending_leave_applications,
     pendingPayroll: hr?.pending_payroll_approvals,
     staffUnmarked: hr ? Math.max((hr.active_staff || 0) - (hr.attendance_marked_today || 0), 0) : undefined,
@@ -134,22 +125,15 @@ export default function AdminDashboard() {
   quickActions.push({ label: 'Reports', href: '/reports', icon: icons.reports })
   quickActions.push({ label: 'School Setup', href: '/school-setup', icon: icons.setup })
 
-  const showToday = (attendanceOn && report) || (financeOn && fin) || (hrOn && hr)
+  const showToday = (attendanceOn && report) || (financeOn && fee) || (hrOn && hr)
 
   return (
     <div>
       {/* Header */}
-      <div className="mb-6 flex flex-wrap items-start justify-between gap-2">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Dashboard</h1>
-          <p className="text-sm text-gray-500 mt-0.5">
-            {activeSchool?.name || 'Welcome back'}
+      <PageHeader title="Dashboard" subtitle={<>{activeSchool?.name || 'Welcome back'}
             {activeAcademicYear && <span className="text-gray-400"> — {activeAcademicYear.name}</span>}
-            {currentTerm && <span className="text-gray-400"> | {currentTerm.name}</span>}
-          </p>
-        </div>
-        <div className="flex items-center gap-2 text-xs">
-          <span className="text-gray-500">
+            {currentTerm && <span className="text-gray-400"> | {currentTerm.name}</span>}</>} className="mb-6" actions={<>
+<span className="text-gray-500">
             {new Date().toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' })}
           </span>
           {isOffDay && (
@@ -157,8 +141,7 @@ export default function AdminDashboard() {
               OFF day{report?.off_day_types?.length ? `: ${report.off_day_types.join(', ')}` : ''}
             </span>
           )}
-        </div>
-      </div>
+</>} />
 
       {!academicYearLoading && !hasAcademicYear && (
         <div className="mb-6 flex items-center gap-3 px-4 py-3 bg-amber-50 border border-amber-200 rounded-lg">
@@ -196,9 +179,9 @@ export default function AdminDashboard() {
           loading={attendanceOn && loadingAttendance}
         />
         <StatCard
-          label="Fee Collection"
+          label="Monthly Fee Collection"
           value={collectionRate != null ? `${collectionRate}%` : '—'}
-          subtitle={fin ? `Rs. ${Number(fin.total_collected || 0).toLocaleString()} collected` : undefined}
+          subtitle={fee ? `Monthly fees · Rs. ${fee.totalPending.toLocaleString()} pending${fee.isMulti ? ' · all schools' : ''}` : undefined}
           icon={icons.finance}
           color={collectionRate == null ? 'gray' : collectionRate >= 80 ? 'green' : collectionRate >= 50 ? 'amber' : 'orange'}
           href="/finance"
@@ -232,49 +215,35 @@ export default function AdminDashboard() {
                     <p className="text-sm text-gray-600">Attendance is not applicable today.</p>
                   ) : (
                     <>
-                      <div className="flex items-center gap-3 mb-2">
-                        <div className="flex-1 h-3 bg-gray-100 rounded-full overflow-hidden flex">
-                          {report.total_students > 0 && (
-                            <>
-                              <div className="bg-green-500 h-full transition-all duration-500" style={{ width: `${(report.present_count / report.total_students) * 100}%` }} />
-                              <div className="bg-red-400 h-full transition-all duration-500" style={{ width: `${(report.absent_count / report.total_students) * 100}%` }} />
-                            </>
-                          )}
-                        </div>
-                        <span className="text-xs text-gray-500 shrink-0 tabular-nums">{report.present_count}/{report.total_students}</span>
-                      </div>
-                      <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs">
-                        <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-green-500" />Present: {report.present_count}</span>
-                        <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-red-400" />Absent: {report.absent_count}</span>
-                        <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-gray-400" />Not marked: {notMarkedCount}</span>
-                      </div>
+                      <AttendanceBreakdown report={report} />
                     </>
                   )}
                 </div>
               )}
 
-              {financeOn && fin && (
+              {financeOn && fee && (
                 <div className="pt-4 border-t border-gray-100">
                   <div className="flex items-center justify-between mb-2">
-                    <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Fees this month</p>
+                    <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Monthly fees this month{fee.isMulti ? ' · all schools' : ''}</p>
                     <Link to="/finance/fees" className="text-xs text-sky-600 hover:text-sky-700 font-medium">View details</Link>
                   </div>
                   <div className="grid grid-cols-3 gap-3">
                     <div className="text-center p-3 bg-green-50 rounded-lg">
                       <p className="text-xs text-green-600 mb-0.5">Collected</p>
-                      <p className="text-sm sm:text-base font-bold text-green-700">Rs. {Number(fin.total_collected || 0).toLocaleString()}</p>
+                      <p className="text-sm sm:text-base font-bold text-green-700">Rs. {fee.totalCollected.toLocaleString()}</p>
                     </div>
                     <div className="text-center p-3 bg-orange-50 rounded-lg">
                       <p className="text-xs text-orange-600 mb-0.5">Pending</p>
-                      <p className="text-sm sm:text-base font-bold text-orange-700">Rs. {Number(fin.total_pending || 0).toLocaleString()}</p>
+                      <p className="text-sm sm:text-base font-bold text-orange-700">Rs. {fee.totalPending.toLocaleString()}</p>
                     </div>
                     <div className="text-center p-3 bg-gray-50 rounded-lg">
                       <p className="text-xs text-gray-600 mb-0.5">Paid / Partial / Unpaid</p>
                       <p className="text-sm sm:text-base font-bold text-gray-700 tabular-nums">
-                        {fin.paid_count ?? 0} / {fin.partial_count ?? 0} / {fin.unpaid_count ?? 0}
+                        {fee.paidCount} / {fee.partialCount} / {fee.unpaidCount}
                       </p>
                     </div>
                   </div>
+                  <FeeCategoryBreakdown summary={fee} />
                 </div>
               )}
 

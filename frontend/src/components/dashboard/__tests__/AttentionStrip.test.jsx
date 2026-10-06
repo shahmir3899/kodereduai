@@ -56,4 +56,12 @@ describe('AttentionStrip', () => {
     renderStrip({ items: [{ key: 'ai', count: 2, label: 'AI alerts', href: '#ai-insights', tone: 'red' }] })
     expect(screen.getByRole('link').getAttribute('href')).toBe('#ai-insights')
   })
+
+  it('flags fee chips as spanning all schools for a multi-school admin', () => {
+    const items = buildAttentionItems({ unpaidFees: 3, partialFees: 2, feesAllSchools: true })
+    expect(items.map((i) => i.label)).toEqual([
+      'monthly fees unpaid this month (all schools)',
+      'monthly fees partially paid (all schools)',
+    ])
+  })
 })

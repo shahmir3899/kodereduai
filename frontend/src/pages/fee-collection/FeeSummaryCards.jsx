@@ -5,7 +5,7 @@ import { getPaymentClassKey } from './feeUtils'
 import { getLifecycleLabel, getLifecycleStyle, isLeftStatus } from '../../utils/studentLifecycle'
 
 // Splits a class's payment rows into "currently enrolled" vs. "left"
-// (withdrawn/transferred/graduated/suspended) sub-groups, mirroring the
+// (withdrawn/transferred/graduated) sub-groups, mirroring the
 // left_count/left_total_due fields fee_summary already computes for the
 // class-level totals. Left students stay counted in the class row's totals;
 // this only affects how the expanded student list is grouped.

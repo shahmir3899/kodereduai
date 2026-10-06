@@ -7,7 +7,7 @@
       "runtimeArgs": ["manage.py", "runserver", "8000"],
       "cwd": "backend",
       "port": 8000,
-      "autoPort": false
+      "autoPort": true
     },
     {
       "name": "frontend",

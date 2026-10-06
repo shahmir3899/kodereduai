@@ -29,6 +29,23 @@ const COLOR_PALETTE = [
   TONE.neutral,
 ]
 
+// Local calendar date, not toISOString(): in UTC+ zones the UTC date is the
+// previous day before ~5am, and a month start (local midnight) became the last
+// day of the previous month.
+const toDateInputValue = (date) => (
+  `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+)
+
+// Both tabs open on the current month: the lists are fetched unpaginated, so an
+// all-time default grows with every year of records. "Clear Dates" still shows all.
+const currentMonthRange = () => {
+  const today = new Date()
+  return {
+    from: toDateInputValue(new Date(today.getFullYear(), today.getMonth(), 1)),
+    to: toDateInputValue(today),
+  }
+}
+
 export default function ExpensesPage() {
   const { user, isStaffMember } = useAuth()
   const canWrite = !isStaffMember
@@ -41,8 +58,9 @@ export default function ExpensesPage() {
   const [activeTab, setActiveTab] = useState(initialTab)
 
   // Expense state
-  const [dateFrom, setDateFrom] = useState('')
-  const [dateTo, setDateTo] = useState('')
+  const [initialRange] = useState(currentMonthRange)
+  const [dateFrom, setDateFrom] = useState(initialRange.from)
+  const [dateTo, setDateTo] = useState(initialRange.to)
   const [categoryFilter, setCategoryFilter] = useState('')
   const [view, setView] = useViewPreference('expenses')
   const [accountFilter, setAccountFilter] = useState('')
@@ -55,12 +73,10 @@ export default function ExpensesPage() {
   const [showCategoryModal, setShowCategoryModal] = useState(false)
 
   // Transfer state
-  const [tfrDateFrom, setTfrDateFrom] = useState('')
-  const [tfrDateTo, setTfrDateTo] = useState('')
+  const [tfrDateFrom, setTfrDateFrom] = useState(initialRange.from)
+  const [tfrDateTo, setTfrDateTo] = useState(initialRange.to)
   const [showTransferModal, setShowTransferModal] = useState(false)
   const [editingTransfer, setEditingTransfer] = useState(null)
-
-  const toDateInputValue = (date) => date.toISOString().split('T')[0]
 
   const applyExpenseDatePreset = (preset) => {
     const today = new Date()

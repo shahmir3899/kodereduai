@@ -6,7 +6,7 @@ import { useToast } from '../../../components/Toast'
 import { useEscapeKey } from '../../../hooks/useEscapeKey'
 import { formatDate, getApiErrorMessage } from './profileUtils'
 
-// Changes a student's lifecycle status (left, transferred, suspended, ...). Mount
+// Changes a student's lifecycle status (left, transferred, repeat, ...). Mount
 // only while open. When the chosen leaving date would strand attendance or marks,
 // the server answers 400 records_after_leaving and this shows the conflict with the
 // two ways out (use the suggested date, or remove the records).
@@ -81,7 +81,7 @@ export default function StatusUpdateModal({ student, onClose, onStartExit, onSta
       <div className="bg-white rounded-xl shadow-xl border border-gray-200 w-full max-w-md">
         <div className="px-6 py-4 border-b border-gray-200">
           <h2 className="text-lg font-semibold text-gray-900">Update Student Status</h2>
-          <p className="text-sm text-gray-500 mt-1">Use this for mid-session status changes (e.g. student left, transferred, suspended).</p>
+          <p className="text-sm text-gray-500 mt-1">Use this for mid-session status changes (e.g. student left, transferred, repeating).</p>
         </div>
 
         <div className="p-6 space-y-4">
@@ -99,7 +99,6 @@ export default function StatusUpdateModal({ student, onClose, onStartExit, onSta
               <option value="ACTIVE">Active</option>
               <option value="WITHDRAWN">Withdrawn (Left school)</option>
               <option value="TRANSFERRED">Transferred (To another branch of this organization)</option>
-              <option value="SUSPENDED">Suspended</option>
               <option value="GRADUATED">Graduated</option>
               <option value="REPEAT">Repeat</option>
             </select>

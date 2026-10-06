@@ -1,24 +1,20 @@
 import Field from '../../../components/ui/Field'
-// Filter card: school picker (super admin), search, Current/Left/All, class chips, gender summary.
-// Current = enrolled now. Left = withdrawn + transferred + graduated together; each of
-// those, and the still-enrolled special states, also has its own filter. All = everyone.
+// Filter card: school picker (super admin), search, status scope, class chips, gender summary.
+// Current = enrolled now. Left = withdrawn + transferred. Graduated = alumni of the year
+// being viewed (empty until the next academic year exists). All = everyone.
 const STATUS_SCOPES = [
   ['current', 'Current'],
   ['left', 'Left'],
-  ['withdrawn', 'Withdrawn'],
-  ['transferred', 'Transferred'],
   ['graduated', 'Graduated'],
-  ['suspended', 'Suspended'],
   ['repeat', 'Repeat'],
   ['all', 'All'],
 ]
 const SCOPE_HINTS = {
-  left: 'Withdrawn, transferred and graduated this academic year',
-  withdrawn: 'Students who withdrew this academic year',
-  transferred: 'Students transferred to another branch this academic year',
-  graduated: 'Students who graduated this academic year',
-  suspended: 'Enrolled students who are currently suspended',
+  current: 'Students enrolled in this academic year',
+  left: 'Withdrawn or transferred this academic year',
+  graduated: 'Graduates of this academic year, listed once the next academic year is created',
   repeat: 'Students repeating the year',
+  all: 'Everyone enrolled at any point in this academic year',
 }
 
 export default function StudentFilters({

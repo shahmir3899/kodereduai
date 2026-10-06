@@ -18,9 +18,9 @@ from django.db import transaction
 from django.db.models import Count, Max, Min, Q
 from django.utils import timezone
 
-from .models import StudentEnrollment
+from students.status_groups import DEPARTED_STATUSES  # noqa: F401  (re-exported for existing importers)
 
-DEPARTED_STATUSES = ('WITHDRAWN', 'TRANSFERRED')
+from .models import StudentEnrollment
 
 
 def enrolled_on_q(day, prefix=''):

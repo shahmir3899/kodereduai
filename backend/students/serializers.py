@@ -4,6 +4,7 @@ Student and Class serializers.
 
 from rest_framework import serializers
 from .models import Class, Student, StudentDocument
+from .status_groups import DEPARTED_STATUSES
 
 
 # ── Class ─────────────────────────────────────────────────────
@@ -263,12 +264,8 @@ class StudentCreateSerializer(serializers.ModelSerializer):
 
 
 
-# Statuses that mean "no longer on the current roster" -- SUSPENDED and REPEAT
-# are deliberately excluded (temporary / still enrolled). GRADUATED is handled
-# by the promotion flow (academic_sessions), not here, so it's excluded too:
-# that flow already leaves the graduating year's enrollment alone and simply
-# never creates a new one, which is the correct shape for "completed successfully".
-DEPARTED_STATUSES = {'WITHDRAWN', 'TRANSFERRED'}
+# GRADUATED is handled by the promotion flow (academic_sessions), not here: that flow
+# leaves the graduating year's enrollment alone and never creates a new one.
 
 
 class StudentUpdateSerializer(serializers.ModelSerializer):

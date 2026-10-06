@@ -29,6 +29,7 @@ from .serializers import (
     AttendanceRecordSerializer,
 )
 from students.models import Student
+from .summary import daily_attendance_summary
 
 logger = logging.getLogger(__name__)
 
@@ -983,38 +984,7 @@ class AttendanceRecordViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.R
         if not school_id:
             return Response({'error': 'school_id is required'}, status=400)
 
-        # Get counts — session-aware when academic_year is provided
-        students_qs = Student.objects.filter(school_id=school_id, is_active=True)
-        if academic_year:
-            students_qs = students_qs.filter(
-                enrollments__academic_year_id=academic_year,
-                enrollments__is_active=True,
-            )
-        total = students_qs.values('id').distinct().count()
-
-        records = AttendanceRecord.objects.filter(
-            school_id=school_id,
-            date=date,
-        ).select_related('student', 'student__class_obj', 'academic_year')
-
-        counts = records.aggregate(
-            present_count=Count('id', filter=Q(status=AttendanceRecord.AttendanceStatus.PRESENT)),
-            absent_count=Count('id', filter=Q(status=AttendanceRecord.AttendanceStatus.ABSENT)),
-            leave_count=Count('id', filter=Q(status=AttendanceRecord.AttendanceStatus.LEAVE)),
-        )
-        absent_records = records.filter(status=AttendanceRecord.AttendanceStatus.ABSENT)
-
-        is_off_day = is_off_day_for_date(school_id, date)
-        return Response({
-            'date': date,
-            'is_off_day': is_off_day,
-            'off_day_types': off_day_types_for_date(school_id, date),
-            'total_students': total,
-            'present_count': counts.get('present_count') or 0,
-            'absent_count': counts.get('absent_count') or 0,
-            'leave_count': counts.get('leave_count') or 0,
-            'absent_students': AttendanceRecordSerializer(absent_records, many=True).data,
-        })
+        return Response(daily_attendance_summary(school_id, date, academic_year))
 
     @action(detail=False, methods=['get'])
     def chronic_absentees(self, request):

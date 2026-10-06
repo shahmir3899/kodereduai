@@ -125,10 +125,19 @@ class ClassViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet
 from django.db import models as db_models
 
 
-# Enrollment/student statuses that mean "no longer here" for the Students page Left view.
-LEFT_STATUSES = ('WITHDRAWN', 'TRANSFERRED', 'GRADUATED')
-# Statuses of students who are still enrolled but in a special state.
-STILL_ENROLLED_STATUSES = ('SUSPENDED', 'REPEAT')
+from .status_groups import ALUMNI_STATUSES, DEPARTED_STATUSES
+
+
+def _has_later_year(school_id, year_id):
+    """True once the school has an academic year starting after this one. Until then
+    a graduating student is still on this year's roll (promotion only stamps the
+    enrollment), so they read as Current rather than as an alumnus."""
+    from academic_sessions.models import AcademicYear
+
+    year = AcademicYear.objects.filter(pk=year_id, school_id=school_id).first()
+    return bool(year and AcademicYear.objects.filter(
+        school_id=school_id, start_date__gt=year.start_date,
+    ).exists())
 
 
 class StudentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet):
@@ -253,40 +262,50 @@ class StudentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
         academic_year = self.request.query_params.get('academic_year')
         enrollment_active_filter = True
 
-        # status_scope (list only): 'current' (default, enrolled now), 'left' (withdrawn,
-        # transferred or graduated in the year), 'all', or one exact status:
-        # withdrawn / transferred / graduated (left students) and suspended / repeat
-        # (still enrolled). Left students have an inactive enrollment, so the default
-        # "enrolled and active" join never returns them.
+        # status_scope (list only): 'current' (default, enrolled now), 'left' (withdrawn or
+        # transferred in the year), 'graduated' (only once a later year exists, see
+        # _has_later_year), 'repeat' (still enrolled) or 'all'. Left students have an
+        # inactive enrollment, so the default "enrolled and active" join never returns them.
         status_scope = (self.request.query_params.get('status_scope') or '').lower()
-        exact_status = status_scope.upper() if status_scope.upper() in (*LEFT_STATUSES, *STILL_ENROLLED_STATUSES) else None
         left_only = False
-        left_statuses = LEFT_STATUSES
-        if self.action == 'list' and (status_scope in ('left', 'all') or exact_status):
-            if not academic_year:
+        left_statuses = DEPARTED_STATUSES
+        if self.action == 'list' and status_scope in ('current', 'left', 'graduated', 'repeat', 'all'):
+            scope_school_id = active_school_id or school_id
+            if not academic_year and scope_school_id:
                 from academic_sessions.utils import resolve_current_academic_year_id
-                academic_year = resolve_current_academic_year_id(active_school_id or school_id) \
-                    if (active_school_id or school_id) else None
-            if exact_status in STILL_ENROLLED_STATUSES:
+                academic_year = resolve_current_academic_year_id(scope_school_id)
+            later_year = bool(
+                academic_year and scope_school_id and _has_later_year(scope_school_id, academic_year)
+            )
+            if status_scope == 'repeat':
                 # Still enrolled, so the normal current listing, narrowed by status. REPEAT
                 # also lives on the enrollment, so either place counts.
-                condition = db_models.Q(status=exact_status)
-                if exact_status == 'REPEAT' and academic_year:
+                condition = db_models.Q(status='REPEAT')
+                if academic_year:
                     condition |= db_models.Q(
                         enrollments__academic_year_id=academic_year, enrollments__status='REPEAT',
                     )
                 queryset = queryset.filter(condition)
-            elif not academic_year:
-                if status_scope == 'left':
-                    queryset = queryset.filter(status__in=LEFT_STATUSES)
-                elif exact_status:
-                    queryset = queryset.filter(status=exact_status)
-            elif status_scope == 'left' or exact_status:
-                enrollment_active_filter, left_only = False, True
-                if exact_status:
-                    left_statuses = (exact_status,)
-            else:
-                enrollment_active_filter = None
+            elif status_scope in ('left', 'graduated'):
+                left_statuses = DEPARTED_STATUSES if status_scope == 'left' else ALUMNI_STATUSES
+                if not academic_year:
+                    queryset = queryset.filter(status__in=left_statuses)
+                elif status_scope == 'graduated' and not later_year:
+                    return queryset.none()
+                else:
+                    # Departed enrollments are closed (inactive); graduating ones are not,
+                    # promotion only stamps their status.
+                    enrollment_active_filter = False if status_scope == 'left' else None
+                    left_only = True
+            elif status_scope == 'all':
+                if academic_year:
+                    enrollment_active_filter = None
+            elif later_year:
+                # Current in a past year: graduates belong to the Graduated view there.
+                queryset = queryset.exclude(
+                    enrollments__academic_year_id=academic_year,
+                    enrollments__status__in=ALUMNI_STATUSES,
+                )
 
         is_active = self.request.query_params.get('is_active')
         if is_active is not None:

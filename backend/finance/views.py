@@ -26,6 +26,7 @@ from core.permissions import IsSchoolAdmin, FinanceRoleAccessPermission, HasScho
 from core.mixins import TenantQuerySetMixin, ensure_tenant_schools, ensure_tenant_school_id
 from core.class_scope import resolve_class_scope
 from students.models import Student, Class
+from students.status_groups import ENROLLED_STATUSES
 from django.utils import timezone
 from .models import (
     Account, Transfer, FeeStructure, FeePayment, Expense, OtherIncome,
@@ -54,6 +55,7 @@ from .serializers import (
 )
 from .generation_planner import build_preview_plan
 from .class_resolution import resolve_unambiguous_session_class
+from .fee_month_summary import month_payments, summarize, summarize_schools
 
 logger = logging.getLogger(__name__)
 
@@ -1296,32 +1298,17 @@ class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
         if not school_id:
             return Response({'detail': 'No school associated with your account. Please contact an administrator.'}, status=400)
 
-        payments = FeePayment.objects.filter(
-            school_id=school_id, month=month, year=year
+        payments = month_payments(
+            [school_id], month, year,
+            academic_year_id=request.query_params.get('academic_year'),
+            fee_type=request.query_params.get('fee_type'),
         )
-
-        academic_year = request.query_params.get('academic_year')
-        if academic_year:
-            payments = payments.filter(academic_year_id=academic_year)
-
-        fee_type = request.query_params.get('fee_type')
-        if fee_type:
-            payments = payments.filter(fee_type=fee_type.upper())
 
         monthly_category = request.query_params.get('monthly_category')
         if monthly_category:
             payments = payments.filter(monthly_category_id=monthly_category)
 
-        totals = payments.aggregate(
-            total_due=Sum('amount_due'),
-            total_collected=Sum('amount_paid'),
-        )
-
-        total_due = totals['total_due'] or Decimal('0')
-        total_collected = totals['total_collected'] or Decimal('0')
-
-        status_counts = payments.values('status').annotate(count=Count('id'))
-        counts = {item['status']: item['count'] for item in status_counts}
+        summary = summarize(payments)
 
         # Per-class breakdown, by the section each student was in for the
         # payment's own academic year (same rule fee_summary uses). Grouping on
@@ -1378,38 +1365,11 @@ class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
             key=lambda item: item['class_name'] or '',
         )
 
-        # Per-category breakdown (monthly categories)
-        by_category = payments.filter(
-            fee_type='MONTHLY', monthly_category__isnull=False
-        ).values(
-            'monthly_category__id', 'monthly_category__name'
-        ).annotate(
-            total_due=Sum('amount_due'),
-            total_collected=Sum('amount_paid'),
-            count=Count('id'),
-        ).order_by('monthly_category__name')
-
         return Response({
             'month': int(month),
             'year': int(year),
-            'total_due': total_due,
-            'total_collected': total_collected,
-            'total_pending': max(Decimal('0'), total_due - total_collected),
-            'paid_count': counts.get('PAID', 0),
-            'partial_count': counts.get('PARTIAL', 0),
-            'unpaid_count': counts.get('UNPAID', 0),
-            'advance_count': counts.get('ADVANCE', 0),
+            **summary,
             'by_class': by_class,
-            'by_category': [
-                {
-                    'category_id': item['monthly_category__id'],
-                    'category_name': item['monthly_category__name'],
-                    'total_due': item['total_due'],
-                    'total_collected': item['total_collected'],
-                    'count': item['count'],
-                }
-                for item in by_category
-            ],
         })
 
     @action(detail=False, methods=['get'])
@@ -1515,12 +1475,12 @@ class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
                             'grade_level': fallback_sc.grade_level,
                             'label': label,
                         }
-            # A student is "left" (no longer currently enrolled) for any status other than
-            # ACTIVE/REPEAT — e.g. WITHDRAWN, TRANSFERRED, GRADUATED. These students still
+            # A student is "left" (no longer currently enrolled) for any status outside
+            # ENROLLED_STATUSES — WITHDRAWN, TRANSFERRED or GRADUATED. These students still
             # count toward the class's totals (they were billed while enrolled), but are
             # reported separately so staff can tell a still-open balance from a still-current
             # family apart from one that has already left.
-            is_left = payment['student__status'] not in ('ACTIVE', 'REPEAT')
+            is_left = payment['student__status'] not in ENROLLED_STATUSES
 
             if sc_id and sc_id in session_class_meta:
                 meta = session_class_meta[sc_id]
@@ -1586,7 +1546,7 @@ class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
                 'total_due': b['total_due'],
                 'total_collected': b['total_collected'],
                 # Sub-total for students no longer currently enrolled (WITHDRAWN/
-                # TRANSFERRED/GRADUATED/SUSPENDED), already included in the totals
+                # TRANSFERRED/GRADUATED), already included in the totals
                 # above — additive, so existing consumers of this endpoint that
                 # ignore these fields keep working unchanged.
                 'left_count': len(b['left_students']),
@@ -1656,7 +1616,11 @@ class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
 
     @action(detail=False, methods=['get'], url_path='monthly_summary_all')
     def monthly_summary_all(self, request):
-        """Fee collection summary across all accessible schools in the org."""
+        """Fee collection summary across all accessible schools in the org.
+
+        Same fields as monthly_summary per school (and combined under
+        ``grand``), so the dashboards read one shape either way.
+        """
         from schools.models import School
         month = int(request.query_params.get('month', date.today().month))
         year = int(request.query_params.get('year', date.today().year))
@@ -1665,36 +1629,15 @@ class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
         if not school_ids:
             return Response({'detail': 'No schools accessible.'}, status=400)
 
-        schools = School.objects.filter(id__in=school_ids, is_active=True)
-
-        results = []
-        grand_due = grand_collected = Decimal('0')
-        for school in schools:
-            totals = FeePayment.objects.filter(
-                school=school, month=month, year=year
-            ).aggregate(
-                total_due=Sum('amount_due'),
-                total_collected=Sum('amount_paid'),
-            )
-            due = totals['total_due'] or Decimal('0')
-            collected = totals['total_collected'] or Decimal('0')
-            results.append({
-                'school_id': school.id,
-                'school_name': school.name,
-                'total_due': due,
-                'total_collected': collected,
-                'total_pending': max(Decimal('0'), due - collected),
-            })
-            grand_due += due
-            grand_collected += collected
-
+        schools = list(School.objects.filter(id__in=school_ids, is_active=True))
+        per_school, grand = summarize_schools(
+            schools, month, year, fee_type=request.query_params.get('fee_type'),
+        )
         return Response({
             'month': month,
             'year': year,
-            'schools': results,
-            'grand_total_due': grand_due,
-            'grand_total_collected': grand_collected,
-            'grand_total_pending': max(Decimal('0'), grand_due - grand_collected),
+            'schools': per_school,
+            'grand': grand,
         })
 
 
