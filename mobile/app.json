@@ -80,7 +80,7 @@
       ]
     ],
     "extra": {
-      "apiUrl": "https://personal-gateway.onrender.com/educationai",
+      "apiUrl": "https://personal-gateway-sg.onrender.com/educationai",
       "appEnv": "production",
       "allowInsecureHttp": false,
       "router": {
