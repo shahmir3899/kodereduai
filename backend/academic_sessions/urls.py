@@ -1,6 +1,6 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from .views import AcademicYearViewSet, TermViewSet, SchoolCalendarEntryViewSet, SessionClassViewSet, StudentEnrollmentViewSet, SessionSetupView, PromotionAdvisorView, SessionHealthView, SectionAllocatorView, AttendanceRiskView, StudentRiskScoreView
+from .views import AcademicYearViewSet, TermViewSet, SchoolCalendarEntryViewSet, SessionClassViewSet, StudentEnrollmentViewSet, SessionSetupView, PromotionAdvisorView, SessionHealthView, SessionHealthAISummaryView, SectionAllocatorView, AttendanceRiskView, StudentRiskScoreView
 
 router = DefaultRouter()
 router.register(r'academic-years', AcademicYearViewSet, basename='academic-year')
@@ -14,6 +14,7 @@ urlpatterns = [
     path('promotion-advisor/', PromotionAdvisorView.as_view(), name='promotion-advisor'),
     path('setup-wizard/', SessionSetupView.as_view(), name='session-setup-wizard'),
     path('health/', SessionHealthView.as_view(), name='session-health'),
+    path('health/ai-summary/', SessionHealthAISummaryView.as_view(), name='session-health-ai-summary'),
     path('section-allocator/', SectionAllocatorView.as_view(), name='section-allocator'),
     path('attendance-risk/', AttendanceRiskView.as_view(), name='attendance-risk'),
     path('student-risk-score/', StudentRiskScoreView.as_view(), name='student-risk-score'),

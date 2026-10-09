@@ -28,8 +28,13 @@ class SessionHealthService:
     # Public API
     # ------------------------------------------------------------------
 
-    def generate_health_report(self) -> dict:
-        """Return a complete health report dict with all module metrics."""
+    def generate_health_report(self, include_ai: bool = True) -> dict:
+        """Return a complete health report dict with all module metrics.
+
+        With include_ai=False the summary is the instant rule-based one and the
+        Groq call is skipped: the dashboard used to block 1.5-2.3 s on that call
+        on every load. Callers then fetch the AI text separately (generate_ai_summary_only).
+        """
         from academic_sessions.models import AcademicYear
 
         academic_year = AcademicYear.objects.filter(
@@ -59,12 +64,22 @@ class SessionHealthService:
             'staff': staff,
         }
 
-        # Generate AI or rule-based summary
-        ai_summary = self.generate_ai_summary(report_data)
-        report_data['ai_summary'] = ai_summary
+        if include_ai:
+            report_data['ai_summary'] = self.generate_ai_summary(report_data)
+        else:
+            report_data['ai_summary'] = self._rule_based_summary(report_data)
+            # Lets the client know an AI version can be requested afterwards.
+            report_data['ai_summary_available'] = bool(getattr(settings, 'GROQ_API_KEY', ''))
         report_data['success'] = True
 
         return report_data
+
+    def generate_ai_summary_only(self) -> dict:
+        """Just the AI (or rule-based fallback) summary, for the deferred request."""
+        report = self.generate_health_report(include_ai=False)
+        if not report.get('success'):
+            return report
+        return {'success': True, 'ai_summary': self.generate_ai_summary(report)}
 
     def generate_ai_summary(self, report_data: dict) -> dict:
         """Generate a natural-language summary with highlights, concerns,

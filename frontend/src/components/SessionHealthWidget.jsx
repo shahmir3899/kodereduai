@@ -41,6 +41,18 @@ export default function SessionHealthWidget() {
     refetchOnWindowFocus: false,
   })
 
+  // The numbers and a rule-based summary render straight away; the AI-written summary
+  // is fetched afterwards (and cached server-side) so the dashboard never waits on it.
+  const aiAvailable = !!data?.data?.ai_summary_available
+  const { data: aiData, isLoading: aiLoading } = useQuery({
+    queryKey: ['sessionHealthAI', activeAcademicYear?.id],
+    queryFn: () => sessionsApi.getSessionHealthAISummary({ academic_year: activeAcademicYear?.id }),
+    enabled: !!activeAcademicYear?.id && aiAvailable,
+    staleTime: 30 * 60 * 1000,
+    refetchOnWindowFocus: false,
+    retry: false,
+  })
+
   if (!hasAcademicYear) return null
 
   if (isLoading) return <SkeletonCard />
@@ -48,7 +60,7 @@ export default function SessionHealthWidget() {
   const report = data?.data
   if (!report || !report.success) return null
 
-  const summary = report.ai_summary
+  const summary = aiData?.data?.ai_summary || report.ai_summary
 
   return (
     <div className="card mb-6">
@@ -60,6 +72,9 @@ export default function SessionHealthWidget() {
           <Badge tone="accent">
             AI Summary
           </Badge>
+        )}
+        {aiAvailable && aiLoading && (
+          <span className="text-xs text-gray-400">Writing AI summary…</span>
         )}
       </div>
 

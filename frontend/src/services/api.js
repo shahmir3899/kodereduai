@@ -703,6 +703,8 @@ export const sessionsApi = {
 
   // Session Health
   getSessionHealth: (params) => api.get('/api/sessions/health/', { params }),
+  // The AI-written summary is its own call so the dashboard never waits on the LLM.
+  getSessionHealthAISummary: (params) => api.get('/api/sessions/health/ai-summary/', { params }),
 
   // Section Allocator
   sectionAllocatorPreview: (data) => api.post('/api/sessions/section-allocator/', { action: 'preview', ...data }),

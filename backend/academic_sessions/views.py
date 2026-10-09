@@ -2031,12 +2031,55 @@ class SessionHealthView(APIView):
             academic_year_id = current.id
 
         service = SessionHealthService(school_id, int(academic_year_id))
-        report = service.generate_health_report()
+        # Numbers + instant rule-based summary; the Groq summary is a separate
+        # request (SessionHealthAISummaryView) so the dashboard never waits on it.
+        report = service.generate_health_report(include_ai=False)
 
         if not report.get('success'):
             return Response(report, status=status.HTTP_404_NOT_FOUND)
 
         return Response(report)
+
+
+class SessionHealthAISummaryView(APIView):
+    """The AI-written health summary, fetched after the dashboard has rendered.
+
+    Cached per school and year: an LLM call takes seconds and costs tokens, and the
+    text doesn't need to change on every page load.
+    """
+    permission_classes = [IsAuthenticated, HasSchoolAccess]
+    CACHE_SECONDS = 30 * 60
+
+    def get(self, request):
+        from django.core.cache import cache
+        from .session_health_service import SessionHealthService
+
+        school_id = _resolve_school_id(request)
+        if not school_id:
+            return Response({'detail': 'No school context found.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        academic_year_id = request.query_params.get('academic_year')
+        if not academic_year_id:
+            current = AcademicYear.objects.filter(
+                school_id=school_id, is_current=True, is_active=True,
+            ).first()
+            if not current:
+                return Response(
+                    {'detail': 'No current academic year set for this school.'},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+            academic_year_id = current.id
+
+        key = f'session_health_ai:{school_id}:{int(academic_year_id)}'
+        cached = cache.get(key)
+        if cached is not None:
+            return Response(cached)
+
+        result = SessionHealthService(school_id, int(academic_year_id)).generate_ai_summary_only()
+        if not result.get('success'):
+            return Response(result, status=status.HTTP_404_NOT_FOUND)
+        cache.set(key, result, self.CACHE_SECONDS)
+        return Response(result)
 
 
 class SessionSetupView(APIView):
