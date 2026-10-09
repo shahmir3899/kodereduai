@@ -281,13 +281,15 @@ def get_effective_role(request):
         return 'SUPER_ADMIN'
 
     school_id = ensure_tenant_school_id(request)
-    if school_id:
-        role = user.get_role_for_school(school_id)
-        if role:
-            return role
+    # Permission classes and the view each ask for the role; a request's role can't
+    # change mid-request, so look it up once (it was a membership query per call).
+    cached = getattr(request, '_effective_role_cache', None)
+    if cached is not None and cached[0] == (user.pk, school_id):
+        return cached[1]
 
-    # Fallback to User.role
-    return user.role
+    role = (user.get_role_for_school(school_id) if school_id else None) or user.role
+    request._effective_role_cache = ((user.pk, school_id), role)
+    return role
 
 
 class IsSuperAdmin(permissions.BasePermission):
@@ -774,7 +776,8 @@ class ModuleAccessMixin:
             school = getattr(request, 'tenant_school', None)
             if school_id and (not school or school.id != school_id):
                 from schools.models import School
-                school = School.objects.filter(id=school_id).first()
+                # select_related: get_enabled_module reads the organization's ceiling.
+                school = School.objects.select_related('organization').filter(id=school_id).first()
                 # Cache the resolved school so any other code later in this
                 # request's lifecycle that reads request.tenant_school sees
                 # a consistent value instead of the stale None middleware left.
