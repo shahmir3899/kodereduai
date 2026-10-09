@@ -2204,6 +2204,63 @@ class ExamSubjectViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelV
         instance.delete()  # Cascades to StudentMark
 
 
+def _save_student_marks(school_id, exam_subject, to_save, errors):
+    """Write a subject's marks as one upsert instead of a lookup plus update_or_create
+    per student (~5 round trips each, ~0.1s apiece to the Singapore DB). Falls back to
+    the row-by-row path if the batch fails, so one bad row still only reports itself.
+    Only the entered fields are updated: AI comments on existing marks are untouched.
+    """
+    from academic_sessions.models import StudentEnrollment
+
+    if not to_save:
+        return 0, 0
+    exam = exam_subject.exam
+    enrollment_by_student = {}
+    for enrollment in StudentEnrollment.objects.filter(
+        school_id=school_id, student_id__in=to_save,
+        academic_year_id=exam.academic_year_id, class_obj_id=exam.class_obj_id,
+    ).order_by('-is_active', '-created_at'):
+        enrollment_by_student.setdefault(enrollment.student_id, enrollment)
+
+    existing = set(
+        StudentMark.objects.filter(exam_subject=exam_subject, student_id__in=to_save)
+        .values_list('student_id', flat=True)
+    )
+    rows = [
+        StudentMark(
+            school_id=school_id, exam_subject=exam_subject, student_id=sid,
+            enrollment=enrollment_by_student.get(sid), **values,
+        )
+        for sid, values in to_save.items()
+    ]
+    try:
+        with transaction.atomic():
+            StudentMark.objects.bulk_create(
+                rows, update_conflicts=True, unique_fields=['school', 'exam_subject', 'student'],
+                update_fields=['marks_obtained', 'is_absent', 'remarks', 'enrollment', 'updated_at'],
+            )
+    except Exception:
+        return _save_student_marks_one_by_one(school_id, exam_subject, to_save, enrollment_by_student, errors)
+    return len(to_save) - len(existing), len(existing)
+
+
+def _save_student_marks_one_by_one(school_id, exam_subject, to_save, enrollment_by_student, errors):
+    created = updated = 0
+    for student_id, values in to_save.items():
+        try:
+            _, was_created = StudentMark.objects.update_or_create(
+                school_id=school_id, exam_subject=exam_subject, student_id=student_id,
+                defaults={**values, 'enrollment': enrollment_by_student.get(student_id)},
+            )
+            if was_created:
+                created += 1
+            else:
+                updated += 1
+        except Exception as e:
+            errors.append({'student_id': student_id, 'error': str(e)})
+    return created, updated
+
+
 class StudentMarkViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet):
     required_module = 'examinations'
     queryset = StudentMark.objects.all()
@@ -2318,11 +2375,8 @@ class StudentMarkViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelV
 
         self._check_exam_subject_scope(exam_subject, school_id)
 
-        created = 0
-        updated = 0
         errors = []
 
-        from academic_sessions.models import StudentEnrollment
         from students.models import Student
 
         departed_errors = _departed_mark_errors(
@@ -2337,6 +2391,7 @@ class StudentMarkViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelV
             ).values_list('id', flat=True)
         )
 
+        to_save = {}  # student_id -> values; a repeated student keeps the last entry
         for entry in marks_data:
             student_id = entry.get('student_id')
             marks_obtained = entry.get('marks_obtained')
@@ -2352,32 +2407,13 @@ class StudentMarkViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelV
 
             if marks_obtained is not None:
                 marks_obtained = Decimal(str(marks_obtained))
+            to_save[student_id] = {
+                'marks_obtained': None if is_absent else marks_obtained,
+                'is_absent': is_absent,
+                'remarks': remarks,
+            }
 
-            enrollment = StudentEnrollment.objects.filter(
-                school_id=school_id,
-                student_id=student_id,
-                academic_year_id=exam_subject.exam.academic_year_id,
-                class_obj_id=exam_subject.exam.class_obj_id,
-            ).order_by('-is_active', '-created_at').first()
-
-            try:
-                mark, was_created = StudentMark.objects.update_or_create(
-                    school_id=school_id,
-                    exam_subject=exam_subject,
-                    student_id=student_id,
-                    defaults={
-                        'marks_obtained': None if is_absent else marks_obtained,
-                        'is_absent': is_absent,
-                        'remarks': remarks,
-                        'enrollment': enrollment,
-                    },
-                )
-                if was_created:
-                    created += 1
-                else:
-                    updated += 1
-            except Exception as e:
-                errors.append({'student_id': student_id, 'error': str(e)})
+        created, updated = _save_student_marks(school_id, exam_subject, to_save, errors)
 
         return Response({
             'created': created,
