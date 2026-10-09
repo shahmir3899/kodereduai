@@ -83,3 +83,8 @@ htmlcov/
 
 # WAHA (local WhatsApp stack) — session store must not be committed
 infra/waha/sessions/
+
+# Build output and screen recordings never belong in git
+/*.zip
+/frontend/dist-build-*.zip
+*.mp4

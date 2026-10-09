@@ -472,10 +472,12 @@ def _redis_url_with_db(url, db='1'):
     return urlunsplit((parts.scheme, parts.netloc, f'/{db}', '', ''))
 
 
+# Redis is the cache ONLY when REDIS_URL is set on purpose. It used to fall back to
+# CELERY_BROKER_URL, which silently made a remote Upstash instance the cache and added
+# a network round trip to every cached read (the cached dashboards got slower than the
+# queries they were caching).
 if REDIS_URL:
     _cache_location = _redis_url_with_db(REDIS_URL)
-elif CELERY_BROKER_URL.startswith(('redis://', 'rediss://')):
-    _cache_location = _redis_url_with_db(CELERY_BROKER_URL)
 else:
     _cache_location = ''
 
