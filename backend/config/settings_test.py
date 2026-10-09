@@ -39,3 +39,7 @@ CACHES = {
     }
 }
 CELERY_TASK_EAGER_PROPAGATES = True
+
+# The absence digest normally runs in a background thread after the response; a thread
+# gets its own DB connection and can't see a test's uncommitted data, so run it inline.
+ATTENDANCE_DIGEST_IN_BACKGROUND = False

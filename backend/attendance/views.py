@@ -4,6 +4,7 @@ Attendance views for upload, review, and confirmation workflow.
 
 import logging
 import io
+import threading
 from calendar import monthrange
 from datetime import date, timedelta
 from rest_framework import viewsets, status
@@ -15,6 +16,8 @@ from rest_framework.parsers import MultiPartParser, FormParser
 from django.http import HttpResponse
 from django.utils import timezone
 from django.utils.dateparse import parse_date
+from django.conf import settings
+from django.db import connection, transaction
 from django.db.models import Count, Q
 
 from core.permissions import IsSchoolAdmin, HasSchoolAccess, CanConfirmAttendance, CanUploadAttendance, CanManualAttendance, ModuleAccessMixin, get_effective_role, ADMIN_ROLES, get_teacher_class_scope, get_teacher_session_class_scope, _get_session_class_student_ids
@@ -1906,12 +1909,10 @@ class AttendanceRecordViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.R
         returns = returns_after(school_id, list(departed), date) if departed else {}
         departed_names = dict(Student.objects.filter(id__in=departed).values_list('id', 'name')) if departed else {}
 
-        created = 0
-        updated = 0
         errors = []
+        to_save = {}  # student_id -> status; a repeated student keeps the last entry
         for entry in entries:
             student_id = entry['student_id']
-            att_status = entry['status']
 
             if student_id in departed:
                 errors.append({
@@ -1925,45 +1926,25 @@ class AttendanceRecordViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.R
             if student_id not in valid_student_ids:
                 errors.append({'student_id': student_id, 'error': 'Student not found in this class.'})
                 continue
+            to_save[student_id] = entry['status']
 
-            try:
-                record, was_created = AttendanceRecord.objects.update_or_create(
-                    student_id=student_id,
-                    date=date,
-                    defaults={
-                        'school_id': school_id,
-                        'academic_year': academic_year,
-                        'status': att_status,
-                        'source': AttendanceRecord.Source.MANUAL,
-                        'upload': None,
-                    },
-                )
-                if was_created:
-                    created += 1
-                else:
-                    updated += 1
-
-            except Exception as e:
-                errors.append({'student_id': student_id, 'error': str(e)})
+        created, updated = _save_attendance_rows(school_id, academic_year, date, to_save, errors)
 
         # Event-driven absence digest: check just this cohort now that its
         # register was (re)saved, instead of waiting on the old 8/9/10 Celery
         # Beat scan. Scoped to one (class, section) so it's cheap even though
         # it runs on every save; the marker table still guards against
         # re-notifying the same recipients if a class is saved twice.
+        #
+        # It runs after the response: it creates a notification per recipient, and the
+        # teacher shouldn't wait on that. The marker table makes a late or repeated run
+        # harmless.
         if academic_year:
-            try:
-                from schools.models import School
-                from notifications.absence_digest import process_absence_digest_for_cohort
-
-                school = School.objects.get(pk=school_id)
-                process_absence_digest_for_cohort(
-                    school, date, class_id,
-                    session_class.id if session_class else None,
-                    academic_year,
-                )
-            except Exception as e:
-                logger.error(f"Absence digest failed for class {class_id} on {date}: {e}")
+            digest_args = (school_id, date, class_id, session_class.id if session_class else None, academic_year.id)
+            if getattr(settings, 'ATTENDANCE_DIGEST_IN_BACKGROUND', True):
+                threading.Thread(target=_run_absence_digest_in_thread, args=digest_args, daemon=True).start()
+            else:
+                _run_absence_digest(*digest_args)
 
         return Response({
             'created': created,
@@ -1971,6 +1952,82 @@ class AttendanceRecordViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.R
             'errors': errors,
             'message': f'{created + updated} attendance records saved.',
         })
+
+
+def _run_absence_digest(school_id, date, class_id, session_class_id, academic_year_id):
+    try:
+        from academic_sessions.models import AcademicYear
+        from schools.models import School
+        from notifications.absence_digest import process_absence_digest_for_cohort
+
+        process_absence_digest_for_cohort(
+            School.objects.get(pk=school_id), date, class_id, session_class_id,
+            AcademicYear.objects.get(pk=academic_year_id),
+        )
+    except Exception as e:
+        logger.error(f"Absence digest failed for class {class_id} on {date}: {e}")
+
+
+def _run_absence_digest_in_thread(*args):
+    try:
+        _run_absence_digest(*args)
+    finally:
+        # A thread gets its own DB connection; leaving it open would leak one per save.
+        connection.close()
+
+
+def _save_attendance_rows(school_id, academic_year, date, to_save, errors):
+    """Write a register as one upsert instead of update_or_create per student.
+
+    update_or_create costs 3-4 round trips a row, and every round trip to the
+    Singapore DB is ~0.1s, so a 40-student class took seconds. Falls back to the
+    row-by-row path if the batch fails, so one bad row still only reports itself.
+    """
+    if not to_save:
+        return 0, 0
+    existing = set(
+        AttendanceRecord.objects.filter(date=date, student_id__in=to_save).values_list('student_id', flat=True)
+    )
+    rows = [
+        AttendanceRecord(
+            student_id=sid, date=date, school_id=school_id, academic_year=academic_year,
+            status=att_status, source=AttendanceRecord.Source.MANUAL, upload=None,
+        )
+        for sid, att_status in to_save.items()
+    ]
+    try:
+        with transaction.atomic():
+            AttendanceRecord.objects.bulk_create(
+                rows, update_conflicts=True, unique_fields=['student', 'date'],
+                update_fields=['school', 'academic_year', 'status', 'source', 'upload', 'updated_at'],
+            )
+    except Exception:
+        return _save_attendance_rows_one_by_one(school_id, academic_year, date, to_save, errors)
+    return len(to_save) - len(existing), len(existing)
+
+
+def _save_attendance_rows_one_by_one(school_id, academic_year, date, to_save, errors):
+    created = updated = 0
+    for student_id, att_status in to_save.items():
+        try:
+            _, was_created = AttendanceRecord.objects.update_or_create(
+                student_id=student_id,
+                date=date,
+                defaults={
+                    'school_id': school_id,
+                    'academic_year': academic_year,
+                    'status': att_status,
+                    'source': AttendanceRecord.Source.MANUAL,
+                    'upload': None,
+                },
+            )
+            if was_created:
+                created += 1
+            else:
+                updated += 1
+        except Exception as e:
+            errors.append({'student_id': student_id, 'error': str(e)})
+    return created, updated
 
 
 class AttendanceAnomalyViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ReadOnlyModelViewSet):
