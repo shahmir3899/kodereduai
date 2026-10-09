@@ -2259,6 +2259,122 @@ class AccountViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
             'is_shared': account.school_id is None,
         }
 
+    @staticmethod
+    def _compute_balances_batch(accounts, scope_ids, date_from=None, date_to=None,
+                                snapshot_school_id=None):
+        """Same figures as _compute_account_balance (non-staff), for many accounts at once.
+
+        That function costs ~7 queries per account (a snapshot lookup plus five
+        aggregates), so the all-schools balances page ran 51 queries for 7 accounts.
+        Here the snapshots come in one query and the five aggregates are grouped by
+        account, once per distinct snapshot floor (usually one). An account whose
+        snapshot sits before date_from needs the gap folded into its opening balance;
+        that rare case still goes through the single-account function.
+        """
+        accounts = list(accounts)
+        if not accounts:
+            return []
+        ids = [a.id for a in accounts]
+        zero = Decimal('0')
+
+        latest = {}
+        if snapshot_school_id:
+            anchor = date_from or date_to
+            if anchor:
+                dt = anchor if isinstance(anchor, date) else date.fromisoformat(str(anchor))
+                snap_year, snap_month = dt.year, dt.month
+            else:
+                snap_year, snap_month = 9999, 12
+            prior = (
+                Q(closing__year__lt=snap_year) |
+                Q(closing__year=snap_year, closing__month__lt=snap_month)
+            )
+            snapshots = (
+                AccountSnapshot.objects
+                .filter(prior, account_id__in=ids, closing__school_id=snapshot_school_id)
+                .select_related('closing')
+                .order_by('-closing__year', '-closing__month')
+            )
+            for snapshot in snapshots:
+                latest.setdefault(snapshot.account_id, snapshot)
+
+        results = {}
+        by_floor = {}  # txn_start -> accounts sharing that snapshot floor
+        base_bbf = {}
+        for account in accounts:
+            snapshot = latest.get(account.id)
+            txn_start = None
+            base_bbf[account.id] = account.opening_balance
+            if snapshot:
+                base_bbf[account.id] = snapshot.closing_balance
+                last_day = calendar.monthrange(snapshot.closing.year, snapshot.closing.month)[1]
+                txn_start = date(snapshot.closing.year, snapshot.closing.month, last_day) + timedelta(days=1)
+            if date_from and txn_start and str(txn_start) < str(date_from):
+                results[account.id] = AccountViewSet._compute_account_balance(
+                    account, scope_ids, date_from, date_to, snapshot_school_id=snapshot_school_id,
+                )
+                continue
+            by_floor.setdefault(txn_start, []).append(account)
+
+        def totals(qs, account_field, amount_field):
+            return dict(
+                qs.order_by().values(account_field).annotate(t=Sum(amount_field)).values_list(account_field, 't')
+            )
+
+        for txn_start, group in by_floor.items():
+            group_ids = [a.id for a in group]
+            floor = txn_start or (date_from if date_from else None)
+
+            fee_qs = FeePayment.objects.filter(school_id__in=scope_ids, account_id__in=group_ids)
+            income_qs = OtherIncome.objects.filter(school_id__in=scope_ids, account_id__in=group_ids)
+            expense_qs = Expense.objects.filter(school_id__in=scope_ids, account_id__in=group_ids)
+            tfr_in_qs = Transfer.objects.filter(school_id__in=scope_ids, to_account_id__in=group_ids)
+            tfr_out_qs = Transfer.objects.filter(school_id__in=scope_ids, from_account_id__in=group_ids)
+
+            # Same floor rules as the single-account path: after a snapshot, undated
+            # payments are already in it; with a plain date_from they still count.
+            if floor:
+                if txn_start:
+                    fee_qs = fee_qs.filter(payment_date__gte=floor)
+                else:
+                    fee_qs = fee_qs.filter(Q(payment_date__gte=floor) | Q(payment_date__isnull=True))
+                income_qs = income_qs.filter(date__gte=floor)
+                expense_qs = expense_qs.filter(date__gte=floor)
+                tfr_in_qs = tfr_in_qs.filter(date__gte=floor)
+                tfr_out_qs = tfr_out_qs.filter(date__gte=floor)
+            if date_to:
+                fee_qs = fee_qs.filter(Q(payment_date__lte=date_to) | Q(payment_date__isnull=True))
+                income_qs = income_qs.filter(date__lte=date_to)
+                expense_qs = expense_qs.filter(date__lte=date_to)
+                tfr_in_qs = tfr_in_qs.filter(date__lte=date_to)
+                tfr_out_qs = tfr_out_qs.filter(date__lte=date_to)
+
+            fees = totals(fee_qs, 'account_id', 'amount_paid')
+            incomes = totals(income_qs, 'account_id', 'amount')
+            expenses = totals(expense_qs, 'account_id', 'amount')
+            tfr_in = totals(tfr_in_qs, 'to_account_id', 'amount')
+            tfr_out = totals(tfr_out_qs, 'from_account_id', 'amount')
+
+            for account in group:
+                receipts = (fees.get(account.id) or zero) + (incomes.get(account.id) or zero)
+                payments = expenses.get(account.id) or zero
+                transfers_in = tfr_in.get(account.id) or zero
+                transfers_out = tfr_out.get(account.id) or zero
+                opening = base_bbf[account.id]
+                results[account.id] = {
+                    'id': account.id,
+                    'name': account.name,
+                    'account_type': account.account_type,
+                    'opening_balance': opening,
+                    'receipts': receipts,
+                    'payments': payments,
+                    'transfers_in': transfers_in,
+                    'transfers_out': transfers_out,
+                    'net_balance': opening + receipts - payments + transfers_in - transfers_out,
+                    'is_shared': account.school_id is None,
+                }
+        return [results[a.id] for a in accounts]
+
     @action(detail=False, methods=['get'])
     def balances(self, request):
         """Get all accounts with computed balances for the active school.
@@ -2862,12 +2978,10 @@ class AccountViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
 
         for school_obj in schools:
             school_accounts = Account.objects.filter(school_id=school_obj.id, is_active=True)
-            account_results = []
-            for account in school_accounts:
-                account_results.append(self._compute_account_balance(
-                    account, [account.school_id], date_from, date_to,
-                    snapshot_school_id=school_obj.id,
-                ))
+            account_results = self._compute_balances_batch(
+                school_accounts, [school_obj.id], date_from, date_to,
+                snapshot_school_id=school_obj.id,
+            )
 
             subtotal = sum(r['net_balance'] for r in account_results)
             groups.append({
@@ -2883,11 +2997,9 @@ class AccountViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
             school__isnull=True, organization_id__in=org_ids, is_active=True
         ) if (org_ids and not is_principal_role) else Account.objects.none()
 
-        shared_results = []
-        for account in shared_accounts:
-            shared_results.append(self._compute_account_balance(
-                account, org_school_ids, date_from, date_to
-            ))
+        shared_results = self._compute_balances_batch(
+            shared_accounts, org_school_ids, date_from, date_to,
+        )
 
         shared_subtotal = sum(r['net_balance'] for r in shared_results)
         grand_total = sum(g['subtotal'] for g in groups) + shared_subtotal
