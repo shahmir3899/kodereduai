@@ -985,6 +985,7 @@ export const parentsApi = {
 export const admissionsApi = {
   // Enquiries CRUD
   getEnquiries: (params) => api.get('/api/admissions/enquiries/', { params }),
+  getEnquiryStatusCounts: () => api.get('/api/admissions/enquiries/status-counts/'),
   getEnquiry: (id) => api.get(`/api/admissions/enquiries/${id}/`),
   createEnquiry: (data) => api.post('/api/admissions/enquiries/', data),
   updateEnquiry: (id, data) => api.patch(`/api/admissions/enquiries/${id}/`, data),

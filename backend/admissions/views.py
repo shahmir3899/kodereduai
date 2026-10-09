@@ -6,7 +6,7 @@ notes, and followups.
 from datetime import date
 
 from django.db import transaction, IntegrityError
-from django.db.models import Q
+from django.db.models import Count, Q
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -101,6 +101,19 @@ class AdmissionEnquiryViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.M
             )
 
         return queryset
+
+    @action(detail=False, methods=['get'], url_path='status-counts')
+    def status_counts(self, request):
+        """Enquiry counts per status in one query.
+
+        The enquiries page used to make a separate list request per status just to
+        read `count` off each; this is the same numbers for the price of one.
+        """
+        scoped = super().get_queryset()  # tenant-scoped, without the list filters
+        counts = {code: 0 for code, _ in AdmissionEnquiry.STATUS_CHOICES}
+        for row in scoped.order_by().values('status').annotate(n=Count('id')):
+            counts[row['status']] = row['n']
+        return Response({**counts, 'total': sum(counts.values())})
 
     def perform_create(self, serializer):
         school_id = _resolve_school_id(self.request)

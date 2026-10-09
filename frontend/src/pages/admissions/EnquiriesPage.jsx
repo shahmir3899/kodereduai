@@ -63,34 +63,17 @@ export default function EnquiriesPage() {
   const totalCount = enquiriesRes?.data?.count || enquiries.length
   const totalPages = Math.ceil(totalCount / pageSize)
 
-  // Status counts (fetch all without pagination to get real counts)
-  const { data: allRes } = useQuery({
-    queryKey: ['enquiries', 'counts'],
-    queryFn: () => admissionsApi.getEnquiries({ page_size: 1 }),
-  })
-  // Per-status queries for counts
-  const { data: newRes } = useQuery({
-    queryKey: ['enquiries', 'count', 'NEW'],
-    queryFn: () => admissionsApi.getEnquiries({ status: 'NEW', page_size: 1 }),
-  })
-  const { data: confirmedRes } = useQuery({
-    queryKey: ['enquiries', 'count', 'CONFIRMED'],
-    queryFn: () => admissionsApi.getEnquiries({ status: 'CONFIRMED', page_size: 1 }),
-  })
-  const { data: convertedRes } = useQuery({
-    queryKey: ['enquiries', 'count', 'CONVERTED'],
-    queryFn: () => admissionsApi.getEnquiries({ status: 'CONVERTED', page_size: 1 }),
-  })
-  const { data: cancelledRes } = useQuery({
-    queryKey: ['enquiries', 'count', 'CANCELLED'],
-    queryFn: () => admissionsApi.getEnquiries({ status: 'CANCELLED', page_size: 1 }),
+  // One grouped request for all four counts (was a list request per status).
+  const { data: countsRes } = useQuery({
+    queryKey: ['enquiries', 'status-counts'],
+    queryFn: () => admissionsApi.getEnquiryStatusCounts(),
   })
 
   const statusCounts = {
-    NEW: newRes?.data?.count ?? 0,
-    CONFIRMED: confirmedRes?.data?.count ?? 0,
-    CONVERTED: convertedRes?.data?.count ?? 0,
-    CANCELLED: cancelledRes?.data?.count ?? 0,
+    NEW: countsRes?.data?.NEW ?? 0,
+    CONFIRMED: countsRes?.data?.CONFIRMED ?? 0,
+    CONVERTED: countsRes?.data?.CONVERTED ?? 0,
+    CANCELLED: countsRes?.data?.CANCELLED ?? 0,
   }
 
   // Quick status update
