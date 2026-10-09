@@ -300,7 +300,11 @@ export const studentsApi = {
   getStudent: (id, params) => api.get(`/api/students/${id}/`, { params }),
   createStudent: (data) => api.post('/api/students/', data),
   updateStudent: (id, data) => api.patch(`/api/students/${id}/`, data),
-  deleteStudent: (id) => api.delete(`/api/students/${id}/`),
+  // Soft delete: the student is hidden, everything they own is kept, and they can
+  // be brought back from Students > Recently deleted.
+  deleteStudent: (id, reason = '') => api.delete(`/api/students/${id}/`, { data: { reason } }),
+  getDeletedStudents: () => api.get('/api/students/deleted/'),
+  restoreStudent: (id, data = {}) => api.post(`/api/students/${id}/restore/`, data),
   bulkCreateStudents: (data) => api.post('/api/students/bulk_create/', data),
   getStudentsByClass: (params) => api.get('/api/students/by_class/', { params }),
 

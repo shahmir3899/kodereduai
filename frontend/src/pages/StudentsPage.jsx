@@ -116,12 +116,13 @@ export default function StudentsPage() {
 
   // Delete student mutation
   const deleteMutation = useMutation({
-    mutationFn: (id) => studentsApi.deleteStudent(id),
+    mutationFn: ({ id, reason }) => studentsApi.deleteStudent(id, reason),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['students'] })
       queryClient.invalidateQueries({ queryKey: ['classes'] })
+      queryClient.invalidateQueries({ queryKey: ['deletedStudents'] })
       setDeleteConfirm(null)
-      showSuccess('Student deleted successfully!')
+      showSuccess('Student removed. A School Admin can restore them from Recently deleted.')
     },
     onError: (error) => {
       const message = error.response?.data?.detail ||
@@ -593,7 +594,7 @@ export default function StudentsPage() {
           student={deleteConfirm}
           isPending={deleteMutation.isPending}
           onCancel={() => setDeleteConfirm(null)}
-          onConfirm={() => deleteMutation.mutate(deleteConfirm.id)}
+          onConfirm={(reason) => deleteMutation.mutate({ id: deleteConfirm.id, reason })}
         />
       )}
 

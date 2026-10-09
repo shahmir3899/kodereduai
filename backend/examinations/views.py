@@ -2323,9 +2323,18 @@ class StudentMarkViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelV
         errors = []
 
         from academic_sessions.models import StudentEnrollment
+        from students.models import Student
 
         departed_errors = _departed_mark_errors(
             school_id, exam_subject.exam, [e.get('student_id') for e in marks_data],
+        )
+        # Marks of a removed student stay on file, but nothing new may be saved for
+        # them; the entry grid never lists them, so only a direct API call gets here.
+        removed_ids = set(
+            Student.all_objects.filter(
+                school_id=school_id, deleted_at__isnull=False,
+                id__in=[e.get('student_id') for e in marks_data if e.get('student_id')],
+            ).values_list('id', flat=True)
         )
 
         for entry in marks_data:
@@ -2334,6 +2343,9 @@ class StudentMarkViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelV
             is_absent = entry.get('is_absent', False)
             remarks = entry.get('remarks', '')
 
+            if student_id in removed_ids:
+                errors.append({'student_id': student_id, 'error': 'This student has been removed; restore them first.'})
+                continue
             if student_id in departed_errors:
                 errors.append({'student_id': student_id, 'error': departed_errors[student_id]})
                 continue

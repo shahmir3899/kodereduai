@@ -27,6 +27,7 @@ const AnomaliesPage = lazy(() => import('./pages/attendance/AnomaliesPage'))
 const AtRiskStudentsPage = lazy(() => import('./pages/attendance/AtRiskStudentsPage'))
 const StudentsPage = lazy(() => import('./pages/StudentsPage'))
 const StudentRiskScorePage = lazy(() => import('./pages/students/StudentRiskScorePage'))
+const DeletedStudentsPage = lazy(() => import('./pages/students/DeletedStudentsPage'))
 const ClassesGradesPage = lazy(() => import('./pages/ClassesGradesPage'))
 const SuperAdminDashboard = lazy(() => import('./pages/SuperAdminDashboard'))
 const BrochurePage = lazy(() => import('./pages/admin/BrochurePage'))
@@ -519,6 +520,7 @@ function App() {
 
             <Route path="students" element={<SchoolRoute><ModuleRoute module="students"><ManagementRoute teacherAllowed><StudentsPage /></ManagementRoute></ModuleRoute></SchoolRoute>} />
             <Route path="students/:id" element={<SchoolRoute><ModuleRoute module="students"><ManagementRoute teacherAllowed><StudentProfilePage /></ManagementRoute></ModuleRoute></SchoolRoute>} />
+            <Route path="students/deleted" element={<SchoolRoute><ModuleRoute module="students"><AdminPrincipalRoute><DeletedStudentsPage /></AdminPrincipalRoute></ModuleRoute></SchoolRoute>} />
             <Route path="students/risk-score" element={<SchoolRoute><ModuleRoute module="students"><AdminPrincipalRoute><StudentRiskScorePage /></AdminPrincipalRoute></ModuleRoute></SchoolRoute>} />
             <Route path="classes" element={<SchoolRoute><ModuleRoute module="students"><ManagementRoute teacherAllowed><ClassesGradesPage /></ManagementRoute></ModuleRoute></SchoolRoute>} />
 

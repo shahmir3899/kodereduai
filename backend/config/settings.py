@@ -102,6 +102,7 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'core.middleware.TenantMiddleware',  # Custom multi-tenancy middleware
+    'core.audit.AuditRequestMiddleware',  # who/where for delete audit signals
     'core.cache_middleware.APICacheControlMiddleware',
 ]
 

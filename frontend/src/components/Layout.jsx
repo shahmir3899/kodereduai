@@ -681,6 +681,7 @@ export default function Layout() {
           { name: 'Classes', href: '/classes', icon: TableIcon },
           { name: 'Students', href: '/students', icon: UsersIcon },
           ...(!isStaffLevel ? [{ name: 'Student Risk Score', href: '/students/risk-score', icon: ExclamationIcon }] : []),
+          ...(effectiveRole === 'SCHOOL_ADMIN' || effectiveRole === 'PRINCIPAL' ? [{ name: 'Recently Deleted', href: '/students/deleted', icon: TableIcon }] : []),
         ] : []),
         ...(!isTeacher && isModuleEnabled('academics') ? [
           { type: 'divider', label: 'Academic Ops' },

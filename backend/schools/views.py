@@ -321,8 +321,12 @@ class SuperAdminOrganizationViewSet(viewsets.ModelViewSet):
         org.cascade_disabled_modules()
 
     def perform_destroy(self, instance):
+        from core.db_guards import allow_student_hard_delete
         log_admin_action(self.request, 'delete', instance)
-        instance.delete()
+        # Deleting an organization removes its schools and, by cascade, their
+        # students; this is the one sanctioned path past the student delete trigger.
+        with allow_student_hard_delete():
+            instance.delete()
 
 
 class SuperAdminMembershipViewSet(viewsets.ModelViewSet):

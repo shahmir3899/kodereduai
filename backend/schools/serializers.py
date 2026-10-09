@@ -246,6 +246,7 @@ class AdminActionLogSerializer(serializers.ModelSerializer):
         model = AdminActionLog
         fields = [
             'id', 'actor', 'actor_username', 'action',
-            'target_type', 'target_id', 'target_repr', 'metadata', 'created_at',
+            'target_type', 'target_id', 'target_repr', 'metadata', 'school_id',
+            'ip_address', 'user_agent', 'created_at',
         ]
         read_only_fields = fields

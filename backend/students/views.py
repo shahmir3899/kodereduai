@@ -3,11 +3,14 @@ Student and Class views.
 """
 
 from rest_framework import viewsets, status
+from rest_framework.exceptions import ParseError
 from rest_framework.decorators import action
 from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
+from django.db import transaction
 from django.db.models import Count, Q
+from django.shortcuts import get_object_or_404
 
 from rest_framework.views import APIView
 from django.contrib.auth import get_user_model
@@ -24,6 +27,7 @@ from core.permissions import (
     _get_session_class_student_ids,
 )
 from core.mixins import TenantQuerySetMixin, ensure_tenant_schools, ensure_tenant_school_id
+from core.audit import AuditedDeleteMixin
 from .models import Class, Student, StudentDocument, StudentProfile, StudentInvite
 from .serializers import (
     ClassSerializer,
@@ -60,6 +64,23 @@ class ClassViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet
     required_module = 'students'
     queryset = Class.objects.all()
     permission_classes = [IsAuthenticated, CanViewStudentRecords, HasSchoolAccess]
+
+    def destroy(self, request, *args, **kwargs):
+        # Student.class_obj cascades, so deleting a class used to erase every
+        # student in it along with their attendance, fees and marks.
+        class_obj = self.get_object()
+        if Student.all_objects.filter(class_obj=class_obj).exists():
+            return Response(
+                {
+                    'code': 'class_has_students',
+                    'detail': (
+                        f'{class_obj.name} still has students (including removed ones), so it cannot be '
+                        'deleted. Move or withdraw them first, or mark the class inactive.'
+                    ),
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return super().destroy(request, *args, **kwargs)
 
 
     def get_serializer_class(self):
@@ -140,7 +161,7 @@ def _has_later_year(school_id, year_id):
     ).exists())
 
 
-class StudentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet):
+class StudentViewSet(ModuleAccessMixin, TenantQuerySetMixin, AuditedDeleteMixin, viewsets.ModelViewSet):
     required_module = 'students'
     queryset = Student.objects.all()
     permission_classes = [IsAuthenticated, CanViewStudentRecords, HasSchoolAccess]
@@ -150,6 +171,8 @@ class StudentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
             return [IsAuthenticated(), CanManageStudentPhoto(), HasSchoolAccess()]
         if self.action in ('create_user_account', 'bulk_create_accounts'):
             return [IsAuthenticated(), CanCreateStudentAccount(), HasSchoolAccess()]
+        if self.action in ('deleted', 'restore'):
+            return [IsAuthenticated(), IsSchoolAdmin(), HasSchoolAccess()]
         if self.action in ('update', 'partial_update'):
             return [IsAuthenticated(), CanEditStudentRecord(), HasSchoolAccess()]
         return super().get_permissions()
@@ -415,6 +438,65 @@ class StudentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
                     'status': 'ACTIVE',
                 },
             )
+
+    audit_delete_action = 'soft_delete'
+
+    def delete_instance(self, instance):
+        # Soft delete: attendance, marks, fees and enrollments are kept, so the
+        # student can be restored from the Recently deleted list.
+        instance.soft_delete(by=self.request.user, reason=self._delete_reason())
+
+    def _delete_reason(self):
+        # DELETE is often sent with no body (or an empty JSON one); a reason is
+        # optional, so an unreadable body must not fail the delete.
+        try:
+            body = self.request.data
+        except ParseError:
+            body = None
+        reason = body.get('reason') if hasattr(body, 'get') else None
+        return str(reason or self.request.query_params.get('reason', ''))
+
+    def _deleted_queryset(self):
+        qs = Student.all_objects.filter(deleted_at__isnull=False).select_related(
+            'class_obj', 'deleted_by',
+        )
+        active_school_id = ensure_tenant_school_id(self.request)
+        if active_school_id:
+            return qs.filter(school_id=active_school_id)
+        if self.request.user.is_super_admin:
+            return qs
+        return qs.filter(school_id__in=ensure_tenant_schools(self.request))
+
+    @action(detail=False, methods=['get'], url_path='deleted')
+    def deleted(self, request):
+        """Soft-deleted students of the active school, newest first."""
+        rows = [{
+            'id': s.id,
+            'name': s.name,
+            'roll_number': s.roll_number,
+            'class_obj': s.class_obj_id,
+            'class_name': s.class_obj.name,
+            'parent_name': s.parent_name,
+            'status': s.status,
+            'deleted_at': s.deleted_at,
+            'deleted_by': s.deleted_by.username if s.deleted_by_id else None,
+            'deleted_reason': s.deleted_reason,
+        } for s in self._deleted_queryset().order_by('-deleted_at')]
+        return Response({'count': len(rows), 'results': rows})
+
+    @action(detail=True, methods=['post'], url_path='restore')
+    def restore(self, request, pk=None):
+        """Bring a deleted student back with everything they owned."""
+        from core.audit import log_admin_action
+        from .models import RestoreConflict
+        student = get_object_or_404(self._deleted_queryset(), pk=pk)
+        try:
+            with transaction.atomic():
+                student.restore(roll_number=request.data.get('roll_number'))
+                log_admin_action(request, 'student_restore', student, metadata={'roll_number': student.roll_number})
+        except RestoreConflict as exc:
+            return Response({'code': 'roll_conflict', 'detail': str(exc)}, status=status.HTTP_409_CONFLICT)
+        return Response(StudentSerializer(student, context=self.get_serializer_context()).data)
 
     def destroy(self, request, *args, **kwargs):
         """A student who is part of a branch transfer cannot be deleted: either record

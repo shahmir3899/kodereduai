@@ -8,6 +8,9 @@ from core.cache_utils import invalidate_group_on_change
 
 
 def register():
+    from core.audit import register_delete_audit
+    register_delete_audit()
+
     from academic_sessions.models import AcademicYear, SessionClass, StudentEnrollment
     from attendance.models import AttendanceUpload
     from brochure.models import DemoRequest

@@ -1,7 +1,37 @@
 import secrets
-from django.db import models
+from django.db import models, transaction
 from django.conf import settings
 from django.utils import timezone
+
+
+class RestoreConflict(Exception):
+    """A deleted student cannot be restored as-is (roll number now taken)."""
+
+
+class StudentQuerySet(models.QuerySet):
+    def delete(self):
+        # A bulk delete used to cascade away every student's attendance, fees and
+        # marks with no way back; it now hides them like a single delete does.
+        # Use hard_delete() for a real removal.
+        count = 0
+        for student in self:
+            student.soft_delete()
+            count += 1
+        return count, {self.model._meta.label: count}
+
+    def hard_delete(self):
+        from core.db_guards import allow_student_hard_delete
+        with allow_student_hard_delete():
+            return super().delete()
+
+
+class StudentManager(models.Manager.from_queryset(StudentQuerySet)):
+    """Default manager: soft-deleted students are invisible. Every existing
+    Student.objects call, and every reverse relation (class.students,
+    school.students), therefore skips them without being touched."""
+
+    def get_queryset(self):
+        return super().get_queryset().filter(deleted_at__isnull=True)
 
 
 class Class(models.Model):
@@ -159,9 +189,27 @@ class Student(models.Model):
     status_date = models.DateField(null=True, blank=True)
     status_reason = models.TextField(blank=True, default='')
 
+    # Soft delete: a deleted student keeps every row that points at them
+    # (attendance, marks, fees, enrollments) and is only hidden, so a mistaken
+    # delete can be undone. Deleting for real is Student.hard_delete().
+    deleted_at = models.DateTimeField(null=True, blank=True, db_index=True)
+    deleted_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True,
+        on_delete=models.SET_NULL, related_name='+',
+    )
+    # db_default: the code deployed before this column existed leaves it out of its
+    # INSERTs; without a database-level default creating a student would fail NOT NULL.
+    deleted_reason = models.TextField(blank=True, default='', db_default='')
+    # Enrollments that were active when the student was deleted, so restore
+    # reactivates exactly those and not ones that were already closed.
+    deleted_enrollment_ids = models.JSONField(null=True, blank=True)
+
     # Timestamps
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    objects = StudentManager()
+    all_objects = models.Manager.from_queryset(StudentQuerySet)()
 
     class Meta:
         ordering = ['class_obj', 'roll_number']
@@ -176,6 +224,76 @@ class Student(models.Model):
 
     def __str__(self):
         return f"{self.roll_number}. {self.name} ({self.class_obj.name})"
+
+    @property
+    def is_deleted(self):
+        return self.deleted_at is not None
+
+    def delete(self, using=None, keep_parents=False):
+        self.soft_delete()
+        return 1, {self._meta.label: 1}
+
+    def hard_delete(self, using=None, keep_parents=False):
+        """Really remove the row and cascade away everything it owns. Not
+        reachable from the API."""
+        from core.db_guards import allow_student_hard_delete
+        with allow_student_hard_delete():
+            return super().delete(using=using, keep_parents=keep_parents)
+
+    def soft_delete(self, by=None, reason=''):
+        """Hide the student without touching any row that points at them.
+
+        Their enrollments are closed so class rosters, attendance sheets and
+        promotion lists (which read enrollments directly) stop listing them;
+        fee payments are left alone because collected money is still on the books.
+        """
+        from academic_sessions.models import StudentEnrollment
+        if self.deleted_at:
+            return
+        with transaction.atomic():
+            enrollment_ids = list(
+                StudentEnrollment.objects.filter(student_id=self.pk, is_active=True)
+                .values_list('id', flat=True)
+            )
+            if enrollment_ids:
+                StudentEnrollment.objects.filter(id__in=enrollment_ids).update(is_active=False)
+            self.deleted_at = timezone.now()
+            self.deleted_by = by if getattr(by, 'is_authenticated', False) else None
+            self.deleted_reason = (reason or '')[:1000]
+            self.deleted_enrollment_ids = enrollment_ids
+            self.save(update_fields=[
+                'deleted_at', 'deleted_by', 'deleted_reason', 'deleted_enrollment_ids', 'updated_at',
+            ])
+
+    def restore(self, roll_number=None):
+        """Bring a soft-deleted student back, reopening the enrollments that
+        were active at the time. Raises RestoreConflict if their roll number has
+        since been given to another active student in the class."""
+        from academic_sessions.models import StudentEnrollment
+        if not self.deleted_at:
+            return
+        roll = str(roll_number) if roll_number else self.roll_number
+        taken = Student.objects.filter(
+            school_id=self.school_id, class_obj_id=self.class_obj_id,
+            roll_number=roll, status='ACTIVE', is_active=True,
+        ).exclude(pk=self.pk).exists()
+        if taken:
+            raise RestoreConflict(
+                f'Roll number {roll} in {self.class_obj.name} now belongs to another student.'
+            )
+        with transaction.atomic():
+            ids = self.deleted_enrollment_ids or []
+            if ids:
+                StudentEnrollment.objects.filter(id__in=ids, student_id=self.pk).update(is_active=True)
+            self.roll_number = roll
+            self.deleted_at = None
+            self.deleted_by = None
+            self.deleted_reason = ''
+            self.deleted_enrollment_ids = None
+            self.save(update_fields=[
+                'roll_number', 'deleted_at', 'deleted_by', 'deleted_reason',
+                'deleted_enrollment_ids', 'updated_at',
+            ])
 
 
 class StudentDocument(models.Model):

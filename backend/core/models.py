@@ -189,6 +189,13 @@ class AdminActionLog(models.Model):
     target_id = models.CharField(max_length=50, blank=True, default='')
     target_repr = models.CharField(max_length=255, blank=True, default='')
     metadata = models.JSONField(null=True, blank=True)
+    # Denormalized (plain int, not an FK) so the entry still says which school a
+    # deleted record belonged to even after the school itself is gone.
+    school_id = models.IntegerField(null=True, blank=True)
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    # db_default: the code deployed before this column existed leaves it out of its
+    # INSERTs; without a database-level default those would fail NOT NULL.
+    user_agent = models.CharField(max_length=300, blank=True, default='', db_default='')
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -197,6 +204,7 @@ class AdminActionLog(models.Model):
             models.Index(fields=['-created_at']),
             models.Index(fields=['actor', '-created_at']),
             models.Index(fields=['target_type', 'target_id']),
+            models.Index(fields=['school_id', '-created_at']),
         ]
 
     def __str__(self):
