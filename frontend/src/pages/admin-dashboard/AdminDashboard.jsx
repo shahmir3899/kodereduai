@@ -15,7 +15,7 @@ import QuickActionGrid from '../../components/dashboard/QuickActionGrid'
 import NotificationsFeed from '../../components/dashboard/NotificationsFeed'
 import AttentionStrip, { buildAttentionItems } from '../../components/dashboard/AttentionStrip'
 import AttendanceBreakdown from '../../components/dashboard/AttendanceBreakdown'
-import FeeCategoryBreakdown from '../../components/dashboard/FeeCategoryBreakdown'
+import MonthlyFeeCollectionCard from '../../components/dashboard/MonthlyFeeCollectionCard'
 import { useFeeMonthSummary } from '../../hooks/useFeeMonthSummary'
 import LeadershipInsightsPanels from '../../components/dashboard/LeadershipInsightsPanels'
 import { icons, AIInsightsCard } from '../DashboardPage'
@@ -223,27 +223,7 @@ export default function AdminDashboard() {
 
               {financeOn && fee && (
                 <div className="pt-4 border-t border-gray-100">
-                  <div className="flex items-center justify-between mb-2">
-                    <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Monthly fees this month{fee.isMulti ? ' · all schools' : ''}</p>
-                    <Link to="/finance/fees" className="text-xs text-sky-600 hover:text-sky-700 font-medium">View details</Link>
-                  </div>
-                  <div className="grid grid-cols-3 gap-3">
-                    <div className="text-center p-3 bg-green-50 rounded-lg">
-                      <p className="text-xs text-green-600 mb-0.5">Collected</p>
-                      <p className="text-sm sm:text-base font-bold text-green-700">Rs. {fee.totalCollected.toLocaleString()}</p>
-                    </div>
-                    <div className="text-center p-3 bg-orange-50 rounded-lg">
-                      <p className="text-xs text-orange-600 mb-0.5">Pending</p>
-                      <p className="text-sm sm:text-base font-bold text-orange-700">Rs. {fee.totalPending.toLocaleString()}</p>
-                    </div>
-                    <div className="text-center p-3 bg-gray-50 rounded-lg">
-                      <p className="text-xs text-gray-600 mb-0.5">Paid / Partial / Unpaid</p>
-                      <p className="text-sm sm:text-base font-bold text-gray-700 tabular-nums">
-                        {fee.paidCount} / {fee.partialCount} / {fee.unpaidCount}
-                      </p>
-                    </div>
-                  </div>
-                  <FeeCategoryBreakdown summary={fee} />
+                  <MonthlyFeeCollectionCard fee={fee} detailsHref="/finance/fees" />
                 </div>
               )}
 

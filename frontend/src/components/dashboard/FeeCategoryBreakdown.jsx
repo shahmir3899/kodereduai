@@ -48,6 +48,7 @@ export default function FeeCategoryBreakdown({ summary, alwaysShowCategories = f
                 <span className="text-green-700">{fmt(school.totalCollected)}</span>
                 <span className="text-gray-400">/</span>
                 <span className="text-gray-600">{fmt(school.totalDue)}</span>
+                <span className="text-orange-700 text-xs">Pending {fmt(school.totalPending)}</span>
                 <RateBadge rate={school.rate} />
               </div>
             </div>

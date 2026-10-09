@@ -16,6 +16,7 @@ import {
 } from 'recharts'
 import { exportFinanceReport } from './finance/financeReportExport'
 import FeeCategoryBreakdown from '../components/dashboard/FeeCategoryBreakdown'
+import MonthlyFeeCollectionCard from '../components/dashboard/MonthlyFeeCollectionCard'
 import { useAnnualFeeSummary, useFeeMonthSummary } from '../hooks/useFeeMonthSummary'
 
 const typeColors = {
@@ -265,35 +266,14 @@ export default function FinanceDashboardPage() {
 
         {/* --- Monthly Fee Collection Card (Current Month) --- */}
         <div className="card">
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-semibold text-gray-700">
-              Monthly Fee Collection — {MONTH_NAMES[currentMonth]}{fee?.isMulti ? ' · all schools' : ''}
-            </h2>
-            <Link to="/finance/fees?feeType=MONTHLY" className="text-xs text-primary-600 hover:underline">
-              Details
-            </Link>
-          </div>
-
           {!fee ? (
             <LoadingState label="Loading..." compact />
           ) : (
-            <div>
-              <div className="grid grid-cols-3 gap-3">
-                <div className="bg-green-50 rounded-lg p-3 text-center">
-                  <p className="text-xs text-green-600 mb-1">Collected</p>
-                  <p className="text-lg font-bold text-green-700">{fee.totalCollected.toLocaleString()}</p>
-                </div>
-                <div className="bg-orange-50 rounded-lg p-3 text-center">
-                  <p className="text-xs text-orange-600 mb-1">Pending</p>
-                  <p className="text-lg font-bold text-orange-700">{fee.totalPending.toLocaleString()}</p>
-                </div>
-                <div className="bg-blue-50 rounded-lg p-3 text-center">
-                  <p className="text-xs text-blue-600 mb-1">Rate</p>
-                  <p className="text-lg font-bold text-blue-700">{fee.rate != null ? `${fee.rate}%` : '—'}</p>
-                </div>
-              </div>
-              <FeeCategoryBreakdown summary={fee} />
-            </div>
+            <MonthlyFeeCollectionCard
+              fee={fee}
+              monthLabel={MONTH_NAMES[currentMonth]}
+              detailsHref="/finance/fees?feeType=MONTHLY"
+            />
           )}
         </div>
 
