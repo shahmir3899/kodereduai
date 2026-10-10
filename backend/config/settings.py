@@ -27,8 +27,11 @@ SECRET_KEY = os.getenv(
 if IS_PRODUCTION and not SECRET_KEY:
     raise ValueError('EDU_DJANGO_SECRET_KEY must be set in production!')
 
-# DEBUG is derived from ENVIRONMENT — no separate toggle needed
-DEBUG = not IS_PRODUCTION
+# DEBUG follows ENVIRONMENT by default, but APP_DEBUG overrides it on its own. The live
+# service runs ENVIRONMENT=local (flipping that also shortens logins, locks CORS and
+# switches email backends), so DEBUG used to be on in production and served debug
+# pages that list every URL. Set APP_DEBUG=false there to turn only debug off.
+DEBUG = os.getenv('APP_DEBUG', str(not IS_PRODUCTION)).strip().lower() in ('1', 'true', 'yes')
 
 # ALLOWED_HOSTS includes:
 #   - localhost for dev
@@ -515,12 +518,31 @@ else:
         }
     }
 
+def mask_url(url):
+    """Hide the password (and username) in a connection URL so it is safe to log.
+
+    Startup used to log the broker URL verbatim, which put the Upstash password in
+    the Render logs for anyone with log access.
+    """
+    from urllib.parse import urlsplit, urlunsplit
+    try:
+        parts = urlsplit(url or '')
+        if parts.username or parts.password:
+            host = parts.hostname or ''
+            if parts.port:
+                host = f'{host}:{parts.port}'
+            return urlunsplit((parts.scheme, f'***@{host}', parts.path, '', ''))
+        return url or ''
+    except ValueError:
+        return '<unparseable url>'
+
+
 # Log key environment variables for debugging (especially on Render)
 import logging
 logging.getLogger(__name__).info("ENVIRONMENT=%s", ENVIRONMENT)
-logging.getLogger(__name__).info("CELERY_BROKER_URL=%r", CELERY_BROKER_URL)
-logging.getLogger(__name__).info("CELERY_RESULT_BACKEND=%r", CELERY_RESULT_BACKEND)
-logging.getLogger(__name__).info("REDIS_URL=%r", REDIS_URL)
+logging.getLogger(__name__).info("CELERY_BROKER_URL=%r", mask_url(CELERY_BROKER_URL))
+logging.getLogger(__name__).info("CELERY_RESULT_BACKEND=%r", mask_url(CELERY_RESULT_BACKEND))
+logging.getLogger(__name__).info("REDIS_URL=%r", mask_url(REDIS_URL))
 
 # =============================================================================
 # AI / LLM Configuration
