@@ -499,7 +499,7 @@ def _roll_taken(school_id, academic_year_id, session_class, class_obj_id, roll_n
     """Same rule as the roll constraints: unique per section, or per master class for
     enrollments with no section."""
     taken = StudentEnrollment.objects.filter(
-        school_id=school_id, academic_year_id=academic_year_id, roll_number=roll_number,
+        school_id=school_id, academic_year_id=academic_year_id, roll_number=roll_number, is_active=True,
     ).exclude(student=student)
     taken = taken.filter(session_class=session_class) if session_class else taken.filter(
         session_class__isnull=True, class_obj_id=class_obj_id,
@@ -551,7 +551,16 @@ def readmit_student(*, student, return_date, session_class=None, roll_number=Non
     )
     target_roll = (roll_number or '').strip() or (enrollment.roll_number if enrollment else '')
     if _roll_taken(student.school_id, year.id, target_class, target_class_obj_id, target_roll, student):
-        raise ExitError(f"Roll number '{target_roll}' is already taken in that class for {year.name}.")
+        if (roll_number or '').strip():
+            raise ExitError(f"Roll number '{target_roll}' is already taken in that class for {year.name}.")
+        # Their old number was given to someone else while they were away: take the
+        # lowest free one instead of refusing the return.
+        from academic_sessions.roll_allocator_service import RollAllocatorService
+        target_roll = RollAllocatorService(
+            school_id=student.school_id, academic_year_id=year.id, class_obj_id=target_class_obj_id,
+            session_class_id=target_class.id if target_class else None,
+        ).lowest_free_roll(exclude_student_id=student.id)
+        roll_number = target_roll
 
     with transaction.atomic():
         if enrollment is None:

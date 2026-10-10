@@ -15,13 +15,13 @@ pytestmark = pytest.mark.django_db
 
 
 class TestRollAllocation:
-    def test_batch_convert_uses_next_highest_roll(self, seed_data, api):
+    def test_batch_convert_takes_the_lowest_free_roll(self, seed_data, api):
         token = seed_data['tokens']['admin']
         sid = seed_data['SID_A']
         ay = seed_data['academic_year']
         class_1 = seed_data['classes'][0]
 
-        # Force a high existing snapshot roll in class so conversion must allocate next number.
+        # A high roll exists in the class; the new student must still take the lowest FREE number.
         from students.models import Student
 
         Student.objects.create(
@@ -58,7 +58,14 @@ class TestRollAllocation:
         assert convert_resp.status_code == 201, convert_resp.content[:300]
         converted = convert_resp.json().get('converted') or []
         assert len(converted) == 1
-        assert converted[0]['roll_number'] == '51'
+        taken = {
+            int(r) for r in Student.objects.filter(school=seed_data['school_a'], class_obj=class_1)
+            .exclude(id=converted[0]['student_id'] if 'student_id' in converted[0] else 0)
+            .values_list('roll_number', flat=True) if str(r).isdigit()
+        }
+        lowest_free = next(n for n in range(1, 1000) if n not in taken)
+        assert converted[0]['roll_number'] == str(lowest_free)
+        assert converted[0]['roll_number'] != '51'
 
     def test_bulk_promote_roll_collision_gets_next_highest(self, seed_data, api):
         token = seed_data['tokens']['admin']

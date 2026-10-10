@@ -255,6 +255,7 @@ class StudentCreateSerializer(serializers.ModelSerializer):
                 academic_year=current_year,
                 class_obj=class_obj,
                 roll_number=roll_number,
+                is_active=True,
             ).exists():
                 raise serializers.ValidationError({
                     'roll_number': f"Roll number '{roll_number}' already exists in this class for {current_year.name}."
@@ -328,27 +329,25 @@ class StudentUpdateSerializer(serializers.ModelSerializer):
 
         return sync_enrollment_status(student, previous_status, previous_date)
 
-    def _refuse_direct_departure(self, student, attrs):
-        """Withdrawn/Transferred go through the student exit workflow (clearance and
-        finalization), not a bare status change. Only enforced once the exit UI is
-        live (STUDENT_EXIT_WORKFLOW_ENFORCED); a date correction on a student who has
-        already left is still a plain update."""
-        from django.conf import settings
-
-        new_status = attrs.get('status')
-        if (
-            student
-            and getattr(settings, 'STUDENT_EXIT_WORKFLOW_ENFORCED', False)
-            and new_status in DEPARTED_STATUSES
-            and new_status != student.status
-        ):
+    def _refuse_direct_status_change(self, student, attrs):
+        """Leaving, graduating, repeating and re-admitting each have their own flow
+        (exit workflow with clearance, Status & exit outcome, Re-admit), so a bare
+        PATCH may not change status or is_active. Resending the current value, or
+        correcting the date/reason of a departure that already happened, is fine."""
+        if not student:
+            return
+        if 'status' in attrs and attrs['status'] != student.status:
             raise serializers.ValidationError({
-                'status': 'Use the student exit workflow to withdraw or transfer a student.',
+                'status': "Use Status & exit on the student profile to change a student's status.",
+            })
+        if 'is_active' in attrs and attrs['is_active'] != student.is_active:
+            raise serializers.ValidationError({
+                'is_active': "A student's active flag cannot be changed directly.",
             })
 
     def validate(self, attrs):
         student = self.instance
-        self._refuse_direct_departure(student, attrs)
+        self._refuse_direct_status_change(student, attrs)
         school = student.school if student else None
         class_obj = attrs.get('class_obj', student.class_obj if student else None)
         roll_number = attrs.get('roll_number', student.roll_number if student else None)
@@ -378,6 +377,7 @@ class StudentUpdateSerializer(serializers.ModelSerializer):
                     school=school,
                     academic_year=current_year,
                     roll_number=roll_number,
+                    is_active=True,
                 )
 
                 if (
@@ -434,6 +434,11 @@ class ReclassifyStudentSerializer(serializers.Serializer):
     target_session_class_id = serializers.IntegerField(required=False)
     new_roll_number = serializers.CharField(required=False, allow_blank=True, max_length=20)
     reason = serializers.CharField(required=True, allow_blank=False)
+    # First day in the new class (default today). Dates before it stay with the old class.
+    effective_date = serializers.DateField(required=False)
+    # 'keep': months already generated stay as they are; 'reprice': unpaid months from
+    # the move onward are re-priced at the new class's fee (different master class only).
+    fee_option = serializers.ChoiceField(choices=['keep', 'reprice'], required=False, default='keep')
 
     def validate(self, attrs):
         target_class_id = attrs.get('target_class_id')

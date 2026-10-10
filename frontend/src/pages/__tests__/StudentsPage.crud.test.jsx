@@ -472,40 +472,10 @@ describe('StudentsPage — list, edit, delete, add', () => {
 
   // ─── Delete ──────────────────────────────────────────────────
 
-  it('deletes a student after confirmation', async () => {
-    let deletedId = null
-    server.use(
-      http.delete('/api/students/:id/', ({ params }) => {
-        deletedId = params.id
-        return new HttpResponse(null, { status: 204 })
-      }),
-    )
-    const user = await renderLoaded()
+  it('has no Delete button on the list: removal lives on the profile under Status & exit', async () => {
+    await renderLoaded()
 
-    await user.click(firstButton('Delete'))
-    const modal = modalFor('Delete Student')
-    expect(modal.getByText('Ali Hassan')).toBeInTheDocument()
-    await user.click(modal.getByRole('button', { name: 'Delete' }))
-
-    await waitFor(() => expect(deletedId).toBe('1'))
-    await waitFor(() => expect(mockShowSuccess).toHaveBeenCalledWith('Student deleted successfully!'))
-  })
-
-  it('does not delete when the confirmation is cancelled', async () => {
-    let called = false
-    server.use(
-      http.delete('/api/students/:id/', () => {
-        called = true
-        return new HttpResponse(null, { status: 204 })
-      }),
-    )
-    const user = await renderLoaded()
-
-    await user.click(firstButton('Delete'))
-    await user.click(modalFor('Delete Student').getByRole('button', { name: 'Cancel' }))
-
-    expect(screen.queryByRole('heading', { name: 'Delete Student' })).not.toBeInTheDocument()
-    expect(called).toBe(false)
+    expect(screen.queryAllByRole('button', { name: 'Delete' })).toHaveLength(0)
   })
 
   it('hides Delete from roles that cannot manage the student lifecycle', async () => {

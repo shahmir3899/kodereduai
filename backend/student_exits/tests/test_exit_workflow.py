@@ -520,19 +520,11 @@ class TestOldPathAndSummary:
         return api.patch(f"/api/students/{ctx['student'].id}/", {'status': status, 'status_date': LEAVING.isoformat()},
                          ctx['tokens']['admin'], ctx['SID_A'])
 
-    def test_the_old_status_dialog_still_works_until_enforcement_is_on(self, api, ctx):
-        assert self.patch_status(api, ctx, 'WITHDRAWN').status_code == 200
-
-    @override_settings(STUDENT_EXIT_WORKFLOW_ENFORCED=True)
-    def test_enforcement_refuses_withdrawn_and_transferred_through_the_old_path(self, api, ctx):
-        for status in ('WITHDRAWN', 'TRANSFERRED'):
-            resp = self.patch_status(api, ctx, status)
-            assert resp.status_code == 400
-            assert 'exit workflow' in str(resp.json())
-
-    @override_settings(STUDENT_EXIT_WORKFLOW_ENFORCED=True)
-    def test_enforcement_leaves_other_statuses_alone(self, api, ctx):
-        assert self.patch_status(api, ctx, 'REPEAT').status_code == 200
+    @pytest.mark.parametrize('status', ['WITHDRAWN', 'TRANSFERRED', 'GRADUATED', 'REPEAT'])
+    def test_a_bare_status_change_is_refused(self, api, ctx, status):
+        resp = self.patch_status(api, ctx, status)
+        assert resp.status_code == 400
+        assert 'Status & exit' in str(resp.json())
 
     def test_profile_summary_shows_pending_fee_and_the_waiver(self, api, ctx, category):
         monthly_payment(ctx, category, 1, '1000', '0')

@@ -334,10 +334,21 @@ class AttendanceRecordSerializer(serializers.ModelSerializer):
 
             listing = isinstance(self.parent, serializers.ListSerializer) and self.parent.instance is not None
             instances = list(self.parent.instance) if listing else [obj]
+            from academic_sessions.placement_service import DatedPlacements
+
             self._placements = placements_for(
                 obj.school_id, ((r.student_id, r.academic_year_id) for r in instances),
             )
-        return self._placements.get((obj.student_id, obj.academic_year_id))
+            # Where the student sat on each record's own date (a moved student's old days
+            # keep the old class and roll); enrollment is the fallback.
+            dates = [r.date for r in instances if r.date]
+            self._dated = DatedPlacements(
+                obj.school_id, {r.student_id for r in instances}, min(dates, default=None), max(dates, default=None),
+            )
+        return (
+            (self._dated.get(obj.student_id, obj.date) if obj.date else None)
+            or self._placements.get((obj.student_id, obj.academic_year_id))
+        )
 
     def get_student_roll(self, obj):
         from academic_sessions.roster import placement_roll

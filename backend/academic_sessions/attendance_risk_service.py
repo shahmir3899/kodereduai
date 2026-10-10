@@ -122,12 +122,18 @@ class AttendanceRiskService:
         # engagement problem. Excluded the same way as an OFF day.
         leave_index = self._build_leave_index(student_ids, year_start, year_end)
 
+        # Class off days apply to the class the student sat in ON THAT DAY, so a mid-year
+        # move does not carry the new class's holidays back over the old class's days.
+        from .placement_service import DatedPlacements
+        dated = DatedPlacements(self.school_id, student_ids, year_start, year_end)
+
         def is_off_day(student, rec_date):
             if rec_date.weekday() == 6:  # Sunday
                 return True
             if rec_date in off_day_index['school']:
                 return True
-            return rec_date in off_day_index['classes'].get(placement_class_id(placement(student.id), student), ())
+            class_id = dated.class_id(student.id, rec_date) or placement_class_id(placement(student.id), student)
+            return rec_date in off_day_index['classes'].get(class_id, ())
 
         def is_approved_leave(sid, rec_date):
             return rec_date in leave_index.get(sid, ())

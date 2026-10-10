@@ -9,10 +9,10 @@ import Textarea from '../../../components/ui/Textarea'
 // row; a click-through confirm does not catch that.
 export const namesMatch = (typed, name) => typed.trim().toLowerCase() === (name || '').trim().toLowerCase()
 
-export default function DeleteStudentModal({ student, isPending, onCancel, onConfirm }) {
+export default function DeleteStudentModal({ student, initialReason = '', isPending, onCancel, onConfirm }) {
   const [typed, setTyped] = useState('')
-  const [reason, setReason] = useState('')
-  const confirmed = namesMatch(typed, student.name)
+  const [reason, setReason] = useState(initialReason)
+  const confirmed = namesMatch(typed, student.name) && reason.trim().length > 0
 
   return (
     <Modal
@@ -36,13 +36,14 @@ export default function DeleteStudentModal({ student, isPending, onCancel, onCon
         from <em>Students &rsaquo; Recently deleted</em>.
       </p>
       <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-        If the student has left the school, use Update Status (Withdrawn / Transferred) instead of removing them.
+        Only use this for a record entered by mistake. If the student has left the school, use Status &amp; exit
+        (Left school / Transferred) instead of removing them.
       </p>
       <div className="space-y-3">
         <Field label={`Type "${student.name}" to confirm`}>
           <Input value={typed} onChange={(e) => setTyped(e.target.value)} autoComplete="off" />
         </Field>
-        <Field label="Reason (optional)">
+        <Field label="Reason (required)">
           <Textarea rows={2} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. duplicate entry" />
         </Field>
       </div>

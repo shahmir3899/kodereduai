@@ -65,6 +65,14 @@ function useStudentApi(overrides = {}) {
     http.get('/api/students/5/ai-profile/', () => HttpResponse.json({})),
     http.get('/api/student-exits/', () => HttpResponse.json({ count: 0, results: [] })),
     http.get('/api/student-exits/destinations/', () => HttpResponse.json([])),
+    http.get('/api/students/5/removal-preview/', () => HttpResponse.json({
+      has_history: true,
+      counts: { attendance: 3, fees: 1, marks: 0, enrollments: 0, other: 0 },
+      allowed_outcomes: ['WITHDRAWN', 'TRANSFERRED'].includes(current.status)
+        ? ['READMIT', 'GRADUATED', 'REPEAT', 'REMOVE']
+        : ['LEFT', 'TRANSFERRED', 'GRADUATED', 'REPEAT', 'REMOVE'],
+      can_purge: false,
+    })),
     http.patch('/api/students/5/', async ({ request }) => {
       const body = await request.json()
       patches.push(body)
@@ -539,17 +547,15 @@ describe('StudentProfilePage', () => {
       expect(screen.queryByRole('button', { name: 'Re-admit' })).not.toBeInTheDocument()
     })
 
-    it('sends Active from the status dialog to re-admission instead of saving it', async () => {
+    it('sends Re-admit from the status dialog to re-admission instead of saving it', async () => {
       useStudentApi({ status: 'WITHDRAWN', status_date: '2026-03-01' })
       const user = await renderProfile()
 
-      await user.click(screen.getByRole('button', { name: 'Update Status' }))
-      const modal = modalFor('Update Student Status')
-      await user.selectOptions(modal.getByLabelText('Status'), 'ACTIVE')
-      await user.clear(modal.getByLabelText('Effective Date'))
-      await user.type(modal.getByLabelText('Effective Date'), '2026-03-20')
+      await user.click(screen.getByRole('button', { name: 'Status & exit' }))
+      const modal = modalFor('Status & exit')
+      await user.click(await modal.findByLabelText(/Re-admit/))
+      await user.type(modal.getByLabelText('Return date'), '2026-03-20')
       await user.type(modal.getByLabelText('Reason'), 'Back home')
-      expect(modal.getByText(/is a re-admission/)).toBeInTheDocument()
       await user.click(modal.getByRole('button', { name: 'Continue to re-admission' }))
 
       expect(await screen.findByRole('heading', { name: 'Re-admit student' })).toBeInTheDocument()
@@ -821,59 +827,94 @@ describe('StudentProfilePage', () => {
 
     expect(screen.getByRole('button', { name: 'Edit Guardian' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Change class' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Update Status' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Status & exit' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Reclassify' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Generate Parent Invite/ })).not.toBeInTheDocument()
   })
 
   // ─── Status ──────────────────────────────────────────────────
 
-  describe('status update', () => {
-    it('saves a status that does not leave the school directly, with its date and reason', async () => {
+  describe('status & exit', () => {
+    it.each([
+      ['GRADUATED', /^Graduated/, 'Marked as graduated', 'Mark as graduated'],
+      ['REPEAT', /^Repeat/, 'Marked as repeating', 'Mark as repeat'],
+    ])('records %s through the outcome endpoint with its reason, not a status PATCH', async (value, label, toast, button) => {
+      let body = null
+      server.use(http.post('/api/students/5/outcome/', async ({ request }) => {
+        body = await request.json()
+        return HttpResponse.json(current)
+      }))
       const user = await renderProfile()
 
-      await user.click(screen.getByRole('button', { name: 'Update Status' }))
-      const modal = modalFor('Update Student Status')
-      await user.selectOptions(modal.getByLabelText('Status'), 'REPEAT')
-      await user.type(modal.getByLabelText('Effective Date'), '2026-03-01')
-      await user.type(modal.getByLabelText('Reason'), 'Failed the year')
-      await user.click(modal.getByRole('button', { name: 'Save Status' }))
+      await user.click(screen.getByRole('button', { name: 'Status & exit' }))
+      const modal = modalFor('Status & exit')
+      await user.click(await modal.findByLabelText(label))
+      await user.type(modal.getByLabelText('Reason'), 'Finished the year')
+      await user.click(modal.getByRole('button', { name: button }))
 
-      await waitFor(() => expect(patches).toHaveLength(1))
-      expect(patches[0]).toEqual({ status: 'REPEAT', status_date: '2026-03-01', status_reason: 'Failed the year' })
-      await waitFor(() => expect(mockShowSuccess).toHaveBeenCalledWith('Student status updated successfully'))
-      expect(screen.queryByRole('heading', { name: 'Update Student Status' })).not.toBeInTheDocument()
+      await waitFor(() => expect(body).toEqual({ outcome: value, reason: 'Finished the year' }))
+      await waitFor(() => expect(mockShowSuccess).toHaveBeenCalledWith(toast))
+      expect(patches).toHaveLength(0)
+    })
+
+    it('needs a reason before anything is sent', async () => {
+      const user = await renderProfile()
+
+      await user.click(screen.getByRole('button', { name: 'Status & exit' }))
+      const modal = modalFor('Status & exit')
+      await user.click(await modal.findByLabelText(/^Repeat/))
+      await user.click(modal.getByRole('button', { name: 'Mark as repeat' }))
+
+      expect(mockShowError).toHaveBeenCalledWith('A reason is required')
+      expect(patches).toHaveLength(0)
     })
 
     it.each([
-      ['WITHDRAWN', 'Withdrawn'],
-      ['TRANSFERRED', 'Transferred'],
-    ])('hands %s over to the exit checklist instead of saving it', async (value) => {
+      ['Left school', /Withdrawn/],
+      ['Transferred', /Transferred/],
+    ])('hands %s over to the exit checklist instead of saving it', async (label, wizardLabel) => {
       const user = await renderProfile()
 
-      await user.click(screen.getByRole('button', { name: 'Update Status' }))
-      const modal = modalFor('Update Student Status')
-      await user.selectOptions(modal.getByLabelText('Status'), value)
-      await user.type(modal.getByLabelText('Effective Date'), '2026-03-01')
+      await user.click(screen.getByRole('button', { name: 'Status & exit' }))
+      const modal = modalFor('Status & exit')
+      await user.click(await modal.findByLabelText(new RegExp(`^${label}`)))
+      await user.type(modal.getByLabelText('Effective date'), '2026-03-01')
       await user.type(modal.getByLabelText('Reason'), 'Moving away')
-      expect(modal.getByText(/short checklist/i)).toBeInTheDocument()
       await user.click(modal.getByRole('button', { name: 'Continue to checklist' }))
 
-      expect(screen.queryByRole('heading', { name: 'Update Student Status' })).not.toBeInTheDocument()
+      expect(screen.queryByRole('heading', { name: 'Status & exit' })).not.toBeInTheDocument()
       await screen.findByRole('heading', { name: 'Student exit' })
       const wizard = modalFor('Student exit')
       expect(wizard.getByLabelText('Leaving date')).toHaveValue('2026-03-01')
       expect(wizard.getByLabelText('Reason')).toHaveValue('Moving away')
-      expect(wizard.getByLabelText(value === 'WITHDRAWN' ? /Withdrawn/ : /Transferred/)).toBeChecked()
+      expect(wizard.getByLabelText(wizardLabel)).toBeChecked()
       expect(patches).toHaveLength(0)
     })
 
-    it('shows other failures as a toast', async () => {
-      server.use(http.patch('/api/students/5/', () => HttpResponse.json({ detail: 'Nope.' }, { status: 403 })))
+    it('removing a student entered by mistake opens the typed-name dialog with the reason', async () => {
       const user = await renderProfile()
 
-      await user.click(screen.getByRole('button', { name: 'Update Status' }))
-      await user.click(modalFor('Update Student Status').getByRole('button', { name: 'Save Status' }))
+      await user.click(screen.getByRole('button', { name: 'Status & exit' }))
+      const modal = modalFor('Status & exit')
+      await user.click(await modal.findByLabelText(/^Remove/))
+      expect(modal.getByText(/has records \(3 attendance, 1 fee\)/)).toBeInTheDocument()
+      await user.type(modal.getByLabelText('Reason'), 'entered twice')
+      await user.click(modal.getByRole('button', { name: 'Continue to remove' }))
+
+      const remove = modalFor('Remove student')
+      expect(remove.getByLabelText('Reason (required)')).toHaveValue('entered twice')
+      expect(remove.getByRole('button', { name: 'Remove student' })).toBeDisabled()
+    })
+
+    it('shows failures from the outcome endpoint as a toast', async () => {
+      server.use(http.post('/api/students/5/outcome/', () => HttpResponse.json({ detail: 'Nope.' }, { status: 400 })))
+      const user = await renderProfile()
+
+      await user.click(screen.getByRole('button', { name: 'Status & exit' }))
+      const modal = modalFor('Status & exit')
+      await user.click(await modal.findByLabelText(/^Graduated/))
+      await user.type(modal.getByLabelText('Reason'), 'x')
+      await user.click(modal.getByRole('button', { name: 'Mark as graduated' }))
 
       await waitFor(() => expect(mockShowError).toHaveBeenCalledWith('Nope.'))
     })
@@ -921,10 +962,18 @@ describe('StudentProfilePage', () => {
       expect(posted).toBe(false)
     })
 
-    it('posts the correction with the suggested roll and closes', async () => {
+    const previewFor = (overrides = {}) => http.get('/api/students/5/reclassify-preview/', () => HttpResponse.json({
+      effective_date: '2026-03-01',
+      suggested_roll: '4',
+      warnings: {},
+      fees: { applies: false },
+      ...overrides,
+    }))
+
+    it('posts the move with the server-suggested roll, the effective date and closes', async () => {
       mockYear = { id: 1, name: '2025-2026' }
       let body = null
-      server.use(http.post('/api/students/5/reclassify/', async ({ request }) => {
+      server.use(previewFor(), http.post('/api/students/5/reclassify/', async ({ request }) => {
         body = await request.json()
         return HttpResponse.json({})
       }))
@@ -935,6 +984,8 @@ describe('StudentProfilePage', () => {
       await waitFor(() => expect(within(modal.getByLabelText('Target Class')).getByText('Class 1A - A')).toBeInTheDocument())
       await user.selectOptions(modal.getByLabelText('Target Class'), 'Class 1A - A')
       await waitFor(() => expect(modal.getByLabelText('New Roll Number (optional)')).toHaveValue('4'))
+      await user.clear(modal.getByLabelText('Effective date'))
+      await user.type(modal.getByLabelText('Effective date'), '2026-03-01')
       await user.type(modal.getByLabelText('Reason'), 'Wrong section at admission')
       await user.click(modal.getByRole('button', { name: 'Apply Reclassification' }))
 
@@ -944,22 +995,20 @@ describe('StudentProfilePage', () => {
         target_session_class_id: 1,
         target_class_id: 1,
         new_roll_number: '4',
+        effective_date: '2026-03-01',
         reason: 'Wrong section at admission',
       })
       await waitFor(() => expect(mockShowSuccess).toHaveBeenCalledWith('Student reclassified successfully'))
       expect(screen.queryByRole('heading', { name: 'Reclassify Student' })).not.toBeInTheDocument()
     })
 
-    it('does not suggest roll 1 from an empty list while the class roster is still loading', async () => {
+    it('leaves the roll empty until the server has answered', async () => {
       mockYear = { id: 1, name: '2025-2026' }
       let release
       const gate = new Promise((resolve) => { release = resolve })
-      const roster = [
-        { id: 1, class_obj: 1, roll_number: '1' }, { id: 2, class_obj: 1, roll_number: '2' }, { id: 3, class_obj: 1, roll_number: '3' },
-      ]
-      server.use(http.get('/api/students/', async () => {
+      server.use(http.get('/api/students/5/reclassify-preview/', async () => {
         await gate
-        return HttpResponse.json(roster)
+        return HttpResponse.json({ effective_date: '2026-03-01', suggested_roll: '4', warnings: {}, fees: { applies: false } })
       }))
       const user = await renderProfile()
 
@@ -971,6 +1020,81 @@ describe('StudentProfilePage', () => {
       expect(modal.getByLabelText('New Roll Number (optional)')).toHaveValue('')
       release()
       await waitFor(() => expect(modal.getByLabelText('New Roll Number (optional)')).toHaveValue('4'))
+    })
+
+    it('warns about records after the effective date', async () => {
+      mockYear = { id: 1, name: '2025-2026' }
+      server.use(previewFor({ warnings: { attendance_since: 6, fee_rows_since: 2 } }))
+      const user = await renderProfile()
+
+      await user.click(screen.getByRole('button', { name: 'Reclassify' }))
+      const modal = modalFor('Reclassify Student')
+      await waitFor(() => expect(within(modal.getByLabelText('Target Class')).getByText('Class 1A - A')).toBeInTheDocument())
+      await user.selectOptions(modal.getByLabelText('Target Class'), 'Class 1A - A')
+
+      const note = await modal.findByRole('note')
+      expect(note).toHaveTextContent('6 attendance record(s)')
+      expect(note).toHaveTextContent('2 monthly fee row(s)')
+    })
+
+    it('shows the fee impact of a different master class and sends the re-price choice', async () => {
+      mockYear = { id: 1, name: '2025-2026' }
+      let body = null
+      server.use(
+        previewFor({
+          fees: {
+            applies: true,
+            from_month: { month: 3, year: 2026 },
+            can_reprice: true,
+            blockers: [],
+            annual_note: 'Annual and one-time fees stay with the old class and are not changed.',
+            categories: [{ category_id: 1, name: 'Tuition', old_fee: '1000.00', new_fee: '1500.00', student_override: false, months_from_move: [] }],
+          },
+        }),
+        http.post('/api/students/5/reclassify/', async ({ request }) => {
+          body = await request.json()
+          return HttpResponse.json({})
+        }),
+      )
+      const user = await renderProfile()
+
+      await user.click(screen.getByRole('button', { name: 'Reclassify' }))
+      const modal = modalFor('Reclassify Student')
+      await waitFor(() => expect(within(modal.getByLabelText('Target Class')).getByText('Class 1A - A')).toBeInTheDocument())
+      await user.selectOptions(modal.getByLabelText('Target Class'), 'Class 1A - A')
+
+      expect(await modal.findByText(/Tuition: 1000.00/)).toHaveTextContent('1500.00')
+      expect(modal.getByLabelText(/Keep generated months/)).toBeChecked()
+      expect(modal.getByText(/Annual and one-time fees stay with the old class/)).toBeInTheDocument()
+      await user.click(modal.getByLabelText(/Re-price unpaid months from March 2026/))
+      await user.type(modal.getByLabelText('Reason'), 'Moved up a class')
+      await user.click(modal.getByRole('button', { name: 'Apply Reclassification' }))
+
+      await waitFor(() => expect(body).not.toBeNull())
+      expect(body.fee_option).toBe('reprice')
+    })
+
+    it('disables re-pricing and says why when a month already has a payment', async () => {
+      mockYear = { id: 1, name: '2025-2026' }
+      server.use(previewFor({
+        fees: {
+          applies: true,
+          from_month: { month: 3, year: 2026 },
+          can_reprice: false,
+          blockers: ['Tuition: 1 month(s) from March 2026 already have payments.'],
+          annual_note: '',
+          categories: [{ category_id: 1, name: 'Tuition', old_fee: '1000.00', new_fee: '1500.00', student_override: false, months_from_move: [] }],
+        },
+      }))
+      const user = await renderProfile()
+
+      await user.click(screen.getByRole('button', { name: 'Reclassify' }))
+      const modal = modalFor('Reclassify Student')
+      await waitFor(() => expect(within(modal.getByLabelText('Target Class')).getByText('Class 1A - A')).toBeInTheDocument())
+      await user.selectOptions(modal.getByLabelText('Target Class'), 'Class 1A - A')
+
+      expect(await modal.findByLabelText(/Re-price unpaid months/)).toBeDisabled()
+      expect(modal.getByText(/already have payments/)).toBeInTheDocument()
     })
 
     it('shows a server rejection inside the dialog', async () => {

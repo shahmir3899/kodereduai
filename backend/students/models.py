@@ -267,24 +267,51 @@ class Student(models.Model):
 
     def restore(self, roll_number=None):
         """Bring a soft-deleted student back, reopening the enrollments that
-        were active at the time. Raises RestoreConflict if their roll number has
-        since been given to another active student in the class."""
+        were active at the time. A roll number given to someone else while they
+        were removed is replaced by the lowest free one in that section; only a roll
+        the caller asks for explicitly raises RestoreConflict when it is taken."""
         from academic_sessions.models import StudentEnrollment
+        from academic_sessions.placement_service import sync_open_placement
+        from academic_sessions.roll_allocator_service import RollAllocatorService
         if not self.deleted_at:
             return
-        roll = str(roll_number) if roll_number else self.roll_number
-        taken = Student.objects.filter(
-            school_id=self.school_id, class_obj_id=self.class_obj_id,
-            roll_number=roll, status='ACTIVE', is_active=True,
-        ).exclude(pk=self.pk).exists()
-        if taken:
-            raise RestoreConflict(
-                f'Roll number {roll} in {self.class_obj.name} now belongs to another student.'
-            )
+        explicit = str(roll_number).strip() if roll_number else ''
         with transaction.atomic():
             ids = self.deleted_enrollment_ids or []
-            if ids:
-                StudentEnrollment.objects.filter(id__in=ids, student_id=self.pk).update(is_active=True)
+            enrollments = list(
+                StudentEnrollment.objects.filter(id__in=ids, student_id=self.pk)
+                .select_related('academic_year', 'session_class')
+                .order_by('academic_year__start_date')
+            )
+            roll = explicit or self.roll_number
+            if not enrollments:
+                taken = Student.objects.filter(
+                    school_id=self.school_id, class_obj_id=self.class_obj_id,
+                    roll_number=roll, status='ACTIVE', is_active=True,
+                ).exclude(pk=self.pk).exists()
+                if taken:
+                    raise RestoreConflict(
+                        f'Roll number {roll} in {self.class_obj.name} now belongs to another student.'
+                    )
+            for position, enrollment in enumerate(enrollments):
+                is_latest = position == len(enrollments) - 1
+                allocator = RollAllocatorService(
+                    school_id=enrollment.school_id, academic_year_id=enrollment.academic_year_id,
+                    class_obj_id=enrollment.class_obj_id, session_class_id=enrollment.session_class_id,
+                )
+                wanted = explicit if (explicit and is_latest) else enrollment.roll_number
+                if allocator.is_roll_taken(wanted, exclude_student_id=self.pk):
+                    if explicit and is_latest:
+                        raise RestoreConflict(
+                            f'Roll number {wanted} in {self.class_obj.name} now belongs to another student.'
+                        )
+                    wanted = allocator.lowest_free_roll(exclude_student_id=self.pk)
+                enrollment.roll_number = wanted
+                enrollment.is_active = True
+                enrollment.save(update_fields=['roll_number', 'is_active', 'updated_at'])
+                sync_open_placement(enrollment)
+                if is_latest:
+                    roll = wanted
             self.roll_number = roll
             self.deleted_at = None
             self.deleted_by = None

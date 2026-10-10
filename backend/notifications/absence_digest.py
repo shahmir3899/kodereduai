@@ -67,6 +67,39 @@ def _active_enrollment_student_ids(
     academic_year_id: int,
     class_obj_id: int,
     session_class_id: Optional[int],
+    target_date=None,
+) -> List[int]:
+    """Students expected in the section. With ``target_date`` they are the ones who sat in it
+    ON that day, so a student moved since (or moved in later) is judged by the right register."""
+    ids = _current_enrollment_student_ids(school_id, academic_year_id, class_obj_id, session_class_id)
+    if not (target_date and session_class_id):
+        return ids
+
+    from academic_sessions.models import EnrollmentPlacement
+    from django.db.models import Q
+
+    on_day = EnrollmentPlacement.objects.filter(
+        school_id=school_id, academic_year_id=academic_year_id, start_date__lte=target_date,
+    ).filter(Q(end_date__isnull=True) | Q(end_date__gt=target_date))
+    placed_here = set(on_day.filter(session_class_id=session_class_id).values_list('student_id', flat=True))
+    placed_anywhere = set(on_day.values_list('student_id', flat=True))
+    # Placed in another section that day: not expected here. Placed here that day but enrolled
+    # elsewhere now (moved later): expected here.
+    keep = [sid for sid in ids if sid not in placed_anywhere or sid in placed_here]
+    extra = set(
+        StudentEnrollment.objects.filter(
+            school_id=school_id, academic_year_id=academic_year_id, student_id__in=placed_here - set(keep),
+            is_active=True, status=StudentEnrollment.Status.ACTIVE, student__is_active=True,
+        ).values_list('student_id', flat=True)
+    )
+    return keep + sorted(extra)
+
+
+def _current_enrollment_student_ids(
+    school_id: int,
+    academic_year_id: int,
+    class_obj_id: int,
+    session_class_id: Optional[int],
 ) -> List[int]:
     qs = StudentEnrollment.objects.filter(
         school_id=school_id,
@@ -200,7 +233,7 @@ def _process_one_cohort_digest(
     """
     stats['cohorts_total'] += 1
     student_ids = _active_enrollment_student_ids(
-        school.id, academic_year.id, class_obj_id, session_class_id
+        school.id, academic_year.id, class_obj_id, session_class_id, target_date=target_date
     )
     if not student_ids:
         stats['cohorts_incomplete'] += 1

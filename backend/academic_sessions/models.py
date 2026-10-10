@@ -318,14 +318,17 @@ class StudentEnrollment(models.Model):
             models.Index(fields=['academic_year', 'is_active', 'student']),
         ]
         constraints = [
+            # Only active enrollments hold a roll: a student who left (or was removed)
+            # keeps the number in their closed enrollment for history, but it is free
+            # for the next student and for the re-number tool.
             models.UniqueConstraint(
                 fields=['school', 'academic_year', 'session_class', 'roll_number'],
-                condition=models.Q(session_class__isnull=False),
+                condition=models.Q(session_class__isnull=False, is_active=True),
                 name='unique_roll_per_session_class_enrollment',
             ),
             models.UniqueConstraint(
                 fields=['school', 'academic_year', 'class_obj', 'roll_number'],
-                condition=models.Q(session_class__isnull=True),
+                condition=models.Q(session_class__isnull=True, is_active=True),
                 name='unique_roll_per_legacy_class_enrollment',
             ),
         ]
@@ -349,11 +352,62 @@ class StudentEnrollment(models.Model):
                 update_fields = kwargs.get('update_fields')
                 if update_fields is not None and 'class_obj' not in update_fields:
                     kwargs['update_fields'] = [*update_fields, 'class_obj']
+        creating = self._state.adding
         super().save(*args, **kwargs)
+        if creating:
+            from .placement_service import open_initial_placement
+            open_initial_placement(self)
 
     def __str__(self):
         class_label = self.session_class.label if self.session_class_id else self.class_obj.name
         return f"{self.student.name} -> {class_label} ({self.academic_year.name})"
+
+
+class EnrollmentPlacement(models.Model):
+    """Where a student sat, and on which dates, within one academic year.
+
+    StudentEnrollment stays the CURRENT placement (every existing reader keeps
+    working); this table is the dated history behind it, so a mid-year class move
+    splits a student's records the way a branch transfer does: dates before the
+    move belong to the old class, dates from it to the new one. ``end_date`` is the
+    first day NOT in the placement (None = still there).
+    """
+
+    school = models.ForeignKey('schools.School', on_delete=models.CASCADE, related_name='enrollment_placements')
+    enrollment = models.ForeignKey(StudentEnrollment, on_delete=models.CASCADE, related_name='placements')
+    # Denormalised from the enrollment so "who was in this section on that day" is one query.
+    student = models.ForeignKey('students.Student', on_delete=models.CASCADE, related_name='enrollment_placements')
+    academic_year = models.ForeignKey(AcademicYear, on_delete=models.CASCADE, related_name='enrollment_placements')
+    session_class = models.ForeignKey(
+        SessionClass, on_delete=models.SET_NULL, null=True, blank=True, related_name='placements',
+    )
+    class_obj = models.ForeignKey('students.Class', on_delete=models.CASCADE, related_name='placements')
+    roll_number = models.CharField(max_length=20)
+    start_date = models.DateField()
+    end_date = models.DateField(null=True, blank=True, help_text='First day NOT in this placement; null = current.')
+    reason = models.TextField(blank=True, default='')
+    created_by = models.ForeignKey(
+        'users.User', null=True, blank=True, on_delete=models.SET_NULL, related_name='+',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['enrollment_id', 'start_date']
+        indexes = [
+            models.Index(fields=['student', 'start_date']),
+            models.Index(fields=['session_class', 'start_date']),
+            models.Index(fields=['school', 'academic_year', 'class_obj']),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=['enrollment'], condition=models.Q(end_date__isnull=True),
+                name='one_open_placement_per_enrollment',
+            ),
+        ]
+
+    def __str__(self):
+        label = self.session_class.label if self.session_class_id else self.class_obj.name
+        return f'{self.student_id} in {label} from {self.start_date}'
 
 
 class PromotionOperation(models.Model):

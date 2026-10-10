@@ -51,6 +51,7 @@ def destination_year(destination, leaving_date):
 def _roll_taken_at_destination(destination, year, session_class, roll_number):
     return StudentEnrollment.objects.filter(
         school=destination, academic_year=year, session_class=session_class, roll_number=roll_number,
+        is_active=True,
     ).exists()
 
 

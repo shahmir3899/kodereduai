@@ -94,7 +94,11 @@ class BaseReportGenerator:
         )
         if enrollments is None:
             return records.filter(student__class_obj_id=class_id) if class_id else records
-        return records.filter(student_id__in=enrollments.values('student_id'))
+        # By where the student sat on each record's date, so a student moved mid-period
+        # appears under each class for its own days.
+        from academic_sessions.placement_service import scope_records
+
+        return scope_records(records, enrollments, session_class_id=session_class_id, class_obj_id=class_id)
 
     def get_data(self) -> dict:
         raise NotImplementedError

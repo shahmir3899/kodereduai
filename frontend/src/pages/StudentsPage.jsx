@@ -30,11 +30,11 @@ import StudentsHeader from './students/components/StudentsHeader'
 import StudentFormModal from './students/components/StudentFormModal'
 import StudentPhotoControl from './students/components/StudentPhotoControl'
 import ReclassifyStudentModal from './students/components/ReclassifyStudentModal'
+import RenumberSectionModal from './students/components/RenumberSectionModal'
 import StudentStats from './students/components/StudentStats'
 import StudentFilters from './students/components/StudentFilters'
 import StudentsList from './students/components/StudentsList'
 import SelectionBar from './students/components/SelectionBar'
-import DeleteStudentModal from './students/components/DeleteStudentModal'
 import BulkUploadModal from './students/components/BulkUploadModal'
 import ConvertAccountModal from './students/components/ConvertAccountModal'
 import BulkConvertModal from './students/components/BulkConvertModal'
@@ -63,7 +63,6 @@ export default function StudentsPage() {
   const [showModal, setShowModal] = useState(false)
   const [editingStudent, setEditingStudent] = useState(null)
   const [reclassifyStudent, setReclassifyStudent] = useState(null)
-  const [deleteConfirm, setDeleteConfirm] = useState(null)
   const [showBulkModal, setShowBulkModal] = useState(false)
   const [bulkData, setBulkData] = useState({ class_id: '', students: [] })
   const [isUploading, setIsUploading] = useState(false)
@@ -74,6 +73,7 @@ export default function StudentsPage() {
   // Convert existing students to portal users (the modals own their form state)
   const [convertStudent, setConvertStudent] = useState(null)
   const [showBulkConvertModal, setShowBulkConvertModal] = useState(false)
+  const [showRenumber, setShowRenumber] = useState(false)
 
   const { sessionClasses } = useSessionClasses(activeAcademicYear?.id, selectedSchoolId)
   const classSelectorScope = getClassSelectorScope(activeAcademicYear?.id)
@@ -83,6 +83,10 @@ export default function StudentsPage() {
       .filter(Boolean),
     [selectedClassIds, activeAcademicYear?.id, sessionClasses],
   )
+  // The one section being viewed (exactly one chip selected), for the admin-only re-number tool.
+  const renumberSection = canManageLifecycle && selectedClassIds.length === 1
+    ? sessionClasses.find((sc) => String(sc.id) === String(selectedClassIds[0])) || null
+    : null
   const resolveMasterClassId = (classId) => getResolvedMasterClassId(classId, activeAcademicYear?.id, sessionClasses)
 
   // Fetch schools for Super Admin
@@ -112,24 +116,6 @@ export default function StudentsPage() {
       status_scope: statusScope,
     }),
     enabled: !!selectedSchoolId,
-  })
-
-  // Delete student mutation
-  const deleteMutation = useMutation({
-    mutationFn: ({ id, reason }) => studentsApi.deleteStudent(id, reason),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['students'] })
-      queryClient.invalidateQueries({ queryKey: ['classes'] })
-      queryClient.invalidateQueries({ queryKey: ['deletedStudents'] })
-      setDeleteConfirm(null)
-      showSuccess('Student removed. A School Admin can restore them from Recently deleted.')
-    },
-    onError: (error) => {
-      const message = error.response?.data?.detail ||
-                      error.message ||
-                      'Failed to delete student'
-      showError(message)
-    },
   })
 
   // Photo upload/remove — only available once a student exists (edit mode)
@@ -198,7 +184,6 @@ export default function StudentsPage() {
     setReclassifyStudent(student)
   }
 
-  useEscapeKey(() => setDeleteConfirm(null), !!deleteConfirm)
   useEscapeKey(() => setShowBulkModal(false), showBulkModal)
 
   const updateStudent = useUpdateStudent()
@@ -494,6 +479,7 @@ export default function StudentsPage() {
         onDownloadExcel={downloadExcelTemplate}
         onUploadFile={handleFileUpload}
         onAdd={openAddModal}
+        onRenumber={renumberSection ? () => setShowRenumber(true) : undefined}
       />
 
       {/* Warning: No academic year */}
@@ -550,10 +536,8 @@ export default function StudentsPage() {
           allSelectableSelected={studentsWithoutAccounts.length > 0 && selectedIds.size === studentsWithoutAccounts.length}
           onToggleSelect={selection.toggle}
           onToggleSelectAll={selection.toggleAll}
-          canManageLifecycle={canManageLifecycle}
           onEdit={openEditModal}
           onConvert={setConvertStudent}
-          onDelete={setDeleteConfirm}
           onOpenTransferred={openTransferred}
         />
       )}
@@ -585,17 +569,15 @@ export default function StudentsPage() {
         />
       )}
 
-      {reclassifyStudent && (
-        <ReclassifyStudentModal student={reclassifyStudent} onClose={() => setReclassifyStudent(null)} />
+      {showRenumber && renumberSection && (
+        <RenumberSectionModal
+          section={{ id: renumberSection.id, label: renumberSection.label || renumberSection.display_name || renumberSection.name }}
+          onClose={() => setShowRenumber(false)}
+        />
       )}
 
-      {deleteConfirm && (
-        <DeleteStudentModal
-          student={deleteConfirm}
-          isPending={deleteMutation.isPending}
-          onCancel={() => setDeleteConfirm(null)}
-          onConfirm={(reason) => deleteMutation.mutate({ id: deleteConfirm.id, reason })}
-        />
+      {reclassifyStudent && (
+        <ReclassifyStudentModal student={reclassifyStudent} onClose={() => setReclassifyStudent(null)} />
       )}
 
       {showBulkModal && (

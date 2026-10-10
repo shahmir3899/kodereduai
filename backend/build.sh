@@ -25,6 +25,11 @@ python manage.py collectstatic --no-input
 echo "==> Running database migrations..."
 python manage.py migrate --no-input
 
+echo "==> Giving enrollments created before placements existed their initial placement..."
+# Idempotent: only enrollments with no placement row are touched. Migration 0018 did the
+# bulk of it; this covers rows the previous deploy created in the meantime.
+python manage.py backfill_enrollment_placements || echo "WARN: backfill_enrollment_placements failed (non-fatal)"
+
 echo "==> Syncing notification scheduler (django_celery_beat DB rows)..."
 # Beat uses DatabaseScheduler — it seeds new periodic tasks from
 # settings.CELERY_BEAT_SCHEDULE on startup but does NOT update existing rows

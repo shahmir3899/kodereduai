@@ -27,16 +27,19 @@ describe('DeleteStudentModal', () => {
 
     await user.clear(screen.getByLabelText(/Type "Muhammad Abbas Jan"/))
     await user.type(screen.getByLabelText(/Type "Muhammad Abbas Jan"/), 'muhammad abbas jan')
+    expect(remove).toBeDisabled() // a reason is required too
+
+    await user.type(screen.getByLabelText('Reason (required)'), 'duplicate entry')
     expect(remove).toBeEnabled()
   })
 
-  it('passes the optional reason to onConfirm', async () => {
+  it('passes the reason to onConfirm', async () => {
     const user = userEvent.setup()
     const onConfirm = vi.fn()
     render(<DeleteStudentModal student={student} isPending={false} onCancel={() => {}} onConfirm={onConfirm} />)
 
     await user.type(screen.getByLabelText(/Type "Muhammad Abbas Jan"/), student.name)
-    await user.type(screen.getByLabelText('Reason (optional)'), ' duplicate entry ')
+    await user.type(screen.getByLabelText('Reason (required)'), ' duplicate entry ')
     await user.click(screen.getByRole('button', { name: 'Remove student' }))
 
     expect(onConfirm).toHaveBeenCalledWith('duplicate entry')

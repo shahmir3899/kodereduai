@@ -305,6 +305,12 @@ export const studentsApi = {
   deleteStudent: (id, reason = '') => api.delete(`/api/students/${id}/`, { data: { reason } }),
   getDeletedStudents: () => api.get('/api/students/deleted/'),
   restoreStudent: (id, data = {}) => api.post(`/api/students/${id}/restore/`, data),
+  // Records the student owns + the outcomes open to them (drives Status & exit / Remove).
+  getRemovalPreview: (id) => api.get(`/api/students/${id}/removal-preview/`),
+  // Graduated / Repeat for an academic year; reason is required.
+  setStudentOutcome: (id, data) => api.post(`/api/students/${id}/outcome/`, data),
+  // Erase a removed student for good; only allowed when they own no records at all.
+  purgeStudent: (id, confirmName) => api.post(`/api/students/${id}/purge/`, { confirm_name: confirmName }),
   bulkCreateStudents: (data) => api.post('/api/students/bulk_create/', data),
   getStudentsByClass: (params) => api.get('/api/students/by_class/', { params }),
 
@@ -328,6 +334,8 @@ export const studentsApi = {
   removePhoto: (id) => api.post(`/api/students/${id}/remove_photo/`),
   getAIProfile: (id) => api.get(`/api/students/${id}/ai-profile/`),
   reclassifyStudent: (id, data) => api.post(`/api/students/${id}/reclassify/`, data),
+  // Roll, warnings and fee impact of a move, nothing changed.
+  getReclassifyPreview: (id, params) => api.get(`/api/students/${id}/reclassify-preview/`, { params }),
   createStudentUserAccount: (id, data) => api.post(`/api/students/${id}/create-user-account/`, data),
   bulkCreateAccounts: (data) => api.post('/api/students/bulk-create-accounts/', data),
 }
@@ -652,6 +660,8 @@ export const academicsApi = {
 
 // Academic Sessions API
 export const sessionsApi = {
+  // Re-number a section's active students 1..n (action: 'preview' | 'apply').
+  renumberSection: (sessionClassId, data) => api.post(`/api/sessions/session-classes/${sessionClassId}/renumber/`, data),
   // Academic Years
   getAcademicYears: (params) => api.get('/api/sessions/academic-years/', { params }),
   getAcademicYear: (id) => api.get(`/api/sessions/academic-years/${id}/`),

@@ -772,7 +772,11 @@ class AttendanceRecordViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.R
             if enrollments is None:
                 queryset = queryset.filter(student__class_obj_id=class_id)
             else:
-                queryset = queryset.filter(student_id__in=enrollments.values('student_id'))
+                from academic_sessions.placement_service import scope_records
+
+                queryset = scope_records(
+                    queryset, enrollments, session_class_id=session_class_id, class_obj_id=class_id,
+                )
         elif session_class_id:
             queryset = queryset.filter(student__enrollments__session_class_id=session_class_id).distinct()
         elif class_id:
@@ -877,7 +881,13 @@ class AttendanceRecordViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.R
         if enrollments is None:
             records = records.filter(student__class_obj_id=class_id)
         else:
-            records = records.filter(student_id__in=enrollments.values('student_id'))
+            # By where the student sat on each record's own date, so a student moved
+            # mid-month shows under the old section before the move and the new one after.
+            from academic_sessions.placement_service import scope_records
+
+            records = scope_records(
+                records, enrollments, session_class_id=session_class_id, class_obj_id=class_id,
+            )
             if academic_year_id:
                 records = records.filter(academic_year_id=academic_year_id)
         return Response(list(records))
@@ -953,10 +963,22 @@ class AttendanceRecordViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.R
             if e['session_class_id']
         }
 
+        # A student moved mid-month belongs to each section for the days they were in it.
+        from academic_sessions.placement_service import section_by_student_date
+        dated = section_by_student_date(
+            school_id, {row['student_id'] for row in rows}, date.fromisoformat(date_from), date.fromisoformat(date_to),
+        )
+
+        def section_on(student_id, day):
+            for start, end, session_class_id in dated.get(student_id, ()):
+                if start <= day and (end is None or end > day) and session_class_id:
+                    return str(session_class_id)
+            return None
+
         # Group rows by session_class_id
         by_class = {}
         for row in rows:
-            sc_id = student_to_sc.get(row['student_id'])
+            sc_id = section_on(row['student_id'], row['date']) or student_to_sc.get(row['student_id'])
             if sc_id is None:
                 sc_id = f"c{row['student__class_obj_id']}" if row['student__class_obj_id'] else '__unknown__'
             if sc_id not in by_class:
@@ -1025,12 +1047,18 @@ class AttendanceRecordViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.R
         class_off_dates_cache = {}
         stats = {sid: {'absent_count': 0, 'total_days': 0} for sid in student_map.keys()}
 
+        # The class's own off days count for the days the student was in that class.
+        from academic_sessions.placement_service import DatedPlacements
+        dated = DatedPlacements(school_id, student_map.keys(), date_from, timezone.now().date())
+
         for row in attendance_rows:
             student = student_map.get(row['student_id'])
             if not student:
                 continue
 
-            class_id = placement_class_id(placements.get((student.id, current_year_id)), student)
+            class_id = dated.class_id(student.id, row['date']) or placement_class_id(
+                placements.get((student.id, current_year_id)), student,
+            )
             if class_id not in class_off_dates_cache:
                 class_off_dates_cache[class_id] = build_off_day_date_set(
                     school_id=school_id,
@@ -1198,6 +1226,17 @@ class AttendanceRecordViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.R
             month=month,
         )
 
+        # A student moved mid-month is on both sections' registers, each for its own days.
+        if session_class_id:
+            from academic_sessions.models import SessionClass
+            from academic_sessions.placement_service import section_month_roster_q
+
+            section = SessionClass.objects.filter(id=session_class_id, school_id=school_id).first()
+            if section is not None:
+                students_qs = Student.objects.filter(school_id=school_id, is_active=True).filter(
+                    section_month_roster_q(section, year, month)
+                ).distinct()
+
         students = students_qs.order_by('roll_number').values('id', 'name', 'roll_number')
         student_ids = [s['id'] for s in students]
 
@@ -1211,8 +1250,21 @@ class AttendanceRecordViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.R
 
         # Build attendance matrix: {student_id: {date: status}}
         attendance_matrix = {s['id']: {} for s in students}
+        from academic_sessions.placement_service import DatedPlacements
+
+        dated = DatedPlacements(school_id, student_ids, date_from, date_to)
+
+        def in_this_class(student_id, day):
+            placement = dated.get(student_id, day)
+            if placement is None:
+                return True  # no dated placement: the enrollment-based roster already decided
+            if session_class_id:
+                return placement.session_class_id == int(session_class_id)
+            return placement.class_obj_id == int(class_id)
+
         for record in records:
-            attendance_matrix[record['student_id']][record['date']] = record['status']
+            if in_this_class(record['student_id'], record['date']):
+                attendance_matrix[record['student_id']][record['date']] = record['status']
 
         # Generate PDF
         buffer = io.BytesIO()
@@ -1894,6 +1946,26 @@ class AttendanceRecordViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.R
             from academic_sessions.leaving import enrolled_on_q
 
             valid_student_ids = set(enrollments.filter(enrolled_on_q(date)).values_list('student_id', flat=True))
+            # Where they sat on this date, not where they sit now: a student moved
+            # later can still be back-filled in the old section for earlier days.
+            from academic_sessions.placement_service import student_ids_placed_on
+
+            placed, has_placements = student_ids_placed_on(
+                date, [e['student_id'] for e in entries], school_id=school_id,
+                session_class_id=session_class.id if session_class else None, class_obj_id=class_id,
+            )
+            # Still enrolled on that date in some section (a removed or departed student is not).
+            from academic_sessions.models import StudentEnrollment
+
+            enrolled_somewhere = set(
+                StudentEnrollment.objects.filter(
+                    school_id=school_id, academic_year_id=academic_year.id,
+                    student_id__in=[e['student_id'] for e in entries],
+                ).filter(enrolled_on_q(date)).values_list('student_id', flat=True)
+            )
+            valid_student_ids = (
+                {sid for sid in valid_student_ids if sid not in has_placements} | (placed & enrolled_somewhere)
+            )
         else:
             valid_student_ids = set(
                 Student.objects.filter(

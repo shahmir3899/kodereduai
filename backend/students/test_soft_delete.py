@@ -131,15 +131,31 @@ class TestRestore:
         assert AdminActionLog.objects.filter(action='student_restore', target_id=str(student.id)).exists()
         assert student.id not in deleted_ids(api, ctx)
 
-    def test_restore_refuses_a_roll_number_that_was_reused(self, api, ctx):
+    def test_restore_gives_the_lowest_free_roll_when_theirs_was_reused(self, api, ctx):
         student = ctx['student']
+        old_roll = student.roll_number
         delete(api, ctx, student)
-        other = Student.objects.create(
-            school=ctx['school_a'], class_obj=student.class_obj, roll_number=student.roll_number,
+        Student.objects.create(
+            school=ctx['school_a'], class_obj=student.class_obj, roll_number=old_roll,
             name='New Kid', status='ACTIVE',
         )
 
         resp = api.post(url(student, 'restore/'), {}, ctx['tokens']['admin'], ctx['SID_A'])
+
+        assert resp.status_code == 200, resp.content
+        restored = Student.objects.get(id=student.id)
+        assert restored.deleted_at is None and restored.roll_number != old_roll
+        assert StudentEnrollment.objects.get(id=ctx['enrollment'].id).roll_number == restored.roll_number
+
+    def test_restore_refuses_a_requested_roll_that_is_taken(self, api, ctx):
+        student = ctx['student']
+        delete(api, ctx, student)
+        other = Student.objects.create(
+            school=ctx['school_a'], class_obj=student.class_obj, roll_number='888',
+            name='New Kid', status='ACTIVE',
+        )
+
+        resp = api.post(url(student, 'restore/'), {'roll_number': other.roll_number}, ctx['tokens']['admin'], ctx['SID_A'])
         assert resp.status_code == 409
         assert resp.json()['code'] == 'roll_conflict'
         assert Student.all_objects.get(id=student.id).deleted_at is not None
@@ -147,7 +163,6 @@ class TestRestore:
         ok = api.post(url(student, 'restore/'), {'roll_number': '999'}, ctx['tokens']['admin'], ctx['SID_A'])
         assert ok.status_code == 200
         assert Student.objects.get(id=student.id).roll_number == '999'
-        assert other.roll_number != '999'
 
     def test_a_teacher_cannot_list_or_restore_deleted_students(self, api, ctx):
         student = ctx['student']

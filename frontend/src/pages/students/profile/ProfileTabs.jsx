@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { Fragment, useEffect, useState } from 'react'
 import { TONE } from '../../../components/ui/statusTones'
 import ErrorState from '../../../components/ui/ErrorState'
 import LoadingState from '../../../components/ui/LoadingState'
@@ -340,7 +340,8 @@ export function HistoryTab({ data, isLoading, error, awayPeriods }) {
         </thead>
         <tbody className="divide-y divide-gray-100">
           {history.map((e, i) => (
-            <tr key={i} className="hover:bg-gray-50">
+            <Fragment key={i}>
+            <tr className="hover:bg-gray-50">
               <td className="px-4 py-3 text-sm text-gray-900">{e.academic_year_name || e.academic_year}<BranchTag branch={e.branch} /></td>
               <td className="px-4 py-3 text-sm text-gray-600">{e.class_name}</td>
               <td className="px-4 py-3 text-sm text-gray-600">{e.section || '-'}</td>
@@ -355,6 +356,21 @@ export function HistoryTab({ data, isLoading, error, awayPeriods }) {
                 </span>
               </td>
             </tr>
+            {(e.placements || []).length > 1 && (
+              <tr className="bg-gray-50">
+                <td colSpan={5} className="px-4 py-2 text-xs text-gray-600">
+                  <span className="font-medium text-gray-700">Moved during the year: </span>
+                  {e.placements.map((p, idx) => (
+                    <span key={idx}>
+                      {idx > 0 && ' → '}
+                      {p.class_name} (roll {p.roll_number}, {formatPlacementDate(p.start_date)}
+                      {p.end_date ? ` to ${formatPlacementDate(p.end_date, -1)}` : ' onward'})
+                    </span>
+                  ))}
+                </td>
+              </tr>
+            )}
+            </Fragment>
           ))}
         </tbody>
       </table>
@@ -362,6 +378,13 @@ export function HistoryTab({ data, isLoading, error, awayPeriods }) {
     </div>
     </div>
   )
+}
+
+// End dates are exclusive (the first day in the NEXT class), so show the day before.
+function formatPlacementDate(iso, shiftDays = 0) {
+  const d = new Date(`${iso}T00:00:00`)
+  d.setDate(d.getDate() + shiftDays)
+  return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })
 }
 
 const SKILL_FIELDS = [

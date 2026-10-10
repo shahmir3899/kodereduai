@@ -555,11 +555,6 @@ GROQ_MODEL = os.getenv('EDU_GROQ_MODEL', 'openai/gpt-oss-120b')
 # See: backend/attendance/_deprecated_ocr/README.md
 OCR_ENABLED = os.getenv('OCR_ENABLED', 'False').lower() in ('true', '1', 'yes')
 
-# Withdrawn/Transferred must go through the student exit workflow (clearance +
-# finalization). Off until the exit UI ships, so the Update Status dialog keeps
-# working in the meantime; flip it on afterwards to close the side door.
-STUDENT_EXIT_WORKFLOW_ENFORCED = os.getenv('STUDENT_EXIT_WORKFLOW_ENFORCED', 'False').lower() in ('true', '1', 'yes')
-
 # Vision Pipeline: Use vision AI instead of OCR for handwritten registers
 # Set to False to use legacy Tesseract OCR pipeline
 # NOTE: Unused while OCR_ENABLED=False. Kept for future re-activation.

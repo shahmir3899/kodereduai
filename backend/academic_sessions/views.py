@@ -24,6 +24,7 @@ from .models import (
     SchoolCalendarEntry,
     PromotionOperation,
     PromotionEvent,
+    EnrollmentPlacement,
 )
 from .serializers import (
     AcademicYearSerializer,
@@ -525,7 +526,12 @@ class SessionClassViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
                 is_active=True,
                 session_class__isnull=True,
             )
+            ids = list(qs.values_list('id', flat=True))
             updated_count = qs.update(session_class=target)
+            # queryset.update() skips save(), so the dated placements follow by hand.
+            EnrollmentPlacement.objects.filter(enrollment_id__in=ids, end_date__isnull=True).update(
+                session_class=target,
+            )
 
         return Response({
             'updated_count': updated_count,
@@ -536,6 +542,32 @@ class SessionClassViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
                 'class_obj_id': target.class_obj_id,
             },
         })
+
+    @action(detail=True, methods=['post'], url_path='renumber')
+    def renumber(self, request, pk=None):
+        """Re-number the active students of a section 1..n. ``action`` is ``preview``
+        (default, changes nothing) or ``apply`` (needs the same ``order`` and, for a
+        manual order, ``student_ids``). Admin only; roll numbers never shift on their own."""
+        from . import renumber_service as renumber
+
+        if not IsSchoolAdmin().has_permission(request, self):
+            return Response({'detail': 'Only a School Admin can re-number a section.'}, status=403)
+        section = self.get_object()
+        try:
+            plan = renumber.build_plan(
+                section, order=request.data.get('order') or 'alphabetical',
+                manual_ids=request.data.get('student_ids'),
+            )
+            if (request.data.get('action') or 'preview') != 'apply':
+                return Response({
+                    'section': section.label, 'changes': plan,
+                    'unchanged': sum(1 for row in plan if row['old_roll'] == row['new_roll']),
+                    'attendance_records': renumber.attendance_warning(section, plan),
+                })
+            changed = renumber.apply_plan(section, plan, user=request.user, request=request)
+        except renumber.RenumberError as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({'section': section.label, 'changed': len(changed), 'changes': plan})
 
     @action(detail=False, methods=['post'], url_path='initialize')
     def initialize(self, request):
@@ -672,6 +704,48 @@ class StudentEnrollmentViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
 
             qs = qs.filter(enrolled_on_q(active_on))
         return qs
+
+    def destroy(self, request, *args, **kwargs):
+        """Deleting an enrollment makes the student vanish from that year's rosters
+        and reports, so it is refused once the year holds any of their attendance,
+        fees or marks, and audit-logged when it goes ahead (no screen uses this)."""
+        from attendance.models import AttendanceRecord
+        from core.audit import log_admin_action, snapshot_instance
+        from examinations.models import StudentMark
+        from finance.models import FeePayment
+
+        enrollment = self.get_object()
+        owned = {
+            'attendance': AttendanceRecord.objects.filter(
+                student_id=enrollment.student_id, academic_year_id=enrollment.academic_year_id).count(),
+            'fees': FeePayment.objects.filter(
+                student_id=enrollment.student_id, academic_year_id=enrollment.academic_year_id).count(),
+            'marks': StudentMark.objects.filter(enrollment=enrollment).count(),
+        }
+        if any(owned.values()):
+            return Response({
+                'code': 'enrollment_has_records',
+                'detail': 'This enrollment still has attendance, fees or marks for the year, so it cannot be deleted.',
+                'counts': owned,
+            }, status=status.HTTP_409_CONFLICT)
+        with transaction.atomic():
+            log_admin_action(request, 'enrollment_delete', enrollment, metadata={
+                'snapshot': snapshot_instance(enrollment), 'student': enrollment.student_id,
+            })
+            return super().destroy(request, *args, **kwargs)
+
+    def perform_update(self, serializer):
+        from core.audit import log_admin_action
+
+        before = {
+            'class_obj': serializer.instance.class_obj_id, 'session_class': serializer.instance.session_class_id,
+            'roll_number': serializer.instance.roll_number, 'status': serializer.instance.status,
+        }
+        with transaction.atomic():
+            enrollment = serializer.save()
+            log_admin_action(self.request, 'enrollment_update', enrollment, metadata={
+                'before': before, 'student': enrollment.student_id,
+            })
 
     @staticmethod
     def _derive_next_class_name(source_name):

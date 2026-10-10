@@ -155,7 +155,7 @@ class StudentExitViewSet(
                        .select_related('class_obj').order_by('grade_level', 'section'))
         rolls = {}
         for class_id, roll in StudentEnrollment.objects.filter(
-            school=destination, academic_year=year, session_class__in=classes,
+            school=destination, academic_year=year, session_class__in=classes, is_active=True,
         ).values_list('session_class_id', 'roll_number'):
             rolls.setdefault(class_id, []).append(roll)
         return Response({

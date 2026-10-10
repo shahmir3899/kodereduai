@@ -240,10 +240,12 @@ def enrollment_rows(student, segments=None):
     enrollments = (
         StudentEnrollment.objects.filter(timeline.enrollments_q(segments))
         .select_related('academic_year', 'session_class', 'class_obj')
+        .prefetch_related('placements__session_class', 'placements__class_obj')
         .order_by('-academic_year__start_date', '-academic_year__id', '-id')
     )
     rows = []
     for e in enrollments:
+        placements = sorted(e.placements.all(), key=lambda p: p.start_date)
         class_name = (
             (e.session_class.display_name if e.session_class_id else None)
             or (e.class_obj.name if e.class_obj_id else None)
@@ -261,6 +263,20 @@ def enrollment_rows(student, segments=None):
             'status': e.status,
             'is_active': e.is_active,
             'left_date': e.left_date.isoformat() if e.left_date else None,
+            # Only a year with a mid-year move has more than one: class and roll by dates.
+            'placements': [
+                {
+                    'class_name': (
+                        (p.session_class.display_name if p.session_class_id else None)
+                        or (p.class_obj.name if p.class_obj_id else None)
+                    ),
+                    'roll_number': p.roll_number,
+                    'start_date': p.start_date.isoformat(),
+                    'end_date': p.end_date.isoformat() if p.end_date else None,
+                    'reason': p.reason,
+                }
+                for p in placements
+            ] if len(placements) > 1 else [],
         }, segments, e.student_id, e.school_id))
     return rows
 

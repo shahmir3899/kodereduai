@@ -264,8 +264,26 @@ class TestLegacyAndOldPath:
         assert "can't tell when this student left" in resp.json()['detail']
 
     def patch_status(self, api, ctx, status, day):
-        return api.patch(f"/api/students/{ctx['student'].id}/", {'status': status, 'status_date': day.isoformat()},
+        """What the Update Status dialog used to do. A bare PATCH of status is now refused,
+        but sync_enrollment_status still runs for any other caller that changes it, so the
+        break bookkeeping is exercised directly."""
+        from academic_sessions.leaving import sync_enrollment_status
+
+        student = ctx['student']
+        student.refresh_from_db()
+        previous_status, previous_date = student.status, student.status_date
+        student.status, student.status_date = status, day
+        student.save()
+        sync_enrollment_status(student, previous_status, previous_date)
+
+        class Ok:
+            status_code = 200
+        return Ok()
+
+    def test_a_bare_status_patch_is_refused(self, api, ctx):
+        resp = api.patch(f"/api/students/{ctx['student'].id}/", {'status': 'WITHDRAWN'},
                          ctx['tokens']['admin'], ctx['SID_A'])
+        assert resp.status_code == 400
 
     def test_leaving_through_the_old_status_dialog_also_opens_a_break(self, api, ctx):
         assert self.patch_status(api, ctx, 'WITHDRAWN', LEFT).status_code == 200

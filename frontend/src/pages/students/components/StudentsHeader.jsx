@@ -12,6 +12,7 @@ export default function StudentsHeader({
   onDownloadExcel,
   onUploadFile,
   onAdd,
+  onRenumber,
 }) {
   const [showExportMenu, setShowExportMenu] = useState(false)
   const exportRef = useRef(null)
@@ -29,6 +30,9 @@ export default function StudentsHeader({
 
   return (
     <PageHeader title="Students" subtitle="Manage students in your school" className="mb-6" actions={<>
+{onRenumber && (
+          <button onClick={onRenumber} className="btn btn-secondary">Re-number section</button>
+        )}
 {showTools && (
           <>
             {hasStudents && (

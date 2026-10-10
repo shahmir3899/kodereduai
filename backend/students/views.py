@@ -171,7 +171,7 @@ class StudentViewSet(ModuleAccessMixin, TenantQuerySetMixin, AuditedDeleteMixin,
             return [IsAuthenticated(), CanManageStudentPhoto(), HasSchoolAccess()]
         if self.action in ('create_user_account', 'bulk_create_accounts'):
             return [IsAuthenticated(), CanCreateStudentAccount(), HasSchoolAccess()]
-        if self.action in ('deleted', 'restore'):
+        if self.action in ('deleted', 'restore', 'removal_preview', 'outcome', 'purge', 'reclassify', 'reclassify_preview'):
             return [IsAuthenticated(), IsSchoolAdmin(), HasSchoolAccess()]
         if self.action in ('update', 'partial_update'):
             return [IsAuthenticated(), CanEditStudentRecord(), HasSchoolAccess()]
@@ -250,11 +250,8 @@ class StudentViewSet(ModuleAccessMixin, TenantQuerySetMixin, AuditedDeleteMixin,
             as_of_year = self.request.query_params.get('as_of_year')
             as_of_month = self.request.query_params.get('as_of_month')
             if as_of_year and as_of_month:
-                from academic_sessions.utils import enrollment_covers_month
-                roster_filter = Q(
-                    enrollments__academic_year_id=session_class.academic_year_id,
-                    enrollments__session_class_id=session_class.id,
-                ) & enrollment_covers_month(int(as_of_year), int(as_of_month), prefix='enrollments')
+                from academic_sessions.placement_service import section_month_roster_q
+                roster_filter = section_month_roster_q(session_class, as_of_year, as_of_month)
                 session_roster_month_scoped = True
             else:
                 roster_filter = Q(
@@ -484,6 +481,64 @@ class StudentViewSet(ModuleAccessMixin, TenantQuerySetMixin, AuditedDeleteMixin,
         } for s in self._deleted_queryset().order_by('-deleted_at')]
         return Response({'count': len(rows), 'results': rows})
 
+    @action(detail=True, methods=['get'], url_path='removal-preview')
+    def removal_preview(self, request, pk=None):
+        """Records the student owns and the outcomes open to them, for the
+        Status & exit dialog."""
+        from django.http import Http404
+        from .lifecycle import removal_preview
+        try:
+            student = self.get_object()
+        except Http404:
+            # Removed students are not in the normal queryset; Recently deleted
+            # asks the same question to decide whether they can be erased.
+            student = get_object_or_404(self._deleted_queryset(), pk=pk)
+        return Response(removal_preview(student))
+
+    @action(detail=True, methods=['post'], url_path='outcome')
+    def outcome(self, request, pk=None):
+        """Mark the student Graduated or Repeat for an academic year."""
+        from academic_sessions.models import AcademicYear
+        from .lifecycle import OutcomeError, set_academic_outcome
+        student = self.get_object()
+        year = None
+        if request.data.get('academic_year'):
+            year = get_object_or_404(AcademicYear, pk=request.data['academic_year'], school_id=student.school_id)
+        try:
+            set_academic_outcome(
+                student=student, outcome=request.data.get('outcome'), reason=request.data.get('reason'),
+                user=request.user, request=request, academic_year=year,
+            )
+        except OutcomeError as exc:
+            return Response(exc.payload, status=status.HTTP_400_BAD_REQUEST)
+        return Response(StudentSerializer(student, context=self.get_serializer_context()).data)
+
+    @action(detail=True, methods=['post'], url_path='purge')
+    def purge(self, request, pk=None):
+        """Erase a removed student for good. Only possible when they own no records
+        at all (a hard delete cascades away attendance, fees and marks), and only
+        after they were removed and their name is typed back."""
+        from core.audit import log_admin_action, snapshot_instance
+        from .lifecycle import history_counts
+        student = get_object_or_404(self._deleted_queryset(), pk=pk)
+        if str(request.data.get('confirm_name', '')).strip() != student.name.strip():
+            return Response(
+                {'code': 'name_mismatch', 'detail': "Type the student's name exactly to confirm."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        counts = history_counts(student)
+        if counts:
+            return Response({
+                'code': 'has_history',
+                'detail': f'{student.name} has records, so they cannot be deleted permanently. '
+                          'Keep them in Recently deleted, or restore and mark them as left.',
+                'counts': counts,
+            }, status=status.HTTP_409_CONFLICT)
+        with transaction.atomic():
+            log_admin_action(request, 'student_purge', student, metadata={'snapshot': snapshot_instance(student)})
+            student.hard_delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
     @action(detail=True, methods=['post'], url_path='restore')
     def restore(self, request, pk=None):
         """Bring a deleted student back with everything they owned."""
@@ -632,7 +687,13 @@ class StudentViewSet(ModuleAccessMixin, TenantQuerySetMixin, AuditedDeleteMixin,
             class_obj_id=target_class.id,
             session_class_id=(target_session_class.id if target_session_class else None),
         )
-        preferred_roll = (payload.get('new_roll_number') or enrollment.roll_number or '').strip() or None
+        # A roll typed in the dialog wins when free; otherwise the lowest free one in the
+        # destination. Staying in the same section keeps the current roll.
+        same_section = (
+            target_session_class is not None and target_session_class.id == enrollment.session_class_id
+        ) or (target_session_class is None and target_class.id == enrollment.class_obj_id)
+        typed_roll = (payload.get('new_roll_number') or '').strip()
+        preferred_roll = typed_roll or ((enrollment.roll_number or '').strip() if same_section else '') or None
         resolved_roll = allocator.resolve_roll(
             preferred_roll=preferred_roll,
             exclude_student_id=student.id,
@@ -641,12 +702,50 @@ class StudentViewSet(ModuleAccessMixin, TenantQuerySetMixin, AuditedDeleteMixin,
         old_class_id = enrollment.class_obj_id
         old_roll = enrollment.roll_number
 
-        move_student(
-            enrollment,
-            session_class=target_session_class,
-            class_obj=target_class,
-            roll_number=resolved_roll,
+        from datetime import date as date_cls
+        from finance import class_move_fees
+        from core.audit import log_admin_action
+
+        effective_date = payload.get('effective_date') or date_cls.today()
+        effective_date = min(max(effective_date, academic_year.start_date), academic_year.end_date)
+        impact = class_move_fees.fee_impact(
+            student, academic_year=academic_year, old_class_obj_id=old_class_id,
+            new_class_obj_id=target_class.id, effective_date=effective_date,
         )
+        reprice = payload.get('fee_option') == 'reprice' and impact.get('applies')
+        if reprice and not impact.get('can_reprice'):
+            return Response(
+                {'code': 'fees_cannot_be_repriced', 'detail': 'The fees cannot be re-priced: ' + ' '.join(impact['blockers'])},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        with transaction.atomic():
+            move_student(
+                enrollment,
+                session_class=target_session_class,
+                class_obj=target_class,
+                roll_number=resolved_roll,
+                effective_date=effective_date,
+                reason=payload['reason'],
+                user=request.user,
+            )
+            fee_changes = []
+            if reprice:
+                try:
+                    fee_changes = class_move_fees.reprice_months(
+                        student, academic_year=academic_year, new_class_obj_id=target_class.id,
+                        effective_date=effective_date,
+                    )
+                except ValueError as exc:
+                    transaction.set_rollback(True)
+                    return Response({'code': 'fees_cannot_be_repriced', 'detail': str(exc)},
+                                    status=status.HTTP_400_BAD_REQUEST)
+            log_admin_action(request, 'student_reclassified', student, metadata={
+                'academic_year_id': academic_year.id, 'effective_date': effective_date.isoformat(),
+                'old_class_id': old_class_id, 'new_class_id': target_class.id,
+                'old_roll': old_roll, 'new_roll': resolved_roll, 'reason': payload['reason'],
+                'fee_option': payload.get('fee_option'), 'fee_changes': fee_changes,
+            })
 
         operation = PromotionOperation.objects.create(
             school_id=school_id,
@@ -705,6 +804,81 @@ class StudentViewSet(ModuleAccessMixin, TenantQuerySetMixin, AuditedDeleteMixin,
             'target_class_id': target_class.id,
             'target_session_class_id': (target_session_class.id if target_session_class else None),
             'new_roll_number': resolved_roll,
+            'effective_date': effective_date.isoformat(),
+            'fee_changes': fee_changes,
+        })
+
+    @action(detail=True, methods=['get'], url_path='reclassify-preview')
+    def reclassify_preview(self, request, pk=None):
+        """What a move would do, for the Reclassify dialog: the roll the student would get,
+        warnings about records dated on or after the effective date, and the fee impact.
+        Nothing is changed."""
+        from datetime import date as date_cls
+        from academic_sessions.models import AcademicYear, SessionClass, StudentEnrollment
+        from academic_sessions.roll_allocator_service import RollAllocatorService
+        from attendance.models import AttendanceRecord
+        from examinations.models import StudentMark
+        from finance import class_move_fees
+        from finance.models import FeePayment
+        from students.models import Class
+
+        student = self.get_object()
+        params = request.query_params
+        academic_year = get_object_or_404(AcademicYear, pk=params.get('academic_year_id'), school_id=student.school_id)
+        enrollment = StudentEnrollment.objects.filter(student=student, academic_year=academic_year, is_active=True).first()
+        if enrollment is None:
+            return Response({'detail': 'Student enrollment not found for the selected academic year.'}, status=400)
+
+        target_session = None
+        if params.get('target_session_class_id'):
+            target_session = get_object_or_404(
+                SessionClass, pk=params['target_session_class_id'], school_id=student.school_id,
+                academic_year=academic_year,
+            )
+            target_class = target_session.class_obj
+        else:
+            target_class = get_object_or_404(Class, pk=params.get('target_class_id'), school_id=student.school_id)
+        if target_class is None:
+            return Response({'detail': 'The class is not linked to a master class.'}, status=400)
+
+        try:
+            effective_date = date_cls.fromisoformat(params.get('effective_date') or '')
+        except ValueError:
+            effective_date = date_cls.today()
+        effective_date = min(max(effective_date, academic_year.start_date), academic_year.end_date)
+
+        allocator = RollAllocatorService(
+            school_id=student.school_id, academic_year_id=academic_year.id, class_obj_id=target_class.id,
+            session_class_id=target_session.id if target_session else None,
+        )
+        same_section = (target_session is not None and target_session.id == enrollment.session_class_id)
+        suggested = (
+            enrollment.roll_number
+            if same_section else allocator.lowest_free_roll(exclude_student_id=student.id)
+        )
+        warnings = {}
+        since = AttendanceRecord.objects.filter(student=student, academic_year=academic_year, date__gte=effective_date).count()
+        if since:
+            warnings['attendance_since'] = since
+        fees_since = FeePayment.objects.filter(
+            student=student, academic_year=academic_year, fee_type='MONTHLY',
+        ).filter(
+            Q(year__gt=effective_date.year) | Q(year=effective_date.year, month__gte=effective_date.month)
+        ).count()
+        if fees_since:
+            warnings['fee_rows_since'] = fees_since
+        marks = StudentMark.objects.filter(student=student, enrollment=enrollment).count()
+        if marks:
+            warnings['marks_in_year'] = marks
+
+        return Response({
+            'effective_date': effective_date.isoformat(),
+            'suggested_roll': suggested,
+            'warnings': warnings,
+            'fees': class_move_fees.fee_impact(
+                student, academic_year=academic_year, old_class_obj_id=enrollment.class_obj_id,
+                new_class_obj_id=target_class.id, effective_date=effective_date,
+            ),
         })
 
     @action(detail=True, methods=['post'], url_path='create-user-account')

@@ -129,7 +129,7 @@ def _write_snapshot(student, enrollment):
 
 
 def move_student(enrollment, *, session_class=None, class_obj=None, roll_number=None,
-                 sync_student=True):
+                 sync_student=True, effective_date=None, reason='', user=None):
     """Move an enrollment to a new section (or master class) and/or roll number.
 
     Pass ``session_class`` whenever the caller knows the section. Passing only
@@ -142,7 +142,14 @@ def move_student(enrollment, *, session_class=None, class_obj=None, roll_number=
     latest placement (promotion sets it to next year's class before that year
     becomes current), so a correction in the latest year must reach it even
     while an older year is still current.
+
+    Without ``effective_date`` the change is a correction: the open placement is
+    rewritten in place. With one it is a real move, and the dated history splits there
+    (the old class keeps the days before it); see ``placement_service``.
     """
+    from . import placement_service
+
+    open_before = placement_service._open_placement(enrollment) if effective_date else None
     if session_class is not None:
         enrollment.session_class = session_class
         if session_class.class_obj_id:
@@ -164,6 +171,11 @@ def move_student(enrollment, *, session_class=None, class_obj=None, roll_number=
         enrollment.roll_number = roll_number
 
     enrollment.save(update_fields=['class_obj', 'session_class', 'roll_number', 'updated_at'])
+
+    if effective_date and open_before is not None and placement_service.moves_class(enrollment, open_before):
+        placement_service.split_placement(enrollment, effective_date, reason=reason, user=user)
+    else:
+        placement_service.sync_open_placement(enrollment)
 
     if sync_student and _is_latest_enrollment(enrollment):
         _write_snapshot(enrollment.student, enrollment)

@@ -2232,7 +2232,7 @@
             {
               "type": "info_box",
               "title": "Financial Record Safety",
-              "text": "When a student is deleted, all their financial records (fee payments, online payments, fee structures, discounts) are preserved with 'Deleted Student' label. Best practice: mark students as inactive instead of deleting them."
+              "text": "Students are taken off the roll from the profile under Status & exit: Left school, Transferred, Graduated, Repeat, or Remove for a record entered by mistake. A removed student keeps all their records (fee payments, attendance, marks) and can be restored from Recently deleted. Only a removed student with no records at all can be erased permanently. If the student really attended, use Left school instead."
             }
           ]
         },

@@ -51,10 +51,8 @@ export default function StudentsList({
   allSelectableSelected,
   onToggleSelect,
   onToggleSelectAll,
-  canManageLifecycle,
   onEdit,
   onConvert,
-  onDelete,
   onOpenTransferred,
 }) {
   return (
@@ -140,7 +138,6 @@ export default function StudentsList({
                 { label: 'View', to: `/students/${student.id}` },
                 { label: 'Edit', tone: 'info', onClick: () => onEdit(student) },
                 ...(!student.has_user_account ? [{ label: 'Create Account', tone: 'accent', onClick: () => onConvert(student) }] : []),
-                ...(canManageLifecycle ? [{ label: 'Delete', tone: 'danger', onClick: () => onDelete(student) }] : []),
               ]}
             />
           ))}
@@ -226,14 +223,6 @@ export default function StudentsList({
                         className="text-sm text-purple-600 hover:text-purple-800 font-medium mr-3"
                       >
                         Create Account
-                      </button>
-                    )}
-                    {canManageLifecycle && (
-                      <button
-                        onClick={() => onDelete(student)}
-                        className="text-sm text-red-600 hover:text-red-800 font-medium"
-                      >
-                        Delete
                       </button>
                     )}
                   </td>

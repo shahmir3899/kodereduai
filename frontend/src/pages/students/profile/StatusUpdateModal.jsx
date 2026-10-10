@@ -1,153 +1,153 @@
 import { useState } from 'react'
 import Button from '../../../components/ui/Button'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { studentsApi } from '../../../services/api'
 import { useToast } from '../../../components/Toast'
 import { useEscapeKey } from '../../../hooks/useEscapeKey'
 import { formatDate, getApiErrorMessage } from './profileUtils'
 
-// Changes a student's lifecycle status (left, transferred, repeat, ...). Mount
-// only while open. When the chosen leaving date would strand attendance or marks,
-// the server answers 400 records_after_leaving and this shows the conflict with the
-// two ways out (use the suggested date, or remove the records).
-export default function StatusUpdateModal({ student, onClose, onStartExit, onStartReadmit }) {
+// The one entry point for taking a student off the roll. Each outcome has its own
+// flow: leaving/transfer -> exit checklist, coming back -> re-admission, graduated
+// and repeat -> a small confirmed change, and removing a student entered by mistake
+// -> the typed-name delete. A bare status PATCH is refused by the server.
+const OUTCOMES = {
+  LEFT: { label: 'Left school', hint: 'Withdrawn. Goes through a short checklist: pending fees, library books and gate passes.' },
+  TRANSFERRED: { label: 'Transferred', hint: 'Moves to another branch of this organization, with a new record there.' },
+  READMIT: { label: 'Re-admit', hint: 'Coming back after leaving. You choose the class and roll; the time away is recorded.' },
+  GRADUATED: { label: 'Graduated', hint: 'Completed the highest class. Still visible in the year they graduated.' },
+  REPEAT: { label: 'Repeat', hint: 'Stays in the same class level next year.' },
+  REMOVE: { label: 'Remove (entered by mistake)', hint: 'Hides the record. An admin can restore it from Recently deleted.' },
+}
+
+const needsDate = (outcome) => ['LEFT', 'TRANSFERRED', 'READMIT'].includes(outcome)
+
+export default function StatusUpdateModal({ student, onClose, onStartExit, onStartReadmit, onStartRemove }) {
   const queryClient = useQueryClient()
   const { showError, showSuccess } = useToast()
-  const [form, setForm] = useState({
-    status: student.status || 'ACTIVE',
-    status_date: student.status_date || '',
-    status_reason: student.status_reason || '',
-  })
-  // Attendance/marks already recorded on or after the chosen leaving date
-  // (server-side check); the admin picks a later date or removes them.
-  const [conflict, setConflict] = useState(null)
-  const [removeRecords, setRemoveRecords] = useState(false)
+  const [outcome, setOutcome] = useState('')
+  const [date, setDate] = useState('')
+  const [reason, setReason] = useState('')
 
   useEscapeKey(onClose, true)
 
+  const { data, isLoading } = useQuery({
+    queryKey: ['removal-preview', student.id],
+    queryFn: () => studentsApi.getRemovalPreview(student.id),
+  })
+  const preview = data?.data
+  const allowed = preview?.allowed_outcomes || []
+
   const mutation = useMutation({
-    mutationFn: (payload) => studentsApi.updateStudent(student.id, payload),
+    mutationFn: (payload) => studentsApi.setStudentOutcome(student.id, payload),
     onSuccess: (_res, payload) => {
-      showSuccess(
-        payload?.remove_records_after_leaving
-          ? 'Student status updated; records after the leaving date were removed'
-          : 'Student status updated successfully',
-      )
+      showSuccess(payload.outcome === 'GRADUATED' ? 'Marked as graduated' : 'Marked as repeating')
       queryClient.invalidateQueries({ queryKey: ['student', String(student.id)] })
       queryClient.invalidateQueries({ queryKey: ['students'] })
+      queryClient.invalidateQueries({ queryKey: ['removal-preview', student.id] })
       onClose()
     },
-    onError: (error) => {
-      const data = error?.response?.data
-      if (data?.code === 'records_after_leaving') {
-        setConflict(data)
-        setRemoveRecords(false)
-        return
-      }
-      showError(getApiErrorMessage(error, 'Failed to update student status'))
-    },
+    onError: (error) => showError(getApiErrorMessage(error, 'Failed to update student status')),
   })
 
-  // Leaving the school goes through the exit workflow (clearance checklist and
-  // finalization), not a bare status change.
-  const startsExit = ['WITHDRAWN', 'TRANSFERRED'].includes(form.status) && form.status !== student.status
+  const counts = preview?.counts || {}
+  const recordSummary = [
+    counts.attendance ? `${counts.attendance} attendance` : null,
+    counts.fees ? `${counts.fees} fee` : null,
+    counts.marks ? `${counts.marks} marks` : null,
+    counts.enrollments ? `${counts.enrollments} enrollment` : null,
+    counts.other ? `${counts.other} other` : null,
+  ].filter(Boolean).join(', ')
 
-  // Coming back after leaving goes through re-admission, which keeps the months away.
-  const startsReadmit = form.status === 'ACTIVE' && ['WITHDRAWN', 'TRANSFERRED'].includes(student.status)
+  const submitLabel = {
+    LEFT: 'Continue to checklist',
+    TRANSFERRED: 'Continue to checklist',
+    READMIT: 'Continue to re-admission',
+    GRADUATED: 'Mark as graduated',
+    REPEAT: 'Mark as repeat',
+    REMOVE: 'Continue to remove',
+  }[outcome] || 'Continue'
 
   const handleSubmit = () => {
-    if (!form.status) {
-      showError('Status is required')
+    if (!outcome) {
+      showError('Choose what happened to the student')
       return
     }
-    if (startsReadmit && onStartReadmit) {
-      onStartReadmit({ return_date: form.status_date || '', reason: form.status_reason })
+    if (!reason.trim()) {
+      showError('A reason is required')
       return
     }
-    if (startsExit && onStartExit) {
-      onStartExit({ exit_type: form.status, leaving_date: form.status_date || '', reason: form.status_reason })
-      return
-    }
-    mutation.mutate({
-      status: form.status,
-      status_date: form.status_date || null,
-      status_reason: form.status_reason,
-      ...(conflict && removeRecords ? { remove_records_after_leaving: true } : {}),
-    })
+    if (outcome === 'READMIT') return onStartReadmit?.({ return_date: date, reason: reason.trim() })
+    if (outcome === 'LEFT') return onStartExit?.({ exit_type: 'WITHDRAWN', leaving_date: date, reason: reason.trim() })
+    if (outcome === 'TRANSFERRED') return onStartExit?.({ exit_type: 'TRANSFERRED', leaving_date: date, reason: reason.trim() })
+    if (outcome === 'REMOVE') return onStartRemove?.(reason.trim())
+    mutation.mutate({ outcome, reason: reason.trim() })
   }
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4">
-      <div className="bg-white rounded-xl shadow-xl border border-gray-200 w-full max-w-md">
+      <div className="bg-white rounded-xl shadow-xl border border-gray-200 w-full max-w-md max-h-[90vh] overflow-y-auto">
         <div className="px-6 py-4 border-b border-gray-200">
-          <h2 className="text-lg font-semibold text-gray-900">Update Student Status</h2>
-          <p className="text-sm text-gray-500 mt-1">Use this for mid-session status changes (e.g. student left, transferred, repeating).</p>
+          <h2 className="text-lg font-semibold text-gray-900">Status &amp; exit</h2>
+          <p className="text-sm text-gray-500 mt-1">What happened to {student.name}?</p>
         </div>
 
         <div className="p-6 space-y-4">
-          <div>
-            <label htmlFor="status-update-status" className="block text-sm font-medium text-gray-700 mb-1">Status</label>
-            <select
-              id="status-update-status"
-              className="input"
-              value={form.status}
-              onChange={(e) => {
-                setForm((p) => ({ ...p, status: e.target.value }))
-                setConflict(null)
-              }}
-            >
-              <option value="ACTIVE">Active</option>
-              <option value="WITHDRAWN">Withdrawn (Left school)</option>
-              <option value="TRANSFERRED">Transferred (To another branch of this organization)</option>
-              <option value="GRADUATED">Graduated</option>
-              <option value="REPEAT">Repeat</option>
-            </select>
+          {isLoading && <p className="text-sm text-gray-500">Loading options…</p>}
+          <div className="space-y-2" role="radiogroup" aria-label="Outcome">
+            {allowed.map((key) => (
+              <label
+                key={key}
+                className={`flex items-start gap-2 px-3 py-2 rounded-lg border cursor-pointer ${
+                  outcome === key ? 'border-amber-500 bg-amber-50' : 'border-gray-200 hover:bg-gray-50'
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="student-outcome"
+                  className="mt-1"
+                  checked={outcome === key}
+                  onChange={() => setOutcome(key)}
+                />
+                <span>
+                  <span className="font-medium text-gray-900">{OUTCOMES[key]?.label || key}</span>
+                  <span className="block text-xs text-gray-600">{OUTCOMES[key]?.hint}</span>
+                </span>
+              </label>
+            ))}
           </div>
-          {startsExit && onStartExit && (
-            <p className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-              Leaving the school goes through a short checklist: pending fees, library books and gate passes are
-              cleared or waived before the exit is finalized.
+
+          {outcome === 'REMOVE' && (
+            <p className="text-sm text-red-800 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+              {preview?.has_history
+                ? `${student.name} has records (${recordSummary}). They are kept, but if the student actually attended, choose Left school instead.`
+                : `${student.name} has no records, so they can also be erased for good from Recently deleted.`}
             </p>
           )}
-          {startsReadmit && onStartReadmit && (
-            <p className="text-sm text-green-800 bg-green-50 border border-green-200 rounded-lg px-3 py-2">
-              Coming back after leaving is a re-admission: you choose the class and roll, and the time away is recorded.
-            </p>
+
+          {needsDate(outcome) && (
+            <div>
+              <label htmlFor="status-update-date" className="block text-sm font-medium text-gray-700 mb-1">
+                {outcome === 'READMIT' ? 'Return date' : 'Effective date'}
+              </label>
+              <input
+                id="status-update-date"
+                type="date"
+                className="input"
+                value={date}
+                onChange={(e) => setDate(e.target.value)}
+              />
+            </div>
           )}
-          <div>
-            <label htmlFor="status-update-date" className="block text-sm font-medium text-gray-700 mb-1">Effective Date</label>
-            <input
-              id="status-update-date"
-              type="date"
-              className="input"
-              value={form.status_date}
-              onChange={(e) => {
-                setForm((p) => ({ ...p, status_date: e.target.value }))
-                setConflict(null)
-              }}
-            />
-          </div>
-          {conflict && (
-            <LeavingConflictNotice
-              conflict={conflict}
-              removeRecords={removeRecords}
-              onToggleRemove={setRemoveRecords}
-              onUseSuggestedDate={() => {
-                setForm((p) => ({ ...p, status_date: conflict.suggested_leaving_date }))
-                setConflict(null)
-                setRemoveRecords(false)
-              }}
-            />
-          )}
+
           <div>
             <label htmlFor="status-update-reason" className="block text-sm font-medium text-gray-700 mb-1">Reason</label>
             <textarea
               id="status-update-reason"
               rows={3}
               className="input"
-              value={form.status_reason}
-              onChange={(e) => setForm((p) => ({ ...p, status_reason: e.target.value }))}
-              placeholder="Brief reason for status change"
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              placeholder="Brief reason (required)"
             />
           </div>
         </div>
@@ -157,16 +157,12 @@ export default function StatusUpdateModal({ student, onClose, onStartExit, onSta
           <button
             type="button"
             onClick={handleSubmit}
-            disabled={mutation.isPending || (conflict && !removeRecords)}
+            disabled={mutation.isPending || !outcome}
             className={`px-4 py-2 text-white rounded-lg disabled:opacity-50 ${
-              conflict && removeRecords ? 'bg-red-600 hover:bg-red-700' : 'bg-amber-600 hover:bg-amber-700'
+              outcome === 'REMOVE' ? 'bg-red-600 hover:bg-red-700' : 'bg-amber-600 hover:bg-amber-700'
             }`}
           >
-            {mutation.isPending
-              ? 'Saving...'
-              : startsExit && onStartExit ? 'Continue to checklist'
-              : startsReadmit && onStartReadmit ? 'Continue to re-admission'
-              : conflict && removeRecords ? 'Remove Records & Save' : 'Save Status'}
+            {mutation.isPending ? 'Saving...' : submitLabel}
           </button>
         </div>
       </div>

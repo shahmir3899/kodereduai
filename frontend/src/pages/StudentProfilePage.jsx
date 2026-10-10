@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import { useParams, Link } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
+import { useParams, Link, useNavigate } from 'react-router-dom'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { studentsApi, examinationsApi } from '../services/api'
 import { useToast } from '../components/Toast'
 import { useAcademicYear } from '../contexts/AcademicYearContext'
@@ -16,6 +16,7 @@ import StatusUpdateModal from './students/profile/StatusUpdateModal'
 import ParentInviteModal from './students/profile/ParentInviteModal'
 import StudentExitWizard from './students/profile/StudentExitWizard'
 import ReadmitStudentModal from './students/profile/ReadmitStudentModal'
+import DeleteStudentModal from './students/components/DeleteStudentModal'
 import ReclassifyStudentModal from './students/components/ReclassifyStudentModal'
 import {
   OverviewTab,
@@ -38,9 +39,23 @@ export default function StudentProfilePage() {
   const [showInviteModal, setShowInviteModal] = useState(false)
   const [exitPrefill, setExitPrefill] = useState(null) // non-null while the exit wizard is open
   const [readmitPrefill, setReadmitPrefill] = useState(null) // non-null while the re-admit dialog is open
+  const [removeReason, setRemoveReason] = useState(null) // non-null while the remove-by-mistake dialog is open
   const { showError, showSuccess } = useToast()
+  const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const { user } = useAuth()
   const canManageLifecycle = canManageStudentLifecycle(user?.role)
+  const removeMutation = useMutation({
+    mutationFn: ({ reason }) => studentsApi.deleteStudent(id, reason),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['students'] })
+      queryClient.invalidateQueries({ queryKey: ['classes'] })
+      queryClient.invalidateQueries({ queryKey: ['deletedStudents'] })
+      showSuccess('Student removed. A School Admin can restore them from Recently deleted.')
+      navigate('/students')
+    },
+    onError: (error) => showError(error.response?.data?.detail || error.message || 'Failed to remove student'),
+  })
   const { activeAcademicYear } = useAcademicYear()
   const { exitCase: openExit } = useStudentExit(id, { enabled: canManageLifecycle })
 
@@ -307,6 +322,19 @@ export default function StudentProfilePage() {
             setShowStatusModal(false)
             setReadmitPrefill(prefill)
           }}
+          onStartRemove={(reason) => {
+            setShowStatusModal(false)
+            setRemoveReason(reason)
+          }}
+        />
+      )}
+      {removeReason !== null && (
+        <DeleteStudentModal
+          student={student}
+          initialReason={removeReason}
+          isPending={removeMutation.isPending}
+          onCancel={() => setRemoveReason(null)}
+          onConfirm={(reason) => removeMutation.mutate({ reason })}
         />
       )}
       {exitPrefill && <StudentExitWizard student={student} prefill={exitPrefill} onClose={() => setExitPrefill(null)} />}

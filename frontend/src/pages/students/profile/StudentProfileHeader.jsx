@@ -217,7 +217,7 @@ export default function StudentProfileHeader({
                 onClick={onUpdateStatus}
                 className="px-4 py-2 bg-amber-100 text-amber-800 border border-amber-200 rounded-lg hover:bg-amber-200 text-sm"
               >
-                Update Status
+                Status &amp; exit
               </button>
             )}
             {canManageLifecycle && ['WITHDRAWN', 'TRANSFERRED'].includes(student.status) && (
