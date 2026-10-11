@@ -242,6 +242,7 @@ export default function StudentsPage() {
       schoolName: selectedSchool?.name,
       classes: classesList,
       students: existingStudents,
+      sessionClasses,
     })
 
     showSuccess(existingStudents.length > 0
@@ -256,7 +257,7 @@ export default function StudentsPage() {
     if (!file) return
 
     try {
-      const { error, studentsByClass, issues } = await readStudentsFile(file, classesList)
+      const { error, studentsByClass, issues } = await readStudentsFile(file, classesList, sessionClasses)
       if (error) {
         showError(error)
         return
@@ -295,10 +296,13 @@ export default function StudentsPage() {
       let totalUpdated = 0
       let totalErrors = []
 
-      for (const [classId, students] of Object.entries(studentsByClass)) {
+      for (const [key, students] of Object.entries(studentsByClass)) {
+        // Key is "classId" or "classId:sessionClassId" (see parseStudentRows).
+        const [classId, sessionClassId] = key.split(':')
         const response = await studentsApi.bulkCreateStudents({
           school_id: selectedSchoolId,
           class_id: parseInt(classId),
+          ...(sessionClassId && { session_class_id: parseInt(sessionClassId) }),
           students,
         })
         totalCreated += response.data.created_count || 0
@@ -584,6 +588,7 @@ export default function StudentsPage() {
         <BulkUploadModal
           bulkData={bulkData}
           classes={classes}
+          sessionClasses={sessionClasses}
           isUploading={isUploading}
           onCancel={() => {
             setShowBulkModal(false)

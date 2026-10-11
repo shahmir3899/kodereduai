@@ -16,8 +16,8 @@ from rest_framework.views import APIView
 from django.contrib.auth import get_user_model
 from django.utils import timezone
 from django.db.models import Sum, Avg
-from django.db.models import OuterRef, Subquery, CharField
-from django.db.models.functions import Coalesce
+from django.db.models import OuterRef, Subquery, CharField, Case, When, Value, F
+from django.db.models.functions import Coalesce, Concat
 
 from core.permissions import (
     IsSchoolAdmin, CanViewStudentRecords, HasSchoolAccess, ModuleAccessMixin,
@@ -385,8 +385,16 @@ class StudentViewSet(ModuleAccessMixin, TenantQuerySetMixin, AuditedDeleteMixin,
                 _enrollment_roll_number=Subquery(enr_qs.values('roll_number')[:1]),
                 _enrollment_class_obj_id=Subquery(enr_qs.values('class_obj_id')[:1]),
                 _enrollment_session_class_id=Subquery(enr_qs.values('session_class_id')[:1]),
+                # Section-aware ("Class 2 - A", same as SessionClass.label): display_name
+                # alone is the same for every section of a class, so lists couldn't
+                # tell A from B.
                 _enrollment_class_name=Coalesce(
-                    Subquery(enr_qs.values('session_class__display_name')[:1]),
+                    Subquery(enr_qs.annotate(_section_label=Case(
+                        When(session_class__isnull=True, then=Value(None)),
+                        When(session_class__section='', then=F('session_class__display_name')),
+                        default=Concat(F('session_class__display_name'), Value(' - '), F('session_class__section')),
+                        output_field=CharField(),
+                    )).values('_section_label')[:1]),
                     Subquery(enr_qs.values('class_obj__name')[:1]),
                     output_field=CharField(),
                 ),

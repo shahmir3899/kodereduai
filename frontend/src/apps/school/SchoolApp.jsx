@@ -75,6 +75,11 @@ export default function SchoolApp() {
       if (schoolInfo.logo) {
         localStorage.setItem('currentSchoolLogo', schoolInfo.logo)
       }
+      // Set-or-remove so an address/email the school later clears doesn't linger from a cached visit.
+      if (schoolInfo.address) localStorage.setItem('currentSchoolAddress', schoolInfo.address)
+      else localStorage.removeItem('currentSchoolAddress')
+      if (schoolInfo.contact_email) localStorage.setItem('currentSchoolEmail', schoolInfo.contact_email)
+      else localStorage.removeItem('currentSchoolEmail')
       // Only set active_school_id if not already set (preserve explicit switch)
       if (!localStorage.getItem('active_school_id')) {
         localStorage.setItem('active_school_id', schoolInfo.id)

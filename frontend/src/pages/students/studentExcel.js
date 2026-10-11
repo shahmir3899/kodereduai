@@ -6,10 +6,22 @@ import { parsePhone } from './studentFormUtils'
 
 const HEADER = ['class_name', 'roll_number', 'student_name', 'parent_phone', 'parent_name']
 
-export function buildStudentsSheetData({ schoolName, classes, students }) {
+// Sections ("Class 2 - A") are what the list shows and what the sheet's class_name
+// column holds, because two sections of one class reuse the same roll numbers and a
+// bare class name can't say which student a row is. Schools with no sections fall
+// back to plain class names.
+const sectionLabel = (sc) => sc.label || sc.display_name
+const importableSections = (sessionClasses) => sessionClasses.filter((sc) => sc.is_active !== false && sc.class_obj)
+const placeNames = (classes, sessionClasses) => {
+  const sections = importableSections(sessionClasses)
+  return sections.length > 0 ? sections.map(sectionLabel) : classes.map((c) => c.name)
+}
+
+export function buildStudentsSheetData({ schoolName, classes, students, sessionClasses = [] }) {
+  const names = placeNames(classes, sessionClasses)
   const sheetData = [
     [`School: ${schoolName || 'Unknown'}`],
-    [`Classes: ${classes.map((c) => c.name).join(' | ')}`],
+    [`Classes: ${names.join(' | ')}`],
     ['Phone (optional): Use +92 format like +923001234567 for WhatsApp - can be added later'],
     [],
     HEADER,
@@ -26,8 +38,8 @@ export function buildStudentsSheetData({ schoolName, classes, students }) {
     })
   } else {
     // No students yet: blank template with sample rows
-    classes.slice(0, 2).forEach((cls) => {
-      sheetData.push([cls.name, '1', 'Student Name', '+923001234567', 'Parent Name'])
+    names.slice(0, 2).forEach((name) => {
+      sheetData.push([name, '1', 'Student Name', '+923001234567', 'Parent Name'])
     })
     for (let i = 0; i < 10; i++) sheetData.push(['', '', '', '', ''])
   }
@@ -35,10 +47,10 @@ export function buildStudentsSheetData({ schoolName, classes, students }) {
   return sheetData
 }
 
-export async function downloadStudentsExcel({ schoolName, classes, students }) {
+export async function downloadStudentsExcel({ schoolName, classes, students, sessionClasses = [] }) {
   const XLSX = (await import('xlsx')).default || await import('xlsx')
   const wb = XLSX.utils.book_new()
-  const ws = XLSX.utils.aoa_to_sheet(buildStudentsSheetData({ schoolName, classes, students }))
+  const ws = XLSX.utils.aoa_to_sheet(buildStudentsSheetData({ schoolName, classes, students, sessionClasses }))
 
   // Force phone column cells to text so Excel keeps the + prefix
   const range = XLSX.utils.decode_range(ws['!ref'] || 'A1')
@@ -56,10 +68,11 @@ export async function downloadStudentsExcel({ schoolName, classes, students }) {
   XLSX.writeFile(wb, `students_${schoolName?.replace(/\s+/g, '_') || 'school'}.xlsx`)
 }
 
-// Reads the uploaded rows into { studentsByClass } keyed by class id. Returns
-// { error } for an unusable file, otherwise { studentsByClass, issues }
-// where issues are skipped rows (unknown class) for the caller to report.
-export function parseStudentRows(jsonData, classes) {
+// Reads the uploaded rows into { studentsByClass } keyed by class id, or by
+// "classId:sessionClassId" for rows that name a section. Returns { error } for an
+// unusable file, otherwise { studentsByClass, issues } where issues are skipped
+// rows (unknown class) for the caller to report.
+export function parseStudentRows(jsonData, classes, sessionClasses = []) {
   if (jsonData.length < 2) return { error: 'File is empty or invalid' }
 
   const headerRowIndex = jsonData.findIndex((row) =>
@@ -77,13 +90,21 @@ export function parseStudentRows(jsonData, classes) {
     return { error: 'Missing required columns: class_name, roll_number, student_name' }
   }
 
+  // Each name resolves to a target { classId, sessionClassId }. Sections are
+  // registered first so "Class 2 - A" reaches its section; a bare class name (an
+  // older sheet) still maps to the class with no section.
   const classMap = {}
   const classMapNoSpace = {} // fallback for matching without spaces
-  classes.forEach((cls) => {
-    const normalized = cls.name.toLowerCase().trim().replace(/\s+/g, ' ')
-    classMap[normalized] = cls.id
-    classMapNoSpace[normalized.replace(/\s/g, '')] = cls.id
+  const register = (name, target) => {
+    const normalized = name.toLowerCase().trim().replace(/\s+/g, ' ')
+    if (!classMap[normalized]) classMap[normalized] = target
+    const compact = normalized.replace(/\s/g, '')
+    if (!classMapNoSpace[compact]) classMapNoSpace[compact] = target
+  }
+  importableSections(sessionClasses).forEach((sc) => {
+    register(sectionLabel(sc), { classId: sc.class_obj, sessionClassId: sc.id })
   })
+  classes.forEach((cls) => register(cls.name, { classId: cls.id, sessionClassId: null }))
 
   const studentsByClass = {}
   const issues = []
@@ -94,9 +115,9 @@ export function parseStudentRows(jsonData, classes) {
 
     const className = String(row[classNameIdx] || '').trim().replace(/\s+/g, ' ')
     const classNameLower = className.toLowerCase()
-    const classId = classMap[classNameLower] || classMapNoSpace[classNameLower.replace(/\s/g, '')]
+    const target = classMap[classNameLower] || classMapNoSpace[classNameLower.replace(/\s/g, '')]
 
-    if (!classId) {
+    if (!target) {
       if (className && !classNameLower.includes('enter') && !classNameLower.includes('student')) {
         issues.push(`Row ${i + 1}: Unknown class "${className}"`)
       }
@@ -114,8 +135,9 @@ export function parseStudentRows(jsonData, classes) {
       continue
     }
 
-    if (!studentsByClass[classId]) studentsByClass[classId] = []
-    studentsByClass[classId].push({
+    const key = target.sessionClassId ? `${target.classId}:${target.sessionClassId}` : String(target.classId)
+    if (!studentsByClass[key]) studentsByClass[key] = []
+    studentsByClass[key].push({
       roll_number: rollNumber,
       name: studentName,
       // Phone is optional
@@ -128,12 +150,12 @@ export function parseStudentRows(jsonData, classes) {
 }
 
 // Browser File -> parsed rows. Prefers a sheet named like "Students", else the first.
-export async function readStudentsFile(file, classes) {
+export async function readStudentsFile(file, classes, sessionClasses = []) {
   const XLSX = (await import('xlsx')).default || await import('xlsx')
   const data = new Uint8Array(await file.arrayBuffer())
   const workbook = XLSX.read(data, { type: 'array' })
   const sheetName = workbook.SheetNames.find((name) => name.toLowerCase().includes('student'))
     || workbook.SheetNames[0]
   const jsonData = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { header: 1 })
-  return parseStudentRows(jsonData, classes)
+  return parseStudentRows(jsonData, classes, sessionClasses)
 }

@@ -43,6 +43,8 @@ localStorage.removeItem('currentSchoolId')
 localStorage.removeItem('currentSchoolName')
 localStorage.removeItem('currentSchoolSubdomain')
 localStorage.removeItem('currentSchoolLogo')
+localStorage.removeItem('currentSchoolAddress')
+localStorage.removeItem('currentSchoolEmail')
 console.log('✅ Portal mode activated')
 
 const persister = createAppPersister()

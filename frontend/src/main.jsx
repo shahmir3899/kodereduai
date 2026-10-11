@@ -88,6 +88,11 @@ function AppWithSubdomain() {
           if (schoolData.logo) {
             localStorage.setItem('currentSchoolLogo', schoolData.logo)
           }
+          // Set-or-remove so an address/email the school later clears doesn't linger from a cached visit.
+          if (schoolData.address) localStorage.setItem('currentSchoolAddress', schoolData.address)
+          else localStorage.removeItem('currentSchoolAddress')
+          if (schoolData.contact_email) localStorage.setItem('currentSchoolEmail', schoolData.contact_email)
+          else localStorage.removeItem('currentSchoolEmail')
           
           console.log(`✅ School auto-detected: ${schoolData.name} (subdomain: ${subdomain})`)
         } else if (subdomain === 'portal' && hostname.endsWith('.kodereduai.pk')) {

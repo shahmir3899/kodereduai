@@ -116,3 +116,55 @@ describe('parseStudentRows', () => {
     expect(studentsByClass[1]).toEqual([{ roll_number: '4', name: 'Ali', parent_phone: '', parent_name: '' }])
   })
 })
+
+describe('sections', () => {
+  const sessionClasses = [
+    { id: 11, class_obj: 5, label: 'Class 2 - A', display_name: 'Class 2', is_active: true },
+    { id: 12, class_obj: 5, label: 'Class 2 - B', display_name: 'Class 2', is_active: true },
+    { id: 13, class_obj: null, label: 'Orphan', display_name: 'Orphan', is_active: true },
+  ]
+  const withMaster = [...classes, { id: 5, name: 'Class 2' }]
+
+  it('lists sections, not master classes, in the template when sections exist', () => {
+    const data = buildStudentsSheetData({ schoolName: 'X', classes: withMaster, students: [], sessionClasses })
+    expect(data[1]).toEqual(['Classes: Class 2 - A | Class 2 - B'])
+    expect(data[5][0]).toBe('Class 2 - A')
+    expect(data[6][0]).toBe('Class 2 - B')
+  })
+
+  it('imports a section name to its master class and section', () => {
+    const rows = [['School: X'], HEADER, ['Class 2 - A', '1', 'Ali', '', ''], ['Class 2 - B', '1', 'Sara', '', '']]
+    const { studentsByClass, issues } = parseStudentRows(rows, withMaster, sessionClasses)
+    expect(issues).toEqual([])
+    expect(Object.keys(studentsByClass).sort()).toEqual(['5:11', '5:12'])
+    expect(studentsByClass['5:11'][0].name).toBe('Ali')
+    expect(studentsByClass['5:12'][0].name).toBe('Sara')
+  })
+
+  it('round-trips two sections that share roll numbers without merging them', () => {
+    const students = [
+      { class_name: 'Class 2 - A', roll_number: '1', name: 'Ali' },
+      { class_name: 'Class 2 - B', roll_number: '1', name: 'Sara' },
+    ]
+    const parsed = parseStudentRows(
+      buildStudentsSheetData({ schoolName: 'X', classes: withMaster, students, sessionClasses }),
+      withMaster,
+      sessionClasses,
+    )
+    expect(parsed.studentsByClass['5:11']).toHaveLength(1)
+    expect(parsed.studentsByClass['5:12']).toHaveLength(1)
+  })
+
+  it('still accepts a bare master class name from an older sheet', () => {
+    const rows = [['School: X'], HEADER, ['Class 1', '1', 'Old', '', '']]
+    const { studentsByClass } = parseStudentRows(rows, withMaster, sessionClasses)
+    expect(Object.keys(studentsByClass)).toEqual(['1'])
+  })
+
+  it('does not offer a section that has no master class', () => {
+    const rows = [['School: X'], HEADER, ['Orphan', '1', 'X', '', '']]
+    const { issues } = parseStudentRows(rows, withMaster, sessionClasses)
+    expect(issues).toEqual(['Row 3: Unknown class "Orphan"'])
+  })
+})
+

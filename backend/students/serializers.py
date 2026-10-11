@@ -141,7 +141,7 @@ class StudentSerializer(serializers.ModelSerializer):
             placement = self._current_placement(obj)
             if placement is not None:
                 if placement.session_class_id and placement.session_class.display_name:
-                    return placement.session_class.display_name
+                    return placement.session_class.label
                 return placement.class_obj.name if placement.class_obj_id else None
         return obj.class_obj.name if obj.class_obj else None
 
@@ -496,6 +496,9 @@ class ReclassifyStudentSerializer(serializers.Serializer):
 class StudentBulkCreateSerializer(serializers.Serializer):
     school_id = serializers.IntegerField()
     class_id = serializers.IntegerField()
+    # Two sections can share one master class, so the class alone can't say which
+    # section a row belongs to (nor which student a roll number refers to).
+    session_class_id = serializers.IntegerField(required=False)
     students = serializers.ListField(
         child=serializers.DictField(),
         min_length=1,
@@ -531,6 +534,18 @@ class StudentBulkCreateSerializer(serializers.Serializer):
                 "Please create an academic year first."
             )
 
+        session_class_id = attrs.get('session_class_id')
+        if session_class_id:
+            from academic_sessions.models import SessionClass
+            section = SessionClass.objects.filter(
+                id=session_class_id, school_id=school_id,
+                academic_year__is_current=True, class_obj_id=class_id,
+            ).exists()
+            if not section:
+                raise serializers.ValidationError({
+                    'session_class_id': "That section isn't in the current year for this class.",
+                })
+
         return attrs
 
     def validate_students(self, value):
@@ -549,6 +564,7 @@ class StudentBulkCreateSerializer(serializers.Serializer):
     def create(self, validated_data):
         school_id = validated_data['school_id']
         class_id = validated_data['class_id']
+        session_class_id = validated_data.get('session_class_id')
         students_data = validated_data['students']
 
         from academic_sessions.models import AcademicYear, StudentEnrollment
@@ -568,12 +584,15 @@ class StudentBulkCreateSerializer(serializers.Serializer):
 
                 # Look up by enrollment (session-scoped roll)
                 if current_year:
-                    existing_enrollment = StudentEnrollment.objects.filter(
+                    lookup = StudentEnrollment.objects.filter(
                         school_id=school_id,
                         academic_year=current_year,
                         class_obj_id=class_id,
                         roll_number=roll,
-                    ).select_related('student').first()
+                    )
+                    if session_class_id:
+                        lookup = lookup.filter(session_class_id=session_class_id)
+                    existing_enrollment = lookup.select_related('student').first()
 
                 if existing_enrollment:
                     # Update existing student
@@ -603,6 +622,7 @@ class StudentBulkCreateSerializer(serializers.Serializer):
                                 school_id=school_id,
                                 academic_year_id=current_year.id,
                                 class_obj_id=class_id,
+                                prefer_id=session_class_id,
                             ),
                             roll_number=roll,
                             status='ACTIVE',

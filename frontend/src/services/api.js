@@ -58,8 +58,13 @@ api.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config
 
+    // A 401 from the login call itself means "wrong credentials", not "session
+    // expired" — falling through would hard-redirect to /login, reloading the
+    // page and wiping the form and the inline error the login screens show.
+    const isLoginRequest = originalRequest?.url?.includes('/api/auth/login/')
+
     // If 401 and we haven't already retried
-    if (error.response?.status === 401 && !originalRequest._retry) {
+    if (error.response?.status === 401 && !originalRequest._retry && !isLoginRequest) {
       originalRequest._retry = true
 
       const refreshToken = getRefreshToken()
