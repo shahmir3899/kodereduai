@@ -3,6 +3,7 @@ Django settings for EducationAI Platform.
 """
 
 import os
+import re
 from pathlib import Path
 from datetime import timedelta
 from dotenv import load_dotenv
@@ -33,18 +34,25 @@ if IS_PRODUCTION and not SECRET_KEY:
 # pages that list every URL. Set APP_DEBUG=false there to turn only debug off.
 DEBUG = os.getenv('APP_DEBUG', str(not IS_PRODUCTION)).strip().lower() in ('1', 'true', 'yes')
 
+# Domains the school SPAs are served from (apex + wildcard school subdomains + www/portal).
+# Env-driven so a domain move is a config change, not a code change; keep the old domain
+# listed while it still redirects, then drop it.
+BASE_DOMAINS = [
+    d.strip().lower()
+    for d in os.getenv('BASE_DOMAINS', 'kodereduai.pk,educationai.pk,educationai.com.pk').split(',')
+    if d.strip()
+]
+
 # ALLOWED_HOSTS includes:
 #   - localhost for dev
-#   - .kodereduai.pk for wildcard subdomains
+#   - every BASE_DOMAINS apex plus its wildcard subdomains
 #   - kodereduai-api.onrender.com for production backend
 #   - Any additional hosts from environment variable
 ALLOWED_HOSTS = [
     'localhost',
     '127.0.0.1',
-    'kodereduai.pk',
-    'www.kodereduai.pk',
-    'portal.kodereduai.pk',
-    '.kodereduai.pk',  # Wildcard for all subdomains (*.kodereduai.pk)
+    *BASE_DOMAINS,
+    *(f'.{d}' for d in BASE_DOMAINS),  # Wildcard for all subdomains (www, portal, schools)
     'kodereduai-api.onrender.com',
 ]
 # Add any additional hosts from environment
@@ -234,10 +242,9 @@ SIMPLE_JWT = {
 _env_cors_origins = [o.strip() for o in os.getenv('CORS_ALLOWED_ORIGINS', '').split(',') if o.strip()]
 
 # Production HTTPS fronts not always present in dashboard env vars; merge so school subdomains
-# (e.g. focus.kodereduai.pk) still work if regex matching ever fails upstream.
-_DEFAULT_PRODUCTION_SCHOOL_FRONTENDS = (
-    'https://demo.kodereduai.pk',
-    'https://focus.kodereduai.pk',
+# (e.g. focus.<base domain>) still work if regex matching ever fails upstream.
+_DEFAULT_PRODUCTION_SCHOOL_FRONTENDS = tuple(
+    f'https://{sub}.{d}' for d in BASE_DOMAINS for sub in ('demo', 'focus')
 )
 
 if IS_PRODUCTION:
@@ -249,11 +256,9 @@ if IS_PRODUCTION:
 
     # Allow HTTPS regex patterns for multi-subdomain and migration paths.
     CORS_ALLOWED_ORIGIN_REGEXES = [
-        # Subdomains: at least one label before .kodereduai.pk (hyphens allowed in labels)
-        r'^https://[a-z0-9][a-z0-9.-]*\.kodereduai\.pk$',
-        r'^https://kodereduai\.pk$',           # Apex
-        r'^https://www\.kodereduai\.pk$',     # www
-        r'^https://portal\.kodereduai\.pk$',   # Portal
+        # Per base domain: apex, plus subdomains with at least one label (hyphens allowed;
+        # the wildcard already covers www and portal)
+        *(rf'^https://([a-z0-9][a-z0-9.-]*\.)?{re.escape(d)}$' for d in BASE_DOMAINS),
         r'^https://[a-z0-9][a-z0-9.-]*\.onrender\.com$',  # Render preview / service URLs
     ]
 else:
@@ -269,10 +274,7 @@ else:
     ]
 
     CORS_ALLOWED_ORIGIN_REGEXES = [
-        r'^https?://.*\.kodereduai\.pk$',
-        r'^https?://kodereduai\.pk$',
-        r'^https?://www\.kodereduai\.pk$',
-        r'^https?://portal\.kodereduai\.pk$',
+        *(rf'^https?://(.*\.)?{re.escape(d)}$' for d in BASE_DOMAINS),
         r'^https?://.*\.onrender\.com$',
     ]
 

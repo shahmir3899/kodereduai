@@ -1,11 +1,12 @@
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import api from '../../services/api'
+import { portalUrl, schoolUrl } from '../../config/domain'
 
 /**
  * Static/Landing Page
  * 
- * Shown at www.kodereduai.pk and kodereduai.pk
+ * Shown at www.<base domain> and <base domain>
  * Includes school discovery, signup, and admin login links
  */
 export default function StaticSite() {
@@ -28,7 +29,7 @@ export default function StaticSite() {
           <h1 className="text-2xl font-bold text-blue-600">EducationAI</h1>
           <div className="space-x-4">
             <a
-              href="https://portal.kodereduai.pk"
+              href={portalUrl()}
               className="text-gray-700 hover:text-blue-600 font-medium"
             >
               Admin Portal
@@ -73,7 +74,7 @@ export default function StaticSite() {
                 key={school.id}
                 className="bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow p-6 cursor-pointer"
                 onClick={() => {
-                  window.location.href = `https://${school.subdomain}.kodereduai.pk`
+                  window.location.href = schoolUrl(school.subdomain)
                 }}
               >
                 {school.logo && (
@@ -94,7 +95,7 @@ export default function StaticSite() {
                 )}
                 <div className="pt-4 border-t border-gray-200">
                   <a
-                    href={`https://${school.subdomain}.kodereduai.pk`}
+                    href={schoolUrl(school.subdomain)}
                     className="text-blue-600 hover:text-blue-700 font-medium text-sm"
                   >
                     Login →

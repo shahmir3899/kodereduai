@@ -10,6 +10,7 @@ import ForgotPasswordPage from '../../pages/ForgotPasswordPage'
 import ResetPasswordPage from '../../pages/ResetPasswordPage'
 import LoadingSpinner from '../../components/LoadingSpinner'
 import { useToast } from '../../components/Toast'
+import { linkBaseDomain, wwwUrl } from '../../config/domain'
 
 // Password recovery pages normally live in App.jsx's own <Routes>, but App
 // only mounts once a user is signed in (see the `!user` branches below) —
@@ -127,7 +128,7 @@ export default function SchoolApp() {
           <h1 className="text-2xl font-bold text-red-600 mb-2">Invalid URL</h1>
           <p className="text-gray-600 mb-4">This page must be accessed via a school subdomain.</p>
           <p className="text-sm text-gray-500 mb-6">
-            Example: <code className="bg-gray-100 px-2 py-1 rounded">focus.kodereduai.pk</code>
+            Example: <code className="bg-gray-100 px-2 py-1 rounded">focus.{linkBaseDomain()}</code>
           </p>
           <button
             onClick={handleReturn}
@@ -154,7 +155,7 @@ export default function SchoolApp() {
         window.location.href = '/'
       } else {
         // Production
-        window.location.href = 'https://www.kodereduai.pk'
+        window.location.href = wwwUrl()
       }
     }
 

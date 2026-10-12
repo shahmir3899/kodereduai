@@ -44,22 +44,22 @@
     <div id="root"></div>
     
     <script type="module">
+      import { isPortalHost, getSchoolSubdomain } from '/src/config/domain.js';
       // Detect subdomain and load appropriate app
       (function() {
         const hostname = window.location.hostname;
-        const parts = hostname.split('.');
         
         let appToLoad = 'portal'; // default to portal for simplicity
         let detectedSubdomain = null;
         
         // Determine which app to load based on subdomain
-        if (hostname === 'portal.kodereduai.pk') {
+        if (isPortalHost(hostname)) {
           // Portal subdomain -> Admin Portal
           appToLoad = 'portal';
-        } else if (hostname.endsWith('.kodereduai.pk') && parts.length === 3 && parts[0] !== 'www') {
-          // School subdomain (e.g., focus.kodereduai.pk, focus2.kodereduai.pk)
+        } else if (getSchoolSubdomain(hostname)) {
+          // School subdomain (e.g., focus.<base domain>, focus2.<base domain>)
           appToLoad = 'school';
-          detectedSubdomain = parts[0];
+          detectedSubdomain = getSchoolSubdomain(hostname);
         } else {
           // Development / LAN mode - check URL params first, then localStorage.
           // Treat direct IP access as dev too so mobile devices on WiFi can load

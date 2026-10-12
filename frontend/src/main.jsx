@@ -10,6 +10,7 @@ import { ThemeProvider } from './contexts/ThemeContext.jsx'
 import { ToastProvider } from './components/Toast.jsx'
 import { BackgroundTaskProvider } from './contexts/BackgroundTaskContext.jsx'
 import { schoolsApi } from './services/api'
+import { getSchoolSubdomain, isBaseSubdomain } from './config/domain'
 import './index.css'
 import { installFinanceQueryRules } from './financeQueryRules'
 
@@ -62,16 +63,15 @@ function AppWithSubdomain() {
         
         // Extract subdomain from hostname
         const hostname = window.location.hostname
-        const parts = hostname.split('.')
         let subdomain = null
 
-        // Use URL param if present, otherwise extract from hostname (only for kodereduai.pk)
+        // Use URL param if present, otherwise extract from hostname (only for known base domains)
         if (subdomainParam) {
           subdomain = subdomainParam
-        } else if (hostname.endsWith('.kodereduai.pk') && parts.length === 3 && parts[0] !== 'www') {
-          // Only extract subdomain for *.kodereduai.pk domains
-          // e.g., focus.kodereduai.pk -> 'focus'
-          subdomain = parts[0]
+        } else if (getSchoolSubdomain(hostname)) {
+          // Only extract subdomain for *.<base domain> hosts
+          // e.g., focus.<base domain> -> 'focus'
+          subdomain = getSchoolSubdomain(hostname)
         }
 
         // If subdomain detected, fetch school data
@@ -95,12 +95,12 @@ function AppWithSubdomain() {
           else localStorage.removeItem('currentSchoolEmail')
           
           console.log(`✅ School auto-detected: ${schoolData.name} (subdomain: ${subdomain})`)
-        } else if (subdomain === 'portal' && hostname.endsWith('.kodereduai.pk')) {
-          // ONLY set portal mode if the domain is actually portal.kodereduai.pk
+        } else if (subdomain === 'portal' && isBaseSubdomain(hostname)) {
+          // ONLY set portal mode if the domain is actually portal.<base domain>
           localStorage.setItem('isPortalMode', 'true')
           console.log('✅ Portal mode detected')
         } else {
-          // Not a kodereduai.pk subdomain - clear portal mode
+          // Not a base-domain subdomain - clear portal mode
           localStorage.removeItem('isPortalMode')
         }
       } catch (err) {

@@ -1,10 +1,13 @@
+import { isStaticHost, isBaseSubdomain } from '../config/domain'
+
 /**
  * Hook to detect and extract school information from subdomain.
  * 
  * Detects:
- * - portal.kodereduai.pk (super admin portal)
- * - www.kodereduai.pk or kodereduai.pk (static/landing page)
- * - {school}.kodereduai.pk (school-specific app)
+ * - portal.<base domain> (super admin portal)
+ * - www.<base domain> or <base domain> (static/landing page)
+ * - {school}.<base domain> (school-specific app)
+ * Base domains come from src/config/domain.js.
  * 
  * @returns {Object} { subdomain, isSubdomain, isPortal, isStatic, hostname }
  */
@@ -22,20 +25,17 @@ export function useSubdomainSchool() {
   let isPortal = false
   let isStatic = false
 
-  // Check for portal.kodereduai.pk
+  // Check for portal.<base domain>
   if (hostname.startsWith('portal.')) {
     isPortal = true
     subdomain = 'portal'
   }
-  // Check for www.kodereduai.pk or kodereduai.pk (static/landing page)
-  else if (
-    hostname === 'www.kodereduai.pk' ||
-    hostname === 'kodereduai.pk'
-  ) {
+  // Check for www.<base domain> or <base domain> (static/landing page)
+  else if (isStaticHost(hostname)) {
     isStatic = true
   }
-  // Check for *.kodereduai.pk (school subdomains)
-  else if (hostname.endsWith('.kodereduai.pk')) {
+  // Check for *.<base domain> (school subdomains)
+  else if (isBaseSubdomain(hostname)) {
     isSubdomain = true
     subdomain = parts[0]
   }
@@ -102,9 +102,8 @@ export function detectAppType(hostname = '') {
     /^\d{1,3}(\.\d{1,3}){3}$/.test(hostname)
 
   if (hostname.startsWith('portal.')) return 'portal'
-  if (hostname === 'www.kodereduai.pk' || hostname === 'kodereduai.pk')
-    return 'static'
-  if (hostname.endsWith('.kodereduai.pk')) return 'school'
+  if (isStaticHost(hostname)) return 'static'
+  if (isBaseSubdomain(hostname)) return 'school'
   if (isLocalHost) return 'dev'
 
   return 'unknown'

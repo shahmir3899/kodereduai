@@ -12,6 +12,7 @@ import { useEscapeKey } from '../hooks/useEscapeKey'
 import { usePasswordPolicy } from '../hooks/usePasswordPolicy'
 import { RecordCard, CardGrid, ViewToggle } from '../components/cards'
 import { useViewPreference } from '../hooks/useViewPreference'
+import { schoolUrl, schoolHost, linkBaseDomain } from '../config/domain'
 
 const ADMIN_PAGE_SIZE = 20
 
@@ -697,7 +698,7 @@ export default function SuperAdminDashboard() {
                       <p className="font-medium text-sm text-gray-900">{s.name}</p>
                       {s.subdomain && (
                         <a
-                          href={`https://${s.subdomain}.kodereduai.pk`}
+                          href={schoolUrl(s.subdomain)}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="text-xs text-blue-600 hover:underline shrink-0"
@@ -733,7 +734,7 @@ export default function SuperAdminDashboard() {
                         <td className="px-4 py-3 text-sm">
                           {s.subdomain && (
                             <a
-                              href={`https://${s.subdomain}.kodereduai.pk`}
+                              href={schoolUrl(s.subdomain)}
                               target="_blank"
                               rel="noopener noreferrer"
                               className="text-blue-600 hover:underline"
@@ -854,12 +855,12 @@ export default function SuperAdminDashboard() {
                       <StatusBadge active={school.is_active} />
                     </div>
                     <a
-                      href={`https://${school.subdomain}.kodereduai.pk`}
+                      href={schoolUrl(school.subdomain)}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="text-xs text-blue-600 hover:underline"
                     >
-                      {school.subdomain}.kodereduai.pk
+                      {schoolHost(school.subdomain)}
                     </a>
                     {school.organization_name && (
                       <p className="text-xs text-purple-600 mt-0.5">{school.organization_name}</p>
@@ -870,7 +871,7 @@ export default function SuperAdminDashboard() {
                     </div>
                     <div className="flex gap-3 mt-2">
                       <a
-                        href={`https://${school.subdomain}.kodereduai.pk`}
+                        href={schoolUrl(school.subdomain)}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="text-xs text-gray-600 font-medium"
@@ -933,12 +934,12 @@ export default function SuperAdminDashboard() {
                         </td>
                         <td className="px-4 py-3 text-sm">
                           <a
-                            href={`https://${school.subdomain}.kodereduai.pk`}
+                            href={schoolUrl(school.subdomain)}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="text-blue-600 hover:underline"
                           >
-                            {school.subdomain}.kodereduai.pk
+                            {schoolHost(school.subdomain)}
                           </a>
                         </td>
                         <td className="px-4 py-3 text-sm text-gray-500">{school.organization_name || '-'}</td>
@@ -947,7 +948,7 @@ export default function SuperAdminDashboard() {
                         <td className="px-4 py-3"><StatusBadge active={school.is_active} /></td>
                         <td className="px-4 py-3 flex gap-3">
                           <a
-                            href={`https://${school.subdomain}.kodereduai.pk`}
+                            href={schoolUrl(school.subdomain)}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="text-sm text-gray-600 hover:text-gray-800 font-medium"
@@ -1448,7 +1449,7 @@ export default function SuperAdminDashboard() {
                   disabled={!!editingSchool}
                   required />
                 <span className="inline-flex items-center px-3 py-2 bg-gray-100 border border-t-0 sm:border-t sm:border-l-0 border-gray-300 rounded-b-lg sm:rounded-b-none sm:rounded-r-lg text-sm text-gray-500">
-                  .kodereduai.pk
+                  .{linkBaseDomain()}
                 </span>
               </div>
               {editingSchool && <p className="text-xs text-gray-400 mt-1">Subdomain cannot be changed after creation</p>}

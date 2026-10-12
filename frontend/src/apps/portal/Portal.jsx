@@ -8,6 +8,7 @@ import ResetPasswordPage from '../../pages/ResetPasswordPage'
 import App from '../../App'
 import LoadingSpinner from '../../components/LoadingSpinner'
 import { clearAuthState } from '../../services/authStorage'
+import { getBaseDomain, schoolUrl } from '../../config/domain'
 
 // Same gap as SchoolApp.jsx: these pages live in App.jsx's own <Routes>, which
 // only mounts once a user is signed in, so a logged-out visit to
@@ -91,8 +92,8 @@ export default function Portal() {
       } else {
         // Production - user logged into wrong portal, send to school subdomain
         const schoolSubdomain = user.schools?.[0]?.subdomain
-        if (schoolSubdomain && window.location.hostname.includes('kodereduai.pk')) {
-          window.location.href = `https://${schoolSubdomain}.kodereduai.pk/`
+        if (schoolSubdomain && getBaseDomain()) {
+          window.location.href = `${schoolUrl(schoolSubdomain)}/`
         } else {
           window.location.href = '/login'
         }
