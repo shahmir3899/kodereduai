@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "EducationAI",
+    "name": "Education AI",
     "slug": "kodereduai",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "scheme": "kodereduai",
+    "scheme": "educationai",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "splash": {
@@ -15,7 +15,7 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.kodereduai.app",
+      "bundleIdentifier": "pk.educationai.app",
       "infoPlist": {
         "NSCameraUsageDescription": "This app uses the camera to capture attendance photos.",
         "NSLocationWhenInUseUsageDescription": "This app uses your location to share your journey status with parents.",
@@ -27,7 +27,7 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#1e40af"
       },
-      "package": "com.kodereduai.app",
+      "package": "pk.educationai.app",
       "permissions": [
         "android.permission.CAMERA",
         "android.permission.RECORD_AUDIO",
@@ -47,20 +47,20 @@
       [
         "expo-router",
         {
-          "origin": "https://kodereduai.com"
+          "origin": "https://www.educationai.pk"
         }
       ],
       "expo-secure-store",
       [
         "expo-camera",
         {
-          "cameraPermission": "Allow EducationAI to access your camera for attendance capture."
+          "cameraPermission": "Allow Education AI to access your camera for attendance capture."
         }
       ],
       [
         "expo-location",
         {
-          "locationAlwaysAndWhenInUsePermission": "Allow EducationAI to use your location for journey tracking.",
+          "locationAlwaysAndWhenInUsePermission": "Allow Education AI to use your location for journey tracking.",
           "isAndroidBackgroundLocationEnabled": true,
           "isAndroidForegroundServiceEnabled": true
         }
@@ -75,7 +75,7 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Allow EducationAI to access your photos."
+          "photosPermission": "Allow Education AI to access your photos."
         }
       ]
     ],
@@ -84,7 +84,7 @@
       "appEnv": "production",
       "allowInsecureHttp": false,
       "router": {
-        "origin": "https://kodereduai.com"
+        "origin": "https://www.educationai.pk"
       },
       "eas": {
         "projectId": "b157c887-f004-4827-9a18-179bd88a06d5"
