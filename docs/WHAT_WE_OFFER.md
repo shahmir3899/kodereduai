@@ -1,4 +1,4 @@
-# KoderEduAI — The Smartest School Management Platform
+# Education AI — The Smartest School Management Platform
 
 ### *Stop managing your school. Start leading it.*
 
@@ -6,7 +6,7 @@
 
 ## What We Offer
 
-KoderEduAI is a **complete, AI-powered School ERP** that replaces 10+ disconnected tools with one intelligent platform — built for the way schools actually work.
+Education AI is a **complete, AI-powered School ERP** that replaces 10+ disconnected tools with one intelligent platform — built for the way schools actually work.
 
 **Attendance That Thinks for You** — Snap a photo of your handwritten attendance register, and our AI reads it, matches students, and digitizes records in seconds. No biometric hardware. No QR codes. No behavior change. Just your existing registers + a camera.
 
@@ -28,7 +28,7 @@ KoderEduAI is a **complete, AI-powered School ERP** that replaces 10+ disconnect
 
 ## How We're Different
 
-| The Old Way (Everyone Else) | The KoderEduAI Way |
+| The Old Way (Everyone Else) | The Education AI Way |
 |---|---|
 | Need biometric machines, RFID cards, or QR scanners for digital attendance | **Just photograph your existing register** — AI does the rest |
 | Buy a monolithic suite, pay for 50 modules, use 5 | **Enable only the modules you need** — pay for what you use |
@@ -71,6 +71,6 @@ KoderEduAI is a **complete, AI-powered School ERP** that replaces 10+ disconnect
 
 ### Ready to modernize your school without the complexity?
 
-**KoderEduAI** — *Where AI meets the attendance register.*
+**Education AI** — *Where AI meets the attendance register.*
 
 ---

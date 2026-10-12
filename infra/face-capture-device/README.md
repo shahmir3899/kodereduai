@@ -3,7 +3,7 @@
 Runs at a school, on a small on-prem machine (a mini PC on the school's LAN
 is enough — no GPU required). Pulls frames from a fixed camera, detects and
 extracts a face embedding locally, and POSTs only that embedding vector
-(never the image or video) to the school's KoderEduAI backend. See
+(never the image or video) to the school's Education AI backend. See
 `docs/face-attendance-live-detection-design.md` in the main repo for the
 full design.
 

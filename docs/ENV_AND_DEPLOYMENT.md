@@ -58,7 +58,7 @@ Every successful login writes a `core.LoginEvent` row; the SuperAdmin dashboard'
 |----------|----------|---------|---------|
 | VITE_API_URL | Prod only | - | Backend API URL. Dev uses proxy to localhost:8000 |
 
-### Standalone Landing App (`frontend/apps/koderkids-landing-astro/.env`)
+### Standalone Landing App (`frontend/apps/educationai-landing-astro/.env`)
 
 | Variable | Required | Default | Purpose |
 |----------|----------|---------|---------|
@@ -101,10 +101,10 @@ Every successful login writes a `core.LoginEvent` row; the SuperAdmin dashboard'
 - SPA Rewrite: /* → /index.html
 - Headers: X-Frame-Options: DENY, X-Content-Type-Options: nosniff
 
-**3. koderkids-landing-astro (Optional standalone marketing site)**
+**3. educationai-landing-astro (Optional standalone marketing site)**
 
 - Runtime: Static site
-- Root: `frontend/apps/koderkids-landing-astro/`
+- Root: `frontend/apps/educationai-landing-astro/`
 - Build: `npm install && npm run build`
 - Publish: `dist/`
 - Notes: deploy separately from the authenticated ERP SPA when you want an isolated marketing surface or different domain/subdomain
@@ -300,7 +300,7 @@ cp .env.example .env  # Usually empty for local
 npm run dev  # Port 3000, proxies /api to :8000
 
 # 2b. Standalone landing app (Astro)
-cd frontend/apps/koderkids-landing-astro
+cd frontend/apps/educationai-landing-astro
 npm install
 cp .env.example .env
 npm run dev

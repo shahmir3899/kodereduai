@@ -15,7 +15,7 @@ uploads).
 Naming convention: most seeded rows are foundational/idempotent (kept fresh
 in place via get_or_create/update_or_create on a stable natural key) and use
 plain, presentable names since several tenants use this seeder to populate a
-tenant shown to prospects (demo.kodereduai.pk). Only genuinely time-rolling
+tenant shown to prospects (demo.educationai.pk). Only genuinely time-rolling
 data — rows keyed off "today" that would otherwise accumulate stale entries
 as the anchor date drifts forward (attendance, fee payments, staff
 attendance, payslips, attendance uploads) — is tagged via an internal

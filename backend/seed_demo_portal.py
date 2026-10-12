@@ -1,7 +1,7 @@
 """
 Baseline roster + academic structure for the public demo tenant (subdomain `demo`).
 
-Used when demo.kodereduai.pk school exists but has no classes/students/terms yet.
+Used when demo.educationai.pk school exists but has no classes/students/terms yet.
 Then run showcase graphs: `ensure_showcase_graph_data(school.id)` from seed_showcase_graphs.
 
 Does not delete existing non-demo data except resetting `is_current` on academic years for the school.
@@ -30,7 +30,7 @@ def resolve_demo_school(*, school_id: int | None = None):
     try:
         return School.objects.get(subdomain__iexact="demo")
     except School.DoesNotExist as e:
-        raise ValueError("No school with subdomain 'demo' (expected for demo.kodereduai.pk).") from e
+        raise ValueError("No school with subdomain 'demo' (expected for demo.educationai.pk).") from e
 
 
 def ensure_demo_portal_baseline(school_id: int | None = None) -> dict:

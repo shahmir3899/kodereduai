@@ -1,8 +1,8 @@
 # Demo data: public demo host + showcase graphs
 
-## Public demo tenant (`demo.kodereduai.pk`)
+## Public demo tenant (`demo.educationai.pk`)
 
-Production-style URL **`https://demo.kodereduai.pk`** maps to the school whose **`subdomain` is `demo`** (in typical deployments this is **Demo School**, id **42**).
+Production-style URL **`https://demo.educationai.pk`** maps to the school whose **`subdomain` is `demo`** (in typical deployments this is **Demo School**, id **42**).
 
 From `backend/`, run the **combined** seeder (creates academic year/terms/classes/students/staff if missing, sets admin `qaisar` password to **`Abcd1234`**, then applies showcase graph layers):
 

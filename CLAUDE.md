@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Is
 
-Multi-tenant school management SaaS (ERP) for K-12 schools, covering attendance, academics, examinations, finance/fees, HR/payroll, admissions, LMS, transport, library, hostel, and inventory. Built with Django REST + React (Vite) + React Native (Expo). The repo also includes a separate standalone marketing/landing site for the KoderKids brand — a fully independent app with its own build/deploy.
+Multi-tenant school management SaaS (ERP) for K-12 schools, covering attendance, academics, examinations, finance/fees, HR/payroll, admissions, LMS, transport, library, hostel, and inventory. Built with Django REST + React (Vite) + React Native (Expo). The repo also includes a separate standalone marketing/landing site for the Education AI brand — a fully independent app with its own build/deploy.
 
 ## Tech Stack
 
@@ -12,7 +12,7 @@ Multi-tenant school management SaaS (ERP) for K-12 schools, covering attendance,
 |-------|------|
 | Backend | Django 5.2.11, DRF 3.16, SimpleJWT, Celery 5.6 + django-celery-beat, Redis (Upstash) |
 | Frontend | React 18.3, Vite 6, Tailwind 3.4, React Query 5, React Router 7, Axios |
-| Landing site | Astro, `frontend/apps/koderkids-landing-astro` — separate build/deploy from the main frontend |
+| Landing site | Astro, `frontend/apps/educationai-landing-astro` — separate build/deploy from the main frontend |
 | Mobile | React Native 0.81, Expo 54, TypeScript, expo-router |
 | Database | PostgreSQL (Supabase pooler) in production / SQLite in dev (auto-selected when `DATABASE_URL` is unset) |
 | File Storage | Supabase Storage (bucket: `atten-reg`) |
@@ -63,7 +63,7 @@ EducationAI/
 │   │   ├── pages/               # Page components, one per route
 │   │   └── services/api.js     # Centralized Axios API layer
 │   └── apps/
-│       └── koderkids-landing-astro/  # Standalone Astro marketing site
+│       └── educationai-landing-astro/  # Standalone Astro marketing site
 ├── mobile/                     # React Native (Expo) app
 ├── infra/waha/                 # Local WhatsApp (WAHA) Docker stack — integration currently deprecated, see Gotchas
 ├── scripts/                    # One-off operational/verification scripts
@@ -82,7 +82,7 @@ python manage.py runserver 8000
 npm install
 npm run dev             # port 3000, proxies /api to :8000
 
-# Landing site (from frontend/apps/koderkids-landing-astro/)
+# Landing site (from frontend/apps/educationai-landing-astro/)
 npm install
 npm run dev
 
@@ -101,7 +101,7 @@ Helper script: `run_both_servers.bat` starts backend + main frontend in separate
 - **Pagination:** all list endpoints return `{count, next, previous, results}` via `core.pagination.FlexiblePageNumberPagination`, default `page_size=20`, override with `?page_size=N`.
 - **Errors:** DRF `EXCEPTION_HANDLER` is `core.views.custom_exception_handler` — don't bypass with ad hoc try/except in views.
 - **Module gating:** schools have an `enabled_modules` object. Frontend checks `isModuleEnabled('finance')` before rendering routes; backend enforces via `ModuleAccessMixin`.
-- **CORS:** production trusts only explicit HTTPS origins plus regexes for `*.kodereduai.pk` and `*.onrender.com`; local dev allows `localhost`/`127.0.0.1` on ports 3000/8000/4321.
+- **CORS:** production trusts only explicit HTTPS origins plus regexes built from `BASE_DOMAINS` (`educationai.pk`, `educationai.com.pk`, and the old `kodereduai.pk` until it expires) and `*.onrender.com`; local dev allows `localhost`/`127.0.0.1` on ports 3000/8000/4321.
 
 ### URL/param quirks
 - Attendance URLs use underscores (`pending_review`, `daily_report`), not hyphens.
@@ -155,7 +155,7 @@ Some backend apps keep tests in a `tests/` package (e.g. `lms/tests/`), others i
 
 ```bash
 npm run build        # frontend/ -> frontend/dist
-npm run build         # frontend/apps/koderkids-landing-astro/ -> its own dist
+npm run build         # frontend/apps/educationai-landing-astro/ -> its own dist
 ./build.sh             # backend/ — installs deps, collectstatic, migrate (used by Render)
 ```
 
@@ -203,7 +203,7 @@ Read on demand from `docs/` (not preloaded — these are large):
 | focus3899 | SCHOOL_ADMIN (Branch 1) | Abcd1234 |
 | SEED_TEST_admin | SCHOOL_ADMIN (School Alpha, id=37) | Abcd1234 |
 
-### Public demo (`demo.kodereduai.pk`)
+### Public demo (`demo.educationai.pk`; old `demo.kodereduai.pk` redirects until it expires)
 | Item | Value |
 |------|--------|
 | School | **Demo School** — ID **42**, subdomain **`demo`** |
@@ -221,7 +221,7 @@ School ID **37** (SEED_TEST_School_Alpha). To add **only** showcase graph layers
 ## Deployment
 
 - `render.yaml` deploys **only the backend** to Render as a `web` service (`kodereduai-api`, Oregon, Starter plan, `rootDir: backend`, `buildCommand: ./build.sh`, `startCommand: bash start.sh`, gunicorn + whitenoise for static files). A push to the connected branch on the linked GitHub repo triggers a deploy.
-- **The frontend is not on Render.** It's hosted externally (Hostinger, wildcard subdomains for per-school SPAs under `*.kodereduai.pk`); the Astro landing site builds/deploys separately too.
+- **The frontend is not on Render.** It's hosted externally (hostnext.net, wildcard subdomains for per-school SPAs under `*.educationai.pk`; one shared folder also serves the old `*.kodereduai.pk` until it expires); the Astro landing site builds/deploys separately too.
 - Redis is Upstash (`CELERY_BROKER_URL`/`CELERY_RESULT_BACKEND`, `rediss://`); SSL cert verification is relaxed (`ssl_cert_reqs: CERT_NONE`) to work with Upstash's setup.
 - Required Render env vars are listed in `render.yaml` (`sync: false` entries are set manually in the dashboard) and mirrored in `backend/.env.example`.
 - `python manage.py run_scheduled_jobs --all` / `run_cleanup_jobs --all` exist as manual fallbacks if Celery Beat is ever disabled in production.

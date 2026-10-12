@@ -60,7 +60,7 @@ Migrate the standalone landing app from React + Vite SPA to Astro static-first a
 5. Static deployment output for CDN-friendly hosting.
 
 ## Proposed Repository Layout
-- frontend/apps/koderkids-landing-astro/
+- frontend/apps/educationai-landing-astro/
   - astro.config.mjs
   - package.json
   - src/
@@ -287,7 +287,7 @@ Exit Criteria
 ```
 User-agent: *
 Allow: /
-Sitemap: https://www.koderkids.pk/sitemap-index.xml
+Sitemap: https://www.educationai.pk/sitemap-index.xml
 ```
 
 **`SeoHead.astro` enhanced:**

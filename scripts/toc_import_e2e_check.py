@@ -2,7 +2,7 @@
 End-to-end check: async TOC OCR (create job + poll until SUCCEEDED).
 
 Usage (from repo root, with Python + Pillow + requests):
-  set TOCE2E_BASE_URL=https://kodereduai-api.onrender.com
+  set TOCE2E_BASE_URL=https://personal-gateway-sg.onrender.com/educationai
   set TOCE2E_USERNAME=qaisar
   set TOCE2E_PASSWORD=Abcd1234
   set TOCE2E_SCHOOL_ID=42
@@ -35,7 +35,7 @@ from pathlib import Path
 import requests
 from PIL import Image, ImageDraw
 
-BASE = os.environ.get("TOCE2E_BASE_URL", "https://kodereduai-api.onrender.com").rstrip("/")
+BASE = os.environ.get("TOCE2E_BASE_URL", "https://personal-gateway-sg.onrender.com/educationai").rstrip("/")
 USER = os.environ.get("TOCE2E_USERNAME", "qaisar")
 PASSWORD = os.environ.get("TOCE2E_PASSWORD", "Abcd1234")
 SCHOOL_ID = os.environ.get("TOCE2E_SCHOOL_ID", "42")

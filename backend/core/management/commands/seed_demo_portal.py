@@ -6,7 +6,7 @@ from seed_showcase_graphs import ensure_showcase_graph_data
 
 class Command(BaseCommand):
     help = (
-        "Seed the public demo tenant (subdomain `demo`, demo.kodereduai.pk): "
+        "Seed the public demo tenant (subdomain `demo`, demo.educationai.pk): "
         "minimal classes/students/terms if missing, then showcase graph data. "
         "Resets admin `qaisar` password to the documented demo password."
     )
@@ -48,7 +48,7 @@ class Command(BaseCommand):
 
         self.stdout.write(
             self.style.WARNING(
-                "Login: https://demo.kodereduai.pk  |  User: qaisar  |  Password: Abcd1234  |  X-School-ID: "
+                "Login: https://demo.educationai.pk  |  User: qaisar  |  Password: Abcd1234  |  X-School-ID: "
                 f"{school.id}"
             )
         )
