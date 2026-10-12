@@ -464,7 +464,7 @@ def draw_page_bg(canvas, doc):
     canvas.rect(0, 0, W, 18, stroke=0, fill=1)
     canvas.setFillColor(BRAND_WHITE)
     canvas.setFont("Helvetica", 7)
-    canvas.drawCentredString(W / 2, 5, "EducationAI  |  Smart School Management Platform  |  www.kodereduai.pk")
+    canvas.drawCentredString(W / 2, 5, "Education AI  |  Smart School Management Platform  |  www.educationai.pk")
     canvas.restoreState()
 
 
@@ -492,7 +492,7 @@ def draw_cover_bg(canvas, doc):
     canvas.rect(0, 0, W, 24, stroke=0, fill=1)
     canvas.setFillColor(BRAND_WHITE)
     canvas.setFont("Helvetica", 7.5)
-    canvas.drawCentredString(W / 2, 7, "EducationAI  |  Transforming Schools with Technology")
+    canvas.drawCentredString(W / 2, 7, "Education AI  |  Transforming Schools with Technology")
     canvas.restoreState()
 
 
@@ -545,7 +545,7 @@ def build_cover():
 
     call_to_action = style("CTA", fontName="Helvetica-Bold", fontSize=12,
                            textColor=BRAND_GOLD, alignment=TA_CENTER)
-    elems.append(Paragraph("www.kodereduai.pk  ·  info@kodereduai.pk  ·  +92-300-0000000",
+    elems.append(Paragraph("www.educationai.pk  ·  info@educationai.pk  ·  +92-300-0000000",
                             call_to_action))
     return elems
 
@@ -973,7 +973,7 @@ def build_closing():
         "Join schools already running smarter with EducationAI.", closing_sub))
     elems.append(sp(14))
     elems.append(Paragraph(
-        "www.kodereduai.pk  ·  info@kodereduai.pk  ·  +92-300-0000000",
+        "www.educationai.pk  ·  info@educationai.pk  ·  +92-300-0000000",
         closing_cta))
     elems.append(sp(16))
     return elems

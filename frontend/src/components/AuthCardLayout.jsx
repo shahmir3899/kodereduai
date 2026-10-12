@@ -39,12 +39,12 @@ export default function AuthCardLayout({
   address,
   email,
   children,
-  footer = 'EducationAI - AI-Powered Education Platform',
+  footer = 'Education AI - AI-Powered Education Platform',
 }) {
   const subdomainSchool = useSubdomainSchoolBranding()
 
   const resolvedLogo = logo || subdomainSchool?.logo || '/Logo.jpeg'
-  const resolvedTitle = title || subdomainSchool?.name || 'EducationAI'
+  const resolvedTitle = title || subdomainSchool?.name || 'Education AI'
   const resolvedAddress = address ?? subdomainSchool?.address
   const resolvedEmail = email ?? subdomainSchool?.email
   const resolvedSubtitle =

@@ -61,7 +61,7 @@ export default function ParentRegisterPage() {
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary-50 to-primary-100 px-4">
       <div className="max-w-md w-full">
         <div className="text-center mb-6 sm:mb-8">
-          <img src="/Logo.jpeg" alt="EducationAI" className="h-16 w-16 rounded-full object-cover mx-auto mb-3" />
+          <img src="/Logo.jpeg" alt="Education AI" className="h-16 w-16 rounded-full object-cover mx-auto mb-3" />
           <h1 className="text-2xl sm:text-3xl font-bold text-primary-700">Parent Registration</h1>
           <p className="mt-2 text-gray-600">Create your account using the invite code from your school</p>
         </div>

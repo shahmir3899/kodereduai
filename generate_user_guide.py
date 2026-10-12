@@ -1,5 +1,5 @@
 """
-EducationAI - Comprehensive User Guide PDF Generator
+Education AI - Comprehensive User Guide PDF Generator
 Generates a professional PDF user guide covering all modules and workflows.
 
 Source: generate_user_guide.py (project root)
@@ -32,7 +32,7 @@ class UserGuidePDF(FPDF):
         if self.page_no() > 1:
             self.set_font("Helvetica", "I", 8)
             self.set_text_color(120, 120, 120)
-            self.cell(0, 8, "EducationAI - User Guide", align="L")
+            self.cell(0, 8, "Education AI - User Guide", align="L")
             self.cell(0, 8, f"Page {self.page_no()}", align="R", new_x="LMARGIN", new_y="NEXT")
             self.set_draw_color(200, 200, 200)
             self.line(10, 14, 200, 14)
@@ -67,7 +67,7 @@ class UserGuidePDF(FPDF):
         self.ln(50)
         self.set_font("Helvetica", "B", 36)
         self.set_text_color(25, 60, 120)
-        self.cell(0, 20, "EducationAI", align="C", new_x="LMARGIN", new_y="NEXT")
+        self.cell(0, 20, "Education AI", align="C", new_x="LMARGIN", new_y="NEXT")
         self.ln(5)
         self.set_font("Helvetica", "", 20)
         self.set_text_color(80, 80, 80)
@@ -351,7 +351,7 @@ def build_guide():
 
     pdf.section_title("Overview")
     pdf.body_text(
-        "EducationAI is a comprehensive School Management System that covers every aspect of school "
+        "Education AI is a comprehensive School Management System that covers every aspect of school "
         "administration - from student enrollment and attendance tracking to finance, HR, academics, "
         "examinations, transport, library, and more. The system supports multiple user roles and provides "
         "dedicated portals for administrators, teachers, parents, and students."
@@ -1929,7 +1929,7 @@ def build_guide():
     pdf.chapter_title("User Management")
 
     pdf.body_text(
-        "EducationAI uses a hierarchical role system for user management. "
+        "Education AI uses a hierarchical role system for user management. "
         "School Admins and Principals can create and manage users within their schools."
     )
 
@@ -2025,7 +2025,7 @@ def build_guide():
     pdf.chapter_title("AI Intelligence Features")
 
     pdf.body_text(
-        "EducationAI includes a suite of AI-powered intelligence features that operate across "
+        "Education AI includes a suite of AI-powered intelligence features that operate across "
         "modules to improve accuracy, surface insights, and automate routine analysis. These "
         "features learn from your school's data patterns and become more effective over time."
     )
@@ -2169,7 +2169,7 @@ def build_guide():
     # =========================================================================
     json_data = {
         "meta": {
-            "title": "EducationAI",
+            "title": "Education AI",
             "subtitle": "School Administration Guide",
             "version": "3.3 - Monthly Skill & Behaviour Assessments",
             "generatedAt": datetime.now(timezone.utc).isoformat(),

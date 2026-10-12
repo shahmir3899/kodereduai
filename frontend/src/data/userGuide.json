@@ -1,6 +1,6 @@
 {
   "meta": {
-    "title": "EducationAI",
+    "title": "Education AI",
     "subtitle": "School Administration Guide",
     "version": "3.3 - Monthly Skill & Behaviour Assessments",
     "generatedAt": "2026-07-16T09:03:27.688162+00:00",
@@ -28,7 +28,7 @@
           "content": [
             {
               "type": "body_text",
-              "text": "EducationAI is a comprehensive School Management System that covers every aspect of school administration - from student enrollment and attendance tracking to finance, HR, academics, examinations, transport, library, and more. The system supports multiple user roles and provides dedicated portals for administrators, teachers, parents, and students."
+              "text": "Education AI is a comprehensive School Management System that covers every aspect of school administration - from student enrollment and attendance tracking to finance, HR, academics, examinations, transport, library, and more. The system supports multiple user roles and provides dedicated portals for administrators, teachers, parents, and students."
             }
           ]
         },
@@ -5028,7 +5028,7 @@
           "content": [
             {
               "type": "body_text",
-              "text": "EducationAI uses a hierarchical role system for user management. School Admins and Principals can create and manage users within their schools."
+              "text": "Education AI uses a hierarchical role system for user management. School Admins and Principals can create and manage users within their schools."
             }
           ]
         },
@@ -5268,7 +5268,7 @@
           "content": [
             {
               "type": "body_text",
-              "text": "EducationAI includes a suite of AI-powered intelligence features that operate across modules to improve accuracy, surface insights, and automate routine analysis. These features learn from your school's data patterns and become more effective over time."
+              "text": "Education AI includes a suite of AI-powered intelligence features that operate across modules to improve accuracy, surface insights, and automate routine analysis. These features learn from your school's data patterns and become more effective over time."
             }
           ]
         },

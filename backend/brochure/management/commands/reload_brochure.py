@@ -5,18 +5,18 @@ from brochure.models import BrochureSection
 SECTIONS = [
     {
         'key': 'introduction',
-        'title': 'Introducing KoderEduAI',
+        'title': 'Introducing Education AI',
         'order': 0,
-        'content_html': """<p><strong>KoderEduAI</strong> is a cloud-based, AI-powered School ERP platform designed for modern educational institutions — from single-branch schools to large multi-campus networks.</p>
+        'content_html': """<p><strong>Education AI</strong> is a cloud-based, AI-powered School ERP platform designed for modern educational institutions — from single-branch schools to large multi-campus networks.</p>
 <p>Built on a multi-tenant architecture with a simple <strong>per-student pricing model</strong>, every school on the platform gets a fully isolated environment with role-based access, real-time data, and intelligent automation built in from day one.</p>
 <blockquote>One plan. Every module. All included. No hidden tiers.</blockquote>
-<p>From AI-assisted attendance reading to automated fee collection, timetable management to parent portals, KoderEduAI is the single platform that replaces dozens of disconnected tools. All 18 modules are included in one flat price.</p>""",
+<p>From AI-assisted attendance reading to automated fee collection, timetable management to parent portals, Education AI is the single platform that replaces dozens of disconnected tools. All 18 modules are included in one flat price.</p>""",
     },
     {
         'key': 'use-cases',
         'title': 'Who Is It For?',
         'order': 1,
-        'content_html': """<p>KoderEduAI serves a wide range of educational institutions:</p>
+        'content_html': """<p>Education AI serves a wide range of educational institutions:</p>
 <ul>
   <li><strong>Private K-12 Schools</strong> — Full academic year lifecycle: enrolments, timetables, exams, report cards, and parent communication.</li>
   <li><strong>Multi-Branch School Networks</strong> — One admin dashboard to manage all branches. Each campus gets its own isolated data and staff.</li>
@@ -24,7 +24,7 @@ SECTIONS = [
   <li><strong>International Schools</strong> — Multi-currency finance, curriculum builder, and cloud-first infrastructure.</li>
   <li><strong>Government-Aided Schools</strong> — Budget-friendly per-student model, offline-capable mobile attendance, and bulk reporting tools.</li>
 </ul>
-<p>No matter the size — 50 students or 5,000 — KoderEduAI scales without configuration overhead. You pay only for the students you have.</p>""",
+<p>No matter the size — 50 students or 5,000 — Education AI scales without configuration overhead. You pay only for the students you have.</p>""",
     },
     {
         'key': 'benefits',
@@ -128,7 +128,7 @@ SECTIONS = [
         'key': 'automations',
         'title': 'Powerful Automations',
         'order': 5,
-        'content_html': """<p>KoderEduAI replaces repetitive administrative work with intelligent, configurable automations:</p>
+        'content_html': """<p>Education AI replaces repetitive administrative work with intelligent, configurable automations:</p>
 <h3>Attendance Automations</h3>
 <ul>
   <li>AI reads scanned handwritten registers and auto-fills records.</li>

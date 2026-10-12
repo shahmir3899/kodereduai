@@ -1,5 +1,5 @@
 """
-URL configuration for EducationAI Platform.
+URL configuration for Education AI Platform.
 """
 
 from django.contrib import admin
@@ -47,7 +47,7 @@ def landing_metrics(request):
 def api_root(request):
     """API root endpoint with available endpoints."""
     return Response({
-        'name': 'EducationAI API',
+        'name': 'Education AI API',
         'version': '1.0.0',
         'endpoints': {
             'auth': {

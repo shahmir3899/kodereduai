@@ -807,8 +807,8 @@ export default function Layout() {
           {isSuperAdmin ? (
             // Super admin sees platform branding
             <>
-              <img src="/Logo.jpeg" alt="EducationAI" className="h-10 w-10 rounded-full object-cover flex-shrink-0" />
-              <h1 className="text-lg font-bold text-primary-600 whitespace-nowrap overflow-hidden text-ellipsis">EducationAI</h1>
+              <img src="/Logo.jpeg" alt="Education AI" className="h-10 w-10 rounded-full object-cover flex-shrink-0" />
+              <h1 className="text-lg font-bold text-primary-600 whitespace-nowrap overflow-hidden text-ellipsis">Education AI</h1>
             </>
           ) : (
             // School admin / staff / teacher sees their school branding

@@ -102,7 +102,7 @@ export default function LoginPage() {
   // back to the stored school (or generic EducationAI) branding.
   const portalBranding = isPortalMode
     ? {
-        title: 'EducationAI Admin Portal',
+        title: 'Education AI Admin Portal',
         subtitle: 'Super Administrator Access',
         logo: '/Logo.jpeg',
         address: '',

@@ -144,7 +144,7 @@ export default function FaceDevicesPage() {
         </button>
         <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Capture Devices</h1>
         <p className="text-sm text-gray-500 mt-1">
-          Fixed on-prem cameras registered for this school (Fixed Camera capture). New devices are provisioned by KoderEduAI support.
+          Fixed on-prem cameras registered for this school (Fixed Camera capture). New devices are provisioned by Education AI support.
         </p>
       </div>
 
@@ -165,7 +165,7 @@ export default function FaceDevicesPage() {
           <LoadingState />
         ) : devices.length === 0 ? (
           <div className="p-8 text-center text-gray-500 text-sm">
-            No capture devices registered yet. Contact KoderEduAI support to set up a fixed camera.
+            No capture devices registered yet. Contact Education AI support to set up a fixed camera.
           </div>
         ) : (
           <div className="divide-y">
