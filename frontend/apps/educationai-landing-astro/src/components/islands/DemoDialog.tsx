@@ -174,7 +174,7 @@ export default function DemoDialog() {
       setStatus('error');
       setMessage(buildSubmitErrorMessage(
         error,
-        'Could not send your request right now. Please try again shortly or email admin@koderkids.pk.',
+        'Could not send your request right now. Please try again shortly or email admin@educationai.pk.',
       ));
       trackConversion('landing_demo_submit_fallback', {
         method: 'mailto',

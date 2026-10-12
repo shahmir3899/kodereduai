@@ -2,10 +2,10 @@
 setlocal
 
 set "ROOT=%~dp0"
-set "LANDING_DIR=%ROOT%frontend\apps\koderkids-landing-astro"
+set "LANDING_DIR=%ROOT%frontend\apps\educationai-landing-astro"
 set "LANDING_ENV_PROD=%LANDING_DIR%\.env.production"
 
-if "%LANDING_SITE_URL%"=="" set "LANDING_SITE_URL=https://koderkids.pk"
+if "%LANDING_SITE_URL%"=="" set "LANDING_SITE_URL=https://www.educationai.pk"
 if "%LANDING_API_BASE_URL%"=="" set "LANDING_API_BASE_URL=https://personal-gateway-sg.onrender.com/educationai"
 if "%LANDING_SCHOOL_ID%"=="" set "LANDING_SCHOOL_ID=37"
 
@@ -42,8 +42,8 @@ for %%T in (
   "Landing Backend Dev"
   "Landing Astro Dev"
   "Smart Attendance Backend"
-  "KoderKids Landing Astro"
-  "KoderKids Landing Frontend"
+  "Education AI Landing Astro"
+  "Education AI Landing Frontend"
 ) do (
   taskkill /FI "WINDOWTITLE eq %%~T" /F >nul 2>nul
 )

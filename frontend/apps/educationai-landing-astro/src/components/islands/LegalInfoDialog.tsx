@@ -22,7 +22,7 @@ const contentMap: Record<LegalKind, { title: string; body: string; href: string;
   support: {
     title: 'Support',
     body:
-      'For demos, onboarding, and implementation support, contact our team directly at admin@koderkids.pk or 03167394390 (Islamabad).',
+      'For demos, onboarding, and implementation support, contact our team directly at admin@educationai.pk or 03167394390 (Islamabad).',
     href: '/support',
     cta: 'Open support page',
   },

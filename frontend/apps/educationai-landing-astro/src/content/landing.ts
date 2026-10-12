@@ -5,10 +5,10 @@ const fallbackApiBase = import.meta.env.DEV
 const publicApiBase = (import.meta.env.PUBLIC_MAIN_APP_API_BASE_URL || fallbackApiBase).replace(/\/$/, '');
 
 export const siteConfig = {
-  brandName: 'KoderKids',
+  brandName: 'Education AI',
   productName: 'Education AI',
-  siteUrl: import.meta.env.SITE_URL || 'https://www.koderkids.pk',
-  salesEmail: 'admin@koderkids.pk',
+  siteUrl: import.meta.env.SITE_URL || 'https://www.educationai.pk',
+  salesEmail: 'admin@educationai.pk',
   contactPhone: '03167394390',
   contactCity: 'Islamabad',
   demoRequestEndpoint:
@@ -20,7 +20,7 @@ export const siteConfig = {
   careersEndpoint:
     import.meta.env.PUBLIC_CAREERS_FORM_ENDPOINT ||
     `${publicApiBase || ''}/api/public/careers/apply/`,
-  demoUrl: 'https://demo.kodereduai.pk',
+  demoUrl: 'https://demo.educationai.pk',
   twitterUrl: 'https://twitter.com/koderkidspk',
   linkedInUrl: 'https://www.linkedin.com/company/koderkids',
   youtubeUrl: 'https://youtube.com/@koderkids',
@@ -322,7 +322,7 @@ export const landingContent = {
       'Book a personalized demo — see admissions, academics, attendance, and finance workflows in one production-ready platform.',
     chips: ['Cloud-based', 'Role-based access', 'AI-assisted workflows', '18 live modules'],
     primaryCta: { label: 'Book a Demo', href: '#contact' },
-    secondaryCta: { label: 'Try Live Demo', href: 'https://demo.kodereduai.pk' },
+    secondaryCta: { label: 'Try Live Demo', href: 'https://demo.educationai.pk' },
     formTitle: 'Send us a message',
   },
 
@@ -334,7 +334,7 @@ export const landingContent = {
       { label: 'Platform Overview', href: '#overview' },
       { label: 'Feature Walkthrough', href: '#walkthrough' },
       { label: 'Pricing', href: '#pricing' },
-      { label: 'Live Demo', href: 'https://demo.kodereduai.pk', external: true },
+      { label: 'Live Demo', href: 'https://demo.educationai.pk', external: true },
     ],
     companyLinks: [
       { label: 'Contact', href: '#contact' },
@@ -355,7 +355,7 @@ export const faqContent = [
   {
     question: 'What is Education AI?',
     answer:
-      'Education AI is a cloud-based school operating system by KoderKids that brings admissions, AI-assisted attendance, academics, finance, HR, transport, library, hostel, and inventory management into a single platform designed for K-12 schools.',
+      'Education AI is a cloud-based school operating system that brings admissions, AI-assisted attendance, academics, finance, HR, transport, library, hostel, and inventory management into a single platform designed for K-12 schools.',
   },
   {
     question: 'How does Education AI attendance work?',
@@ -385,7 +385,7 @@ export const faqContent = [
   {
     question: 'Can I try Education AI before committing?',
     answer:
-      'Yes. Book a live demo via the form on this page and our team will walk you through the platform with a fully seeded demo environment. You can also access the live demo at demo.kodereduai.pk.',
+      'Yes. Book a live demo via the form on this page and our team will walk you through the platform with a fully seeded demo environment. You can also access the live demo at demo.educationai.pk.',
   },
   {
     question: 'How is Education AI pricing structured?',

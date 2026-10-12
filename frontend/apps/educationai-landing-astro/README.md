@@ -1,10 +1,10 @@
-# KoderKids Landing Astro App
+# Education AI Landing Astro App
 
 Static-first Astro migration target for the standalone marketing site.
 
 ## Location
 
-- frontend/apps/koderkids-landing-astro
+- frontend/apps/educationai-landing-astro
 
 ## Run Locally
 

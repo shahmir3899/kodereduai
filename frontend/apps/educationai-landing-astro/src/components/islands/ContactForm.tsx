@@ -137,7 +137,7 @@ export default function ContactForm() {
       setStatus('error');
       setMessage(buildSubmitErrorMessage(
         error,
-        'Could not send your message right now. Please try again shortly or email admin@koderkids.pk.',
+        'Could not send your message right now. Please try again shortly or email admin@educationai.pk.',
       ));
       trackConversion('landing_contact_submit_fallback', {
         method: 'mailto',

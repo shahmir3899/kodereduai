@@ -3,7 +3,7 @@ setlocal
 
 set "ROOT=%~dp0"
 set "BACKEND_DIR=%ROOT%backend"
-set "LANDING_DIR=%ROOT%frontend\apps\koderkids-landing-astro"
+set "LANDING_DIR=%ROOT%frontend\apps\educationai-landing-astro"
 set "VENV_PY=%ROOT%.venv\Scripts\python.exe"
 
 if not exist "%VENV_PY%" (

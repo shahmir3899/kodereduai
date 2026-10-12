@@ -2,20 +2,20 @@
 import BaseLayout from '../layouts/BaseLayout.astro';
 import { siteConfig } from '../content/landing';
 
-const siteUrl = Astro.site?.toString().replace(/\/$/, '') ?? 'https://www.kodereduai.pk';
+const siteUrl = Astro.site?.toString().replace(/\/$/, '') ?? 'https://www.educationai.pk';
 
 const schema = {
   '@context': 'https://schema.org',
   '@type': 'AboutPage',
   name: 'About Education AI',
   url: `${siteUrl}/about`,
-  description: 'About Education AI and Koder Kids, an education consultant focused on school transformation.',
+  description: 'About Education AI, a school operations platform for attendance, academics, finance, and administration.',
 };
 ---
 
 <BaseLayout
   title="About | Education AI"
-  description="Learn about Education AI and Koder Kids, an education consultant helping schools modernize operations."
+  description="Learn about Education AI, a school operations platform that helps schools modernize operations."
   canonical="/about"
   robots="index,follow"
   ogImage="/hero_illustration.jpg"
@@ -33,7 +33,6 @@ const schema = {
         </p>
 
         <p class="text-brand-gray leading-relaxed mb-8">
-          Koder Kids is an education consultant focused on practical digital transformation for schools.
           We work with school leadership teams to streamline operations, improve visibility, and build
           scalable systems that support better learning environments.
         </p>

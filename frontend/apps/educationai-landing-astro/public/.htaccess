@@ -10,6 +10,9 @@ RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301,NE]
 
 # ── 2. Redirect bare domain → www ──────────────────────────────────────────
 # (adjust if canonical is non-www — swap the two conditions below)
+RewriteCond %{HTTP_HOST} ^educationai\.(com\.)?pk$ [NC]
+RewriteRule ^ https://www.educationai.pk%{REQUEST_URI} [L,R=301,NE]
+# Old domain: kept only for the redirect window, remove when kodereduai.pk expires.
 RewriteCond %{HTTP_HOST} ^kodereduai\.pk$ [NC]
 RewriteRule ^ https://www.kodereduai.pk%{REQUEST_URI} [L,R=301,NE]
 

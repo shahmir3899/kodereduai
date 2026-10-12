@@ -16,8 +16,8 @@ dist/
 build/
 staticfiles/
 frontend/dist/
-frontend/apps/koderkids-landing-astro/dist/
-frontend/apps/koderkids-landing-astro/.astro/
+frontend/apps/educationai-landing-astro/dist/
+frontend/apps/educationai-landing-astro/.astro/
 mobile/android/app/build/
 mobile/android/.gradle/
 
@@ -53,13 +53,13 @@ test_output.txt
 *.docx
 mobile/assets/*.png
 !mobile/assets/favicon.png
-frontend/apps/koderkids-landing-astro/public/**/*.png
-frontend/apps/koderkids-landing-astro/public/**/*.jpg
-frontend/apps/koderkids-landing-astro/public/**/*.jpeg
-frontend/apps/koderkids-landing-astro/public/**/*.gif
-frontend/apps/koderkids-landing-astro/public/**/*.webp
-frontend/apps/koderkids-landing-astro/public/**/*.mp4
-frontend/apps/koderkids-landing-astro/public/**/*.mov
+frontend/apps/educationai-landing-astro/public/**/*.png
+frontend/apps/educationai-landing-astro/public/**/*.jpg
+frontend/apps/educationai-landing-astro/public/**/*.jpeg
+frontend/apps/educationai-landing-astro/public/**/*.gif
+frontend/apps/educationai-landing-astro/public/**/*.webp
+frontend/apps/educationai-landing-astro/public/**/*.mp4
+frontend/apps/educationai-landing-astro/public/**/*.mov
 
 # =============================================================================
 # Generated / compiled files

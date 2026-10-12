@@ -86,7 +86,7 @@ export default function CareersForm() {
       }
     } catch {
       setStatus('error');
-      setMessage('Could not submit right now. Please try again or email admin@koderkids.pk.');
+      setMessage('Could not submit right now. Please try again or email admin@educationai.pk.');
     }
   };
 
