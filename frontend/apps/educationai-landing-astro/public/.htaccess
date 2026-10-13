@@ -3,18 +3,21 @@ DirectoryIndex index.html
 
 RewriteEngine On
 
-# ── 1. Force HTTPS (handles both direct TLS and proxy/load-balancer setups) ──
+# ── 1. Old domains -> new domain (before HTTPS-force so it is a single hop) ─────
+# kodereduai.pk and educationai.com.pk (apex and www) -> https://www.educationai.pk
+# R=302 while testing (browsers cache 301 hard); change to R=301 once verified.
+# Remove the kodereduai.pk part when that domain expires.
+RewriteCond %{HTTP_HOST} ^(www\.)?(kodereduai\.pk|educationai\.com\.pk)$ [NC]
+RewriteRule ^ https://www.educationai.pk%{REQUEST_URI} [R=302,L,NE]
+
+# ── 2. Force HTTPS (handles both direct TLS and proxy/load-balancer setups) ──
 RewriteCond %{HTTPS} !=on [NC]
 RewriteCond %{HTTP:X-Forwarded-Proto} !https [NC]
 RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301,NE]
 
-# ── 2. Redirect bare domain → www ──────────────────────────────────────────
-# (adjust if canonical is non-www — swap the two conditions below)
-RewriteCond %{HTTP_HOST} ^educationai\.(com\.)?pk$ [NC]
+# ── 3. Redirect bare educationai.pk -> www ─────────────────────────────────
+RewriteCond %{HTTP_HOST} ^educationai\.pk$ [NC]
 RewriteRule ^ https://www.educationai.pk%{REQUEST_URI} [L,R=301,NE]
-# Old domain: kept only for the redirect window, remove when kodereduai.pk expires.
-RewriteCond %{HTTP_HOST} ^kodereduai\.pk$ [NC]
-RewriteRule ^ https://www.kodereduai.pk%{REQUEST_URI} [L,R=301,NE]
 
 # Fresh HTML documents on each visit.
 # Note: true Ctrl+F5 cannot be forced server-side.
