@@ -1,6 +1,6 @@
 # Rebranding: KoderEduAI -> Education AI
 
-Status as of 2026-10-12. Branch: `feature/rebrand-educationai`.
+Status as of 2026-10-13. Merged to `main` (kodereduai `fa4f528`, parent personal-gateway `5cbe969`) and deployed.
 
 ## Decisions
 - **Display name:** "Education AI". Identifiers/file names: `EducationAI` / `educationai`.
@@ -17,17 +17,25 @@ Status as of 2026-10-12. Branch: `feature/rebrand-educationai`.
 - **Images:** existing logo/favicons reused.
 
 ## Phases
-1. **Configurable domains** (done, `12f17bc`): `BASE_DOMAINS` (backend) and `src/config/domain.js` (frontend).
-2. **Go live on new domain** (waiting on hostnext ticket): DNS, wildcard SSL, same document root, upload build, test
-   `demo.`, `portal.`, `www.`, `focus.` on `educationai.pk`. Users must log in again (tokens are per-origin).
-3. **Visible rebrand** (this branch): UI text and reports, landing app (folder renamed to
+1. **Configurable domains** (done): `BASE_DOMAINS` (backend) and `src/config/domain.js` (frontend).
+2. **Go live on new domain** (done 2026-10-13): wildcard on hostnext, app and landing builds uploaded, backend
+   deployed. Verified: `demo.`, `portal.`, `focus.`, `www.educationai.pk` load with no console errors and pass CORS;
+   apex redirects to `www`. Logins are the user's to test (production credentials are not entered by tooling).
+   Findings: the old domain serves its **own folder with the old build** (not shared with the new domain);
+   `educationai.com.pk` did not resolve at the time of testing.
+3. **Visible rebrand** (done, in `main`): UI text and reports, landing app (folder renamed to
    `educationai-landing-astro`), mobile config, docs and config.
-4. **Redirect old domain for ~1 month:** host-conditional rules in the shared `.htaccess`.
-   Landing `public/.htaccess` already redirects the apex to `www` for both domains.
-5. **Cleanup and repo rename:** drop `kodereduai.pk` from `BASE_DOMAINS` defaults
-   (`backend/config/settings.py`, `frontend/src/config/domain.js`) and the landing `.htaccess` rule;
-   rename the GitHub repo to `educationai`, then fix `.gitmodules` in the `personal-gateway` parent
-   (push the submodule commit first).
+4. **Redirect old domains** (file ready, not yet live): `infra/hostnext/old-domain/.htaccess` redirects
+   `kodereduai.pk` and `educationai.com.pk` (apex, www and every subdomain, path and query kept) to
+   `educationai.pk`. Upload it into the old domain's document root (back up the existing `.htaccess` first).
+   It ships with `R=302`; switch to `R=301` once tested. Users must log in again on the new domain (tokens are
+   per-origin), so tell schools before enabling. If `educationai.com.pk` points at the same folder as
+   `educationai.pk` instead, that folder needs a `.com.pk` rule of its own.
+5. **Cleanup and repo rename:** when `kodereduai.pk` expires, drop it from `BASE_DOMAINS` defaults
+   (`backend/config/settings.py`, `frontend/src/config/domain.js`), `VITE_BASE_DOMAINS`/`BASE_DOMAINS` env, the
+   landing `.htaccess` rule, and `infra/hostnext/old-domain/`. Then rename the GitHub repo to `educationai`, fix
+   `.gitmodules` in the `personal-gateway` parent (push the submodule commit first), and check the Render
+   deploy hook.
 
 ## Deliberately NOT changed
 - Old migrations (`brochure/`, `schools/`) and `schools/models.py` help_text (would create a migration).
@@ -42,7 +50,10 @@ Create `admin@`, `support@`, `info@`, `noreply@educationai.pk` with SPF/DKIM/DMA
 - the matching env vars on Render.
 Changing the defaults earlier would make password-reset and form emails fail or land in spam.
 
-## Local-only files to check (gitignored)
-`frontend/apps/educationai-landing-astro/.env.production` has `SITE_URL` updated, but
-`PUBLIC_MAIN_APP_API_BASE_URL` still points at the suspended `kodereduai-api.onrender.com`;
-set it to `https://personal-gateway-sg.onrender.com/educationai`.
+## Local-only files (gitignored)
+`frontend/apps/educationai-landing-astro/.env.production` now has `SITE_URL=https://www.educationai.pk` and
+`PUBLIC_MAIN_APP_API_BASE_URL=https://personal-gateway-sg.onrender.com/educationai`. The `PUBLIC_*_FORM_ENDPOINT`
+values are empty; check that the contact/demo/careers forms work.
+
+## Deploy note
+Render builds the parent repo `personal-gateway`: push `kodereduai` first, then bump the submodule pointer in the parent.
