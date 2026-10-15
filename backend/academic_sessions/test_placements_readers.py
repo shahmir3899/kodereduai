@@ -1,10 +1,10 @@
 """Readers that answer "which class was this student in on that day": record labels, the
 display roster, the digest cohort, and class off-days all follow the dated placements."""
-from datetime import timedelta
+from datetime import date, timedelta
 
 import pytest
 
-from academic_sessions.models import StudentEnrollment
+from academic_sessions.models import AcademicYear, EnrollmentPlacement, StudentEnrollment
 from academic_sessions.placement_service import DatedPlacements, section_month_roster_q
 from academic_sessions.test_placements_and_rolls import sections  # noqa: F401  (fixture)
 from attendance.models import AttendanceRecord
@@ -27,6 +27,120 @@ def moved(api, sections):  # noqa: F811
     )
     assert resp.status_code == 200, resp.content
     return {**sections, 'student': student, 'month_start': month_start, 'move_day': move_day}
+
+
+@pytest.fixture
+def stale_prior_year(sections):  # noqa: F811
+    """A student with last year's placement still open (end_date NULL), overlapping this year's."""
+    student = sections['a_students'][0]
+    year = sections['year']
+    other_year = AcademicYear.objects.create(
+        school=sections['school_a'], name='Earlier', start_date=date(2023, 4, 1), end_date=date(2024, 3, 31),
+    )
+    current = StudentEnrollment.objects.get(student=student, academic_year=year)
+    old_enrollment = StudentEnrollment.objects.create(
+        school=current.school, student=student, academic_year=other_year,
+        class_obj=current.class_obj, roll_number='1', is_active=False,
+    )
+    EnrollmentPlacement.objects.filter(enrollment=old_enrollment).delete()  # enrollment creation may auto-place
+    # Placements read back ordered by enrollment id, and in real data last year's
+    # enrollment is the older (lower id) one, so it must sort first here too.
+    lowest = StudentEnrollment.objects.order_by('id').values_list('id', flat=True).first()
+    StudentEnrollment.objects.filter(pk=old_enrollment.pk).update(id=min(lowest, 0) - 1)
+    old_enrollment = StudentEnrollment.objects.get(student=student, academic_year=other_year)
+    stale = EnrollmentPlacement.objects.create(
+        school=current.school, enrollment=old_enrollment, student=student, academic_year=other_year,
+        session_class=None, class_obj=current.class_obj, roll_number='1', start_date=other_year.start_date,
+    )
+    return {'student': student, 'other_year': other_year, 'old_enrollment': old_enrollment, 'stale': stale}
+
+
+@pytest.mark.django_db
+class TestStalePlacements:
+    def test_get_prefers_the_placement_of_the_year_containing_the_day(self, sections, stale_prior_year):
+        student = stale_prior_year['student']
+        day = sections['year'].start_date + timedelta(days=5)
+        lookup = DatedPlacements(sections['school_a'].id, [student.id], day, day)
+        assert len(lookup.covering(student.id, day)) == 2  # the stale one overlaps
+        assert lookup.get(student.id, day).session_class_id == sections['section_a'].id
+        assert lookup.class_id(student.id, day) == sections['master'].id
+
+    def test_get_falls_back_when_no_year_contains_the_day(self, sections, stale_prior_year):
+        student = stale_prior_year['student']
+        day = stale_prior_year['other_year'].end_date + timedelta(days=1)  # between the two years
+        lookup = DatedPlacements(sections['school_a'].id, [student.id], day, day)
+        assert lookup.get(student.id, day) is not None
+
+    def test_closing_a_year_ends_its_open_placement_and_reopening_undoes_it(self, stale_prior_year):
+        from academic_sessions.placement_service import close_year_placements, reopen_year_placements
+
+        enrollment = stale_prior_year['old_enrollment']
+        end = stale_prior_year['other_year'].end_date + timedelta(days=1)
+        assert close_year_placements(enrollment) == 1
+        assert enrollment.placements.get().end_date == end
+        assert close_year_placements(enrollment) == 0  # idempotent
+        reopen_year_placements(enrollment)
+        assert enrollment.placements.get().end_date is None
+
+    def test_reopen_leaves_a_mid_year_move_close_alone(self, sections):
+        from academic_sessions.placement_service import reopen_year_placements
+
+        enrollment = StudentEnrollment.objects.get(student=sections['a_students'][0], academic_year=sections['year'])
+        placement = enrollment.placements.get()
+        placement.end_date = sections['year'].start_date + timedelta(days=10)
+        placement.save()
+        reopen_year_placements(enrollment)
+        placement.refresh_from_db()
+        assert placement.end_date is not None
+
+    def test_bulk_promote_closes_the_source_years_placement(self, sections):
+        """Promotion must not leave the old year's placement open-ended."""
+        from academic_sessions.tasks import bulk_promote_task
+
+        student = sections['a_students'][1]
+        year = sections['year']
+        enrollment = StudentEnrollment.objects.get(student=student, academic_year=year)
+        assert enrollment.placements.filter(end_date__isnull=True).count() == 1
+        result = bulk_promote_task.apply(args=[
+            sections['school_a'].id, year.id, year.id,
+            [{'student_id': student.id, 'action': 'GRADUATE'}],
+        ])
+        assert result.successful(), result.traceback
+        assert enrollment.placements.get().end_date == year.end_date + timedelta(days=1)
+
+
+@pytest.mark.django_db
+class TestRepairStalePlacementsCommand:
+    def run(self, *args):
+        from io import StringIO
+
+        from django.core.management import call_command
+
+        out = StringIO()
+        call_command('repair_stale_placements', *args, stdout=out)
+        return out.getvalue()
+
+    def test_dry_run_writes_nothing_and_apply_closes_only_students_with_a_later_year(self, stale_prior_year):
+        stale = stale_prior_year['stale']
+        out = self.run('--school-id', str(stale.school_id))
+        assert '1 placement(s) to close' in out and 'Dry run' in out
+        stale.refresh_from_db()
+        assert stale.end_date is None
+
+        self.run('--apply', '--school-id', str(stale.school_id))
+        stale.refresh_from_db()
+        assert stale.end_date == stale_prior_year['other_year'].end_date + timedelta(days=1)
+        assert '0 placement(s) to close' in self.run('--school-id', str(stale.school_id))
+
+    def test_a_student_with_no_later_enrollment_is_skipped(self, stale_prior_year):
+        stale = stale_prior_year['stale']
+        StudentEnrollment.objects.filter(
+            student=stale.student, academic_year__start_date__gt=stale_prior_year['other_year'].end_date,
+        ).delete()
+        out = self.run('--apply', '--school-id', str(stale.school_id))
+        assert '0 placement(s) to close' in out and 'skipped' in out
+        stale.refresh_from_db()
+        assert stale.end_date is None
 
 
 @pytest.mark.django_db
@@ -99,6 +213,41 @@ class TestDatedReaders:
 
         assert pdf(moved['section_a']).status_code == 200
         assert pdf(moved['section_b']).status_code == 200
+
+    def test_the_pdf_register_keeps_records_when_a_prior_year_placement_is_still_open(
+        self, api, sections, stale_prior_year, monkeypatch,
+    ):
+        """A previous year's placement that was never closed (end_date NULL) overlaps the
+        current year's; the PDF used to pick it and drop every record of the month."""
+        import reportlab.platypus as rp
+
+        student = stale_prior_year['student']
+        year = sections['year']
+        month = year.start_date.replace(day=1)
+        for offset in (2, 3):
+            AttendanceRecord.objects.create(
+                school=sections['school_a'], student=student, academic_year=year,
+                date=month + timedelta(days=offset), status='PRESENT',
+            )
+
+        captured = []
+        real_table = rp.Table
+
+        class CapturingTable(real_table):
+            def __init__(self, data, *args, **kwargs):
+                captured.append(data)
+                super().__init__(data, *args, **kwargs)
+
+        monkeypatch.setattr(rp, 'Table', CapturingTable)
+        resp = api.get(
+            f"/api/attendance/records/download_register_pdf/?session_class_id={sections['section_a'].id}"
+            f"&month={month.month}&year={month.year}&academic_year={year.id}",
+            sections['tokens']['admin'], sections['SID_A'],
+        )
+        assert resp.status_code == 200
+        register = next(t for t in captured if t[0][0] == 'Roll#')
+        rows = [r for r in register[2:] if r[1] == student.name[:22]]
+        assert rows and rows[0][-3] == '2'  # P column
 
     def test_the_risk_service_uses_the_class_calendar_of_the_day(self, moved):
         from academic_sessions.attendance_risk_service import AttendanceRiskService

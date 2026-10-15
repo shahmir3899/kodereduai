@@ -133,6 +133,8 @@ def bulk_promote_task(self, school_id, source_year_id, target_year_id, promotion
                         previous_status = old_enrollment.status
                         old_enrollment.status = StudentEnrollment.Status.GRADUATED
                         old_enrollment.save(update_fields=['status'])
+                        from academic_sessions.placement_service import close_year_placements
+                        close_year_placements(old_enrollment)
                         Student.objects.filter(pk=student_id).update(
                             status=Student.Status.GRADUATED,
                         )
@@ -187,6 +189,8 @@ def bulk_promote_task(self, school_id, source_year_id, target_year_id, promotion
                                 else:
                                     old_enrollment.status = StudentEnrollment.Status.PROMOTED
                                 old_enrollment.save(update_fields=['status'])
+                                from academic_sessions.placement_service import close_year_placements
+                                close_year_placements(old_enrollment)
 
                                 Student.objects.filter(pk=student_id).update(
                                     class_obj_id=target_class_id,

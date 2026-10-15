@@ -67,6 +67,28 @@ def split_placement(enrollment, effective_date, reason='', user=None):
     )
 
 
+def close_year_placements(enrollment):
+    """Year rollover: the source enrollment's open placement ends with its year, so it
+    stops overlapping the next year's. ``end_date`` is the first day NOT in the placement."""
+    from datetime import timedelta
+
+    end = enrollment.academic_year.end_date + timedelta(days=1)
+    return enrollment.placements.filter(end_date__isnull=True, start_date__lt=end).update(end_date=end)
+
+
+def reopen_year_placements(enrollment):
+    """Undo of ``close_year_placements`` (promotion reversed): reopen only the last
+    placement and only when it was closed at year end, never a mid-year move's close."""
+    from datetime import timedelta
+
+    end = enrollment.academic_year.end_date + timedelta(days=1)
+    last = enrollment.placements.order_by('-start_date').first()
+    if last is not None and last.end_date == end:
+        last.end_date = None
+        last.save(update_fields=['end_date'])
+    return last
+
+
 def placement_on(student_id, day, academic_year_id=None):
     """The placement a student had on ``day`` (None = no placement rows cover it)."""
     qs = EnrollmentPlacement.objects.filter(student_id=student_id, start_date__lte=day).filter(
@@ -171,16 +193,28 @@ class DatedPlacements:
         rows = (
             EnrollmentPlacement.objects.filter(school_id=school_id, student_id__in=ids, start_date__lte=date_to)
             .filter(Q(end_date__isnull=True) | Q(end_date__gt=date_from))
-            .select_related('session_class', 'class_obj')
+            .select_related('session_class', 'class_obj', 'academic_year')
         )
         for placement in rows:
             self._rows.setdefault(placement.student_id, []).append(placement)
 
+    def covering(self, student_id, day):
+        """Every placement in effect on ``day`` (a prior year's never-closed one can overlap)."""
+        return [
+            p for p in self._rows.get(student_id, ())
+            if p.start_date <= day and (p.end_date is None or p.end_date > day)
+        ]
+
     def get(self, student_id, day):
-        for placement in self._rows.get(student_id, ()):
-            if placement.start_date <= day and (placement.end_date is None or placement.end_date > day):
+        covering = self.covering(student_id, day)
+        # A previous year's open-ended placement overlaps the current year's; the one
+        # from the year containing ``day`` is the real answer, so it must not lose to
+        # whichever row happens to sort first.
+        for placement in covering:
+            year = placement.academic_year
+            if year.start_date <= day <= year.end_date:
                 return placement
-        return None
+        return covering[0] if covering else None
 
     def class_id(self, student_id, day):
         placement = self.get(student_id, day)

@@ -957,6 +957,8 @@ class StudentEnrollmentViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
                 target_enrollment.delete()
                 source_enrollment.status = StudentEnrollment.Status.ACTIVE
                 source_enrollment.save(update_fields=['status', 'updated_at'])
+                from .placement_service import reopen_year_placements
+                reopen_year_placements(source_enrollment)
                 Student.objects.filter(pk=student_id, school_id=school_id).update(
                     class_obj_id=source_enrollment.class_obj_id,
                     roll_number=source_enrollment.roll_number,
@@ -989,6 +991,8 @@ class StudentEnrollmentViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
                 previous_status = source_enrollment.status
                 source_enrollment.status = StudentEnrollment.Status.GRADUATED
                 source_enrollment.save(update_fields=['status', 'updated_at'])
+                from .placement_service import close_year_placements
+                close_year_placements(source_enrollment)
                 Student.objects.filter(pk=student_id, school_id=school_id).update(status=Student.Status.GRADUATED)
 
                 self._log_promotion_event(
@@ -1015,6 +1019,8 @@ class StudentEnrollmentViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
                 previous_status = source_enrollment.status
                 source_enrollment.status = StudentEnrollment.Status.ACTIVE
                 source_enrollment.save(update_fields=['status', 'updated_at'])
+                from .placement_service import reopen_year_placements
+                reopen_year_placements(source_enrollment)
                 Student.objects.filter(pk=student_id, school_id=school_id).update(
                     class_obj_id=source_enrollment.class_obj_id,
                     roll_number=source_enrollment.roll_number,
@@ -1043,6 +1049,8 @@ class StudentEnrollmentViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
             if action == 'GRADUATE':
                 source_enrollment.status = StudentEnrollment.Status.GRADUATED
                 source_enrollment.save(update_fields=['status', 'updated_at'])
+                from .placement_service import close_year_placements
+                close_year_placements(source_enrollment)
                 Student.objects.filter(pk=student_id, school_id=school_id).update(status=Student.Status.GRADUATED)
 
                 self._log_promotion_event(
@@ -1091,6 +1099,8 @@ class StudentEnrollmentViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
                 else StudentEnrollment.Status.PROMOTED
             )
             source_enrollment.save(update_fields=['status', 'updated_at'])
+            from .placement_service import close_year_placements
+            close_year_placements(source_enrollment)
 
             Student.objects.filter(pk=student_id, school_id=school_id).update(
                 class_obj_id=resolved_target_class_id,

@@ -1255,12 +1255,14 @@ class AttendanceRecordViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.R
         dated = DatedPlacements(school_id, student_ids, date_from, date_to)
 
         def in_this_class(student_id, day):
-            placement = dated.get(student_id, day)
-            if placement is None:
+            # Any covering placement in this section counts, like the on-screen register's
+            # scope_records: legacy never-closed placements from a prior year can overlap.
+            covering = dated.covering(student_id, day)
+            if not covering:
                 return True  # no dated placement: the enrollment-based roster already decided
             if session_class_id:
-                return placement.session_class_id == int(session_class_id)
-            return placement.class_obj_id == int(class_id)
+                return any(p.session_class_id == int(session_class_id) for p in covering)
+            return any(p.class_obj_id == int(class_id) for p in covering)
 
         for record in records:
             if in_this_class(record['student_id'], record['date']):
