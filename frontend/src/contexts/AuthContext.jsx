@@ -6,7 +6,6 @@ import api, {
   academicsApi,
   admissionsApi,
   attendanceApi,
-  bootstrapApi,
   classesApi,
   examinationsApi,
   financeApi,
@@ -34,6 +33,7 @@ import {
   setAuthTokens,
 } from '../services/authStorage'
 import { QUERY_PERSIST_KEY } from '../queryPersistConfig'
+import { DASHBOARD_BOOTSTRAP_ENABLED, fetchDashboardBootstrap } from '../utils/dashboardBootstrap'
 
 const AuthContext = createContext(null)
 
@@ -73,6 +73,14 @@ function isModuleAvailable({ moduleKey, enabledModules, isSuperAdmin }) {
   if (typeof moduleConfig === 'boolean') return moduleConfig
   if (moduleConfig && typeof moduleConfig === 'object') return !!moduleConfig.enabled
   return false
+}
+
+// Pages the preload exists to warm. Session restore runs on every hard load, so a refresh or
+// deep link on /students or /academics/subjects must not also pull the dashboard's ~15 calls.
+const PRELOAD_LANDING_PATHS = new Set(['/', '/dashboard', '/parent/dashboard', '/student/dashboard', '/admin'])
+export function isPreloadLandingPath(pathname) {
+  const path = (pathname || '/').replace(/\/+$/, '') || '/'
+  return PRELOAD_LANDING_PATHS.has(path)
 }
 
 function normalizeListResponse(data) {
@@ -197,7 +205,9 @@ export function AuthProvider({ children }) {
         setActiveSchoolId(String(school.id))
       }
 
-      void preloadVisibleData(userData, school)
+      if (isPreloadLandingPath(window.location.pathname)) {
+        void preloadVisibleData(userData, school)
+      }
     } catch (error) {
       console.error('Failed to fetch user:', error)
       clearAuthState()
@@ -549,117 +559,28 @@ export function AuthProvider({ children }) {
         })
       }
     } else if (effectiveRole === 'SCHOOL_ADMIN' || effectiveRole === 'PRINCIPAL') {
-      // Bootstrap call: attendance + hr + finance in one round trip.
-      // Individual React Query cache entries are populated from the combined response,
-      // so dashboard pages hit the cache instantly when they mount.
-      addPrefetch(
-        ['adminDashboardBootstrap', today, school.id, activeAcademicYearId, currentMonth, currentYear],
-        async () => {
-          const res = await bootstrapApi.getAdminDashboard({
-            date: today,
-            ...(activeAcademicYearId && { academic_year: activeAcademicYearId }),
+      // The dashboard is where an admin/principal lands after login, and it fetches everything
+      // its tiles show itself. Preloading more than that (full-month attendance, the review
+      // queue, upcoming exams, leadership insights) only added calls that compete with the page:
+      // each of those screens loads its own data when opened.
+      if (!DASHBOARD_BOOTSTRAP_ENABLED) {
+        // Switch off: the old behaviour, one combined request seeding the tile keys. With the
+        // switch on the dashboard itself runs it (useDashboardBootstrap) so the tiles can wait.
+        addPrefetch(
+          ['adminDashboardBootstrap', today, school.id, activeAcademicYearId, currentMonth, currentYear],
+          () => fetchDashboardBootstrap(queryClient, {
+            today,
+            schoolId: school.id,
+            academicYearId: activeAcademicYearId,
             month: currentMonth,
             year: currentYear,
-          })
-          const data = res.data || {}
-          if (data.attendance != null) {
-            queryClient.setQueryData(
-              ['dailyReport', today, school.id, activeAcademicYearId],
-              { data: data.attendance },
-            )
-          }
-          if (data.hr != null) {
-            queryClient.setQueryData(['hrDashboardStats'], { data: data.hr })
-          }
-          if (data.finance != null) {
-            // Every dashboard reads the month's fee numbers through
-            // useFeeMonthSummary, so one seeded key covers them all.
-            queryClient.setQueryData(
-              feeMonthSummaryKey('single', currentMonth, currentYear, activeAcademicYearId),
-              { data: data.finance },
-            )
-          }
-          return res
-        },
-        2 * 60 * 1000,
-        'A',
-      )
-      // Pending review uploads — separate call (full list needed for the review queue UI)
-      if (isModuleAvailable({ moduleKey: 'attendance', enabledModules, isSuperAdmin })) {
-        addPrefetch(
-          ['pendingReviews', activeAcademicYearId],
-          () => attendanceApi.getPendingReviews({ ...(activeAcademicYearId && { academic_year: activeAcademicYearId }) }),
-          2 * 60 * 1000,
-          'B',
-        )
-      }
-      if (isModuleAvailable({ moduleKey: 'admissions', enabledModules, isSuperAdmin })) {
-        addPrefetch(['admissionsNewCount'], () => admissionsApi.getEnquiries({ status: 'NEW', page_size: 1 }), 2 * 60 * 1000, 'B')
-      }
-      if (isModuleAvailable({ moduleKey: 'examinations', enabledModules, isSuperAdmin })) {
-        addPrefetch(
-          ['upcomingExams', activeAcademicYearId],
-          () => examinationsApi.getExams({ status: 'SCHEDULED', page_size: 1, academic_year: activeAcademicYearId || undefined }),
-          2 * 60 * 1000,
-          'B',
-        )
-      }
-      if (isModuleAvailable({ moduleKey: 'transport', enabledModules, isSuperAdmin })) {
-        addPrefetch(['transportDashboard'], () => transportApi.getDashboardStats(), 2 * 60 * 1000, 'B')
-      }
-      if (isModuleAvailable({ moduleKey: 'library', enabledModules, isSuperAdmin })) {
-        addPrefetch(['libraryStats'], () => libraryApi.getStats(), 2 * 60 * 1000, 'B')
-      }
-      if (isModuleAvailable({ moduleKey: 'hostel', enabledModules, isSuperAdmin })) {
-        addPrefetch(['hostelDashboard'], () => hostelApi.getDashboard(), 2 * 60 * 1000, 'B')
-      }
-      if (isModuleAvailable({ moduleKey: 'inventory', enabledModules, isSuperAdmin })) {
-        addPrefetch(['inventoryDashboard'], () => inventoryApi.getDashboard(), 2 * 60 * 1000, 'B')
-      }
-      // Leadership academic insights (admissions/roster + curriculum coverage) — only
-      // fetched by DashboardPage when at least one of these module groups is enabled,
-      // matching the same gate used there (leadershipRosterGate / leadershipCurriculumGate).
-      if (
-        isModuleAvailable({ moduleKey: 'students', enabledModules, isSuperAdmin }) ||
-        isModuleAvailable({ moduleKey: 'admissions', enabledModules, isSuperAdmin }) ||
-        isModuleAvailable({ moduleKey: 'lms', enabledModules, isSuperAdmin }) ||
-        isModuleAvailable({ moduleKey: 'examinations', enabledModules, isSuperAdmin })
-      ) {
-        addPrefetch(
-          ['leadershipAcademicInsights', school.id, activeAcademicYearId, today],
-          () => bootstrapApi.getLeadershipAcademicInsights({
-            reference_date: today,
-            ...(activeAcademicYearId && { academic_year: activeAcademicYearId }),
+            isModuleOn: (moduleKey) => isModuleAvailable({ moduleKey, enabledModules, isSuperAdmin }),
           }),
           2 * 60 * 1000,
-          'B',
+          'A',
         )
       }
       addPrefetch(['aiInsights'], () => tasksApi.getAIInsights(), 5 * 60 * 1000, 'B')
-      // Preload full-month attendance for all classes in one request
-      if (isModuleAvailable({ moduleKey: 'attendance', enabledModules, isSuperAdmin }) && activeAcademicYearId) {
-        tierBTasks.push(async () => {
-          try {
-            const [yy, mm] = today.split('-').map(Number)
-            const daysInMonth = new Date(yy, mm, 0).getDate()
-            const dateFrom = `${yy}-${String(mm).padStart(2, '0')}-01`
-            const dateTo = `${yy}-${String(mm).padStart(2, '0')}-${String(daysInMonth).padStart(2, '0')}`
-            const res = await withTimeout(
-              attendanceApi.getMonthlyBulk({ month: mm, year: yy, academic_year: activeAcademicYearId }),
-              PRELOAD_TIMEOUT_MS * 2,
-            )
-            const byClass = res?.data?.by_class || {}
-            for (const [scId, records] of Object.entries(byClass)) {
-              queryClient.setQueryData(
-                ['attendanceRecords', dateFrom, dateTo, scId, activeAcademicYearId],
-                { data: { results: records } },
-              )
-            }
-          } catch (err) {
-            if (PRELOAD_DEBUG) console.warn('[preload] monthly_bulk (admin) failed', err?.message)
-          }
-        })
-      }
     } else if (effectiveRole === 'MANAGER') {
       // 2026-09: Manager's nav access scoped down to Dashboard/Academics/
       // Content Creation/Management only — the HR dashboard/payroll/staff-

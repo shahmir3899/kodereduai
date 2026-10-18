@@ -72,30 +72,31 @@ def _resolve_school_id(request):
 # Transport Dashboard
 # =============================================================================
 
+def build_dashboard_summary(school_id):
+    """Shared by TransportDashboardView and the admin-dashboard bootstrap."""
+    from datetime import date as date_cls
+
+    return {
+        'total_routes': TransportRoute.objects.filter(school_id=school_id, is_active=True).count(),
+        'total_vehicles': TransportVehicle.objects.filter(school_id=school_id, is_active=True).count(),
+        'students_assigned': TransportAssignment.objects.filter(school_id=school_id, is_active=True).count(),
+        'today_attendance': TransportAttendance.objects.filter(
+            school_id=school_id, date=date_cls.today(),
+        ).count(),
+    }
+
+
 class TransportDashboardView(ModuleAccessMixin, APIView):
     """GET /api/transport/dashboard/ — Transport overview stats."""
     required_module = 'transport'
     permission_classes = [IsAuthenticated, HasSchoolAccess]
 
     def get(self, request):
-        from datetime import date as date_cls
         school_id = _resolve_school_id(request)
         if not school_id:
             return Response({'detail': 'No school selected.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        total_routes = TransportRoute.objects.filter(school_id=school_id, is_active=True).count()
-        total_vehicles = TransportVehicle.objects.filter(school_id=school_id, is_active=True).count()
-        students_assigned = TransportAssignment.objects.filter(school_id=school_id, is_active=True).count()
-        today_attendance = TransportAttendance.objects.filter(
-            school_id=school_id, date=date_cls.today(),
-        ).count()
-
-        return Response({
-            'total_routes': total_routes,
-            'total_vehicles': total_vehicles,
-            'students_assigned': students_assigned,
-            'today_attendance': today_attendance,
-        })
+        return Response(build_dashboard_summary(school_id))
 
 
 # =============================================================================

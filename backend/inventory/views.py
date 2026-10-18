@@ -320,6 +320,59 @@ class StockTransactionViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.M
 # Dashboard View
 # =============================================================================
 
+def build_dashboard_summary(school_id):
+    """Shared by InventoryDashboardView and the admin-dashboard bootstrap."""
+    items_qs = InventoryItem.objects.filter(school_id=school_id, is_active=True)
+
+    total_items = items_qs.count()
+
+    total_value = sum(
+        item.current_stock * item.unit_price for item in items_qs.only(
+            'current_stock', 'unit_price',
+        )
+    )
+
+    low_stock_count = items_qs.filter(
+        current_stock__lte=F('minimum_stock'),
+    ).count()
+
+    active_assignments = ItemAssignment.objects.filter(
+        school_id=school_id, is_active=True,
+    ).count()
+
+    total_categories = InventoryCategory.objects.filter(
+        school_id=school_id, is_active=True,
+    ).count()
+
+    total_vendors = Vendor.objects.filter(
+        school_id=school_id, is_active=True,
+    ).count()
+
+    recent_transactions = StockTransactionReadSerializer(
+        StockTransaction.objects.filter(school_id=school_id).select_related(
+            'item', 'vendor', 'recorded_by',
+        )[:10],
+        many=True,
+    ).data
+
+    low_stock_items = InventoryItemReadSerializer(
+        items_qs.filter(current_stock__lte=F('minimum_stock'))[:10],
+        many=True,
+    ).data
+
+    payload = {
+        'total_items': total_items,
+        'total_value': float(total_value),
+        'low_stock_count': low_stock_count,
+        'active_assignments': active_assignments,
+        'total_categories': total_categories,
+        'total_vendors': total_vendors,
+        'recent_transactions': recent_transactions,
+        'low_stock_items': low_stock_items,
+    }
+    return payload
+
+
 class InventoryDashboardView(ModuleAccessMixin, APIView):
     """
     GET: Returns aggregate inventory statistics for the active school.
@@ -337,55 +390,7 @@ class InventoryDashboardView(ModuleAccessMixin, APIView):
 
         # Not cached: the payload includes total_value (stock valued at unit_price).
 
-        items_qs = InventoryItem.objects.filter(school_id=school_id, is_active=True)
-
-        total_items = items_qs.count()
-
-        total_value = sum(
-            item.current_stock * item.unit_price for item in items_qs.only(
-                'current_stock', 'unit_price',
-            )
-        )
-
-        low_stock_count = items_qs.filter(
-            current_stock__lte=F('minimum_stock'),
-        ).count()
-
-        active_assignments = ItemAssignment.objects.filter(
-            school_id=school_id, is_active=True,
-        ).count()
-
-        total_categories = InventoryCategory.objects.filter(
-            school_id=school_id, is_active=True,
-        ).count()
-
-        total_vendors = Vendor.objects.filter(
-            school_id=school_id, is_active=True,
-        ).count()
-
-        recent_transactions = StockTransactionReadSerializer(
-            StockTransaction.objects.filter(school_id=school_id).select_related(
-                'item', 'vendor', 'recorded_by',
-            )[:10],
-            many=True,
-        ).data
-
-        low_stock_items = InventoryItemReadSerializer(
-            items_qs.filter(current_stock__lte=F('minimum_stock'))[:10],
-            many=True,
-        ).data
-
-        payload = {
-            'total_items': total_items,
-            'total_value': float(total_value),
-            'low_stock_count': low_stock_count,
-            'active_assignments': active_assignments,
-            'total_categories': total_categories,
-            'total_vendors': total_vendors,
-            'recent_transactions': recent_transactions,
-            'low_stock_items': low_stock_items,
-        }
-        return Response(payload)
+        return Response(build_dashboard_summary(school_id))
 
 
 # =============================================================================

@@ -333,6 +333,56 @@ class GatePassViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelView
 # Dashboard View
 # =============================================================================
 
+def build_dashboard_summary(school_id):
+    """Shared by HostelDashboardView and the admin-dashboard bootstrap."""
+    total_hostels = Hostel.objects.filter(
+        school_id=school_id, is_active=True,
+    ).count()
+
+    total_rooms = Room.objects.filter(
+        hostel__school_id=school_id, hostel__is_active=True,
+    ).count()
+
+    total_capacity = Room.objects.filter(
+        hostel__school_id=school_id, hostel__is_active=True, is_available=True,
+    ).aggregate(total=Sum('capacity'))['total'] or 0
+
+    current_occupancy = HostelAllocation.objects.filter(
+        school_id=school_id, is_active=True,
+    ).count()
+
+    pending_gate_passes = GatePass.objects.filter(
+        school_id=school_id, status='PENDING',
+    ).count()
+
+    available_beds = total_capacity - current_occupancy
+
+    boys_hostels = Hostel.objects.filter(
+        school_id=school_id, is_active=True, hostel_type='BOYS',
+    ).count()
+
+    girls_hostels = Hostel.objects.filter(
+        school_id=school_id, is_active=True, hostel_type='GIRLS',
+    ).count()
+
+    students_on_leave = GatePass.objects.filter(
+        school_id=school_id, status='USED',
+    ).count()
+
+    payload = {
+        'total_hostels': total_hostels,
+        'total_rooms': total_rooms,
+        'total_capacity': total_capacity,
+        'current_occupancy': current_occupancy,
+        'available_beds': available_beds,
+        'pending_gate_passes': pending_gate_passes,
+        'boys_hostels': boys_hostels,
+        'girls_hostels': girls_hostels,
+        'students_on_leave': students_on_leave,
+    }
+    return payload
+
+
 class HostelDashboardView(ModuleAccessMixin, APIView):
     """
     GET: Returns aggregate hostel statistics for the active school.
@@ -351,49 +401,4 @@ class HostelDashboardView(ModuleAccessMixin, APIView):
             )
 
 
-        total_hostels = Hostel.objects.filter(
-            school_id=school_id, is_active=True,
-        ).count()
-
-        total_rooms = Room.objects.filter(
-            hostel__school_id=school_id, hostel__is_active=True,
-        ).count()
-
-        total_capacity = Room.objects.filter(
-            hostel__school_id=school_id, hostel__is_active=True, is_available=True,
-        ).aggregate(total=Sum('capacity'))['total'] or 0
-
-        current_occupancy = HostelAllocation.objects.filter(
-            school_id=school_id, is_active=True,
-        ).count()
-
-        pending_gate_passes = GatePass.objects.filter(
-            school_id=school_id, status='PENDING',
-        ).count()
-
-        available_beds = total_capacity - current_occupancy
-
-        boys_hostels = Hostel.objects.filter(
-            school_id=school_id, is_active=True, hostel_type='BOYS',
-        ).count()
-
-        girls_hostels = Hostel.objects.filter(
-            school_id=school_id, is_active=True, hostel_type='GIRLS',
-        ).count()
-
-        students_on_leave = GatePass.objects.filter(
-            school_id=school_id, status='USED',
-        ).count()
-
-        payload = {
-            'total_hostels': total_hostels,
-            'total_rooms': total_rooms,
-            'total_capacity': total_capacity,
-            'current_occupancy': current_occupancy,
-            'available_beds': available_beds,
-            'pending_gate_passes': pending_gate_passes,
-            'boys_hostels': boys_hostels,
-            'girls_hostels': girls_hostels,
-            'students_on_leave': students_on_leave,
-        }
-        return Response(payload)
+        return Response(build_dashboard_summary(school_id))

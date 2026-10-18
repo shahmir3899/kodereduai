@@ -271,6 +271,39 @@ class LibraryConfigViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Mode
         return config
 
 
+def build_stats_summary(school_id):
+    """Shared by LibraryStatsView and the admin-dashboard bootstrap."""
+    today = date.today()
+
+    total_books = Book.objects.filter(
+        school_id=school_id, is_active=True,
+    ).aggregate(total=Sum('total_copies'))['total'] or 0
+
+    total_issued = BookIssue.objects.filter(
+        school_id=school_id, status='ISSUED',
+    ).count()
+
+    total_overdue = BookIssue.objects.filter(
+        school_id=school_id, status='ISSUED', due_date__lt=today,
+    ).count()
+
+    total_categories = BookCategory.objects.filter(
+        school_id=school_id,
+    ).count()
+
+    total_fine_collected = BookIssue.objects.filter(
+        school_id=school_id, status='RETURNED',
+    ).aggregate(total=Sum('fine_amount'))['total'] or Decimal('0')
+
+    return {
+        'total_books': total_books,
+        'total_issued': total_issued,
+        'total_overdue': total_overdue,
+        'total_categories': total_categories,
+        'total_fine_collected': total_fine_collected,
+    }
+
+
 class LibraryStatsView(ModuleAccessMixin, APIView):
     """
     GET: Returns aggregate library statistics for the active school.
@@ -287,32 +320,4 @@ class LibraryStatsView(ModuleAccessMixin, APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        today = date.today()
-
-        total_books = Book.objects.filter(
-            school_id=school_id, is_active=True,
-        ).aggregate(total=Sum('total_copies'))['total'] or 0
-
-        total_issued = BookIssue.objects.filter(
-            school_id=school_id, status='ISSUED',
-        ).count()
-
-        total_overdue = BookIssue.objects.filter(
-            school_id=school_id, status='ISSUED', due_date__lt=today,
-        ).count()
-
-        total_categories = BookCategory.objects.filter(
-            school_id=school_id,
-        ).count()
-
-        total_fine_collected = BookIssue.objects.filter(
-            school_id=school_id, status='RETURNED',
-        ).aggregate(total=Sum('fine_amount'))['total'] or Decimal('0')
-
-        return Response({
-            'total_books': total_books,
-            'total_issued': total_issued,
-            'total_overdue': total_overdue,
-            'total_categories': total_categories,
-            'total_fine_collected': total_fine_collected,
-        })
+        return Response(build_stats_summary(school_id))

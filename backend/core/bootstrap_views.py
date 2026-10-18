@@ -99,6 +99,45 @@ def _get_finance_section(school_id, month, year, academic_year_id):
     }
 
 
+def _get_admissions_new_count(school_id):
+    """Count of NEW enquiries — same filter as AdmissionEnquiryViewSet with ?status=NEW."""
+    from admissions.models import AdmissionEnquiry
+
+    return AdmissionEnquiry.objects.filter(school_id=school_id, status='NEW').count()
+
+
+def _module_summaries():
+    """
+    Module dashboards folded into the bootstrap so the frontend stops firing one request
+    each on every boot. Each builder is the same helper its own endpoint calls.
+    """
+    from hostel.views import build_dashboard_summary as hostel_summary
+    from inventory.views import build_dashboard_summary as inventory_summary
+    from library.views import build_stats_summary as library_summary
+    from transport.views import build_dashboard_summary as transport_summary
+
+    return {
+        'transport': transport_summary,
+        'library': library_summary,
+        'hostel': hostel_summary,
+        'inventory': inventory_summary,
+        'admissions': _get_admissions_new_count,
+    }
+
+
+# Section name -> response key. Module sections are opt-in via ?sections= so existing
+# callers keep getting exactly attendance/hr/finance.
+_MODULE_RESPONSE_KEYS = {
+    'transport': 'transport',
+    'library': 'library',
+    'hostel': 'hostel',
+    'inventory': 'inventory',
+    'admissions': 'admissions_new_count',
+}
+# Inventory denies MANAGER (InventoryRoleAccessPermission); the others are admin-only on the dashboard.
+_MODULE_SECTION_ROLES = {'SCHOOL_ADMIN', 'PRINCIPAL'}
+
+
 class AdminDashboardBootstrapView(APIView):
     """
     GET /api/bootstrap/admin-dashboard/
@@ -111,8 +150,12 @@ class AdminDashboardBootstrapView(APIView):
       academic_year   int id      (optional)
       month           int         (default: current month)
       year            int         (default: current year)
-      sections        comma-separated list of: attendance,hr,finance
-                      (default: all three)
+      sections        comma-separated list of: attendance,hr,finance and, opt-in,
+                      transport,library,hostel,inventory,admissions
+                      (default: attendance,hr,finance). The opt-in sections are returned
+                      only for SCHOOL_ADMIN/PRINCIPAL and only when the module is enabled;
+                      a section that fails comes back as null so the client can fall back
+                      to that module's own endpoint.
     """
 
     permission_classes = [IsAuthenticated, HasSchoolAccess]
@@ -183,5 +226,20 @@ class AdminDashboardBootstrapView(APIView):
                 result['finance'] = _get_finance_section(school_id, month, year, academic_year_id)
             except Exception:
                 result['finance'] = None
+
+        wanted_modules = [n for n in _MODULE_RESPONSE_KEYS if n in requested]
+        if wanted_modules and role in _MODULE_SECTION_ROLES:
+            # get_enabled_module is the exact check ModuleAccessMixin runs on each module's
+            # own endpoint (org ceiling AND school toggle), so a section is never served for
+            # a module that endpoint would 403.
+            module_school = School.objects.select_related('organization').filter(id=school_id).first()
+            builders = _module_summaries()
+            for name in wanted_modules:
+                response_key = _MODULE_RESPONSE_KEYS[name]
+                if module_school and module_school.get_enabled_module(name):
+                    try:
+                        result[response_key] = builders[name](school_id)
+                    except Exception:
+                        result[response_key] = None
 
         return Response(result)

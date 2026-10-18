@@ -1,0 +1,534 @@
+{
+  "host": "",
+  "taken_at": "2026-10-18 22:04:54",
+  "pages": {
+    "students_list": {
+      "hard": {
+        "api_requests": 6,
+        "waterfall_depth": 2,
+        "total_ms_incl_1.5s_settle": 6699,
+        "calls": [
+          {
+            "url": "auth/me/",
+            "start": 57,
+            "end": 1493
+          },
+          {
+            "url": "schools/by-subdomain/",
+            "start": 60,
+            "end": 1378
+          },
+          {
+            "url": "sessions/terms/",
+            "start": 1497,
+            "end": 2680
+          },
+          {
+            "url": "notifications/unread-count/",
+            "start": 1554,
+            "end": 2884
+          },
+          {
+            "url": "tasks/ai-jobs/",
+            "start": 1555,
+            "end": 2702
+          },
+          {
+            "url": "students/",
+            "start": 1555,
+            "end": 4677
+          }
+        ]
+      },
+      "spa": {
+        "api_requests": 0,
+        "waterfall_depth": 0,
+        "total_ms_incl_1.5s_settle": 1560,
+        "calls": [],
+        "navigated": true
+      }
+    },
+    "dashboard": {
+      "hard": {
+        "api_requests": 17,
+        "waterfall_depth": 4,
+        "total_ms_incl_1.5s_settle": 13222,
+        "calls": [
+          {
+            "url": "auth/me/",
+            "start": 69,
+            "end": 1699
+          },
+          {
+            "url": "schools/by-subdomain/",
+            "start": 74,
+            "end": 1610
+          },
+          {
+            "url": "notifications/unread-count/",
+            "start": 1699,
+            "end": 2936
+          },
+          {
+            "url": "sessions/terms/",
+            "start": 1719,
+            "end": 3036
+          },
+          {
+            "url": "tasks/ai-insights/",
+            "start": 1744,
+            "end": 4395
+          },
+          {
+            "url": "notifications/digest/",
+            "start": 1745,
+            "end": 3018
+          },
+          {
+            "url": "notifications/my/",
+            "start": 1745,
+            "end": 3235
+          },
+          {
+            "url": "tasks/ai-jobs/",
+            "start": 1745,
+            "end": 3976
+          },
+          {
+            "url": "sessions/health/",
+            "start": 1745,
+            "end": 9154
+          },
+          {
+            "url": "bootstrap/admin-dashboard/",
+            "start": 3039,
+            "end": 10507
+          },
+          {
+            "url": "finance/fee-payments/monthly_summary/",
+            "start": 7060,
+            "end": 9109
+          },
+          {
+            "url": "attendance/records/daily_report/",
+            "start": 7060,
+            "end": 9219
+          },
+          {
+            "url": "hr/staff/dashboard_stats/",
+            "start": 7061,
+            "end": 8518
+          },
+          {
+            "url": "admissions/enquiries/",
+            "start": 7061,
+            "end": 8680
+          },
+          {
+            "url": "library/stats/",
+            "start": 7061,
+            "end": 10454
+          },
+          {
+            "url": "inventory/dashboard/",
+            "start": 7061,
+            "end": 11211
+          },
+          {
+            "url": "sessions/health/ai-summary/",
+            "start": 9156,
+            "end": 10248
+          }
+        ]
+      },
+      "spa": null
+    },
+    "student_profile": {
+      "hard": {
+        "api_requests": 9,
+        "waterfall_depth": 2,
+        "total_ms_incl_1.5s_settle": 12554,
+        "calls": [
+          {
+            "url": "auth/me/",
+            "start": 75,
+            "end": 2211
+          },
+          {
+            "url": "schools/by-subdomain/",
+            "start": 79,
+            "end": 1646
+          },
+          {
+            "url": "sessions/terms/",
+            "start": 2239,
+            "end": 3733
+          },
+          {
+            "url": "notifications/unread-count/",
+            "start": 2271,
+            "end": 3635
+          },
+          {
+            "url": "student-exits/",
+            "start": 2271,
+            "end": 3954
+          },
+          {
+            "url": "students/611/",
+            "start": 2272,
+            "end": 4953
+          },
+          {
+            "url": "tasks/ai-jobs/",
+            "start": 2272,
+            "end": 4969
+          },
+          {
+            "url": "students/611/profile_summary/",
+            "start": 2272,
+            "end": 7832
+          },
+          {
+            "url": "students/611/ai-profile/",
+            "start": 2272,
+            "end": 10544
+          }
+        ]
+      },
+      "spa": {
+        "api_requests": 0,
+        "waterfall_depth": 0,
+        "total_ms_incl_1.5s_settle": 1511,
+        "calls": [],
+        "navigated": false
+      }
+    },
+    "exams": {
+      "hard": {
+        "api_requests": 13,
+        "waterfall_depth": 2,
+        "total_ms_incl_1.5s_settle": 6525,
+        "calls": [
+          {
+            "url": "auth/me/",
+            "start": 56,
+            "end": 1447
+          },
+          {
+            "url": "schools/by-subdomain/",
+            "start": 58,
+            "end": 1352
+          },
+          {
+            "url": "sessions/terms/",
+            "start": 1467,
+            "end": 2927
+          },
+          {
+            "url": "notifications/unread-count/",
+            "start": 1500,
+            "end": 2686
+          },
+          {
+            "url": "sessions/session-classes/",
+            "start": 1500,
+            "end": 2804
+          },
+          {
+            "url": "examinations/exam-groups/",
+            "start": 1500,
+            "end": 2949
+          },
+          {
+            "url": "sessions/academic-years/",
+            "start": 1500,
+            "end": 2974
+          },
+          {
+            "url": "examinations/exams/",
+            "start": 1500,
+            "end": 3135
+          },
+          {
+            "url": "tasks/ai-jobs/",
+            "start": 1501,
+            "end": 4055
+          },
+          {
+            "url": "examinations/exam-types/",
+            "start": 1501,
+            "end": 4132
+          },
+          {
+            "url": "examinations/exams/",
+            "start": 1501,
+            "end": 4250
+          },
+          {
+            "url": "sessions/session-classes/",
+            "start": 1501,
+            "end": 4455
+          },
+          {
+            "url": "examinations/exam-groups/",
+            "start": 1501,
+            "end": 4515
+          }
+        ]
+      },
+      "spa": {
+        "api_requests": 0,
+        "waterfall_depth": 0,
+        "total_ms_incl_1.5s_settle": 1513,
+        "calls": [],
+        "navigated": false
+      }
+    },
+    "fee_collect": {
+      "hard": {
+        "api_requests": 11,
+        "waterfall_depth": 2,
+        "total_ms_incl_1.5s_settle": 6999,
+        "calls": [
+          {
+            "url": "auth/me/",
+            "start": 64,
+            "end": 1509
+          },
+          {
+            "url": "schools/by-subdomain/",
+            "start": 68,
+            "end": 1375
+          },
+          {
+            "url": "sessions/terms/",
+            "start": 1533,
+            "end": 2891
+          },
+          {
+            "url": "notifications/unread-count/",
+            "start": 1593,
+            "end": 2699
+          },
+          {
+            "url": "finance/annual-categories/",
+            "start": 1594,
+            "end": 3042
+          },
+          {
+            "url": "finance/accounts/",
+            "start": 1594,
+            "end": 3208
+          },
+          {
+            "url": "finance/monthly-categories/",
+            "start": 1594,
+            "end": 3359
+          },
+          {
+            "url": "attendance/records/my_classes/",
+            "start": 1594,
+            "end": 3470
+          },
+          {
+            "url": "finance/fee-payments/",
+            "start": 1594,
+            "end": 4104
+          },
+          {
+            "url": "tasks/ai-jobs/",
+            "start": 1594,
+            "end": 4145
+          },
+          {
+            "url": "finance/fee-payments/fee_summary/",
+            "start": 1594,
+            "end": 4987
+          }
+        ]
+      },
+      "spa": {
+        "api_requests": 0,
+        "waterfall_depth": 0,
+        "total_ms_incl_1.5s_settle": 1526,
+        "calls": [],
+        "navigated": false
+      }
+    },
+    "finance_dashboard": {
+      "hard": {
+        "api_requests": 13,
+        "waterfall_depth": 2,
+        "total_ms_incl_1.5s_settle": 7384,
+        "calls": [
+          {
+            "url": "auth/me/",
+            "start": 108,
+            "end": 1575
+          },
+          {
+            "url": "schools/by-subdomain/",
+            "start": 115,
+            "end": 1445
+          },
+          {
+            "url": "sessions/terms/",
+            "start": 1611,
+            "end": 2990
+          },
+          {
+            "url": "notifications/unread-count/",
+            "start": 1722,
+            "end": 2824
+          },
+          {
+            "url": "finance/accounts/balances/",
+            "start": 1723,
+            "end": 5379
+          },
+          {
+            "url": "finance/fee-payments/monthly_summary/",
+            "start": 1724,
+            "end": 3465
+          },
+          {
+            "url": "finance/fee-payments/monthly_summary/",
+            "start": 1724,
+            "end": 3710
+          },
+          {
+            "url": "finance/transfers/",
+            "start": 1725,
+            "end": 3231
+          },
+          {
+            "url": "finance/accounts/recent_entries/",
+            "start": 1727,
+            "end": 4942
+          },
+          {
+            "url": "finance/reports/",
+            "start": 1728,
+            "end": 4747
+          },
+          {
+            "url": "finance/reports/",
+            "start": 1728,
+            "end": 5082
+          },
+          {
+            "url": "tasks/ai-jobs/",
+            "start": 1729,
+            "end": 4930
+          },
+          {
+            "url": "finance/expenses/category_summary/",
+            "start": 1729,
+            "end": 4976
+          }
+        ]
+      },
+      "spa": {
+        "api_requests": 0,
+        "waterfall_depth": 0,
+        "total_ms_incl_1.5s_settle": 1605,
+        "calls": [],
+        "navigated": true
+      }
+    },
+    "subjects": {
+      "hard": {
+        "api_requests": 6,
+        "waterfall_depth": 2,
+        "total_ms_incl_1.5s_settle": 5407,
+        "calls": [
+          {
+            "url": "auth/me/",
+            "start": 116,
+            "end": 1460
+          },
+          {
+            "url": "schools/by-subdomain/",
+            "start": 119,
+            "end": 1351
+          },
+          {
+            "url": "sessions/terms/",
+            "start": 1490,
+            "end": 3390
+          },
+          {
+            "url": "notifications/unread-count/",
+            "start": 1552,
+            "end": 2856
+          },
+          {
+            "url": "academics/subjects/",
+            "start": 1553,
+            "end": 2818
+          },
+          {
+            "url": "tasks/ai-jobs/",
+            "start": 1554,
+            "end": 2856
+          }
+        ]
+      },
+      "spa": {
+        "api_requests": 0,
+        "waterfall_depth": 0,
+        "total_ms_incl_1.5s_settle": 1537,
+        "calls": [],
+        "navigated": true
+      }
+    }
+  },
+  "enabled_modules": {
+    "37": {
+      "attendance": true,
+      "finance": true,
+      "hr": true,
+      "academics": true,
+      "examinations": true,
+      "students": true,
+      "notifications": true,
+      "parents": true,
+      "admissions": true,
+      "lms": true,
+      "transport": true,
+      "library": true,
+      "hostel": true,
+      "inventory": true
+    }
+  },
+  "me_keys": [
+    "created_at",
+    "email",
+    "first_name",
+    "id",
+    "is_school_admin",
+    "is_staff_member",
+    "is_super_admin",
+    "last_login",
+    "last_name",
+    "organization",
+    "organization_name",
+    "phone",
+    "profile_photo_url",
+    "role",
+    "role_display",
+    "school",
+    "school_details",
+    "school_id",
+    "schools",
+    "username"
+  ],
+  "idle_polling": {
+    "seconds": 5,
+    "requests": 0,
+    "per_minute": 0.0,
+    "by_endpoint": {},
+    "note": "headless; polling may be paused by page visibility"
+  }
+}

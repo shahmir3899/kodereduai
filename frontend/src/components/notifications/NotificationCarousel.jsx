@@ -128,9 +128,11 @@ export default function NotificationCarousel({ allSchools = false, showViewAll =
 
   // Same source as the bell badge, so the two numbers can never disagree.
   // The dashboard follows the active school; the bell spans all schools.
+  // A one-school user has nothing to narrow, so it shares the bell's query: one poll, not two.
+  const unreadAcrossSchools = allSchools || !multiSchool
   const unreadQuery = useQuery({
-    queryKey: allSchools ? ['notificationUnreadCount'] : ['notificationUnreadCount', schoolId],
-    queryFn: () => notificationsApi.getUnreadCount(allSchools ? undefined : { school_id: activeSchool?.id || undefined }),
+    queryKey: unreadAcrossSchools ? ['notificationUnreadCount'] : ['notificationUnreadCount', schoolId],
+    queryFn: () => notificationsApi.getUnreadCount(unreadAcrossSchools ? undefined : { school_id: activeSchool?.id || undefined }),
     refetchInterval: 30000,
     staleTime: 15000,
   })

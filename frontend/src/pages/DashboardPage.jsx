@@ -4,6 +4,7 @@ import PageHeader from '../components/ui/PageHeader'
 import { useQuery } from '@tanstack/react-query'
 import { useAuth } from '../contexts/AuthContext'
 import { useAcademicYear } from '../contexts/AcademicYearContext'
+import { useDashboardBootstrap } from '../hooks/useDashboardBootstrap'
 import {
   attendanceApi, tasksApi, hrApi,
   admissionsApi, examinationsApi, transportApi,
@@ -121,6 +122,8 @@ export default function DashboardPage({ variant }) {
   const currentYear = new Date().getFullYear()
 
   const isPrincipal = variant === 'principal'
+  // Admin/principal summary tiles wait for one combined request instead of firing one call each.
+  const { settled: bootstrapSettled, waiting: bootstrapWaiting } = useDashboardBootstrap()
 
   const canSeeLeadershipInsights = effectiveRole === 'SCHOOL_ADMIN' || effectiveRole === 'PRINCIPAL'
   const leadershipRosterGate = canSeeLeadershipInsights && (
@@ -133,32 +136,32 @@ export default function DashboardPage({ variant }) {
   // ─── Data Queries ───────────────────────────────────────────────────────────
 
   // Attendance
-  const { data: dailyReport, isLoading: loadingAttendance } = useQuery({
+  const { data: dailyReport, isLoading: loadingAttendanceQuery } = useQuery({
     queryKey: ['dailyReport', today, activeSchool?.id, activeAcademicYear?.id],
     queryFn: () => attendanceApi.getDailyReport(today, activeSchool?.id, activeAcademicYear?.id),
-    enabled: !!activeSchool?.id && isModuleEnabled('attendance'),
+    enabled: !!activeSchool?.id && isModuleEnabled('attendance') && bootstrapSettled,
   })
 
   // Pending OCR reviews query removed 2026-05-13 — OCR feature discontinued
   // const { data: pendingReviews } = useQuery({ ... })
 
   // Finance
-  const { summary: fin, isLoading: loadingFinance } = useFeeMonthSummary({
-    enabled: !!activeSchool?.id && isModuleEnabled('finance'),
+  const { summary: fin, isLoading: loadingFinanceQuery } = useFeeMonthSummary({
+    enabled: !!activeSchool?.id && isModuleEnabled('finance') && bootstrapSettled,
   })
 
   // HR
-  const { data: hrStats, isLoading: loadingHR } = useQuery({
+  const { data: hrStats, isLoading: loadingHRQuery } = useQuery({
     queryKey: ['hrDashboardStats'],
     queryFn: () => hrApi.getDashboardStats(),
-    enabled: !!activeSchool?.id && isModuleEnabled('hr'),
+    enabled: !!activeSchool?.id && isModuleEnabled('hr') && bootstrapSettled,
   })
 
   // Admissions
   const { data: admissionsData } = useQuery({
     queryKey: ['admissionsNewCount'],
     queryFn: () => admissionsApi.getEnquiries({ status: 'NEW', page_size: 1 }),
-    enabled: !!activeSchool?.id && isModuleEnabled('admissions'),
+    enabled: !!activeSchool?.id && isModuleEnabled('admissions') && bootstrapSettled,
   })
 
   // Exams
@@ -169,32 +172,41 @@ export default function DashboardPage({ variant }) {
   })
 
   // Transport
-  const { data: transportData, isLoading: loadingTransport } = useQuery({
+  const { data: transportData, isLoading: loadingTransportQuery } = useQuery({
     queryKey: ['transportDashboard'],
     queryFn: () => transportApi.getDashboardStats(),
-    enabled: !!activeSchool?.id && isModuleEnabled('transport'),
+    enabled: !!activeSchool?.id && isModuleEnabled('transport') && bootstrapSettled,
   })
 
   // Library
-  const { data: libraryData, isLoading: loadingLibrary } = useQuery({
+  const { data: libraryData, isLoading: loadingLibraryQuery } = useQuery({
     queryKey: ['libraryStats'],
     queryFn: () => libraryApi.getStats(),
-    enabled: !!activeSchool?.id && isModuleEnabled('library'),
+    enabled: !!activeSchool?.id && isModuleEnabled('library') && bootstrapSettled,
   })
 
   // Hostel
-  const { data: hostelData, isLoading: loadingHostel } = useQuery({
+  const { data: hostelData, isLoading: loadingHostelQuery } = useQuery({
     queryKey: ['hostelDashboard'],
     queryFn: () => hostelApi.getDashboard(),
-    enabled: !!activeSchool?.id && isModuleEnabled('hostel'),
+    enabled: !!activeSchool?.id && isModuleEnabled('hostel') && bootstrapSettled,
   })
 
   // Inventory
-  const { data: inventoryData, isLoading: loadingInventory } = useQuery({
+  const { data: inventoryData, isLoading: loadingInventoryQuery } = useQuery({
     queryKey: ['inventoryDashboard'],
     queryFn: () => inventoryApi.getDashboard(),
-    enabled: !!activeSchool?.id && isModuleEnabled('inventory'),
+    enabled: !!activeSchool?.id && isModuleEnabled('inventory') && bootstrapSettled,
   })
+
+  // A query held back by the bootstrap reports isLoading=false; keep the skeleton up meanwhile.
+  const loadingAttendance = loadingAttendanceQuery || bootstrapWaiting
+  const loadingFinance = loadingFinanceQuery || bootstrapWaiting
+  const loadingHR = loadingHRQuery || bootstrapWaiting
+  const loadingTransport = loadingTransportQuery || bootstrapWaiting
+  const loadingLibrary = loadingLibraryQuery || bootstrapWaiting
+  const loadingHostel = loadingHostelQuery || bootstrapWaiting
+  const loadingInventory = loadingInventoryQuery || bootstrapWaiting
 
   const { data: leadershipApiRes, isLoading: loadingLeadershipInsights } = useQuery({
     queryKey: ['leadershipAcademicInsights', activeSchool?.id, activeAcademicYear?.id, today],
