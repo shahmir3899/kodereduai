@@ -1,0 +1,980 @@
+{
+  "host": "demo.educationai.pk",
+  "taken_at": "2026-10-18 20:57:08",
+  "pages": {
+    "students_list": {
+      "hard": {
+        "api_requests": 17,
+        "waterfall_depth": 5,
+        "total_ms_incl_1.5s_settle": 4310,
+        "calls": [
+          {
+            "url": "auth/me/",
+            "start": 228,
+            "end": 569
+          },
+          {
+            "url": "schools/by-subdomain/",
+            "start": 237,
+            "end": 581
+          },
+          {
+            "url": "notifications/unread-count/",
+            "start": 569,
+            "end": 723
+          },
+          {
+            "url": "sessions/terms/",
+            "start": 569,
+            "end": 739
+          },
+          {
+            "url": "bootstrap/admin-dashboard/",
+            "start": 569,
+            "end": 792
+          },
+          {
+            "url": "attendance/uploads/pending_review/",
+            "start": 796,
+            "end": 976
+          },
+          {
+            "url": "admissions/enquiries/",
+            "start": 797,
+            "end": 968
+          },
+          {
+            "url": "examinations/exams/",
+            "start": 797,
+            "end": 982
+          },
+          {
+            "url": "transport/dashboard/",
+            "start": 968,
+            "end": 1175
+          },
+          {
+            "url": "library/stats/",
+            "start": 976,
+            "end": 1176
+          },
+          {
+            "url": "hostel/dashboard/",
+            "start": 982,
+            "end": 1176
+          },
+          {
+            "url": "students/",
+            "start": 1139,
+            "end": 1576
+          },
+          {
+            "url": "tasks/ai-jobs/",
+            "start": 1140,
+            "end": 1320
+          },
+          {
+            "url": "inventory/dashboard/",
+            "start": 1175,
+            "end": 1388
+          },
+          {
+            "url": "bootstrap/leadership-academic-insights/",
+            "start": 1176,
+            "end": 1420
+          },
+          {
+            "url": "tasks/ai-insights/",
+            "start": 1176,
+            "end": 1475
+          },
+          {
+            "url": "attendance/records/monthly_bulk/",
+            "start": 1387,
+            "end": 1575
+          }
+        ]
+      },
+      "spa": {
+        "api_requests": 0,
+        "waterfall_depth": 0,
+        "total_ms_incl_1.5s_settle": 1514,
+        "calls": []
+      }
+    },
+    "dashboard": {
+      "hard": {
+        "api_requests": 25,
+        "waterfall_depth": 5,
+        "total_ms_incl_1.5s_settle": 3218,
+        "calls": [
+          {
+            "url": "students/",
+            "start": 15,
+            "end": 15
+          },
+          {
+            "url": "auth/me/",
+            "start": 205,
+            "end": 381
+          },
+          {
+            "url": "schools/by-subdomain/",
+            "start": 206,
+            "end": 394
+          },
+          {
+            "url": "notifications/unread-count/",
+            "start": 380,
+            "end": 553
+          },
+          {
+            "url": "sessions/terms/",
+            "start": 381,
+            "end": 554
+          },
+          {
+            "url": "bootstrap/admin-dashboard/",
+            "start": 381,
+            "end": 707
+          },
+          {
+            "url": "tasks/ai-insights/",
+            "start": 415,
+            "end": 644
+          },
+          {
+            "url": "notifications/my/",
+            "start": 416,
+            "end": 582
+          },
+          {
+            "url": "sessions/health/",
+            "start": 416,
+            "end": 662
+          },
+          {
+            "url": "hr/staff/dashboard_stats/",
+            "start": 417,
+            "end": 581
+          },
+          {
+            "url": "notifications/unread-count/",
+            "start": 417,
+            "end": 583
+          },
+          {
+            "url": "notifications/digest/",
+            "start": 417,
+            "end": 603
+          },
+          {
+            "url": "library/stats/",
+            "start": 417,
+            "end": 613
+          },
+          {
+            "url": "admissions/enquiries/",
+            "start": 417,
+            "end": 613
+          },
+          {
+            "url": "finance/fee-payments/monthly_summary/",
+            "start": 417,
+            "end": 643
+          },
+          {
+            "url": "inventory/dashboard/",
+            "start": 417,
+            "end": 645
+          },
+          {
+            "url": "attendance/records/daily_report/",
+            "start": 417,
+            "end": 645
+          },
+          {
+            "url": "tasks/ai-jobs/",
+            "start": 417,
+            "end": 958
+          },
+          {
+            "url": "sessions/health/ai-summary/",
+            "start": 662,
+            "end": 824
+          },
+          {
+            "url": "attendance/uploads/pending_review/",
+            "start": 712,
+            "end": 927
+          },
+          {
+            "url": "transport/dashboard/",
+            "start": 713,
+            "end": 894
+          },
+          {
+            "url": "examinations/exams/",
+            "start": 713,
+            "end": 897
+          },
+          {
+            "url": "hostel/dashboard/",
+            "start": 894,
+            "end": 1052
+          },
+          {
+            "url": "bootstrap/leadership-academic-insights/",
+            "start": 897,
+            "end": 1052
+          },
+          {
+            "url": "attendance/records/monthly_bulk/",
+            "start": 927,
+            "end": 1208
+          }
+        ]
+      },
+      "spa": null
+    },
+    "student_profile": {
+      "hard": {
+        "api_requests": 20,
+        "waterfall_depth": 6,
+        "total_ms_incl_1.5s_settle": 3520,
+        "calls": [
+          {
+            "url": "auth/me/",
+            "start": 216,
+            "end": 433
+          },
+          {
+            "url": "schools/by-subdomain/",
+            "start": 217,
+            "end": 445
+          },
+          {
+            "url": "notifications/unread-count/",
+            "start": 432,
+            "end": 600
+          },
+          {
+            "url": "sessions/terms/",
+            "start": 433,
+            "end": 616
+          },
+          {
+            "url": "bootstrap/admin-dashboard/",
+            "start": 433,
+            "end": 727
+          },
+          {
+            "url": "student-exits/",
+            "start": 627,
+            "end": 971
+          },
+          {
+            "url": "tasks/ai-jobs/",
+            "start": 628,
+            "end": 801
+          },
+          {
+            "url": "students/720/",
+            "start": 628,
+            "end": 972
+          },
+          {
+            "url": "students/720/profile_summary/",
+            "start": 628,
+            "end": 1047
+          },
+          {
+            "url": "students/720/ai-profile/",
+            "start": 628,
+            "end": 1144
+          },
+          {
+            "url": "attendance/uploads/pending_review/",
+            "start": 729,
+            "end": 920
+          },
+          {
+            "url": "examinations/exams/",
+            "start": 730,
+            "end": 938
+          },
+          {
+            "url": "admissions/enquiries/",
+            "start": 730,
+            "end": 1327
+          },
+          {
+            "url": "transport/dashboard/",
+            "start": 920,
+            "end": 1106
+          },
+          {
+            "url": "library/stats/",
+            "start": 938,
+            "end": 1107
+          },
+          {
+            "url": "hostel/dashboard/",
+            "start": 1106,
+            "end": 1285
+          },
+          {
+            "url": "inventory/dashboard/",
+            "start": 1107,
+            "end": 1305
+          },
+          {
+            "url": "bootstrap/leadership-academic-insights/",
+            "start": 1285,
+            "end": 1462
+          },
+          {
+            "url": "tasks/ai-insights/",
+            "start": 1305,
+            "end": 1483
+          },
+          {
+            "url": "attendance/records/monthly_bulk/",
+            "start": 1327,
+            "end": 1507
+          }
+        ]
+      },
+      "spa": {
+        "api_requests": 0,
+        "waterfall_depth": 0,
+        "total_ms_incl_1.5s_settle": 1513,
+        "calls": []
+      }
+    },
+    "exams": {
+      "hard": {
+        "api_requests": 28,
+        "waterfall_depth": 7,
+        "total_ms_incl_1.5s_settle": 3472,
+        "calls": [
+          {
+            "url": "student-exits/",
+            "start": 19,
+            "end": 21
+          },
+          {
+            "url": "students/720/",
+            "start": 20,
+            "end": 22
+          },
+          {
+            "url": "students/720/profile_summary/",
+            "start": 20,
+            "end": 22
+          },
+          {
+            "url": "students/720/ai-profile/",
+            "start": 20,
+            "end": 23
+          },
+          {
+            "url": "auth/me/",
+            "start": 218,
+            "end": 406
+          },
+          {
+            "url": "schools/by-subdomain/",
+            "start": 220,
+            "end": 407
+          },
+          {
+            "url": "notifications/unread-count/",
+            "start": 406,
+            "end": 571
+          },
+          {
+            "url": "bootstrap/admin-dashboard/",
+            "start": 406,
+            "end": 642
+          },
+          {
+            "url": "sessions/terms/",
+            "start": 425,
+            "end": 610
+          },
+          {
+            "url": "sessions/session-classes/",
+            "start": 603,
+            "end": 959
+          },
+          {
+            "url": "tasks/ai-jobs/",
+            "start": 604,
+            "end": 806
+          },
+          {
+            "url": "examinations/exam-types/",
+            "start": 604,
+            "end": 934
+          },
+          {
+            "url": "sessions/academic-years/",
+            "start": 604,
+            "end": 958
+          },
+          {
+            "url": "examinations/exams/",
+            "start": 604,
+            "end": 974
+          },
+          {
+            "url": "examinations/exam-groups/",
+            "start": 604,
+            "end": 995
+          },
+          {
+            "url": "sessions/session-classes/",
+            "start": 605,
+            "end": 779
+          },
+          {
+            "url": "examinations/exams/",
+            "start": 605,
+            "end": 996
+          },
+          {
+            "url": "examinations/exam-groups/",
+            "start": 605,
+            "end": 996
+          },
+          {
+            "url": "examinations/exams/",
+            "start": 644,
+            "end": 824
+          },
+          {
+            "url": "admissions/enquiries/",
+            "start": 644,
+            "end": 846
+          },
+          {
+            "url": "attendance/uploads/pending_review/",
+            "start": 644,
+            "end": 861
+          },
+          {
+            "url": "transport/dashboard/",
+            "start": 824,
+            "end": 1045
+          },
+          {
+            "url": "library/stats/",
+            "start": 846,
+            "end": 1047
+          },
+          {
+            "url": "hostel/dashboard/",
+            "start": 861,
+            "end": 1044
+          },
+          {
+            "url": "inventory/dashboard/",
+            "start": 1044,
+            "end": 1259
+          },
+          {
+            "url": "bootstrap/leadership-academic-insights/",
+            "start": 1045,
+            "end": 1208
+          },
+          {
+            "url": "tasks/ai-insights/",
+            "start": 1047,
+            "end": 1242
+          },
+          {
+            "url": "attendance/records/monthly_bulk/",
+            "start": 1208,
+            "end": 1458
+          }
+        ]
+      },
+      "spa": {
+        "api_requests": 0,
+        "waterfall_depth": 0,
+        "total_ms_incl_1.5s_settle": 1516,
+        "calls": []
+      }
+    },
+    "fee_collect": {
+      "hard": {
+        "api_requests": 28,
+        "waterfall_depth": 8,
+        "total_ms_incl_1.5s_settle": 3424,
+        "calls": [
+          {
+            "url": "sessions/session-classes/",
+            "start": 17,
+            "end": 22
+          },
+          {
+            "url": "examinations/exams/",
+            "start": 18,
+            "end": 20
+          },
+          {
+            "url": "examinations/exam-groups/",
+            "start": 18,
+            "end": 22
+          },
+          {
+            "url": "examinations/exam-types/",
+            "start": 19,
+            "end": 21
+          },
+          {
+            "url": "examinations/exam-groups/",
+            "start": 19,
+            "end": 22
+          },
+          {
+            "url": "examinations/exams/",
+            "start": 20,
+            "end": 22
+          },
+          {
+            "url": "auth/me/",
+            "start": 222,
+            "end": 455
+          },
+          {
+            "url": "schools/by-subdomain/",
+            "start": 224,
+            "end": 448
+          },
+          {
+            "url": "notifications/unread-count/",
+            "start": 454,
+            "end": 625
+          },
+          {
+            "url": "bootstrap/admin-dashboard/",
+            "start": 455,
+            "end": 676
+          },
+          {
+            "url": "sessions/terms/",
+            "start": 477,
+            "end": 637
+          },
+          {
+            "url": "finance/annual-categories/",
+            "start": 645,
+            "end": 962
+          },
+          {
+            "url": "finance/accounts/",
+            "start": 645,
+            "end": 1002
+          },
+          {
+            "url": "attendance/records/my_classes/",
+            "start": 645,
+            "end": 1003
+          },
+          {
+            "url": "finance/monthly-categories/",
+            "start": 645,
+            "end": 1003
+          },
+          {
+            "url": "tasks/ai-jobs/",
+            "start": 646,
+            "end": 823
+          },
+          {
+            "url": "finance/fee-payments/",
+            "start": 646,
+            "end": 982
+          },
+          {
+            "url": "finance/fee-payments/fee_summary/",
+            "start": 646,
+            "end": 1026
+          },
+          {
+            "url": "admissions/enquiries/",
+            "start": 686,
+            "end": 846
+          },
+          {
+            "url": "attendance/uploads/pending_review/",
+            "start": 686,
+            "end": 864
+          },
+          {
+            "url": "examinations/exams/",
+            "start": 687,
+            "end": 878
+          },
+          {
+            "url": "transport/dashboard/",
+            "start": 846,
+            "end": 1027
+          },
+          {
+            "url": "library/stats/",
+            "start": 864,
+            "end": 1055
+          },
+          {
+            "url": "hostel/dashboard/",
+            "start": 878,
+            "end": 1041
+          },
+          {
+            "url": "inventory/dashboard/",
+            "start": 1027,
+            "end": 1222
+          },
+          {
+            "url": "bootstrap/leadership-academic-insights/",
+            "start": 1041,
+            "end": 1221
+          },
+          {
+            "url": "tasks/ai-insights/",
+            "start": 1055,
+            "end": 1267
+          },
+          {
+            "url": "attendance/records/monthly_bulk/",
+            "start": 1221,
+            "end": 1419
+          }
+        ]
+      },
+      "spa": {
+        "api_requests": 0,
+        "waterfall_depth": 0,
+        "total_ms_incl_1.5s_settle": 1508,
+        "calls": []
+      }
+    },
+    "finance_dashboard": {
+      "hard": {
+        "api_requests": 30,
+        "waterfall_depth": 8,
+        "total_ms_incl_1.5s_settle": 3869,
+        "calls": [
+          {
+            "url": "finance/annual-categories/",
+            "start": 19,
+            "end": 23
+          },
+          {
+            "url": "finance/accounts/",
+            "start": 19,
+            "end": 23
+          },
+          {
+            "url": "finance/monthly-categories/",
+            "start": 19,
+            "end": 24
+          },
+          {
+            "url": "attendance/records/my_classes/",
+            "start": 20,
+            "end": 24
+          },
+          {
+            "url": "finance/fee-payments/",
+            "start": 22,
+            "end": 24
+          },
+          {
+            "url": "finance/fee-payments/fee_summary/",
+            "start": 23,
+            "end": 24
+          },
+          {
+            "url": "auth/me/",
+            "start": 310,
+            "end": 588
+          },
+          {
+            "url": "schools/by-subdomain/",
+            "start": 311,
+            "end": 583
+          },
+          {
+            "url": "bootstrap/admin-dashboard/",
+            "start": 588,
+            "end": 816
+          },
+          {
+            "url": "notifications/unread-count/",
+            "start": 588,
+            "end": 910
+          },
+          {
+            "url": "sessions/terms/",
+            "start": 599,
+            "end": 770
+          },
+          {
+            "url": "finance/fee-payments/monthly_summary/",
+            "start": 814,
+            "end": 1006
+          },
+          {
+            "url": "finance/fee-payments/monthly_summary/",
+            "start": 814,
+            "end": 1192
+          },
+          {
+            "url": "finance/accounts/balances/",
+            "start": 814,
+            "end": 1211
+          },
+          {
+            "url": "tasks/ai-jobs/",
+            "start": 815,
+            "end": 993
+          },
+          {
+            "url": "finance/reports/",
+            "start": 815,
+            "end": 1173
+          },
+          {
+            "url": "finance/transfers/",
+            "start": 815,
+            "end": 1182
+          },
+          {
+            "url": "finance/expenses/category_summary/",
+            "start": 815,
+            "end": 1182
+          },
+          {
+            "url": "finance/reports/",
+            "start": 815,
+            "end": 1211
+          },
+          {
+            "url": "finance/accounts/recent_entries/",
+            "start": 815,
+            "end": 1696
+          },
+          {
+            "url": "attendance/uploads/pending_review/",
+            "start": 912,
+            "end": 1102
+          },
+          {
+            "url": "admissions/enquiries/",
+            "start": 912,
+            "end": 1104
+          },
+          {
+            "url": "examinations/exams/",
+            "start": 913,
+            "end": 1103
+          },
+          {
+            "url": "transport/dashboard/",
+            "start": 1102,
+            "end": 1276
+          },
+          {
+            "url": "library/stats/",
+            "start": 1103,
+            "end": 1277
+          },
+          {
+            "url": "hostel/dashboard/",
+            "start": 1104,
+            "end": 1277
+          },
+          {
+            "url": "inventory/dashboard/",
+            "start": 1276,
+            "end": 1498
+          },
+          {
+            "url": "bootstrap/leadership-academic-insights/",
+            "start": 1277,
+            "end": 1459
+          },
+          {
+            "url": "tasks/ai-insights/",
+            "start": 1277,
+            "end": 1857
+          },
+          {
+            "url": "attendance/records/monthly_bulk/",
+            "start": 1459,
+            "end": 1697
+          }
+        ]
+      },
+      "spa": {
+        "api_requests": 0,
+        "waterfall_depth": 0,
+        "total_ms_incl_1.5s_settle": 1519,
+        "calls": []
+      }
+    },
+    "subjects": {
+      "hard": {
+        "api_requests": 25,
+        "waterfall_depth": 7,
+        "total_ms_incl_1.5s_settle": 3524,
+        "calls": [
+          {
+            "url": "finance/fee-payments/monthly_summary/",
+            "start": 11,
+            "end": 14
+          },
+          {
+            "url": "finance/accounts/balances/",
+            "start": 11,
+            "end": 15
+          },
+          {
+            "url": "finance/fee-payments/monthly_summary/",
+            "start": 11,
+            "end": 16
+          },
+          {
+            "url": "finance/transfers/",
+            "start": 12,
+            "end": 13
+          },
+          {
+            "url": "finance/expenses/category_summary/",
+            "start": 12,
+            "end": 13
+          },
+          {
+            "url": "finance/reports/",
+            "start": 12,
+            "end": 14
+          },
+          {
+            "url": "finance/reports/",
+            "start": 12,
+            "end": 15
+          },
+          {
+            "url": "finance/accounts/recent_entries/",
+            "start": 12,
+            "end": 15
+          },
+          {
+            "url": "auth/me/",
+            "start": 205,
+            "end": 396
+          },
+          {
+            "url": "schools/by-subdomain/",
+            "start": 208,
+            "end": 404
+          },
+          {
+            "url": "notifications/unread-count/",
+            "start": 393,
+            "end": 582
+          },
+          {
+            "url": "bootstrap/admin-dashboard/",
+            "start": 395,
+            "end": 665
+          },
+          {
+            "url": "sessions/terms/",
+            "start": 397,
+            "end": 581
+          },
+          {
+            "url": "academics/subjects/",
+            "start": 615,
+            "end": 924
+          },
+          {
+            "url": "tasks/ai-jobs/",
+            "start": 616,
+            "end": 782
+          },
+          {
+            "url": "admissions/enquiries/",
+            "start": 671,
+            "end": 850
+          },
+          {
+            "url": "attendance/uploads/pending_review/",
+            "start": 671,
+            "end": 882
+          },
+          {
+            "url": "examinations/exams/",
+            "start": 672,
+            "end": 851
+          },
+          {
+            "url": "transport/dashboard/",
+            "start": 850,
+            "end": 1053
+          },
+          {
+            "url": "library/stats/",
+            "start": 851,
+            "end": 1056
+          },
+          {
+            "url": "hostel/dashboard/",
+            "start": 882,
+            "end": 1050
+          },
+          {
+            "url": "inventory/dashboard/",
+            "start": 1049,
+            "end": 1242
+          },
+          {
+            "url": "bootstrap/leadership-academic-insights/",
+            "start": 1052,
+            "end": 1241
+          },
+          {
+            "url": "tasks/ai-insights/",
+            "start": 1056,
+            "end": 1246
+          },
+          {
+            "url": "attendance/records/monthly_bulk/",
+            "start": 1241,
+            "end": 1516
+          }
+        ]
+      },
+      "spa": {
+        "api_requests": 0,
+        "waterfall_depth": 0,
+        "total_ms_incl_1.5s_settle": 1514,
+        "calls": []
+      }
+    }
+  },
+  "enabled_modules": {},
+  "me_keys": [],
+  "idle_polling": {
+    "seconds": 60,
+    "requests": 0,
+    "per_minute": 0.0,
+    "by_endpoint": {},
+    "note": "headless; polling may be paused by page visibility"
+  }
+}

@@ -14,7 +14,7 @@ import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell,
 } from 'recharts'
-import { exportFinanceReport } from './finance/financeReportExport'
+// jsPDF/autotable load on the export click, not when the dashboard opens.
 import FeeCategoryBreakdown from '../components/dashboard/FeeCategoryBreakdown'
 import MonthlyFeeCollectionCard from '../components/dashboard/MonthlyFeeCollectionCard'
 import { useAnnualFeeSummary, useFeeMonthSummary } from '../hooks/useFeeMonthSummary'
@@ -150,22 +150,27 @@ export default function FinanceDashboardPage() {
     Expenses: Number(t.expenses || 0),
   }))
 
-  const handleExportPDF = () => {
-    exportFinanceReport({
-      schoolName: user?.school_name || '',
-      periodLabel: useCustom ? 'Custom' : PERIODS[periodIdx].label,
-      dateFrom: period.date_from,
-      dateTo: period.date_to,
-      summary: summaryData || {},
-      trendData: trendMonths,
-      categories,
-      catTotal,
-      accounts: hasMultipleSchools ? [] : balances,
-      grandTotal: hasMultipleSchools ? grandTotalAll : grandTotal,
-      feeCollectionRate: fee?.rate ?? 0,
-      feeTotalCollected: fee?.totalCollected ?? 0,
-      feeTotalPending: fee?.totalPending ?? 0,
-    })
+  const handleExportPDF = async () => {
+    try {
+      const { exportFinanceReport } = await import('./finance/financeReportExport')
+      exportFinanceReport({
+        schoolName: user?.school_name || '',
+        periodLabel: useCustom ? 'Custom' : PERIODS[periodIdx].label,
+        dateFrom: period.date_from,
+        dateTo: period.date_to,
+        summary: summaryData || {},
+        trendData: trendMonths,
+        categories,
+        catTotal,
+        accounts: hasMultipleSchools ? [] : balances,
+        grandTotal: hasMultipleSchools ? grandTotalAll : grandTotal,
+        feeCollectionRate: fee?.rate ?? 0,
+        feeTotalCollected: fee?.totalCollected ?? 0,
+        feeTotalPending: fee?.totalPending ?? 0,
+      })
+    } catch (err) {
+      console.error('PDF export failed:', err)
+    }
   }
 
   return (

@@ -209,7 +209,11 @@
       "Skill(dataviz:*)",
       "Bash(node scripts/validate_palette.js \"#2a78d6,#008300\" --mode light)",
       "Bash(awk -F: '$1 >= 720')",
-      "Bash(python \"C:\\\\Users\\\\hp\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\d--Personal-EducationAI\\\\721fb09b-a9e8-4078-9348-970ff84cfef5\\\\scratchpad\\\\render_test.py\")"
+      "Bash(python \"C:\\\\Users\\\\hp\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\d--Personal-EducationAI\\\\721fb09b-a9e8-4078-9348-970ff84cfef5\\\\scratchpad\\\\render_test.py\")",
+      "Bash(npx vite *)",
+      "Bash(awk '{print}')",
+      "Bash(sort -k4 -t' ' \"C:/Users/hp/AppData/Local/Temp/claude/D--personal-EducationAI/4038c562-0098-4f87-b865-27bf666485a3/scratchpad/build.log\")",
+      "Bash(python -)"
     ]
   }
 }

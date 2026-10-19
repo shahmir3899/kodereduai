@@ -17,7 +17,7 @@ import {
  */
 export function useDashboardBootstrap() {
   const queryClient = useQueryClient()
-  const { activeSchool, isModuleEnabled, effectiveRole } = useAuth()
+  const { user, isStaffMember, activeSchool, isModuleEnabled, effectiveRole } = useAuth()
   const { activeAcademicYear, loading: academicYearLoading } = useAcademicYear()
 
   const applies = DASHBOARD_BOOTSTRAP_ENABLED
@@ -46,5 +46,13 @@ export function useDashboardBootstrap() {
   })
 
   const settled = !applies || query.isSuccess || query.isError
-  return { settled, waiting: !settled }
+
+  // Admins with several schools read the fee tile from the all-schools key, which the combined
+  // call does not seed (it only seeds the single-school key). Holding that tile back would just
+  // add a round trip after the combined call, so it goes out in parallel. Same test as
+  // useFeeCollectionSummary's isMulti.
+  const feeIsMultiSchool = !isStaffMember && (user?.schools?.length > 1 || !!user?.is_super_admin)
+  const feeReady = settled || feeIsMultiSchool
+
+  return { settled, waiting: !settled, feeReady, feeWaiting: !feeReady }
 }

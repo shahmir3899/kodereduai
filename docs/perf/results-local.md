@@ -53,3 +53,29 @@ database (each of its ~35 queries pays a round trip), so the 4 s timeout fired a
 to the server (the old three-section bootstrap took ~270 ms in the production baseline). A must be judged on a deployed build.
 Timeout lowered from 4 s to 2 s so a slow bootstrap can stall the tiles for at most 2 s.
 The switch-off (B only) comparison run was not completed (my runner killed itself).
+
+## Phase 2, Step 0 + C + A (local prod-style build, localhost; timings are ordering evidence, not prod ms)
+Cause of the ~460 ms gap on production, confirmed from chunk timings (`step0-local.json`): the page's JS chunk and its
+10-23 dependency chunks were requested only AFTER auth/me returned (e.g. subjects: auth/me done 1152 -> SubjectsPage chunk
+1165 -> first own API call ~1253). StudentsPage also pulls jspdf-autotable + html2canvas (~600 KB raw) eagerly although only
+the export buttons use them (new candidate F below).
+
+After A (warm the route chunk at boot, `apps/school/main.jsx` + `utils/warmRouteChunk.js`) - `step0-after-CA2.json`:
+| Page | page chunk requested at | auth/me done -> first own call |
+|---|---|---|
+| students list | 51 ms (was after auth/me) | gap 177 -> 22 ms |
+| student profile | 44 ms | 22 ms |
+| fee collect | 45 ms | gap 153 -> 29 ms |
+| finance | 44 ms | gap (noisy run) -> 34 ms |
+| subjects | 40 ms | gap 101 -> 25 ms |
+| exams | 42 ms | 111 -> 340 ms (that run's auth/me was slow, 1958 ms; noise, see below) |
+Localhost chunk fetches cost ~10 ms, so the production gain should be much larger (each chunk is a network round trip there;
+expect the 267-647 ms gaps seen on production to shrink to roughly the auth call's own jitter). Production must confirm.
+C (multi-school admins fetch the fee tile in parallel with the bootstrap) is covered by a hook test; it only shows on
+a multi-school account (the seed admin here has one school, so its fee tile still waits, as designed).
+Noise: the shared dev backend (the user's running instance) varies run to run; one-off auth/me spikes (exams 1958 ms,
+student profile 4510 ms in the earlier run) are not code effects.
+
+## New candidate F (not done)
+StudentsPage imports jspdf-autotable and html2canvas statically. Load them with import() on the export click: the students
+list page stops downloading ~600 KB it does not use on open. Needs your go-ahead (touches the export code path).

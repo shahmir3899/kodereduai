@@ -11,7 +11,7 @@ import BulkReportCardModal from './BulkReportCardModal'
 import MarksTable from './ReportCardMarksTable'
 import { ExamPicker, StudentPicker } from './ReportCardFilters'
 import { MONTH_NAMES } from './reportCardTemplates/stars'
-import { exportReportCardPDF, exportBulkReportCardsZIP } from './reportCardExport'
+// jsPDF/autotable/zip export code loads on the download click, not when the page opens.
 import ClassSelector from '../../components/ClassSelector'
 import { useSessionClasses } from '../../hooks/useSessionClasses'
 import useTeacherScopedClasses from '../../hooks/useTeacherScopedClasses'
@@ -228,6 +228,7 @@ export default function ReportCardPage() {
     if (!report) return
     setDownloading(true)
     try {
+      const { exportReportCardPDF } = await import('./reportCardExport')
       await exportReportCardPDF({ report, schoolData, format: pdfFormat })
     } catch (err) {
       console.error('PDF export failed:', err)
@@ -242,6 +243,7 @@ export default function ReportCardPage() {
     setShowBulkSkips(false)
     setBulkProgress({ done: 0, total: students.length })
     try {
+      const { exportBulkReportCardsZIP } = await import('./reportCardExport')
       const result = await exportBulkReportCardsZIP({
         students: students.map(e => ({ studentId: e.student, name: e.student_name, roll: e.roll_number })),
         yearId,

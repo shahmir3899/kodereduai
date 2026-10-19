@@ -123,7 +123,7 @@ export default function DashboardPage({ variant }) {
 
   const isPrincipal = variant === 'principal'
   // Admin/principal summary tiles wait for one combined request instead of firing one call each.
-  const { settled: bootstrapSettled, waiting: bootstrapWaiting } = useDashboardBootstrap()
+  const { settled: bootstrapSettled, waiting: bootstrapWaiting, feeReady, feeWaiting } = useDashboardBootstrap()
 
   const canSeeLeadershipInsights = effectiveRole === 'SCHOOL_ADMIN' || effectiveRole === 'PRINCIPAL'
   const leadershipRosterGate = canSeeLeadershipInsights && (
@@ -147,7 +147,7 @@ export default function DashboardPage({ variant }) {
 
   // Finance
   const { summary: fin, isLoading: loadingFinanceQuery } = useFeeMonthSummary({
-    enabled: !!activeSchool?.id && isModuleEnabled('finance') && bootstrapSettled,
+    enabled: !!activeSchool?.id && isModuleEnabled('finance') && feeReady,
   })
 
   // HR
@@ -201,7 +201,7 @@ export default function DashboardPage({ variant }) {
 
   // A query held back by the bootstrap reports isLoading=false; keep the skeleton up meanwhile.
   const loadingAttendance = loadingAttendanceQuery || bootstrapWaiting
-  const loadingFinance = loadingFinanceQuery || bootstrapWaiting
+  const loadingFinance = loadingFinanceQuery || feeWaiting
   const loadingHR = loadingHRQuery || bootstrapWaiting
   const loadingTransport = loadingTransportQuery || bootstrapWaiting
   const loadingLibrary = loadingLibraryQuery || bootstrapWaiting

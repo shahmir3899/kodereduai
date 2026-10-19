@@ -8,7 +8,7 @@ function MiniStat({ label, value, color }) {
   return (
     <div className={`rounded-lg p-3 ${color}`}>
       <p className="text-xs font-medium opacity-80">{label}</p>
-      <p className="text-xl font-bold mt-0.5">{value}%</p>
+      <p className="text-xl font-bold mt-0.5">{value == null ? '—' : `${value}%`}</p>
     </div>
   )
 }
@@ -81,8 +81,8 @@ export default function SessionHealthWidget() {
       {/* Mini stat cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
         <MiniStat
-          label="Enrollment"
-          value={report.enrollment?.enrollment_rate ?? 0}
+          label="Retention"
+          value={report.enrollment?.retention_rate ?? 0}
           color="bg-blue-50 text-blue-800"
         />
         <MiniStat
@@ -97,7 +97,7 @@ export default function SessionHealthWidget() {
         />
         <MiniStat
           label="Pass Rate"
-          value={report.exam_performance?.average_pass_rate ?? 0}
+          value={report.exam_performance?.average_pass_rate}
           color="bg-purple-50 text-purple-800"
         />
       </div>

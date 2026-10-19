@@ -1,9 +1,17 @@
-import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
+import { useState, useEffect, useMemo, useCallback, useRef, createContext, useContext } from 'react'
 import PageHeader from '../components/ui/PageHeader'
-import { useSearchParams } from 'react-router-dom'
+import { useSearchParams, Link } from 'react-router-dom'
+import { useAuth } from '../contexts/AuthContext'
+import { filterGuideChapters, buildAvailability, isVisibleFor } from '../utils/guideAccess'
 import { useDebounce } from '../hooks/useDebounce'
 import { useToast } from '../components/Toast'
 import guideData from '../data/userGuide.json'
+import videoData from '../data/guideVideos.json'
+
+// Tells nav_path blocks whether the current user can open a linked page.
+const GuideAccessContext = createContext(() => true)
+// Lets a section open its tutorial video in the Videos tab.
+const GuideVideoContext = createContext(null)
 
 // --- Utility ---
 function escapeRegex(str) {
@@ -80,6 +88,34 @@ function HighlightText({ text, highlight }) {
   }
 }
 
+// --- Navigation path with an optional "Show me" button ---
+function NavPathBlock({ item }) {
+  const canOpen = useContext(GuideAccessContext)
+  return (
+    <div className="flex items-center gap-1 text-xs text-gray-500 italic flex-wrap">
+      <span className="mr-1">Navigate to:</span>
+      {item.path.split(' > ').map((segment, i, arr) => (
+        <span key={i} className="flex items-center gap-1">
+          <span className="bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded text-xs">{segment.trim()}</span>
+          {i < arr.length - 1 && <span className="text-gray-400">&rsaquo;</span>}
+        </span>
+      ))}
+      {item.href && (canOpen(item.href) ? (
+        <Link
+          to={item.href}
+          className="ml-2 not-italic font-medium text-primary-700 bg-primary-50 hover:bg-primary-100 px-2 py-0.5 rounded"
+        >
+          Show me
+        </Link>
+      ) : (
+        <span className="ml-2 not-italic text-gray-400" title="Your role or school settings do not include this page">
+          Not available for your role
+        </span>
+      ))}
+    </div>
+  )
+}
+
 // --- Content Block Renderers ---
 function ContentBlock({ item, searchHighlight }) {
   switch (item.type) {
@@ -140,17 +176,7 @@ function ContentBlock({ item, searchHighlight }) {
       )
 
     case 'nav_path':
-      return (
-        <div className="flex items-center gap-1 text-xs text-gray-500 italic flex-wrap">
-          <span className="mr-1">Navigate to:</span>
-          {item.path.split(' > ').map((segment, i, arr) => (
-            <span key={i} className="flex items-center gap-1">
-              <span className="bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded text-xs">{segment.trim()}</span>
-              {i < arr.length - 1 && <span className="text-gray-400">&rsaquo;</span>}
-            </span>
-          ))}
-        </div>
-      )
+      return <NavPathBlock item={item} />
 
     case 'table':
       return (
@@ -183,6 +209,91 @@ function ContentBlock({ item, searchHighlight }) {
   }
 }
 
+// --- Inline video slot for step-by-step sections ---
+const VIDEOS_BY_ID = Object.fromEntries(videoData.videos.map((v) => [v.id, v]))
+
+function VideoSlot({ videoId }) {
+  const { effectiveRole, isSuperAdmin } = useAuth()
+  const openVideo = useContext(GuideVideoContext)
+  const [open, setOpen] = useState(false)
+  const [lang, setLang] = useState('en')
+  const video = VIDEOS_BY_ID[videoId]
+  if (!video) return null
+
+  if (video.status === 'planned') {
+    // Placeholders are for admins only, so other roles never see an unfinished guide.
+    if (!(isSuperAdmin || effectiveRole === 'SCHOOL_ADMIN' || effectiveRole === 'PRINCIPAL')) return null
+    return (
+      <div className="flex items-center gap-3 rounded-lg border border-dashed border-gray-300 bg-gray-50 px-4 py-3 text-sm text-gray-500">
+        <span aria-hidden="true" className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-200 text-gray-500">&#9654;</span>
+        <div>
+          <p className="font-medium text-gray-600">Video tutorial coming soon</p>
+          <p className="text-xs text-gray-400">{video.title.en}</p>
+        </div>
+      </div>
+    )
+  }
+
+  const base = `/videos/${video.id}.${lang}`
+  return (
+    <div className="rounded-lg border border-primary-200 bg-primary-50/40">
+      {!open ? (
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className="flex w-full items-center gap-3 px-3 py-2 text-left"
+        >
+          <img src={`/videos/${video.id}.en.poster.jpg`} alt="" className="h-12 w-20 rounded object-cover bg-gray-100" loading="lazy" />
+          <span className="flex-1">
+            <span className="block text-sm font-semibold text-primary-800">Watch: {video.title.en}</span>
+            <span className="block text-xs text-gray-500">{formatSeconds(video.seconds.en)} &middot; English voice-over, English or اردو captions</span>
+          </span>
+          <span aria-hidden="true" className="flex h-8 w-8 items-center justify-center rounded-full bg-primary-600 text-white">&#9654;</span>
+        </button>
+      ) : (
+        <div className="space-y-2 p-3">
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <p className="text-sm font-semibold text-primary-800" dir={lang === 'ur' ? 'rtl' : 'ltr'}>{video.title[lang] || video.title.en}</p>
+            <div className="flex items-center gap-2">
+              <div className="inline-flex rounded-md border border-gray-300 overflow-hidden" role="group" aria-label="Video language">
+                {[['en', 'English'], ['ur', 'اردو']].map(([code, label]) => (
+                  <button
+                    key={code}
+                    type="button"
+                    onClick={() => setLang(code)}
+                    aria-pressed={lang === code}
+                    className={`px-2 py-1 text-xs ${lang === code ? 'bg-primary-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <button type="button" onClick={() => setOpen(false)} className="text-xs text-gray-500 hover:text-gray-700">Close</button>
+            </div>
+          </div>
+          <video
+            key={`${video.id}-${lang}`}
+            className="w-full rounded-lg bg-black"
+            controls
+            autoPlay
+            preload="metadata"
+            poster={`${base}.poster.jpg`}
+          >
+            <source src={`${base}.mp4`} type="video/mp4" />
+            <track kind="captions" src={`${base}.vtt`} srcLang={lang} label={lang === 'ur' ? 'اردو' : 'English'} default />
+            Your browser cannot play this video.
+          </video>
+          {openVideo && (
+            <button type="button" onClick={() => openVideo(video.id)} className="text-xs text-primary-700 hover:underline">
+              Open in the Videos tab
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // --- Section Renderer ---
 function SectionBlock({ section, chapterId, searchHighlight, showCopyLink }) {
   const { showSuccess } = useToast()
@@ -212,6 +323,7 @@ function SectionBlock({ section, chapterId, searchHighlight, showCopyLink }) {
         )}
       </div>
       <div className="space-y-3 pl-1">
+        {section.video && <VideoSlot videoId={section.video} />}
         {section.content.map((item, idx) => (
           <ContentBlock key={idx} item={item} searchHighlight={searchHighlight} />
         ))}
@@ -274,9 +386,133 @@ function SearchResultItem({ result, onNavigate }) {
   )
 }
 
+// --- Videos tab ---
+function formatSeconds(total) {
+  const m = Math.floor(total / 60)
+  const sec = String(total % 60).padStart(2, '0')
+  return `${m}:${sec}`
+}
+
+function VideosTab({ videos, selectedId, lang, onSelect, onLang }) {
+  const selected = videos.find((v) => v.id === selectedId) || null
+  const base = `/videos/${selected?.id}.${lang}`
+  return (
+    <div className="space-y-4">
+      {videos.length === 0 && (
+        <div className="text-center py-12 text-gray-500 bg-white rounded-lg border border-gray-200">
+          <p className="text-lg">No videos for your role yet</p>
+          <p className="text-sm mt-1">Switch to &quot;Show all&quot; to see every tutorial.</p>
+        </div>
+      )}
+
+      {selected && (
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 space-y-3">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <h2 className="text-lg font-bold text-gray-900" dir={lang === 'ur' ? 'rtl' : 'ltr'}>
+              {selected.title[lang] || selected.title.en}
+            </h2>
+            <div className="inline-flex rounded-lg border border-gray-300 overflow-hidden" role="group" aria-label="Video language">
+              {[['en', 'English'], ['ur', 'اردو']].map(([code, label]) => (
+                <button
+                  key={code}
+                  type="button"
+                  onClick={() => onLang(code)}
+                  aria-pressed={lang === code}
+                  className={`px-3 py-1.5 text-sm ${lang === code ? 'bg-primary-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'} ${code === 'ur' ? 'border-l border-gray-300' : ''}`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <video
+            key={`${selected.id}-${lang}`}
+            className="w-full rounded-lg bg-black"
+            controls
+            preload="metadata"
+            poster={`${base}.poster.jpg`}
+          >
+            <source src={`${base}.mp4`} type="video/mp4" />
+            <track kind="captions" src={`${base}.vtt`} srcLang={lang} label={lang === 'ur' ? 'اردو' : 'English'} default />
+            Your browser cannot play this video.
+          </video>
+          <p className="text-sm text-gray-600">{selected.summary}</p>
+          <p className="text-xs text-gray-400">Voice-over is in English. Captions follow the language you pick.</p>
+        </div>
+      )}
+
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {videos.map((video) => (
+          <button
+            key={video.id}
+            type="button"
+            onClick={() => onSelect(video.id)}
+            className={`text-left bg-white rounded-lg shadow-sm border overflow-hidden hover:border-primary-300 transition-colors ${selected?.id === video.id ? 'border-primary-500' : 'border-gray-200'}`}
+          >
+            <img src={`/videos/${video.id}.en.poster.jpg`} alt="" className="w-full aspect-video object-cover bg-gray-100" loading="lazy" />
+            <div className="p-3">
+              <p className="text-sm font-semibold text-gray-900">{video.title.en}</p>
+              <p className="text-sm text-gray-500 mt-0.5" dir="rtl">{video.title.ur}</p>
+              <p className="text-xs text-gray-400 mt-1">{formatSeconds(video.seconds.en)} &middot; Chapter {video.chapter}</p>
+            </div>
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 // --- Main Page Component ---
 export default function UserGuidePage() {
   const [searchParams, setSearchParams] = useSearchParams()
+  const { effectiveRole, isSuperAdmin, isParent, isStudent, isStaffLevel, isManager, isModuleEnabled } = useAuth()
+
+  // Default view follows the user's role and the school's enabled modules;
+  // ?view=all shows the whole guide. A deep link to a hidden chapter switches to "all".
+  const requestedChapter = parseInt(searchParams.get('chapter')) || null
+  const roleChapters = useMemo(
+    () => filterGuideChapters(guideData.chapters, { role: effectiveRole, isSuperAdmin, isModuleEnabled }),
+    [effectiveRole, isSuperAdmin, isModuleEnabled]
+  )
+  const roleViewUsable = roleChapters.length > 0
+    && (!requestedChapter || roleChapters.some((c) => c.id === requestedChapter))
+  const viewAll = searchParams.get('view') === 'all' || !roleViewUsable || isSuperAdmin
+  const chapters = viewAll ? guideData.chapters : roleChapters
+  const canOpen = useMemo(
+    () => buildAvailability({ effectiveRole, isSuperAdmin, isParent, isStudent, isModuleEnabled, isStaffLevel, isManager }),
+    [effectiveRole, isSuperAdmin, isParent, isStudent, isModuleEnabled, isStaffLevel, isManager]
+  )
+  const setView = (view) => {
+    const next = new URLSearchParams(searchParams)
+    if (view === 'all') next.set('view', 'all')
+    else {
+      next.delete('view')
+      // A deep link to a chapter hidden from this role would force the whole guide back open.
+      next.delete('chapter')
+      next.delete('section')
+    }
+    setSearchParams(next, { replace: true })
+  }
+
+  const tab = searchParams.get('tab') === 'videos' ? 'videos' : 'guide'
+  const videoLang = searchParams.get('lang') === 'ur' ? 'ur' : 'en'
+  const selectedVideoId = searchParams.get('video')
+  const visibleVideos = useMemo(
+    () => videoData.videos
+      .filter((v) => v.status !== 'planned')
+      .filter((v) => viewAll || isVisibleFor(v, { role: effectiveRole, isSuperAdmin, isModuleEnabled })),
+    [viewAll, effectiveRole, isSuperAdmin, isModuleEnabled]
+  )
+  const updateParams = (changes) => {
+    const next = new URLSearchParams(searchParams)
+    Object.entries(changes).forEach(([key, value]) => {
+      if (value === null || value === undefined) next.delete(key)
+      else next.set(key, value)
+    })
+    setSearchParams(next, { replace: true })
+  }
+  const setTab = (name) => updateParams({ tab: name === 'videos' ? 'videos' : null, video: null, chapter: null, section: null })
+  const openVideo = (id) => updateParams({ tab: 'videos', video: id, chapter: null, section: null })
   const [searchQuery, setSearchQuery] = useState('')
   const debouncedSearch = useDebounce(searchQuery, 300)
   const [mobileTocOpen, setMobileTocOpen] = useState(false)
@@ -290,7 +526,7 @@ export default function UserGuidePage() {
   // Build search index
   const searchIndex = useMemo(() => {
     const entries = []
-    guideData.chapters.forEach(chapter => {
+    chapters.forEach(chapter => {
       chapter.sections.forEach(section => {
         section.content.forEach((item) => {
           const text = extractText(item)
@@ -308,7 +544,7 @@ export default function UserGuidePage() {
       })
     })
     return entries
-  }, [])
+  }, [chapters])
 
   // Search results
   const searchResults = useMemo(() => {
@@ -351,16 +587,17 @@ export default function UserGuidePage() {
     setMobileTocOpen(false)
 
     const sectionNum = sectionId ? sectionId.split('.')[1] : null
+    const view = searchParams.get('view') === 'all' ? { view: 'all' } : {}
     setSearchParams(sectionNum
-      ? { chapter: chapterId, section: sectionNum }
-      : { chapter: chapterId }
+      ? { chapter: chapterId, section: sectionNum, ...view }
+      : { chapter: chapterId, ...view }
     )
 
     setTimeout(() => {
       const targetId = sectionId ? `section-${sectionId}` : `chapter-${chapterId}`
       document.getElementById(targetId)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
     }, 100)
-  }, [setSearchParams])
+  }, [setSearchParams, searchParams])
 
   // Handle deep-link on mount
   useEffect(() => {
@@ -385,6 +622,8 @@ export default function UserGuidePage() {
   const isSearchMode = searchResults !== null
 
   return (
+    <GuideAccessContext.Provider value={canOpen}>
+    <GuideVideoContext.Provider value={openVideo}>
     <div className="space-y-4">
       {/* Header */}
       <PageHeader title="User Guide" subtitle={<>{guideData.meta.version} &middot; Updated {formatDate(guideData.meta.generatedAt)}</>} actions={<>
@@ -411,6 +650,50 @@ export default function UserGuidePage() {
         </div>
 </>} />
 
+      {/* Tabs: written guide or video tutorials */}
+      <div className="flex gap-1 border-b border-gray-200" role="tablist" aria-label="Guide sections">
+        {[['guide', 'Guide'], ['videos', `Videos (${visibleVideos.length})`]].map(([key, label]) => (
+          <button
+            key={key}
+            type="button"
+            role="tab"
+            aria-selected={tab === key}
+            onClick={() => setTab(key)}
+            className={`px-4 py-2 text-sm font-medium -mb-px border-b-2 ${tab === key ? 'border-primary-600 text-primary-700' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {/* View toggle: role-based or whole guide */}
+      {!isSuperAdmin && (
+        <div className="flex items-center gap-3 flex-wrap text-sm">
+          <div className="inline-flex rounded-lg border border-gray-300 overflow-hidden" role="group" aria-label="Guide view">
+            <button
+              type="button"
+              onClick={() => setView('role')}
+              className={`px-3 py-1.5 ${!viewAll ? 'bg-primary-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
+              aria-pressed={!viewAll}
+            >
+              For my role
+            </button>
+            <button
+              type="button"
+              onClick={() => setView('all')}
+              className={`px-3 py-1.5 border-l border-gray-300 ${viewAll ? 'bg-primary-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
+              aria-pressed={viewAll}
+            >
+              Show all
+            </button>
+          </div>
+          <span className="text-gray-500">
+            Showing {chapters.length} of {guideData.chapters.length} chapters
+            {!viewAll && " for your role and your school's modules"}
+          </span>
+        </div>
+      )}
+
       {/* Search results count */}
       {isSearchMode && (
         <div className="text-sm text-gray-600 bg-yellow-50 border border-yellow-200 rounded-lg px-4 py-2">
@@ -429,6 +712,15 @@ export default function UserGuidePage() {
       </button>
 
       {/* Main layout */}
+      {tab === 'videos' ? (
+        <VideosTab
+          videos={visibleVideos}
+          selectedId={selectedVideoId}
+          lang={videoLang}
+          onSelect={(id) => updateParams({ video: id })}
+          onLang={(code) => updateParams({ lang: code === 'ur' ? 'ur' : null })}
+        />
+      ) : (
       <div className="flex flex-col lg:flex-row gap-6">
         {/* TOC Sidebar */}
         <aside className={`${mobileTocOpen ? 'block' : 'hidden'} lg:block lg:w-72 lg:flex-shrink-0`}>
@@ -437,7 +729,7 @@ export default function UserGuidePage() {
               <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Contents</h3>
             </div>
             <nav className="p-2">
-              {guideData.chapters.map(chapter => (
+              {chapters.map(chapter => (
                 <button
                   key={chapter.id}
                   onClick={() => handleTocClick(chapter.id)}
@@ -486,7 +778,7 @@ export default function UserGuidePage() {
           ) : (
             /* Normal Chapter View */
             <div className="space-y-4">
-              {guideData.chapters.map(chapter => (
+              {chapters.map(chapter => (
                 <ChapterBlock
                   key={chapter.id}
                   chapter={chapter}
@@ -499,6 +791,9 @@ export default function UserGuidePage() {
           )}
         </main>
       </div>
+      )}
     </div>
+    </GuideVideoContext.Provider>
+    </GuideAccessContext.Provider>
   )
 }

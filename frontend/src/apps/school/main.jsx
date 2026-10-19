@@ -12,6 +12,10 @@ import SchoolApp from './SchoolApp'
 import { createAppPersister, queryPersistOptions } from '../../queryPersistConfig'
 import '../../index.css'
 import { installFinanceQueryRules } from '../../financeQueryRules'
+import { warmRouteChunk } from '../../utils/warmRouteChunk'
+
+// Start the deep-linked page's JS download now so it overlaps the auth call instead of following it.
+warmRouteChunk(window.location.pathname)
 
 const queryClient = new QueryClient({
   defaultOptions: {

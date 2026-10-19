@@ -1,0 +1,138 @@
+{
+  "host": "demo.educationai.pk",
+  "taken_at": "2026-10-18 21:04:06",
+  "pages": {
+    "students_list": {
+      "hard": {
+        "api_requests": 1,
+        "waterfall_depth": 1,
+        "total_ms_incl_1.5s_settle": 2732,
+        "calls": [
+          {
+            "url": "schools/by-subdomain/",
+            "start": 263,
+            "end": 650
+          }
+        ]
+      },
+      "spa": {
+        "api_requests": 0,
+        "waterfall_depth": 0,
+        "total_ms_incl_1.5s_settle": 1518,
+        "calls": [],
+        "navigated": false
+      }
+    },
+    "dashboard": {
+      "hard": {
+        "api_requests": 1,
+        "waterfall_depth": 1,
+        "total_ms_incl_1.5s_settle": 2554,
+        "calls": [
+          {
+            "url": "schools/by-subdomain/",
+            "start": 249,
+            "end": 439
+          }
+        ]
+      },
+      "spa": null
+    },
+    "student_profile": {
+      "error": "no student id seen"
+    },
+    "exams": {
+      "hard": {
+        "api_requests": 1,
+        "waterfall_depth": 1,
+        "total_ms_incl_1.5s_settle": 2622,
+        "calls": [
+          {
+            "url": "schools/by-subdomain/",
+            "start": 346,
+            "end": 545
+          }
+        ]
+      },
+      "spa": {
+        "api_requests": 0,
+        "waterfall_depth": 0,
+        "total_ms_incl_1.5s_settle": 1514,
+        "calls": [],
+        "navigated": false
+      }
+    },
+    "fee_collect": {
+      "hard": {
+        "api_requests": 1,
+        "waterfall_depth": 1,
+        "total_ms_incl_1.5s_settle": 2500,
+        "calls": [
+          {
+            "url": "schools/by-subdomain/",
+            "start": 239,
+            "end": 405
+          }
+        ]
+      },
+      "spa": {
+        "api_requests": 0,
+        "waterfall_depth": 0,
+        "total_ms_incl_1.5s_settle": 1515,
+        "calls": [],
+        "navigated": false
+      }
+    },
+    "finance_dashboard": {
+      "hard": {
+        "api_requests": 1,
+        "waterfall_depth": 1,
+        "total_ms_incl_1.5s_settle": 2532,
+        "calls": [
+          {
+            "url": "schools/by-subdomain/",
+            "start": 269,
+            "end": 441
+          }
+        ]
+      },
+      "spa": {
+        "api_requests": 0,
+        "waterfall_depth": 0,
+        "total_ms_incl_1.5s_settle": 1510,
+        "calls": [],
+        "navigated": false
+      }
+    },
+    "subjects": {
+      "hard": {
+        "api_requests": 1,
+        "waterfall_depth": 1,
+        "total_ms_incl_1.5s_settle": 2642,
+        "calls": [
+          {
+            "url": "schools/by-subdomain/",
+            "start": 320,
+            "end": 555
+          }
+        ]
+      },
+      "spa": {
+        "api_requests": 0,
+        "waterfall_depth": 0,
+        "total_ms_incl_1.5s_settle": 1507,
+        "calls": [],
+        "navigated": false
+      }
+    }
+  },
+  "enabled_modules": {},
+  "me_keys": [],
+  "idle_polling": {
+    "seconds": 60,
+    "requests": 0,
+    "per_minute": 0.0,
+    "by_endpoint": {},
+    "note": "headless; polling may be paused by page visibility"
+  }
+}

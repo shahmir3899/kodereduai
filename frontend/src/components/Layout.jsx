@@ -13,6 +13,7 @@ import AcademicYearSwitcher from './AcademicYearSwitcher'
 import { inventoryApi, aiJobsApi } from '../services/api'
 import { useEscapeKey } from '../hooks/useEscapeKey'
 import { useTheme } from '../contexts/ThemeContext'
+import { buildStaffNavigation, buildParentNavigation, buildStudentNavigation } from '../navigation/navigationConfig'
 
 // Icons (simple SVG components)
 const RocketIcon = () => (
@@ -342,28 +343,44 @@ const ExclamationIcon = () => (
   </svg>
 )
 
-// Static navigation arrays (no dependencies on component state)
-const parentNavGroups = [
-  { type: 'item', name: 'Dashboard', href: '/parent/dashboard', icon: HomeIcon },
-  { type: 'item', name: 'Leave Requests', href: '/parent/leave', icon: CalendarIcon },
-  { type: 'item', name: 'Messages', href: '/parent/messages', icon: MailIcon },
-  { type: 'item', name: 'User Guide', href: '/guide', icon: BookOpenIcon },
-]
+// Icon lookup for the shared navigation builder (src/navigation/navigationConfig.js)
+const NAV_ICONS = {
+  AcademicIcon,
+  BanknotesIcon,
+  BookOpenIcon,
+  BriefcaseIcon,
+  CalendarIcon,
+  ChartIcon,
+  ChatBotIcon,
+  ClipboardCheckIcon,
+  ClipboardIcon,
+  ClockIcon,
+  CogIcon,
+  CurrencyIcon,
+  DocumentIcon,
+  ExclamationIcon,
+  FolderIcon,
+  HomeIcon,
+  LibraryIcon,
+  MailIcon,
+  MapPinIcon,
+  PencilIcon,
+  ReceiptIcon,
+  ReportIcon,
+  RocketIcon,
+  SearchIcon,
+  SettingsIcon,
+  StarIcon,
+  TableIcon,
+  TagIcon,
+  TruckIcon,
+  UserPlusIcon,
+  UsersIcon,
+  WalletIcon,
+}
 
-const studentNavGroups = [
-  { type: 'item', name: 'Dashboard', href: '/student/dashboard', icon: HomeIcon },
-  { type: 'item', name: 'Attendance', href: '/student/attendance', icon: ClipboardIcon },
-  { type: 'item', name: 'Fees', href: '/student/fees', icon: CurrencyIcon },
-  { type: 'item', name: 'Timetable', href: '/student/timetable', icon: ClockIcon },
-  { type: 'item', name: 'Exam Schedule', href: '/student/exam-schedule', icon: CalendarIcon },
-  { type: 'item', name: 'Results', href: '/student/results', icon: ChartIcon },
-  { type: 'item', name: 'Assignments', href: '/student/assignments', icon: PencilIcon },
-  { type: 'item', name: 'Library', href: '/student/library', icon: LibraryIcon },
-  { type: 'item', name: 'Transport', href: '/student/transport', icon: TruckIcon },
-  { type: 'item', name: 'AI Study Helper', href: '/student/study-helper', icon: ChatBotIcon },
-  { type: 'item', name: 'My Profile', href: '/student/profile', icon: UsersIcon },
-  { type: 'item', name: 'User Guide', href: '/guide', icon: BookOpenIcon },
-]
+const PARENT_NAV_GROUPS = buildParentNavigation(NAV_ICONS)
+const STUDENT_NAV_GROUPS = buildStudentNavigation(NAV_ICONS)
 
 // Routes where the academic year switcher affects displayed data
 const SESSION_AWARE_PREFIXES = [
@@ -490,301 +507,12 @@ export default function Layout() {
   }
 
   // Navigation structure: memoized to avoid re-creating on every render
-  const navigationGroups = useMemo(() => [
-    // Dashboard - always visible at top
-    { type: 'item', name: 'Dashboard', href: '/dashboard', icon: HomeIcon },
-
-    // Attendance group (consolidated) — student/class attendance, not
-    // relevant to Staff (their own attendance lives in the Self Service
-    // hub below, backed by hr.StaffAttendance, not this module).
-    // Manager removed 2026-09: nav access scoped down to Dashboard/
-    // Academics/Content Creation/Management only.
-    ...(isModuleEnabled('attendance') && !isStaff && !isManager ? [{
-      type: 'group',
-      name: 'Attendance',
-      icon: ClipboardIcon,
-      children: [
-        { type: 'divider', label: 'Mark Attendance' },
-        { name: '1. Manual Entry', href: '/attendance/manual-entry', icon: PencilIcon },
-        { name: '2. Face Attendance', href: '/face-attendance', icon: ClipboardCheckIcon },
-        { type: 'divider', label: 'Records' },
-        { name: 'Attendance Record', href: '/attendance/register', icon: TableIcon },
-      ],
-    }] : []),
-
-    // Finance group — Manager removed 2026-09 (see Attendance comment above).
-    ...(isModuleEnabled('finance') && !isStaff && !isManager ? [{
-      type: 'group',
-      name: 'Finance',
-      icon: CurrencyIcon,
-      children: isTeacher
-        ? [{ name: 'Collect Payments', href: '/finance/fees/collect', icon: ReceiptIcon }]
-        : [
-            { name: 'Dashboard', href: '/finance', icon: ChartIcon },
-            { name: 'Accounts', href: '/finance/accounts', icon: BanknotesIcon },
-            { type: 'divider', label: 'Fees' },
-            { name: 'Fee Overview', href: '/finance/fees', icon: ClipboardCheckIcon },
-            { name: 'Collect Payments', href: '/finance/fees/collect', icon: ReceiptIcon },
-            ...(!isStaffLevel
-              ? [{ name: 'Fee Setup', href: '/finance/fees/setup', icon: CogIcon }]
-              : []),
-            { type: 'divider', label: 'Income & Expenses' },
-            { name: 'Other Income', href: '/finance/income', icon: BanknotesIcon },
-            { name: 'Expenses', href: '/finance/expenses', icon: WalletIcon },
-            ...(!isStaffLevel
-              ? [
-                  { name: 'Discounts', href: '/finance/discounts', icon: TagIcon },
-                ]
-              : []),
-          ],
-    }] : []),
-
-    // Academics navigation split into focused groups to reduce clutter —
-    // none of Curriculum/Assessment/Content Creation/Planning & Delivery is
-    // Staff's business (no backend access to any of it; Staff has no
-    // teaching or curriculum role), so the whole cluster is hidden for them.
-    ...(isModuleEnabled('academics') && !isStaff ? [{
-      type: 'group',
-      name: 'Academics',
-      icon: BookOpenIcon,
-      children: [
-        { type: 'divider', label: 'Curriculum' },
-        ...(!isTeacher ? [{ name: 'Subjects', href: '/academics/subjects', icon: AcademicIcon }] : []),
-        { name: 'Timetable', href: '/academics/timetable', icon: ClockIcon },
-        ...(isModuleEnabled('examinations') || isModuleEnabled('lms') ? [
-          { type: 'divider', label: 'Assessment' },
-        ] : []),
-        ...(isModuleEnabled('examinations') ? [
-          ...(!isTeacher ? [{ name: 'Exam Types', href: '/academics/exam-types', icon: FolderIcon }] : []),
-          ...(!isTeacher ? [{ name: 'Exams', href: '/academics/exams', icon: ClipboardIcon }] : []),
-          ...(isTeacher ? [{ name: 'Exam Schedule', href: '/academics/exam-schedule', icon: CalendarIcon }] : []),
-          // Matches AssessmentAccessRoute's allow-list (SCHOOL_ADMIN/PRINCIPAL/
-          // TEACHER/SUPER_ADMIN) -- keeps ACCOUNTANT/DRIVER from seeing a link
-          // that immediately redirects them away.
-          ...(isSchoolAdminNav || isTeacher ? [{ name: 'Assessments', href: '/assessments', icon: DocumentIcon }] : []),
-          ...(isSchoolAdminNav || isTeacher ? [{ name: 'Marks Entry', href: '/academics/marks-entry', icon: DocumentIcon }] : []),
-          ...(isSchoolAdminNav ? [{ name: 'Grade Scale', href: '/academics/grade-scale', icon: SettingsIcon }] : []),
-          { name: 'Results', href: '/academics/results', icon: ChartIcon },
-          { name: 'Report Cards', href: '/academics/report-cards', icon: ReportIcon },
-        ] : []),
-        ...(isModuleEnabled('lms') ? [
-          { name: 'Assignments', href: '/academics/assignments', icon: DocumentIcon },
-        ] : []),
-      ],
-    }] : []),
-
-    ...(isModuleEnabled('academics') && !isStaff && (isModuleEnabled('examinations') || isModuleEnabled('lms')) ? [{
-      type: 'group',
-      name: 'Content Creation',
-      icon: PencilIcon,
-      children: [
-        ...(isModuleEnabled('examinations') ? [
-          { name: 'Question Bank', href: '/academics/questions', icon: PencilIcon },
-          // Paper Builder/Question Papers/Worksheets match PaperBuilderRoute's
-          // allow-list (SCHOOL_ADMIN/PRINCIPAL/TEACHER/MANAGER) -- keeps
-          // ACCOUNTANT/DRIVER from seeing links that redirect them away.
-          ...(isSchoolAdminNav || isTeacher || isManager ? [
-            { name: 'Paper Builder', href: '/academics/paper-builder', icon: PencilIcon },
-            { name: 'Question Papers', href: '/academics/papers', icon: DocumentIcon },
-            { name: 'Worksheets', href: '/academics/worksheets', icon: DocumentIcon },
-          ] : []),
-        ] : []),
-        ...(isModuleEnabled('lms') ? [
-          { name: 'Curriculum', href: '/academics/curriculum', icon: BookOpenIcon },
-        ] : []),
-      ],
-    }] : []),
-
-    // Manager removed 2026-09 (see Attendance comment above).
-    ...(isModuleEnabled('academics') && !isStaff && !isManager && (isModuleEnabled('examinations') || isModuleEnabled('lms')) ? [{
-      type: 'group',
-      name: 'Planning & Delivery',
-      icon: CalendarIcon,
-      children: [
-        ...(isModuleEnabled('examinations') ? [
-          { name: 'Curriculum Coverage', href: '/academics/curriculum-coverage', icon: ChartIcon },
-        ] : []),
-        ...(isModuleEnabled('lms') ? [
-          { name: 'Lesson Plans', href: '/academics/lesson-plans', icon: BookOpenIcon },
-        ] : []),
-      ],
-    }] : []),
-
-    ...(isModuleEnabled('academics') && !isStaffLevel ? [{
-      type: 'item',
-      name: 'AI Analytics',
-      href: '/academics/analytics',
-      icon: ChartIcon,
-    }] : []),
-
-    ...(isModuleEnabled('examinations') && !isStaffLevel ? [{
-      type: 'item',
-      name: 'Academic Risk',
-      href: '/academics/academic-risk',
-      icon: ExclamationIcon,
-    }] : []),
-
-    // HR & Staff group (visible to SCHOOL_ADMIN, PRINCIPAL only —
-    // 2026-09: Manager removed, dropped to the self-service tier below,
-    // same as Teacher: nav access scoped down to Dashboard/Academics/
-    // Content Creation/Management, with only own leave/attendance/payslip
-    // as an exception, enforced backend-side in hr/permissions.py).
-    ...(isModuleEnabled('hr') && !isStaffLevel
-      ? [{
-          type: 'group',
-          name: 'HR & Staff',
-          icon: BriefcaseIcon,
-          children: [
-            { name: 'Dashboard', href: '/hr', icon: ChartIcon },
-            { name: 'Staff Directory', href: '/hr/staff', icon: UsersIcon },
-            { name: 'Departments', href: '/hr/departments', icon: FolderIcon },
-            { name: 'Salary', href: '/hr/salary', icon: BanknotesIcon },
-            { name: 'Payroll', href: '/hr/payroll', icon: ReceiptIcon },
-            { name: 'Leave', href: '/hr/leave', icon: CalendarIcon },
-            { name: 'Attendance', href: '/hr/attendance', icon: ClipboardCheckIcon },
-            { name: 'Performance', href: '/hr/appraisals', icon: StarIcon },
-            { name: 'Documents', href: '/hr/documents', icon: DocumentIcon },
-            { name: 'Letter Composer', href: '/hr/letters', icon: DocumentIcon },
-            { name: 'Staff Risk', href: '/hr/risk', icon: ExclamationIcon },
-          ],
-        }]
-      : []),
-
-    // Standalone self-service items for Teacher/Manager — the full "HR &
-    // Staff" group above stays admin-only; Teacher/Manager get just their
-    // own leave and attendance, not the whole HR toolset
-    // (LeaveManagementPage.jsx and StaffAttendancePage.jsx both render a
-    // trimmed self-service view for TEACHER/STAFF/MANAGER).
-    ...(isModuleEnabled('hr') && (isTeacher || isManager)
-      ? [
-          { type: 'item', name: 'My Leave', href: '/hr/leave', icon: CalendarIcon },
-          { type: 'item', name: 'My Attendance', href: '/hr/attendance', icon: ClipboardCheckIcon },
-        ]
-      : []),
-
-    // Staff gets one consolidated "Self Service" hub (Leave + Attendance
-    // tabs) instead of separate items — Staff sits at the bottom of the
-    // school hierarchy with no teaching/admin surface at all, so a single
-    // entry point is clearer than scattering it across the sidebar. Also
-    // reachable via the dashboard's "Apply Leave"/quick-action links.
-    ...(isModuleEnabled('hr') && isStaff
-      ? [{ type: 'item', name: 'Self Service', href: '/hr/self-service', icon: CalendarIcon }]
-      : []),
-
-    // Management group
-    ...((isModuleEnabled('students') || isModuleEnabled('academics')) && !isStaff ? [{
-      type: 'group',
-      name: 'Management',
-      icon: FolderIcon,
-      children: [
-        ...(isModuleEnabled('students') ? [
-          { name: 'Classes', href: '/classes', icon: TableIcon },
-          { name: 'Students', href: '/students', icon: UsersIcon },
-          ...(!isStaffLevel ? [{ name: 'Student Risk Score', href: '/students/risk-score', icon: ExclamationIcon }] : []),
-          ...(effectiveRole === 'SCHOOL_ADMIN' || effectiveRole === 'PRINCIPAL' ? [{ name: 'Recently Deleted', href: '/students/deleted', icon: TableIcon }] : []),
-        ] : []),
-        ...(!isTeacher && isModuleEnabled('academics') ? [
-          { type: 'divider', label: 'Academic Ops' },
-          { name: 'Academic Calendar', href: '/academics/calendar', icon: CalendarIcon },
-          { name: 'Sessions', href: '/academics/sessions', icon: CalendarIcon },
-          { name: 'Promotion', href: '/academics/promotion', icon: UsersIcon },
-        ] : []),
-      ],
-    }] : []),
-
-    // Notifications
-    ...(isModuleEnabled('notifications') ? [{
-      type: 'item', name: 'Notifications', href: '/notifications', icon: ChatBotIcon,
-    }] : []),
-
-    // Messages
-    { type: 'item', name: 'Messages', href: '/messages', icon: MailIcon },
-
-    // Admissions (admin only)
-    ...(isModuleEnabled('admissions') && !isStaffLevel ? [{
-      type: 'group',
-      name: 'Admissions',
-      icon: UserPlusIcon,
-      children: [
-        { name: 'Enquiries', href: '/admissions', icon: UserPlusIcon },
-        { name: 'Conversion Likelihood', href: '/admissions/conversion-likelihood', icon: ExclamationIcon },
-      ],
-    }] : []),
-
-    // Transport group — Manager removed 2026-09 (see Attendance comment above).
-    ...(isModuleEnabled('transport') && !isManager ? [{
-      type: 'group',
-      name: 'Transport',
-      icon: TruckIcon,
-      children: [
-        { name: 'Dashboard', href: '/transport', icon: ChartIcon },
-        { name: 'Routes', href: '/transport/routes', icon: MapPinIcon },
-        { name: 'Vehicles', href: '/transport/vehicles', icon: TruckIcon },
-        { name: 'Assignments', href: '/transport/assignments', icon: UsersIcon },
-        { name: 'Attendance', href: '/transport/attendance', icon: ClipboardCheckIcon },
-      ],
-    }] : []),
-
-    // Library group — Manager removed 2026-09 (see Attendance comment above).
-    ...(isModuleEnabled('library') && !isManager ? [{
-      type: 'group',
-      name: 'Library',
-      icon: LibraryIcon,
-      children: [
-        { name: 'Dashboard', href: '/library', icon: ChartIcon },
-        { name: 'Catalog', href: '/library/catalog', icon: SearchIcon },
-        { name: 'Issue / Return', href: '/library/issues', icon: BookOpenIcon },
-        { name: 'Overdue', href: '/library/overdue', icon: ExclamationIcon },
-      ],
-    }] : []),
-
-    // Hostel group — Manager removed 2026-09 (see Attendance comment above).
-    ...(isModuleEnabled('hostel') && !isManager ? [{
-      type: 'group',
-      name: 'Hostel',
-      icon: HomeIcon,
-      children: [
-        { name: 'Dashboard', href: '/hostel', icon: ChartIcon },
-        { name: 'Rooms', href: '/hostel/rooms', icon: TableIcon },
-        { name: 'Allocations', href: '/hostel/allocations', icon: UsersIcon },
-        { name: 'Gate Passes', href: '/hostel/gate-passes', icon: DocumentIcon },
-      ],
-    }] : []),
-
-    // Inventory group — Manager removed 2026-09 (see Attendance comment above).
-    ...(isModuleEnabled('inventory') && !isManager && (!isTeacher && !isStaff ? true : hasInventoryAssignments) ? [{
-      type: 'group',
-      name: 'Inventory',
-      icon: ClipboardCheckIcon,
-      children: (isTeacher || isStaff)
-        ? [{ name: 'Assignments', href: '/inventory/assignments', icon: UsersIcon }]
-        : [
-            { name: 'Dashboard', href: '/inventory', icon: ChartIcon },
-            { name: 'Items', href: '/inventory/items', icon: FolderIcon },
-            { name: 'Transactions', href: '/inventory/transactions', icon: DocumentIcon },
-            { name: 'Assignments', href: '/inventory/assignments', icon: UsersIcon },
-            { name: 'Reorder Prediction', href: '/inventory/reorder-prediction', icon: ExclamationIcon },
-          ],
-    }] : []),
-
-    // Discounts moved into Finance group above
-
-    // User Guide - visible to all roles
-    { type: 'item', name: 'User Guide', href: '/guide', icon: BookOpenIcon },
-
-    // School Setup - admin only
-    ...(!isStaffLevel
-      ? [{ type: 'item', name: 'School Setup', href: '/school-setup', icon: RocketIcon }]
-      : []),
-
-    // Settings - admin only (SCHOOL_ADMIN, not staff-level roles)
-    ...(!isStaffLevel
-      ? [{ type: 'item', name: 'Settings', href: '/settings', icon: CogIcon }]
-      : []),
-  ], [isModuleEnabled, isStaffLevel, isManager, isTeacher, isStaff, isSchoolAdminNav, hasInventoryAssignments])
+  const navigationGroups = useMemo(() => buildStaffNavigation({
+    effectiveRole, isModuleEnabled, isStaffLevel, isManager, isTeacher, isStaff, isSchoolAdminNav, hasInventoryAssignments,
+  }, NAV_ICONS), [effectiveRole, isModuleEnabled, isStaffLevel, isManager, isTeacher, isStaff, isSchoolAdminNav, hasInventoryAssignments])
 
   // SuperAdmin only sees the Admin Panel link — no school-internal nav
-  const visibleNavGroups = isSuperAdmin ? [] : (isParent ? parentNavGroups : (isStudent ? studentNavGroups : navigationGroups))
+  const visibleNavGroups = isSuperAdmin ? [] : (isParent ? PARENT_NAV_GROUPS : (isStudent ? STUDENT_NAV_GROUPS : navigationGroups))
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">

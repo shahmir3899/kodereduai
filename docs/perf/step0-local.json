@@ -1,0 +1,1087 @@
+{
+  "host": "",
+  "taken_at": "2026-10-19 09:42:05",
+  "pages": {
+    "students_list": {
+      "hard": {
+        "api_requests": 6,
+        "waterfall_depth": 2,
+        "total_ms_incl_1.5s_settle": 6717,
+        "calls": [
+          {
+            "url": "auth/me/",
+            "start": 57,
+            "end": 1203
+          },
+          {
+            "url": "schools/by-subdomain/",
+            "start": 61,
+            "end": 1034
+          },
+          {
+            "url": "sessions/terms/",
+            "start": 1211,
+            "end": 3025
+          },
+          {
+            "url": "notifications/unread-count/",
+            "start": 1379,
+            "end": 2765
+          },
+          {
+            "url": "tasks/ai-jobs/",
+            "start": 1380,
+            "end": 2631
+          },
+          {
+            "url": "students/",
+            "start": 1380,
+            "end": 4714
+          }
+        ],
+        "chunks": [
+          {
+            "url": "main-5ogvJo3e.js",
+            "start": 15,
+            "end": 18
+          },
+          {
+            "url": "main-D_-zzvon.js",
+            "start": 20,
+            "end": 24
+          },
+          {
+            "url": "financeQueryRules-CIDb5K39.css",
+            "start": 21,
+            "end": 26
+          },
+          {
+            "url": "financeQueryRules-ByemnWSY.js",
+            "start": 21,
+            "end": 40
+          },
+          {
+            "url": "css2?family=Noto+Naskh+Arabic:wght@400;500;600;700&display=swap",
+            "start": 26,
+            "end": 29
+          },
+          {
+            "url": "StudentsPage-CtZZPRMA.js",
+            "start": 1203,
+            "end": 1267
+          },
+          {
+            "url": "useClasses-DJkwmHrI.js",
+            "start": 1204,
+            "end": 1211
+          },
+          {
+            "url": "useSessionClasses-BLLSqJMf.js",
+            "start": 1204,
+            "end": 1211
+          },
+          {
+            "url": "classScope-D1CrIGzy.js",
+            "start": 1205,
+            "end": 1212
+          },
+          {
+            "url": "classOrdering-BKmwL68M.js",
+            "start": 1205,
+            "end": 1212
+          },
+          {
+            "url": "jspdf.plugin.autotable-D7QrxqU7.js",
+            "start": 1205,
+            "end": 1356
+          },
+          {
+            "url": "useDebounce-Cz7_ivzu.js",
+            "start": 1206,
+            "end": 1212
+          },
+          {
+            "url": "tslib.es6-BYppDQt_.js",
+            "start": 1206,
+            "end": 1267
+          },
+          {
+            "url": "PhotoCropModal-QKfU3kqT.js",
+            "start": 1206,
+            "end": 1272
+          },
+          {
+            "url": "html2canvas.esm-QH1iLAAe.js",
+            "start": 1206,
+            "end": 1306
+          },
+          {
+            "url": "ViewToggle-pCZkmyLi.js",
+            "start": 1207,
+            "end": 1297
+          },
+          {
+            "url": "ReportPeriodPicker-B5236Uu4.js",
+            "start": 1207,
+            "end": 1306
+          },
+          {
+            "url": "WhatsAppTick-0H3f7qwc.js",
+            "start": 1208,
+            "end": 1296
+          },
+          {
+            "url": "errorUtils-Ba8179fX.js",
+            "start": 1208,
+            "end": 1304
+          },
+          {
+            "url": "studentLifecycle-CsOsTZeH.js",
+            "start": 1208,
+            "end": 1325
+          },
+          {
+            "url": "PageHeader-RPufd84s.js",
+            "start": 1209,
+            "end": 1300
+          },
+          {
+            "url": "Badge-D-8JUtGJ.js",
+            "start": 1209,
+            "end": 1309
+          },
+          {
+            "url": "ClassSelector-DZQqBI87.js",
+            "start": 1209,
+            "end": 1324
+          },
+          {
+            "url": "Field-2RCidniX.js",
+            "start": 1209,
+            "end": 1325
+          },
+          {
+            "url": "Skeleton-B4QCyz65.js",
+            "start": 1209,
+            "end": 1338
+          },
+          {
+            "url": "RecordCard-Cc4pJX8N.js",
+            "start": 1210,
+            "end": 1343
+          },
+          {
+            "url": "Modal-BBCpX7Iu.js",
+            "start": 1210,
+            "end": 1349
+          },
+          {
+            "url": "CardGrid-e9KGUhS1.js",
+            "start": 1210,
+            "end": 1352
+          }
+        ]
+      },
+      "spa": null
+    },
+    "dashboard": {
+      "hard": {
+        "api_requests": 17,
+        "waterfall_depth": 4,
+        "total_ms_incl_1.5s_settle": 10373,
+        "calls": [
+          {
+            "url": "auth/me/",
+            "start": 69,
+            "end": 1195
+          },
+          {
+            "url": "schools/by-subdomain/",
+            "start": 72,
+            "end": 1065
+          },
+          {
+            "url": "notifications/unread-count/",
+            "start": 1195,
+            "end": 2143
+          },
+          {
+            "url": "sessions/terms/",
+            "start": 1205,
+            "end": 2263
+          },
+          {
+            "url": "tasks/ai-insights/",
+            "start": 1235,
+            "end": 3166
+          },
+          {
+            "url": "sessions/health/",
+            "start": 1235,
+            "end": 6466
+          },
+          {
+            "url": "notifications/my/",
+            "start": 1236,
+            "end": 2304
+          },
+          {
+            "url": "notifications/digest/",
+            "start": 1236,
+            "end": 2316
+          },
+          {
+            "url": "tasks/ai-jobs/",
+            "start": 1237,
+            "end": 3130
+          },
+          {
+            "url": "bootstrap/admin-dashboard/",
+            "start": 2266,
+            "end": 8363
+          },
+          {
+            "url": "finance/fee-payments/monthly_summary/",
+            "start": 4281,
+            "end": 5976
+          },
+          {
+            "url": "attendance/records/daily_report/",
+            "start": 4281,
+            "end": 6144
+          },
+          {
+            "url": "hr/staff/dashboard_stats/",
+            "start": 4282,
+            "end": 5465
+          },
+          {
+            "url": "admissions/enquiries/",
+            "start": 4282,
+            "end": 5468
+          },
+          {
+            "url": "library/stats/",
+            "start": 4282,
+            "end": 7137
+          },
+          {
+            "url": "inventory/dashboard/",
+            "start": 4282,
+            "end": 7764
+          },
+          {
+            "url": "sessions/health/ai-summary/",
+            "start": 6467,
+            "end": 7464
+          }
+        ],
+        "chunks": [
+          {
+            "url": "main-5ogvJo3e.js",
+            "start": 25,
+            "end": 29
+          },
+          {
+            "url": "main-D_-zzvon.js",
+            "start": 31,
+            "end": 35
+          },
+          {
+            "url": "financeQueryRules-ByemnWSY.js",
+            "start": 32,
+            "end": 53
+          },
+          {
+            "url": "financeQueryRules-CIDb5K39.css",
+            "start": 33,
+            "end": 39
+          },
+          {
+            "url": "css2?family=Noto+Naskh+Arabic:wght@400;500;600;700&display=swap",
+            "start": 39,
+            "end": 41
+          },
+          {
+            "url": "DashboardRouter-ZaHdVhog.js",
+            "start": 1202,
+            "end": 1211
+          },
+          {
+            "url": "PageHeader-RPufd84s.js",
+            "start": 1203,
+            "end": 1209
+          },
+          {
+            "url": "Badge-D-8JUtGJ.js",
+            "start": 1203,
+            "end": 1212
+          },
+          {
+            "url": "StatCard-Drwhe0sZ.js",
+            "start": 1203,
+            "end": 1213
+          },
+          {
+            "url": "MonthlyFeeCollectionCard-qtsnyEFt.js",
+            "start": 1204,
+            "end": 1213
+          },
+          {
+            "url": "QuickActionGrid-CZ5koDln.js",
+            "start": 1204,
+            "end": 1213
+          },
+          {
+            "url": "NotificationsFeed-w_H39JBm.js",
+            "start": 1204,
+            "end": 1216
+          }
+        ]
+      },
+      "spa": null
+    },
+    "student_profile": {
+      "hard": {
+        "api_requests": 2,
+        "waterfall_depth": 2,
+        "total_ms_incl_1.5s_settle": 61545,
+        "calls": [
+          {
+            "url": "auth/me/",
+            "start": 53,
+            "end": 4510
+          },
+          {
+            "url": "sessions/terms/",
+            "start": 4511,
+            "end": 11232
+          }
+        ],
+        "chunks": [
+          {
+            "url": "main-5ogvJo3e.js",
+            "start": 15,
+            "end": 17
+          },
+          {
+            "url": "main-D_-zzvon.js",
+            "start": 19,
+            "end": 22
+          },
+          {
+            "url": "financeQueryRules-ByemnWSY.js",
+            "start": 19,
+            "end": 37
+          },
+          {
+            "url": "financeQueryRules-CIDb5K39.css",
+            "start": 20,
+            "end": 24
+          },
+          {
+            "url": "css2?family=Noto+Naskh+Arabic:wght@400;500;600;700&display=swap",
+            "start": 24,
+            "end": 25
+          }
+        ]
+      },
+      "spa": null
+    },
+    "exams": {
+      "hard": {
+        "api_requests": 13,
+        "waterfall_depth": 2,
+        "total_ms_incl_1.5s_settle": 5664,
+        "calls": [
+          {
+            "url": "auth/me/",
+            "start": 67,
+            "end": 1119
+          },
+          {
+            "url": "schools/by-subdomain/",
+            "start": 70,
+            "end": 1017
+          },
+          {
+            "url": "sessions/terms/",
+            "start": 1137,
+            "end": 2196
+          },
+          {
+            "url": "notifications/unread-count/",
+            "start": 1230,
+            "end": 2186
+          },
+          {
+            "url": "sessions/session-classes/",
+            "start": 1230,
+            "end": 2329
+          },
+          {
+            "url": "examinations/exam-groups/",
+            "start": 1231,
+            "end": 2573
+          },
+          {
+            "url": "sessions/academic-years/",
+            "start": 1232,
+            "end": 2317
+          },
+          {
+            "url": "examinations/exams/",
+            "start": 1232,
+            "end": 2417
+          },
+          {
+            "url": "tasks/ai-jobs/",
+            "start": 1233,
+            "end": 3247
+          },
+          {
+            "url": "sessions/session-classes/",
+            "start": 1233,
+            "end": 3392
+          },
+          {
+            "url": "examinations/exam-types/",
+            "start": 1233,
+            "end": 3483
+          },
+          {
+            "url": "examinations/exams/",
+            "start": 1233,
+            "end": 3587
+          },
+          {
+            "url": "examinations/exam-groups/",
+            "start": 1233,
+            "end": 3653
+          }
+        ],
+        "chunks": [
+          {
+            "url": "main-5ogvJo3e.js",
+            "start": 21,
+            "end": 24
+          },
+          {
+            "url": "main-D_-zzvon.js",
+            "start": 26,
+            "end": 31
+          },
+          {
+            "url": "financeQueryRules-CIDb5K39.css",
+            "start": 27,
+            "end": 35
+          },
+          {
+            "url": "financeQueryRules-ByemnWSY.js",
+            "start": 27,
+            "end": 51
+          },
+          {
+            "url": "css2?family=Noto+Naskh+Arabic:wght@400;500;600;700&display=swap",
+            "start": 34,
+            "end": 40
+          },
+          {
+            "url": "Modal-BBCpX7Iu.js",
+            "start": 1134,
+            "end": 1138
+          },
+          {
+            "url": "ExamsPage-BeDgYoua.js",
+            "start": 1134,
+            "end": 1213
+          },
+          {
+            "url": "Field-2RCidniX.js",
+            "start": 1135,
+            "end": 1139
+          },
+          {
+            "url": "ClassSelector-DZQqBI87.js",
+            "start": 1135,
+            "end": 1139
+          },
+          {
+            "url": "PageHeader-RPufd84s.js",
+            "start": 1135,
+            "end": 1140
+          },
+          {
+            "url": "useClasses-DJkwmHrI.js",
+            "start": 1136,
+            "end": 1143
+          },
+          {
+            "url": "useSessionClasses-BLLSqJMf.js",
+            "start": 1136,
+            "end": 1144
+          },
+          {
+            "url": "classOrdering-BKmwL68M.js",
+            "start": 1136,
+            "end": 1144
+          },
+          {
+            "url": "classScope-D1CrIGzy.js",
+            "start": 1136,
+            "end": 1146
+          },
+          {
+            "url": "Badge-D-8JUtGJ.js",
+            "start": 1137,
+            "end": 1149
+          },
+          {
+            "url": "ConfirmModal-C8iVGnYd.js",
+            "start": 1137,
+            "end": 1185
+          }
+        ]
+      },
+      "spa": null
+    },
+    "fee_collect": {
+      "hard": {
+        "api_requests": 11,
+        "waterfall_depth": 2,
+        "total_ms_incl_1.5s_settle": 7825,
+        "calls": [
+          {
+            "url": "auth/me/",
+            "start": 65,
+            "end": 1585
+          },
+          {
+            "url": "schools/by-subdomain/",
+            "start": 67,
+            "end": 1177
+          },
+          {
+            "url": "sessions/terms/",
+            "start": 1613,
+            "end": 3284
+          },
+          {
+            "url": "notifications/unread-count/",
+            "start": 1737,
+            "end": 3209
+          },
+          {
+            "url": "finance/annual-categories/",
+            "start": 1738,
+            "end": 3500
+          },
+          {
+            "url": "finance/accounts/",
+            "start": 1738,
+            "end": 3818
+          },
+          {
+            "url": "finance/monthly-categories/",
+            "start": 1738,
+            "end": 3882
+          },
+          {
+            "url": "attendance/records/my_classes/",
+            "start": 1739,
+            "end": 3815
+          },
+          {
+            "url": "finance/fee-payments/",
+            "start": 1739,
+            "end": 4890
+          },
+          {
+            "url": "finance/fee-payments/fee_summary/",
+            "start": 1739,
+            "end": 5813
+          },
+          {
+            "url": "tasks/ai-jobs/",
+            "start": 1740,
+            "end": 4886
+          }
+        ],
+        "chunks": [
+          {
+            "url": "main-5ogvJo3e.js",
+            "start": 23,
+            "end": 26
+          },
+          {
+            "url": "main-D_-zzvon.js",
+            "start": 28,
+            "end": 31
+          },
+          {
+            "url": "financeQueryRules-CIDb5K39.css",
+            "start": 28,
+            "end": 36
+          },
+          {
+            "url": "financeQueryRules-ByemnWSY.js",
+            "start": 28,
+            "end": 50
+          },
+          {
+            "url": "css2?family=Noto+Naskh+Arabic:wght@400;500;600;700&display=swap",
+            "start": 35,
+            "end": 38
+          },
+          {
+            "url": "PageHeader-RPufd84s.js",
+            "start": 1606,
+            "end": 1616
+          },
+          {
+            "url": "useSessionClasses-BLLSqJMf.js",
+            "start": 1606,
+            "end": 1616
+          },
+          {
+            "url": "FeeCollectPage-BaTD2VDp.js",
+            "start": 1606,
+            "end": 1666
+          },
+          {
+            "url": "studentLifecycle-CsOsTZeH.js",
+            "start": 1607,
+            "end": 1617
+          },
+          {
+            "url": "useBackgroundTask-C915tYsQ.js",
+            "start": 1607,
+            "end": 1665
+          },
+          {
+            "url": "FeeSummaryCards-DNiaKUv2.js",
+            "start": 1607,
+            "end": 1680
+          },
+          {
+            "url": "FeeFilters-CLFLY2s7.js",
+            "start": 1608,
+            "end": 1666
+          },
+          {
+            "url": "ClassSelector-DZQqBI87.js",
+            "start": 1609,
+            "end": 1621
+          },
+          {
+            "url": "useClasses-DJkwmHrI.js",
+            "start": 1609,
+            "end": 1621
+          },
+          {
+            "url": "classOrdering-BKmwL68M.js",
+            "start": 1609,
+            "end": 1623
+          },
+          {
+            "url": "Badge-D-8JUtGJ.js",
+            "start": 1609,
+            "end": 1626
+          },
+          {
+            "url": "LoadingState-C64puTuz.js",
+            "start": 1610,
+            "end": 1684
+          },
+          {
+            "url": "FeeModals-Dqqx1qwr.js",
+            "start": 1610,
+            "end": 1693
+          },
+          {
+            "url": "Field-2RCidniX.js",
+            "start": 1611,
+            "end": 1667
+          },
+          {
+            "url": "errorUtils-Ba8179fX.js",
+            "start": 1611,
+            "end": 1671
+          },
+          {
+            "url": "SearchableSelect-N2xi_15l.js",
+            "start": 1611,
+            "end": 1690
+          },
+          {
+            "url": "classScope-D1CrIGzy.js",
+            "start": 1612,
+            "end": 1673
+          },
+          {
+            "url": "Modal-BBCpX7Iu.js",
+            "start": 1612,
+            "end": 1680
+          },
+          {
+            "url": "ConfirmModal-C8iVGnYd.js",
+            "start": 1612,
+            "end": 1681
+          },
+          {
+            "url": "jspdf.plugin.autotable-D7QrxqU7.js",
+            "start": 1612,
+            "end": 1690
+          },
+          {
+            "url": "useDebounce-Cz7_ivzu.js",
+            "start": 1613,
+            "end": 1681
+          },
+          {
+            "url": "useResetStaleClassFilter-BSiMBG89.js",
+            "start": 1613,
+            "end": 1708
+          }
+        ]
+      },
+      "spa": null
+    },
+    "finance_dashboard": {
+      "hard": {
+        "api_requests": 13,
+        "waterfall_depth": 3,
+        "total_ms_incl_1.5s_settle": 7169,
+        "calls": [
+          {
+            "url": "auth/me/",
+            "start": 51,
+            "end": 1115
+          },
+          {
+            "url": "schools/by-subdomain/",
+            "start": 54,
+            "end": 1006
+          },
+          {
+            "url": "sessions/terms/",
+            "start": 1133,
+            "end": 2234
+          },
+          {
+            "url": "notifications/unread-count/",
+            "start": 2269,
+            "end": 3235
+          },
+          {
+            "url": "finance/fee-payments/monthly_summary/",
+            "start": 2269,
+            "end": 3875
+          },
+          {
+            "url": "finance/fee-payments/monthly_summary/",
+            "start": 2269,
+            "end": 3889
+          },
+          {
+            "url": "finance/accounts/balances/",
+            "start": 2269,
+            "end": 4972
+          },
+          {
+            "url": "finance/transfers/",
+            "start": 2270,
+            "end": 3471
+          },
+          {
+            "url": "finance/accounts/recent_entries/",
+            "start": 2270,
+            "end": 4082
+          },
+          {
+            "url": "finance/reports/",
+            "start": 2270,
+            "end": 4627
+          },
+          {
+            "url": "tasks/ai-jobs/",
+            "start": 2271,
+            "end": 4860
+          },
+          {
+            "url": "finance/reports/",
+            "start": 2271,
+            "end": 4871
+          },
+          {
+            "url": "finance/expenses/category_summary/",
+            "start": 2271,
+            "end": 5151
+          }
+        ],
+        "chunks": [
+          {
+            "url": "main-5ogvJo3e.js",
+            "start": 14,
+            "end": 16
+          },
+          {
+            "url": "main-D_-zzvon.js",
+            "start": 18,
+            "end": 21
+          },
+          {
+            "url": "financeQueryRules-ByemnWSY.js",
+            "start": 18,
+            "end": 36
+          },
+          {
+            "url": "financeQueryRules-CIDb5K39.css",
+            "start": 19,
+            "end": 23
+          },
+          {
+            "url": "css2?family=Noto+Naskh+Arabic:wght@400;500;600;700&display=swap",
+            "start": 22,
+            "end": 24
+          },
+          {
+            "url": "PageHeader-RPufd84s.js",
+            "start": 1129,
+            "end": 1134
+          },
+          {
+            "url": "FinanceDashboardPage-n2CcOWSB.js",
+            "start": 1129,
+            "end": 1190
+          },
+          {
+            "url": "LoadingState-C64puTuz.js",
+            "start": 1130,
+            "end": 1135
+          },
+          {
+            "url": "TransferModal-D4OdBYhR.js",
+            "start": 1130,
+            "end": 1188
+          },
+          {
+            "url": "Field-2RCidniX.js",
+            "start": 1131,
+            "end": 1138
+          },
+          {
+            "url": "errorUtils-Ba8179fX.js",
+            "start": 1131,
+            "end": 1139
+          },
+          {
+            "url": "jspdf.plugin.autotable-D7QrxqU7.js",
+            "start": 1131,
+            "end": 1154
+          },
+          {
+            "url": "MonthlyFeeCollectionCard-qtsnyEFt.js",
+            "start": 1132,
+            "end": 1144
+          },
+          {
+            "url": "index-0sZf0Zlt.js",
+            "start": 1132,
+            "end": 1199
+          },
+          {
+            "url": "BarChart-DKDVLuAl.js",
+            "start": 1132,
+            "end": 2238
+          },
+          {
+            "url": "PieChart-RTcwowU8.js",
+            "start": 1133,
+            "end": 1290
+          }
+        ]
+      },
+      "spa": null
+    },
+    "subjects": {
+      "hard": {
+        "api_requests": 6,
+        "waterfall_depth": 2,
+        "total_ms_incl_1.5s_settle": 4346,
+        "calls": [
+          {
+            "url": "auth/me/",
+            "start": 64,
+            "end": 1152
+          },
+          {
+            "url": "schools/by-subdomain/",
+            "start": 66,
+            "end": 1035
+          },
+          {
+            "url": "sessions/terms/",
+            "start": 1172,
+            "end": 2261
+          },
+          {
+            "url": "notifications/unread-count/",
+            "start": 1252,
+            "end": 2218
+          },
+          {
+            "url": "tasks/ai-jobs/",
+            "start": 1253,
+            "end": 2224
+          },
+          {
+            "url": "academics/subjects/",
+            "start": 1253,
+            "end": 2336
+          }
+        ],
+        "chunks": [
+          {
+            "url": "main-5ogvJo3e.js",
+            "start": 22,
+            "end": 25
+          },
+          {
+            "url": "main-D_-zzvon.js",
+            "start": 27,
+            "end": 31
+          },
+          {
+            "url": "financeQueryRules-ByemnWSY.js",
+            "start": 27,
+            "end": 50
+          },
+          {
+            "url": "financeQueryRules-CIDb5K39.css",
+            "start": 28,
+            "end": 36
+          },
+          {
+            "url": "css2?family=Noto+Naskh+Arabic:wght@400;500;600;700&display=swap",
+            "start": 35,
+            "end": 38
+          },
+          {
+            "url": "SubjectsPage-ri8LnZ8W.js",
+            "start": 1165,
+            "end": 1228
+          },
+          {
+            "url": "Modal-BBCpX7Iu.js",
+            "start": 1166,
+            "end": 1173
+          },
+          {
+            "url": "PageHeader-RPufd84s.js",
+            "start": 1166,
+            "end": 1173
+          },
+          {
+            "url": "useSessionClasses-BLLSqJMf.js",
+            "start": 1168,
+            "end": 1174
+          },
+          {
+            "url": "useClasses-DJkwmHrI.js",
+            "start": 1169,
+            "end": 1178
+          },
+          {
+            "url": "ClassSelector-DZQqBI87.js",
+            "start": 1169,
+            "end": 1179
+          },
+          {
+            "url": "classOrdering-BKmwL68M.js",
+            "start": 1170,
+            "end": 1183
+          },
+          {
+            "url": "useDebounce-Cz7_ivzu.js",
+            "start": 1170,
+            "end": 1183
+          },
+          {
+            "url": "ConfirmModal-C8iVGnYd.js",
+            "start": 1170,
+            "end": 1187
+          },
+          {
+            "url": "classScope-D1CrIGzy.js",
+            "start": 1170,
+            "end": 1188
+          },
+          {
+            "url": "Badge-D-8JUtGJ.js",
+            "start": 1171,
+            "end": 1190
+          },
+          {
+            "url": "LoadingState-C64puTuz.js",
+            "start": 1171,
+            "end": 1194
+          },
+          {
+            "url": "StaffFilter-CN5lVVfi.js",
+            "start": 1171,
+            "end": 1237
+          }
+        ]
+      },
+      "spa": null
+    }
+  },
+  "enabled_modules": {
+    "37": {
+      "attendance": true,
+      "finance": true,
+      "hr": true,
+      "academics": true,
+      "examinations": true,
+      "students": true,
+      "notifications": true,
+      "parents": true,
+      "admissions": true,
+      "lms": true,
+      "transport": true,
+      "library": true,
+      "hostel": true,
+      "inventory": true
+    }
+  },
+  "me_keys": [
+    "created_at",
+    "email",
+    "first_name",
+    "id",
+    "is_school_admin",
+    "is_staff_member",
+    "is_super_admin",
+    "last_login",
+    "last_name",
+    "organization",
+    "organization_name",
+    "phone",
+    "profile_photo_url",
+    "role",
+    "role_display",
+    "school",
+    "school_details",
+    "school_id",
+    "schools",
+    "username"
+  ],
+  "idle_polling": {
+    "seconds": 1,
+    "requests": 0,
+    "per_minute": 0.0,
+    "by_endpoint": {},
+    "note": "headless; polling may be paused by page visibility"
+  }
+}

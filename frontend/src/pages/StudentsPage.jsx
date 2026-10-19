@@ -9,7 +9,7 @@ import { useSessionClasses } from '../hooks/useSessionClasses'
 import { useClasses } from '../hooks/useClasses'
 import { getClassSelectorScope, getResolvedMasterClassId } from '../utils/classScope'
 import { canManageStudentLifecycle } from '../utils/accessPolicies'
-import { exportStudentsPDF, exportStudentsPNG } from './studentExport'
+// jsPDF/autotable/html2canvas (~600 KB) load on the export click, not when the list opens.
 import { useDebounce } from '../hooks/useDebounce'
 import PhotoCropModal from '../components/PhotoCropModal'
 import { downloadInstantReport } from '../utils/downloadReport'
@@ -424,15 +424,21 @@ export default function StudentsPage() {
     return { schoolName, filterInfo: parts.join(' | ') || null }
   }
 
-  const handleExportPDF = () => {
+  const handleExportPDF = async () => {
     const { schoolName, filterInfo } = getExportInfo()
-    exportStudentsPDF({ students, schoolName, filterInfo })
-    showSuccess('PDF downloaded!')
+    try {
+      const { exportStudentsPDF } = await import('./studentExport')
+      exportStudentsPDF({ students, schoolName, filterInfo })
+      showSuccess('PDF downloaded!')
+    } catch {
+      showError('Failed to export PDF')
+    }
   }
 
   const handleExportPNG = async () => {
     const { schoolName, filterInfo } = getExportInfo()
     try {
+      const { exportStudentsPNG } = await import('./studentExport')
       await exportStudentsPNG({ students, schoolName, filterInfo })
       showSuccess('PNG downloaded!')
     } catch {

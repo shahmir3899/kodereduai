@@ -53,23 +53,11 @@ from .serializers import (
     WorksheetUploadSerializer, WorksheetUploadCreateSerializer,
 )
 from .tasks import recompute_question_stats
+from .overall_result import calculate_overall_pass, subject_is_pass
 from .term_periods import attendance_summaries, report_attendance_window as _report_attendance_window
 
 logger = logging.getLogger(__name__)
 
-def calculate_overall_pass(subject_results, fail_threshold=3):
-    """
-    Determines overall exam pass/fail from subject-level results.
-
-    A student fails overall once their failed-subject count reaches
-    fail_threshold (an exam's own Exam.fail_threshold_subjects).
-    """
-    failed_subjects = sum(
-        1 for subject in subject_results
-        if not subject['is_pass']
-    )
-
-    return failed_subjects < fail_threshold
 
 def _resolve_school_id(request):
     school_id = ensure_tenant_school_id(request)
@@ -1939,10 +1927,7 @@ class ExamViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet)
                 # Therefore:
                 # 0 marks = Fail
                 # Absent = Fail
-                subject_is_pass = (
-                    obtained is not None
-                    and obtained >= es.passing_marks
-                )
+                is_subject_pass = subject_is_pass(obtained, es.passing_marks)
 
                 # Count failed subjects.
                 #
@@ -1965,7 +1950,7 @@ class ExamViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet)
                         else None
                     ),
                     'is_absent': is_absent,
-                    'is_pass': subject_is_pass,
+                    'is_pass': is_subject_pass,
                     'ai_comment': (
                         mark.ai_comment
                         if mark

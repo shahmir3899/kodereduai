@@ -21,7 +21,7 @@ import TeacherScopeSummary from '../../components/teacher/TeacherScopeSummary'
 import TeacherScopeBadge, { TeacherScopeHint, useTeacherScopeLookup } from '../../components/teacher/TeacherScopeBadge'
 import BulkLessonPlansModal from './BulkLessonPlansModal'
 import LessonPlanTopicsPickerModal from './LessonPlanTopicsPickerModal'
-import { exportLessonPlansPDF } from './lessonPlansExportPdf'
+// jsPDF/autotable load on the export click, not when the page opens.
 import { normalizeLessonPlanText, deriveAutoTitleFromCurriculumSummary } from './lessonPlanTextUtils'
 import StaffFilter from '../../components/StaffFilter'
 import { RecordCard, CardGrid, ViewToggle } from '../../components/cards'
@@ -575,6 +575,7 @@ export default function LessonPlansPage() {
       return
     }
     try {
+      const { exportLessonPlansPDF } = await import('./lessonPlansExportPdf')
       await exportLessonPlansPDF({
         plans: exportPlans,
         dateFrom: exportDateFrom,

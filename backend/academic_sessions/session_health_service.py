@@ -16,6 +16,11 @@ from django.db.models import Avg, Count, Q, Sum, F
 
 logger = logging.getLogger(__name__)
 
+# Leave is an approved absence, so it counts as attended.
+ATTENDED_STATUSES = ('PRESENT', 'LEAVE')
+# Promoted/repeat/graduated students are still at the school; only these two left it.
+LOST_ENROLLMENT_STATUSES = ('WITHDRAWN', 'TRANSFERRED')
+
 
 class SessionHealthService:
     """Generates a cross-module health report for a given academic year."""
@@ -99,27 +104,46 @@ class SessionHealthService:
     # ------------------------------------------------------------------
 
     def _enrollment_metrics(self, academic_year) -> dict:
+        """Retention: of everyone who was on the roll at any point this year, the
+        share who haven't withdrawn or transferred out. Promoted/repeat/graduated
+        students are still ours, so they count as retained."""
         from academic_sessions.models import StudentEnrollment
-        from students.models import Student
 
-        enrolled = StudentEnrollment.objects.filter(
-            school_id=self.school_id,
-            academic_year=academic_year,
-            is_active=True,
-            status='ACTIVE',
-        ).count()
-
-        capacity = Student.objects.filter(
-            school_id=self.school_id,
-            is_active=True,
-        ).count()
-
-        enrollment_rate = round((enrolled / capacity * 100), 1) if capacity > 0 else 0
+        # All rows for the year, not only today's active ones: a student who left
+        # in March must stay in the denominator or leaving would never lower it.
+        on_roll = StudentEnrollment.objects.filter(
+            school_id=self.school_id, academic_year=academic_year,
+        )
+        total_on_roll = on_roll.count()
+        left = on_roll.filter(status__in=LOST_ENROLLMENT_STATUSES).count()
+        retained = total_on_roll - left
+        retention_rate = round((retained / total_on_roll * 100), 1) if total_on_roll > 0 else 0
 
         return {
-            'total_enrolled': enrolled,
-            'capacity': capacity,
-            'enrollment_rate': enrollment_rate,
+            # Kept under this name so the dashboard widget and AI prompt keep working.
+            'enrollment_rate': retention_rate,
+            'retention_rate': retention_rate,
+            'on_roll': total_on_roll,
+            'retained': retained,
+            'left': left,
+            'admission_conversion': self._admission_conversion(academic_year),
+        }
+
+    def _admission_conversion(self, academic_year) -> dict:
+        from admissions.models import AdmissionEnquiry
+
+        # CANCELLED stays in the denominator: a cancelled enquiry is a lost lead.
+        enquiries = AdmissionEnquiry.objects.filter(
+            school_id=self.school_id,
+            created_at__date__gte=academic_year.start_date,
+            created_at__date__lte=academic_year.end_date,
+        )
+        total = enquiries.count()
+        converted = enquiries.filter(status='CONVERTED').count()
+        return {
+            'enquiries': total,
+            'converted': converted,
+            'rate': round((converted / total * 100), 1) if total > 0 else None,
         }
 
     def _attendance_metrics(self, academic_year) -> dict:
@@ -138,7 +162,7 @@ class SessionHealthService:
         )
 
         total_records = records.count()
-        present_records = records.filter(status='PRESENT').count()
+        present_records = records.filter(status__in=ATTENDED_STATUSES).count()
         average_attendance_rate = round(
             (present_records / total_records * 100), 1
         ) if total_records > 0 else 0
@@ -164,7 +188,7 @@ class SessionHealthService:
                 date__lte=current_term.end_date,
             )
             ct_total = ct_records.count()
-            ct_present = ct_records.filter(status='PRESENT').count()
+            ct_present = ct_records.filter(status__in=ATTENDED_STATUSES).count()
             current_term_rate = round(
                 (ct_present / ct_total * 100), 1
             ) if ct_total > 0 else 0
@@ -177,7 +201,7 @@ class SessionHealthService:
                     date__lte=prev_term.end_date,
                 )
                 pt_total = pt_records.count()
-                pt_present = pt_records.filter(status='PRESENT').count()
+                pt_present = pt_records.filter(status__in=ATTENDED_STATUSES).count()
                 previous_term_rate = round(
                     (pt_present / pt_total * 100), 1
                 ) if pt_total > 0 else 0
@@ -188,7 +212,7 @@ class SessionHealthService:
             records.values('student_id')
             .annotate(
                 total=Count('id'),
-                present=Count('id', filter=Q(status='PRESENT')),
+                present=Count('id', filter=Q(status__in=ATTENDED_STATUSES)),
             )
         )
         for s in student_stats:
@@ -204,79 +228,235 @@ class SessionHealthService:
         }
 
     def _fee_collection_metrics(self, academic_year) -> dict:
-        from finance.models import FeePayment
+        """Two parts, pooled into one rupee-weighted rate:
 
+        * yearly (every non-monthly type): paid / total billed.
+        * monthly: paid so far / (months elapsed x the monthly fee structure).
+
+        Monthly rows can't simply be summed on amount_due: each month's amount_due
+        already includes the previous month's carried balance, so a June balance
+        would be counted again inside July.
+        """
+        from academic_sessions.models import StudentEnrollment
+        from finance.models import FeePayment, FeeStructure, FeeType
+
+        today = date.today()
         payments = FeePayment.objects.filter(
             school_id=self.school_id,
             academic_year=academic_year,
+            handed_over_to_exit__isnull=True,
         )
 
-        agg = payments.aggregate(
-            total_expected=Sum('amount_due'),
-            total_collected=Sum('amount_paid'),
+        yearly = payments.exclude(fee_type=FeeType.MONTHLY).aggregate(
+            total=Sum('amount_due'), paid=Sum('amount_paid'),
         )
+        yearly_total = float(yearly['total'] or 0)
+        yearly_paid = float(yearly['paid'] or 0)
 
-        total_expected = float(agg['total_expected'] or 0)
-        total_collected = float(agg['total_collected'] or 0)
+        # Months from the year's first month to now (capped at its last), inclusive.
+        first = academic_year.start_date
+        last = min(today, academic_year.end_date)
+        months_elapsed = max(0, (last.year - first.year) * 12 + last.month - first.month + 1)
+        start_key = first.year * 12 + first.month
+        end_key = start_key + months_elapsed - 1
+
+        monthly_rows = payments.filter(fee_type=FeeType.MONTHLY).annotate(
+            period=F('year') * 12 + F('month'),
+        ).filter(period__gte=start_key, period__lte=end_key)
+        monthly_paid = float(monthly_rows.aggregate(p=Sum('amount_paid'))['p'] or 0)
+
+        # Expected = months x the fee each billed student is on today. Students with
+        # no monthly rows yet aren't billed, so they aren't expected to have paid.
+        billed_ids = set(monthly_rows.values_list('student_id', flat=True).distinct())
+        billed_ids.discard(None)
+
+        def current_fees(**filters):
+            by_key = {}
+            rows = FeeStructure.objects.filter(
+                school_id=self.school_id, fee_type=FeeType.MONTHLY, is_active=True,
+                effective_from__lte=today, **filters,
+            ).filter(Q(effective_to__isnull=True) | Q(effective_to__gte=today)).order_by('effective_from')
+            for fs in rows:
+                owner = fs.student_id if fs.student_id else fs.class_obj_id
+                by_key[(owner, fs.monthly_category_id)] = float(fs.monthly_amount)  # latest effective_from wins
+            return by_key
+
+        student_fees = current_fees(student_id__in=billed_ids)
+        class_fees = current_fees(student__isnull=True)
+
+        enrollments = StudentEnrollment.objects.filter(
+            school_id=self.school_id, academic_year=academic_year, student_id__in=billed_ids,
+        ).values('student_id', 'class_obj_id', 'left_date')
+
+        fees_by_student = {}
+        for (owner, cat), amount in student_fees.items():
+            fees_by_student.setdefault(owner, {})[cat] = amount
+        fees_by_class = {}
+        for (owner, cat), amount in class_fees.items():
+            fees_by_class.setdefault(owner, {})[cat] = amount
+
+        monthly_expected = 0.0
+        for e in enrollments:
+            per_cat = dict(fees_by_class.get(e['class_obj_id'], {}))
+            per_cat.update(fees_by_student.get(e['student_id'], {}))  # student override wins per category
+            months = months_elapsed
+            if e['left_date']:
+                # A leaver only owed fees up to their leaving month.
+                left_key = e['left_date'].year * 12 + e['left_date'].month
+                months = max(0, min(end_key, left_key) - start_key + 1)
+            monthly_expected += months * sum(per_cat.values())
+
+        total_expected = yearly_total + monthly_expected
+        total_collected = yearly_paid + monthly_paid
         collection_rate = round(
             (total_collected / total_expected * 100), 1
         ) if total_expected > 0 else 0
 
-        defaulting_students = payments.filter(
-            status__in=['UNPAID', 'PARTIAL'],
-        ).values('student_id').distinct().count()
-
         return {
-            'total_expected': total_expected,
-            'total_collected': total_collected,
+            'total_expected': round(total_expected, 2),
+            'total_collected': round(total_collected, 2),
             'collection_rate': collection_rate,
-            'defaulting_students': defaulting_students,
+            'yearly': {
+                'total': yearly_total,
+                'paid': yearly_paid,
+                'rate': round(yearly_paid / yearly_total * 100, 1) if yearly_total > 0 else None,
+            },
+            'monthly': {
+                'months_elapsed': months_elapsed,
+                'expected': round(monthly_expected, 2),
+                'paid': monthly_paid,
+                'rate': round(monthly_paid / monthly_expected * 100, 1) if monthly_expected > 0 else None,
+            },
+            'defaulting_students': self._defaulting_students(payments),
         }
+
+    @staticmethod
+    def _defaulting_students(payments) -> int:
+        """Students still owing something. A monthly row's amount_due carries the
+        earlier months' balance, so only the latest row of each (student, category)
+        shows what is owed; older UNPAID/PARTIAL rows are already settled or rolled
+        into it."""
+        from finance.models import FeeType
+
+        latest = {}
+        owing = set()
+        rows = payments.values_list(
+            'student_id', 'fee_type', 'monthly_category_id', 'year', 'month', 'amount_due', 'amount_paid',
+        )
+        for student_id, fee_type, cat_id, year, month, due, paid in rows:
+            if student_id is None:
+                continue
+            if fee_type != FeeType.MONTHLY:
+                if due - paid > 0:
+                    owing.add(student_id)
+                continue
+            key = (student_id, cat_id)
+            if key not in latest or (year, month) > latest[key][0]:
+                latest[key] = ((year, month), due - paid)
+        owing.update(key[0] for key, (_, outstanding) in latest.items() if outstanding > 0)
+        return len(owing)
 
     def _exam_performance_metrics(self, academic_year) -> dict:
-        from examinations.models import Exam, StudentMark, ExamSubject
+        """Pass rate by overall result, not by subject mark: a student passes the
+        way the report card says (failed subjects below the exam's threshold) in
+        their main exam, the last one covering them. Same rule as the report card
+        (examinations.overall_result), so the two can't disagree."""
+        from examinations.models import Exam, ExamSubject, StudentMark
+        from examinations.views import _exam_roster
 
-        exams = Exam.objects.filter(
-            school_id=self.school_id,
-            academic_year=academic_year,
-            is_active=True,
+        exams = list(Exam.objects.filter(
+            school_id=self.school_id, academic_year=academic_year, is_active=True,
+        ))
+        total_exams = len(exams)
+
+        # An exam nobody has been marked on yet (e.g. a scheduled one) must not
+        # become the "main" exam and blank out the results of the one before it.
+        marked_exam_ids = set(
+            StudentMark.objects.filter(
+                school_id=self.school_id, exam_subject__exam__in=exams,
+            ).filter(Q(marks_obtained__isnull=False) | Q(is_absent=True))
+            .values_list('exam_subject__exam_id', flat=True).distinct()
         )
 
-        exam_subject_ids = ExamSubject.objects.filter(
-            exam__in=exams, is_active=True,
-        ).values_list('id', flat=True)
+        by_class = {}
+        for exam in exams:
+            if exam.id in marked_exam_ids:
+                by_class.setdefault(exam.class_obj_id, []).append(exam)
 
-        marks = StudentMark.objects.filter(
-            school_id=self.school_id,
-            exam_subject_id__in=exam_subject_ids,
-            marks_obtained__isnull=False,
-            is_absent=False,
-        )
+        passed = assessed = pending = 0
+        pct_sum = 0.0
+        for class_exams in by_class.values():
+            class_exams.sort(key=lambda e: (e.end_date or e.start_date or date.min, e.id), reverse=True)
+            covered = set()
+            for exam in class_exams:
+                students, _rolls = _exam_roster(self.school_id, exam)
+                roster_ids = {s.id for s in students}
+                ids = roster_ids - covered
+                covered |= roster_ids
+                if ids:
+                    result = self._main_exam_outcomes(exam, ids, ExamSubject, StudentMark)
+                    passed += result['passed']
+                    assessed += result['assessed']
+                    pending += result['pending']
+                    pct_sum += result['pct_sum']
+                # A class-wide exam covers every section, so nothing earlier can be main.
+                if exam.session_class_id is None:
+                    break
 
-        total_marks_count = marks.count()
-        if total_marks_count == 0:
+        if assessed == 0:
             return {
-                'average_pass_rate': 0,
-                'average_score': 0,
-                'total_exams': exams.count(),
+                'average_pass_rate': None,
+                'average_score': None,
+                'students_assessed': 0,
+                'students_passed': 0,
+                'results_pending': pending,
+                'total_exams': total_exams,
             }
 
-        pass_count = 0
-        score_sum = 0
-        for m in marks.select_related('exam_subject').iterator():
-            pct = float(m.marks_obtained / m.exam_subject.total_marks * 100)
-            score_sum += pct
-            if m.is_pass:
-                pass_count += 1
-
-        average_pass_rate = round((pass_count / total_marks_count * 100), 1)
-        average_score = round(score_sum / total_marks_count, 1)
-
         return {
-            'average_pass_rate': average_pass_rate,
-            'average_score': average_score,
-            'total_exams': exams.count(),
+            'average_pass_rate': round(passed / assessed * 100, 1),
+            'average_score': round(pct_sum / assessed, 1),
+            'students_assessed': assessed,
+            'students_passed': passed,
+            'results_pending': pending,
+            'total_exams': total_exams,
         }
+
+    def _main_exam_outcomes(self, exam, student_ids, ExamSubject, StudentMark) -> dict:
+        from examinations.overall_result import calculate_overall_pass, subject_is_pass
+
+        exam_subjects = list(ExamSubject.objects.filter(exam=exam, is_active=True))
+        marks = {
+            (m.student_id, m.exam_subject_id): m
+            for m in StudentMark.objects.filter(
+                school_id=self.school_id, exam_subject__in=exam_subjects, student_id__in=student_ids,
+            )
+        }
+
+        passed = assessed = pending = 0
+        pct_sum = 0.0
+        for sid in student_ids:
+            results = []
+            obtained_total = possible_total = 0.0
+            incomplete = False
+            for es in exam_subjects:
+                mark = marks.get((sid, es.id))
+                obtained = mark.marks_obtained if mark and not mark.is_absent else None
+                if obtained is None and not (mark and mark.is_absent):
+                    incomplete = True  # same rule as the results screen: unentered = unfinished
+                results.append({'is_pass': subject_is_pass(obtained, es.passing_marks)})
+                possible_total += float(es.total_marks)
+                if obtained is not None:
+                    obtained_total += float(obtained)
+            if incomplete:
+                pending += 1
+                continue
+            assessed += 1
+            if calculate_overall_pass(results, exam.fail_threshold_subjects):
+                passed += 1
+            if possible_total > 0:
+                pct_sum += obtained_total / possible_total * 100
+        return {'passed': passed, 'assessed': assessed, 'pending': pending, 'pct_sum': pct_sum}
 
     def _staff_metrics(self, academic_year) -> dict:
         from academic_sessions.models import Term
@@ -347,7 +527,7 @@ class SessionHealthService:
         # Build a concise data snapshot for the prompt
         snapshot = {
             'year': report_data['academic_year']['name'],
-            'enrollment_rate': report_data['enrollment']['enrollment_rate'],
+            'student_retention_rate': report_data['enrollment']['retention_rate'],
             'attendance_rate': report_data['attendance']['average_attendance_rate'],
             'current_term_attendance': report_data['attendance']['current_term_rate'],
             'previous_term_attendance': report_data['attendance']['previous_term_rate'],
@@ -411,13 +591,13 @@ class SessionHealthService:
         staff = report_data['staff']
 
         # --- Highlights ---
-        if enroll['enrollment_rate'] >= 90:
+        if enroll['retention_rate'] >= 90:
             highlights.append(
-                f"Strong enrollment at {enroll['enrollment_rate']}% capacity."
+                f"Strong student retention at {enroll['retention_rate']}%."
             )
-        elif enroll['enrollment_rate'] >= 70:
+        elif enroll['retention_rate'] >= 70:
             highlights.append(
-                f"Healthy enrollment at {enroll['enrollment_rate']}% capacity."
+                f"Healthy student retention at {enroll['retention_rate']}%."
             )
 
         if attend['average_attendance_rate'] >= 85:
@@ -430,9 +610,10 @@ class SessionHealthService:
                 f"Fee collection is on track at {fee['collection_rate']}%."
             )
 
-        if exam['average_pass_rate'] >= 80:
+        pass_rate = exam['average_pass_rate']  # None until a main exam has complete results
+        if pass_rate is not None and pass_rate >= 80:
             highlights.append(
-                f"Exam pass rate is strong at {exam['average_pass_rate']}%."
+                f"Overall pass rate is strong at {pass_rate}%."
             )
 
         if staff['staff_attendance_rate'] >= 90:
@@ -471,9 +652,9 @@ class SessionHealthService:
                 f"{fee['defaulting_students']} student(s) have outstanding fee dues."
             )
 
-        if exam['average_pass_rate'] < 70:
+        if pass_rate is not None and pass_rate < 70:
             concerns.append(
-                f"Exam pass rate needs attention at {exam['average_pass_rate']}%."
+                f"Overall pass rate needs attention at {pass_rate}%."
             )
 
         if staff['staff_attendance_rate'] < 85:
@@ -501,7 +682,7 @@ class SessionHealthService:
                 "Schedule a fee-collection drive and send payment reminders."
             )
 
-        if exam['average_pass_rate'] < 75:
+        if exam['average_pass_rate'] is not None and exam['average_pass_rate'] < 75:
             action_items.append(
                 "Organize extra tutoring sessions for underperforming students."
             )

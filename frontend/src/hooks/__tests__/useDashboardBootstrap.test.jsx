@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { renderHook, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 
-const auth = { activeSchool: { id: 5 }, isModuleEnabled: () => true, effectiveRole: 'SCHOOL_ADMIN' }
+const auth = { user: { schools: [{ id: 5 }] }, isStaffMember: false, activeSchool: { id: 5 }, isModuleEnabled: () => true, effectiveRole: 'SCHOOL_ADMIN' }
 const year = { activeAcademicYear: { id: 7 }, loading: false }
 vi.mock('../../contexts/AuthContext', () => ({ useAuth: () => auth }))
 vi.mock('../../contexts/AcademicYearContext', () => ({ useAcademicYear: () => year }))
@@ -51,6 +51,7 @@ describe('useDashboardBootstrap', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     auth.effectiveRole = 'SCHOOL_ADMIN'
+    auth.user = { schools: [{ id: 5 }] }
     auth.isModuleEnabled = () => true
     year.loading = false
   })
@@ -61,7 +62,7 @@ describe('useDashboardBootstrap', () => {
     const client = makeClient()
     const { result } = renderHook(() => useDashboardBootstrap(), { wrapper: withClient(client) })
 
-    expect(result.current).toEqual({ settled: false, waiting: true })
+    expect(result.current).toEqual({ settled: false, waiting: true, feeReady: false, feeWaiting: true })
 
     release({ data: full })
     await waitFor(() => expect(result.current.settled).toBe(true))
@@ -117,8 +118,19 @@ describe('useDashboardBootstrap', () => {
   it.each(['TEACHER', 'ACCOUNTANT', 'STAFF', 'MANAGER'])('is a no-op for %s', async (role) => {
     auth.effectiveRole = role
     const { result } = renderHook(() => useDashboardBootstrap(), { wrapper: withClient(makeClient()) })
-    expect(result.current).toEqual({ settled: true, waiting: false })
+    expect(result.current).toMatchObject({ settled: true, waiting: false, feeReady: true, feeWaiting: false })
     expect(api.getAdminDashboard).not.toHaveBeenCalled()
+  })
+
+  it('does not hold the fee tile for a multi-school admin (its all-schools key is never seeded)', async () => {
+    auth.user = { schools: [{ id: 5 }, { id: 6 }] }
+    api.getAdminDashboard.mockReturnValue(new Promise(() => {}))
+    const { result } = renderHook(() => useDashboardBootstrap(), { wrapper: withClient(makeClient()) })
+    expect(result.current.settled).toBe(false)
+    expect(result.current.feeReady).toBe(true)
+    expect(result.current.feeWaiting).toBe(false)
+    // the other tiles still wait
+    expect(result.current.waiting).toBe(true)
   })
 
   it('also serves the principal', async () => {
@@ -140,7 +152,7 @@ describe('VITE_DASHBOARD_BOOTSTRAP=false', () => {
     vi.resetModules()
     const mod = await import('../useDashboardBootstrap')
     const { result } = renderHook(() => mod.useDashboardBootstrap(), { wrapper: withClient(makeClient()) })
-    expect(result.current).toEqual({ settled: true, waiting: false })
+    expect(result.current).toMatchObject({ settled: true, waiting: false, feeReady: true, feeWaiting: false })
     expect(api.getAdminDashboard).not.toHaveBeenCalled()
   })
 })

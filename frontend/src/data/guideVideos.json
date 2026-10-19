@@ -1,0 +1,1354 @@
+{
+  "videos": [
+    {
+      "id": "mark-attendance",
+      "title": {
+        "en": "Marking daily attendance",
+        "ur": "روزانہ حاضری لگانا"
+      },
+      "summary": "A teacher marks attendance for a class with Manual Entry, step by step.",
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL",
+        "TEACHER"
+      ],
+      "module": "attendance",
+      "chapter": 3,
+      "seconds": {
+        "en": 61,
+        "ur": 65
+      },
+      "status": "ready",
+      "section": "3.1"
+    },
+    {
+      "id": "attendance-already-marked",
+      "title": {
+        "en": "Attendance already marked?",
+        "ur": "حاضری پہلے سے لگی ہو تو؟"
+      },
+      "summary": "Reopen a class and date that already has records, correct a status and save without duplicates.",
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL",
+        "TEACHER"
+      ],
+      "module": "attendance",
+      "chapter": 3,
+      "seconds": {
+        "en": 53,
+        "ur": 60
+      },
+      "status": "ready",
+      "section": "3.2"
+    },
+    {
+      "id": "ch1-logging-in",
+      "status": "planned",
+      "title": {
+        "en": "Logging In",
+        "ur": ""
+      },
+      "section": "1.3",
+      "chapter": 1
+    },
+    {
+      "id": "ch2-step-1-academic-year-terms",
+      "status": "planned",
+      "title": {
+        "en": "Academic Year & Terms",
+        "ur": ""
+      },
+      "section": "2.1",
+      "chapter": 2,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL"
+      ]
+    },
+    {
+      "id": "ch2-step-2-create-classes",
+      "status": "planned",
+      "title": {
+        "en": "Create Classes",
+        "ur": ""
+      },
+      "section": "2.2",
+      "chapter": 2,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL"
+      ]
+    },
+    {
+      "id": "ch2-step-3-add-students",
+      "status": "planned",
+      "title": {
+        "en": "Add Students",
+        "ur": ""
+      },
+      "section": "2.3",
+      "chapter": 2,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL"
+      ]
+    },
+    {
+      "id": "ch2-step-4-add-subjects",
+      "status": "planned",
+      "title": {
+        "en": "Add Subjects",
+        "ur": ""
+      },
+      "section": "2.4",
+      "chapter": 2,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL"
+      ]
+    },
+    {
+      "id": "ch2-step-5-create-timetable",
+      "status": "planned",
+      "title": {
+        "en": "Create Timetable",
+        "ur": ""
+      },
+      "section": "2.5",
+      "chapter": 2,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL"
+      ]
+    },
+    {
+      "id": "ch2-school-setup-wizard",
+      "status": "planned",
+      "title": {
+        "en": "School Setup Wizard",
+        "ur": ""
+      },
+      "section": "2.8",
+      "chapter": 2,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL"
+      ]
+    },
+    {
+      "id": "ch3-viewing-the-attendance-register",
+      "status": "planned",
+      "title": {
+        "en": "Viewing the Attendance Register",
+        "ur": ""
+      },
+      "section": "3.3",
+      "chapter": 3,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL",
+        "TEACHER"
+      ],
+      "module": "attendance"
+    },
+    {
+      "id": "ch4-step-1-enroll-student-faces",
+      "status": "planned",
+      "title": {
+        "en": "Enroll Student Faces",
+        "ur": ""
+      },
+      "section": "4.2",
+      "chapter": 4,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL",
+        "TEACHER"
+      ],
+      "module": "attendance"
+    },
+    {
+      "id": "ch4-step-2-capture-class-photo",
+      "status": "planned",
+      "title": {
+        "en": "Capture Class Photo",
+        "ur": ""
+      },
+      "section": "4.3",
+      "chapter": 4,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL",
+        "TEACHER"
+      ],
+      "module": "attendance"
+    },
+    {
+      "id": "ch4-step-4-confirm-attendance",
+      "status": "planned",
+      "title": {
+        "en": "Confirm Attendance",
+        "ur": ""
+      },
+      "section": "4.5",
+      "chapter": 4,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL",
+        "TEACHER"
+      ],
+      "module": "attendance"
+    },
+    {
+      "id": "ch4-viewing-past-sessions",
+      "status": "planned",
+      "title": {
+        "en": "Viewing Past Sessions",
+        "ur": ""
+      },
+      "section": "4.6",
+      "chapter": 4,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL",
+        "TEACHER"
+      ],
+      "module": "attendance"
+    },
+    {
+      "id": "ch5-managing-subjects",
+      "status": "planned",
+      "title": {
+        "en": "Managing Subjects",
+        "ur": ""
+      },
+      "section": "5.1",
+      "chapter": 5,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL",
+        "MANAGER",
+        "TEACHER"
+      ],
+      "module": "academics"
+    },
+    {
+      "id": "ch5-academic-sessions-years-terms",
+      "status": "planned",
+      "title": {
+        "en": "Academic Sessions (Years & Terms)",
+        "ur": ""
+      },
+      "section": "5.2",
+      "chapter": 5,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL",
+        "MANAGER",
+        "TEACHER"
+      ],
+      "module": "academics"
+    },
+    {
+      "id": "ch5-student-promotion",
+      "status": "planned",
+      "title": {
+        "en": "Student Promotion",
+        "ur": ""
+      },
+      "section": "5.3",
+      "chapter": 5,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL"
+      ],
+      "module": "academics"
+    },
+    {
+      "id": "ch5-academic-calendar",
+      "status": "planned",
+      "title": {
+        "en": "Academic Calendar",
+        "ur": ""
+      },
+      "section": "5.5",
+      "chapter": 5,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL",
+        "MANAGER"
+      ],
+      "module": "academics"
+    },
+    {
+      "id": "ch6-step-1-define-grade-scale",
+      "status": "planned",
+      "title": {
+        "en": "Define Grade Scale",
+        "ur": ""
+      },
+      "section": "6.1",
+      "chapter": 6,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL"
+      ],
+      "module": "examinations"
+    },
+    {
+      "id": "ch6-step-2-create-exam-types",
+      "status": "planned",
+      "title": {
+        "en": "Create Exam Types",
+        "ur": ""
+      },
+      "section": "6.2",
+      "chapter": 6,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL",
+        "MANAGER",
+        "TEACHER"
+      ],
+      "module": "examinations"
+    },
+    {
+      "id": "ch6-step-3-create-an-exam",
+      "status": "planned",
+      "title": {
+        "en": "Create an Exam",
+        "ur": ""
+      },
+      "section": "6.3",
+      "chapter": 6,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL",
+        "MANAGER",
+        "TEACHER"
+      ],
+      "module": "examinations"
+    },
+    {
+      "id": "ch6-step-4-enter-marks",
+      "status": "planned",
+      "title": {
+        "en": "Enter Marks",
+        "ur": ""
+      },
+      "section": "6.4",
+      "chapter": 6,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL",
+        "MANAGER",
+        "TEACHER"
+      ],
+      "module": "examinations"
+    },
+    {
+      "id": "ch6-step-5-view-publish-results",
+      "status": "planned",
+      "title": {
+        "en": "View & Publish Results",
+        "ur": ""
+      },
+      "section": "6.5",
+      "chapter": 6,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL",
+        "MANAGER",
+        "TEACHER"
+      ],
+      "module": "examinations"
+    },
+    {
+      "id": "ch6-step-6-generate-report-cards",
+      "status": "planned",
+      "title": {
+        "en": "Generate Report Cards",
+        "ur": ""
+      },
+      "section": "6.6",
+      "chapter": 6,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL",
+        "MANAGER",
+        "TEACHER"
+      ],
+      "module": "examinations"
+    },
+    {
+      "id": "ch6-weighted-average-configuration",
+      "status": "planned",
+      "title": {
+        "en": "Weighted Average Configuration",
+        "ur": ""
+      },
+      "section": "6.7",
+      "chapter": 6,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL"
+      ],
+      "module": "examinations"
+    },
+    {
+      "id": "ch6-step-7-monthly-skill-behaviour-assessments",
+      "status": "planned",
+      "title": {
+        "en": "Monthly Skill & Behaviour Assessments",
+        "ur": ""
+      },
+      "section": "6.8",
+      "chapter": 6,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL",
+        "MANAGER",
+        "TEACHER"
+      ],
+      "module": "examinations"
+    },
+    {
+      "id": "ch6-question-bank",
+      "status": "planned",
+      "title": {
+        "en": "Question Bank",
+        "ur": ""
+      },
+      "section": "6.9",
+      "chapter": 6,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL",
+        "MANAGER",
+        "TEACHER"
+      ],
+      "module": "examinations"
+    },
+    {
+      "id": "ch6-question-paper-builder-and-question-papers",
+      "status": "planned",
+      "title": {
+        "en": "Question Paper Builder and Question Papers",
+        "ur": ""
+      },
+      "section": "6.10",
+      "chapter": 6,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL",
+        "MANAGER",
+        "TEACHER"
+      ],
+      "module": "examinations"
+    },
+    {
+      "id": "ch6-curriculum-coverage",
+      "status": "planned",
+      "title": {
+        "en": "Curriculum Coverage",
+        "ur": ""
+      },
+      "section": "6.12",
+      "chapter": 6,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL",
+        "TEACHER"
+      ],
+      "module": "examinations"
+    },
+    {
+      "id": "ch7-setting-up-finance-accounts",
+      "status": "planned",
+      "title": {
+        "en": "Setting Up Finance Accounts",
+        "ur": ""
+      },
+      "section": "7.1",
+      "chapter": 7,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL",
+        "ACCOUNTANT"
+      ],
+      "module": "finance"
+    },
+    {
+      "id": "ch7-fee-setup-page",
+      "status": "planned",
+      "title": {
+        "en": "Fee Setup Page",
+        "ur": ""
+      },
+      "section": "7.3",
+      "chapter": 7,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL",
+        "ACCOUNTANT"
+      ],
+      "module": "finance"
+    },
+    {
+      "id": "ch7-creating-individual-fee-records",
+      "status": "planned",
+      "title": {
+        "en": "Creating Individual Fee Records",
+        "ur": ""
+      },
+      "section": "7.4",
+      "chapter": 7,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL",
+        "ACCOUNTANT"
+      ],
+      "module": "finance"
+    },
+    {
+      "id": "ch7-recording-payments",
+      "status": "planned",
+      "title": {
+        "en": "Recording Payments",
+        "ur": ""
+      },
+      "section": "7.6",
+      "chapter": 7,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL",
+        "ACCOUNTANT",
+        "TEACHER"
+      ],
+      "module": "finance"
+    },
+    {
+      "id": "ch7-bulk-operations",
+      "status": "planned",
+      "title": {
+        "en": "Bulk Operations",
+        "ur": ""
+      },
+      "section": "7.7",
+      "chapter": 7,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL",
+        "ACCOUNTANT"
+      ],
+      "module": "finance"
+    },
+    {
+      "id": "ch7-managing-discounts-scholarships",
+      "status": "planned",
+      "title": {
+        "en": "Managing Discounts & Scholarships",
+        "ur": ""
+      },
+      "section": "7.8",
+      "chapter": 7,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL",
+        "ACCOUNTANT"
+      ],
+      "module": "finance"
+    },
+    {
+      "id": "ch7-recording-expenses",
+      "status": "planned",
+      "title": {
+        "en": "Recording Expenses",
+        "ur": ""
+      },
+      "section": "7.9",
+      "chapter": 7,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL",
+        "ACCOUNTANT"
+      ],
+      "module": "finance"
+    },
+    {
+      "id": "ch7-interaccount-transfers",
+      "status": "planned",
+      "title": {
+        "en": "Inter-Account Transfers",
+        "ur": ""
+      },
+      "section": "7.11",
+      "chapter": 7,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL",
+        "ACCOUNTANT"
+      ],
+      "module": "finance"
+    },
+    {
+      "id": "ch7-month-closing",
+      "status": "planned",
+      "title": {
+        "en": "Month Closing",
+        "ur": ""
+      },
+      "section": "7.12",
+      "chapter": 7,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL",
+        "ACCOUNTANT"
+      ],
+      "module": "finance"
+    },
+    {
+      "id": "ch7-fee-overview",
+      "status": "planned",
+      "title": {
+        "en": "Fee Overview",
+        "ur": ""
+      },
+      "section": "7.13",
+      "chapter": 7,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL",
+        "ACCOUNTANT"
+      ],
+      "module": "finance"
+    },
+    {
+      "id": "ch7-other-income",
+      "status": "planned",
+      "title": {
+        "en": "Other Income",
+        "ur": ""
+      },
+      "section": "7.14",
+      "chapter": 7,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL",
+        "ACCOUNTANT"
+      ],
+      "module": "finance"
+    },
+    {
+      "id": "ch8-setting-up-departments",
+      "status": "planned",
+      "title": {
+        "en": "Setting Up Departments",
+        "ur": ""
+      },
+      "section": "8.1",
+      "chapter": 8,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL"
+      ],
+      "module": "hr"
+    },
+    {
+      "id": "ch8-adding-staff-members",
+      "status": "planned",
+      "title": {
+        "en": "Adding Staff Members",
+        "ur": ""
+      },
+      "section": "8.2",
+      "chapter": 8,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL"
+      ],
+      "module": "hr"
+    },
+    {
+      "id": "ch8-salary-management",
+      "status": "planned",
+      "title": {
+        "en": "Salary Management",
+        "ur": ""
+      },
+      "section": "8.4",
+      "chapter": 8,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL"
+      ],
+      "module": "hr"
+    },
+    {
+      "id": "ch8-payroll-processing",
+      "status": "planned",
+      "title": {
+        "en": "Payroll Processing",
+        "ur": ""
+      },
+      "section": "8.5",
+      "chapter": 8,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL"
+      ],
+      "module": "hr"
+    },
+    {
+      "id": "ch8-leave-management",
+      "status": "planned",
+      "title": {
+        "en": "Leave Management",
+        "ur": ""
+      },
+      "section": "8.6",
+      "chapter": 8,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL"
+      ],
+      "module": "hr"
+    },
+    {
+      "id": "ch8-staff-attendance",
+      "status": "planned",
+      "title": {
+        "en": "Staff Attendance",
+        "ur": ""
+      },
+      "section": "8.7",
+      "chapter": 8,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL"
+      ],
+      "module": "hr"
+    },
+    {
+      "id": "ch8-performance-appraisals",
+      "status": "planned",
+      "title": {
+        "en": "Performance Appraisals",
+        "ur": ""
+      },
+      "section": "8.8",
+      "chapter": 8,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL"
+      ],
+      "module": "hr"
+    },
+    {
+      "id": "ch8-staff-documents",
+      "status": "planned",
+      "title": {
+        "en": "Staff Documents",
+        "ur": ""
+      },
+      "section": "8.9",
+      "chapter": 8,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL"
+      ],
+      "module": "hr"
+    },
+    {
+      "id": "ch8-linking-unlinking-user-accounts",
+      "status": "planned",
+      "title": {
+        "en": "Linking & Unlinking User Accounts",
+        "ur": ""
+      },
+      "section": "8.10",
+      "chapter": 8,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL"
+      ],
+      "module": "hr"
+    },
+    {
+      "id": "ch8-letter-composer",
+      "status": "planned",
+      "title": {
+        "en": "Letter Composer",
+        "ur": ""
+      },
+      "section": "8.11",
+      "chapter": 8,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL"
+      ],
+      "module": "hr"
+    },
+    {
+      "id": "ch9-creating-enquiries",
+      "status": "planned",
+      "title": {
+        "en": "Creating Enquiries",
+        "ur": ""
+      },
+      "section": "9.2",
+      "chapter": 9,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL"
+      ],
+      "module": "admissions"
+    },
+    {
+      "id": "ch9-managing-enquiries",
+      "status": "planned",
+      "title": {
+        "en": "Managing Enquiries",
+        "ur": ""
+      },
+      "section": "9.4",
+      "chapter": 9,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL"
+      ],
+      "module": "admissions"
+    },
+    {
+      "id": "ch9-followup-management",
+      "status": "planned",
+      "title": {
+        "en": "Followup Management",
+        "ur": ""
+      },
+      "section": "9.5",
+      "chapter": 9,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL"
+      ],
+      "module": "admissions"
+    },
+    {
+      "id": "ch9-converting-enquiries-to-students",
+      "status": "planned",
+      "title": {
+        "en": "Converting Enquiries to Students",
+        "ur": ""
+      },
+      "section": "9.6",
+      "chapter": 9,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL"
+      ],
+      "module": "admissions"
+    },
+    {
+      "id": "ch10-setting-up-routes",
+      "status": "planned",
+      "title": {
+        "en": "Setting Up Routes",
+        "ur": ""
+      },
+      "section": "10.1",
+      "chapter": 10,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL",
+        "TEACHER",
+        "ACCOUNTANT",
+        "STAFF",
+        "DRIVER"
+      ],
+      "module": "transport"
+    },
+    {
+      "id": "ch10-adding-vehicles",
+      "status": "planned",
+      "title": {
+        "en": "Adding Vehicles",
+        "ur": ""
+      },
+      "section": "10.2",
+      "chapter": 10,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL",
+        "TEACHER",
+        "ACCOUNTANT",
+        "STAFF",
+        "DRIVER"
+      ],
+      "module": "transport"
+    },
+    {
+      "id": "ch10-assigning-students-to-routes",
+      "status": "planned",
+      "title": {
+        "en": "Assigning Students to Routes",
+        "ur": ""
+      },
+      "section": "10.3",
+      "chapter": 10,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL",
+        "TEACHER",
+        "ACCOUNTANT",
+        "STAFF",
+        "DRIVER"
+      ],
+      "module": "transport"
+    },
+    {
+      "id": "ch10-transport-attendance",
+      "status": "planned",
+      "title": {
+        "en": "Transport Attendance",
+        "ur": ""
+      },
+      "section": "10.4",
+      "chapter": 10,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL",
+        "TEACHER",
+        "ACCOUNTANT",
+        "STAFF",
+        "DRIVER"
+      ],
+      "module": "transport"
+    },
+    {
+      "id": "ch11-setting-up-book-categories",
+      "status": "planned",
+      "title": {
+        "en": "Setting Up Book Categories",
+        "ur": ""
+      },
+      "section": "11.1",
+      "chapter": 11,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL",
+        "TEACHER",
+        "ACCOUNTANT",
+        "STAFF",
+        "DRIVER"
+      ],
+      "module": "library"
+    },
+    {
+      "id": "ch11-adding-books-to-the-catalog",
+      "status": "planned",
+      "title": {
+        "en": "Adding Books to the Catalog",
+        "ur": ""
+      },
+      "section": "11.2",
+      "chapter": 11,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL",
+        "TEACHER",
+        "ACCOUNTANT",
+        "STAFF",
+        "DRIVER"
+      ],
+      "module": "library"
+    },
+    {
+      "id": "ch11-issuing-books",
+      "status": "planned",
+      "title": {
+        "en": "Issuing Books",
+        "ur": ""
+      },
+      "section": "11.3",
+      "chapter": 11,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL",
+        "TEACHER",
+        "ACCOUNTANT",
+        "STAFF",
+        "DRIVER"
+      ],
+      "module": "library"
+    },
+    {
+      "id": "ch11-returning-books",
+      "status": "planned",
+      "title": {
+        "en": "Returning Books",
+        "ur": ""
+      },
+      "section": "11.4",
+      "chapter": 11,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL",
+        "TEACHER",
+        "ACCOUNTANT",
+        "STAFF",
+        "DRIVER"
+      ],
+      "module": "library"
+    },
+    {
+      "id": "ch11-tracking-overdue-books",
+      "status": "planned",
+      "title": {
+        "en": "Tracking Overdue Books",
+        "ur": ""
+      },
+      "section": "11.5",
+      "chapter": 11,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL",
+        "TEACHER",
+        "ACCOUNTANT",
+        "STAFF",
+        "DRIVER"
+      ],
+      "module": "library"
+    },
+    {
+      "id": "ch12-managing-curriculum-books-chapters-topics",
+      "status": "planned",
+      "title": {
+        "en": "Managing Curriculum (Books, Chapters, Topics)",
+        "ur": ""
+      },
+      "section": "12.1",
+      "chapter": 12,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL",
+        "MANAGER",
+        "TEACHER"
+      ],
+      "module": "lms"
+    },
+    {
+      "id": "ch12-creating-lesson-plans",
+      "status": "planned",
+      "title": {
+        "en": "Creating Lesson Plans",
+        "ur": ""
+      },
+      "section": "12.2",
+      "chapter": 12,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL",
+        "MANAGER",
+        "TEACHER"
+      ],
+      "module": "lms"
+    },
+    {
+      "id": "ch12-creating-assignments",
+      "status": "planned",
+      "title": {
+        "en": "Creating Assignments",
+        "ur": ""
+      },
+      "section": "12.3",
+      "chapter": 12,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL",
+        "MANAGER",
+        "TEACHER"
+      ],
+      "module": "lms"
+    },
+    {
+      "id": "ch12-reviewing-submissions",
+      "status": "planned",
+      "title": {
+        "en": "Reviewing Submissions",
+        "ur": ""
+      },
+      "section": "12.4",
+      "chapter": 12,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL",
+        "MANAGER",
+        "TEACHER"
+      ],
+      "module": "lms"
+    },
+    {
+      "id": "ch13-viewing-notifications-all-users",
+      "status": "planned",
+      "title": {
+        "en": "Viewing Notifications (All Users)",
+        "ur": ""
+      },
+      "section": "13.1",
+      "chapter": 13,
+      "module": "notifications"
+    },
+    {
+      "id": "ch13-creating-notification-templates-admin",
+      "status": "planned",
+      "title": {
+        "en": "Creating Notification Templates (Admin)",
+        "ur": ""
+      },
+      "section": "13.2",
+      "chapter": 13,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL"
+      ],
+      "module": "notifications"
+    },
+    {
+      "id": "ch13-sending-notifications-admin",
+      "status": "planned",
+      "title": {
+        "en": "Sending Notifications (Admin)",
+        "ur": ""
+      },
+      "section": "13.3",
+      "chapter": 13,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL"
+      ],
+      "module": "notifications"
+    },
+    {
+      "id": "ch14-starting-a-new-conversation",
+      "status": "planned",
+      "title": {
+        "en": "Starting a New Conversation",
+        "ur": ""
+      },
+      "section": "14.3",
+      "chapter": 14
+    },
+    {
+      "id": "ch14-replying-to-messages",
+      "status": "planned",
+      "title": {
+        "en": "Replying to Messages",
+        "ur": ""
+      },
+      "section": "14.4",
+      "chapter": 14
+    },
+    {
+      "id": "ch15-viewing-childs-information",
+      "status": "planned",
+      "title": {
+        "en": "Viewing Child's Information",
+        "ur": ""
+      },
+      "section": "15.2",
+      "chapter": 15,
+      "roles": [
+        "PARENT"
+      ]
+    },
+    {
+      "id": "ch15-applying-for-leave",
+      "status": "planned",
+      "title": {
+        "en": "Applying for Leave",
+        "ur": ""
+      },
+      "section": "15.3",
+      "chapter": 15,
+      "roles": [
+        "PARENT"
+      ]
+    },
+    {
+      "id": "ch16-my-assignments",
+      "status": "planned",
+      "title": {
+        "en": "My Assignments",
+        "ur": ""
+      },
+      "section": "16.4",
+      "chapter": 16,
+      "roles": [
+        "STUDENT"
+      ]
+    },
+    {
+      "id": "ch16-my-results",
+      "status": "planned",
+      "title": {
+        "en": "My Results",
+        "ur": ""
+      },
+      "section": "16.6",
+      "chapter": 16,
+      "roles": [
+        "STUDENT"
+      ]
+    },
+    {
+      "id": "ch16-ai-study-helper",
+      "status": "planned",
+      "title": {
+        "en": "AI Study Helper",
+        "ur": ""
+      },
+      "section": "16.8",
+      "chapter": 16,
+      "roles": [
+        "STUDENT"
+      ]
+    },
+    {
+      "id": "ch17-managing-hostels-rooms",
+      "status": "planned",
+      "title": {
+        "en": "Managing Hostels & Rooms",
+        "ur": ""
+      },
+      "section": "17.2",
+      "chapter": 17,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL",
+        "TEACHER",
+        "ACCOUNTANT",
+        "STAFF",
+        "DRIVER"
+      ],
+      "module": "hostel"
+    },
+    {
+      "id": "ch17-student-allocations",
+      "status": "planned",
+      "title": {
+        "en": "Student Allocations",
+        "ur": ""
+      },
+      "section": "17.3",
+      "chapter": 17,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL",
+        "TEACHER",
+        "ACCOUNTANT",
+        "STAFF",
+        "DRIVER"
+      ],
+      "module": "hostel"
+    },
+    {
+      "id": "ch17-gate-passes",
+      "status": "planned",
+      "title": {
+        "en": "Gate Passes",
+        "ur": ""
+      },
+      "section": "17.4",
+      "chapter": 17,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL",
+        "TEACHER",
+        "ACCOUNTANT",
+        "STAFF",
+        "DRIVER"
+      ],
+      "module": "hostel"
+    },
+    {
+      "id": "ch19-managing-users-school-admin-principal",
+      "status": "planned",
+      "title": {
+        "en": "Managing Users (School Admin & Principal)",
+        "ur": ""
+      },
+      "section": "19.2",
+      "chapter": 19,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL"
+      ]
+    },
+    {
+      "id": "ch19-creating-student-user-accounts",
+      "status": "planned",
+      "title": {
+        "en": "Creating Student User Accounts",
+        "ur": ""
+      },
+      "section": "19.3",
+      "chapter": 19,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL"
+      ]
+    },
+    {
+      "id": "ch21-items-stock",
+      "status": "planned",
+      "title": {
+        "en": "Items & Stock",
+        "ur": ""
+      },
+      "section": "21.2",
+      "chapter": 21,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL",
+        "ACCOUNTANT"
+      ],
+      "module": "inventory"
+    },
+    {
+      "id": "ch21-stock-transactions",
+      "status": "planned",
+      "title": {
+        "en": "Stock Transactions",
+        "ur": ""
+      },
+      "section": "21.3",
+      "chapter": 21,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL",
+        "ACCOUNTANT"
+      ],
+      "module": "inventory"
+    },
+    {
+      "id": "ch21-item-assignments",
+      "status": "planned",
+      "title": {
+        "en": "Item Assignments",
+        "ur": ""
+      },
+      "section": "21.4",
+      "chapter": 21,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL",
+        "ACCOUNTANT",
+        "TEACHER",
+        "STAFF"
+      ],
+      "module": "inventory"
+    }
+  ]
+}

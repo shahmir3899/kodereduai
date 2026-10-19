@@ -39,6 +39,14 @@ PAGES = {
 }
 
 
+def settle(page, timeout=30000):
+    """Wait for the network to go quiet, but never abort the whole run if it stays busy."""
+    try:
+        page.wait_for_load_state("networkidle", timeout=timeout)
+    except Exception:
+        pass
+
+
 def depth(calls):
     """Sequential round trips: longest chain where a call starts after another ended."""
     calls = sorted(calls, key=lambda c: c["start"])
@@ -55,14 +63,21 @@ def measure(page, navigate):
     calls, pending = [], {}
     t0 = time.perf_counter()
 
+    chunks, chunk_pending = [], {}
+
     def on_req(r):
         if "/api/" in r.url:
             pending[r] = time.perf_counter() - t0
+        elif r.resource_type in ("script", "stylesheet"):
+            chunk_pending[r] = time.perf_counter() - t0
 
     def on_done(r):
         if r in pending:
             calls.append({"url": r.url.split("/api/")[1].split("?")[0],
                           "start": round(pending.pop(r) * 1000), "end": round((time.perf_counter() - t0) * 1000)})
+        elif r in chunk_pending:
+            chunks.append({"url": r.url.rsplit("/", 1)[-1],
+                           "start": round(chunk_pending.pop(r) * 1000), "end": round((time.perf_counter() - t0) * 1000)})
 
     page.on("request", on_req)
     page.on("requestfinished", on_done)
@@ -81,8 +96,9 @@ def measure(page, navigate):
     for ev, fn in (("request", on_req), ("requestfinished", on_done), ("requestfailed", on_done)):
         page.remove_listener(ev, fn)
     calls.sort(key=lambda c: c["start"])
+    chunks.sort(key=lambda c: c["start"])
     return {"api_requests": len(calls), "waterfall_depth": depth(calls),
-            "total_ms_incl_1.5s_settle": idle_ms, "calls": calls}
+            "total_ms_incl_1.5s_settle": idle_ms, "calls": calls, "chunks": chunks}
 
 
 def spa_click(page, path):
@@ -130,11 +146,12 @@ def main():
         # which each new page (tab) would not share, and every later page would land on the login form.
         page.check("input[type=checkbox]")
         page.click("button[type=submit]")
-        page.wait_for_load_state("networkidle", timeout=45000)
+        page.wait_for_url(lambda u: "/login" not in u, timeout=60000)
+        settle(page, 45000)
         print("signed in at", page.url, file=sys.stderr)
         probe = ctx.new_page()
         probe.goto(BASE + "/dashboard" + QS, wait_until="load", timeout=90000)
-        probe.wait_for_load_state("networkidle", timeout=30000)
+        settle(probe)
         if probe.locator("input[type=password]").count():
             sys.exit("Login did not persist across pages (landed on the login form). Aborting.")
         probe.close()
@@ -152,10 +169,10 @@ def main():
             hard = measure(pg, lambda: pg.goto(BASE + path + QS, wait_until="load", timeout=90000))
             pg.close()
             spa = None
-            if name != "dashboard":
+            if name != "dashboard" and not os.environ.get("PERF_NO_SPA"):
                 pg = new_page()
                 pg.goto(BASE + "/dashboard" + QS, wait_until="load", timeout=90000)
-                pg.wait_for_load_state("networkidle", timeout=30000)
+                settle(pg)
                 time.sleep(4)  # let the dashboard preload (tier B) finish before the click
                 res = {}
                 spa = measure(pg, lambda: res.update(ok=spa_click(pg, path)))
@@ -180,7 +197,7 @@ def main():
 
         page = new_page()
         page.goto(BASE + "/dashboard" + QS, wait_until="load")
-        page.wait_for_load_state("networkidle", timeout=30000)
+        settle(page)
         time.sleep(4)
         seen = []
         page.on("request", lambda r: seen.append(r.url.split("/api/")[1].split("?")[0]) if "/api/" in r.url else None)

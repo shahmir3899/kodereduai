@@ -12,7 +12,7 @@ import BulkActionsBar from './BulkActionsBar'
 import {
   PaymentModal, GenerateModal, CreateSingleFeeModal,
 } from './FeeModals'
-import { exportFeePDF } from './feeExport'
+// jsPDF/autotable load on the export click, not when the page opens.
 import { useToast } from '../../components/Toast'
 import { useConfirmModal } from '../../components/ConfirmModal'
 import {
@@ -231,6 +231,7 @@ export default function FeeCollectPage() {
   }
 
   const handleExportPDF = async () => {
+    const { exportFeePDF } = await import('./feeExport')
     await exportFeePDF({
       paymentList: data.paymentList,
       month, year,

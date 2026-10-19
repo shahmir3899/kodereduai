@@ -28,7 +28,7 @@ import { icons, AIInsightsCard } from '../DashboardPage'
 export default function AdminDashboard() {
   const { activeSchool, isModuleEnabled } = useAuth()
   // The summary tiles wait for one combined request instead of firing one call each.
-  const { settled: bootstrapSettled, waiting: bootstrapWaiting } = useDashboardBootstrap()
+  const { settled: bootstrapSettled, waiting: bootstrapWaiting, feeReady, feeWaiting } = useDashboardBootstrap()
   const { activeAcademicYear, currentTerm, hasAcademicYear, loading: academicYearLoading } = useAcademicYear()
   const [insightsOpen, setInsightsOpen] = useState(false)
 
@@ -45,7 +45,7 @@ export default function AdminDashboard() {
     enabled: schoolReady && attendanceOn && bootstrapSettled,
   })
 
-  const { summary: fee, isLoading: loadingFinanceQuery } = useFeeMonthSummary({ enabled: schoolReady && financeOn && bootstrapSettled })
+  const { summary: fee, isLoading: loadingFinanceQuery } = useFeeMonthSummary({ enabled: schoolReady && financeOn && feeReady })
 
   const { data: hrStats, isLoading: loadingHRQuery } = useQuery({
     queryKey: ['hrDashboardStats'],
@@ -55,7 +55,7 @@ export default function AdminDashboard() {
 
   // A query held back by the bootstrap reports isLoading=false; keep the skeleton up meanwhile.
   const loadingAttendance = loadingAttendanceQuery || bootstrapWaiting
-  const loadingFinance = loadingFinanceQuery || bootstrapWaiting
+  const loadingFinance = loadingFinanceQuery || feeWaiting
   const loadingHR = loadingHRQuery || bootstrapWaiting
 
   const { data: admissionsData } = useQuery({

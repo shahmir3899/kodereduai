@@ -7,7 +7,7 @@ import { useAcademicYear } from '../../contexts/AcademicYearContext'
 import ClassSelector from '../../components/ClassSelector'
 import TeacherScopeSummary from '../../components/teacher/TeacherScopeSummary'
 import TeacherScopeBadge, { TeacherScopeHint, useTeacherScopeLookup } from '../../components/teacher/TeacherScopeBadge'
-import * as XLSX from 'xlsx'
+// xlsx (~400 KB) is loaded when a marks file is uploaded, not when the page opens.
 import { useSessionClasses } from '../../hooks/useSessionClasses'
 import useTeacherScopedClasses from '../../hooks/useTeacherScopedClasses'
 import { getClassSelectorScope, getResolvedMasterClassId } from '../../utils/classScope'
@@ -265,8 +265,10 @@ export default function MarksEntryPage() {
     e.target.value = ''
 
     const reader = new FileReader()
-    reader.onload = (evt) => {
+    reader.onload = async (evt) => {
       try {
+        const xlsxModule = await import('xlsx')
+        const XLSX = xlsxModule.default || xlsxModule
         const workbook = XLSX.read(evt.target.result, { type: 'binary' })
         const sheet = workbook.Sheets[workbook.SheetNames[0]]
         // Read all rows starting from row 5 (1-indexed in Excel = row 5)
