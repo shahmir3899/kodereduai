@@ -7,7 +7,7 @@ import { studentsApi, schoolsApi } from '../services/api'
 import { useToast } from '../components/Toast'
 import { useSessionClasses } from '../hooks/useSessionClasses'
 import { useClasses } from '../hooks/useClasses'
-import { getClassSelectorScope, getResolvedMasterClassId } from '../utils/classScope'
+import { getClassSelectorScope, getResolvedMasterClassId, resolveSessionClassId } from '../utils/classScope'
 import { canManageStudentLifecycle } from '../utils/accessPolicies'
 // jsPDF/autotable/html2canvas (~600 KB) load on the export click, not when the list opens.
 import { useDebounce } from '../hooks/useDebounce'
@@ -190,7 +190,7 @@ export default function StudentsPage() {
 
   // Resolves on success (and closes the modal); rejects with the API error so the
   // form can show it beside the field instead of as a toast.
-  const handleSaveStudent = async ({ payload, classId, account }) => {
+  const handleSaveStudent = async ({ payload, classId, sessionClassId, account }) => {
     if (editingStudent) {
       await updateStudent.mutateAsync({ id: editingStudent.id, payload })
       closeModal()
@@ -202,6 +202,7 @@ export default function StudentsPage() {
     const response = await studentsApi.createStudent({
       school: selectedSchoolId,
       class_obj: parseInt(classId),
+      ...(sessionClassId && { session_class_id: parseInt(sessionClassId) }),
       ...payload,
     })
     const newStudent = response.data
@@ -563,6 +564,7 @@ export default function StudentsPage() {
             schoolId: selectedSchoolId,
           }}
           resolveMasterClassId={resolveMasterClassId}
+          resolveSessionClassId={(id) => resolveSessionClassId(id, activeAcademicYear?.id, sessionClasses)}
           initialClassId={selectedClassIds[0] || ''}
           photoSlot={editingStudent ? (
             <StudentPhotoControl

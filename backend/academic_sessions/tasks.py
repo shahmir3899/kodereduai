@@ -163,6 +163,8 @@ def bulk_promote_task(self, school_id, source_year_id, target_year_id, promotion
                             school_id=school_id,
                             academic_year_id=target_year_id,
                             class_obj_id=target_class_id,
+                            # Rolls are per section: without it, 3-B students are numbered after 3-A's.
+                            session_class_id=resolved_target_session_class_id,
                         )
 
                         # For PROMOTE or REPEAT, create new enrollment then update source status and student snapshot.

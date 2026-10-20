@@ -427,7 +427,8 @@ class StudentViewSet(ModuleAccessMixin, TenantQuerySetMixin, AuditedDeleteMixin,
             school_id=student.school_id, is_current=True,
         ).first()
         if current_year:
-            session_class = resolve_session_class(
+            # The serializer already settled the section (or found none to use).
+            session_class = getattr(serializer, 'resolved_session_class', None) or resolve_session_class(
                 school_id=student.school_id,
                 academic_year_id=current_year.id,
                 class_obj_id=student.class_obj_id,

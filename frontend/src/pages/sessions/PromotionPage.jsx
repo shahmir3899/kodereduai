@@ -15,6 +15,7 @@ import ClassSelector from '../../components/ClassSelector'
 import { useToast } from '../../components/Toast'
 import { useConfirmModal } from '../../components/ConfirmModal'
 import { useDebounce } from '../../hooks/useDebounce'
+import { useEscapeKey } from '../../hooks/useEscapeKey'
 
 // Recommendation badge component
 function RecBadge({ rec }) {

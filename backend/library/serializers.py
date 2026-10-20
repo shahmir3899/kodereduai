@@ -80,7 +80,7 @@ class BookIssueReadSerializer(serializers.ModelSerializer):
             'borrower_type', 'student', 'staff',
             'borrower_name',
             'issue_date', 'due_date', 'return_date',
-            'status', 'fine_amount',
+            'status', 'fine_amount', 'notes',
             'issued_by', 'issued_by_name',
         ]
         read_only_fields = ['id', 'issue_date']
@@ -100,7 +100,7 @@ class BookIssueCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = BookIssue
         fields = [
-            'book', 'borrower_type', 'student', 'staff', 'due_date',
+            'book', 'borrower_type', 'student', 'staff', 'due_date', 'notes',
         ]
 
     def validate(self, attrs):

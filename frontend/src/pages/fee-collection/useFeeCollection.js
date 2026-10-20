@@ -1,7 +1,9 @@
 import { useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { financeApi, attendanceApi } from '../../services/api'
+import { financeApi, attendanceApi, classesApi } from '../../services/api'
+import { useAuth } from '../../contexts/AuthContext'
 import { useBackgroundTask } from '../../hooks/useBackgroundTask'
+import { useToast } from '../../components/Toast'
 import { filterPayments } from './feeUtils'
 
 const formatGenerationPeriod = (month, year) => new Date(year, month - 1).toLocaleString('en-US', { month: 'short', year: 'numeric' })
@@ -12,6 +14,7 @@ const formatGenerationPeriod = (month, year) => new Date(year, month - 1).toLoca
  */
 export function useFeeCollection({ month, year, classFilter, statusFilter, searchQuery = '', feeTypeFilter, annualCategoryFilter, monthlyCategoryFilter, sessionClassId, academicYearId }) {
   const queryClient = useQueryClient()
+  const { showSuccess } = useToast()
 
   // Reference data
   const { data: accountsData } = useQuery({
@@ -20,9 +23,16 @@ export function useFeeCollection({ month, year, classFilter, statusFilter, searc
     staleTime: 0,
   })
 
+  // my_classes is a manual-attendance endpoint (admin + teacher only): accountants got a 403 and an
+  // empty class filter. Only teachers need the assigned-classes scope; everyone else gets the school's classes.
+  const { effectiveRole, activeSchool } = useAuth()
+  const isTeacher = effectiveRole === 'TEACHER'
   const { data: classes } = useQuery({
-    queryKey: ['myFeeCollectionClasses'],
-    queryFn: () => attendanceApi.getMyAttendanceClasses(),
+    queryKey: ['myFeeCollectionClasses', isTeacher ? 'assigned' : 'all', activeSchool?.id],
+    queryFn: () => (isTeacher
+      ? attendanceApi.getMyAttendanceClasses()
+      : classesApi.getClasses({ school_id: activeSchool?.id, page_size: 9999 })),
+    enabled: isTeacher || !!activeSchool?.id,
     staleTime: 5 * 60_000,
   })
 
@@ -98,7 +108,11 @@ export function useFeeCollection({ month, year, classFilter, statusFilter, searc
 
   const bulkUpdateMutation = useMutation({
     mutationFn: (data) => financeApi.bulkUpdatePayments(data),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['feePayments'] }); queryClient.invalidateQueries({ queryKey: ['feeSummary'] }); queryClient.invalidateQueries({ queryKey: ['accounts'] }) },
+    onSuccess: (_res, variables) => {
+      const n = variables?.ids?.length ?? variables?.records?.length ?? 0
+      const noun = `fee record${n === 1 ? '' : 's'}`
+      showSuccess(variables?.pay_full ? `${n} ${noun} marked as fully paid` : `${n} ${noun} updated`)
+      queryClient.invalidateQueries({ queryKey: ['feePayments'] }); queryClient.invalidateQueries({ queryKey: ['feeSummary'] }); queryClient.invalidateQueries({ queryKey: ['accounts'] }) },
   })
 
   const bulkDeleteMutation = useMutation({

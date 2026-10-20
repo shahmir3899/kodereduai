@@ -20,7 +20,7 @@ const EMPTY_ACCOUNT = { username: '', email: '', password: '', confirm_password:
 // student between classes goes through reclassify, not this form. When onChangeClass
 // is given (admins) the class line gets a "Change class" button that hands off to it.
 //
-// onSubmit({ payload, classId, account }) must resolve on success (the page then
+// onSubmit({ payload, classId, sessionClassId, account }) must resolve on success (the page then
 // unmounts this modal) and reject with the API error otherwise; the error is
 // shown on the form, not as a toast.
 export default function StudentFormModal({
@@ -28,6 +28,7 @@ export default function StudentFormModal({
   allStudents,
   classSelector,
   resolveMasterClassId,
+  resolveSessionClassId = () => '',
   initialClassId = '',
   photoSlot = null,
   onChangeClass = null,
@@ -49,14 +50,19 @@ export default function StudentFormModal({
   const [confirmingDiscard, setConfirmingDiscard] = useState(false)
 
   const resolvedClassId = isEdit ? String(student.class_obj ?? '') : resolveMasterClassId(classId)
+  // The section picked in the class dropdown; the master class alone can't say which
+  // of two sections ("Class 2-A" / "2-B") the student joins.
+  const sessionClassId = isEdit ? '' : resolveSessionClassId(classId)
 
   const occupiedRolls = useMemo(
     () => (resolvedClassId
       ? allStudents
-        .filter((s) => String(s.class_obj) === resolvedClassId && s.id !== student?.id)
+        .filter((s) => (sessionClassId
+          ? String(s.session_class_obj?.id) === sessionClassId
+          : String(s.class_obj) === resolvedClassId) && s.id !== student?.id)
         .map((s) => s.roll_number)
       : []),
-    [allStudents, resolvedClassId, student?.id],
+    [allStudents, resolvedClassId, sessionClassId, student?.id],
   )
 
   const autoFillRoll = useCallback((roll) => form.setField('roll_number', roll), [form.setField])
@@ -132,9 +138,10 @@ export default function StudentFormModal({
 
     setSaving(true)
     try {
-      await onSubmit({ payload, classId: resolvedClassId, account: wantsAccount && !isEdit ? account : null })
+      await onSubmit({ payload, classId: resolvedClassId, sessionClassId, account: wantsAccount && !isEdit ? account : null })
     } catch (error) {
       const parsed = form.applyServerError(error, isEdit ? 'Failed to update student' : 'Failed to add student')
+      if (parsed.fieldErrors.session_class_id) setClassError(String(parsed.fieldErrors.session_class_id))
       if (parsed.fieldErrors.roll_number && recommendedRoll) {
         form.setFieldError('roll_number', `${parsed.fieldErrors.roll_number} Suggested next roll: ${recommendedRoll}.`)
       }

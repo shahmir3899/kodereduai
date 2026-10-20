@@ -29,10 +29,12 @@ const typeColors = {
 
 export default function AccountsPage() {
   const queryClient = useQueryClient()
-  const { user, isStaffMember, isPrincipal } = useAuth()
+  const { user, isStaffMember, isPrincipal, isAccountant } = useAuth()
   const toast = useToast()
   const { confirm, ConfirmModalRoot } = useConfirmModal()
   const canManageAccounts = !isStaffMember
+  // close_month is admin-only on the API (accountants are read-only in finance), so the button would only end in a 403.
+  const canCloseMonth = canManageAccounts && !isAccountant
   const canRecordTransactions = true // Staff can record transfers (backend limits to staff_visible accounts)
   const hasMultipleSchools = !isStaffMember && (user?.schools?.length > 1 || user?.is_super_admin)
   const [activeTab, setActiveTab] = useState(isPrincipal ? 'accounts' : (isStaffMember ? 'manage' : 'balances'))
@@ -342,7 +344,7 @@ export default function AccountsPage() {
   return (
     <div>
       <PageHeader title="Accounts" subtitle="Track where money flows" className="mb-6" actions={<>
-{canManageAccounts && (activeTab === 'balances' || activeTab === 'accounts') && (
+{canCloseMonth && (activeTab === 'balances' || activeTab === 'accounts') && (
             <button
               onClick={() => setShowCloseMonthModal(true)}
               className="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 text-sm"
@@ -821,7 +823,7 @@ export default function AccountsPage() {
 
       {/* Record Transfer Modal */}
       {/* Close Month Modal */}
-      {showCloseMonthModal && (
+      {canCloseMonth && showCloseMonthModal && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4">
           <div className="bg-white rounded-lg shadow-xl w-full max-w-sm">
             <div className="p-6">

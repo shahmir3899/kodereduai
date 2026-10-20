@@ -895,7 +895,7 @@ def build_guide():
     pdf.step("Review results for accuracy.")
     pdf.step("Click 'Generate AI Comments' to create personalized per-subject comments for all students.")
     pdf.step("Click on any student row to expand and view/edit their AI-generated comments.")
-    pdf.step("Click 'Publish Results' to make them visible to students and parents.")
+    pdf.step("To make results visible to students and parents, open Sidebar > Academics > Exams, find the exam group and click 'Announce Results' (or 'Announce Ready Classes' if some classes are still missing marks). The button stays disabled until all marks for that exam are entered.")
 
     pdf.section_title("Step 6: Generate Report Cards")
     pdf.nav_path("Sidebar > Academics > Report Cards")
@@ -955,15 +955,18 @@ def build_guide():
     pdf.step("Choose Class and Subject, then the Book, Chapter and topic.")
     pdf.step("Choose the Question Type, Difficulty, Bloom's Level and Marks.")
     pdf.step("Type the Question Text. For multiple choice, enter the options and select the correct one.")
+    pdf.step("Tick at least one Linked Topic. The bank lists questions by class through their topics, so a question without a topic is saved but does not appear when you filter by class.")
     pdf.step("Optionally add tags and link a Source Content Block from the book.")
+    pdf.step("To find the question again, choose the Class (and Subject) in the filters at the top. The list stays empty until a class is selected.")
     pdf.body_text("Filter questions by keyword or semantic search, type, difficulty, Bloom level, tag and source (Human, AI Unverified, AI Verified). Mark AI-generated questions as verified after you check them.")
 
     pdf.section_title("Question Paper Builder and Question Papers")
     pdf.nav_path("Sidebar > Content Creation > Paper Builder")
     pdf.info_box("Availability", "The paper builder appears only if the feature is enabled for your school.")
     pdf.step("Paper Setup: choose Class, Subject, optional Exam, Paper Title, Total Marks, Duration and Instructions.")
-    pdf.step("Paper Structure: define the sections of the paper.")
-    pdf.step("Add Questions in one of three ways: type them manually, pick from the question bank or lesson plans, or capture from an image of a handwritten paper.")
+    pdf.step("The Paper Title is filled in from the exam, class and subject. Edit it if you want a different title; clear it to get the suggestion back.")
+    pdf.step("Paper Structure: define the sections of the paper. Sections are optional. If the section marks do not add up to the Total Marks, a 'Marks mismatch' message asks you to confirm - press Continue to go on anyway.")
+    pdf.step("Choose how to add questions: 'Type manually', 'From question bank / lesson plans' or 'Capture from image' (a handwritten paper). You can change the source later.")
     pdf.step("For image capture, take a clear, well-lit photo and review the extracted questions before confirming.")
     pdf.step("Check the Curriculum Coverage and Bloom distribution panel, and fix any marks mismatch warning.")
     pdf.body_text("Open 'Question Papers' to see papers as Draft, Ready or Published. Resume drafts, duplicate or delete papers, and export published papers. Teachers can open Responses for a paper.")
@@ -999,7 +1002,8 @@ def build_guide():
     pdf.step("Click 'Add Account' to create finance accounts.")
     pdf.step("Account types: CASH (physical cash), BANK (bank accounts), PERSON (individual accounts).")
     pdf.step("Enter: Account Name, Type, Opening Balance.")
-    pdf.step("Check 'Staff Visible' if staff members should see this account.")
+    pdf.step("Leave 'Visible to Staff' ticked if staff members should see this account.")
+    pdf.step("Click 'Save'. The new account appears in the Manage Accounts list.")
     pdf.step("Create at least one CASH and one BANK account before collecting fees.")
 
     pdf.section_title("Finance Dashboard")
@@ -1020,25 +1024,27 @@ def build_guide():
     pdf.section_title("Fee Setup Page")
     pdf.nav_path("Sidebar > Finance > Fee Setup")
     pdf.body_text(
-        "The Fee Setup page is a dedicated configuration page with three tabs: "
-        "Fee Structures, Generate Records, and Student Discounts."
+        "The Fee Setup page is a dedicated configuration page with four tabs: "
+        "Monthly Structure, Annual Charges, Generate Records, and Student Discounts."
     )
 
-    pdf.sub_section("Tab 1: Fee Structures")
-    pdf.body_text("Set base fee amounts by class or by individual student.")
-    pdf.step("Use the 'By Class' / 'By Student' toggle to switch modes.")
-    pdf.step("Use the fee type tabs (Monthly, Annual, Admission, Books, Fine) to switch between fee types.")
-    pdf.step("By Class: Enter the fee amount for each class. Leave as 0 for classes that don't pay this fee.")
-    pdf.step("By Student: Select a class, then override individual student fees. "
+    pdf.sub_section("Tab 1: Monthly Structure")
+    pdf.body_text("Set the monthly fee of each class, or override it for individual students.")
+    pdf.step("Use the 'By Class' / 'By Student' toggle at the top to switch modes.")
+    pdf.step("By Class: each class has its own card. Click 'Edit' (or '+ Set Up' for a class with no fee yet), "
+             "choose the fee category and enter the amount. Use '+ Add Charge' for more categories.")
+    pdf.step("By Student: select a class, then click 'Edit' to override individual student fees. "
              "Overrides are highlighted in blue. Students without an override use the class default.")
     pdf.step("Set the 'Effective From' date (when this fee amount takes effect).")
-    pdf.step("Click 'Review Changes' (by class) or 'Review & Save' (by student) to see a confirmation summary.")
-    pdf.step("Confirm to save. Fee structures are used to auto-calculate amounts when generating fee records.")
+    pdf.step("Click 'Review & Save' to see a confirmation summary with the new total.")
+    pdf.step("Click 'Confirm & Save'. A success message appears. Fee structures are used to auto-calculate "
+             "amounts when generating fee records.")
     pdf.info_box("Fee Priority",
                  "Student-level fee overrides take precedence over class-level defaults. "
                  "You can set a per-student override from the By Student mode.")
+    pdf.body_text("The Annual Charges tab works the same way for yearly fees such as admission, books and fines.")
 
-    pdf.sub_section("Tab 2: Generate Records")
+    pdf.sub_section("Tab 3: Generate Records")
     pdf.step("Use the fee type tabs to select which type of fee to generate.")
     pdf.step("For Monthly fees: select the month and year. The system shows a preview of how many "
              "records will be created, how many already exist (will be skipped), and the total amount.")
@@ -1049,7 +1055,7 @@ def build_guide():
     pdf.warning_box("Fee generation requires fee structures to be set first. Students without a matching "
                     "fee structure will be listed as 'no fee structure' in the preview and will not receive a record.")
 
-    pdf.sub_section("Tab 3: Student Discounts")
+    pdf.sub_section("Tab 4: Student Discounts")
     pdf.body_text(
         "Assign discounts or scholarships to individual students directly from the Fee Setup page. "
         "This tab shows each student's base monthly fee, the applied discount/scholarship, "
@@ -1073,14 +1079,15 @@ def build_guide():
                  "The effective fee column updates instantly when a discount is assigned or removed.")
 
     pdf.section_title("Creating Individual Fee Records")
-    pdf.nav_path("Sidebar > Finance > Collect Payments > Create Fee")
-    pdf.step("Click 'Create Fee' to open the single fee creation modal.")
+    pdf.nav_path("Sidebar > Finance > Collect Payments > Generate Single Fee Record")
+    pdf.step("Click 'Generate Single Fee Record' to open the single fee creation window.")
     pdf.step("Select a class, then search for a student using the searchable dropdown.")
     pdf.step("The fee amount auto-fills from the student's fee structure (class default or student override).")
     pdf.step("If the student has already paid, enter the paid amount. Payment fields (Account, Method, Date) "
              "appear automatically when a paid amount is entered.")
     pdf.step("The system warns if a duplicate fee record already exists for the same student/type/period.")
-    pdf.step("Click 'Create' to save the fee record.")
+    pdf.step("Click 'Create' to save the fee record. A success message appears, the window closes by itself "
+             "and the record shows in the fee table.")
 
     pdf.section_title("Fee Collection Page")
     pdf.nav_path("Sidebar > Finance > Collect Payments")

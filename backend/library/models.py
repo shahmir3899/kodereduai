@@ -121,6 +121,7 @@ class BookIssue(models.Model):
         decimal_places=2,
         default=0,
     )
+    notes = models.TextField(blank=True, default='')
     issued_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,

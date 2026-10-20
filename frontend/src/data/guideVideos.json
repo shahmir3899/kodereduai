@@ -43,105 +43,277 @@
       "section": "3.2"
     },
     {
-      "id": "ch1-logging-in",
-      "status": "planned",
-      "title": {
-        "en": "Logging In",
-        "ur": ""
-      },
-      "section": "1.3",
-      "chapter": 1
-    },
-    {
       "id": "ch2-step-1-academic-year-terms",
-      "status": "planned",
+      "status": "ready",
       "title": {
         "en": "Academic Year & Terms",
-        "ur": ""
+        "ur": "تعلیمی سال اور ٹرمز"
       },
       "section": "2.1",
       "chapter": 2,
       "roles": [
         "SCHOOL_ADMIN",
         "PRINCIPAL"
-      ]
+      ],
+      "seconds": {
+        "en": 71,
+        "ur": 69
+      }
     },
     {
       "id": "ch2-step-2-create-classes",
-      "status": "planned",
+      "status": "ready",
       "title": {
         "en": "Create Classes",
-        "ur": ""
+        "ur": "کلاسیں اور سیکشن بنانا"
       },
       "section": "2.2",
       "chapter": 2,
       "roles": [
         "SCHOOL_ADMIN",
         "PRINCIPAL"
-      ]
+      ],
+      "seconds": {
+        "en": 57,
+        "ur": 59
+      }
     },
     {
       "id": "ch2-step-3-add-students",
-      "status": "planned",
+      "status": "ready",
       "title": {
         "en": "Add Students",
-        "ur": ""
+        "ur": "طالب علم شامل کرنا"
       },
       "section": "2.3",
       "chapter": 2,
       "roles": [
         "SCHOOL_ADMIN",
         "PRINCIPAL"
-      ]
+      ],
+      "seconds": {
+        "en": 51,
+        "ur": 54
+      }
+    },
+    {
+      "id": "ch6-step-3-create-an-exam",
+      "status": "ready",
+      "title": {
+        "en": "Create an Exam",
+        "ur": "امتحان بنانا"
+      },
+      "section": "6.3",
+      "chapter": 6,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL",
+        "MANAGER",
+        "TEACHER"
+      ],
+      "module": "examinations",
+      "seconds": {
+        "en": 66,
+        "ur": 69
+      }
+    },
+    {
+      "id": "ch6-step-4-enter-marks",
+      "status": "ready",
+      "title": {
+        "en": "Enter Marks",
+        "ur": "امتحان کے نمبر درج کرنا"
+      },
+      "section": "6.4",
+      "chapter": 6,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL",
+        "MANAGER",
+        "TEACHER"
+      ],
+      "module": "examinations",
+      "seconds": {
+        "en": 54,
+        "ur": 56
+      }
+    },
+    {
+      "id": "ch6-step-6-generate-report-cards",
+      "status": "ready",
+      "title": {
+        "en": "Generate Report Cards",
+        "ur": "رپورٹ کارڈ"
+      },
+      "section": "6.6",
+      "chapter": 6,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL",
+        "MANAGER",
+        "TEACHER"
+      ],
+      "module": "examinations",
+      "seconds": {
+        "en": 48,
+        "ur": 50
+      }
+    },
+    {
+      "id": "ch7-recording-payments",
+      "status": "ready",
+      "title": {
+        "en": "Recording Payments",
+        "ur": "فیس کی ادائیگی درج کرنا"
+      },
+      "section": "7.6",
+      "chapter": 7,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL",
+        "ACCOUNTANT",
+        "TEACHER"
+      ],
+      "module": "finance",
+      "seconds": {
+        "en": 39,
+        "ur": 40
+      }
+    },
+    {
+      "id": "ch7-recording-expenses",
+      "status": "ready",
+      "title": {
+        "en": "Recording Expenses",
+        "ur": "اخراجات درج کرنا"
+      },
+      "section": "7.9",
+      "chapter": 7,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL",
+        "ACCOUNTANT"
+      ],
+      "module": "finance",
+      "seconds": {
+        "en": 49,
+        "ur": 49
+      }
+    },
+    {
+      "id": "ch8-leave-management",
+      "status": "ready",
+      "title": {
+        "en": "Leave Management",
+        "ur": "چھٹی کی درخواست دیکھنا"
+      },
+      "section": "8.6",
+      "chapter": 8,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL"
+      ],
+      "module": "hr",
+      "seconds": {
+        "en": 47,
+        "ur": 48
+      }
+    },
+    {
+      "id": "ch1-logging-in",
+      "status": "ready",
+      "title": {
+        "en": "Logging In",
+        "ur": "لاگ ان کرنا"
+      },
+      "section": "1.3",
+      "chapter": 1,
+      "seconds": {
+        "en": 30,
+        "ur": 31
+      }
     },
     {
       "id": "ch2-step-4-add-subjects",
-      "status": "planned",
+      "status": "ready",
       "title": {
         "en": "Add Subjects",
-        "ur": ""
+        "ur": "مضامین شامل کرنا"
       },
       "section": "2.4",
       "chapter": 2,
       "roles": [
         "SCHOOL_ADMIN",
         "PRINCIPAL"
-      ]
+      ],
+      "seconds": {
+        "en": 47,
+        "ur": 47
+      }
     },
     {
       "id": "ch2-step-5-create-timetable",
-      "status": "planned",
+      "status": "ready",
       "title": {
         "en": "Create Timetable",
-        "ur": ""
+        "ur": "ٹائم ٹیبل بنانا"
       },
       "section": "2.5",
       "chapter": 2,
       "roles": [
         "SCHOOL_ADMIN",
         "PRINCIPAL"
-      ]
+      ],
+      "seconds": {
+        "en": 41,
+        "ur": 42
+      }
     },
     {
       "id": "ch2-school-setup-wizard",
-      "status": "planned",
+      "status": "ready",
       "title": {
         "en": "School Setup Wizard",
-        "ur": ""
+        "ur": "اسکول سیٹ اپ وزرڈ"
       },
       "section": "2.8",
       "chapter": 2,
       "roles": [
         "SCHOOL_ADMIN",
         "PRINCIPAL"
-      ]
+      ],
+      "seconds": {
+        "en": 43,
+        "ur": 45
+      }
+    },
+    {
+      "id": "ch5-managing-subjects",
+      "status": "ready",
+      "title": {
+        "en": "Managing Subjects",
+        "ur": "مضامین کا انتظام"
+      },
+      "section": "5.1",
+      "chapter": 5,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL",
+        "MANAGER",
+        "TEACHER"
+      ],
+      "module": "academics",
+      "seconds": {
+        "en": 47,
+        "ur": 47
+      }
     },
     {
       "id": "ch3-viewing-the-attendance-register",
-      "status": "planned",
+      "status": "ready",
       "title": {
         "en": "Viewing the Attendance Register",
-        "ur": ""
+        "ur": "حاضری رجسٹر دیکھنا"
       },
       "section": "3.3",
       "chapter": 3,
@@ -150,7 +322,314 @@
         "PRINCIPAL",
         "TEACHER"
       ],
-      "module": "attendance"
+      "module": "attendance",
+      "seconds": {
+        "en": 46,
+        "ur": 47
+      }
+    },
+    {
+      "id": "ch5-academic-sessions-years-terms",
+      "status": "ready",
+      "title": {
+        "en": "Academic Sessions (Years & Terms)",
+        "ur": "تعلیمی سیشنز (سال اور ٹرمز)"
+      },
+      "section": "5.2",
+      "chapter": 5,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL",
+        "MANAGER",
+        "TEACHER"
+      ],
+      "module": "academics",
+      "seconds": {
+        "en": 71,
+        "ur": 69
+      }
+    },
+    {
+      "id": "ch5-academic-calendar",
+      "status": "ready",
+      "title": {
+        "en": "Academic Calendar",
+        "ur": "تعلیمی کیلنڈر"
+      },
+      "section": "5.5",
+      "chapter": 5,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL",
+        "MANAGER"
+      ],
+      "module": "academics",
+      "seconds": {
+        "en": 60,
+        "ur": 62
+      }
+    },
+    {
+      "id": "ch5-student-promotion",
+      "status": "ready",
+      "title": {
+        "en": "Student Promotion",
+        "ur": "طلبہ کی ترقی"
+      },
+      "section": "5.3",
+      "chapter": 5,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL"
+      ],
+      "module": "academics",
+      "seconds": {
+        "en": 64,
+        "ur": 64
+      }
+    },
+    {
+      "id": "ch6-step-1-define-grade-scale",
+      "status": "ready",
+      "title": {
+        "en": "Define Grade Scale",
+        "ur": "گریڈ سکیل بنانا"
+      },
+      "section": "6.1",
+      "chapter": 6,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL"
+      ],
+      "module": "examinations",
+      "seconds": {
+        "en": 61,
+        "ur": 62
+      }
+    },
+    {
+      "id": "ch6-step-2-create-exam-types",
+      "status": "ready",
+      "title": {
+        "en": "Create Exam Types",
+        "ur": "امتحان کی اقسام بنانا"
+      },
+      "section": "6.2",
+      "chapter": 6,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL",
+        "MANAGER",
+        "TEACHER"
+      ],
+      "module": "examinations",
+      "seconds": {
+        "en": 47,
+        "ur": 48
+      }
+    },
+    {
+      "id": "ch6-step-5-view-publish-results",
+      "status": "ready",
+      "title": {
+        "en": "View & Publish Results",
+        "ur": "نتائج دیکھنا اور اعلان کرنا"
+      },
+      "section": "6.5",
+      "chapter": 6,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL",
+        "MANAGER",
+        "TEACHER"
+      ],
+      "module": "examinations",
+      "seconds": {
+        "en": 55,
+        "ur": 55
+      }
+    },
+    {
+      "id": "ch6-weighted-average-configuration",
+      "status": "ready",
+      "title": {
+        "en": "Weighted Average Configuration",
+        "ur": "ویٹڈ ایوریج"
+      },
+      "section": "6.7",
+      "chapter": 6,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL"
+      ],
+      "module": "examinations",
+      "seconds": {
+        "en": 41,
+        "ur": 44
+      }
+    },
+    {
+      "id": "ch6-step-7-monthly-skill-behaviour-assessments",
+      "status": "ready",
+      "title": {
+        "en": "Monthly Skill & Behaviour Assessments",
+        "ur": "ماہانہ مہارت کا جائزہ"
+      },
+      "section": "6.8",
+      "chapter": 6,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL",
+        "MANAGER",
+        "TEACHER"
+      ],
+      "module": "examinations",
+      "seconds": {
+        "en": 50,
+        "ur": 53
+      }
+    },
+    {
+      "id": "ch6-question-bank",
+      "status": "ready",
+      "title": {
+        "en": "Question Bank",
+        "ur": "سوالات کا بینک"
+      },
+      "section": "6.9",
+      "chapter": 6,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL",
+        "MANAGER",
+        "TEACHER"
+      ],
+      "module": "examinations",
+      "seconds": {
+        "en": 72,
+        "ur": 73
+      }
+    },
+    {
+      "id": "ch6-question-paper-builder-and-question-papers",
+      "status": "ready",
+      "title": {
+        "en": "Question Paper Builder and Question Papers",
+        "ur": "سوالیہ پرچہ بنانا"
+      },
+      "section": "6.10",
+      "chapter": 6,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL",
+        "MANAGER",
+        "TEACHER"
+      ],
+      "module": "examinations",
+      "seconds": {
+        "en": 75,
+        "ur": 77
+      }
+    },
+    {
+      "id": "ch6-curriculum-coverage",
+      "status": "ready",
+      "title": {
+        "en": "Curriculum Coverage",
+        "ur": "نصاب کی کوریج"
+      },
+      "section": "6.12",
+      "chapter": 6,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL",
+        "TEACHER"
+      ],
+      "module": "examinations",
+      "seconds": {
+        "en": 42,
+        "ur": 44
+      }
+    },
+    {
+      "id": "ch7-setting-up-finance-accounts",
+      "status": "ready",
+      "title": {
+        "en": "Setting Up Finance Accounts",
+        "ur": "فنانس اکاؤنٹس بنانا"
+      },
+      "section": "7.1",
+      "chapter": 7,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL",
+        "ACCOUNTANT"
+      ],
+      "module": "finance",
+      "seconds": {
+        "en": 49,
+        "ur": 51
+      }
+    },
+    {
+      "id": "ch7-fee-setup-page",
+      "status": "ready",
+      "title": {
+        "en": "Fee Setup Page",
+        "ur": "کلاس کی فیس مقرر کرنا"
+      },
+      "section": "7.3",
+      "chapter": 7,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL",
+        "ACCOUNTANT"
+      ],
+      "module": "finance",
+      "seconds": {
+        "en": 47,
+        "ur": 50
+      }
+    },
+    {
+      "id": "ch7-creating-individual-fee-records",
+      "status": "ready",
+      "title": {
+        "en": "Creating Individual Fee Records",
+        "ur": "ایک فیس ریکارڈ بنانا"
+      },
+      "section": "7.4",
+      "chapter": 7,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL",
+        "ACCOUNTANT"
+      ],
+      "module": "finance",
+      "seconds": {
+        "en": 53,
+        "ur": 56
+      }
+    },
+    {
+      "id": "ch7-bulk-operations",
+      "status": "ready",
+      "title": {
+        "en": "Bulk Operations",
+        "ur": "ایک ساتھ کئی فیس ریکارڈ"
+      },
+      "section": "7.7",
+      "chapter": 7,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL",
+        "ACCOUNTANT"
+      ],
+      "module": "finance",
+      "seconds": {
+        "en": 44,
+        "ur": 46
+      }
     },
     {
       "id": "ch4-step-1-enroll-student-faces",
@@ -217,334 +696,6 @@
       "module": "attendance"
     },
     {
-      "id": "ch5-managing-subjects",
-      "status": "planned",
-      "title": {
-        "en": "Managing Subjects",
-        "ur": ""
-      },
-      "section": "5.1",
-      "chapter": 5,
-      "roles": [
-        "SCHOOL_ADMIN",
-        "PRINCIPAL",
-        "MANAGER",
-        "TEACHER"
-      ],
-      "module": "academics"
-    },
-    {
-      "id": "ch5-academic-sessions-years-terms",
-      "status": "planned",
-      "title": {
-        "en": "Academic Sessions (Years & Terms)",
-        "ur": ""
-      },
-      "section": "5.2",
-      "chapter": 5,
-      "roles": [
-        "SCHOOL_ADMIN",
-        "PRINCIPAL",
-        "MANAGER",
-        "TEACHER"
-      ],
-      "module": "academics"
-    },
-    {
-      "id": "ch5-student-promotion",
-      "status": "planned",
-      "title": {
-        "en": "Student Promotion",
-        "ur": ""
-      },
-      "section": "5.3",
-      "chapter": 5,
-      "roles": [
-        "SCHOOL_ADMIN",
-        "PRINCIPAL"
-      ],
-      "module": "academics"
-    },
-    {
-      "id": "ch5-academic-calendar",
-      "status": "planned",
-      "title": {
-        "en": "Academic Calendar",
-        "ur": ""
-      },
-      "section": "5.5",
-      "chapter": 5,
-      "roles": [
-        "SCHOOL_ADMIN",
-        "PRINCIPAL",
-        "MANAGER"
-      ],
-      "module": "academics"
-    },
-    {
-      "id": "ch6-step-1-define-grade-scale",
-      "status": "planned",
-      "title": {
-        "en": "Define Grade Scale",
-        "ur": ""
-      },
-      "section": "6.1",
-      "chapter": 6,
-      "roles": [
-        "SCHOOL_ADMIN",
-        "PRINCIPAL"
-      ],
-      "module": "examinations"
-    },
-    {
-      "id": "ch6-step-2-create-exam-types",
-      "status": "planned",
-      "title": {
-        "en": "Create Exam Types",
-        "ur": ""
-      },
-      "section": "6.2",
-      "chapter": 6,
-      "roles": [
-        "SCHOOL_ADMIN",
-        "PRINCIPAL",
-        "MANAGER",
-        "TEACHER"
-      ],
-      "module": "examinations"
-    },
-    {
-      "id": "ch6-step-3-create-an-exam",
-      "status": "planned",
-      "title": {
-        "en": "Create an Exam",
-        "ur": ""
-      },
-      "section": "6.3",
-      "chapter": 6,
-      "roles": [
-        "SCHOOL_ADMIN",
-        "PRINCIPAL",
-        "MANAGER",
-        "TEACHER"
-      ],
-      "module": "examinations"
-    },
-    {
-      "id": "ch6-step-4-enter-marks",
-      "status": "planned",
-      "title": {
-        "en": "Enter Marks",
-        "ur": ""
-      },
-      "section": "6.4",
-      "chapter": 6,
-      "roles": [
-        "SCHOOL_ADMIN",
-        "PRINCIPAL",
-        "MANAGER",
-        "TEACHER"
-      ],
-      "module": "examinations"
-    },
-    {
-      "id": "ch6-step-5-view-publish-results",
-      "status": "planned",
-      "title": {
-        "en": "View & Publish Results",
-        "ur": ""
-      },
-      "section": "6.5",
-      "chapter": 6,
-      "roles": [
-        "SCHOOL_ADMIN",
-        "PRINCIPAL",
-        "MANAGER",
-        "TEACHER"
-      ],
-      "module": "examinations"
-    },
-    {
-      "id": "ch6-step-6-generate-report-cards",
-      "status": "planned",
-      "title": {
-        "en": "Generate Report Cards",
-        "ur": ""
-      },
-      "section": "6.6",
-      "chapter": 6,
-      "roles": [
-        "SCHOOL_ADMIN",
-        "PRINCIPAL",
-        "MANAGER",
-        "TEACHER"
-      ],
-      "module": "examinations"
-    },
-    {
-      "id": "ch6-weighted-average-configuration",
-      "status": "planned",
-      "title": {
-        "en": "Weighted Average Configuration",
-        "ur": ""
-      },
-      "section": "6.7",
-      "chapter": 6,
-      "roles": [
-        "SCHOOL_ADMIN",
-        "PRINCIPAL"
-      ],
-      "module": "examinations"
-    },
-    {
-      "id": "ch6-step-7-monthly-skill-behaviour-assessments",
-      "status": "planned",
-      "title": {
-        "en": "Monthly Skill & Behaviour Assessments",
-        "ur": ""
-      },
-      "section": "6.8",
-      "chapter": 6,
-      "roles": [
-        "SCHOOL_ADMIN",
-        "PRINCIPAL",
-        "MANAGER",
-        "TEACHER"
-      ],
-      "module": "examinations"
-    },
-    {
-      "id": "ch6-question-bank",
-      "status": "planned",
-      "title": {
-        "en": "Question Bank",
-        "ur": ""
-      },
-      "section": "6.9",
-      "chapter": 6,
-      "roles": [
-        "SCHOOL_ADMIN",
-        "PRINCIPAL",
-        "MANAGER",
-        "TEACHER"
-      ],
-      "module": "examinations"
-    },
-    {
-      "id": "ch6-question-paper-builder-and-question-papers",
-      "status": "planned",
-      "title": {
-        "en": "Question Paper Builder and Question Papers",
-        "ur": ""
-      },
-      "section": "6.10",
-      "chapter": 6,
-      "roles": [
-        "SCHOOL_ADMIN",
-        "PRINCIPAL",
-        "MANAGER",
-        "TEACHER"
-      ],
-      "module": "examinations"
-    },
-    {
-      "id": "ch6-curriculum-coverage",
-      "status": "planned",
-      "title": {
-        "en": "Curriculum Coverage",
-        "ur": ""
-      },
-      "section": "6.12",
-      "chapter": 6,
-      "roles": [
-        "SCHOOL_ADMIN",
-        "PRINCIPAL",
-        "TEACHER"
-      ],
-      "module": "examinations"
-    },
-    {
-      "id": "ch7-setting-up-finance-accounts",
-      "status": "planned",
-      "title": {
-        "en": "Setting Up Finance Accounts",
-        "ur": ""
-      },
-      "section": "7.1",
-      "chapter": 7,
-      "roles": [
-        "SCHOOL_ADMIN",
-        "PRINCIPAL",
-        "ACCOUNTANT"
-      ],
-      "module": "finance"
-    },
-    {
-      "id": "ch7-fee-setup-page",
-      "status": "planned",
-      "title": {
-        "en": "Fee Setup Page",
-        "ur": ""
-      },
-      "section": "7.3",
-      "chapter": 7,
-      "roles": [
-        "SCHOOL_ADMIN",
-        "PRINCIPAL",
-        "ACCOUNTANT"
-      ],
-      "module": "finance"
-    },
-    {
-      "id": "ch7-creating-individual-fee-records",
-      "status": "planned",
-      "title": {
-        "en": "Creating Individual Fee Records",
-        "ur": ""
-      },
-      "section": "7.4",
-      "chapter": 7,
-      "roles": [
-        "SCHOOL_ADMIN",
-        "PRINCIPAL",
-        "ACCOUNTANT"
-      ],
-      "module": "finance"
-    },
-    {
-      "id": "ch7-recording-payments",
-      "status": "planned",
-      "title": {
-        "en": "Recording Payments",
-        "ur": ""
-      },
-      "section": "7.6",
-      "chapter": 7,
-      "roles": [
-        "SCHOOL_ADMIN",
-        "PRINCIPAL",
-        "ACCOUNTANT",
-        "TEACHER"
-      ],
-      "module": "finance"
-    },
-    {
-      "id": "ch7-bulk-operations",
-      "status": "planned",
-      "title": {
-        "en": "Bulk Operations",
-        "ur": ""
-      },
-      "section": "7.7",
-      "chapter": 7,
-      "roles": [
-        "SCHOOL_ADMIN",
-        "PRINCIPAL",
-        "ACCOUNTANT"
-      ],
-      "module": "finance"
-    },
-    {
       "id": "ch7-managing-discounts-scholarships",
       "status": "planned",
       "title": {
@@ -552,22 +703,6 @@
         "ur": ""
       },
       "section": "7.8",
-      "chapter": 7,
-      "roles": [
-        "SCHOOL_ADMIN",
-        "PRINCIPAL",
-        "ACCOUNTANT"
-      ],
-      "module": "finance"
-    },
-    {
-      "id": "ch7-recording-expenses",
-      "status": "planned",
-      "title": {
-        "en": "Recording Expenses",
-        "ur": ""
-      },
-      "section": "7.9",
       "chapter": 7,
       "roles": [
         "SCHOOL_ADMIN",
@@ -693,21 +828,6 @@
         "ur": ""
       },
       "section": "8.5",
-      "chapter": 8,
-      "roles": [
-        "SCHOOL_ADMIN",
-        "PRINCIPAL"
-      ],
-      "module": "hr"
-    },
-    {
-      "id": "ch8-leave-management",
-      "status": "planned",
-      "title": {
-        "en": "Leave Management",
-        "ur": ""
-      },
-      "section": "8.6",
       "chapter": 8,
       "roles": [
         "SCHOOL_ADMIN",

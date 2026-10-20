@@ -321,6 +321,23 @@ class IsSchoolAdmin(permissions.BasePermission):
         return role in ADMIN_ROLES
 
 
+class IsSchoolAdminOrAccountant(permissions.BasePermission):
+    """
+    School Admins, Principals, Super Admins and Accountants.
+    For read-only finance feeds the accountant dashboard needs; keeps Driver,
+    Teacher, Manager and Staff out (unlike FinanceRoleAccessPermission, which
+    lets Driver read all finance data).
+    """
+    message = "Only School Admins and Accountants can perform this action."
+
+    def has_permission(self, request, view):
+        if not request.user.is_authenticated:
+            return False
+
+        role = get_effective_role(request)
+        return role in ADMIN_ROLES or role == 'ACCOUNTANT'
+
+
 class IsSchoolAdminOrReadOnly(permissions.BasePermission):
     """
     School Admins/Principals can edit, others can only read.

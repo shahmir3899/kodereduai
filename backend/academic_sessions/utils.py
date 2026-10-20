@@ -9,7 +9,8 @@ specific academic year should prefer the `SessionClass.display_name` for
 that year over the master `Class.name`.
 """
 
-from django.db.models import OuterRef, Subquery
+from django.db.models import Case, Count, IntegerField, OuterRef, Subquery, Value, When
+from django.db.models.functions import Coalesce
 
 
 def annotate_session_class_display(queryset, class_field='class_obj_id', academic_year_field='academic_year_id'):
@@ -27,9 +28,23 @@ def annotate_session_class_display(queryset, class_field='class_obj_id', academi
         is_active=True,
     ).order_by('id')
 
+    # Two sections share one master class: naming either one (the lowest id) would label
+    # the whole class "Class 2 - A", so the section is left blank when it is ambiguous.
+    section_count = Coalesce(
+        Subquery(
+            session_qs.order_by().values('class_obj_id').annotate(n=Count('id')).values('n')[:1],
+            output_field=IntegerField(),
+        ),
+        Value(0),
+    )
     return queryset.annotate(
+        _session_section_count=section_count,
+    ).annotate(
         session_display_name=Subquery(session_qs.values('display_name')[:1]),
-        session_display_section=Subquery(session_qs.values('section')[:1]),
+        session_display_section=Case(
+            When(_session_section_count__gt=1, then=Value('')),
+            default=Subquery(session_qs.values('section')[:1]),
+        ),
     )
 
 
@@ -51,8 +66,14 @@ def get_session_class_label_map(school_id, academic_year_id, class_obj_ids):
     ).values('class_obj_id', 'display_name', 'section')
 
     result = {}
+    ambiguous = set()
     for row in rows:
+        if row['class_obj_id'] in result:
+            ambiguous.add(row['class_obj_id'])
         result.setdefault(row['class_obj_id'], {'name': row['display_name'], 'section': row['section']})
+    # Several sections share this class: don't name one of them for the whole class.
+    for class_id in ambiguous:
+        result[class_id]['section'] = ''
     return result
 
 
@@ -67,17 +88,18 @@ def resolve_class_display_name(school_id, academic_year_id, class_obj):
     if academic_year_id:
         from .models import SessionClass
 
-        session_class = SessionClass.objects.filter(
+        sections = list(SessionClass.objects.filter(
             school_id=school_id,
             academic_year_id=academic_year_id,
             class_obj_id=class_obj.id,
             is_active=True,
-        ).only('display_name', 'section').first()
-        if session_class:
-            return (
-                f"{session_class.display_name} - {session_class.section}"
-                if session_class.section else session_class.display_name
-            )
+        ).only('display_name', 'section').order_by('id')[:2])
+        if sections:
+            session_class = sections[0]
+            # More than one section: name the class, not an arbitrary section of it.
+            if len(sections) > 1 or not session_class.section:
+                return session_class.display_name
+            return f"{session_class.display_name} - {session_class.section}"
 
     return f"{class_obj.name} - {class_obj.section}" if class_obj.section else class_obj.name
 

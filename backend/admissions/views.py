@@ -173,7 +173,8 @@ class AdmissionEnquiryViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.M
 
         enquiry_ids = serializer.validated_data['enquiry_ids']
         academic_year_id = serializer.validated_data['academic_year_id']
-        class_id = serializer.validated_data['class_id']
+        session_class_id = serializer.validated_data.get('session_class_id')
+        class_id = serializer.validated_data.get('class_id')
         generate_fees = serializer.validated_data.get('generate_fees', False)
         fee_types_to_generate = serializer.validated_data.get('fee_types', [])
 
@@ -183,14 +184,6 @@ class AdmissionEnquiryViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.M
         school_id = _resolve_school_id(request)
 
         try:
-            class_obj = StudentClass.objects.get(id=class_id, school_id=school_id)
-        except StudentClass.DoesNotExist:
-            return Response(
-                {'detail': 'Class not found in this school.'},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        try:
             academic_year = AcademicYear.objects.get(id=academic_year_id, school_id=school_id)
         except AcademicYear.DoesNotExist:
             return Response(
@@ -198,13 +191,49 @@ class AdmissionEnquiryViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.M
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # Resolve session_class for this year + master class (None if not yet configured)
-        session_class = SessionClass.objects.filter(
-            school_id=school_id,
-            academic_year_id=academic_year.id,
-            class_obj_id=class_obj.id,
-            is_active=True,
-        ).first()
+        # The section decides everything (class, roll bucket, fees). Never pick one
+        # for the user: two sections can share a master class, and .first() put
+        # Class 2-B admissions into 2-A.
+        session_class = None
+        if session_class_id:
+            session_class = SessionClass.objects.filter(
+                id=session_class_id,
+                school_id=school_id,
+                academic_year_id=academic_year.id,
+                is_active=True,
+            ).select_related('class_obj').first()
+            if not session_class or not session_class.class_obj_id:
+                return Response(
+                    {'detail': 'Section not found for this academic year, or it is not linked to a class.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            class_obj = session_class.class_obj
+        else:
+            try:
+                class_obj = StudentClass.objects.get(id=class_id, school_id=school_id)
+            except StudentClass.DoesNotExist:
+                return Response(
+                    {'detail': 'Class not found in this school.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            sections = list(SessionClass.objects.filter(
+                school_id=school_id,
+                academic_year_id=academic_year.id,
+                class_obj_id=class_obj.id,
+                is_active=True,
+            )[:2])
+            if len(sections) > 1:
+                return Response(
+                    {'detail': 'This class has more than one section. Choose a section.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            session_class = sections[0] if sections else None
+
+        section_label = class_obj.name
+        if session_class:
+            section_label = session_class.display_name
+            if session_class.section:
+                section_label = f"{section_label} - {session_class.section}"
 
         monthly_generation_category = None
         annual_generation_category = None
@@ -252,6 +281,7 @@ class AdmissionEnquiryViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.M
             school_id=school_id,
             academic_year_id=academic_year.id,
             class_obj_id=class_obj.id,
+            session_class_id=session_class.id if session_class else None,
         )
 
         for enquiry in enquiries:
@@ -292,7 +322,7 @@ class AdmissionEnquiryViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.M
                             AdmissionNote.objects.create(
                                 enquiry=enquiry,
                                 user=request.user,
-                                note=f"Converted to student #{student.id} (Roll: {roll_number}, Class: {class_obj.name})",
+                                note=f"Converted to student #{student.id} (Roll: {roll_number}, Class: {section_label})",
                                 note_type='STATUS_CHANGE',
                             )
 

@@ -22,7 +22,7 @@ from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 from django.http import FileResponse
 
-from core.permissions import IsSchoolAdmin, FinanceRoleAccessPermission, HasSchoolAccess, get_effective_role, ModuleAccessMixin, ADMIN_ROLES, _is_data_restricted_user, get_teacher_class_scope, get_teacher_master_only_class_scope, get_teacher_session_class_scope, _get_session_class_student_ids
+from core.permissions import IsSchoolAdmin, IsSchoolAdminOrAccountant, FinanceRoleAccessPermission, HasSchoolAccess, get_effective_role, ModuleAccessMixin, ADMIN_ROLES, _is_data_restricted_user, get_teacher_class_scope, get_teacher_master_only_class_scope, get_teacher_session_class_scope, _get_session_class_student_ids
 from core.mixins import TenantQuerySetMixin, ensure_tenant_schools, ensure_tenant_school_id
 from core.class_scope import resolve_class_scope
 from students.models import Student, Class
@@ -3156,9 +3156,9 @@ class AccountViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
             'closed_at': closing.closed_at.isoformat(),
         })
 
-    @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated, IsSchoolAdmin, HasSchoolAccess])
+    @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated, IsSchoolAdminOrAccountant, HasSchoolAccess])
     def closings(self, request):
-        """List all monthly closings for the active school."""
+        """List all monthly closings for the active school. Read-only: closing/reopening stays admin-only."""
         school_id = _resolve_school_id(request)
         if not school_id:
             return Response({'detail': 'No school associated.'}, status=400)
@@ -3191,9 +3191,9 @@ class AccountViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
         return Response({'detail': f'Month {year}/{month:02d} reopened.', 'year': year, 'month': month})
 
     @action(detail=False, methods=['get'], url_path='recent_entries',
-            permission_classes=[IsAuthenticated, IsSchoolAdmin, HasSchoolAccess])
+            permission_classes=[IsAuthenticated, IsSchoolAdminOrAccountant, HasSchoolAccess])
     def recent_entries(self, request):
-        """Return recent finance entries across all transaction types. Admin+ only."""
+        """Return recent finance entries across all transaction types. Admin+ and Accountant (dashboard feed)."""
         school_id = _resolve_school_id(request)
         if not school_id:
             return Response({'detail': 'No school associated.'}, status=400)
@@ -3851,6 +3851,8 @@ class StudentDiscountViewSet(ModuleAccessMixin, viewsets.ModelViewSet):
         discount_id = request.data.get('discount_id')
         scholarship_id = request.data.get('scholarship_id')
         class_id = request.data.get('class_id')
+        # A section wins over its master class: "Class 2-B" must not reach 2-A.
+        session_class_id = request.data.get('session_class_id')
         grade_level = request.data.get('grade_level')
         academic_year_id = request.data.get('academic_year_id')
 
@@ -3861,9 +3863,9 @@ class StudentDiscountViewSet(ModuleAccessMixin, viewsets.ModelViewSet):
             )
         if not academic_year_id:
             return Response({'detail': 'academic_year_id is required.'}, status=400)
-        if not class_id and grade_level is None:
+        if not class_id and not session_class_id and grade_level is None:
             return Response(
-                {'detail': 'Either class_id or grade_level is required.'},
+                {'detail': 'Either session_class_id, class_id or grade_level is required.'},
                 status=400,
             )
 
@@ -3880,11 +3882,22 @@ class StudentDiscountViewSet(ModuleAccessMixin, viewsets.ModelViewSet):
         # is for that year, and Student.class_obj is only the current class.
         from academic_sessions.roster import enrollments_in_scope
 
+        if session_class_id:
+            from academic_sessions.models import SessionClass
+            if not SessionClass.objects.filter(
+                id=session_class_id, school_id=school_id, academic_year_id=academic_year_id,
+            ).exists():
+                return Response({'detail': 'Section not found for this academic year.'}, status=400)
+
         students_qs = Student.objects.filter(school_id=school_id, is_active=True)
         enrollments = enrollments_in_scope(
-            school_id, academic_year_id=academic_year_id, class_obj_id=class_id or None,
+            school_id, academic_year_id=academic_year_id,
+            session_class_id=session_class_id or None, class_obj_id=class_id or None,
         )
-        if enrollments is not None:
+        if session_class_id:
+            # Sections have enrollment rows by definition; never fall back to the class snapshot.
+            students_qs = students_qs.filter(id__in=enrollments.values('student_id'))
+        elif enrollments is not None:
             if not class_id:
                 enrollments = enrollments.filter(class_obj__grade_level=grade_level)
             students_qs = students_qs.filter(id__in=enrollments.values('student_id'))

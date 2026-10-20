@@ -215,10 +215,15 @@ class StudentSerializer(serializers.ModelSerializer):
 
 
 class StudentCreateSerializer(serializers.ModelSerializer):
+    # The section the student joins. Two sections can share one master class, so the
+    # class alone does not say where to put them and we refuse to guess.
+    session_class_id = serializers.IntegerField(required=False, write_only=True)
+    resolved_session_class = None
+
     class Meta:
         model = Student
         fields = [
-            'school', 'class_obj', 'roll_number',
+            'school', 'class_obj', 'session_class_id', 'roll_number',
             'name', 'parent_phone', 'parent_name',
             'admission_number', 'admission_date', 'date_of_birth',
             'gender', 'blood_group', 'address', 'previous_school',
@@ -249,17 +254,34 @@ class StudentCreateSerializer(serializers.ModelSerializer):
                 "Please create an academic year first."
             )
 
-        if current_year:
-            if StudentEnrollment.objects.filter(
-                school=school,
-                academic_year=current_year,
-                class_obj=class_obj,
-                roll_number=roll_number,
-                is_active=True,
-            ).exists():
+        from academic_sessions.models import SessionClass
+        sections = list(SessionClass.objects.filter(
+            school=school, academic_year=current_year, class_obj=class_obj, is_active=True,
+        ).order_by('section')[:50])
+        session_class_id = attrs.pop('session_class_id', None)
+        if session_class_id:
+            section = next((sc for sc in sections if sc.id == session_class_id), None)
+            if not section:
                 raise serializers.ValidationError({
-                    'roll_number': f"Roll number '{roll_number}' already exists in this class for {current_year.name}."
+                    'session_class_id': "That section isn't in the current year for this class.",
                 })
+        elif len(sections) > 1:
+            raise serializers.ValidationError({
+                'session_class_id': 'This class has more than one section. Choose a section.',
+            })
+        else:
+            section = sections[0] if sections else None
+        self.resolved_session_class = section
+
+        # Rolls are per section; a class with no section set up falls back to the class.
+        taken = StudentEnrollment.objects.filter(
+            school=school, academic_year=current_year, roll_number=roll_number, is_active=True,
+        )
+        taken = taken.filter(session_class=section) if section else taken.filter(class_obj=class_obj)
+        if taken.exists():
+            raise serializers.ValidationError({
+                'roll_number': f"Roll number '{roll_number}' already exists in this class for {current_year.name}."
+            })
 
         return attrs
 

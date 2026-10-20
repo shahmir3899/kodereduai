@@ -412,7 +412,7 @@ function TopicPicker({ classId, subjectId, selectedTopics, onChange, initialBook
       if (selectedChapter && String(ch.id) !== String(selectedChapter)) {
         return
       }
-      ;(ch.topics || []).forEach((t) => list.push({ ...t, chapterName: ch.name }))
+      ;(ch.topics || []).forEach((t) => list.push({ ...t, chapterName: ch.title }))
     })
     return list
   }, [chapters, selectedChapter])
@@ -482,7 +482,7 @@ function TopicPicker({ classId, subjectId, selectedTopics, onChange, initialBook
                     className="accent-blue-600"
                   />
                   <span className="text-sm text-gray-700 group-hover:text-blue-700">
-                    {t.name}
+                    {t.title}
                   </span>
                   <span className="text-xs text-gray-400 ml-auto">{t.chapterName}</span>
                 </label>
@@ -493,6 +493,13 @@ function TopicPicker({ classId, subjectId, selectedTopics, onChange, initialBook
           {selectedTopics.length > 0 && (
             <p className="text-xs text-blue-600">
               {selectedTopics.length} topic{selectedTopics.length > 1 ? 's' : ''} linked
+            </p>
+          )}
+
+          {selectedTopics.length === 0 && (
+            // The bank lists questions per class through their linked topics, so an unlinked one is saved but hidden under a class filter.
+            <p className="text-xs text-amber-700">
+              Link at least one topic, otherwise this question will not appear when you filter the bank by class.
             </p>
           )}
         </>

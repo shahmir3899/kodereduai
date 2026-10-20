@@ -10,7 +10,7 @@ import { useConfirmModal } from '../../components/ConfirmModal'
 import { GRADE_PRESETS, GRADE_LEVEL_LABELS } from '../../constants/gradePresets'
 import BatchConvertModal from '../../components/BatchConvertModal'
 import Spinner from '../../components/ui/Spinner'
-import { RecordCard, CardGrid, ViewToggle } from '../../components/cards'
+import { RecordCard, CardGrid, ViewToggle, Avatar } from '../../components/cards'
 import { useViewPreference } from '../../hooks/useViewPreference'
 
 const STATUSES = [
@@ -18,6 +18,14 @@ const STATUSES = [
   { key: 'CONFIRMED', label: 'Confirmed', color: TONE.success },
   { key: 'CONVERTED', label: 'Converted', color: TONE.accent },
   { key: 'CANCELLED', label: 'Cancelled', color: TONE.danger },
+]
+
+// Classes are written out in full so Tailwind's scanner sees them.
+const FUNNEL_STAGES = [
+  { key: 'NEW', label: 'New', hint: 'Awaiting confirmation', bar: 'bg-blue-500', ring: 'border-blue-400 bg-blue-50/60' },
+  { key: 'CONFIRMED', label: 'Confirmed', hint: 'Ready to convert', bar: 'bg-green-500', ring: 'border-green-400 bg-green-50/60' },
+  { key: 'CONVERTED', label: 'Converted', hint: 'Now students', bar: 'bg-purple-500', ring: 'border-purple-400 bg-purple-50/60' },
+  { key: 'CANCELLED', label: 'Cancelled', hint: 'Dropped out', bar: 'bg-red-400', ring: 'border-red-300 bg-red-50/60' },
 ]
 
 const STATUS_COLORS = Object.fromEntries(STATUSES.map((s) => [s.key, s.color]))
@@ -75,6 +83,9 @@ export default function EnquiriesPage() {
     CONVERTED: countsRes?.data?.CONVERTED ?? 0,
     CANCELLED: countsRes?.data?.CANCELLED ?? 0,
   }
+
+  const funnelTotal = statusCounts.NEW + statusCounts.CONFIRMED + statusCounts.CONVERTED + statusCounts.CANCELLED
+  const conversionRate = funnelTotal ? Math.round((statusCounts.CONVERTED / funnelTotal) * 100) : 0
 
   // Quick status update
   const statusMut = useMutation({
@@ -141,17 +152,6 @@ export default function EnquiriesPage() {
     <div>
       {/* Header */}
       <PageHeader title="Admissions" subtitle={<>{totalCount} enquir{totalCount === 1 ? 'y' : 'ies'}</>} className="mb-6" actions={<>
-{selectedConfirmed.length > 0 && (
-            <button
-              onClick={() => setShowConvertModal(true)}
-              className="btn-primary text-sm px-4 py-2 inline-flex items-center bg-purple-600 hover:bg-purple-700"
-            >
-              <svg className="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-              </svg>
-              Convert {selectedConfirmed.length} to Students
-            </button>
-          )}
           <Link
             to="/admissions/new"
             className="btn-primary text-sm px-4 py-2 inline-flex items-center"
@@ -163,150 +163,118 @@ export default function EnquiriesPage() {
           </Link>
 </>} />
 
-      {/* Flow Pipeline */}
-      <div className="card mb-6">
-        <div className="flex items-center justify-between mb-2">
-          <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Pipeline</h2>
-        </div>
-        <div className="flex items-center gap-0 overflow-x-auto">
-          {/* NEW */}
-          <button
-            onClick={() => { setStatusFilter(statusFilter === 'NEW' ? '' : 'NEW'); setPage(1) }}
-            className={`flex-1 min-w-[100px] px-4 py-3 rounded-l-lg border-2 transition-all text-center ${
-              statusFilter === 'NEW'
-                ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-200'
-                : 'border-gray-200 bg-white hover:bg-gray-50'
-            }`}
-          >
-            <p className="text-2xl font-bold text-blue-600">{statusCounts.NEW}</p>
-            <p className="text-xs font-medium text-gray-500 mt-0.5">New</p>
-          </button>
-
-          {/* Arrow */}
-          <div className="flex-shrink-0 text-gray-300 -mx-1 z-10">
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-            </svg>
+      {/* Funnel */}
+      <div className="card mb-4">
+        <div className="flex flex-wrap items-end justify-between gap-2 mb-3">
+          <div>
+            <h2 className="text-sm font-semibold text-gray-900">Admission funnel</h2>
+            <p className="text-xs text-gray-500">Click a stage to filter the list</p>
           </div>
-
-          {/* CONFIRMED */}
-          <button
-            onClick={() => { setStatusFilter(statusFilter === 'CONFIRMED' ? '' : 'CONFIRMED'); setPage(1) }}
-            className={`flex-1 min-w-[100px] px-4 py-3 border-2 transition-all text-center ${
-              statusFilter === 'CONFIRMED'
-                ? 'border-green-500 bg-green-50 ring-2 ring-green-200'
-                : 'border-gray-200 bg-white hover:bg-gray-50'
-            }`}
-          >
-            <p className="text-2xl font-bold text-green-600">{statusCounts.CONFIRMED}</p>
-            <p className="text-xs font-medium text-gray-500 mt-0.5">Confirmed</p>
-          </button>
-
-          {/* Arrow */}
-          <div className="flex-shrink-0 text-gray-300 -mx-1 z-10">
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-            </svg>
+          <div className="text-right">
+            <p className="text-2xl font-bold text-gray-900">{conversionRate}%</p>
+            <p className="text-xs text-gray-500">of enquiries converted</p>
           </div>
-
-          {/* CONVERTED */}
-          <button
-            onClick={() => { setStatusFilter(statusFilter === 'CONVERTED' ? '' : 'CONVERTED'); setPage(1) }}
-            className={`flex-1 min-w-[100px] px-4 py-3 border-2 transition-all text-center ${
-              statusFilter === 'CONVERTED'
-                ? 'border-purple-500 bg-purple-50 ring-2 ring-purple-200'
-                : 'border-gray-200 bg-white hover:bg-gray-50'
-            }`}
-          >
-            <p className="text-2xl font-bold text-purple-600">{statusCounts.CONVERTED}</p>
-            <p className="text-xs font-medium text-gray-500 mt-0.5">Converted</p>
-          </button>
-
-          {/* Divider */}
-          <div className="flex-shrink-0 mx-3 h-10 border-l-2 border-dashed border-gray-300" />
-
-          {/* CANCELLED */}
-          <button
-            onClick={() => { setStatusFilter(statusFilter === 'CANCELLED' ? '' : 'CANCELLED'); setPage(1) }}
-            className={`min-w-[100px] px-4 py-3 rounded-r-lg border-2 transition-all text-center ${
-              statusFilter === 'CANCELLED'
-                ? 'border-red-500 bg-red-50 ring-2 ring-red-200'
-                : 'border-gray-200 bg-white hover:bg-gray-50'
-            }`}
-          >
-            <p className="text-2xl font-bold text-red-500">{statusCounts.CANCELLED}</p>
-            <p className="text-xs font-medium text-gray-500 mt-0.5">Cancelled</p>
-          </button>
         </div>
-        <p className="text-xs text-gray-400 mt-2">
-          New → Confirm → Select confirmed → Convert to Students (batch) &nbsp;|&nbsp; Cancel anytime
-        </p>
+
+        {/* Proportional bar */}
+        <div className="flex h-2 w-full overflow-hidden rounded-full bg-gray-100 mb-4" aria-hidden="true">
+          {FUNNEL_STAGES.map((st) => (
+            <div
+              key={st.key}
+              className={`${st.bar} transition-all`}
+              style={{ width: funnelTotal ? `${(statusCounts[st.key] / funnelTotal) * 100}%` : 0 }}
+            />
+          ))}
+        </div>
+
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          {FUNNEL_STAGES.map((st) => {
+            const active = statusFilter === st.key
+            return (
+              <button
+                key={st.key}
+                onClick={() => { setStatusFilter(active ? '' : st.key); setPage(1) }}
+                className={`rounded-xl border p-3 text-left transition ${
+                  active ? `${st.ring} shadow-sm` : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  <span className={`h-2 w-2 rounded-full ${st.bar}`} />
+                  <span className="text-xs font-medium text-gray-500">{st.label}</span>
+                </div>
+                <p className="mt-1 text-2xl font-semibold text-gray-900">{statusCounts[st.key]}</p>
+                <p className="text-xs text-gray-400">{st.hint}</p>
+              </button>
+            )
+          })}
+        </div>
       </div>
 
       {/* Filters */}
-      <div className="card mb-6">
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
-          <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">Status</label>
-            <select
-              value={statusFilter}
-              onChange={(e) => { setStatusFilter(e.target.value); setPage(1) }}
-              className="input w-full text-sm"
-            >
-              <option value="">All Statuses</option>
-              {STATUSES.map((s) => (
-                <option key={s.key} value={s.key}>{s.label}</option>
-              ))}
-            </select>
+      <div className="card mb-4">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center">
+          <div className="relative md:flex-1">
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => { setSearch(e.target.value); setPage(1) }}
+              className="input w-full text-sm pl-9"
+              placeholder="Search by child name or phone"
+              aria-label="Search enquiries"
+            />
+            <svg className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
           </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">Grade</label>
-            <select
-              value={gradeFilter}
-              onChange={(e) => { setGradeFilter(e.target.value); setPage(1) }}
-              className="input w-full text-sm"
+          <select
+            value={gradeFilter}
+            onChange={(e) => { setGradeFilter(e.target.value); setPage(1) }}
+            className="input text-sm md:w-44"
+            aria-label="Filter by grade"
+          >
+            <option value="">All grades</option>
+            {GRADE_PRESETS.map((p) => (
+              <option key={p.numeric_level} value={p.numeric_level}>{p.name}</option>
+            ))}
+          </select>
+          <select
+            value={sourceFilter}
+            onChange={(e) => { setSourceFilter(e.target.value); setPage(1) }}
+            className="input text-sm md:w-44"
+            aria-label="Filter by source"
+          >
+            <option value="">All sources</option>
+            {SOURCES.map((src) => (
+              <option key={src} value={src}>{src.replace(/_/g, ' ')}</option>
+            ))}
+          </select>
+          {hasFilters && (
+            <button onClick={clearFilters} className="text-sm text-primary-600 hover:text-primary-700 font-medium whitespace-nowrap">
+              Clear
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Bulk action bar */}
+      {selectedConfirmed.length > 0 && (
+        <div className="sticky top-2 z-20 mb-4 flex items-center justify-between gap-3 rounded-xl bg-gray-900 px-4 py-3 text-white shadow-lg">
+          <p className="text-sm">
+            <span className="font-semibold">{selectedConfirmed.length}</span> confirmed enquir{selectedConfirmed.length === 1 ? 'y' : 'ies'} selected
+          </p>
+          <div className="flex items-center gap-2">
+            <button onClick={() => setSelected(new Set())} className="rounded-lg px-3 py-1.5 text-sm text-gray-300 hover:bg-white/10">
+              Clear
+            </button>
+            <button
+              onClick={() => setShowConvertModal(true)}
+              className="rounded-lg bg-white px-3 py-1.5 text-sm font-medium text-gray-900 hover:bg-gray-100"
             >
-              <option value="">All Grades</option>
-              {GRADE_PRESETS.map((p) => (
-                <option key={p.numeric_level} value={p.numeric_level}>{p.name}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">Source</label>
-            <select
-              value={sourceFilter}
-              onChange={(e) => { setSourceFilter(e.target.value); setPage(1) }}
-              className="input w-full text-sm"
-            >
-              <option value="">All Sources</option>
-              {SOURCES.map((s) => (
-                <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">Search</label>
-            <div className="relative">
-              <input
-                type="text"
-                value={search}
-                onChange={(e) => { setSearch(e.target.value); setPage(1) }}
-                className="input w-full text-sm pl-8"
-                placeholder="Name or phone..."
-              />
-              <svg className="w-4 h-4 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
-            </div>
+              Convert to students
+            </button>
           </div>
         </div>
-        {hasFilters && (
-          <button onClick={clearFilters} className="mt-3 text-xs text-primary-600 hover:text-primary-700 font-medium">
-            Clear all filters
-          </button>
-        )}
-      </div>
+      )}
 
       {/* Loading */}
       {isLoading && (
@@ -393,9 +361,9 @@ export default function EnquiriesPage() {
             ))}
           </CardGrid>
           ) : (
-          <div className="card overflow-x-auto mb-4">
+          <div className="card !p-0 overflow-x-auto mb-4">
             <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
+              <thead className="bg-gray-50/70">
                 <tr>
                   <th className="px-3 py-3 text-left w-10">
                     <input
@@ -409,14 +377,13 @@ export default function EnquiriesPage() {
                       title="Select all confirmed enquiries"
                     />
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Father Name</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Mobile</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Grade</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Source</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Follow-up</th>
-                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
+                  <th className="px-4 py-3 text-left text-[11px] font-semibold tracking-wide text-gray-500 uppercase">Child</th>
+                  <th className="px-4 py-3 text-left text-[11px] font-semibold tracking-wide text-gray-500 uppercase">Mobile</th>
+                  <th className="px-4 py-3 text-left text-[11px] font-semibold tracking-wide text-gray-500 uppercase">Grade</th>
+                  <th className="px-4 py-3 text-left text-[11px] font-semibold tracking-wide text-gray-500 uppercase">Status</th>
+                  <th className="px-4 py-3 text-left text-[11px] font-semibold tracking-wide text-gray-500 uppercase">Source</th>
+                  <th className="px-4 py-3 text-left text-[11px] font-semibold tracking-wide text-gray-500 uppercase">Follow-up</th>
+                  <th className="px-4 py-3 text-right text-[11px] font-semibold tracking-wide text-gray-500 uppercase">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -434,8 +401,15 @@ export default function EnquiriesPage() {
                         <span />
                       )}
                     </td>
-                    <td className="px-4 py-3 text-sm font-medium text-gray-900">{enquiry.name}</td>
-                    <td className="px-4 py-3 text-sm text-gray-600">{enquiry.father_name}</td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-3">
+                        <Avatar name={enquiry.name} />
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-gray-900 truncate">{enquiry.name}</p>
+                          <p className="text-xs text-gray-500 truncate">S/O {enquiry.father_name}</p>
+                        </div>
+                      </div>
+                    </td>
                     <td className="px-4 py-3 text-sm text-gray-600">{enquiry.mobile}</td>
                     <td className="px-4 py-3 text-sm text-gray-600">
                       {GRADE_LEVEL_LABELS[enquiry.applying_for_grade_level] || 'N/A'}
@@ -531,6 +505,7 @@ export default function EnquiriesPage() {
       {/* Batch Convert Modal */}
       {showConvertModal && (
         <BatchConvertModal
+          enquiries={enquiries}
           enquiryIds={[...selected].filter((id) =>
             enquiries.find((e) => e.id === id && e.status === 'CONFIRMED')
           )}

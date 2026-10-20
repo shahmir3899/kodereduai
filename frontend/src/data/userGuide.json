@@ -3,7 +3,7 @@
     "title": "Education AI",
     "subtitle": "School Administration Guide",
     "version": "3.4 - Manual Attendance & Updated Navigation",
-    "generatedAt": "2026-10-19T04:57:55.189662+00:00",
+    "generatedAt": "2026-10-20T10:29:53.283035+00:00",
     "totalChapters": 22,
     "modules": [
       "Dashboard | Classes & Students | Attendance (Manual Entry)",
@@ -1803,7 +1803,7 @@
             {
               "type": "step",
               "number": 6,
-              "text": "Click 'Publish Results' to make them visible to students and parents."
+              "text": "To make results visible to students and parents, open Sidebar > Academics > Exams, find the exam group and click 'Announce Results' (or 'Announce Ready Classes' if some classes are still missing marks). The button stays disabled until all marks for that exam are entered."
             }
           ],
           "video": "ch6-step-5-view-publish-results"
@@ -1987,7 +1987,17 @@
             {
               "type": "step",
               "number": 5,
+              "text": "Tick at least one Linked Topic. The bank lists questions by class through their topics, so a question without a topic is saved but does not appear when you filter by class."
+            },
+            {
+              "type": "step",
+              "number": 6,
               "text": "Optionally add tags and link a Source Content Block from the book."
+            },
+            {
+              "type": "step",
+              "number": 7,
+              "text": "To find the question again, choose the Class (and Subject) in the filters at the top. The list stays empty until a class is selected."
             },
             {
               "type": "body_text",
@@ -2019,21 +2029,26 @@
             {
               "type": "step",
               "number": 2,
-              "text": "Paper Structure: define the sections of the paper."
+              "text": "The Paper Title is filled in from the exam, class and subject. Edit it if you want a different title; clear it to get the suggestion back."
             },
             {
               "type": "step",
               "number": 3,
-              "text": "Add Questions in one of three ways: type them manually, pick from the question bank or lesson plans, or capture from an image of a handwritten paper."
+              "text": "Paper Structure: define the sections of the paper. Sections are optional. If the section marks do not add up to the Total Marks, a 'Marks mismatch' message asks you to confirm - press Continue to go on anyway."
             },
             {
               "type": "step",
               "number": 4,
-              "text": "For image capture, take a clear, well-lit photo and review the extracted questions before confirming."
+              "text": "Choose how to add questions: 'Type manually', 'From question bank / lesson plans' or 'Capture from image' (a handwritten paper). You can change the source later."
             },
             {
               "type": "step",
               "number": 5,
+              "text": "For image capture, take a clear, well-lit photo and review the extracted questions before confirming."
+            },
+            {
+              "type": "step",
+              "number": 6,
               "text": "Check the Curriculum Coverage and Bloom distribution panel, and fix any marks mismatch warning."
             },
             {
@@ -2159,11 +2174,16 @@
             {
               "type": "step",
               "number": 5,
-              "text": "Check 'Staff Visible' if staff members should see this account."
+              "text": "Leave 'Visible to Staff' ticked if staff members should see this account."
             },
             {
               "type": "step",
               "number": 6,
+              "text": "Click 'Save'. The new account appears in the Manage Accounts list."
+            },
+            {
+              "type": "step",
+              "number": 7,
               "text": "Create at least one CASH and one BANK account before collecting fees."
             }
           ],
@@ -2206,50 +2226,45 @@
             },
             {
               "type": "body_text",
-              "text": "The Fee Setup page is a dedicated configuration page with three tabs: Fee Structures, Generate Records, and Student Discounts."
+              "text": "The Fee Setup page is a dedicated configuration page with four tabs: Monthly Structure, Annual Charges, Generate Records, and Student Discounts."
             },
             {
               "type": "sub_section",
-              "title": "Tab 1: Fee Structures"
+              "title": "Tab 1: Monthly Structure"
             },
             {
               "type": "body_text",
-              "text": "Set base fee amounts by class or by individual student."
+              "text": "Set the monthly fee of each class, or override it for individual students."
             },
             {
               "type": "step",
               "number": 1,
-              "text": "Use the 'By Class' / 'By Student' toggle to switch modes."
+              "text": "Use the 'By Class' / 'By Student' toggle at the top to switch modes."
             },
             {
               "type": "step",
               "number": 2,
-              "text": "Use the fee type tabs (Monthly, Annual, Admission, Books, Fine) to switch between fee types."
+              "text": "By Class: each class has its own card. Click 'Edit' (or '+ Set Up' for a class with no fee yet), choose the fee category and enter the amount. Use '+ Add Charge' for more categories."
             },
             {
               "type": "step",
               "number": 3,
-              "text": "By Class: Enter the fee amount for each class. Leave as 0 for classes that don't pay this fee."
+              "text": "By Student: select a class, then click 'Edit' to override individual student fees. Overrides are highlighted in blue. Students without an override use the class default."
             },
             {
               "type": "step",
               "number": 4,
-              "text": "By Student: Select a class, then override individual student fees. Overrides are highlighted in blue. Students without an override use the class default."
-            },
-            {
-              "type": "step",
-              "number": 5,
               "text": "Set the 'Effective From' date (when this fee amount takes effect)."
             },
             {
               "type": "step",
-              "number": 6,
-              "text": "Click 'Review Changes' (by class) or 'Review & Save' (by student) to see a confirmation summary."
+              "number": 5,
+              "text": "Click 'Review & Save' to see a confirmation summary with the new total."
             },
             {
               "type": "step",
-              "number": 7,
-              "text": "Confirm to save. Fee structures are used to auto-calculate amounts when generating fee records."
+              "number": 6,
+              "text": "Click 'Confirm & Save'. A success message appears. Fee structures are used to auto-calculate amounts when generating fee records."
             },
             {
               "type": "info_box",
@@ -2257,27 +2272,31 @@
               "text": "Student-level fee overrides take precedence over class-level defaults. You can set a per-student override from the By Student mode."
             },
             {
+              "type": "body_text",
+              "text": "The Annual Charges tab works the same way for yearly fees such as admission, books and fines."
+            },
+            {
               "type": "sub_section",
-              "title": "Tab 2: Generate Records"
+              "title": "Tab 3: Generate Records"
             },
             {
               "type": "step",
-              "number": 8,
+              "number": 7,
               "text": "Use the fee type tabs to select which type of fee to generate."
             },
             {
               "type": "step",
-              "number": 9,
+              "number": 8,
               "text": "For Monthly fees: select the month and year. The system shows a preview of how many records will be created, how many already exist (will be skipped), and the total amount."
             },
             {
               "type": "step",
-              "number": 10,
+              "number": 9,
               "text": "For non-monthly fees (Annual, Admission, Books, Fine): select the class to preview. The system shows per-student amounts resolved from fee structures."
             },
             {
               "type": "step",
-              "number": 11,
+              "number": 10,
               "text": "Review the preview, then click 'Generate' and confirm. Fee records are created for all eligible students. Students without a fee structure or with existing records are skipped."
             },
             {
@@ -2286,7 +2305,7 @@
             },
             {
               "type": "sub_section",
-              "title": "Tab 3: Student Discounts"
+              "title": "Tab 4: Student Discounts"
             },
             {
               "type": "body_text",
@@ -2294,32 +2313,32 @@
             },
             {
               "type": "step",
-              "number": 12,
+              "number": 11,
               "text": "Select a class from the dropdown. The student table loads with columns: Roll, Student Name, Base Fee, Discount/Scholarship, Effective Fee, and Action."
             },
             {
               "type": "step",
-              "number": 13,
+              "number": 12,
               "text": "Students with an assigned discount show a colored badge (blue for discounts, purple for scholarships) and their row is highlighted green."
             },
             {
               "type": "step",
-              "number": 14,
+              "number": 13,
               "text": "Click 'Assign' on a student row to open the assignment modal."
             },
             {
               "type": "step",
-              "number": 15,
+              "number": 14,
               "text": "In the modal, toggle between 'Discount' and 'Scholarship', select from the dropdown (shows name, type, and value), add optional notes, then click 'Assign'."
             },
             {
               "type": "step",
-              "number": 16,
+              "number": 15,
               "text": "To remove a discount, click 'Remove' on the student row and confirm."
             },
             {
               "type": "step",
-              "number": 17,
+              "number": 16,
               "text": "Use the 'Bulk Assign' button to assign one discount or scholarship to all students in the selected class at once. The system shows how many were created and how many were skipped (already assigned)."
             },
             {
@@ -2337,13 +2356,13 @@
           "content": [
             {
               "type": "nav_path",
-              "path": "Sidebar > Finance > Collect Payments > Create Fee",
+              "path": "Sidebar > Finance > Collect Payments > Generate Single Fee Record",
               "href": "/finance/fees/collect"
             },
             {
               "type": "step",
               "number": 1,
-              "text": "Click 'Create Fee' to open the single fee creation modal."
+              "text": "Click 'Generate Single Fee Record' to open the single fee creation window."
             },
             {
               "type": "step",
@@ -2368,7 +2387,7 @@
             {
               "type": "step",
               "number": 6,
-              "text": "Click 'Create' to save the fee record."
+              "text": "Click 'Create' to save the fee record. A success message appears, the window closes by itself and the record shows in the fee table."
             }
           ],
           "video": "ch7-creating-individual-fee-records"

@@ -1077,6 +1077,7 @@ class StudentEnrollmentViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
                 school_id=school_id,
                 academic_year_id=target_year.id,
                 class_obj_id=resolved_target_class_id,
+                session_class_id=resolved_target_session_class_id,
             )
             final_roll = allocator.resolve_roll(
                 preferred_roll=resolved_roll,

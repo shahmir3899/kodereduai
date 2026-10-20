@@ -5,7 +5,8 @@ import { admissionsApi, sessionsApi } from '../services/api'
 import ClassSelector from './ClassSelector'
 import { useToast } from './Toast'
 import { useSessionClasses } from '../hooks/useSessionClasses'
-import { getClassSelectorScope, getResolvedMasterClassId } from '../utils/classScope'
+import { getClassSelectorScope, resolveSessionClassId } from '../utils/classScope'
+import { GRADE_LEVEL_LABELS } from '../constants/gradePresets'
 import { useEscapeKey } from '../hooks/useEscapeKey'
 
 const FEE_TYPE_OPTIONS = [
@@ -15,7 +16,7 @@ const FEE_TYPE_OPTIONS = [
   { value: 'MONTHLY', label: 'Monthly Fee (current month)' },
 ]
 
-export default function BatchConvertModal({ enquiryIds, onClose, onSuccess }) {
+export default function BatchConvertModal({ enquiryIds, enquiries = [], onClose, onSuccess }) {
   useEscapeKey(onClose)
   const { showError, showSuccess } = useToast()
   const queryClient = useQueryClient()
@@ -33,7 +34,17 @@ export default function BatchConvertModal({ enquiryIds, onClose, onSuccess }) {
   const years = yearsRes?.data?.results || yearsRes?.data || []
   const { sessionClasses } = useSessionClasses(academicYearId || null)
   const classSelectorScope = getClassSelectorScope(academicYearId || null)
-  const resolvedClassId = getResolvedMasterClassId(classId, academicYearId || null, sessionClasses)
+  // The section (SessionClass) is what we send. Collapsing it to a master class id
+  // is what used to put Class 2-B admissions into 2-A.
+  const sessionClassId = resolveSessionClassId(classId, academicYearId || null, sessionClasses)
+  const chosenSection = sessionClasses.find(sc => String(sc.id) === String(sessionClassId))
+  const sectionLabel = chosenSection
+    ? `${chosenSection.display_name}${chosenSection.section ? ` - ${chosenSection.section}` : ''}`
+    : ''
+  const picked = enquiries.filter(e => enquiryIds.includes(e.id))
+  const gradeMismatch = chosenSection
+    ? picked.filter(e => e.applying_for_grade_level != null && e.applying_for_grade_level !== chosenSection.grade_level)
+    : []
 
   // Convert mutation
   const convertMut = useMutation({
@@ -70,8 +81,8 @@ export default function BatchConvertModal({ enquiryIds, onClose, onSuccess }) {
       showError('Please select an academic year')
       return
     }
-    if (!classId) {
-      showError('Please select a class')
+    if (!sessionClassId) {
+      showError('Please select a section')
       return
     }
     if (generateFees && selectedFeeTypes.length === 0) {
@@ -81,7 +92,7 @@ export default function BatchConvertModal({ enquiryIds, onClose, onSuccess }) {
     convertMut.mutate({
       enquiry_ids: enquiryIds,
       academic_year_id: parseInt(academicYearId),
-      class_id: parseInt(resolvedClassId),
+      session_class_id: parseInt(sessionClassId),
       generate_fees: generateFees,
       fee_types: generateFees ? selectedFeeTypes : [],
     })
@@ -105,8 +116,19 @@ export default function BatchConvertModal({ enquiryIds, onClose, onSuccess }) {
 
         <p className="text-sm text-gray-600 mb-4">
           Convert <strong>{enquiryIds.length}</strong> confirmed enquir{enquiryIds.length === 1 ? 'y' : 'ies'} into
-          students. Each student will be enrolled in the selected academic year and class.
+          students. Each student will be enrolled in the selected academic year and section.
         </p>
+
+        {picked.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 mb-4">
+            {picked.map(e => (
+              <span key={e.id} className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2.5 py-1 text-xs text-gray-700">
+                {e.name}
+                <span className="text-gray-400">· {GRADE_LEVEL_LABELS[e.applying_for_grade_level] || 'No grade'}</span>
+              </span>
+            ))}
+          </div>
+        )}
 
         <div className="space-y-4">
           {/* Academic Year */}
@@ -135,7 +157,7 @@ export default function BatchConvertModal({ enquiryIds, onClose, onSuccess }) {
           {/* Class */}
           <div>
             <label className="label">
-              Class <span className="text-red-500">*</span>
+              Class &amp; Section <span className="text-red-500">*</span>
             </label>
             <ClassSelector
               value={classId}
@@ -145,6 +167,14 @@ export default function BatchConvertModal({ enquiryIds, onClose, onSuccess }) {
               academicYearId={academicYearId || undefined}
               required
             />
+            {!academicYearId && (
+              <p className="text-xs text-gray-400 mt-1">Select an academic year to see its sections.</p>
+            )}
+            {gradeMismatch.length > 0 && (
+              <p className="text-xs text-amber-600 mt-1">
+                {gradeMismatch.map(e => e.name).join(', ')} applied for a different grade than {sectionLabel}.
+              </p>
+            )}
           </div>
 
           {/* Fee Generation */}
@@ -191,7 +221,7 @@ export default function BatchConvertModal({ enquiryIds, onClose, onSuccess }) {
           </button>
           <button
             onClick={handleConvert}
-            disabled={convertMut.isPending || !academicYearId || !resolvedClassId}
+            disabled={convertMut.isPending || !academicYearId || !sessionClassId}
             className="btn-primary px-6 py-2 text-sm disabled:opacity-50 bg-purple-600 hover:bg-purple-700"
           >
             {convertMut.isPending ? 'Converting...' : `Convert ${enquiryIds.length} Enquiries`}

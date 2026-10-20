@@ -152,9 +152,12 @@ export default function EnquiryForm() {
       </Link>
 
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 sm:p-6">
-        <h1 className="text-xl sm:text-2xl font-bold text-gray-900 mb-6">
+        <h1 className="text-xl sm:text-2xl font-bold text-gray-900">
           {isEdit ? 'Edit Enquiry' : 'New Enquiry'}
         </h1>
+        <p className="text-sm text-gray-500 mt-1 mb-6">
+          Record the child and family details. The class section is chosen later, when the enquiry is converted.
+        </p>
 
         {/* Global errors */}
         {(errors.detail || errors.non_field_errors) && (
@@ -164,7 +167,7 @@ export default function EnquiryForm() {
         )}
 
         <form onSubmit={handleSubmit} className="space-y-5">
-          {/* Name */}
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-400">Child &amp; family</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="label">
@@ -195,7 +198,7 @@ export default function EnquiryForm() {
             </div>
           </div>
 
-          {/* Mobile & Grade */}
+          <h2 className="pt-2 text-xs font-semibold uppercase tracking-wide text-gray-400">Contact &amp; grade</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="label">
@@ -227,7 +230,7 @@ export default function EnquiryForm() {
             </div>
           </div>
 
-          {/* Source & Follow-up */}
+          <h2 className="pt-2 text-xs font-semibold uppercase tracking-wide text-gray-400">Tracking</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Field label="Source">
 <select

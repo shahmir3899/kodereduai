@@ -58,11 +58,19 @@ def _build_filtered_students_qs(school_id, filters):
     students_qs = Student.objects.filter(school_id=school_id, is_active=True)
 
     class_obj_id = filters.get('class_obj_id')
-    if class_obj_id:
-        students_qs = students_qs.filter(class_obj_id=class_obj_id)
-
     academic_year_id = filters.get('academic_year_id')
     session_class_id = filters.get('session_class_id')
+    if class_obj_id and not session_class_id:
+        # Where the student is enrolled this year, not the Student.class_obj snapshot
+        # (which is next year's class right after promotion).
+        from academic_sessions.roster import enrollments_in_scope
+        enrollments = enrollments_in_scope(
+            school_id, academic_year_id=academic_year_id or None, class_obj_id=class_obj_id,
+        )
+        if enrollments is not None:
+            students_qs = students_qs.filter(id__in=enrollments.values('student_id'))
+        else:
+            students_qs = students_qs.filter(class_obj_id=class_obj_id)
     if academic_year_id or session_class_id:
         enrollment_filters = {'enrollments__is_active': True}
         if academic_year_id:

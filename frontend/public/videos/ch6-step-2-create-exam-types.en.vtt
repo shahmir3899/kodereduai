@@ -1,0 +1,22 @@
+WEBVTT
+
+00:00:00.116 --> 00:00:05.776
+Create exam types
+
+00:00:05.826 --> 00:00:09.260
+Open Academics, then Exam Types.
+
+00:00:11.638 --> 00:00:13.787
+Press Add Exam Type.
+
+00:00:15.891 --> 00:00:21.779
+Type the name, and set the weight: how much this exam counts toward the final result.
+
+00:00:27.353 --> 00:00:33.972
+Tick Final exam only for exams that decide promotion. We leave it off for a unit test.
+
+00:00:34.437 --> 00:00:38.966
+Press Create. The new exam type appears in the list.
+
+00:00:42.096 --> 00:00:46.779
+Exam type added

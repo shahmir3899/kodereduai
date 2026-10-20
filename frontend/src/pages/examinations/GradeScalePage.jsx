@@ -67,7 +67,8 @@ export default function GradeScalePage() {
     const gradeLabel = (form.grade_label || '').trim()
     const min_percentage = Number(form.min_percentage)
     const max_percentage = Number(form.max_percentage)
-    const order = Number.isFinite(Number(form.order)) ? parseInt(form.order, 10) : 0
+    // A blank Order is '': parseInt('') is NaN, which serialises to null and the API answers 400 with no visible message.
+    const order = parseInt(form.order, 10) || 0
     const gpa_points = form.gpa_points === '' || form.gpa_points == null ? 0 : Number(form.gpa_points)
 
     const validationErrors = {}
@@ -213,6 +214,7 @@ export default function GradeScalePage() {
                 <Field label="Order">
 <input type="number" min="0" value={form.order} onChange={e => setForm(p => ({ ...p, order: e.target.value }))}
                     className="input w-full" placeholder="0" />
+{errors.order && <p className="text-xs text-red-600 mt-1">{errors.order}</p>}
 </Field>
               </div>
               <div className="grid grid-cols-2 gap-3">

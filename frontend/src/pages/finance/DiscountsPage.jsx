@@ -12,7 +12,7 @@ import { discountApi, studentsApi, sessionsApi } from '../../services/api'
 import ClassSelector from '../../components/ClassSelector'
 import { useToast } from '../../components/Toast'
 import { GRADE_PRESETS, GRADE_LEVEL_LABELS } from '../../constants/gradePresets'
-import { getClassSelectorScope, getResolvedMasterClassId } from '../../utils/classScope'
+import { getClassSelectorScope, getResolvedMasterClassId, resolveSessionClassId } from '../../utils/classScope'
 import Badge from '../../components/ui/Badge'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
 
@@ -168,6 +168,7 @@ export default function DiscountsPage() {
   })
   const resolvedDiscountTargetClass = getResolvedMasterClassId(discountForm.target_class, activeAcademicYear?.id, sessionClasses)
   const resolvedBulkAssignClassId = getResolvedMasterClassId(bulkAssignForm.class_id, activeAcademicYear?.id, sessionClasses)
+  const resolvedBulkAssignSessionClassId = resolveSessionClassId(bulkAssignForm.class_id, activeAcademicYear?.id, sessionClasses)
   const sessionClassIdByMasterId = useMemo(() => {
     const map = {}
     sessionClasses.forEach((sc) => {
@@ -633,6 +634,8 @@ export default function DiscountsPage() {
     if (bulkAssignForm.discount_id) payload.discount_id = parseInt(bulkAssignForm.discount_id)
     if (bulkAssignForm.scholarship_id) payload.scholarship_id = parseInt(bulkAssignForm.scholarship_id)
     if (resolvedBulkAssignClassId) payload.class_id = parseInt(resolvedBulkAssignClassId)
+    // The section, not just its class, so "Class 2-B" does not also reach 2-A.
+    if (resolvedBulkAssignSessionClassId) payload.session_class_id = parseInt(resolvedBulkAssignSessionClassId)
     if (bulkAssignForm.grade_level) payload.grade_level = parseInt(bulkAssignForm.grade_level)
 
     bulkAssignMutation.mutate(payload)

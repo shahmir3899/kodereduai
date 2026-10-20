@@ -665,3 +665,52 @@ class TestPromotionHistoryAndCorrections:
             )
         }
         assert source_after == source_before
+
+
+class TestPromotionRollsArePerSection:
+    def test_same_roll_allowed_in_two_target_sections(self, seed_data, api):
+        token = seed_data['tokens']['admin']
+        sid = seed_data['SID_A']
+        school = seed_data['school_a']
+        source_year = seed_data['academic_year']
+        class_1, class_2 = seed_data['classes'][0], seed_data['classes'][1]
+        s_a, s_b = seed_data['students'][0], seed_data['students'][1]
+
+        for roll, student in (('1', s_a), ('2', s_b)):
+            StudentEnrollment.objects.create(
+                school=school, student=student, academic_year=source_year,
+                class_obj=class_1, roll_number=roll,
+                status=StudentEnrollment.Status.ACTIVE, is_active=True,
+            )
+        target_year = AcademicYear.objects.create(
+            school=school, name=f"{seed_data['prefix']}2027-per-section",
+            start_date=date(2027, 4, 1), end_date=date(2028, 3, 31),
+            is_current=False, is_active=True,
+        )
+        sections = {
+            letter: SessionClass.objects.create(
+                school=school, academic_year=target_year, class_obj=class_2,
+                display_name=class_2.name, section=letter,
+                grade_level=class_2.grade_level, is_active=True,
+            ) for letter in ('A', 'B')
+        }
+
+        resp = api.post('/api/sessions/enrollments/bulk_promote/', {
+            'source_academic_year': source_year.id,
+            'target_academic_year': target_year.id,
+            'promotions': [
+                {'student_id': s_a.id, 'target_class_id': class_2.id,
+                 'target_session_class_id': sections['A'].id, 'new_roll_number': '1', 'action': 'PROMOTE'},
+                {'student_id': s_b.id, 'target_class_id': class_2.id,
+                 'target_session_class_id': sections['B'].id, 'new_roll_number': '1', 'action': 'PROMOTE'},
+            ],
+        }, token, sid)
+        assert resp.status_code == 200, resp.content[:300]
+        assert resp.json()['result']['promoted'] == 2
+
+        rolls = {
+            e.session_class_id: e.roll_number
+            for e in StudentEnrollment.objects.filter(academic_year=target_year, student__in=[s_a, s_b])
+        }
+        # Before the fix the second section's student was bumped to '2'.
+        assert rolls == {sections['A'].id: '1', sections['B'].id: '1'}

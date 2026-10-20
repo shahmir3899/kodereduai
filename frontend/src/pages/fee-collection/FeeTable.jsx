@@ -1,4 +1,4 @@
-import { useRef, useMemo } from 'react'
+import { Fragment, useRef, useMemo } from 'react'
 import { TONE } from '../../components/ui/statusTones'
 import { MONTHS } from './FeeFilters'
 import Badge from '../../components/ui/Badge'
@@ -568,8 +568,8 @@ export default function FeeTable({
               const showStudentCols = !shouldGroupByStudent || !group || group.isFirst
               const studentTotal = groupedTotalsByKey.get(studentKey)
               return (
-                <>
-                  <tr key={payment.id} className={`${isSelected ? 'bg-primary-50' : ''} ${shouldGroupByStudent && group && !group.isFirst ? 'border-t border-dashed border-gray-100' : ''}`}>
+                <Fragment key={payment.id}>
+                  <tr className={`${isSelected ? 'bg-primary-50' : ''} ${shouldGroupByStudent && group && !group.isFirst ? 'border-t border-dashed border-gray-100' : ''}`}>
                     {canWrite && (
                       <td className="px-3 py-2 text-center">
                         <input
@@ -720,7 +720,7 @@ export default function FeeTable({
                       <td colSpan={footerTrailingColSpan} className="px-3 py-2" />
                     </tr>
                   )}
-                </>
+                </Fragment>
               )
             })}
           </tbody>

@@ -147,7 +147,8 @@ export default function BookIssuePage() {
     issueMutation.mutate({
       book: parseInt(issueForm.book_id),
       borrower_type: issueForm.borrower_type,
-      borrower_id: parseInt(issueForm.borrower_id),
+      // backend takes the borrower as `student` or `staff` (by borrower_type)
+      [issueForm.borrower_type === 'STAFF' ? 'staff' : 'student']: parseInt(issueForm.borrower_id),
       due_date: issueForm.due_date,
       notes: issueForm.notes,
     })

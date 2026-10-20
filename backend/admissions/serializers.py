@@ -107,7 +107,14 @@ class BatchConvertSerializer(serializers.Serializer):
         help_text='List of enquiry IDs to convert.',
     )
     academic_year_id = serializers.IntegerField(help_text='Target academic year.')
-    class_id = serializers.IntegerField(help_text='Target class to enrol students into.')
+    session_class_id = serializers.IntegerField(
+        required=False,
+        help_text='Target section (SessionClass) for the academic year. Preferred.',
+    )
+    class_id = serializers.IntegerField(
+        required=False,
+        help_text='Legacy: master class id. Only accepted when it maps to a single section.',
+    )
     generate_fees = serializers.BooleanField(
         default=False,
         required=False,
@@ -123,6 +130,10 @@ class BatchConvertSerializer(serializers.Serializer):
     )
 
     def validate(self, attrs):
+        if not attrs.get('session_class_id') and not attrs.get('class_id'):
+            raise serializers.ValidationError({
+                'session_class_id': 'Select the section to enrol the students into.'
+            })
         if attrs.get('generate_fees') and not attrs.get('fee_types'):
             raise serializers.ValidationError({
                 'fee_types': 'At least one fee type is required when generate_fees is True.'

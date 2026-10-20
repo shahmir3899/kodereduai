@@ -218,19 +218,19 @@ export default function SubjectsPage() {
   // Subject mutations
   const createSubjectMut = useMutation({
     mutationFn: (data) => academicsApi.createSubject(data),
-    onSuccess: async () => { await refetchSubjects(); closeSubjectModal() },
+    onSuccess: async () => { await refetchSubjects(); closeSubjectModal(); showSuccess('Subject added successfully') },
     onError: (err) => setSubjectErrors(err.response?.data || { detail: 'Failed to create subject' }),
   })
 
   const updateSubjectMut = useMutation({
     mutationFn: ({ id, data }) => academicsApi.updateSubject(id, data),
-    onSuccess: async () => { await refetchSubjects(); closeSubjectModal() },
+    onSuccess: async () => { await refetchSubjects(); closeSubjectModal(); showSuccess('Subject updated successfully') },
     onError: (err) => setSubjectErrors(err.response?.data || { detail: 'Failed to update subject' }),
   })
 
   const deleteSubjectMut = useMutation({
     mutationFn: (id) => academicsApi.deleteSubject(id),
-    onSuccess: () => refetchSubjects(),
+    onSuccess: () => { refetchSubjects(); showSuccess('Subject deleted') },
   })
 
   // Bulk create mutation (for "Add All Remaining")
@@ -259,9 +259,10 @@ export default function SubjectsPage() {
       const d = res.data
       if (d.skipped_count > 0) {
         setAssignErrors({ detail: `${d.created_count} assigned, ${d.skipped_count} skipped (already assigned): ${d.skipped_subjects.join(', ')}` })
-        if (d.created_count > 0) setTimeout(closeAssignModal, 2000)
+        if (d.created_count > 0) { setTimeout(closeAssignModal, 2000); showSuccess('Subject assigned successfully') }
       } else {
         closeAssignModal()
+        showSuccess('Subject assigned successfully')
       }
     },
     onError: (err) => setAssignErrors(err.response?.data || { detail: 'Failed to create assignment' }),
@@ -269,13 +270,13 @@ export default function SubjectsPage() {
 
   const updateAssignMut = useMutation({
     mutationFn: ({ id, data }) => academicsApi.updateClassSubject(id, data),
-    onSuccess: async () => { await refetchAssignments(); closeAssignModal() },
+    onSuccess: async () => { await refetchAssignments(); closeAssignModal(); showSuccess('Assignment updated successfully') },
     onError: (err) => setAssignErrors(err.response?.data || { detail: 'Failed to update assignment' }),
   })
 
   const deleteAssignMut = useMutation({
     mutationFn: (id) => academicsApi.deleteClassSubject(id),
-    onSuccess: () => refetchAssignments(),
+    onSuccess: () => { refetchAssignments(); showSuccess('Assignment removed') },
   })
 
   const refetchClassTeachers = () => queryClient.refetchQueries({ queryKey: ['classTeacherAssignments'] })
