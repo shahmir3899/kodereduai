@@ -1126,14 +1126,15 @@ def build_guide():
         "and viewing all student assignments across the school."
     )
     pdf.sub_section("Creating Discount Rules")
-    pdf.step("Go to the 'Discounts' tab and click 'Add Discount'.")
-    pdf.step("Define: Discount Name, Type (Percentage or Fixed Amount), Value.")
-    pdf.step("Set 'Applies To': All Students, Grade Level, Specific Class, Individual Student, or Siblings.")
-    pdf.step("Optionally set start/end dates, max uses, and whether the discount is stackable.")
+    pdf.step("Go to the 'Discounts' tab and click 'Add Discount'. The 'Create Discount' window opens.")
+    pdf.step("Enter the Discount Name, choose the Type (Percentage or Fixed Amount) and enter the Value.")
+    pdf.step("Set 'Applies To': All Students, All classes at a grade level, Specific Class, or Siblings.")
+    pdf.step("Optionally set start/end dates and whether the discount is stackable.")
+    pdf.step("Press 'Create Discount'. The new discount appears in the list.")
     pdf.sub_section("Creating Scholarships")
     pdf.step("Go to the 'Scholarships' tab and click 'Add Scholarship'.")
-    pdf.step("Define: Name, Type (Merit, Need, Sports, Staff Child, Other).")
-    pdf.step("Set coverage: Full Fee Waiver, Percentage Off, or Fixed Amount Off.")
+    pdf.step("Define: Name, Type (Merit, Need-Based, Sports, Staff Child, Other).")
+    pdf.step("Set coverage: Full (100%), Percentage, or Fixed Amount, then press 'Create Scholarship'.")
     pdf.sub_section("Assigning to Students")
     pdf.body_text(
         "Student assignments can be managed from two places: the Discounts page (Student Assignments tab) "
@@ -1172,15 +1173,18 @@ def build_guide():
                  "Best practice: mark students as inactive instead of deleting them.")
 
     pdf.section_title("Inter-Account Transfers")
-    pdf.step("On the Finance Dashboard, click 'Transfer'.")
-    pdf.step("Select: Source Account, Destination Account, Amount, Description.")
-    pdf.step("Click 'Transfer'. Both account balances update immediately.")
+    pdf.nav_path("Sidebar > Finance > Accounts > Transfers tab")
+    pdf.step("Open the Transfers tab and click 'Record Transfer'.")
+    pdf.step("Choose the From Account and To Account. Enter the Amount, the Date and an optional Description.")
+    pdf.step("Click 'Review Transfer', check the details, then click 'Confirm Transfer'. Both account balances update and the transfer appears in the list.")
 
     pdf.section_title("Month Closing")
     pdf.nav_path("Sidebar > Finance > Accounts > Close Month")
-    pdf.step("At the end of each month, click 'Close Month' on the Finance > Accounts page.")
-    pdf.step("This finalizes the month's transactions and carries forward balances.")
-    pdf.step("Closed months cannot be edited (prevents accidental changes to past records).")
+    pdf.step("At the end of each month, click 'Close Month' at the top of Finance > Accounts (admins only).")
+    pdf.step("Choose the month and year. The window warns that the period will be locked.")
+    pdf.step("Tick 'I understand, close this period' and click 'Close Month'.")
+    pdf.step("Closing saves a Balance Brought Forward (BBF) snapshot of every account. No transactions can be added or edited in that month afterwards.")
+    pdf.step("A month needs at least one transaction (payment, expense or other income) before it can be closed.")
 
     pdf.section_title("Fee Overview")
     pdf.nav_path("Sidebar > Finance > Fee Overview")
@@ -1366,10 +1370,10 @@ def build_guide():
     pdf.section_title("Creating Enquiries")
     pdf.nav_path("Sidebar > Admissions > Enquiries")
     pdf.step("Click 'New Enquiry'.")
-    pdf.step("Fill in: Student Name, Parent Name, Phone, Email, Target Grade.")
-    pdf.step("Set Source: Walk-in, Phone, Website, Referral, Social Media, Advertisement, Other.")
-    pdf.step("Set Priority: High, Medium, Low.")
-    pdf.step("Add initial notes and save.")
+    pdf.step("Fill in: Student Name, Father Name, Mobile and Grade Applied For.")
+    pdf.step("Set Source: Walk-in, Phone Call, Website, WhatsApp, Referral, Social Media, Ad Campaign or Other.")
+    pdf.step("Optionally set the Next Follow-up Date and add notes.")
+    pdf.step("Click 'Create Enquiry'. The enquiry appears in the list with status New.")
 
     pdf.section_title("Admission Pipeline Stages")
     pdf.body_text("Each enquiry progresses through these stages:")
@@ -1385,16 +1389,16 @@ def build_guide():
     )
 
     pdf.section_title("Managing Enquiries")
-    pdf.step("View all enquiries in a searchable, filterable table.")
-    pdf.step("Filter by: Status, Grade, Source.")
-    pdf.step("The pipeline summary at the top shows counts for each stage (New, Confirmed, Converted, Cancelled).")
-    pdf.step("Use the 'Edit' action to update enquiry details or 'Cancel' to mark as cancelled.")
-    pdf.step("Move enquiries from New to Confirmed when admission is approved.")
+    pdf.step("View all enquiries in a searchable table or card view. Search by child name or phone number.")
+    pdf.step("Filter by Grade and Source. Click a stage in the Admission funnel to filter by status.")
+    pdf.step("The Admission funnel at the top shows the count for each stage (New, Confirmed, Converted, Cancelled) and the conversion rate.")
+    pdf.step("Use 'Edit' to update enquiry details, 'Cancel' to mark an enquiry as cancelled, or 'Delete' to remove one that is not yet converted.")
+    pdf.step("Click 'Confirm' on a New enquiry when the admission is approved.")
 
     pdf.section_title("Followup Management")
-    pdf.step("Open an enquiry's detail page.")
-    pdf.step("Add followup notes and schedule next followup dates.")
-    pdf.step("The dashboard shows today's and overdue followups for quick action.")
+    pdf.step("Click 'Edit' on the enquiry.")
+    pdf.step("Set the Next Follow-up Date and write what was discussed in Notes, then click 'Update Enquiry'.")
+    pdf.step("The date shows in the Follow-up column of the Enquiries list, in red once it is overdue.")
 
     pdf.section_title("Converting Enquiries to Students")
     pdf.body_text(
@@ -1402,9 +1406,9 @@ def build_guide():
         "gets a Student record and a StudentEnrollment record linking them to the chosen academic year."
     )
     pdf.step("Select one or more enquiries with 'Confirmed' status using the checkboxes.")
-    pdf.step("Click the 'Convert to Students' button that appears.")
-    pdf.step("In the modal, select the target Academic Year and Class.")
-    pdf.step("Click 'Convert'. Roll numbers are auto-assigned sequentially within that session and class.")
+    pdf.step("Click the 'Convert to students' button in the bar that appears.")
+    pdf.step("In the modal, select the target Academic Year and Class & Section. Optionally tick 'Auto-generate fee records' and choose the fee types.")
+    pdf.step("Click 'Convert N Enquiries'. Roll numbers are auto-assigned sequentially within that session and class.")
     pdf.step("Converted enquiries change status to 'Converted' and link to the created student.")
     pdf.info_box("Session-Scoped Admissions",
                  "You can admit students into any academic year, including a future session. "
@@ -1418,7 +1422,7 @@ def build_guide():
 
     pdf.section_title("Admission Analytics")
     pdf.body_text("The enquiries page provides at-a-glance analytics:")
-    pdf.bullet("Pipeline Summary - Count of enquiries in each stage (New, Confirmed, Converted, Cancelled)")
+    pdf.bullet("Admission funnel - Count of enquiries in each stage (New, Confirmed, Converted, Cancelled)")
     pdf.bullet("Conversion Rate - Percentage of enquiries that become students")
     pdf.bullet("Source Tracking - Which channels (Walk-in, Referral, etc.) bring the most enquiries")
 

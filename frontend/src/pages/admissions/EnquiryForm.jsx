@@ -11,9 +11,10 @@ const SOURCES = [
   { value: 'WALK_IN', label: 'Walk-in' },
   { value: 'PHONE', label: 'Phone Call' },
   { value: 'WEBSITE', label: 'Website' },
+  { value: 'WHATSAPP', label: 'WhatsApp' },
   { value: 'REFERRAL', label: 'Referral' },
   { value: 'SOCIAL_MEDIA', label: 'Social Media' },
-  { value: 'NEWSPAPER', label: 'Newspaper' },
+  { value: 'AD_CAMPAIGN', label: 'Ad Campaign' },
   { value: 'OTHER', label: 'Other' },
 ]
 

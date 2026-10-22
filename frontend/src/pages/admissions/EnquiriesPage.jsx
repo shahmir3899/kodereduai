@@ -30,7 +30,7 @@ const FUNNEL_STAGES = [
 
 const STATUS_COLORS = Object.fromEntries(STATUSES.map((s) => [s.key, s.color]))
 
-const SOURCES = ['WALK_IN', 'PHONE', 'WEBSITE', 'REFERRAL', 'SOCIAL_MEDIA', 'NEWSPAPER', 'OTHER']
+const SOURCES = ['WALK_IN', 'PHONE', 'WEBSITE', 'REFERRAL', 'WHATSAPP', 'SOCIAL_MEDIA', 'AD_CAMPAIGN', 'OTHER']
 
 export default function EnquiriesPage() {
   const navigate = useNavigate()

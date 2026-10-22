@@ -632,6 +632,353 @@
       }
     },
     {
+      "id": "ch7-managing-discounts-scholarships",
+      "status": "ready",
+      "title": {
+        "en": "Managing Discounts & Scholarships",
+        "ur": "رعایتیں اور وظائف"
+      },
+      "section": "7.8",
+      "chapter": 7,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL",
+        "ACCOUNTANT"
+      ],
+      "module": "finance",
+      "seconds": {
+        "en": 68,
+        "ur": 65
+      }
+    },
+    {
+      "id": "ch7-interaccount-transfers",
+      "status": "ready",
+      "title": {
+        "en": "Inter-Account Transfers",
+        "ur": "اکاؤنٹس کے درمیان منتقلی"
+      },
+      "section": "7.11",
+      "chapter": 7,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL",
+        "ACCOUNTANT"
+      ],
+      "module": "finance",
+      "seconds": {
+        "en": 57,
+        "ur": 59
+      }
+    },
+    {
+      "id": "ch7-month-closing",
+      "status": "ready",
+      "title": {
+        "en": "Month Closing",
+        "ur": "مہینہ بند کرنا"
+      },
+      "section": "7.12",
+      "chapter": 7,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL",
+        "ACCOUNTANT"
+      ],
+      "module": "finance",
+      "seconds": {
+        "en": 44,
+        "ur": 45
+      }
+    },
+    {
+      "id": "ch7-fee-overview",
+      "status": "ready",
+      "title": {
+        "en": "Fee Overview",
+        "ur": "فیس کا جائزہ"
+      },
+      "section": "7.13",
+      "chapter": 7,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL",
+        "ACCOUNTANT"
+      ],
+      "module": "finance",
+      "seconds": {
+        "en": 45,
+        "ur": 45
+      }
+    },
+    {
+      "id": "ch7-other-income",
+      "status": "ready",
+      "title": {
+        "en": "Other Income",
+        "ur": "دیگر آمدنی"
+      },
+      "section": "7.14",
+      "chapter": 7,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL",
+        "ACCOUNTANT"
+      ],
+      "module": "finance",
+      "seconds": {
+        "en": 49,
+        "ur": 50
+      }
+    },
+    {
+      "id": "ch8-setting-up-departments",
+      "status": "ready",
+      "title": {
+        "en": "Setting Up Departments",
+        "ur": "شعبے بنانا"
+      },
+      "section": "8.1",
+      "chapter": 8,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL"
+      ],
+      "module": "hr",
+      "seconds": {
+        "en": 49,
+        "ur": 50
+      }
+    },
+    {
+      "id": "ch8-adding-staff-members",
+      "status": "ready",
+      "title": {
+        "en": "Adding Staff Members",
+        "ur": "نیا عملہ شامل کرنا"
+      },
+      "section": "8.2",
+      "chapter": 8,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL"
+      ],
+      "module": "hr",
+      "seconds": {
+        "en": 69,
+        "ur": 68
+      }
+    },
+    {
+      "id": "ch8-salary-management",
+      "status": "ready",
+      "title": {
+        "en": "Salary Management",
+        "ur": "تنخواہ کا ڈھانچہ"
+      },
+      "section": "8.4",
+      "chapter": 8,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL"
+      ],
+      "module": "hr",
+      "seconds": {
+        "en": 71,
+        "ur": 74
+      }
+    },
+    {
+      "id": "ch8-payroll-processing",
+      "status": "ready",
+      "title": {
+        "en": "Payroll Processing",
+        "ur": "تنخواہ کی ادائیگی"
+      },
+      "section": "8.5",
+      "chapter": 8,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL"
+      ],
+      "module": "hr",
+      "seconds": {
+        "en": 63,
+        "ur": 63
+      }
+    },
+    {
+      "id": "ch8-staff-attendance",
+      "status": "ready",
+      "title": {
+        "en": "Staff Attendance",
+        "ur": "عملے کی حاضری"
+      },
+      "section": "8.7",
+      "chapter": 8,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL"
+      ],
+      "module": "hr",
+      "seconds": {
+        "en": 54,
+        "ur": 59
+      }
+    },
+    {
+      "id": "ch8-performance-appraisals",
+      "status": "ready",
+      "title": {
+        "en": "Performance Appraisals",
+        "ur": "کارکردگی کا جائزہ"
+      },
+      "section": "8.8",
+      "chapter": 8,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL"
+      ],
+      "module": "hr",
+      "seconds": {
+        "en": 75,
+        "ur": 78
+      }
+    },
+    {
+      "id": "ch8-staff-documents",
+      "status": "ready",
+      "title": {
+        "en": "Staff Documents",
+        "ur": "عملے کی دستاویزات"
+      },
+      "section": "8.9",
+      "chapter": 8,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL"
+      ],
+      "module": "hr",
+      "seconds": {
+        "en": 84,
+        "ur": 84
+      }
+    },
+    {
+      "id": "ch8-linking-unlinking-user-accounts",
+      "status": "ready",
+      "title": {
+        "en": "Linking & Unlinking User Accounts",
+        "ur": "یوزر اکاؤنٹ جوڑنا اور ہٹانا"
+      },
+      "section": "8.10",
+      "chapter": 8,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL"
+      ],
+      "module": "hr",
+      "seconds": {
+        "en": 59,
+        "ur": 63
+      }
+    },
+    {
+      "id": "ch8-letter-composer",
+      "status": "ready",
+      "title": {
+        "en": "Letter Composer",
+        "ur": "سرکاری خط لکھنا"
+      },
+      "section": "8.11",
+      "chapter": 8,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL"
+      ],
+      "module": "hr",
+      "seconds": {
+        "en": 62,
+        "ur": 61
+      }
+    },
+    {
+      "id": "ch9-creating-enquiries",
+      "status": "ready",
+      "title": {
+        "en": "Creating Enquiries",
+        "ur": "داخلے کی انکوائری بنانا"
+      },
+      "section": "9.2",
+      "chapter": 9,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL"
+      ],
+      "module": "admissions",
+      "seconds": {
+        "en": 64,
+        "ur": 67
+      }
+    },
+    {
+      "id": "ch9-managing-enquiries",
+      "status": "ready",
+      "title": {
+        "en": "Managing Enquiries",
+        "ur": "انکوائریز کا انتظام"
+      },
+      "section": "9.4",
+      "chapter": 9,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL"
+      ],
+      "module": "admissions",
+      "seconds": {
+        "en": 59,
+        "ur": 61
+      }
+    },
+    {
+      "id": "ch9-followup-management",
+      "status": "ready",
+      "title": {
+        "en": "Followup Management",
+        "ur": "انکوائری کا فالو اپ"
+      },
+      "section": "9.5",
+      "chapter": 9,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL"
+      ],
+      "module": "admissions",
+      "seconds": {
+        "en": 55,
+        "ur": 57
+      }
+    },
+    {
+      "id": "ch9-converting-enquiries-to-students",
+      "status": "ready",
+      "title": {
+        "en": "Converting Enquiries to Students",
+        "ur": "انکوائری کو طالب علم میں بدلنا"
+      },
+      "section": "9.6",
+      "chapter": 9,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL"
+      ],
+      "module": "admissions",
+      "seconds": {
+        "en": 52,
+        "ur": 54
+      }
+    },
+    {
       "id": "ch4-step-1-enroll-student-faces",
       "status": "planned",
       "title": {
@@ -694,281 +1041,6 @@
         "TEACHER"
       ],
       "module": "attendance"
-    },
-    {
-      "id": "ch7-managing-discounts-scholarships",
-      "status": "planned",
-      "title": {
-        "en": "Managing Discounts & Scholarships",
-        "ur": ""
-      },
-      "section": "7.8",
-      "chapter": 7,
-      "roles": [
-        "SCHOOL_ADMIN",
-        "PRINCIPAL",
-        "ACCOUNTANT"
-      ],
-      "module": "finance"
-    },
-    {
-      "id": "ch7-interaccount-transfers",
-      "status": "planned",
-      "title": {
-        "en": "Inter-Account Transfers",
-        "ur": ""
-      },
-      "section": "7.11",
-      "chapter": 7,
-      "roles": [
-        "SCHOOL_ADMIN",
-        "PRINCIPAL",
-        "ACCOUNTANT"
-      ],
-      "module": "finance"
-    },
-    {
-      "id": "ch7-month-closing",
-      "status": "planned",
-      "title": {
-        "en": "Month Closing",
-        "ur": ""
-      },
-      "section": "7.12",
-      "chapter": 7,
-      "roles": [
-        "SCHOOL_ADMIN",
-        "PRINCIPAL",
-        "ACCOUNTANT"
-      ],
-      "module": "finance"
-    },
-    {
-      "id": "ch7-fee-overview",
-      "status": "planned",
-      "title": {
-        "en": "Fee Overview",
-        "ur": ""
-      },
-      "section": "7.13",
-      "chapter": 7,
-      "roles": [
-        "SCHOOL_ADMIN",
-        "PRINCIPAL",
-        "ACCOUNTANT"
-      ],
-      "module": "finance"
-    },
-    {
-      "id": "ch7-other-income",
-      "status": "planned",
-      "title": {
-        "en": "Other Income",
-        "ur": ""
-      },
-      "section": "7.14",
-      "chapter": 7,
-      "roles": [
-        "SCHOOL_ADMIN",
-        "PRINCIPAL",
-        "ACCOUNTANT"
-      ],
-      "module": "finance"
-    },
-    {
-      "id": "ch8-setting-up-departments",
-      "status": "planned",
-      "title": {
-        "en": "Setting Up Departments",
-        "ur": ""
-      },
-      "section": "8.1",
-      "chapter": 8,
-      "roles": [
-        "SCHOOL_ADMIN",
-        "PRINCIPAL"
-      ],
-      "module": "hr"
-    },
-    {
-      "id": "ch8-adding-staff-members",
-      "status": "planned",
-      "title": {
-        "en": "Adding Staff Members",
-        "ur": ""
-      },
-      "section": "8.2",
-      "chapter": 8,
-      "roles": [
-        "SCHOOL_ADMIN",
-        "PRINCIPAL"
-      ],
-      "module": "hr"
-    },
-    {
-      "id": "ch8-salary-management",
-      "status": "planned",
-      "title": {
-        "en": "Salary Management",
-        "ur": ""
-      },
-      "section": "8.4",
-      "chapter": 8,
-      "roles": [
-        "SCHOOL_ADMIN",
-        "PRINCIPAL"
-      ],
-      "module": "hr"
-    },
-    {
-      "id": "ch8-payroll-processing",
-      "status": "planned",
-      "title": {
-        "en": "Payroll Processing",
-        "ur": ""
-      },
-      "section": "8.5",
-      "chapter": 8,
-      "roles": [
-        "SCHOOL_ADMIN",
-        "PRINCIPAL"
-      ],
-      "module": "hr"
-    },
-    {
-      "id": "ch8-staff-attendance",
-      "status": "planned",
-      "title": {
-        "en": "Staff Attendance",
-        "ur": ""
-      },
-      "section": "8.7",
-      "chapter": 8,
-      "roles": [
-        "SCHOOL_ADMIN",
-        "PRINCIPAL"
-      ],
-      "module": "hr"
-    },
-    {
-      "id": "ch8-performance-appraisals",
-      "status": "planned",
-      "title": {
-        "en": "Performance Appraisals",
-        "ur": ""
-      },
-      "section": "8.8",
-      "chapter": 8,
-      "roles": [
-        "SCHOOL_ADMIN",
-        "PRINCIPAL"
-      ],
-      "module": "hr"
-    },
-    {
-      "id": "ch8-staff-documents",
-      "status": "planned",
-      "title": {
-        "en": "Staff Documents",
-        "ur": ""
-      },
-      "section": "8.9",
-      "chapter": 8,
-      "roles": [
-        "SCHOOL_ADMIN",
-        "PRINCIPAL"
-      ],
-      "module": "hr"
-    },
-    {
-      "id": "ch8-linking-unlinking-user-accounts",
-      "status": "planned",
-      "title": {
-        "en": "Linking & Unlinking User Accounts",
-        "ur": ""
-      },
-      "section": "8.10",
-      "chapter": 8,
-      "roles": [
-        "SCHOOL_ADMIN",
-        "PRINCIPAL"
-      ],
-      "module": "hr"
-    },
-    {
-      "id": "ch8-letter-composer",
-      "status": "planned",
-      "title": {
-        "en": "Letter Composer",
-        "ur": ""
-      },
-      "section": "8.11",
-      "chapter": 8,
-      "roles": [
-        "SCHOOL_ADMIN",
-        "PRINCIPAL"
-      ],
-      "module": "hr"
-    },
-    {
-      "id": "ch9-creating-enquiries",
-      "status": "planned",
-      "title": {
-        "en": "Creating Enquiries",
-        "ur": ""
-      },
-      "section": "9.2",
-      "chapter": 9,
-      "roles": [
-        "SCHOOL_ADMIN",
-        "PRINCIPAL"
-      ],
-      "module": "admissions"
-    },
-    {
-      "id": "ch9-managing-enquiries",
-      "status": "planned",
-      "title": {
-        "en": "Managing Enquiries",
-        "ur": ""
-      },
-      "section": "9.4",
-      "chapter": 9,
-      "roles": [
-        "SCHOOL_ADMIN",
-        "PRINCIPAL"
-      ],
-      "module": "admissions"
-    },
-    {
-      "id": "ch9-followup-management",
-      "status": "planned",
-      "title": {
-        "en": "Followup Management",
-        "ur": ""
-      },
-      "section": "9.5",
-      "chapter": 9,
-      "roles": [
-        "SCHOOL_ADMIN",
-        "PRINCIPAL"
-      ],
-      "module": "admissions"
-    },
-    {
-      "id": "ch9-converting-enquiries-to-students",
-      "status": "planned",
-      "title": {
-        "en": "Converting Enquiries to Students",
-        "ur": ""
-      },
-      "section": "9.6",
-      "chapter": 9,
-      "roles": [
-        "SCHOOL_ADMIN",
-        "PRINCIPAL"
-      ],
-      "module": "admissions"
     },
     {
       "id": "ch10-setting-up-routes",

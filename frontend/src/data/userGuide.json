@@ -3,7 +3,7 @@
     "title": "Education AI",
     "subtitle": "School Administration Guide",
     "version": "3.4 - Manual Attendance & Updated Navigation",
-    "generatedAt": "2026-10-20T10:29:53.283035+00:00",
+    "generatedAt": "2026-10-22T11:55:22.078055+00:00",
     "totalChapters": 22,
     "modules": [
       "Dashboard | Classes & Students | Attendance (Manual Entry)",
@@ -2528,22 +2528,27 @@
             {
               "type": "step",
               "number": 1,
-              "text": "Go to the 'Discounts' tab and click 'Add Discount'."
+              "text": "Go to the 'Discounts' tab and click 'Add Discount'. The 'Create Discount' window opens."
             },
             {
               "type": "step",
               "number": 2,
-              "text": "Define: Discount Name, Type (Percentage or Fixed Amount), Value."
+              "text": "Enter the Discount Name, choose the Type (Percentage or Fixed Amount) and enter the Value."
             },
             {
               "type": "step",
               "number": 3,
-              "text": "Set 'Applies To': All Students, Grade Level, Specific Class, Individual Student, or Siblings."
+              "text": "Set 'Applies To': All Students, All classes at a grade level, Specific Class, or Siblings."
             },
             {
               "type": "step",
               "number": 4,
-              "text": "Optionally set start/end dates, max uses, and whether the discount is stackable."
+              "text": "Optionally set start/end dates and whether the discount is stackable."
+            },
+            {
+              "type": "step",
+              "number": 5,
+              "text": "Press 'Create Discount'. The new discount appears in the list."
             },
             {
               "type": "sub_section",
@@ -2551,18 +2556,18 @@
             },
             {
               "type": "step",
-              "number": 5,
+              "number": 6,
               "text": "Go to the 'Scholarships' tab and click 'Add Scholarship'."
             },
             {
               "type": "step",
-              "number": 6,
-              "text": "Define: Name, Type (Merit, Need, Sports, Staff Child, Other)."
+              "number": 7,
+              "text": "Define: Name, Type (Merit, Need-Based, Sports, Staff Child, Other)."
             },
             {
               "type": "step",
-              "number": 7,
-              "text": "Set coverage: Full Fee Waiver, Percentage Off, or Fixed Amount Off."
+              "number": 8,
+              "text": "Set coverage: Full (100%), Percentage, or Fixed Amount, then press 'Create Scholarship'."
             },
             {
               "type": "sub_section",
@@ -2665,19 +2670,24 @@
           "slug": "interaccount-transfers",
           "content": [
             {
+              "type": "nav_path",
+              "path": "Sidebar > Finance > Accounts > Transfers tab",
+              "href": "/finance/accounts"
+            },
+            {
               "type": "step",
               "number": 1,
-              "text": "On the Finance Dashboard, click 'Transfer'."
+              "text": "Open the Transfers tab and click 'Record Transfer'."
             },
             {
               "type": "step",
               "number": 2,
-              "text": "Select: Source Account, Destination Account, Amount, Description."
+              "text": "Choose the From Account and To Account. Enter the Amount, the Date and an optional Description."
             },
             {
               "type": "step",
               "number": 3,
-              "text": "Click 'Transfer'. Both account balances update immediately."
+              "text": "Click 'Review Transfer', check the details, then click 'Confirm Transfer'. Both account balances update and the transfer appears in the list."
             }
           ],
           "video": "ch7-interaccount-transfers"
@@ -2695,17 +2705,27 @@
             {
               "type": "step",
               "number": 1,
-              "text": "At the end of each month, click 'Close Month' on the Finance > Accounts page."
+              "text": "At the end of each month, click 'Close Month' at the top of Finance > Accounts (admins only)."
             },
             {
               "type": "step",
               "number": 2,
-              "text": "This finalizes the month's transactions and carries forward balances."
+              "text": "Choose the month and year. The window warns that the period will be locked."
             },
             {
               "type": "step",
               "number": 3,
-              "text": "Closed months cannot be edited (prevents accidental changes to past records)."
+              "text": "Tick 'I understand, close this period' and click 'Close Month'."
+            },
+            {
+              "type": "step",
+              "number": 4,
+              "text": "Closing saves a Balance Brought Forward (BBF) snapshot of every account. No transactions can be added or edited in that month afterwards."
+            },
+            {
+              "type": "step",
+              "number": 5,
+              "text": "A month needs at least one transaction (payment, expense or other income) before it can be closed."
             }
           ],
           "video": "ch7-month-closing"
@@ -3297,22 +3317,22 @@
             {
               "type": "step",
               "number": 2,
-              "text": "Fill in: Student Name, Parent Name, Phone, Email, Target Grade."
+              "text": "Fill in: Student Name, Father Name, Mobile and Grade Applied For."
             },
             {
               "type": "step",
               "number": 3,
-              "text": "Set Source: Walk-in, Phone, Website, Referral, Social Media, Advertisement, Other."
+              "text": "Set Source: Walk-in, Phone Call, Website, WhatsApp, Referral, Social Media, Ad Campaign or Other."
             },
             {
               "type": "step",
               "number": 4,
-              "text": "Set Priority: High, Medium, Low."
+              "text": "Optionally set the Next Follow-up Date and add notes."
             },
             {
               "type": "step",
               "number": 5,
-              "text": "Add initial notes and save."
+              "text": "Click 'Create Enquiry'. The enquiry appears in the list with status New."
             }
           ],
           "video": "ch9-creating-enquiries"
@@ -3361,27 +3381,27 @@
             {
               "type": "step",
               "number": 1,
-              "text": "View all enquiries in a searchable, filterable table."
+              "text": "View all enquiries in a searchable table or card view. Search by child name or phone number."
             },
             {
               "type": "step",
               "number": 2,
-              "text": "Filter by: Status, Grade, Source."
+              "text": "Filter by Grade and Source. Click a stage in the Admission funnel to filter by status."
             },
             {
               "type": "step",
               "number": 3,
-              "text": "The pipeline summary at the top shows counts for each stage (New, Confirmed, Converted, Cancelled)."
+              "text": "The Admission funnel at the top shows the count for each stage (New, Confirmed, Converted, Cancelled) and the conversion rate."
             },
             {
               "type": "step",
               "number": 4,
-              "text": "Use the 'Edit' action to update enquiry details or 'Cancel' to mark as cancelled."
+              "text": "Use 'Edit' to update enquiry details, 'Cancel' to mark an enquiry as cancelled, or 'Delete' to remove one that is not yet converted."
             },
             {
               "type": "step",
               "number": 5,
-              "text": "Move enquiries from New to Confirmed when admission is approved."
+              "text": "Click 'Confirm' on a New enquiry when the admission is approved."
             }
           ],
           "video": "ch9-managing-enquiries"
@@ -3394,17 +3414,17 @@
             {
               "type": "step",
               "number": 1,
-              "text": "Open an enquiry's detail page."
+              "text": "Click 'Edit' on the enquiry."
             },
             {
               "type": "step",
               "number": 2,
-              "text": "Add followup notes and schedule next followup dates."
+              "text": "Set the Next Follow-up Date and write what was discussed in Notes, then click 'Update Enquiry'."
             },
             {
               "type": "step",
               "number": 3,
-              "text": "The dashboard shows today's and overdue followups for quick action."
+              "text": "The date shows in the Follow-up column of the Enquiries list, in red once it is overdue."
             }
           ],
           "video": "ch9-followup-management"
@@ -3426,17 +3446,17 @@
             {
               "type": "step",
               "number": 2,
-              "text": "Click the 'Convert to Students' button that appears."
+              "text": "Click the 'Convert to students' button in the bar that appears."
             },
             {
               "type": "step",
               "number": 3,
-              "text": "In the modal, select the target Academic Year and Class."
+              "text": "In the modal, select the target Academic Year and Class & Section. Optionally tick 'Auto-generate fee records' and choose the fee types."
             },
             {
               "type": "step",
               "number": 4,
-              "text": "Click 'Convert'. Roll numbers are auto-assigned sequentially within that session and class."
+              "text": "Click 'Convert N Enquiries'. Roll numbers are auto-assigned sequentially within that session and class."
             },
             {
               "type": "step",
@@ -3467,7 +3487,7 @@
             },
             {
               "type": "bullet",
-              "text": "Pipeline Summary - Count of enquiries in each stage (New, Confirmed, Converted, Cancelled)"
+              "text": "Admission funnel - Count of enquiries in each stage (New, Confirmed, Converted, Cancelled)"
             },
             {
               "type": "bullet",
