@@ -52,6 +52,11 @@ describe('AttentionStrip', () => {
     expect(screen.getByText('+2 more')).toBeTruthy()
   })
 
+  it('omits the number for statement chips that have no count', () => {
+    renderStrip({ items: [{ key: 's', label: 'Ayesha was marked absent today', href: '/x', tone: 'red' }] })
+    expect(screen.getByRole('link').textContent).toBe('Ayesha was marked absent today')
+  })
+
   it('renders hash targets as plain anchors', () => {
     renderStrip({ items: [{ key: 'ai', count: 2, label: 'AI alerts', href: '#ai-insights', tone: 'red' }] })
     expect(screen.getByRole('link').getAttribute('href')).toBe('#ai-insights')

@@ -67,7 +67,7 @@ export function buildAttentionItems({
 
 /**
  * @param {object} props
- * @param {Array<{key:string,count:number,label:string,href:string,tone:'red'|'amber'|'blue'}>} props.items
+ * @param {Array<{key:string,count?:number,label:string,href:string,tone:'red'|'amber'|'blue'}>} props.items - omit `count` for a statement chip (no number)
  * @param {boolean} [props.loading] - true while the numbers are still arriving; avoids flashing "All clear".
  */
 export default function AttentionStrip({ items, loading }) {
@@ -96,7 +96,7 @@ export default function AttentionStrip({ items, loading }) {
           const body = (
             <>
               <span className={`w-2 h-2 rounded-full shrink-0 ${DOT[tone] || DOT.blue}`} />
-              <span className="font-bold tabular-nums">{count}</span>
+              {count != null && <span className="font-bold tabular-nums">{count}</span>}
               <span>{label}</span>
             </>
           )
