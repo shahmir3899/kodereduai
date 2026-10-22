@@ -11,7 +11,7 @@ from datetime import date
 from decimal import Decimal
 
 from django.conf import settings
-from django.db.models import Exists, OuterRef, Sum, Count, Q
+from django.db.models import Exists, F, OuterRef, Sum, Count, Q
 
 from academic_sessions.models import StudentEnrollment
 from academic_sessions.roster import placement_group, placement_roll, placements_for
@@ -760,19 +760,28 @@ class FinanceAIAgent:
     def _get_fee_defaulters(self, min_months=2):
         from .models import FeePayment
 
+        # Each monthly row's amount_due already holds the earlier months' balance, so
+        # summing it over the unpaid months would count that balance repeatedly; what a
+        # student owes is the latest unpaid row's remaining balance.
         qs = FeePayment.objects.filter(
             school_id=self.school_id, status='UNPAID',
         ).values(
             'student_id', 'student__name', 'student__class_obj__name',
         ).annotate(
             unpaid_months=Count('id'),
-            total_due=Sum('amount_due'),
         ).filter(
             unpaid_months__gte=int(min_months),
         ).order_by('-unpaid_months')[:30]
 
         # Unpaid months can span years, so name each student's class as it is now.
         rows = list(qs)
+        owed = {}
+        for student_id, due, paid in FeePayment.objects.filter(
+            school_id=self.school_id, status='UNPAID', student_id__in=[r['student_id'] for r in rows],
+        ).annotate(period=F('year') * 12 + F('month')).order_by('period').values_list(
+            'student_id', 'amount_due', 'amount_paid',
+        ):
+            owed[student_id] = (due or 0) - (paid or 0)  # ascending, so the latest row wins
         year_id = resolve_current_academic_year_id(self.school_id)
         now = placements_for(self.school_id, ((item['student_id'], year_id) for item in rows)) if year_id else {}
 
@@ -788,7 +797,7 @@ class FinanceAIAgent:
                     "student": item['student__name'],
                     "class": current_label(item),
                     "unpaid_months": item['unpaid_months'],
-                    "total_due": float(item['total_due'] or 0),
+                    "total_due": float(owed.get(item['student_id'], 0)),
                 }
                 for item in rows
             ],

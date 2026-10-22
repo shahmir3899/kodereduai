@@ -141,6 +141,7 @@ export default function AccountsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['accounts'] })
       queryClient.invalidateQueries({ queryKey: ['accountBalances'] })
+      toast.showSuccess('Account created')
       closeAccountModal()
     },
   })
@@ -150,6 +151,7 @@ export default function AccountsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['accounts'] })
       queryClient.invalidateQueries({ queryKey: ['accountBalances'] })
+      toast.showSuccess('Account updated')
       closeAccountModal()
     },
   })

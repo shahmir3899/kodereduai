@@ -1387,6 +1387,12 @@ class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
         """
         from academic_sessions.models import SessionClass, StudentEnrollment
 
+        # A monthly row's amount_due already carries the previous month's balance, so
+        # summing across months would count it again; the totals below only make sense
+        # for one month (month=0 selects annual-type rows).
+        if request.query_params.get('month') in (None, ''):
+            return Response({'detail': 'month is required (use month=0 for annual fees).'}, status=400)
+
         qs = self.get_queryset()
 
         # --- Global aggregates ---

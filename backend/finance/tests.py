@@ -697,12 +697,12 @@ class TestFeeSummaryWithdrawnStudentGrouping(TestCase):
             academic_year=cls.academic_year,
             fee_type='MONTHLY',
             monthly_category=cls.monthly_cat,
-            month=5,
+            month=4,
             year=2026,
             amount_due=Decimal('1500'),
             amount_paid=Decimal('1500'),
             base_monthly_fee=Decimal('1500'),
-            payment_date=date(2026, 5, 5),
+            payment_date=date(2026, 4, 5),
             account=cls.account,
         )
         cls.user = get_user_model().objects.create_superuser(
@@ -719,7 +719,7 @@ class TestFeeSummaryWithdrawnStudentGrouping(TestCase):
     def test_fee_summary_groups_withdrawn_student_with_active_classmate(self):
         response = self.client.get(
             '/api/finance/fee-payments/fee_summary/',
-            {'fee_type': 'MONTHLY', 'academic_year': self.academic_year.id},
+            {'fee_type': 'MONTHLY', 'month': 4, 'year': 2026, 'academic_year': self.academic_year.id},
             **self.school_header,
         )
 
@@ -851,12 +851,12 @@ class TestFeeSummaryMissingEnrollmentGrouping(TestCase):
             academic_year=cls.academic_year,
             fee_type='MONTHLY',
             monthly_category=cls.monthly_cat,
-            month=5,
+            month=4,
             year=2026,
             amount_due=Decimal('1500'),
             amount_paid=Decimal('1500'),
             base_monthly_fee=Decimal('1500'),
-            payment_date=date(2026, 5, 5),
+            payment_date=date(2026, 4, 5),
             account=cls.account,
         )
         cls.user = get_user_model().objects.create_superuser(
@@ -873,7 +873,7 @@ class TestFeeSummaryMissingEnrollmentGrouping(TestCase):
     def test_fee_summary_merges_student_with_no_enrollment_row(self):
         response = self.client.get(
             '/api/finance/fee-payments/fee_summary/',
-            {'fee_type': 'MONTHLY', 'academic_year': self.academic_year.id},
+            {'fee_type': 'MONTHLY', 'month': 4, 'year': 2026, 'academic_year': self.academic_year.id},
             **self.school_header,
         )
 
@@ -994,12 +994,12 @@ class TestFeeSummaryAmbiguousSessionClassStaysUnmerged(TestCase):
             academic_year=cls.academic_year,
             fee_type='MONTHLY',
             monthly_category=cls.monthly_cat,
-            month=5,
+            month=4,
             year=2026,
             amount_due=Decimal('1500'),
             amount_paid=Decimal('1500'),
             base_monthly_fee=Decimal('1500'),
-            payment_date=date(2026, 5, 5),
+            payment_date=date(2026, 4, 5),
             account=cls.account,
         )
         cls.user = get_user_model().objects.create_superuser(
@@ -1016,7 +1016,7 @@ class TestFeeSummaryAmbiguousSessionClassStaysUnmerged(TestCase):
     def test_ambiguous_class_is_not_merged_into_either_section(self):
         response = self.client.get(
             '/api/finance/fee-payments/fee_summary/',
-            {'fee_type': 'MONTHLY', 'academic_year': self.academic_year.id},
+            {'fee_type': 'MONTHLY', 'month': 4, 'year': 2026, 'academic_year': self.academic_year.id},
             **self.school_header,
         )
 

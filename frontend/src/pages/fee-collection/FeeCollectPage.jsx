@@ -265,14 +265,15 @@ export default function FeeCollectPage() {
               </Button>
             </>
           )}
-          {data.paymentList.length > 0 && (
-            <button
-              onClick={handleExportPDF}
-              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm whitespace-nowrap"
-            >
-              Export PDF
-            </button>
-          )}
+          {/* Always rendered (disabled while empty): mounting it only after the records load shifted the
+              right-aligned buttons to the left, so an early click on "Generate Single Fee Record" hit its neighbour. */}
+          <button
+            onClick={handleExportPDF}
+            disabled={data.paymentList.length === 0}
+            className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-green-600"
+          >
+            Export PDF
+          </button>
 </>} />
 
       {/* Sticky Toolbar: Filters (Export lives in the header with the other actions to free filter width) */}

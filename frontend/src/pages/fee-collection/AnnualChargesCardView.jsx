@@ -72,7 +72,8 @@ export default function AnnualChargesCardView() {
     staleTime: 0,
   })
 
-  const allStructures = allStructuresData?.data?.results ?? allStructuresData?.data ?? []
+  // useMemo: a new [] per render while the query loads would re-trigger the effect below on every render
+  const allStructures = useMemo(() => allStructuresData?.data?.results ?? allStructuresData?.data ?? [], [allStructuresData])
 
   // Initialize rows for each class when structures or classes change
   useEffect(() => {
