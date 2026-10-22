@@ -181,7 +181,9 @@ class ChildOverviewView(APIView):
 
         today = timezone.localdate()
         class_obj_id, academic_year_id = placement_scope(student)
-        latest_exam, previous_exam = ov.latest_exams(student, academic_year_id)
+        from students import timeline
+        segments = timeline.student_timeline(student)
+        latest_exam, previous_exam = ov.latest_exams(student, academic_year_id, segments)
 
         placement = current_placement(student)
         data = {
@@ -190,8 +192,8 @@ class ChildOverviewView(APIView):
             'class_name': placement_label(placement, student),
             'roll_number': placement_roll(placement, student),
             'school_name': student.school.name,
-            'attendance_summary': ov.attendance_summary(student, academic_year_id, today),
-            'fee_summary': ov.fee_summary(student),
+            'attendance_summary': ov.attendance_summary(student, academic_year_id, today, segments),
+            'fee_summary': ov.fee_summary(student, segments),
             'latest_exam': latest_exam,
             'previous_exam': previous_exam,
             'next_exam': ov.next_exam(student, academic_year_id, class_obj_id, today),

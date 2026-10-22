@@ -3,8 +3,10 @@ Building blocks for the parent child-overview endpoint.
 
 Kept out of views.py so each number can be tested on its own. Two rules the old
 inline version broke:
-  * everything the dashboard shows is for the child's CURRENT academic year;
-    all-time attendance mixes the old class with the new one after a promotion.
+  * everything the dashboard shows is for the child's CURRENT academic year at the
+    current branch; all-time attendance mixes the old class with the new one after a
+    promotion. A child transferred between branches also shows the earlier branch's
+    records in full (students.timeline).
   * FeePayment.amount_due for a month already includes the carried-forward
     balance (amount_due = previous_balance + base amount), so summing it across
     months counts the same unpaid money several times.
@@ -12,7 +14,9 @@ inline version broke:
 from collections import defaultdict
 from decimal import Decimal
 
-from django.db.models import Count
+from django.db.models import Count, Q
+
+from students import timeline
 
 ZERO = Decimal('0')
 RECENT_ATTENDANCE_DAYS = 7
@@ -34,14 +38,22 @@ def _year_bounds(academic_year_id, today):
     return year.start_date, min(year.end_date, today)
 
 
-def attendance_summary(student, academic_year_id, today):
-    """Year-scoped attendance: counts, rate, today's status and the last few marked days."""
+def _segments(student, segments):
+    return segments or timeline.student_timeline(student)
+
+
+def attendance_summary(student, academic_year_id, today, segments=None):
+    """Attendance across every branch: counts, rate, today's status and the last few marked days.
+
+    The current branch's rows are limited to the current academic year; an earlier
+    branch's rows are not, since the child no longer studies there.
+    """
     from attendance.models import AttendanceRecord
 
-    records = AttendanceRecord.objects.filter(student=student)
+    records = AttendanceRecord.objects.filter(timeline.attendance_q(_segments(student, segments)))
     start, end = _year_bounds(academic_year_id, today)
     if start:
-        records = records.filter(date__gte=start, date__lte=end)
+        records = records.filter(~Q(student_id=student.id) | Q(date__gte=start, date__lte=end))
 
     counts = {row['status']: row['n'] for row in records.values('status').annotate(n=Count('id'))}
     present = counts.get('PRESENT', 0)
@@ -62,8 +74,12 @@ def attendance_summary(student, academic_year_id, today):
     }
 
 
-def fee_summary(student):
+def fee_summary(student, segments=None):
     """What the family owes now, without double-counting carried-forward balances.
+
+    Paid money counts at every branch; what is owed is only the current branch's, since
+    a balance handed over at a transfer is owed once, to the new branch. The headline
+    figures come from finance.student_balance, the same calculation staff see.
 
     Monthly fees: the latest generated month per category already contains every
     earlier unpaid month, so only that row counts. Other fee types (annual,
@@ -72,8 +88,9 @@ def fee_summary(student):
     from earlier months and is still unpaid.
     """
     from finance.models import FeePayment
+    from finance.student_balance import student_fee_summary
 
-    rows = list(FeePayment.objects.filter(student=student).values(
+    rows = list(FeePayment.objects.filter(student=student, handed_over_to_exit__isnull=True).values(
         'fee_type', 'monthly_category_id', 'year', 'month', 'amount_due', 'amount_paid', 'previous_balance',
     ))
 
@@ -98,17 +115,20 @@ def fee_summary(student):
         if row['fee_type'] == 'MONTHLY':
             overdue += min(row['previous_balance'] or ZERO, remaining)
 
-    total_paid = sum((r['amount_paid'] or ZERO) for r in rows)
+    headline = student_fee_summary(student, _segments(student, segments))
     return {
-        'outstanding': _money(outstanding),
+        'total_due': _money(headline['total_due']),
+        'total_paid': _money(headline['total_paid']),
+        'outstanding': _money(headline['pending']),
         'overdue_amount': _money(overdue),
         'unpaid_items': unpaid_items,
-        'total_paid': _money(total_paid),
     }
 
 
-def _exam_percentages(student, academic_year_id):
-    """[(exam, percentage)] for published exams this year, newest first.
+def _exam_percentages(student, academic_year_id, segments=None):
+    """[(exam, percentage, marks_obtained, total_marks, branch)] for published exams, newest first.
+
+    Every branch's results count; the current branch's are limited to this year.
 
     Percentage is the average of the child's subject percentages, skipping
     absences and unmarked subjects, matching how the academic-risk service
@@ -117,17 +137,20 @@ def _exam_percentages(student, academic_year_id):
     from academic_sessions.roster import current_year_q
     from examinations.models import Exam, StudentMark
 
+    segments = _segments(student, segments)
     marks = StudentMark.objects.filter(
-        student=student,
+        timeline.marks_q(segments),
         exam_subject__exam__status=Exam.Status.PUBLISHED,
         exam_subject__is_active=True,
         is_absent=False,
         marks_obtained__isnull=False,
-    ).filter(current_year_q(academic_year_id, field='exam_subject__exam__academic_year')).select_related(
-        'exam_subject', 'exam_subject__exam',
-    )
+    ).filter(
+        ~Q(student_id=student.id) | current_year_q(academic_year_id, field='exam_subject__exam__academic_year'),
+    ).select_related('exam_subject', 'exam_subject__exam')
 
     per_exam = defaultdict(list)
+    sums = defaultdict(lambda: [0.0, 0.0])
+    tags = {}
     exams = {}
     for mark in marks:
         total = mark.exam_subject.total_marks
@@ -136,30 +159,37 @@ def _exam_percentages(student, academic_year_id):
         exam = mark.exam_subject.exam
         exams[exam.id] = exam
         per_exam[exam.id].append(float(mark.marks_obtained) / float(total) * 100)
+        sums[exam.id][0] += float(mark.marks_obtained)
+        sums[exam.id][1] += float(total)
+        tags[exam.id] = timeline.branch_tag(segments, mark.student_id, mark.school_id)
 
     ordered = sorted(
         exams.values(),
         key=lambda e: (e.start_date is not None, e.start_date or 0, e.id),
         reverse=True,
     )
-    return [(e, sum(per_exam[e.id]) / len(per_exam[e.id])) for e in ordered]
+    return [(e, sum(per_exam[e.id]) / len(per_exam[e.id]), sums[e.id][0], sums[e.id][1], tags[e.id]) for e in ordered]
 
 
 def _exam_block(pair):
     if not pair:
         return None
-    exam, percentage = pair
+    exam, percentage, obtained, total, branch = pair
     return {
         'exam_id': exam.id,
         'exam_name': exam.name,
         'percentage': round(percentage, 1),
+        'marks_obtained': obtained,
+        'total_marks': total,
         'start_date': str(exam.start_date) if exam.start_date else None,
+        'branch': branch,
+        'read_only': branch is not None,
     }
 
 
-def latest_exams(student, academic_year_id):
+def latest_exams(student, academic_year_id, segments=None):
     """(latest, previous) exam blocks; either may be None."""
-    results = _exam_percentages(student, academic_year_id)
+    results = _exam_percentages(student, academic_year_id, segments)
     latest = _exam_block(results[0]) if results else None
     previous = _exam_block(results[1]) if len(results) > 1 else None
     return latest, previous

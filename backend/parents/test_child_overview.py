@@ -145,12 +145,13 @@ def test_fee_outstanding_adds_non_monthly_rows_and_separate_categories(seed_data
 
     assert summary['outstanding'] == '500.00'
     assert summary['unpaid_items'] == 2
-    assert summary['total_paid'] == '1200.00'
+    assert Decimal(summary['total_paid']) == Decimal('1200')
+    assert Decimal(summary['total_due']) == Decimal('1700')   # paid + still owed, as staff see it
 
 
 def test_fee_summary_for_a_child_with_no_fees(child):
     assert ov.fee_summary(child) == {
-        'outstanding': '0', 'overdue_amount': '0', 'unpaid_items': 0, 'total_paid': '0',
+        'total_due': '0', 'outstanding': '0', 'overdue_amount': '0', 'unpaid_items': 0, 'total_paid': '0',
     }
 
 

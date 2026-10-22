@@ -2,7 +2,7 @@ from datetime import date
 from decimal import Decimal
 
 from django.test import TestCase
-from rest_framework.test import APIRequestFactory
+from rest_framework.test import APIRequestFactory, force_authenticate
 
 from finance.models import Account, AccountSnapshot, FeePayment, MonthlyClosing, AnnualFeeCategory
 from finance.views import AccountViewSet
@@ -124,10 +124,13 @@ class TestAccountSnapshotBoundary(TestCase):
         })()
         request.META['HTTP_X_SCHOOL_ID'] = str(self.school.id)
 
+        # The view reads request.query_params, which only a DRF Request has.
+        force_authenticate(request, user=request.user)
         view = AccountViewSet()
-        view.request = request
         view.kwargs = {}
-        response = view.ledger(request)
+        view.action_map = {'get': 'ledger'}
+        view.request = view.initialize_request(request)
+        response = view.ledger(view.request)
         self.assertEqual(response.status_code, 200)
         return response.data
 
