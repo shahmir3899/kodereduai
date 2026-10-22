@@ -155,7 +155,9 @@ class MyChildrenView(APIView):
 class ChildOverviewView(APIView):
     """
     GET children/<int:student_id>/overview/
-    Aggregated child dashboard: attendance summary, fee status, latest exam.
+    Aggregated child dashboard: year-scoped attendance (with today's status),
+    outstanding fees, latest/previous published exam, next exam, today's
+    calendar status and pending leave count. See parents/overview.py.
     """
     permission_classes = [IsAuthenticated, IsParentOrAdmin]
 
@@ -174,35 +176,12 @@ class ChildOverviewView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        # Attendance summary: every branch the child has been at (students.timeline), each
-        # limited to its own dates. Leave counts as present, as everywhere else.
-        from students import history, timeline
-        segments = timeline.student_timeline(student)
-        att = history.attendance_totals(student, segments)
-        attendance_summary = {
-            'total_days': att['total_days'],
-            'present': att['present_days'] - att['leave'],
-            'absent': att['absent'],
-            'leave': att['leave'],
-            'attendance_rate': att['rate'],
-        }
+        from academic_sessions.roster import current_placement, placement_label, placement_roll, placement_scope
+        from . import overview as ov
 
-        # Fee summary: the shared calculation, so parents see the same figures staff do
-        # (summing every monthly row would count a carried-forward balance repeatedly).
-        from finance.student_balance import student_fee_summary
-        fees = student_fee_summary(student, segments)
-        fee_summary = {
-            'total_due': str(fees['total_due']),
-            'total_paid': str(fees['total_paid']),
-            'outstanding': str(fees['pending']),
-        }
-
-        # Latest exam
-        # The most recent PUBLISHED result at any branch. (This used to sort on a field Exam
-        # does not have, so the error was swallowed and parents never saw a latest exam.)
-        latest_exam = history.latest_exam(student, segments, published_only=True)
-
-        from academic_sessions.roster import current_placement, placement_label, placement_roll
+        today = timezone.localdate()
+        class_obj_id, academic_year_id = placement_scope(student)
+        latest_exam, previous_exam = ov.latest_exams(student, academic_year_id)
 
         placement = current_placement(student)
         data = {
@@ -211,9 +190,13 @@ class ChildOverviewView(APIView):
             'class_name': placement_label(placement, student),
             'roll_number': placement_roll(placement, student),
             'school_name': student.school.name,
-            'attendance_summary': attendance_summary,
-            'fee_summary': fee_summary,
+            'attendance_summary': ov.attendance_summary(student, academic_year_id, today),
+            'fee_summary': ov.fee_summary(student),
             'latest_exam': latest_exam,
+            'previous_exam': previous_exam,
+            'next_exam': ov.next_exam(student, academic_year_id, class_obj_id, today),
+            'today': ov.today_status(student.school_id, class_obj_id, today),
+            'pending_leave_count': ov.pending_leave_count(student),
         }
 
         serializer = ChildOverviewSerializer(data)

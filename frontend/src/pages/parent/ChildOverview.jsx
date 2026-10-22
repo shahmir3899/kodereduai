@@ -1,8 +1,9 @@
 import { useParams, Link } from 'react-router-dom'
 import { TONE } from '../../components/ui/statusTones'
 import { useQuery } from '@tanstack/react-query'
-import { parentsApi, sessionsApi } from '../../services/api'
+import { parentsApi } from '../../services/api'
 import Spinner from '../../components/ui/Spinner'
+import { readOverview, formatPkr } from './parentOverviewUtils'
 
 function StatCard({ label, value, sub, color = 'primary', icon }) {
   const colorMap = {
@@ -34,31 +35,17 @@ function StatCard({ label, value, sub, color = 'primary', icon }) {
 
 export default function ChildOverview() {
   const { studentId } = useParams()
-  const today = new Date().toISOString().split('T')[0]
 
+  // Same key the dashboard uses, so opening a child from there is instant.
   const { data: overviewData, isLoading, isError } = useQuery({
-    queryKey: ['childOverview', studentId],
+    queryKey: ['childOverview', String(studentId)],
     queryFn: () => parentsApi.getChildOverview(studentId),
     enabled: !!studentId,
   })
 
   const overview = overviewData?.data
-  const child = overview?.student || overview || {}
-  const childClassId = child?.class_id || child?.class_obj || child?.class_obj_id || null
-
-  const { data: dayStatusRes } = useQuery({
-    queryKey: ['parentChildOverviewDayStatus', studentId, today, childClassId],
-    queryFn: () => sessionsApi.getCalendarDayStatus({
-      date_from: today,
-      date_to: today,
-      class_id: childClassId || undefined,
-    }),
-    enabled: !!studentId && !!childClassId,
-  })
-
-  const dayStatus = dayStatusRes?.data?.days?.[today] || null
-  const isOffDay = !!dayStatus?.is_off_day
-  const offTypes = dayStatus?.off_day_types || []
+  const vm = readOverview(overview)
+  const isOffDay = vm.isOffDay
 
   if (isLoading) {
     return (
@@ -104,16 +91,14 @@ export default function ChildOverview() {
         <div className="flex flex-col sm:flex-row sm:items-center gap-4">
           <div className="w-16 h-16 rounded-full bg-primary-100 flex items-center justify-center flex-shrink-0">
             <span className="text-2xl font-bold text-primary-700">
-              {child.name?.charAt(0)?.toUpperCase() || '?'}
+              {vm.name?.charAt(0)?.toUpperCase() || '?'}
             </span>
           </div>
           <div className="flex-1 min-w-0">
-            <h1 className="text-xl sm:text-2xl font-bold text-gray-900">{child.name}</h1>
+            <h1 className="text-xl sm:text-2xl font-bold text-gray-900">{vm.name}</h1>
             <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1 text-sm text-gray-500">
-              {child.class_name && <span>{child.class_name}</span>}
-              {child.section && <span>Section: {child.section}</span>}
-              {child.roll_number && <span>Roll #{child.roll_number}</span>}
-              {child.admission_number && <span>Adm #{child.admission_number}</span>}
+              {vm.className && <span>{vm.className}</span>}
+              {vm.rollNumber && <span>Roll #{vm.rollNumber}</span>}
             </div>
           </div>
         </div>
@@ -123,15 +108,15 @@ export default function ChildOverview() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
           label="Attendance Rate"
-          value={isOffDay ? 'N/A' : (overview.attendance_rate != null ? `${overview.attendance_rate}%` : 'N/A')}
+          value={isOffDay ? 'N/A' : (vm.attendanceRate != null ? `${vm.attendanceRate}%` : 'No records')}
           sub={isOffDay
-            ? `OFF day${offTypes.length ? ` (${offTypes.join(', ')})` : ''}`
-            : `${overview.present_days || 0} of ${overview.total_days || 0} days`}
+            ? vm.offDayLabel
+            : `${vm.presentDays} of ${vm.totalDays} days`}
           color={
             isOffDay ? 'primary' :
-            overview.attendance_rate == null ? 'primary' :
-            overview.attendance_rate >= 75 ? 'green' :
-            overview.attendance_rate >= 60 ? 'yellow' : 'red'
+            vm.attendanceRate == null ? 'primary' :
+            vm.attendanceRate >= 75 ? 'green' :
+            vm.attendanceRate >= 60 ? 'yellow' : 'red'
           }
           icon={
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -140,13 +125,11 @@ export default function ChildOverview() {
           }
         />
         <StatCard
-          label="Fee Status"
-          value={overview.fee_status || 'N/A'}
-          sub={overview.outstanding != null ? `Outstanding: PKR ${Number(overview.outstanding).toLocaleString()}` : null}
+          label="Fees"
+          value={vm.outstanding > 0 ? formatPkr(vm.outstanding) : 'Nothing due'}
+          sub={vm.overdue > 0 ? `${formatPkr(vm.overdue)} from earlier months` : null}
           color={
-            overview.fee_status === 'PAID' ? 'green' :
-            overview.fee_status === 'PARTIAL' ? 'yellow' :
-            overview.fee_status === 'UNPAID' ? 'red' : 'primary'
+            vm.outstanding > 0 ? 'red' : 'green'
           }
           icon={
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -155,12 +138,13 @@ export default function ChildOverview() {
           }
         />
         <StatCard
-          label="Last Exam Grade"
-          value={overview.last_exam_grade || overview.last_exam_score != null ? `${overview.last_exam_score || overview.last_exam_grade}%` : 'N/A'}
-          sub={overview.last_exam_name || null}
+          label="Last Exam"
+          value={vm.latestExam ? `${Math.round(vm.latestExam.percentage)}%` : 'No results yet'}
+          sub={vm.latestExam?.name || null}
           color={
-            (overview.last_exam_score || 0) >= 60 ? 'green' :
-            (overview.last_exam_score || 0) >= 40 ? 'yellow' : 'red'
+            !vm.latestExam ? 'primary' :
+            vm.latestExam.percentage >= 60 ? 'green' :
+            vm.latestExam.percentage >= 40 ? 'yellow' : 'red'
           }
           icon={
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -170,8 +154,8 @@ export default function ChildOverview() {
         />
         <StatCard
           label="Days Present"
-          value={overview.present_days ?? 'N/A'}
-          sub={overview.absent_days != null ? `${overview.absent_days} days absent` : null}
+          value={vm.presentDays}
+          sub={`${vm.absentDays} day${vm.absentDays === 1 ? '' : 's'} absent`}
           color="blue"
           icon={
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

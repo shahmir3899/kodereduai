@@ -316,3 +316,7 @@ class ChildOverviewSerializer(serializers.Serializer):
     attendance_summary = serializers.DictField()
     fee_summary = serializers.DictField()
     latest_exam = serializers.DictField(allow_null=True)
+    previous_exam = serializers.DictField(allow_null=True)
+    next_exam = serializers.DictField(allow_null=True)
+    today = serializers.DictField()
+    pending_leave_count = serializers.IntegerField()

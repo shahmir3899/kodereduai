@@ -1,62 +1,87 @@
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueries } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
-import { parentsApi, sessionsApi } from '../../services/api'
+import { parentsApi } from '../../services/api'
+import DashboardShell from '../../components/dashboard/DashboardShell'
+import AttentionStrip from '../../components/dashboard/AttentionStrip'
 import NotificationsFeed from '../../components/dashboard/NotificationsFeed'
 import QuickActionGrid from '../../components/dashboard/QuickActionGrid'
 import Spinner from '../../components/ui/Spinner'
+import {
+  readOverview, buildParentAttentionItems, formatPkr, daysUntil, parseLocalDate,
+} from './parentOverviewUtils'
+
+const Icon = ({ d }) => (
+  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d={d} />
+  </svg>
+)
+const ICONS = {
+  leave: 'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z',
+  messages: 'M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z',
+  fees: 'M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z',
+  profile: 'M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z',
+}
+
+const STATUS_PILL = {
+  PRESENT: 'bg-green-100 text-green-700',
+  ABSENT: 'bg-red-100 text-red-700',
+  LATE: 'bg-amber-100 text-amber-700',
+  LEAVE: 'bg-blue-100 text-blue-700',
+}
+const DOT = { PRESENT: 'bg-green-500', ABSENT: 'bg-red-500', LATE: 'bg-amber-500', LEAVE: 'bg-blue-500' }
+
+const rateColor = (r) => (r == null ? 'text-gray-400' : r >= 75 ? 'text-green-600' : r >= 60 ? 'text-yellow-600' : 'text-red-600')
+const scoreColor = (p) => (p == null ? 'text-gray-400' : p >= 60 ? 'text-green-600' : p >= 40 ? 'text-yellow-600' : 'text-red-600')
 
 export default function ParentDashboard() {
   const { user } = useAuth()
 
-  const { data: childrenData, isLoading } = useQuery({
+  const { data: childrenData, isLoading, isError } = useQuery({
     queryKey: ['myChildren'],
     queryFn: () => parentsApi.getMyChildren(),
   })
-
   const children = childrenData?.data?.results || childrenData?.data || []
 
+  // One overview per child, fetched here (not inside each card) so the attention
+  // strip can summarise every child. Same key as the child Overview page.
+  const overviews = useQueries({
+    queries: children.map((c) => ({
+      queryKey: ['childOverview', String(c.student)],
+      queryFn: () => parentsApi.getChildOverview(c.student),
+      staleTime: 5 * 60 * 1000,
+    })),
+  })
+
+  const { data: threadsRes } = useQuery({
+    queryKey: ['parentMessageThreads'],
+    queryFn: () => parentsApi.getMessageThreads(),
+    staleTime: 60 * 1000,
+  })
+  const threads = threadsRes?.data?.results || threadsRes?.data || []
+  const unreadMessages = threads.reduce((sum, t) => sum + (t.unread_count || 0), 0)
+
+  const rows = children.map((child, i) => ({
+    child,
+    loading: overviews[i]?.isLoading,
+    error: overviews[i]?.isError,
+    vm: overviews[i]?.data ? readOverview(overviews[i].data.data, child) : null,
+  }))
+
+  const attentionItems = buildParentAttentionItems(
+    rows.map(({ child, vm }) => ({ studentId: child.student, vm })),
+    { unreadMessages },
+  )
+  const attentionLoading = rows.some((r) => r.loading)
+
   const quickActions = [
-    {
-      label: 'Apply Leave',
-      href: '/parent/leave',
-      color: 'amber',
-      icon: (
-        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-        </svg>
-      ),
-    },
-    {
-      label: 'Messages',
-      href: '/parent/messages',
-      color: 'blue',
-      icon: (
-        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
-        </svg>
-      ),
-    },
-    {
-      label: 'Leave History',
-      href: '/parent/leave',
-      color: 'green',
-      icon: (
-        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
-        </svg>
-      ),
-    },
-    {
-      label: 'My Profile',
-      href: '/profile',
-      color: 'purple',
-      icon: (
-        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-        </svg>
-      ),
-    },
+    { label: 'Apply Leave', href: '/parent/leave', icon: <Icon d={ICONS.leave} /> },
+    { label: 'Messages', href: '/parent/messages', icon: <Icon d={ICONS.messages} />, badge: unreadMessages },
+    // Which child's fees? Only unambiguous with one child.
+    ...(children.length === 1
+      ? [{ label: 'Fees', href: `/parent/children/${children[0].student}/fees`, icon: <Icon d={ICONS.fees} /> }]
+      : []),
+    { label: 'My Profile', href: '/profile', icon: <Icon d={ICONS.profile} /> },
   ]
 
   if (isLoading) {
@@ -68,38 +93,30 @@ export default function ParentDashboard() {
   }
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div>
-        <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Parent Dashboard</h1>
-        <p className="text-sm text-gray-600 mt-1">
-          Welcome back, {user?.first_name || user?.username}
-          {children.length > 0 && <span className="text-gray-400"> · {children.length} {children.length === 1 ? 'child' : 'children'} linked</span>}
-        </p>
-      </div>
-
-      {/* Children Cards */}
-      {children.length === 0 ? (
-        <div className="bg-white rounded-xl border border-gray-200 p-10 text-center">
-          <div className="w-16 h-16 mx-auto rounded-full bg-gray-100 flex items-center justify-center mb-4">
-            <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
-            </svg>
-          </div>
+    <DashboardShell
+      title="Dashboard"
+      subtitle={`Welcome back, ${user?.first_name || user?.username}${children.length > 0 ? ` · ${children.length} ${children.length === 1 ? 'child' : 'children'} linked` : ''}`}
+    >
+      {isError ? (
+        <div role="alert" className="mb-6 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+          Couldn't load your children. Try refreshing the page.
+        </div>
+      ) : children.length === 0 ? (
+        <div className="mb-6 bg-white rounded-xl border border-gray-200 p-10 text-center">
           <h3 className="text-base font-medium text-gray-900 mb-1">No children linked</h3>
-          <p className="text-sm text-gray-500">
-            Contact the school administrator to link your children to your account.
-          </p>
+          <p className="text-sm text-gray-500">Contact the school administrator to link your children to your account.</p>
         </div>
       ) : (
-        <div className="space-y-4">
-          {children.map((child) => (
-            <ChildCard key={child.id} child={child} />
-          ))}
-        </div>
+        <>
+          <AttentionStrip items={attentionItems} loading={attentionLoading} />
+          <div className="space-y-4 mb-6">
+            {rows.map(({ child, vm, loading, error }) => (
+              <ChildCard key={child.id} child={child} vm={vm} loading={loading} error={error} />
+            ))}
+          </div>
+        </>
       )}
 
-      {/* Two-column: Quick Actions + Notifications */}
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
         <div className="lg:col-span-3">
           <div className="bg-white rounded-xl border border-gray-200 p-4 sm:p-5">
@@ -114,198 +131,122 @@ export default function ParentDashboard() {
           </div>
         </div>
       </div>
+    </DashboardShell>
+  )
+}
+
+function Tile({ label, loading, children }) {
+  return (
+    <div className="p-3 bg-gray-50 rounded-lg min-w-0">
+      <p className="text-xs text-gray-500 mb-1">{label}</p>
+      {loading ? <div className="h-5 bg-gray-200 rounded w-16 animate-pulse" /> : children}
     </div>
   )
 }
 
-/** Per-child card with overview data */
-function ChildCard({ child }) {
-  const today = new Date().toISOString().split('T')[0]
+const LINKS = [
+  ['attendance', 'Attendance'], ['fees', 'Fees'], ['results', 'Results'],
+  ['timetable', 'Timetable'], ['exam-schedule', 'Exam Schedule'], ['library', 'Library'], ['transport', 'Transport'],
+]
 
-  // ParentChildSerializer's `id` is the ParentChild LINK row's own id, not
-  // the student's — `student` is the actual student id. Using `child.id`
-  // here silently 403'd every per-child API call (overview/attendance/fees/
-  // etc.), which the UI gracefully degraded to "N/A" for, masking it since
-  // no real ParentChild link existed anywhere until now.
-  const { data: overviewData, isLoading } = useQuery({
-    queryKey: ['childOverview', child.student],
-    queryFn: () => parentsApi.getChildOverview(child.student),
-    staleTime: 5 * 60 * 1000,
-  })
-
-  // ParentChildSerializer doesn't expose a class id (only the display string
-  // class_name), so this always resolves to null and the day-status query
-  // below never fires — a separate, smaller gap left as-is for now.
-  const childClassId = child.class_id || child.class_obj || child.class_obj_id || null
-  const { data: dayStatusRes } = useQuery({
-    queryKey: ['childTodayDayStatus', child.student, today, childClassId],
-    queryFn: () => sessionsApi.getCalendarDayStatus({
-      date_from: today,
-      date_to: today,
-      class_id: childClassId || undefined,
-    }),
-    enabled: !!childClassId,
-    staleTime: 5 * 60 * 1000,
-  })
-
-  const overview = overviewData?.data || {}
-  const attendance = overview.attendance || {}
-  const fees = overview.fees || overview.fee_summary || {}
-  const recentExams = overview.recent_exams || overview.exam_results || []
-  const dayStatus = dayStatusRes?.data?.days?.[today] || null
-  const isOffDay = !!dayStatus?.is_off_day
-  const offTypes = dayStatus?.off_day_types || []
+/** Per-child card. `vm` is readOverview()'s output (null until the overview loads). */
+function ChildCard({ child, vm, loading, error }) {
+  const base = `/parent/children/${child.student}`
+  const name = vm?.name || child.student_name
+  const className = vm?.className || child.class_name
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-      {/* Child Header */}
       <div className="px-5 py-4 flex items-center gap-3 border-b border-gray-100">
         <div className="w-11 h-11 rounded-full bg-primary-100 flex items-center justify-center shrink-0">
-          <span className="text-lg font-bold text-primary-700">
-            {child.student_name?.charAt(0)?.toUpperCase() || '?'}
-          </span>
+          <span className="text-lg font-bold text-primary-700">{name?.charAt(0)?.toUpperCase() || '?'}</span>
         </div>
         <div className="min-w-0 flex-1">
-          <h3 className="text-base font-semibold text-gray-900 truncate">{child.student_name}</h3>
+          <h3 className="text-base font-semibold text-gray-900 truncate">{name}</h3>
           <p className="text-sm text-gray-500">
-            {child.class_name || 'Class N/A'}
-            {child.section ? ` - ${child.section}` : ''}
-            {child.student_roll_number ? ` · Roll #${child.student_roll_number}` : ''}
+            {className || 'Class N/A'}
+            {(vm?.rollNumber || child.student_roll_number) ? ` · Roll #${vm?.rollNumber || child.student_roll_number}` : ''}
           </p>
         </div>
-        <Link
-          to={`/parent/children/${child.student}`}
-          className="text-sm text-primary-600 hover:text-primary-700 font-medium shrink-0"
-        >
-          View Details
-        </Link>
+        {vm && (
+          <span className={`text-xs font-semibold px-2.5 py-1 rounded-full shrink-0 ${
+            vm.isOffDay ? 'bg-gray-100 text-gray-700' : (STATUS_PILL[vm.todayStatus] || 'bg-gray-100 text-gray-500')
+          }`}>
+            {vm.isOffDay ? vm.offDayLabel : `Today: ${vm.todayLabel}`}
+          </span>
+        )}
       </div>
 
-      {/* Stats Row */}
-      <div className="px-5 py-3 grid grid-cols-2 sm:grid-cols-4 gap-3">
-        {/* Attendance */}
-        <div className="text-center p-2.5 bg-gray-50 rounded-lg">
-          <p className="text-xs text-gray-500 mb-1">Attendance</p>
-          {isLoading ? (
-            <div className="h-5 bg-gray-200 rounded w-12 mx-auto animate-pulse" />
-          ) : (
-            <p className={`text-sm font-bold ${
-              (attendance.rate ?? child.attendance_rate ?? null) === null ? 'text-gray-400' :
-              (attendance.rate ?? child.attendance_rate) >= 75 ? 'text-green-600' :
-              (attendance.rate ?? child.attendance_rate) >= 60 ? 'text-yellow-600' : 'text-red-600'
-            }`}>
-              {(attendance.rate ?? child.attendance_rate) != null
-                ? `${attendance.rate ?? child.attendance_rate}%`
-                : 'N/A'}
+      {error ? (
+        <p role="alert" className="px-5 py-4 text-sm text-red-600">Couldn't load {name}'s summary. Try refreshing the page.</p>
+      ) : (
+        <div className="px-5 py-3 grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <Tile label="Attendance" loading={loading}>
+            <p className={`text-lg font-bold ${rateColor(vm?.attendanceRate)}`}>
+              {vm?.attendanceRate != null ? `${vm.attendanceRate}%` : 'No records'}
             </p>
-          )}
-        </div>
+            {vm?.totalDays > 0 && <p className="text-xs text-gray-500">{vm.presentDays} of {vm.totalDays} days</p>}
+            {vm?.recent?.length > 0 && (
+              <div className="flex gap-1 mt-1.5" aria-label="Last marked days">
+                {vm.recent.map((r) => (
+                  <span key={r.date} title={`${r.date}: ${r.status}`} className={`w-2 h-2 rounded-full ${DOT[r.status] || 'bg-gray-300'}`} />
+                ))}
+              </div>
+            )}
+          </Tile>
 
-        {/* Fee Status */}
-        <div className="text-center p-2.5 bg-gray-50 rounded-lg">
-          <p className="text-xs text-gray-500 mb-1">Fees Due</p>
-          {isLoading ? (
-            <div className="h-5 bg-gray-200 rounded w-16 mx-auto animate-pulse" />
-          ) : (
-            <p className={`text-sm font-bold ${
-              (fees.total_due ?? fees.outstanding ?? child.fee_outstanding ?? 0) > 0
-                ? 'text-red-600' : 'text-green-600'
-            }`}>
-              {(fees.total_due ?? fees.outstanding ?? child.fee_outstanding) != null
-                ? `PKR ${Number(fees.total_due ?? fees.outstanding ?? child.fee_outstanding ?? 0).toLocaleString()}`
-                : child.fee_status || 'N/A'}
-            </p>
-          )}
-        </div>
+          <Tile label="Fees" loading={loading}>
+            {vm?.outstanding > 0 ? (
+              <>
+                <p className="text-lg font-bold text-red-600">{formatPkr(vm.outstanding)}</p>
+                <p className="text-xs text-gray-500">{vm.overdue > 0 ? `${formatPkr(vm.overdue)} from earlier months` : 'outstanding'}</p>
+              </>
+            ) : (
+              <p className="text-lg font-bold text-green-600">Nothing due</p>
+            )}
+          </Tile>
 
-        {/* Last Exam */}
-        <div className="text-center p-2.5 bg-gray-50 rounded-lg">
-          <p className="text-xs text-gray-500 mb-1">Last Exam</p>
-          {isLoading ? (
-            <div className="h-5 bg-gray-200 rounded w-10 mx-auto animate-pulse" />
-          ) : (() => {
-            const lastExam = recentExams[0]
-            const pct = lastExam?.percentage ?? lastExam?.total_obtained_percentage ?? child.last_exam_score
-            return (
-              <p className={`text-sm font-bold ${
-                pct == null ? 'text-gray-400' :
-                pct >= 60 ? 'text-green-600' :
-                pct >= 40 ? 'text-yellow-600' : 'text-red-600'
-              }`}>
-                {pct != null ? `${Math.round(pct)}%` : 'N/A'}
-              </p>
-            )
-          })()}
-        </div>
-
-        {/* Today's Status */}
-        <div className="text-center p-2.5 bg-gray-50 rounded-lg">
-          <p className="text-xs text-gray-500 mb-1">Today</p>
-          {isLoading ? (
-            <div className="h-5 bg-gray-200 rounded w-14 mx-auto animate-pulse" />
-          ) : (() => {
-            if (isOffDay) {
-              return (
-                <p className="text-sm font-bold text-gray-700" title={offTypes.length ? offTypes.join(', ') : undefined}>
-                  OFF
+          <Tile label="Last Exam" loading={loading}>
+            {vm?.latestExam ? (
+              <>
+                <p className={`text-lg font-bold ${scoreColor(vm.latestExam.percentage)}`}>
+                  {Math.round(vm.latestExam.percentage)}%
+                  {vm.examDelta != null && vm.examDelta !== 0 && (
+                    <span className={`ml-1 text-xs font-semibold ${vm.examDelta > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                      {vm.examDelta > 0 ? '▲' : '▼'} {Math.abs(vm.examDelta)}
+                    </span>
+                  )}
                 </p>
-              )
-            }
-            const todayStatus = attendance.today ?? overview.today_attendance
-            if (!todayStatus) return <p className="text-sm font-bold text-gray-400">—</p>
-            const statusColors = {
-              PRESENT: 'text-green-600',
-              ABSENT: 'text-red-600',
-              LATE: 'text-amber-600',
-              LEAVE: 'text-blue-600',
-            }
-            return (
-              <p className={`text-sm font-bold ${statusColors[todayStatus] || 'text-gray-600'}`}>
-                {todayStatus.charAt(0) + todayStatus.slice(1).toLowerCase()}
-              </p>
-            )
-          })()}
-        </div>
-      </div>
+                <p className="text-xs text-gray-500 truncate">{vm.latestExam.name}</p>
+              </>
+            ) : (
+              <p className="text-sm font-medium text-gray-400">No results yet</p>
+            )}
+          </Tile>
 
-      {/* Action Buttons */}
+          <Tile label="Next Exam" loading={loading}>
+            {vm?.nextExam ? (
+              <>
+                <p className="text-sm font-bold text-gray-900 truncate">{vm.nextExam.subject_name}</p>
+                <p className="text-xs text-gray-500">{nextExamWhen(vm.nextExam.exam_date)}</p>
+              </>
+            ) : (
+              <p className="text-sm font-medium text-gray-400">None scheduled</p>
+            )}
+          </Tile>
+        </div>
+      )}
+
       <div className="px-5 py-3 border-t border-gray-100 flex flex-wrap gap-2">
-        <Link
-          to={`/parent/children/${child.student}/attendance`}
-          className="text-xs font-medium text-gray-600 hover:text-primary-600 bg-gray-50 hover:bg-primary-50 px-3 py-1.5 rounded-md transition-colors"
-        >
-          Attendance
-        </Link>
-        <Link
-          to={`/parent/children/${child.student}/fees`}
-          className="text-xs font-medium text-gray-600 hover:text-primary-600 bg-gray-50 hover:bg-primary-50 px-3 py-1.5 rounded-md transition-colors"
-        >
-          Fees
-        </Link>
-        <Link
-          to={`/parent/children/${child.student}/results`}
-          className="text-xs font-medium text-gray-600 hover:text-primary-600 bg-gray-50 hover:bg-primary-50 px-3 py-1.5 rounded-md transition-colors"
-        >
-          Results
-        </Link>
-        <Link
-          to={`/parent/children/${child.student}/timetable`}
-          className="text-xs font-medium text-gray-600 hover:text-primary-600 bg-gray-50 hover:bg-primary-50 px-3 py-1.5 rounded-md transition-colors"
-        >
-          Timetable
-        </Link>
-        <Link
-          to={`/parent/children/${child.student}/library`}
-          className="text-xs font-medium text-gray-600 hover:text-primary-600 bg-gray-50 hover:bg-primary-50 px-3 py-1.5 rounded-md transition-colors"
-        >
-          Library
-        </Link>
-        <Link
-          to={`/parent/children/${child.student}/transport`}
-          className="text-xs font-medium text-gray-600 hover:text-primary-600 bg-gray-50 hover:bg-primary-50 px-3 py-1.5 rounded-md transition-colors"
-        >
-          Transport
-        </Link>
+        {LINKS.map(([path, label]) => (
+          <Link
+            key={path}
+            to={`${base}/${path}`}
+            className="text-xs font-medium text-gray-600 hover:text-primary-600 bg-gray-50 hover:bg-primary-50 px-3 py-1.5 rounded-md transition-colors"
+          >
+            {label}
+          </Link>
+        ))}
         <Link
           to="/parent/leave"
           className="text-xs font-medium text-gray-600 hover:text-amber-600 bg-gray-50 hover:bg-amber-50 px-3 py-1.5 rounded-md transition-colors"
@@ -315,4 +256,13 @@ function ChildCard({ child }) {
       </div>
     </div>
   )
+}
+
+function nextExamWhen(iso) {
+  const days = daysUntil(iso)
+  const date = parseLocalDate(iso)
+  const pretty = date ? date.toLocaleDateString(undefined, { day: 'numeric', month: 'short' }) : iso
+  if (days === 0) return `Today · ${pretty}`
+  if (days === 1) return `Tomorrow · ${pretty}`
+  return days != null && days > 0 ? `In ${days} days · ${pretty}` : pretty
 }
