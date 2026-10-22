@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useAuth } from '../contexts/AuthContext'
 import { classesApi } from '../services/api'
@@ -15,7 +16,9 @@ export function useClasses(schoolId) {
     staleTime: 5 * 60_000,
   })
 
-  const classes = data?.data?.results || data?.data || []
+  // useMemo keeps the array identity stable while loading: a fresh [] every render made consumers' effects
+  // (e.g. the fee-structure card views) re-run and set state in a loop.
+  const classes = useMemo(() => data?.data?.results || data?.data || [], [data])
 
   return { classes, isLoading, error }
 }

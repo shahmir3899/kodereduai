@@ -66,14 +66,8 @@ class TestFeeCollection:
         )])
 
     def test_carried_balance_is_not_counted_twice(self, seed_data, svc):
-        from finance.models import FeeStructure
-
         student = seed_data['students'][0]
         enroll(seed_data, student)
-        FeeStructure.objects.create(
-            school=seed_data['school_a'], class_obj=student.class_obj, fee_type='MONTHLY',
-            monthly_amount=Decimal('1000'), effective_from=date(2025, 4, 1),
-        )
         # April unpaid; May's amount_due already holds April's 1000.
         self._row(seed_data, student, 'MONTHLY', 4, 2025, '1000', '0')
         self._row(seed_data, student, 'MONTHLY', 5, 2025, '2000', '500', prev='1000')
@@ -82,12 +76,27 @@ class TestFeeCollection:
         result = svc._fee_collection_metrics(seed_data['academic_year'])
 
         assert result['monthly']['months_elapsed'] == 12
-        assert result['monthly']['expected'] == 12000
+        # Billed 2000 in total (not 3000): 500 received + 1500 still owed on May's row.
+        assert result['monthly']['expected'] == 2000
         assert result['monthly']['paid'] == 500
+        assert result['monthly']['rate'] == 25.0
         assert result['yearly']['rate'] == 50.0
-        assert result['collection_rate'] == round(3000 / 17000 * 100, 1)
+        assert result['collection_rate'] == round(3000 / 7000 * 100, 1)
         # Owes 1500 on May's row (the latest); April's UNPAID row is not a second debt.
         assert result['defaulting_students'] == 1
+
+    def test_balance_settled_through_a_later_row_is_fully_collected(self, seed_data, svc):
+        student = seed_data['students'][0]
+        # 2M billed each month: Jan pays 1.8M, Feb (2M + 0.2M) pays 1.9M, Mar (2M + 0.3M) pays 2.3M.
+        self._row(seed_data, student, 'MONTHLY', 4, 2025, '2000', '1800')
+        self._row(seed_data, student, 'MONTHLY', 5, 2025, '2200', '1900', prev='200')
+        self._row(seed_data, student, 'MONTHLY', 6, 2025, '2300', '2300', prev='300')
+
+        monthly = svc._fee_collection_metrics(seed_data['academic_year'])['monthly']
+
+        assert monthly['paid'] == 6000
+        assert monthly['expected'] == 6000  # three fresh charges of 2000, nothing owed
+        assert monthly['rate'] == 100.0
 
     def test_student_who_settled_the_latest_row_is_not_a_defaulter(self, seed_data, svc):
         student = seed_data['students'][0]

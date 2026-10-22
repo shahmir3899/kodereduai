@@ -231,14 +231,16 @@ class SessionHealthService:
         """Two parts, pooled into one rupee-weighted rate:
 
         * yearly (every non-monthly type): paid / total billed.
-        * monthly: paid so far / (months elapsed x the monthly fee structure).
+        * monthly: paid / (paid + still owed), over the months billed so far.
 
         Monthly rows can't simply be summed on amount_due: each month's amount_due
         already includes the previous month's carried balance, so a June balance
-        would be counted again inside July.
+        would be counted again inside July. previous_balance / base_monthly_fee are
+        snapshots taken when the month was generated and go stale once a later
+        payment lands, so billed is derived from what was actually received plus
+        what the latest row of each (student, category) still shows as owed.
         """
-        from academic_sessions.models import StudentEnrollment
-        from finance.models import FeePayment, FeeStructure, FeeType
+        from finance.models import FeePayment, FeeType
 
         today = date.today()
         payments = FeePayment.objects.filter(
@@ -263,48 +265,18 @@ class SessionHealthService:
         monthly_rows = payments.filter(fee_type=FeeType.MONTHLY).annotate(
             period=F('year') * 12 + F('month'),
         ).filter(period__gte=start_key, period__lte=end_key)
-        monthly_paid = float(monthly_rows.aggregate(p=Sum('amount_paid'))['p'] or 0)
 
-        # Expected = months x the fee each billed student is on today. Students with
-        # no monthly rows yet aren't billed, so they aren't expected to have paid.
-        billed_ids = set(monthly_rows.values_list('student_id', flat=True).distinct())
-        billed_ids.discard(None)
-
-        def current_fees(**filters):
-            by_key = {}
-            rows = FeeStructure.objects.filter(
-                school_id=self.school_id, fee_type=FeeType.MONTHLY, is_active=True,
-                effective_from__lte=today, **filters,
-            ).filter(Q(effective_to__isnull=True) | Q(effective_to__gte=today)).order_by('effective_from')
-            for fs in rows:
-                owner = fs.student_id if fs.student_id else fs.class_obj_id
-                by_key[(owner, fs.monthly_category_id)] = float(fs.monthly_amount)  # latest effective_from wins
-            return by_key
-
-        student_fees = current_fees(student_id__in=billed_ids)
-        class_fees = current_fees(student__isnull=True)
-
-        enrollments = StudentEnrollment.objects.filter(
-            school_id=self.school_id, academic_year=academic_year, student_id__in=billed_ids,
-        ).values('student_id', 'class_obj_id', 'left_date')
-
-        fees_by_student = {}
-        for (owner, cat), amount in student_fees.items():
-            fees_by_student.setdefault(owner, {})[cat] = amount
-        fees_by_class = {}
-        for (owner, cat), amount in class_fees.items():
-            fees_by_class.setdefault(owner, {})[cat] = amount
-
-        monthly_expected = 0.0
-        for e in enrollments:
-            per_cat = dict(fees_by_class.get(e['class_obj_id'], {}))
-            per_cat.update(fees_by_student.get(e['student_id'], {}))  # student override wins per category
-            months = months_elapsed
-            if e['left_date']:
-                # A leaver only owed fees up to their leaving month.
-                left_key = e['left_date'].year * 12 + e['left_date'].month
-                months = max(0, min(end_key, left_key) - start_key + 1)
-            monthly_expected += months * sum(per_cat.values())
+        monthly_paid = 0.0
+        latest = {}  # (student, category) -> (period, still owed on that row)
+        for student_id, category_id, period, due, paid in monthly_rows.values_list(
+            'student_id', 'monthly_category_id', 'period', 'amount_due', 'amount_paid',
+        ):
+            monthly_paid += float(paid or 0)
+            key = (student_id, category_id)
+            if key not in latest or period > latest[key][0]:
+                latest[key] = (period, float(due or 0) - float(paid or 0))
+        monthly_owed = sum(max(owed, 0.0) for _, owed in latest.values())
+        monthly_expected = monthly_paid + monthly_owed
 
         total_expected = yearly_total + monthly_expected
         total_collected = yearly_paid + monthly_paid

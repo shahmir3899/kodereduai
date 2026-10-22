@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useAuth } from '../contexts/AuthContext'
 import { sessionsApi } from '../services/api'
@@ -20,7 +21,8 @@ export function useSessionClasses(academicYearId, schoolId) {
     staleTime: 5 * 60_000,
   })
 
-  const sessionClasses = data?.data?.results || data?.data || []
+  // Stable identity while loading (see useClasses).
+  const sessionClasses = useMemo(() => data?.data?.results || data?.data || [], [data])
 
   return { sessionClasses, isLoading, error }
 }
