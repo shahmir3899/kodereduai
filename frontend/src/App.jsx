@@ -251,10 +251,13 @@ function ParentRoute({ children }) {
 
 // Guard: redirect SuperAdmin away from school-internal routes
 function SchoolRoute({ children }) {
-  const { isSuperAdmin } = useAuth()
+  const { isSuperAdmin, isParent, isStudent } = useAuth()
   if (isSuperAdmin) {
     return <Navigate to="/admin" replace />
   }
+  // Typing a school URL (e.g. /dashboard) must not open the staff pages for portal accounts.
+  if (isParent) return <Navigate to="/parent/dashboard" replace />
+  if (isStudent) return <Navigate to="/student/dashboard" replace />
   return children
 }
 
@@ -292,6 +295,24 @@ function ManagerRestrictedRoute({ children }) {
         to="/dashboard"
         title="Access Restricted"
         message="This page is not available for the Manager role."
+      />
+    )
+  }
+  return children
+}
+
+// Guard: student-level attendance, marks and results are for admins and teachers
+// only; the API answers 403 to every other role, so don't render a page that
+// would just show errors.
+function StudentDataRoute({ children }) {
+  const { effectiveRole, isSuperAdmin } = useAuth()
+  const allowed = isSuperAdmin || ['SCHOOL_ADMIN', 'PRINCIPAL', 'TEACHER'].includes(effectiveRole)
+  if (!allowed) {
+    return (
+      <AccessRestrictedRedirect
+        to="/dashboard"
+        title="Access Restricted"
+        message="Student attendance and results are available to admins and teachers only."
       />
     )
   }
@@ -479,18 +500,18 @@ function App() {
             {/* CaptureReviewPage (OCR register) removed 2026-05-13 — /attendance now redirects to manual-entry */}
             <Route path="attendance" element={<Navigate to="/attendance/manual-entry" replace />} />
             <Route path="attendance/review/:id" element={<Navigate to="/attendance/manual-entry" replace />} />
-            <Route path="attendance/register" element={<SchoolRoute><ModuleRoute module="attendance"><ManagerRestrictedRoute><StaffRestrictedRoute><AttendanceRecordsPage /></StaffRestrictedRoute></ManagerRestrictedRoute></ModuleRoute></SchoolRoute>} />
-            <Route path="attendance/manual-entry" element={<SchoolRoute><ModuleRoute module="attendance"><ManagerRestrictedRoute><StaffRestrictedRoute><ManualEntryPage /></StaffRestrictedRoute></ManagerRestrictedRoute></ModuleRoute></SchoolRoute>} />
-            <Route path="attendance/anomalies" element={<SchoolRoute><ModuleRoute module="attendance"><ManagerRestrictedRoute><AnomaliesPage /></ManagerRestrictedRoute></ModuleRoute></SchoolRoute>} />
+            <Route path="attendance/register" element={<SchoolRoute><ModuleRoute module="attendance"><StudentDataRoute><AttendanceRecordsPage /></StudentDataRoute></ModuleRoute></SchoolRoute>} />
+            <Route path="attendance/manual-entry" element={<SchoolRoute><ModuleRoute module="attendance"><StudentDataRoute><ManualEntryPage /></StudentDataRoute></ModuleRoute></SchoolRoute>} />
+            <Route path="attendance/anomalies" element={<SchoolRoute><ModuleRoute module="attendance"><AdminPrincipalRoute><AnomaliesPage /></AdminPrincipalRoute></ModuleRoute></SchoolRoute>} />
             <Route path="attendance/at-risk" element={<SchoolRoute><ModuleRoute module="attendance"><AdminPrincipalRoute><AtRiskStudentsPage /></AdminPrincipalRoute></ModuleRoute></SchoolRoute>} />
 
             {/* Face Attendance (camera-based) — Group Photo capture and Live Mobile
                 capture are both unconditionally available to every school (confirmed
                 product decision) — no enable/disable gate for either, just normal
                 auth/school-scoping like every other module. */}
-            <Route path="face-attendance" element={<SchoolRoute><ManagerRestrictedRoute><StaffRestrictedRoute><FaceAttendancePage /></StaffRestrictedRoute></ManagerRestrictedRoute></SchoolRoute>} />
-            <Route path="face-attendance/review/:sessionId" element={<SchoolRoute><ManagerRestrictedRoute><StaffRestrictedRoute><FaceReviewPage /></StaffRestrictedRoute></ManagerRestrictedRoute></SchoolRoute>} />
-            <Route path="face-attendance/enrollment" element={<SchoolRoute><ManagerRestrictedRoute><StaffRestrictedRoute><FaceEnrollmentPage /></StaffRestrictedRoute></ManagerRestrictedRoute></SchoolRoute>} />
+            <Route path="face-attendance" element={<SchoolRoute><AdminPrincipalRoute><FaceAttendancePage /></AdminPrincipalRoute></SchoolRoute>} />
+            <Route path="face-attendance/review/:sessionId" element={<SchoolRoute><AdminPrincipalRoute><FaceReviewPage /></AdminPrincipalRoute></SchoolRoute>} />
+            <Route path="face-attendance/enrollment" element={<SchoolRoute><AdminPrincipalRoute><FaceEnrollmentPage /></AdminPrincipalRoute></SchoolRoute>} />
 
             {/* Old standalone Live Mobile route — Mobile Capture is now a tab on the
                 main page, not a disconnected page. Redirect rather than remove so
@@ -502,7 +523,7 @@ function App() {
                 doc §10 backlog). No AdminPrincipalRoute: it calls the same enroll/
                 embedding path, gated by CanConfirmAttendance (admin OR teacher), not
                 admin-only. */}
-            <Route path="face-attendance/bulk-enrollment" element={<SchoolRoute><ManagerRestrictedRoute><StaffRestrictedRoute><FaceBulkEnrollmentPage /></StaffRestrictedRoute></ManagerRestrictedRoute></SchoolRoute>} />
+            <Route path="face-attendance/bulk-enrollment" element={<SchoolRoute><AdminPrincipalRoute><FaceBulkEnrollmentPage /></AdminPrincipalRoute></SchoolRoute>} />
 
             {/* Face Attendance — Fixed Camera capture, fixed on-prem camera. Admin-only
                 management pages (matches IsSchoolAdmin backend gate) — no enable/disable
@@ -518,8 +539,8 @@ function App() {
             <Route path="school-setup" element={<SchoolRoute><AdminPrincipalRoute><SchoolSetupPage /></AdminPrincipalRoute></SchoolRoute>} />
             <Route path="accuracy" element={<Navigate to="/attendance?tab=analytics" replace />} />
 
-            <Route path="students" element={<SchoolRoute><ModuleRoute module="students"><ManagementRoute teacherAllowed><StudentsPage /></ManagementRoute></ModuleRoute></SchoolRoute>} />
-            <Route path="students/:id" element={<SchoolRoute><ModuleRoute module="students"><ManagementRoute teacherAllowed><StudentProfilePage /></ManagementRoute></ModuleRoute></SchoolRoute>} />
+            <Route path="students" element={<SchoolRoute><ModuleRoute module="students"><ManagerRestrictedRoute><ManagementRoute teacherAllowed><StudentsPage /></ManagementRoute></ManagerRestrictedRoute></ModuleRoute></SchoolRoute>} />
+            <Route path="students/:id" element={<SchoolRoute><ModuleRoute module="students"><ManagerRestrictedRoute><ManagementRoute teacherAllowed><StudentProfilePage /></ManagementRoute></ManagerRestrictedRoute></ModuleRoute></SchoolRoute>} />
             <Route path="students/deleted" element={<SchoolRoute><ModuleRoute module="students"><AdminPrincipalRoute><DeletedStudentsPage /></AdminPrincipalRoute></ModuleRoute></SchoolRoute>} />
             <Route path="students/risk-score" element={<SchoolRoute><ModuleRoute module="students"><AdminPrincipalRoute><StudentRiskScorePage /></AdminPrincipalRoute></ModuleRoute></SchoolRoute>} />
             <Route path="classes" element={<SchoolRoute><ModuleRoute module="students"><ManagementRoute teacherAllowed><ClassesGradesPage /></ManagementRoute></ModuleRoute></SchoolRoute>} />
@@ -557,8 +578,8 @@ function App() {
             <Route path="academics/exam-types" element={<SchoolRoute><ModuleRoute module="examinations"><AssessmentManageRoute><ExamTypesPage /></AssessmentManageRoute></ModuleRoute></SchoolRoute>} />
             <Route path="academics/exams" element={<SchoolRoute><ModuleRoute module="examinations"><AssessmentManageRoute><ExamsPage /></AssessmentManageRoute></ModuleRoute></SchoolRoute>} />
             <Route path="academics/marks-entry" element={<SchoolRoute><ModuleRoute module="examinations"><AssessmentAccessRoute><MarksEntryPage /></AssessmentAccessRoute></ModuleRoute></SchoolRoute>} />
-            <Route path="academics/results" element={<SchoolRoute><ModuleRoute module="examinations"><StaffRestrictedRoute><ResultsPage /></StaffRestrictedRoute></ModuleRoute></SchoolRoute>} />
-            <Route path="academics/report-cards" element={<SchoolRoute><ModuleRoute module="examinations"><StaffRestrictedRoute><ReportCardPage /></StaffRestrictedRoute></ModuleRoute></SchoolRoute>} />
+            <Route path="academics/results" element={<SchoolRoute><ModuleRoute module="examinations"><StudentDataRoute><ResultsPage /></StudentDataRoute></ModuleRoute></SchoolRoute>} />
+            <Route path="academics/report-cards" element={<SchoolRoute><ModuleRoute module="examinations"><StudentDataRoute><ReportCardPage /></StudentDataRoute></ModuleRoute></SchoolRoute>} />
             {/* Grade Scale: admin-only (matches nav's isSchoolAdminNav) -- backend
                 (IsSchoolAdmin, no read fallback) already enforces this, AssessmentManageRoute
                 was too loose (only blocked TEACHER/STAFF, let MANAGER/ACCOUNTANT/DRIVER through). */}

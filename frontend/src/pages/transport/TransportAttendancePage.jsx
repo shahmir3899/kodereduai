@@ -1,10 +1,11 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import Field from '../../components/ui/Field'
 import PageHeader from '../../components/ui/PageHeader'
 import LoadingState from '../../components/ui/LoadingState'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { transportApi } from '../../services/api'
-import { useAuth } from '../../contexts/AuthContext'
+import { useAcademicYear } from '../../contexts/AcademicYearContext'
+import { getErrorMessage } from '../../utils/errorUtils'
 import { RecordCard, CardGrid, ViewToggle } from '../../components/cards'
 import { useViewPreference } from '../../hooks/useViewPreference'
 
@@ -15,10 +16,12 @@ const BOARDING_STATUSES = [
 ]
 
 export default function TransportAttendancePage() {
-  const { user } = useAuth()
+  const { activeAcademicYear } = useAcademicYear()
   const queryClient = useQueryClient()
 
-  const today = new Date().toISOString().split('T')[0]
+  // Local date: toISOString() is UTC, which is still yesterday before 05:00 in Pakistan.
+  const now = new Date()
+  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
   const [selectedDate, setSelectedDate] = useState(today)
   const [selectedRoute, setSelectedRoute] = useState('')
   const [view, setView] = useViewPreference('transport-attendance')
@@ -34,25 +37,21 @@ export default function TransportAttendancePage() {
 
   // Fetch assignments for selected route
   const { data: assignmentsData, isLoading: assignmentsLoading } = useQuery({
-    queryKey: ['transport-assignments', selectedRoute],
-    queryFn: () => transportApi.getAssignments({ route: selectedRoute, page_size: 9999 }),
+    queryKey: ['transport-assignments', 'attendance', selectedRoute, activeAcademicYear?.id],
+    queryFn: () => transportApi.getAssignments({
+      route_id: selectedRoute,
+      is_active: true,
+      ...(activeAcademicYear?.id && { academic_year: activeAcademicYear.id }),
+      page_size: 9999,
+    }),
     enabled: !!selectedRoute,
   })
 
   // Fetch existing attendance for selected date + route
   const { data: attendanceData, isLoading: attendanceLoading } = useQuery({
     queryKey: ['transport-attendance', selectedRoute, selectedDate],
-    queryFn: () => transportApi.getAttendance({ route: selectedRoute, date: selectedDate, page_size: 9999 }),
+    queryFn: () => transportApi.getAttendance({ route_id: selectedRoute, date: selectedDate, page_size: 9999 }),
     enabled: !!selectedRoute && !!selectedDate,
-    onSuccess: (data) => {
-      // Pre-populate attendanceMap from existing records
-      const records = data?.data?.results || data?.data || []
-      const map = {}
-      records.forEach((record) => {
-        map[record.student] = record.boarding_status || 'BOARDED'
-      })
-      setAttendanceMap(map)
-    },
   })
 
   // Bulk mark mutation
@@ -70,19 +69,20 @@ export default function TransportAttendancePage() {
   const assignments = assignmentsData?.data?.results || assignmentsData?.data || []
   const existingAttendance = attendanceData?.data?.results || attendanceData?.data || []
 
-  // Build the merged attendance map on data load
-  useMemo(() => {
-    if (existingAttendance.length > 0) {
-      const map = {}
-      existingAttendance.forEach((record) => {
-        map[record.student] = record.boarding_status || 'BOARDED'
-      })
-      setAttendanceMap(map)
-    } else if (selectedRoute) {
-      // Reset when no existing records
-      setAttendanceMap({})
-    }
-  }, [existingAttendance, selectedRoute, selectedDate])
+  // Load saved marks into local state. Keyed on the query result (a stable
+  // reference), not the `|| []` fallback, which is a new array every render.
+  useEffect(() => {
+    if (!attendanceData) return
+    const map = {}
+    existingAttendance.forEach((record) => {
+      map[record.student] = record.boarding_status || 'BOARDED'
+    })
+    setAttendanceMap(map)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [attendanceData])
+
+  // Students without a mark default to Boarded, which is what Save All records.
+  const statusFor = (studentId) => attendanceMap[studentId] || 'BOARDED'
 
   const isLoading = assignmentsLoading || attendanceLoading
 
@@ -102,7 +102,7 @@ export default function TransportAttendancePage() {
 
     const records = assignments.map((assignment) => ({
       student_id: assignment.student,
-      boarding_status: attendanceMap[assignment.student] || 'BOARDED',
+      boarding_status: statusFor(assignment.student),
     }))
 
     try {
@@ -111,6 +111,8 @@ export default function TransportAttendancePage() {
         route_id: parseInt(selectedRoute),
         records,
       })
+    } catch {
+      // Shown inline from bulkMarkMutation.error.
     } finally {
       setIsSaving(false)
     }
@@ -136,16 +138,13 @@ export default function TransportAttendancePage() {
     let absent = 0
 
     assignments.forEach((assignment) => {
-      const status = attendanceMap[assignment.student]
+      const status = statusFor(assignment.student)
       if (status === 'BOARDED') boarded++
       else if (status === 'NOT_BOARDED') notBoarded++
       else if (status === 'ABSENT') absent++
     })
 
-    // Count unmarked as separate
-    const unmarked = total - boarded - notBoarded - absent
-
-    return { total, boarded, notBoarded, absent, unmarked }
+    return { total, boarded, notBoarded, absent }
   }, [assignments, attendanceMap])
 
   return (
@@ -224,11 +223,9 @@ export default function TransportAttendancePage() {
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-semibold text-gray-900">
                 Mark Attendance
-                {summaryStats.unmarked > 0 && (
-                  <span className="text-sm font-normal text-gray-500 ml-2">
-                    ({summaryStats.unmarked} unmarked)
-                  </span>
-                )}
+                <span className="text-sm font-normal text-gray-500 ml-2">
+                  (everyone starts as Boarded)
+                </span>
               </h2>
               <div className="flex items-center gap-3">
                 {saveSuccess && (
@@ -249,9 +246,15 @@ export default function TransportAttendancePage() {
               </div>
             </div>
 
+            {bulkMarkMutation.isSuccess && bulkMarkMutation.data?.data?.errors?.length > 0 && (
+              <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-sm text-yellow-800">
+                {bulkMarkMutation.data.data.errors.length} record(s) were not saved: the student is not assigned to this route.
+              </div>
+            )}
+
             {bulkMarkMutation.isError && (
               <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
-                {bulkMarkMutation.error?.response?.data?.detail || 'Failed to save attendance. Please try again.'}
+                {getErrorMessage(bulkMarkMutation.error, 'Failed to save attendance. Please try again.')}
               </div>
             )}
 
@@ -262,13 +265,13 @@ export default function TransportAttendancePage() {
             {view === 'cards' ? (
             <CardGrid>
               {assignments.map((assignment) => {
-                const currentStatus = attendanceMap[assignment.student]
+                const currentStatus = statusFor(assignment.student)
                 return (
                   <RecordCard
                     key={assignment.id}
                     title={assignment.student_name}
                     fields={[
-                      { label: 'Class', value: assignment.class_name || '--' },
+                      { label: 'Class', value: assignment.student_class_name || '--' },
                       { label: 'Stop', value: assignment.stop_name || '--' },
                       { label: 'Vehicle', value: assignment.vehicle_number || '--' },
                     ]}
@@ -277,6 +280,7 @@ export default function TransportAttendancePage() {
                       {BOARDING_STATUSES.map((status) => (
                         <button
                           key={status.value}
+                          aria-pressed={currentStatus === status.value}
                           onClick={() => handleStatusChange(assignment.student, status.value)}
                           className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-medium border transition-colors ${
                             currentStatus === status.value
@@ -306,11 +310,11 @@ export default function TransportAttendancePage() {
                 </thead>
                 <tbody className="divide-y divide-gray-100">
                   {assignments.map((assignment) => {
-                    const currentStatus = attendanceMap[assignment.student]
+                    const currentStatus = statusFor(assignment.student)
                     return (
                       <tr key={assignment.id} className="hover:bg-gray-50">
                         <td className="px-4 py-3 text-sm font-medium text-gray-900">{assignment.student_name}</td>
-                        <td className="px-4 py-3 text-sm text-gray-500">{assignment.class_name || '--'}</td>
+                        <td className="px-4 py-3 text-sm text-gray-500">{assignment.student_class_name || '--'}</td>
                         <td className="px-4 py-3 text-sm text-gray-500">{assignment.stop_name || '--'}</td>
                         <td className="px-4 py-3 text-sm text-gray-500">{assignment.vehicle_number || '--'}</td>
                         <td className="px-4 py-3">
@@ -318,6 +322,7 @@ export default function TransportAttendancePage() {
                             {BOARDING_STATUSES.map((status) => (
                               <button
                                 key={status.value}
+                                aria-pressed={currentStatus === status.value}
                                 onClick={() => handleStatusChange(assignment.student, status.value)}
                                 className={`py-1 px-3 rounded-lg text-xs font-medium border transition-colors ${
                                   currentStatus === status.value

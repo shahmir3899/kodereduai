@@ -70,6 +70,7 @@ def _resolve_school_id(request):
 class AcademicYearViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
     queryset = AcademicYear.objects.all()
     permission_classes = [IsAuthenticated, IsSchoolAdminOrReadOnly, HasSchoolAccess]
+    allow_portal_roles = True  # the app shell loads the year list for every signed-in role (read-only: writes need an admin)
 
 
     def get_serializer_class(self):
@@ -153,6 +154,7 @@ class AcademicYearViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
 class TermViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
     queryset = Term.objects.all()
     permission_classes = [IsAuthenticated, IsSchoolAdminOrReadOnly, HasSchoolAccess]
+    allow_portal_roles = True  # loaded with the year list by the app shell (read-only for non-admins)
 
 
     def get_serializer_class(self):
@@ -240,6 +242,7 @@ class TermViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
 class SchoolCalendarEntryViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
     queryset = SchoolCalendarEntry.objects.all()
     permission_classes = [IsAuthenticated, IsSchoolAdminOrReadOnly, HasSchoolAccess]
+    allow_portal_roles = {'day_status'}  # the portal dashboards ask whether today is a school day
 
     def get_serializer_class(self):
         if self.action in ('create', 'update', 'partial_update'):

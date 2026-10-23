@@ -16,7 +16,7 @@ export default function TransportDashboard() {
 
   const { data: routesData } = useQuery({
     queryKey: ['transport-routes-recent'],
-    queryFn: () => transportApi.getRoutes({ limit: 5 }),
+    queryFn: () => transportApi.getRoutes({ page_size: 5 }),
   })
 
   const stats = dashboardData?.data || {}

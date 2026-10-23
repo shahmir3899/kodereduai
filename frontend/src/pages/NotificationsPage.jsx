@@ -73,6 +73,18 @@ const TEMPLATE_PREVIEW_CONTEXT = {
 const SUPPORTED_PLACEHOLDERS = Object.keys(TEMPLATE_PREVIEW_CONTEXT)
 const PLACEHOLDER_PATTERN = /\{\{\s*([^}]+)\s*\}\}/g
 
+// DRF sends either {detail} or {field: [msg]}; show the real reason, not a generic toast.
+const apiErrorText = (err, fallback) => {
+  const d = err?.response?.data
+  if (!d) return fallback
+  if (typeof d === 'string') return fallback
+  if (d.detail || d.error) return d.detail || d.error
+  const first = Object.entries(d)[0]
+  if (!first) return fallback
+  const msg = Array.isArray(first[1]) ? first[1][0] : first[1]
+  return `${first[0].replace(/_/g, ' ')}: ${msg}`
+}
+
 const TABS = ['Inbox', 'Templates', 'Send', 'Analytics', 'Settings']
 
 const SectionSpinner = () => (
@@ -341,7 +353,7 @@ function TemplatesTab() {
       setEditingTemplate(null)
       showSuccess('Template saved')
     },
-    onError: () => showError('Failed to save template'),
+    onError: (err) => showError(apiErrorText(err, 'Failed to save template')),
   })
 
   const deleteMutation = useMutation({
@@ -351,7 +363,7 @@ function TemplatesTab() {
       setDeleteConfirm(null)
       showSuccess('Template deleted')
     },
-    onError: () => showError('Failed to delete template'),
+    onError: (err) => showError(apiErrorText(err, 'Failed to delete template')),
   })
 
   const templates = data?.data?.results || data?.data || []
@@ -486,15 +498,16 @@ function TemplatesTab() {
                   <span className="px-1.5 py-0.5 rounded text-xs bg-blue-50 text-blue-600">
                     {CHANNEL_LABEL[t.channel] || t.channel}
                   </span>
+                  {t.school == null && <span className="px-1.5 py-0.5 rounded text-xs bg-amber-50 text-amber-700">Shared</span>}
                   {!t.is_active && <span className="px-1.5 py-0.5 rounded text-xs bg-red-50 text-red-600">Inactive</span>}
                 </div>
                 <p className="text-xs text-gray-500 mt-0.5 truncate max-w-lg">{t.body_template}</p>
               </div>
               <div className="flex items-center gap-2">
-                <button onClick={() => openEdit(t)} className="text-xs text-primary-600 hover:text-primary-800">Edit</button>
+                {t.school != null && <button onClick={() => openEdit(t)} className="text-xs text-primary-600 hover:text-primary-800">Edit</button>}
                 <button onClick={() => duplicateTemplate(t)} className="text-xs text-indigo-600 hover:text-indigo-800">Duplicate</button>
                 <button onClick={() => setPreviewTemplate(t)} className="text-xs text-emerald-600 hover:text-emerald-800">Preview</button>
-                <button onClick={() => setDeleteConfirm(t)} className="text-xs text-red-600 hover:text-red-800">Delete</button>
+                {t.school != null && <button onClick={() => setDeleteConfirm(t)} className="text-xs text-red-600 hover:text-red-800">Delete</button>}
               </div>
             </div>
           ))}
@@ -679,8 +692,8 @@ function SendTab() {
 
   // Fetch templates for the template picker
   const { data: templatesData } = useQuery({
-    queryKey: ['notificationTemplates'],
-    queryFn: () => notificationsApi.getTemplates({ page_size: 100 }),
+    queryKey: ['notificationTemplates', 'active'],
+    queryFn: () => notificationsApi.getTemplates({ page_size: 100, active: 1 }),
   })
   const templates = templatesData?.data?.results || templatesData?.data || []
 
@@ -691,7 +704,7 @@ function SendTab() {
       showSuccess(`Sent to ${stats.sent} recipients (${stats.skipped} skipped, ${stats.failed} failed)`)
       resetForm()
     },
-    onError: (err) => showError(err.response?.data?.detail || 'Failed to send broadcast'),
+    onError: (err) => showError(apiErrorText(err, 'Failed to send broadcast')),
   })
 
   const previewMutation = useMutation({
@@ -702,11 +715,13 @@ function SendTab() {
 
   const sendMutation = useMutation({
     mutationFn: (d) => notificationsApi.send(d),
-    onSuccess: () => {
-      showSuccess('Notification sent')
+    onSuccess: (res, vars) => {
+      // 200 means the engine skipped it (channel disabled or recipient opted out); 201 means a log row exists.
+      if (res.status === 200) showError(res.data?.detail || 'Notification skipped')
+      else showSuccess(`Notification sent to ${vars.recipient_identifier}`)
       resetForm()
     },
-    onError: (err) => showError(err.response?.data?.detail || err.response?.data?.recipient_identifier?.[0] || 'Failed to send notification'),
+    onError: (err) => showError(apiErrorText(err, 'Failed to send notification')),
   })
 
   const testSendMutation = useMutation({
@@ -974,7 +989,7 @@ function SendTab() {
               )}
               {placeholderWarning.unresolved.length > 0 && (
                 <p className="text-amber-700">
-                  <strong>Missing values (will likely stay as-is):</strong> {placeholderWarning.unresolved.map((k) => `{{${k}}}`).join(', ')}
+                  <strong>Not filled in automatically (will be sent exactly as typed):</strong> {placeholderWarning.unresolved.map((k) => `{{${k}}}`).join(', ')}
                 </p>
               )}
               <p className="text-xs text-gray-500">

@@ -83,14 +83,9 @@ export default function StudentStudyHelper() {
       ])
     },
     onError: (error) => {
-      const status = error?.response?.status
-      if (status === 429) {
-        setErrorToast('You are sending messages too quickly. Please wait a moment and try again.')
-      } else if (status === 400) {
-        setErrorToast('Your message was blocked by our content safety filter. Please rephrase and try again.')
-      } else {
-        setErrorToast('Something went wrong. Please try again.')
-      }
+      // The server words these precisely (daily limit vs blocked content vs AI down), so show its text.
+      const serverMessage = error?.response?.data?.error
+      setErrorToast(serverMessage || 'Something went wrong. Please try again.')
       // Remove the optimistic user message on error
       setMessages(prev => prev.filter(m => !m.id?.startsWith('temp-user-')))
     },

@@ -452,7 +452,8 @@ export default function Layout() {
       const rows = Array.isArray(payload?.results) ? payload.results : (Array.isArray(payload) ? payload : [])
       return rows.length > 0 ? 10000 : false
     },
-    enabled: !isSuperAdmin,
+    // Portal accounts have no AI jobs, and the endpoint now refuses them.
+    enabled: !isSuperAdmin && !isParent && !isStudent,
   })
   const pendingAIJobsPayload = pendingAIJobsRes?.data
   const pendingAIJobs = Array.isArray(pendingAIJobsPayload?.results)
@@ -462,7 +463,7 @@ export default function Layout() {
   const { data: recentAIJobsRes } = useQuery({
     queryKey: ['layout-ai-jobs-recent'],
     queryFn: () => aiJobsApi.getAIJobs({ limit: 5 }),
-    enabled: !isSuperAdmin && (showAIJobsMenu || pendingAIJobs.length > 0),
+    enabled: !isSuperAdmin && !isParent && !isStudent && (showAIJobsMenu || pendingAIJobs.length > 0),
     refetchInterval: pendingAIJobs.length > 0 ? 10000 : false,
   })
   const recentAIJobsPayload = recentAIJobsRes?.data
@@ -508,7 +509,7 @@ export default function Layout() {
 
   // Navigation structure: memoized to avoid re-creating on every render
   const navigationGroups = useMemo(() => buildStaffNavigation({
-    effectiveRole, isModuleEnabled, isStaffLevel, isManager, isTeacher, isStaff, isSchoolAdminNav, hasInventoryAssignments,
+    effectiveRole, isModuleEnabled, isStaffLevel, isManager, isTeacher, isStaff, isDriver: effectiveRole === 'DRIVER', isSchoolAdminNav, hasInventoryAssignments,
   }, NAV_ICONS), [effectiveRole, isModuleEnabled, isStaffLevel, isManager, isTeacher, isStaff, isSchoolAdminNav, hasInventoryAssignments])
 
   // SuperAdmin only sees the Admin Panel link — no school-internal nav

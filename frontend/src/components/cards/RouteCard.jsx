@@ -7,6 +7,8 @@ import { useState } from 'react'
  * relationship. Mirrors the existing expand/collapse-per-row behavior on the
  * desktop table (RoutesPage.jsx) rather than introducing a new interaction.
  *
+ * actions: [{ label, onClick, tone?, disabled? }] — route-level Edit/Delete/etc.,
+ *   shown under the summary row so they work without expanding the card.
  * stats: [{ label, value }] — shown right-aligned in the summary row (distance,
  *   stop count, capacity).
  * renderStops: () => node — deferred so the stop list (and its map view) only
@@ -16,7 +18,7 @@ import { useState } from 'react'
  *   stops" query, as RoutesPage.jsx does). Omit both for uncontrolled mode
  *   (the card manages its own open state internally).
  */
-export default function RouteCard({ title, meta, stats = [], renderStops, onAddStop, open: openProp, onToggle }) {
+export default function RouteCard({ title, meta, stats = [], renderStops, onAddStop, actions = [], open: openProp, onToggle }) {
   const isControlled = openProp !== undefined && !!onToggle
   const [internalOpen, setInternalOpen] = useState(false)
   const open = isControlled ? openProp : internalOpen
@@ -50,6 +52,22 @@ export default function RouteCard({ title, meta, stats = [], renderStops, onAddS
           ))}
         </div>
       </button>
+
+      {actions.length > 0 && (
+        <div className="flex items-center gap-4 px-4 pb-3 pl-11">
+          {actions.map((a) => (
+            <button
+              key={a.label}
+              type="button"
+              onClick={a.onClick}
+              disabled={a.disabled}
+              className={`text-xs font-medium disabled:opacity-50 ${a.tone === 'danger' ? 'text-red-600 hover:text-red-800' : a.tone === 'success' ? 'text-emerald-600 hover:text-emerald-800' : 'text-blue-600 hover:text-blue-800'}`}
+            >
+              {a.label}
+            </button>
+          ))}
+        </div>
+      )}
 
       {open && (
         <div className="border-t border-gray-100 bg-gray-50 px-4 py-3">

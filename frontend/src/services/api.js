@@ -979,7 +979,8 @@ export const parentsApi = {
   // Leave requests
   getLeaveRequests: (params) => api.get('/api/parents/leave-requests/', { params }),
   createLeaveRequest: (data) => api.post('/api/parents/leave-requests/', data),
-  cancelLeaveRequest: (id) => api.patch(`/api/parents/leave-requests/${id}/cancel/`),
+  // Cancel is the viewset's DELETE (it soft-cancels a pending request); there is no /cancel/ route.
+  cancelLeaveRequest: (id) => api.delete(`/api/parents/leave-requests/${id}/`),
 
   // Messages
   getMessageThreads: () => api.get('/api/parents/messages/threads/'),
@@ -1055,7 +1056,8 @@ export const studentPortalApi = {
   // Assignments
   getAssignments: (params) => api.get('/api/students/portal/assignments/', { params }),
   getAssignment: (id) => api.get(`/api/students/portal/assignments/${id}/`),
-  submitAssignment: (id, data) => api.post(`/api/students/portal/assignments/${id}/submit/`, data),
+  // The backend takes the assignment id in the body of the list URL; there is no /<id>/submit/ route.
+  submitAssignment: (id, data) => api.post('/api/students/portal/assignments/', { ...data, assignment_id: id }),
 
   // AI Study Helper
   getStudyHelperHistory: () => api.get('/api/students/portal/study-helper/'),
@@ -1358,9 +1360,8 @@ export const inventoryApi = {
   getAssignments: (params) => api.get('/api/inventory/assignments/', { params }),
   getAssignment: (id) => api.get(`/api/inventory/assignments/${id}/`),
   createAssignment: (data) => api.post('/api/inventory/assignments/', data),
-  returnItem: (id, data) => api.post(`/api/inventory/assignments/${id}/return_item/`, data),
-  getAssignmentsByUser: (userId) => api.get(`/api/inventory/assignments/by_user/`, { params: { user_id: userId } }),
-
+  returnItem: (id, data) => api.post(`/api/inventory/assignments/${id}/return/`, data),
+  
   // Transactions
   getTransactions: (params) => api.get('/api/inventory/transactions/', { params }),
   createTransaction: (data) => api.post('/api/inventory/transactions/', data),

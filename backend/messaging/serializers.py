@@ -21,7 +21,7 @@ class MessageSerializer(serializers.ModelSerializer):
 
 class ThreadParticipantSerializer(serializers.ModelSerializer):
     user_name = serializers.SerializerMethodField()
-    user_role = serializers.CharField(source='user.role', read_only=True)
+    user_role = serializers.SerializerMethodField()
 
     class Meta:
         model = ThreadParticipant
@@ -29,6 +29,9 @@ class ThreadParticipantSerializer(serializers.ModelSerializer):
 
     def get_user_name(self, obj):
         return obj.user.get_full_name() or obj.user.username
+
+    def get_user_role(self, obj):
+        return obj.user.role_label_in_school(obj.thread.school_id)
 
 
 class ThreadListSerializer(serializers.ModelSerializer):
@@ -90,7 +93,7 @@ class ThreadListSerializer(serializers.ModelSerializer):
 
     def get_other_participant_role(self, obj):
         other = self._get_other_participant(obj)
-        return other.user.role if other else None
+        return other.user.role_label_in_school(obj.school_id) if other else None
 
 
 class ThreadDetailSerializer(serializers.ModelSerializer):

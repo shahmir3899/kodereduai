@@ -65,6 +65,7 @@ export function buildAvailability({ effectiveRole, isSuperAdmin, isParent, isStu
       isManager,
       isTeacher: effectiveRole === 'TEACHER',
       isStaff: effectiveRole === 'STAFF',
+      isDriver: effectiveRole === 'DRIVER',
       isSchoolAdminNav: effectiveRole === 'SCHOOL_ADMIN' || effectiveRole === 'PRINCIPAL',
       hasInventoryAssignments: true,
     }, NO_ICONS))

@@ -222,8 +222,10 @@ class StudentCreateSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Student
+        # `id` is returned so the caller can create the student's login straight after
+        # (the Add Student form skipped that step when the response had no id).
         fields = [
-            'school', 'class_obj', 'session_class_id', 'roll_number',
+            'id', 'school', 'class_obj', 'session_class_id', 'roll_number',
             'name', 'parent_phone', 'parent_name',
             'admission_number', 'admission_date', 'date_of_birth',
             'gender', 'blood_group', 'address', 'previous_school',

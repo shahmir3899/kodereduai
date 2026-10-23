@@ -269,6 +269,14 @@ def _is_data_restricted_user(request):
     return role in data_restricted
 
 
+def _is_portal_account(user):
+    if user.role in ('STUDENT', 'PARENT'):
+        return True
+    # Accounts created before those base roles existed are stored as STAFF: the profile gives them away.
+    # Reverse one-to-one lookups raise (an AttributeError subclass) when the profile is absent.
+    return hasattr(user, 'student_profile') or hasattr(user, 'parent_profile')
+
+
 def get_effective_role(request):
     """
     Return the user's effective role for the current active school.
@@ -287,7 +295,11 @@ def get_effective_role(request):
     if cached is not None and cached[0] == (user.pk, school_id):
         return cached[1]
 
-    role = (user.get_role_for_school(school_id) if school_id else None) or user.role
+    role = user.get_role_for_school(school_id) if school_id else None
+    if not role:
+        # A student or parent account without an active membership must resolve to no role,
+        # never fall back to its base role (older accounts are still stored as STAFF).
+        role = None if _is_portal_account(user) else user.role
     request._effective_role_cache = ((user.pk, school_id), role)
     return role
 
@@ -405,7 +417,9 @@ class CanViewStudentRecords(permissions.BasePermission):
     """
     message = "You don't have permission to view student records."
 
-    READ_ROLES = ADMIN_ROLES + ('TEACHER', 'MANAGER', 'ACCOUNTANT')
+    # MANAGER is not here: it has no student-level data. A view that lists non-student
+    # records (ClassViewSet) opts it back in with `extra_read_roles`.
+    READ_ROLES = ADMIN_ROLES + ('TEACHER', 'ACCOUNTANT')
 
     def has_permission(self, request, view):
         if not request.user.is_authenticated:
@@ -414,9 +428,24 @@ class CanViewStudentRecords(permissions.BasePermission):
         role = get_effective_role(request)
 
         if request.method in permissions.SAFE_METHODS:
-            return role in self.READ_ROLES
+            return role in self.READ_ROLES + tuple(getattr(view, 'extra_read_roles', ()))
 
         return role in ADMIN_ROLES
+
+
+class CanViewStudentData(permissions.BasePermission):
+    """Student-level attendance, marks and results: admins and teachers only.
+
+    Teachers are narrowed to their own classes/sections by each view's queryset; this
+    class only keeps every other role (accountant, manager, staff, driver) out.
+    """
+    message = "Only admins and teachers can view student attendance, marks and results."
+
+    def has_permission(self, request, view):
+        if not request.user.is_authenticated:
+            return False
+        role = get_effective_role(request)
+        return role in ADMIN_ROLES or role == 'TEACHER'
 
 
 class CanEditStudentRecord(permissions.BasePermission):
@@ -501,6 +530,17 @@ class HasSchoolAccess(permissions.BasePermission):
         # Super admin has access to all
         if request.user.is_super_admin:
             return True
+
+        # Parent and student accounts belong to the school, but the school-wide read-only
+        # endpoints (staff, enquiries, every student's attendance...) were open to them.
+        # They get their own portal APIs; a view that a portal page really calls opts in
+        # with `allow_portal_roles = True`, or a set of action names for just those actions.
+        allowed = getattr(view, 'allow_portal_roles', False)
+        if isinstance(allowed, (set, frozenset, list, tuple)):
+            allowed = getattr(view, 'action', None) in allowed
+        if get_effective_role(request) in PARENT_ROLES + STUDENT_ROLES and not allowed:
+            self.message = "Parent and student accounts can only use the portal."
+            return False
 
         # Ensure tenant_schools is populated (handles JWT auth timing)
         tenant_schools = ensure_tenant_schools(request)

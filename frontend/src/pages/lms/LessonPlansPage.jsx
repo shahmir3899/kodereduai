@@ -512,6 +512,9 @@ export default function LessonPlansPage() {
     } else if (!form.title) {
       showError('Title is required')
       return
+    } else if (!form.teacher) {
+      showError('Please select a teacher')
+      return
     }
 
     const objectiveRows = form.objective_rows || []
@@ -1264,7 +1267,7 @@ export default function LessonPlansPage() {
                 {(!isMinimal || !form.teacher) && (
                   <div>
                     <label className="label">
-                      Teacher{isMinimal ? ' (no default found — please choose)' : ''}
+                      Teacher{isMinimal ? ' (no default found — please choose)' : ' *'}
                     </label>
                     <StaffFilter
                       role="TEACHER"

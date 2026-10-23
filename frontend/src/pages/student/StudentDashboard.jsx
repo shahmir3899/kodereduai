@@ -5,6 +5,7 @@ import { studentPortalApi, sessionsApi } from '../../services/api'
 import { useAuth } from '../../contexts/AuthContext'
 import NotificationsFeed from '../../components/dashboard/NotificationsFeed'
 import Spinner from '../../components/ui/Spinner'
+import PhotoAvatar from '../../components/ui/PhotoAvatar'
 
 export default function StudentDashboard() {
   const { user } = useAuth()
@@ -77,11 +78,7 @@ export default function StudentDashboard() {
       {/* Welcome Card */}
       <div className="bg-gradient-to-r from-blue-600 to-blue-700 rounded-xl p-5 sm:p-6 text-white">
         <div className="flex items-center gap-4">
-          <div className="w-14 h-14 rounded-full bg-white/20 flex items-center justify-center flex-shrink-0">
-            <span className="text-2xl font-bold">
-              {(student.name || user?.first_name || user?.username || '?').charAt(0).toUpperCase()}
-            </span>
-          </div>
+          <PhotoAvatar url={student.photo_url} name={student.name || user?.first_name || user?.username} className="w-14 h-14" fallbackClassName="bg-white/20 text-white" />
           <div className="min-w-0">
             <h1 className="text-xl sm:text-2xl font-bold truncate">
               Welcome, {student.name || user?.first_name || user?.username || 'Student'}!

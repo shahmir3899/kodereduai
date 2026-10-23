@@ -20,7 +20,7 @@ from django.conf import settings
 from django.db import connection, transaction
 from django.db.models import Count, Q
 
-from core.permissions import IsSchoolAdmin, HasSchoolAccess, CanConfirmAttendance, CanUploadAttendance, CanManualAttendance, ModuleAccessMixin, get_effective_role, ADMIN_ROLES, get_teacher_class_scope, get_teacher_session_class_scope, _get_session_class_student_ids
+from core.permissions import IsSchoolAdmin, HasSchoolAccess, CanConfirmAttendance, CanUploadAttendance, CanManualAttendance, CanViewStudentData, ModuleAccessMixin, get_effective_role, ADMIN_ROLES, get_teacher_class_scope, get_teacher_session_class_scope, get_teacher_master_only_class_scope, _get_session_class_student_ids
 from core.mixins import TenantQuerySetMixin, ensure_tenant_schools, ensure_tenant_school_id
 from academic_sessions.calendar_rules import is_off_day_for_date, off_day_types_for_date, build_off_day_date_set
 from .models import AttendanceUpload, AttendanceRecord
@@ -37,21 +37,22 @@ from .summary import daily_attendance_summary
 logger = logging.getLogger(__name__)
 
 
-class HasSchoolAccessExcludingManager(HasSchoolAccess):
-    """
-    Same as HasSchoolAccess, but blocks MANAGER outright.
+def _scope_to_teacher(request, queryset, school_id, student_field='student'):
+    """Narrow student-keyed rows to what a TEACHER is class teacher of; others pass through.
 
-    2026-09: Manager's nav access was scoped down to Dashboard/Academics/
-    Content Creation/Management only — student attendance (this module) is
-    no longer part of that set, so the previously-unrestricted read access
-    (any authenticated user with school access) needs an explicit carve-out
-    for Manager specifically. Other staff-level roles are unaffected.
+    Same rule as StudentViewSet: students enrolled in the teacher's sections, plus the
+    students of legacy class-teacher assignments that have no section. Subject teachers
+    are deliberately not included: they cannot mark attendance, and their scope is only
+    known at master-class level, which would open every section of the class.
     """
-
-    def has_permission(self, request, view):
-        if get_effective_role(request) == 'MANAGER':
-            return False
-        return super().has_permission(request, view)
+    if get_effective_role(request) != 'TEACHER':
+        return queryset
+    section_ids = get_teacher_session_class_scope(request, school_id=school_id)
+    legacy_class_ids = get_teacher_master_only_class_scope(request, school_id=school_id)
+    return queryset.filter(
+        Q(**{f'{student_field}_id__in': _get_session_class_student_ids(section_ids)}) |
+        Q(**{f'{student_field}__class_obj_id__in': legacy_class_ids})
+    )
 
 
 def _resolve_session_class_filter(request):
@@ -722,7 +723,19 @@ class AttendanceRecordViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.R
     """
     queryset = AttendanceRecord.objects.all()
     serializer_class = AttendanceRecordSerializer
-    permission_classes = [IsAuthenticated, HasSchoolAccessExcludingManager]
+    permission_classes = [IsAuthenticated, CanViewStudentData, HasSchoolAccess]
+
+    # School-wide views and the parked OCR stats are for the admin dashboards; a teacher
+    # only gets the student-scoped list, register, monthly grid and PDF.
+    ADMIN_ONLY_ACTIONS = (
+        'daily_report', 'chronic_absentees', 'accuracy_stats', 'mapping_suggestions',
+        'threshold_status', 'drift_history',
+    )
+
+    def get_permissions(self):
+        if self.action in self.ADMIN_ONLY_ACTIONS:
+            return [IsAuthenticated(), IsSchoolAdmin(), HasSchoolAccess()]
+        return super().get_permissions()
 
     def get_queryset(self):
         queryset = AttendanceRecord.objects.select_related(
@@ -744,6 +757,8 @@ class AttendanceRecordViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.R
         school_id = self.request.query_params.get('school_id')
         if school_id:
             queryset = queryset.filter(school_id=school_id)
+
+        queryset = _scope_to_teacher(self.request, queryset, active_school_id)
 
         # Resolve scope first so class filtering can remain year-consistent.
         academic_year_id = self.request.query_params.get('academic_year')
@@ -864,6 +879,7 @@ class AttendanceRecordViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.R
             )
             .values('student_id', 'date', 'status')
         )
+        records = _scope_to_teacher(request, records, active_school_id)
         # Month cutoff anchored to date_from's month (the month this register
         # view is always browsing) instead of a bare is_active check --
         # otherwise a withdrawn/transferred student's own already-marked records
@@ -941,6 +957,7 @@ class AttendanceRecordViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.R
         )
         if academic_year_id:
             records_qs = records_qs.filter(academic_year_id=academic_year_id)
+        records_qs = _scope_to_teacher(request, records_qs, school_id)
 
         rows = list(records_qs.values('student_id', 'date', 'status', 'student__class_obj_id'))
 
@@ -2113,7 +2130,8 @@ class AttendanceAnomalyViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.
     POST /api/attendance/anomalies/{id}/resolve/ - Mark as resolved
     """
     required_module = 'attendance'
-    permission_classes = [IsAuthenticated, HasSchoolAccessExcludingManager]
+    # School-wide student list: admin dashboards only (was open to every role but Manager).
+    permission_classes = [IsAuthenticated, IsSchoolAdmin, HasSchoolAccess]
 
     def get_queryset(self):
         from .models import AttendanceAnomaly

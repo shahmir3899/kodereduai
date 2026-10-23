@@ -3,6 +3,7 @@ import { TONE } from '../../components/ui/statusTones'
 import { useQuery } from '@tanstack/react-query'
 import { parentsApi } from '../../services/api'
 import Spinner from '../../components/ui/Spinner'
+import PhotoAvatar from '../../components/ui/PhotoAvatar'
 import { readOverview, formatPkr } from './parentOverviewUtils'
 
 function StatCard({ label, value, sub, color = 'primary', icon }) {
@@ -89,11 +90,7 @@ export default function ChildOverview() {
       {/* Header Card */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
         <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-          <div className="w-16 h-16 rounded-full bg-primary-100 flex items-center justify-center flex-shrink-0">
-            <span className="text-2xl font-bold text-primary-700">
-              {vm.name?.charAt(0)?.toUpperCase() || '?'}
-            </span>
-          </div>
+          <PhotoAvatar url={overview.photo_url} name={vm.name} />
           <div className="flex-1 min-w-0">
             <h1 className="text-xl sm:text-2xl font-bold text-gray-900">{vm.name}</h1>
             <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1 text-sm text-gray-500">

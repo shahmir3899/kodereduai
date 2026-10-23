@@ -4,6 +4,7 @@ import { TONE } from '../../components/ui/statusTones'
 import Button from '../../components/ui/Button'
 import PageHeader from '../../components/ui/PageHeader'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useToast } from '../../components/Toast'
 import { inventoryApi } from '../../services/api'
 import { useConfirmModal } from '../../components/ConfirmModal'
 import Spinner from '../../components/ui/Spinner'
@@ -40,6 +41,7 @@ const emptyVendorForm = { name: '', contact_person: '', phone: '', email: '', ad
 
 export default function InventoryItemsPage() {
   const queryClient = useQueryClient()
+  const { showSuccess, showWarning } = useToast()
   const { confirm, ConfirmModalRoot } = useConfirmModal()
 
   // Filters
@@ -106,6 +108,7 @@ export default function InventoryItemsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['inventoryItems'] })
       queryClient.invalidateQueries({ queryKey: ['inventoryDashboard'] })
+      showSuccess(editingItem ? 'Item updated successfully' : 'Item added successfully')
       closeItemModal()
     },
   })
@@ -246,7 +249,7 @@ export default function InventoryItemsPage() {
 
       // Create selected items in parallel
       const selectedItms = (aiSuggestions?.items || []).filter((_, i) => selectedItems[i])
-      await Promise.all(selectedItms.map((item) => {
+      const results = await Promise.all(selectedItms.map((item) => {
         const catId = categoryNameToId[(item.category_name || '').toLowerCase()]
         if (!catId) return Promise.resolve(null)
         return inventoryApi.createItem({
@@ -259,6 +262,11 @@ export default function InventoryItemsPage() {
       queryClient.invalidateQueries({ queryKey: ['inventoryItems'] })
       queryClient.invalidateQueries({ queryKey: ['inventoryCategories'] })
       queryClient.invalidateQueries({ queryKey: ['inventoryDashboard'] })
+      // An item whose category could not be created used to vanish without a word.
+      const added = results.filter(Boolean).length
+      const skipped = selectedItms.length - added
+      if (skipped > 0) showWarning(`${added} item(s) added, ${skipped} skipped. Check the categories and try again.`)
+      else showSuccess(`${added} item(s) added`)
       closeAISuggestModal()
     } catch (err) {
       console.error('Bulk add failed:', err)

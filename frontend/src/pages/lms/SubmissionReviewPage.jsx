@@ -40,7 +40,7 @@ export default function SubmissionReviewPage() {
 
   const { data: submissionsData, isLoading: submissionsLoading } = useQuery({
     queryKey: ['submissions', assignmentId],
-    queryFn: () => lmsApi.getSubmissions({ assignment: assignmentId, page_size: 9999 }),
+    queryFn: () => lmsApi.getSubmissions({ assignment_id: assignmentId, page_size: 9999 }),
     enabled: !!assignmentId,
   })
 
@@ -74,6 +74,7 @@ export default function SubmissionReviewPage() {
       showError(
         error.response?.data?.detail ||
           error.response?.data?.marks_obtained?.[0] ||
+          error.response?.data?.error ||
           'Failed to grade submission'
       )
     },
@@ -86,7 +87,7 @@ export default function SubmissionReviewPage() {
       showSuccess('Submission returned to student!')
     },
     onError: (error) => {
-      showError(error.response?.data?.detail || 'Failed to return submission')
+      showError(error.response?.data?.detail || error.response?.data?.error || 'Failed to return submission')
     },
   })
 

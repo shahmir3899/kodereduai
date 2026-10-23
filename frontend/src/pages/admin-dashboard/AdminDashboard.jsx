@@ -15,6 +15,7 @@ import QuickActionGrid from '../../components/dashboard/QuickActionGrid'
 import NotificationsFeed from '../../components/dashboard/NotificationsFeed'
 import AttentionStrip, { buildAttentionItems } from '../../components/dashboard/AttentionStrip'
 import AttendanceBreakdown from '../../components/dashboard/AttendanceBreakdown'
+import DateStepper, { toLocalISODate } from '../../components/dashboard/DateStepper'
 import MonthlyFeeCollectionCard from '../../components/dashboard/MonthlyFeeCollectionCard'
 import { useFeeMonthSummary } from '../../hooks/useFeeMonthSummary'
 import { useDashboardBootstrap } from '../../hooks/useDashboardBootstrap'
@@ -33,6 +34,10 @@ export default function AdminDashboard() {
   const [insightsOpen, setInsightsOpen] = useState(false)
 
   const today = new Date().toISOString().split('T')[0]
+  // Only the student-attendance block follows this; the KPI tiles, fees and staff stay on today.
+  const localToday = toLocalISODate()
+  const [attendanceDate, setAttendanceDate] = useState(localToday)
+  const viewingPast = attendanceDate < localToday
   const schoolReady = !!activeSchool?.id
 
   const attendanceOn = isModuleEnabled('attendance')
@@ -43,6 +48,13 @@ export default function AdminDashboard() {
     queryKey: ['dailyReport', today, activeSchool?.id, activeAcademicYear?.id],
     queryFn: () => attendanceApi.getDailyReport(today, activeSchool?.id, activeAcademicYear?.id),
     enabled: schoolReady && attendanceOn && bootstrapSettled,
+  })
+
+  // Separate from the query above so navigating back never touches the KPI tiles or attention strip.
+  const { data: pastReport, isFetching: loadingPastReport } = useQuery({
+    queryKey: ['dailyReport', attendanceDate, activeSchool?.id, activeAcademicYear?.id],
+    queryFn: () => attendanceApi.getDailyReport(attendanceDate, activeSchool?.id, activeAcademicYear?.id),
+    enabled: schoolReady && attendanceOn && bootstrapSettled && viewingPast,
   })
 
   const { summary: fee, isLoading: loadingFinanceQuery } = useFeeMonthSummary({ enabled: schoolReady && financeOn && feeReady })
@@ -100,9 +112,11 @@ export default function AdminDashboard() {
   const report = dailyReport?.data
   const hr = hrStats?.data
   const isOffDay = !!report?.is_off_day
+  const attendanceReport = viewingPast ? pastReport?.data : report
+  const attendanceOffDay = !!attendanceReport?.is_off_day
 
   const attendanceRate = !isOffDay && report?.total_students > 0
-    ? Math.round((report.present_count / report.total_students) * 100) : null
+    ? Math.min(100, Math.round((report.present_count / report.total_students) * 100)) : null
   const collectionRate = fee?.rate ?? null
   const staffPresentPct = !isOffDay && hr?.active_staff > 0
     ? Math.round(((hr.attendance_present_today || 0) / hr.active_staff) * 100) : null
@@ -217,14 +231,15 @@ export default function AdminDashboard() {
                 <div>
                   <div className="flex items-center justify-between mb-2">
                     <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Student attendance</p>
+                    <DateStepper date={attendanceDate} today={localToday} onChange={setAttendanceDate} />
                     <Link to="/attendance/register" className="text-xs text-sky-600 hover:text-sky-700 font-medium">View details</Link>
                   </div>
-                  {isOffDay ? (
-                    <p className="text-sm text-gray-600">Attendance is not applicable today.</p>
+                  {viewingPast && !attendanceReport ? (
+                    <p className="text-sm text-gray-500">{loadingPastReport ? 'Loading…' : 'No data for this day.'}</p>
+                  ) : attendanceOffDay ? (
+                    <p className="text-sm text-gray-600">Attendance is not applicable {viewingPast ? 'on this day' : 'today'}.</p>
                   ) : (
-                    <>
-                      <AttendanceBreakdown report={report} />
-                    </>
+                    <AttendanceBreakdown report={attendanceReport} />
                   )}
                 </div>
               )}

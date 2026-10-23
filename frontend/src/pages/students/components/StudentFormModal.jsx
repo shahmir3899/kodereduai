@@ -6,6 +6,7 @@ import { useEscapeKey } from '../../../hooks/useEscapeKey'
 import { useRollSuggestion } from '../../../hooks/useRollSuggestion'
 import { useStudentForm } from '../../../hooks/useStudentForm'
 import { STUDENT_FIELDS } from '../studentFieldConfig'
+import { occupiedRollsInScope } from '../studentListUtils'
 import StudentForm from './StudentForm'
 
 const QUICK_FIELDS = new Set(STUDENT_FIELDS.filter((f) => f.quick).map((f) => f.name))
@@ -55,13 +56,9 @@ export default function StudentFormModal({
   const sessionClassId = isEdit ? '' : resolveSessionClassId(classId)
 
   const occupiedRolls = useMemo(
-    () => (resolvedClassId
-      ? allStudents
-        .filter((s) => (sessionClassId
-          ? String(s.session_class_obj?.id) === sessionClassId
-          : String(s.class_obj) === resolvedClassId) && s.id !== student?.id)
-        .map((s) => s.roll_number)
-      : []),
+    () => occupiedRollsInScope(allStudents, {
+      sessionClassId, classId: resolvedClassId, excludeId: student?.id,
+    }),
     [allStudents, resolvedClassId, sessionClassId, student?.id],
   )
 

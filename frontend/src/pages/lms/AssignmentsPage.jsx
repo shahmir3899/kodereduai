@@ -79,6 +79,13 @@ const EMPTY_BULK_DIARY_FORM = {
 
 const defaultDiaryDateString = () => new Date().toISOString().slice(0, 10)
 
+// DRF returns {field: ['msg']}; surface the first one instead of a generic toast.
+const firstFieldError = (data) => {
+  if (!data || typeof data !== 'object') return null
+  const first = Object.entries(data).find(([, v]) => Array.isArray(v) && v.length)
+  return first ? `${first[0].replace(/_/g, ' ')}: ${first[1][0]}` : null
+}
+
 export default function AssignmentsPage() {
   const { user, isSchoolAdmin, isPrincipal, isTeacher } = useAuth()
   const { activeAcademicYear } = useAcademicYear()
@@ -129,7 +136,6 @@ export default function AssignmentsPage() {
     return siblings.length > 1 ? parseInt(sessionClassId, 10) : null
   }
   const { classifyScope, isTeacherEnabled } = useTeacherScopeLookup({ academicYearId: activeAcademicYear?.id })
-  const canCreateAssignments = isSchoolAdmin || isPrincipal
   const canCreateDailyDiary = isSchoolAdmin || isPrincipal || isTeacher
 
   const { data: classTeacherScopeRes, isLoading: classTeacherScopeLoading } = useQuery({
@@ -273,7 +279,7 @@ export default function AssignmentsPage() {
     onError: (error) => {
       showError(
         error.response?.data?.detail ||
-          error.response?.data?.title?.[0] ||
+          firstFieldError(error.response?.data) ||
           'Failed to create assignment'
       )
     },
@@ -289,7 +295,7 @@ export default function AssignmentsPage() {
     onError: (error) => {
       showError(
         error.response?.data?.detail ||
-          error.response?.data?.title?.[0] ||
+          firstFieldError(error.response?.data) ||
           'Failed to update assignment'
       )
     },
@@ -446,6 +452,14 @@ export default function AssignmentsPage() {
     }
     if (!form.subject) {
       showError('Please select a subject')
+      return
+    }
+    if (!form.teacher) {
+      showError('Please select a teacher')
+      return
+    }
+    if (!form.description.trim()) {
+      showError('Description is required')
       return
     }
     const isDiary = form.assignment_type === 'DIARY'
@@ -711,7 +725,7 @@ export default function AssignmentsPage() {
                     { label: 'Marks', value: a.total_marks ?? '--' },
                   ]}
                   actions={[
-                    { label: `Submissions (${a.submissions_count ?? 0})`, tone: 'primary', onClick: () => navigate(`/academics/assignments/${a.id}/submissions`) },
+                    { label: `Submissions (${a.submission_count ?? 0})`, tone: 'primary', onClick: () => navigate(`/academics/assignments/${a.id}/submissions`) },
                     { label: 'Edit', tone: 'info', onClick: () => openEditModal(a) },
                     ...(a.status === 'DRAFT' ? [{ label: 'Publish', tone: 'success', onClick: () => publishMutation.mutate(a.id) }] : []),
                     ...(a.status === 'PUBLISHED' ? [{ label: 'Close', tone: 'orange', onClick: () => closeMutation.mutate(a.id) }] : []),
@@ -814,7 +828,7 @@ export default function AssignmentsPage() {
                           }
                           className="text-sm text-primary-600 hover:text-primary-800 font-medium underline"
                         >
-                          {a.submissions_count ?? 0}
+                          {a.submission_count ?? 0}
                         </button>
                       </td>
                       <td className="px-4 py-3 text-right whitespace-nowrap">
@@ -912,7 +926,7 @@ export default function AssignmentsPage() {
               {/* Teacher & Type */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="label">Teacher</label>
+                  <label className="label">Teacher *</label>
                   <StaffFilter
                     role="TEACHER"
                     value={form.teacher}
@@ -1026,7 +1040,7 @@ export default function AssignmentsPage() {
 
               {/* Description */}
               <div>
-                <label className="label">Description</label>
+                <label className="label">Description *</label>
                 <textarea
                   className="input"
                   rows={3}

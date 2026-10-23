@@ -7,6 +7,8 @@ import {
   computeStats,
   summarizeByGender,
   buildClassChipData,
+  isInSection,
+  occupiedRollsInScope,
 } from '../studentListUtils'
 
 const s = (over) => ({
@@ -199,3 +201,42 @@ describe('buildClassChipData', () => {
     expect(chips).toEqual([{ id: '7', name: 'Class 7', count: 0 }])
   })
 })
+
+describe('isInSection', () => {
+  it('matches the plain section id the students API returns', () => {
+    expect(isInSection({ session_class_obj: 10 }, '10')).toBe(true)
+    expect(isInSection({ session_class_obj: 10 }, 10)).toBe(true)
+    expect(isInSection({ session_class_obj: 11 }, '10')).toBe(false)
+  })
+
+  it('treats a missing section as not in any section', () => {
+    expect(isInSection({ session_class_obj: null }, '10')).toBe(false)
+    expect(isInSection({}, '10')).toBe(false)
+  })
+})
+
+describe('occupiedRollsInScope', () => {
+  const pupils = [
+    { id: 1, roll_number: '1', session_class_obj: 10, class_obj: 1 },
+    { id: 2, roll_number: '2', session_class_obj: 10, class_obj: 1 },
+    { id: 3, roll_number: '1', session_class_obj: 11, class_obj: 1 },
+    { id: 4, roll_number: '7', class_obj: 2 },
+  ]
+
+  it('lists the rolls of the chosen section only', () => {
+    expect(occupiedRollsInScope(pupils, { sessionClassId: '10', classId: '1' })).toEqual(['1', '2'])
+  })
+
+  it('falls back to the master class when there is no section', () => {
+    expect(occupiedRollsInScope(pupils, { sessionClassId: '', classId: '2' })).toEqual(['7'])
+  })
+
+  it('leaves out the student being edited', () => {
+    expect(occupiedRollsInScope(pupils, { sessionClassId: '10', classId: '1', excludeId: 2 })).toEqual(['1'])
+  })
+
+  it('is empty until a class is chosen', () => {
+    expect(occupiedRollsInScope(pupils, { sessionClassId: '', classId: '' })).toEqual([])
+  })
+})
+

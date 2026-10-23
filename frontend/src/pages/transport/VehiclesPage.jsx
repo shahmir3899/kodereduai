@@ -8,6 +8,9 @@ import LoadingState from '../../components/ui/LoadingState'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { transportApi } from '../../services/api'
 import { useAuth } from '../../contexts/AuthContext'
+import { useToast } from '../../components/Toast'
+import { getErrorMessage } from '../../utils/errorUtils'
+import { canManageTransport } from './transportAccess'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
 import { RecordCard, CardGrid, ViewToggle } from '../../components/cards'
 import { useViewPreference } from '../../hooks/useViewPreference'
@@ -36,8 +39,10 @@ const emptyForm = {
 }
 
 export default function VehiclesPage() {
-  const { user } = useAuth()
+  const { effectiveRole } = useAuth()
+  const canManage = canManageTransport(effectiveRole)
   const queryClient = useQueryClient()
+  const toast = useToast()
 
   const [view, setView] = useViewPreference('vehicles')
   const [showModal, setShowModal] = useState(false)
@@ -63,6 +68,8 @@ export default function VehiclesPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['transport-vehicles'] })
       queryClient.invalidateQueries({ queryKey: ['transport-dashboard'] })
+      queryClient.invalidateQueries({ queryKey: ['transport-routes'] })
+      toast.showSuccess('Vehicle added')
       closeModal()
     },
   })
@@ -72,6 +79,8 @@ export default function VehiclesPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['transport-vehicles'] })
       queryClient.invalidateQueries({ queryKey: ['transport-dashboard'] })
+      queryClient.invalidateQueries({ queryKey: ['transport-routes'] })
+      toast.showSuccess('Vehicle updated')
       closeModal()
     },
   })
@@ -81,6 +90,8 @@ export default function VehiclesPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['transport-vehicles'] })
       queryClient.invalidateQueries({ queryKey: ['transport-dashboard'] })
+      queryClient.invalidateQueries({ queryKey: ['transport-routes'] })
+      toast.showSuccess('Vehicle deleted')
       setDeleteConfirm(null)
     },
   })
@@ -118,8 +129,11 @@ export default function VehiclesPage() {
   useEscapeKey(closeModal, showModal)
   useEscapeKey(() => setDeleteConfirm(null), !!deleteConfirm)
 
+  const formValid = !!vehicleForm.vehicle_number.trim() && !!String(vehicleForm.capacity).trim()
+    && !!vehicleForm.driver_name.trim() && !!vehicleForm.driver_phone.trim()
+
   const handleSubmit = () => {
-    if (!vehicleForm.vehicle_number.trim()) return
+    if (!formValid) return
 
     const payload = {
       ...vehicleForm,
@@ -154,11 +168,11 @@ export default function VehiclesPage() {
 
   return (
     <div>
-      <PageHeader title="Vehicles" subtitle="Manage vehicles and driver information" className="mb-6" actions={<>
-<button onClick={openAddModal} className="btn btn-primary">
+      <PageHeader title="Vehicles" subtitle="Manage vehicles and driver information" className="mb-6" actions={canManage ? (
+        <button onClick={openAddModal} className="btn btn-primary">
           Add Vehicle
         </button>
-</>} />
+      ) : null} />
 
       <div className="card">
         {isLoading ? (
@@ -171,7 +185,7 @@ export default function VehiclesPage() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
             </svg>
             <p className="text-gray-500 mb-2">No vehicles found</p>
-            <p className="text-sm text-gray-400">Add your first vehicle to get started.</p>
+            <p className="text-sm text-gray-400">{canManage ? 'Add your first vehicle to get started.' : 'No vehicles have been added yet.'}</p>
           </div>
         ) : (
           <>
@@ -196,10 +210,10 @@ export default function VehiclesPage() {
                     { label: 'Route', value: getRouteName(vehicle.assigned_route) },
                     ...(vehicle.driver_name ? [{ label: 'Driver', value: `${vehicle.driver_name} (${vehicle.driver_phone || '--'})` }] : []),
                   ]}
-                  actions={[
+                  actions={canManage ? [
                     { label: 'Edit', tone: 'info', onClick: () => openEditModal(vehicle) },
                     { label: 'Delete', tone: 'danger', onClick: () => setDeleteConfirm(vehicle) },
-                  ]}
+                  ] : []}
                 />
               ))}
             </CardGrid>
@@ -233,18 +247,22 @@ export default function VehiclesPage() {
                       <td className="px-4 py-3 text-sm text-gray-500">{vehicle.driver_phone || '--'}</td>
                       <td className="px-4 py-3 text-sm text-gray-500">{getRouteName(vehicle.assigned_route)}</td>
                       <td className="px-4 py-3 text-right">
-                        <button
-                          onClick={() => openEditModal(vehicle)}
-                          className="text-sm text-blue-600 hover:text-blue-800 font-medium mr-3"
-                        >
-                          Edit
-                        </button>
-                        <button
-                          onClick={() => setDeleteConfirm(vehicle)}
-                          className="text-sm text-red-600 hover:text-red-800 font-medium"
-                        >
-                          Delete
-                        </button>
+                        {canManage && (
+                          <>
+                            <button
+                              onClick={() => openEditModal(vehicle)}
+                              className="text-sm text-blue-600 hover:text-blue-800 font-medium mr-3"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              onClick={() => setDeleteConfirm(vehicle)}
+                              className="text-sm text-red-600 hover:text-red-800 font-medium"
+                            >
+                              Delete
+                            </button>
+                          </>
+                        )}
                       </td>
                     </tr>
                   ))}
@@ -288,9 +306,10 @@ export default function VehiclesPage() {
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <Field label="Capacity">
+                <Field label="Capacity" required>
 <input
                     type="number"
+                    min="1"
                     className="input"
                     placeholder="e.g. 40"
                     value={vehicleForm.capacity}
@@ -312,7 +331,7 @@ export default function VehiclesPage() {
               <p className="text-sm font-medium text-gray-700">Driver Information</p>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <Field label="Driver Name">
+                <Field label="Driver Name" required>
 <input
                     type="text"
                     className="input"
@@ -321,7 +340,7 @@ export default function VehiclesPage() {
                     onChange={(e) => setVehicleForm({ ...vehicleForm, driver_name: e.target.value })}
                   />
 </Field>
-                <Field label="Driver Phone">
+                <Field label="Driver Phone" required>
 <input
                     type="text"
                     className="input"
@@ -360,11 +379,7 @@ export default function VehiclesPage() {
 
             {(createMutation.isError || updateMutation.isError) && (
               <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
-                {createMutation.error?.response?.data?.detail ||
-                  createMutation.error?.response?.data?.vehicle_number?.[0] ||
-                  updateMutation.error?.response?.data?.detail ||
-                  updateMutation.error?.response?.data?.vehicle_number?.[0] ||
-                  'Failed to save vehicle. Please try again.'}
+                {getErrorMessage(createMutation.error || updateMutation.error, 'Failed to save vehicle. Please try again.')}
               </div>
             )}
 
@@ -374,7 +389,7 @@ export default function VehiclesPage() {
               </button>
               <button
                 onClick={handleSubmit}
-                disabled={createMutation.isPending || updateMutation.isPending || !vehicleForm.vehicle_number.trim()}
+                disabled={createMutation.isPending || updateMutation.isPending || !formValid}
                 className="btn btn-primary"
               >
                 {(createMutation.isPending || updateMutation.isPending)
@@ -396,7 +411,7 @@ export default function VehiclesPage() {
 
             {deleteMutation.isError && (
               <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
-                {deleteMutation.error?.response?.data?.detail || 'Failed to delete vehicle.'}
+                {getErrorMessage(deleteMutation.error, 'Failed to delete vehicle.')}
               </div>
             )}
 

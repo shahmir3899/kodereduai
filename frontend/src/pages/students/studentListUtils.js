@@ -9,6 +9,23 @@ const matchesSearch = (student, search) => {
   return student.name?.toLowerCase().includes(needle) || student.roll_number?.toLowerCase().includes(needle)
 }
 
+// The students list API gives the section as a plain id (`session_class_obj: 10`), not an
+// object: reading `.id` off it matched nothing, so the roll suggestion and the transport
+// picker silently ignored every student.
+export function isInSection(student, sessionClassId) {
+  return String(student?.session_class_obj ?? '') === String(sessionClassId ?? '')
+}
+
+// Rolls already taken in the section (or, without one, the master class), leaving out the
+// student being edited so their own roll does not count as taken.
+export function occupiedRollsInScope(students, { sessionClassId, classId, excludeId }) {
+  if (!classId) return []
+  return students
+    .filter((s) => (sessionClassId ? isInSection(s, sessionClassId) : String(s.class_obj) === String(classId))
+      && s.id !== excludeId)
+    .map((s) => s.roll_number)
+}
+
 export function compareRollNumbers(leftRoll, rightRoll) {
   const leftRaw = String(leftRoll || '').trim()
   const rightRaw = String(rightRoll || '').trim()

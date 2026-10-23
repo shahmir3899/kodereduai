@@ -3,6 +3,7 @@ import { studentPortalApi } from '../../services/api'
 import { useAuth } from '../../contexts/AuthContext'
 import WhatsAppTick from '../../components/WhatsAppTick'
 import Spinner from '../../components/ui/Spinner'
+import PhotoAvatar from '../../components/ui/PhotoAvatar'
 
 export default function StudentProfileView() {
   const { user } = useAuth()
@@ -51,11 +52,7 @@ export default function StudentProfileView() {
       {/* Profile Header Card */}
       <div className="bg-white rounded-xl border border-gray-200 p-5 sm:p-6">
         <div className="flex items-center gap-4">
-          <div className="w-16 h-16 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
-            <span className="text-2xl font-bold text-blue-700">
-              {(student.name || user?.first_name || user?.username || '?').charAt(0).toUpperCase()}
-            </span>
-          </div>
+          <PhotoAvatar url={student.photo_url} name={student.name || user?.first_name || user?.username} fallbackClassName="bg-blue-100 text-blue-700" />
           <div className="min-w-0">
             <h2 className="text-lg font-semibold text-gray-900 truncate">
               {student.name || student.full_name || `${user?.first_name || ''} ${user?.last_name || ''}`.trim() || user?.username || 'Student'}

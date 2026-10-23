@@ -6,6 +6,8 @@ import PageHeader from '../../components/ui/PageHeader'
 import LoadingState from '../../components/ui/LoadingState'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { inventoryApi } from '../../services/api'
+import { useToast } from '../../components/Toast'
+import { useAuth } from '../../contexts/AuthContext'
 import { useDebounce } from '../../hooks/useDebounce'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
 import { RecordCard, CardGrid, ViewToggle } from '../../components/cards'
@@ -31,6 +33,11 @@ const emptyAssignForm = {
 
 export default function ItemAssignmentsPage() {
   const queryClient = useQueryClient()
+  const { showSuccess } = useToast()
+  const { effectiveRole } = useAuth()
+  // Assigning and returning are admin-only on the API, as is the user list behind the picker.
+  const canPickUsers = ['SUPER_ADMIN', 'SCHOOL_ADMIN', 'PRINCIPAL'].includes(effectiveRole)
+  const canManage = canPickUsers
 
   // Filters & tab
   const [activeTab, setActiveTab] = useState('active') // 'active' | 'returned'
@@ -51,6 +58,7 @@ export default function ItemAssignmentsPage() {
     queryFn: () => inventoryApi.getAssignments({
       is_active: activeTab === 'active' ? 'true' : 'false',
       search: debouncedSearchUser || undefined,
+      page_size: 200,
     }),
   })
 
@@ -59,14 +67,18 @@ export default function ItemAssignmentsPage() {
     queryFn: () => inventoryApi.getItems({ page_size: 1000 }),
   })
 
+  // The user list feeds the "assign to" picker and sits on an admin-only endpoint.
   const { data: usersData } = useQuery({
     queryKey: ['usersAll'],
     queryFn: () => inventoryApi.searchUsers({ page_size: 1000 }),
+    enabled: canPickUsers,
   })
 
   const assignments = assignmentsData?.data?.results || assignmentsData?.data || []
   const items = itemsData?.data?.results || itemsData?.data || []
-  const users = usersData?.data?.results || usersData?.data || []
+  // Portal accounts and deactivated users cannot hold store items.
+  const users = (usersData?.data?.results || usersData?.data || [])
+    .filter((u) => u.is_active && !['STUDENT', 'PARENT'].includes(u.role))
 
   // ---- Mutations ----
   const createAssignmentMutation = useMutation({
@@ -79,6 +91,7 @@ export default function ItemAssignmentsPage() {
       // so available quantity shown here updates without a reload.
       queryClient.invalidateQueries({ queryKey: ['inventoryItemsAll'] })
       queryClient.invalidateQueries({ queryKey: ['inventoryDashboard'] })
+      showSuccess('Item assigned')
       closeAssignModal()
     },
   })
@@ -90,6 +103,7 @@ export default function ItemAssignmentsPage() {
       queryClient.invalidateQueries({ queryKey: ['inventoryItems'] })
       queryClient.invalidateQueries({ queryKey: ['inventoryItemsAll'] })
       queryClient.invalidateQueries({ queryKey: ['inventoryDashboard'] })
+      showSuccess('Item marked as returned')
       setReturnConfirm(null)
     },
   })
@@ -142,7 +156,7 @@ export default function ItemAssignmentsPage() {
   return (
     <div>
       {/* Header */}
-      <PageHeader title="Item Assignments" subtitle="Assign inventory items to staff & track returns" className="mb-6" actions={<>
+      <PageHeader title="Item Assignments" subtitle="Assign inventory items to staff & track returns" className="mb-6" actions={canManage && <>
 <button
           onClick={openAssignModal}
           className="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 transition-colors"
@@ -221,11 +235,11 @@ export default function ItemAssignmentsPage() {
                     </span>
                   }
                   fields={[
-                    { label: 'Qty · Condition', value: `${a.quantity} · ${a.condition_on_assign}` },
+                    { label: 'Qty · Condition', value: `${a.quantity} · ${a.condition_on_assign_display || a.condition_on_assign}` },
                     { label: 'Assigned', value: formatDate(a.assigned_date) },
-                    ...(a.returned_date ? [{ label: 'Returned', value: `${formatDate(a.returned_date)} · ${a.condition_on_return}` }] : []),
+                    ...(a.returned_date ? [{ label: 'Returned', value: `${formatDate(a.returned_date)} · ${a.condition_on_return_display || a.condition_on_return}` }] : []),
                   ]}
-                  actions={a.is_active ? [
+                  actions={a.is_active && canManage ? [
                     { label: 'Mark Returned', tone: 'orange', onClick: () => { setReturnConfirm(a); setReturnCondition('GOOD') } },
                   ] : []}
                 >
@@ -250,7 +264,7 @@ export default function ItemAssignmentsPage() {
                       </>
                     )}
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Notes</th>
-                    {activeTab === 'active' && (
+                    {activeTab === 'active' && canManage && (
                       <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
                     )}
                   </tr>
@@ -263,7 +277,7 @@ export default function ItemAssignmentsPage() {
                       <td className="px-4 py-3 text-sm text-right font-medium">{a.quantity}</td>
                       <td className="px-4 py-3 text-center">
                         <span className={`inline-flex px-2 py-0.5 rounded text-xs font-medium ${conditionColors[a.condition_on_assign] || TONE.neutral}`}>
-                          {a.condition_on_assign}
+                          {a.condition_on_assign_display || a.condition_on_assign}
                         </span>
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-500">{formatDate(a.assigned_date)}</td>
@@ -272,13 +286,13 @@ export default function ItemAssignmentsPage() {
                           <td className="px-4 py-3 text-sm text-gray-500">{formatDate(a.returned_date)}</td>
                           <td className="px-4 py-3 text-center">
                             <span className={`inline-flex px-2 py-0.5 rounded text-xs font-medium ${conditionColors[a.condition_on_return] || TONE.neutral}`}>
-                              {a.condition_on_return || '-'}
+                              {a.condition_on_return_display || a.condition_on_return || '-'}
                             </span>
                           </td>
                         </>
                       )}
                       <td className="px-4 py-3 text-sm text-gray-500 max-w-[200px] truncate">{a.notes || '-'}</td>
-                      {activeTab === 'active' && (
+                      {activeTab === 'active' && canManage && (
                         <td className="px-4 py-3 text-right">
                           <button
                             onClick={() => { setReturnConfirm(a); setReturnCondition('GOOD') }}

@@ -10,6 +10,29 @@ from .models import (
     RouteJourney, RouteLocationUpdate,
 )
 
+from .utils import resolve_school_id
+
+
+class SchoolScopedMixin:
+    """Helpers for write serializers: the models' unique constraints include
+    `school`, which is not a serializer field, so DRF adds no validator for
+    them and a duplicate surfaced as a 500 IntegrityError."""
+
+    def _school_id(self):
+        request = self.context.get('request')
+        return resolve_school_id(request) if request else None
+
+    def _check_school(self, obj, field, label):
+        """Reject a related object that belongs to another school."""
+        school_id = self._school_id()
+        if obj is None or not school_id:
+            return
+        owner = getattr(obj, 'school_id', None)
+        if owner is None and hasattr(obj, 'route'):
+            owner = obj.route.school_id
+        if owner != school_id:
+            raise serializers.ValidationError({field: f'Selected {label} does not belong to this school.'})
+
 
 # =============================================================================
 # TransportRoute Serializers
@@ -39,8 +62,17 @@ class TransportRouteReadSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'created_at', 'updated_at']
 
 
-class TransportRouteCreateSerializer(serializers.ModelSerializer):
+class TransportRouteCreateSerializer(SchoolScopedMixin, serializers.ModelSerializer):
     """Write serializer for creating/updating routes."""
+
+    def validate_name(self, value):
+        school_id = self._school_id()
+        qs = TransportRoute.objects.filter(school_id=school_id, name=value)
+        if self.instance:
+            qs = qs.exclude(pk=self.instance.pk)
+        if school_id and qs.exists():
+            raise serializers.ValidationError('A route with this name already exists.')
+        return value
 
     class Meta:
         model = TransportRoute
@@ -59,7 +91,7 @@ class TransportRouteCreateSerializer(serializers.ModelSerializer):
 # TransportStop Serializers
 # =============================================================================
 
-class TransportStopSerializer(serializers.ModelSerializer):
+class TransportStopSerializer(SchoolScopedMixin, serializers.ModelSerializer):
     """
     Flat serializer used for both read and write operations.
     Includes route_name for display.
@@ -76,6 +108,11 @@ class TransportStopSerializer(serializers.ModelSerializer):
             'pickup_time', 'drop_time',
         ]
         read_only_fields = ['id']
+
+    def validate(self, attrs):
+        route = attrs.get('route') or getattr(self.instance, 'route', None)
+        self._check_school(route, 'route', 'route')
+        return attrs
 
 
 # =============================================================================
@@ -110,8 +147,21 @@ class TransportVehicleReadSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'created_at', 'updated_at']
 
 
-class TransportVehicleCreateSerializer(serializers.ModelSerializer):
+class TransportVehicleCreateSerializer(SchoolScopedMixin, serializers.ModelSerializer):
     """Write serializer for creating/updating vehicles."""
+
+    def validate_vehicle_number(self, value):
+        school_id = self._school_id()
+        qs = TransportVehicle.objects.filter(school_id=school_id, vehicle_number=value)
+        if self.instance:
+            qs = qs.exclude(pk=self.instance.pk)
+        if school_id and qs.exists():
+            raise serializers.ValidationError('A vehicle with this number already exists.')
+        return value
+
+    def validate(self, attrs):
+        self._check_school(attrs.get('assigned_route'), 'assigned_route', 'route')
+        return attrs
 
     class Meta:
         model = TransportVehicle
@@ -173,7 +223,7 @@ class TransportAssignmentReadSerializer(serializers.ModelSerializer):
         return placement_label(serializer_placement(self, obj, lambda a: a.academic_year_id), obj.student) or None
 
 
-class TransportAssignmentCreateSerializer(serializers.ModelSerializer):
+class TransportAssignmentCreateSerializer(SchoolScopedMixin, serializers.ModelSerializer):
     """Write serializer for creating/updating assignments."""
 
     class Meta:
@@ -186,6 +236,24 @@ class TransportAssignmentCreateSerializer(serializers.ModelSerializer):
         read_only_fields = ['id']
 
     def validate(self, attrs):
+        for field, label in (('academic_year', 'academic year'), ('student', 'student'),
+                             ('route', 'route'), ('stop', 'stop'), ('vehicle', 'vehicle')):
+            self._check_school(attrs.get(field), field, label)
+
+        student = attrs.get('student') or getattr(self.instance, 'student', None)
+        year = attrs.get('academic_year') or getattr(self.instance, 'academic_year', None)
+        school_id = self._school_id()
+        if school_id and student and year:
+            dupes = TransportAssignment.objects.filter(
+                school_id=school_id, student=student, academic_year=year,
+            )
+            if self.instance:
+                dupes = dupes.exclude(pk=self.instance.pk)
+            if dupes.exists():
+                raise serializers.ValidationError({
+                    'student': 'This student already has a transport assignment for this academic year.'
+                })
+
         # Ensure the stop belongs to the selected route
         route = attrs.get('route')
         stop = attrs.get('stop')
@@ -245,7 +313,7 @@ class TransportAttendanceReadSerializer(serializers.ModelSerializer):
         return placement_label(serializer_placement(self, obj), obj.student) or None
 
 
-class TransportAttendanceCreateSerializer(serializers.ModelSerializer):
+class TransportAttendanceCreateSerializer(SchoolScopedMixin, serializers.ModelSerializer):
     """Write serializer for creating attendance records."""
 
     class Meta:
@@ -254,6 +322,25 @@ class TransportAttendanceCreateSerializer(serializers.ModelSerializer):
             'id', 'student', 'route', 'date', 'boarding_status',
         ]
         read_only_fields = ['id']
+
+    def validate(self, attrs):
+        self._check_school(attrs.get('student'), 'student', 'student')
+        self._check_school(attrs.get('route'), 'route', 'route')
+        student = attrs.get('student') or getattr(self.instance, 'student', None)
+        route = attrs.get('route') or getattr(self.instance, 'route', None)
+        day = attrs.get('date') or getattr(self.instance, 'date', None)
+        school_id = self._school_id()
+        if school_id and student and route and day:
+            dupes = TransportAttendance.objects.filter(
+                school_id=school_id, student=student, route=route, date=day,
+            )
+            if self.instance:
+                dupes = dupes.exclude(pk=self.instance.pk)
+            if dupes.exists():
+                raise serializers.ValidationError(
+                    'Attendance for this student, route and date is already recorded.'
+                )
+        return attrs
 
 
 # =============================================================================

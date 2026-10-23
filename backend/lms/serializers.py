@@ -535,6 +535,9 @@ class LessonPlanCreateSerializer(serializers.ModelSerializer):
         read_only_fields = ['id']
         extra_kwargs = {
             'session_class': {'required': False, 'allow_null': True},
+            # TenantQuerySetMixin.perform_create fills the school from the request;
+            # the web form never sends it.
+            'school': {'required': False},
         }
 
     def validate_custom_topics(self, value):
@@ -745,6 +748,9 @@ class AssignmentCreateSerializer(serializers.ModelSerializer):
             'attachments_allowed', 'status', 'is_active',
         ]
         read_only_fields = ['id']
+        # TenantQuerySetMixin.perform_create fills the school from the request;
+        # the web form never sends it.
+        extra_kwargs = {'school': {'required': False}}
 
     def validate(self, attrs):
         from lms.models import Assignment as AssignmentModel

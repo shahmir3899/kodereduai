@@ -272,6 +272,52 @@ class UserViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
                 defaults={'role': role, 'is_default': True, 'is_active': True},
             )
 
+    def _assert_can_manage(self, target):
+        """A school-level admin may only manage users whose role they could create.
+
+        The Settings page already hides Edit/Deactivate for other roles, but the API
+        accepted any PATCH/DELETE for any user in the school: a Principal could
+        deactivate the School Admin, and a School Admin could make anyone SUPER_ADMIN.
+        """
+        from rest_framework.exceptions import PermissionDenied
+
+        requester = self.request.user
+        if requester.is_super_admin:
+            return
+        school_id = ensure_tenant_school_id(self.request) or requester.school_id
+        target_role = target.get_role_for_school(school_id) or target.role
+        if target_role not in ROLE_HIERARCHY.get(get_effective_role(self.request), []):
+            raise PermissionDenied(f"You don't have permission to manage a user with the {target_role} role.")
+
+    def perform_update(self, serializer):
+        from rest_framework.exceptions import ValidationError
+
+        target = serializer.instance
+        self._assert_can_manage(target)
+
+        new_role = serializer.validated_data.get('role')
+        if new_role and new_role != target.role and not self.request.user.is_super_admin:
+            if new_role not in ROLE_HIERARCHY.get(get_effective_role(self.request), []):
+                raise ValidationError({'role': f'You cannot assign the {new_role} role.'})
+
+        user = serializer.save()
+
+        # Permissions read the school membership's role first, so a role edit that only
+        # touched User.role changed nothing for that school.
+        if new_role:
+            from schools.models import UserSchoolMembership
+            school_id = ensure_tenant_school_id(self.request) or self.request.user.school_id
+            if school_id:
+                UserSchoolMembership.objects.filter(user=user, school_id=school_id).update(role=new_role)
+
+    def perform_destroy(self, instance):
+        """Deactivate instead of deleting: the user's history (attendance marks,
+        payments, audit rows) must keep pointing at someone."""
+        self._assert_can_manage(instance)
+        instance.is_active = False
+        instance.save(update_fields=['is_active', 'updated_at'])
+        log_admin_action(self.request, 'deactivate_user', instance)
+
     @action(detail=True, methods=['post'], parser_classes=[MultiPartParser, FormParser])
     def upload_photo(self, request, pk=None):
         """Upload (or replace) another user's avatar (admin-managed)."""

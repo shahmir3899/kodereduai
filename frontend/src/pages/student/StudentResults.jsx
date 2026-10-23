@@ -26,6 +26,10 @@ function barBgColor(pct) {
   return 'bg-red-100'
 }
 
+// An absent mark has no marks_obtained; it must not read as a 0% fail or drag the exam total.
+const markPct = (m) => (m.total_marks && m.marks_obtained != null ? Math.round((m.marks_obtained / m.total_marks) * 100) : 0)
+const isAbsentMark = (m) => m.status === 'ABSENT' || m.is_absent || m.marks_obtained == null
+
 function statusBadge(pct, isAbsent) {
   if (isAbsent) return { label: 'Absent', cls: TONE.neutral }
   if (pct >= 40) return { label: 'Pass', cls: TONE.success }
@@ -84,8 +88,9 @@ export default function StudentResults() {
         <div className="space-y-4">
           {exams.map((exam, examIdx) => {
             const marks = exam.marks || exam.subjects || []
-            const totalObtained = marks.reduce((sum, m) => sum + (parseFloat(m.marks_obtained) || 0), 0)
-            const totalMax = marks.reduce((sum, m) => sum + (parseFloat(m.total_marks) || 0), 0)
+            const sat = marks.filter((m) => !isAbsentMark(m))
+            const totalObtained = sat.reduce((sum, m) => sum + (parseFloat(m.marks_obtained) || 0), 0)
+            const totalMax = sat.reduce((sum, m) => sum + (parseFloat(m.total_marks) || 0), 0)
             const overallPct = totalMax > 0 ? Math.round((totalObtained / totalMax) * 100) : 0
             const isExpanded = expandedExam === null || expandedExam === examIdx
 
@@ -147,8 +152,8 @@ export default function StudentResults() {
                     {/* Mobile Card View */}
                     <div className="sm:hidden divide-y divide-gray-100">
                       {marks.map((m, idx) => {
-                        const pct = m.total_marks ? Math.round((m.marks_obtained / m.total_marks) * 100) : 0
-                        const isAbsent = m.status === 'ABSENT' || m.is_absent
+                        const pct = markPct(m)
+                        const isAbsent = isAbsentMark(m)
                         const badge = statusBadge(pct, isAbsent)
                         return (
                           <div key={idx} className="px-4 py-3">
@@ -164,7 +169,7 @@ export default function StudentResults() {
                               </div>
                             </div>
                             <div className="flex items-center justify-between text-xs text-gray-500 mb-2">
-                              <span>{m.marks_obtained}/{m.total_marks}</span>
+                              <span>{isAbsent ? 'Absent' : `${m.marks_obtained}/${m.total_marks}`}</span>
                             </div>
                             <div className={`w-full h-2 rounded-full ${barBgColor(pct)}`}>
                               <div
@@ -191,18 +196,18 @@ export default function StudentResults() {
                         </thead>
                         <tbody className="divide-y divide-gray-100">
                           {marks.map((m, idx) => {
-                            const pct = m.total_marks ? Math.round((m.marks_obtained / m.total_marks) * 100) : 0
-                            const isAbsent = m.status === 'ABSENT' || m.is_absent
+                            const pct = markPct(m)
+                            const isAbsent = isAbsentMark(m)
                             const badge = statusBadge(pct, isAbsent)
                             return (
                               <tr key={idx} className="hover:bg-gray-50">
                                 <td className="px-4 py-3 text-sm font-medium text-gray-900">
                                   {m.subject_name || m.subject}
                                 </td>
-                                <td className="px-4 py-3 text-sm text-gray-900 text-right">{m.marks_obtained}</td>
+                                <td className="px-4 py-3 text-sm text-gray-900 text-right">{isAbsent ? '-' : m.marks_obtained}</td>
                                 <td className="px-4 py-3 text-sm text-gray-500 text-right">{m.total_marks}</td>
                                 <td className="px-4 py-3 text-right">
-                                  <span className={`text-sm font-semibold ${gradeColor(pct)}`}>{pct}%</span>
+                                  <span className={`text-sm font-semibold ${isAbsent ? 'text-gray-400' : gradeColor(pct)}`}>{isAbsent ? '-' : `${pct}%`}</span>
                                 </td>
                                 <td className="px-4 py-3 text-center">
                                   <span className={`px-2 py-0.5 rounded text-xs font-medium ${badge.cls}`}>

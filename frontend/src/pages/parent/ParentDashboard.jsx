@@ -7,6 +7,7 @@ import AttentionStrip from '../../components/dashboard/AttentionStrip'
 import NotificationsFeed from '../../components/dashboard/NotificationsFeed'
 import QuickActionGrid from '../../components/dashboard/QuickActionGrid'
 import Spinner from '../../components/ui/Spinner'
+import PhotoAvatar from '../../components/ui/PhotoAvatar'
 import {
   readOverview, buildParentAttentionItems, formatPkr, daysUntil, parseLocalDate,
 } from './parentOverviewUtils'
@@ -144,8 +145,9 @@ function Tile({ label, loading, children }) {
   )
 }
 
+// '' is the child's overview page; nothing else linked to it, so parents could not reach it from the dashboard.
 const LINKS = [
-  ['attendance', 'Attendance'], ['fees', 'Fees'], ['results', 'Results'],
+  ['', 'Overview'], ['attendance', 'Attendance'], ['fees', 'Fees'], ['results', 'Results'],
   ['timetable', 'Timetable'], ['exam-schedule', 'Exam Schedule'], ['library', 'Library'], ['transport', 'Transport'],
 ]
 
@@ -158,9 +160,7 @@ function ChildCard({ child, vm, loading, error }) {
   return (
     <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
       <div className="px-5 py-4 flex items-center gap-3 border-b border-gray-100">
-        <div className="w-11 h-11 rounded-full bg-primary-100 flex items-center justify-center shrink-0">
-          <span className="text-lg font-bold text-primary-700">{name?.charAt(0)?.toUpperCase() || '?'}</span>
-        </div>
+        <PhotoAvatar url={child.student_photo_url} name={name} className="w-11 h-11" textClassName="text-lg" />
         <div className="min-w-0 flex-1">
           <h3 className="text-base font-semibold text-gray-900 truncate">{name}</h3>
           <p className="text-sm text-gray-500">
@@ -241,7 +241,7 @@ function ChildCard({ child, vm, loading, error }) {
         {LINKS.map(([path, label]) => (
           <Link
             key={path}
-            to={`${base}/${path}`}
+            to={path ? `${base}/${path}` : base}
             className="text-xs font-medium text-gray-600 hover:text-primary-600 bg-gray-50 hover:bg-primary-50 px-3 py-1.5 rounded-md transition-colors"
           >
             {label}

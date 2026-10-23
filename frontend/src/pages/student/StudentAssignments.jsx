@@ -231,7 +231,10 @@ export default function StudentAssignments() {
 
                   {/* Right: Action Button */}
                   <div className="flex-shrink-0">
-                    {subStatus === 'NOT_SUBMITTED' && (
+                    {subStatus === 'NOT_SUBMITTED' && assignment.status === 'CLOSED' && (
+                      <span className="text-xs font-medium text-gray-500">Closed</span>
+                    )}
+                    {subStatus === 'NOT_SUBMITTED' && assignment.status !== 'CLOSED' && (
                       <button
                         onClick={() => openSubmitModal(assignment)}
                         className="px-4 py-2 bg-primary-600 text-white rounded-lg text-sm font-medium hover:bg-primary-700 transition-colors"
@@ -327,7 +330,7 @@ export default function StudentAssignments() {
               {submitMutation.isError && (
                 <div className="bg-red-50 border border-red-200 rounded-lg p-3">
                   <p className="text-sm text-red-700">
-                    {submitMutation.error?.response?.data?.detail || submitMutation.error?.message || 'Failed to submit. Please try again.'}
+                    {submitMutation.error?.response?.data?.error || submitMutation.error?.response?.data?.detail || submitMutation.error?.message || 'Failed to submit. Please try again.'}
                   </p>
                 </div>
               )}

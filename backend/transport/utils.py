@@ -99,3 +99,63 @@ def check_geofence(route_journey, lat, lng):
             logger.exception("Failed to send geofence notification")
 
     return [s.id for s in newly_triggered]
+
+
+def resolve_school_id(request):
+    """
+    Resolve school_id from: X-School-ID header -> params -> user.school_id -> fallback.
+    """
+    from core.mixins import ensure_tenant_school_id
+
+    tenant_sid = ensure_tenant_school_id(request)
+    if tenant_sid:
+        return tenant_sid
+
+    # If X-School-ID header was sent but rejected, don't fall back
+    if request.headers.get('X-School-ID'):
+        return None
+
+    school_id = (
+        request.query_params.get('school_id')
+        or request.data.get('school_id')
+        or request.data.get('school')
+    )
+    if school_id:
+        return int(school_id)
+
+    if request.user.school_id:
+        return request.user.school_id
+
+    if request.user.is_super_admin:
+        from schools.models import School
+        schools = list(School.objects.filter(is_active=True).values_list('id', flat=True)[:2])
+        if len(schools) == 1:
+            return schools[0]
+
+    return None
+
+
+def annotate_route_counts(queryset):
+    """Stop/vehicle/student counts and seat capacity per route.
+
+    The three counts join different tables, so each needs distinct=True and
+    capacity is a subquery: summing over the joined rows multiplied every
+    figure by the other tables' row counts.
+    """
+    from django.db.models import Count, IntegerField, OuterRef, Q, Subquery, Sum
+    from django.db.models.functions import Coalesce
+
+    from .models import TransportVehicle
+
+    capacity = (
+        TransportVehicle.objects.filter(assigned_route=OuterRef('pk'), is_active=True)
+        .order_by().values('assigned_route').annotate(total=Sum('capacity')).values('total')
+    )
+    return queryset.annotate(
+        stops_count=Count('stops', distinct=True),
+        vehicles_count=Count('vehicles', filter=Q(vehicles__is_active=True), distinct=True),
+        students_count=Count(
+            'transport_assignments', filter=Q(transport_assignments__is_active=True), distinct=True,
+        ),
+        total_capacity=Coalesce(Subquery(capacity, output_field=IntegerField()), 0),
+    ).order_by('name')

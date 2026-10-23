@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { screen, waitFor } from '@testing-library/react'
+import { screen, waitFor, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
 import { server } from '../../../test/mocks/server'
@@ -10,20 +10,31 @@ import RoutesPage from '../RoutesPage'
 vi.mock('../../../contexts/AuthContext', () => ({
   useAuth: () => ({
     user: { id: 1, role: 'SCHOOL_ADMIN' },
+    effectiveRole: 'SCHOOL_ADMIN',
     activeSchool: { id: 1, name: 'Test School' },
   }),
 }))
 
-describe('RoutesPage - Bug #5: stop_order field name', () => {
+vi.mock('../../../components/Toast', () => ({
+  useToast: () => ({ showSuccess: vi.fn(), showError: vi.fn() }),
+}))
+
+vi.mock('../../../contexts/AcademicYearContext', () => ({
+  useAcademicYear: () => ({ activeAcademicYear: { id: 1, name: '2026' } }),
+}))
+
+async function expandFirstRoute(user) {
+  await waitFor(() => expect(screen.getByText('Route North')).toBeInTheDocument())
+  const toggles = screen.getAllByRole('button', { name: /^stops$|route north/i })
+  await user.click(toggles[0])
+}
+
+describe('RoutesPage - stop_order field name', () => {
   it('renders stops with stop_order displayed', async () => {
     renderWithProviders(<RoutesPage />)
-    await waitFor(() => {
-      expect(screen.getByText('Route North')).toBeInTheDocument()
-    })
-    // Stops should show with #1, #2 from stop_order
-    await waitFor(() => {
-      expect(screen.getByText(/#1/)).toBeInTheDocument()
-    })
+    await expandFirstRoute(userEvent.setup())
+    expect(await screen.findByText(/Stop A/)).toBeInTheDocument()
+    expect(screen.getByText(/Stop B/)).toBeInTheDocument()
   })
 
   it('sends stop_order (not order) when creating a stop', async () => {
@@ -37,34 +48,31 @@ describe('RoutesPage - Bug #5: stop_order field name', () => {
 
     const user = userEvent.setup()
     renderWithProviders(<RoutesPage />)
+    await expandFirstRoute(user)
 
-    await waitFor(() => {
-      expect(screen.getByText('Route North')).toBeInTheDocument()
-    })
+    await user.click((await screen.findAllByRole('button', { name: /add stop/i }))[0])
+    await user.type(screen.getByPlaceholderText(/stop name|main gate/i), 'New Stop')
+    fireEvent.change(screen.getByLabelText(/pickup time/i), { target: { value: '07:30' } })
+    fireEvent.change(screen.getByLabelText(/drop time/i), { target: { value: '14:30' } })
 
-    // Click "Add Stop" button
-    const addStopBtns = screen.getAllByRole('button', { name: /add stop/i })
-    if (addStopBtns.length > 0) {
-      await user.click(addStopBtns[0])
+    const submit = screen.getAllByRole('button', { name: /^add stop$/i }).pop()
+    await user.click(submit)
 
-      // Fill stop form
-      const nameInput = screen.getByPlaceholderText(/stop name/i)
-      await user.type(nameInput, 'New Stop')
+    await waitFor(() => expect(capturedBody).not.toBeNull())
+    expect(capturedBody).toHaveProperty('stop_order', 3)
+    expect(capturedBody).not.toHaveProperty('order')
+  })
 
-      // Submit
-      const saveBtn = screen.getByRole('button', { name: /save|add|create/i })
-      await user.click(saveBtn)
-
-      await waitFor(() => {
-        expect(capturedBody).not.toBeNull()
-      })
-      expect(capturedBody).toHaveProperty('stop_order')
-      expect(capturedBody).not.toHaveProperty('order')
-    }
+  it('does not enable Add Stop until pickup and drop times are set', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(<RoutesPage />)
+    await expandFirstRoute(user)
+    await user.click((await screen.findAllByRole('button', { name: /add stop/i }))[0])
+    await user.type(screen.getByPlaceholderText(/stop name|main gate/i), 'New Stop')
+    expect(screen.getAllByRole('button', { name: /^add stop$/i }).pop()).toBeDisabled()
   })
 
   it('stops are sorted by stop_order', async () => {
-    // Provide stops in reverse order
     server.use(
       http.get('/api/transport/stops/', () =>
         HttpResponse.json([
@@ -75,18 +83,12 @@ describe('RoutesPage - Bug #5: stop_order field name', () => {
     )
 
     renderWithProviders(<RoutesPage />)
-    await waitFor(() => {
-      expect(screen.getByText('Route North')).toBeInTheDocument()
-    })
+    await expandFirstRoute(userEvent.setup())
 
-    // After sorting, Stop A (#1) should appear before Stop B (#2)
     await waitFor(() => {
       const text = document.body.textContent
-      const posA = text.indexOf('#1')
-      const posB = text.indexOf('#2')
-      if (posA !== -1 && posB !== -1) {
-        expect(posA).toBeLessThan(posB)
-      }
+      expect(text.indexOf('Stop A')).toBeGreaterThan(-1)
+      expect(text.indexOf('Stop A')).toBeLessThan(text.indexOf('Stop B'))
     })
   })
 })

@@ -8,6 +8,10 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { transportApi, studentsApi } from '../../services/api'
 import ClassSelector from '../../components/ClassSelector'
 import { useAuth } from '../../contexts/AuthContext'
+import { useToast } from '../../components/Toast'
+import { getErrorMessage } from '../../utils/errorUtils'
+import { isInSection } from '../students/studentListUtils'
+import { canManageTransport } from './transportAccess'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
 import { useSessionClasses } from '../../hooks/useSessionClasses'
 import { getClassSelectorScope, getResolvedMasterClassId } from '../../utils/classScope'
@@ -22,10 +26,14 @@ const TRANSPORT_TYPES = [
 ]
 
 export default function TransportAssignmentsPage() {
-  const { user, activeSchool } = useAuth()
+  const { effectiveRole, activeSchool } = useAuth()
+  const canManage = canManageTransport(effectiveRole)
+  // The class list is behind the student-records permission, which drivers and staff do not have.
+  const canListClasses = !['DRIVER', 'STAFF'].includes(effectiveRole)
   const { activeAcademicYear } = useAcademicYear()
   const { sessionClasses } = useSessionClasses(activeAcademicYear?.id, activeSchool?.id)
   const queryClient = useQueryClient()
+  const toast = useToast()
 
   const [filterRoute, setFilterRoute] = useState('')
   const [filterClass, setFilterClass] = useState('')
@@ -58,9 +66,10 @@ export default function TransportAssignmentsPage() {
 
   // Fetch assignments
   const { data: assignmentsData, isLoading, error } = useQuery({
-    queryKey: ['transport-assignments', filterRoute, resolvedFilterClass, filterTransportType],
+    queryKey: ['transport-assignments', filterRoute, resolvedFilterClass, filterTransportType, activeAcademicYear?.id],
     queryFn: () => transportApi.getAssignments({
-      ...(filterRoute && { route: filterRoute }),
+      ...(activeAcademicYear?.id && { academic_year: activeAcademicYear.id }),
+      ...(filterRoute && { route_id: filterRoute }),
       ...(resolvedFilterClass && { class_id: resolvedFilterClass }),
       ...(filterTransportType && { transport_type: filterTransportType }),
       page_size: 9999,
@@ -80,7 +89,8 @@ export default function TransportAssignmentsPage() {
       page_size: 9999,
       ...(activeAcademicYear?.id && { academic_year: activeAcademicYear.id }),
     }),
-    enabled: !!activeSchool?.id,
+    // Only for the roles that can assign: the roster endpoint refuses everyone else.
+    enabled: !!activeSchool?.id && canManage,
   })
 
   // Fetch stops filtered by selected route
@@ -94,7 +104,7 @@ export default function TransportAssignmentsPage() {
   // Fetch vehicles filtered by selected route
   const { data: vehiclesData } = useQuery({
     queryKey: ['transport-vehicles-route', selectedRouteForForm],
-    queryFn: () => transportApi.getVehicles({ assigned_route: selectedRouteForForm, page_size: 9999 }),
+    queryFn: () => transportApi.getVehicles({ route_id: selectedRouteForForm, page_size: 9999 }),
     enabled: !!selectedRouteForForm,
   })
 
@@ -104,6 +114,7 @@ export default function TransportAssignmentsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['transport-assignments'] })
       queryClient.invalidateQueries({ queryKey: ['transport-dashboard'] })
+      toast.showSuccess('Student assigned to transport')
       closeModal()
     },
   })
@@ -113,15 +124,18 @@ export default function TransportAssignmentsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['transport-assignments'] })
       queryClient.invalidateQueries({ queryKey: ['transport-dashboard'] })
+      toast.showSuccess('Transport assignment removed')
       setDeleteConfirm(null)
     },
   })
 
   const bulkAssignMutation = useMutation({
     mutationFn: (data) => transportApi.bulkAssign(data),
-    onSuccess: () => {
+    onSuccess: ({ data }) => {
       queryClient.invalidateQueries({ queryKey: ['transport-assignments'] })
       queryClient.invalidateQueries({ queryKey: ['transport-dashboard'] })
+      const skipped = data?.skipped ? `, ${data.skipped} skipped (already assigned)` : ''
+      toast.showSuccess(`${data?.created ?? 0} student${data?.created === 1 ? '' : 's'} assigned${skipped}`)
       if (showBulkModal) closeBulkModal()
       if (showModal) closeModal()
     },
@@ -132,6 +146,10 @@ export default function TransportAssignmentsPage() {
   const allStudents = studentsData?.data?.results || studentsData?.data || []
   const stops = stopsData?.data?.results || stopsData?.data || []
   const vehicles = vehiclesData?.data?.results || vehiclesData?.data || []
+  const sortedStops = useMemo(
+    () => [...stops].sort((a, b) => (a.stop_order || 0) - (b.stop_order || 0)),
+    [stops],
+  )
 
   // Filter students for search + class filter in modal
   const filteredStudents = useMemo(() => {
@@ -141,7 +159,7 @@ export default function TransportAssignmentsPage() {
       const isSessionScope = classSelectorScope === 'session' && modalClassFilter
       result = result.filter((s) => {
         if (isSessionScope && s.session_class_obj) {
-          return String(s.session_class_obj.id) === String(modalClassFilter)
+          return isInSection(s, modalClassFilter)
         }
         return String(s.class_obj) === String(resolvedModalClassFilter)
       })
@@ -188,23 +206,27 @@ export default function TransportAssignmentsPage() {
     setModalSelectedStudents([])
   }
 
+  const canSubmit = modalSelectedStudents.length > 0 && !!assignForm.route && !!assignForm.stop && !!activeAcademicYear?.id
+
   const handleSubmit = () => {
-    if (modalSelectedStudents.length === 0 || !assignForm.route) return
+    if (!canSubmit) return
 
     if (modalSelectedStudents.length === 1) {
       createMutation.mutate({
+        academic_year: activeAcademicYear.id,
         student: modalSelectedStudents[0].id,
         route: parseInt(assignForm.route),
-        stop: assignForm.stop ? parseInt(assignForm.stop) : null,
+        stop: parseInt(assignForm.stop),
         vehicle: assignForm.vehicle ? parseInt(assignForm.vehicle) : null,
         transport_type: assignForm.transport_type,
       })
     } else {
       bulkAssignMutation.mutate({
+        academic_year_id: activeAcademicYear.id,
         student_ids: modalSelectedStudents.map((s) => s.id),
-        route: parseInt(assignForm.route),
-        stop: assignForm.stop ? parseInt(assignForm.stop) : null,
-        vehicle: assignForm.vehicle ? parseInt(assignForm.vehicle) : null,
+        route_id: parseInt(assignForm.route),
+        stop_id: parseInt(assignForm.stop),
+        vehicle_id: assignForm.vehicle ? parseInt(assignForm.vehicle) : null,
         transport_type: assignForm.transport_type,
       })
     }
@@ -256,13 +278,14 @@ export default function TransportAssignmentsPage() {
   useEscapeKey(closeBulkModal, showBulkModal)
 
   const handleBulkSubmit = () => {
-    if (!bulkForm.route || selectedStudents.length === 0) return
+    if (!bulkForm.route || !bulkForm.stop || selectedStudents.length === 0 || !activeAcademicYear?.id) return
 
     const payload = {
+      academic_year_id: activeAcademicYear.id,
       student_ids: selectedStudents,
-      route: parseInt(bulkForm.route),
-      stop: bulkForm.stop ? parseInt(bulkForm.stop) : null,
-      vehicle: bulkForm.vehicle ? parseInt(bulkForm.vehicle) : null,
+      route_id: parseInt(bulkForm.route),
+      stop_id: parseInt(bulkForm.stop),
+      vehicle_id: bulkForm.vehicle ? parseInt(bulkForm.vehicle) : null,
       transport_type: bulkForm.transport_type,
     }
 
@@ -313,14 +336,16 @@ export default function TransportAssignmentsPage() {
   return (
     <div>
       <PageHeader title="Transport Assignments" subtitle="Assign students to routes and stops" className="mb-6" actions={<>
-{selectedStudents.length > 0 && (
+{canManage && selectedStudents.length > 0 && (
             <button onClick={openBulkModal} className="btn btn-secondary">
               Bulk Assign ({selectedStudents.length})
             </button>
           )}
-          <button onClick={openAddModal} className="btn btn-primary">
-            New Assignment
-          </button>
+          {canManage && (
+            <button onClick={openAddModal} className="btn btn-primary">
+              New Assignment
+            </button>
+          )}
 </>} />
 
       {/* Filters */}
@@ -338,9 +363,11 @@ export default function TransportAssignmentsPage() {
               ))}
             </select>
 </Field>
+          {canListClasses && (
           <div>
-            <label className="label">Filter by Class</label>
+            <label className="label" htmlFor="filter-class">Filter by Class</label>
             <ClassSelector
+              id="filter-class"
               className="input"
               value={filterClass}
               onChange={(e) => setFilterClass(e.target.value)}
@@ -349,6 +376,7 @@ export default function TransportAssignmentsPage() {
               academicYearId={activeAcademicYear?.id}
             />
           </div>
+          )}
           <Field label="Filter by Transport Type">
 <select
               className="input"
@@ -403,13 +431,14 @@ export default function TransportAssignmentsPage() {
                   leading={
                     <input
                       type="checkbox"
+                      aria-label={`Select ${assignment.student_name}`}
                       checked={selectedStudents.includes(assignment.student)}
                       onChange={() => toggleStudentSelection(assignment.student)}
                       className="rounded border-gray-300 mt-1"
                     />
                   }
                   title={assignment.student_name}
-                  meta={assignment.class_name || '--'}
+                  meta={assignment.student_class_name || '--'}
                   status={
                     <span className={`px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap ${getTransportTypeBadge(assignment.transport_type)}`}>
                       {assignment.transport_type}
@@ -421,9 +450,9 @@ export default function TransportAssignmentsPage() {
                     { label: 'Pickup · Drop', value: `${assignment.stop_pickup_time || '--'} · ${assignment.stop_drop_time || '--'}` },
                     { label: 'Vehicle', value: assignment.vehicle_number || '--' },
                   ]}
-                  actions={[
+                  actions={canManage ? [
                     { label: 'Remove', tone: 'danger', onClick: () => setDeleteConfirm(assignment) },
-                  ]}
+                  ] : []}
                 />
               ))}
             </CardGrid>
@@ -435,6 +464,7 @@ export default function TransportAssignmentsPage() {
                     <th className="px-4 py-3 text-left">
                       <input
                         type="checkbox"
+                        aria-label="Select all assignments"
                         checked={selectedStudents.length === assignments.length && assignments.length > 0}
                         onChange={toggleSelectAll}
                         className="rounded border-gray-300"
@@ -457,13 +487,14 @@ export default function TransportAssignmentsPage() {
                       <td className="px-4 py-3">
                         <input
                           type="checkbox"
+                          aria-label={`Select ${assignment.student_name}`}
                           checked={selectedStudents.includes(assignment.student)}
                           onChange={() => toggleStudentSelection(assignment.student)}
                           className="rounded border-gray-300"
                         />
                       </td>
                       <td className="px-4 py-3 text-sm font-medium text-gray-900">{assignment.student_name}</td>
-                      <td className="px-4 py-3 text-sm text-gray-500">{assignment.class_name || '--'}</td>
+                      <td className="px-4 py-3 text-sm text-gray-500">{assignment.student_class_name || '--'}</td>
                       <td className="px-4 py-3 text-sm text-gray-500">{assignment.route_name || '--'}</td>
                       <td className="px-4 py-3 text-sm text-gray-500">{assignment.stop_name || '--'}</td>
                       <td className="px-4 py-3 text-sm text-gray-500">{assignment.stop_pickup_time || '--'}</td>
@@ -475,12 +506,14 @@ export default function TransportAssignmentsPage() {
                         </span>
                       </td>
                       <td className="px-4 py-3 text-right">
-                        <button
-                          onClick={() => setDeleteConfirm(assignment)}
-                          className="text-sm text-red-600 hover:text-red-800 font-medium"
-                        >
-                          Remove
-                        </button>
+                        {canManage && (
+                          <button
+                            onClick={() => setDeleteConfirm(assignment)}
+                            className="text-sm text-red-600 hover:text-red-800 font-medium"
+                          >
+                            Remove
+                          </button>
+                        )}
                       </td>
                     </tr>
                   ))}
@@ -500,7 +533,7 @@ export default function TransportAssignmentsPage() {
             <div className="space-y-4">
               {/* Student Selection */}
               <div>
-                <label className="label">Students *</label>
+                <label className="label" htmlFor="assign-student-search">Students <span className="text-red-500 ml-0.5" aria-hidden="true">*</span></label>
 
                 {/* Selected students chips */}
                 {modalSelectedStudents.length > 0 && (
@@ -512,6 +545,8 @@ export default function TransportAssignmentsPage() {
                       >
                         {s.name}
                         <button
+                          type="button"
+                          aria-label={`Remove ${s.name}`}
                           onClick={() => removeStudentFromSelection(s.id)}
                           className="text-primary-500 hover:text-primary-700"
                         >
@@ -533,6 +568,7 @@ export default function TransportAssignmentsPage() {
                 {/* Class filter + search */}
                 <div className="flex gap-2 mb-2">
                   <ClassSelector
+                    aria-label="Filter students by class"
                     className="input w-1/3 text-sm"
                     value={modalClassFilter}
                     onChange={(e) => setModalClassFilter(e.target.value)}
@@ -542,7 +578,9 @@ export default function TransportAssignmentsPage() {
                     academicYearId={activeAcademicYear?.id}
                   />
                   <input
+                    id="assign-student-search"
                     type="text"
+                    aria-label="Search students"
                     className="input flex-1 text-sm"
                     placeholder="Search by name or roll no..."
                     value={studentSearch}
@@ -581,7 +619,9 @@ export default function TransportAssignmentsPage() {
                 </div>
                 <p className="text-xs text-gray-400 mt-1">
                   {modalSelectedStudents.length} student{modalSelectedStudents.length !== 1 ? 's' : ''} selected
-                  {activeAcademicYear && <span> | Session: {activeAcademicYear.name}</span>}
+                  {activeAcademicYear
+                    ? <span> | Session: {activeAcademicYear.name}</span>
+                    : <span className="text-red-600"> | Select an academic session first</span>}
                 </p>
               </div>
 
@@ -601,16 +641,17 @@ export default function TransportAssignmentsPage() {
 
               {/* Stop (filtered by route) */}
               <div>
-                <label className="label">Stop</label>
+                <label className="label" htmlFor="assign-stop">Stop <span className="text-red-500 ml-0.5" aria-hidden="true">*</span></label>
                 <select
+                  id="assign-stop"
                   className="input"
                   value={assignForm.stop}
                   onChange={(e) => setAssignForm({ ...assignForm, stop: e.target.value })}
                   disabled={!assignForm.route}
                 >
                   <option value="">-- Select Stop --</option>
-                  {stops.sort((a, b) => (a.order || 0) - (b.order || 0)).map((stop) => (
-                    <option key={stop.id} value={stop.id}>#{stop.order} {stop.name}</option>
+                  {sortedStops.map((stop) => (
+                    <option key={stop.id} value={stop.id}>#{stop.stop_order} {stop.name}</option>
                   ))}
                 </select>
                 {!assignForm.route && <p className="text-xs text-gray-400 mt-1">Select a route first</p>}
@@ -618,8 +659,9 @@ export default function TransportAssignmentsPage() {
 
               {/* Vehicle (filtered by route) */}
               <div>
-                <label className="label">Vehicle</label>
+                <label className="label" htmlFor="assign-vehicle">Vehicle</label>
                 <select
+                  id="assign-vehicle"
                   className="input"
                   value={assignForm.vehicle}
                   onChange={(e) => setAssignForm({ ...assignForm, vehicle: e.target.value })}
@@ -651,10 +693,7 @@ export default function TransportAssignmentsPage() {
 
             {(createMutation.isError || bulkAssignMutation.isError) && (
               <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
-                {createMutation.error?.response?.data?.detail ||
-                  createMutation.error?.response?.data?.non_field_errors?.[0] ||
-                  bulkAssignMutation.error?.response?.data?.detail ||
-                  'Failed to create assignment. Please try again.'}
+                {getErrorMessage(createMutation.error || bulkAssignMutation.error, 'Failed to create assignment. Please try again.')}
               </div>
             )}
 
@@ -664,7 +703,7 @@ export default function TransportAssignmentsPage() {
               </button>
               <button
                 onClick={handleSubmit}
-                disabled={createMutation.isPending || bulkAssignMutation.isPending || modalSelectedStudents.length === 0 || !assignForm.route}
+                disabled={createMutation.isPending || bulkAssignMutation.isPending || !canSubmit}
                 className="btn btn-primary"
               >
                 {(createMutation.isPending || bulkAssignMutation.isPending)
@@ -700,7 +739,7 @@ export default function TransportAssignmentsPage() {
                 </select>
 </Field>
 
-              <Field label="Stop">
+              <Field label="Stop" required>
 <select
                   className="input"
                   value={bulkForm.stop}
@@ -708,8 +747,8 @@ export default function TransportAssignmentsPage() {
                   disabled={!bulkForm.route}
                 >
                   <option value="">-- Select Stop --</option>
-                  {stops.sort((a, b) => (a.order || 0) - (b.order || 0)).map((stop) => (
-                    <option key={stop.id} value={stop.id}>#{stop.order} {stop.name}</option>
+                  {sortedStops.map((stop) => (
+                    <option key={stop.id} value={stop.id}>#{stop.stop_order} {stop.name}</option>
                   ))}
                 </select>
 </Field>
@@ -745,7 +784,7 @@ export default function TransportAssignmentsPage() {
 
             {bulkAssignMutation.isError && (
               <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
-                {bulkAssignMutation.error?.response?.data?.detail || 'Failed to bulk assign. Please try again.'}
+                {getErrorMessage(bulkAssignMutation.error, 'Failed to bulk assign. Please try again.')}
               </div>
             )}
 
@@ -755,7 +794,7 @@ export default function TransportAssignmentsPage() {
               </button>
               <button
                 onClick={handleBulkSubmit}
-                disabled={bulkAssignMutation.isPending || !bulkForm.route}
+                disabled={bulkAssignMutation.isPending || !bulkForm.route || !bulkForm.stop}
                 className="btn btn-primary"
               >
                 {bulkAssignMutation.isPending ? 'Assigning...' : `Assign ${selectedStudents.length} Students`}
@@ -774,7 +813,7 @@ export default function TransportAssignmentsPage() {
 
             {deleteMutation.isError && (
               <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
-                {deleteMutation.error?.response?.data?.detail || 'Failed to remove assignment.'}
+                {getErrorMessage(deleteMutation.error, 'Failed to remove assignment.')}
               </div>
             )}
 

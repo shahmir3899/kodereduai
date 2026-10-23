@@ -10,15 +10,24 @@ import TransportAttendancePage from '../TransportAttendancePage'
 vi.mock('../../../contexts/AuthContext', () => ({
   useAuth: () => ({
     user: { id: 1, role: 'SCHOOL_ADMIN' },
+    effectiveRole: 'SCHOOL_ADMIN',
     activeSchool: { id: 1, name: 'Test School' },
   }),
+}))
+
+vi.mock('../../../components/Toast', () => ({
+  useToast: () => ({ showSuccess: vi.fn(), showError: vi.fn() }),
+}))
+
+vi.mock('../../../contexts/AcademicYearContext', () => ({
+  useAcademicYear: () => ({ activeAcademicYear: { id: 1, name: '2026' } }),
 }))
 
 describe('TransportAttendancePage - Bug #6: boarding_status field name', () => {
   it('renders page without crashing', async () => {
     renderWithProviders(<TransportAttendancePage />)
     await waitFor(() => {
-      expect(screen.getByText(/transport attendance/i)).toBeInTheDocument()
+      expect(screen.getByRole('heading', { name: /transport attendance/i })).toBeInTheDocument()
     })
   })
 
@@ -41,6 +50,7 @@ describe('TransportAttendancePage - Bug #6: boarding_status field name', () => {
     })
 
     const routeSelect = screen.getByRole('combobox')
+    await screen.findByRole('option', { name: 'Route North' })
     await user.selectOptions(routeSelect, '1')
 
     // Wait for assignments to load
@@ -49,7 +59,7 @@ describe('TransportAttendancePage - Bug #6: boarding_status field name', () => {
     })
 
     // Click Save All
-    const saveBtn = screen.getByRole('button', { name: /save/i })
+    const saveBtn = await screen.findByRole('button', { name: /save all/i })
     await user.click(saveBtn)
 
     await waitFor(() => {
@@ -79,6 +89,7 @@ describe('TransportAttendancePage - Bug #6: boarding_status field name', () => {
     })
 
     const routeSelect = screen.getByRole('combobox')
+    await screen.findByRole('option', { name: 'Route North' })
     await user.selectOptions(routeSelect, '1')
 
     // After selecting route, existing attendance should load
@@ -86,5 +97,22 @@ describe('TransportAttendancePage - Bug #6: boarding_status field name', () => {
     await waitFor(() => {
       expect(screen.getByText('Ali Hassan')).toBeInTheDocument()
     })
+  })
+
+  it('loads assignments for the chosen route with route_id (not route)', async () => {
+    const seen = []
+    server.use(
+      http.get('/api/transport/assignments/', ({ request }) => {
+        seen.push(new URL(request.url).searchParams)
+        return HttpResponse.json([])
+      })
+    )
+    const user = userEvent.setup()
+    renderWithProviders(<TransportAttendancePage />)
+    await screen.findByRole('option', { name: 'Route North' })
+    await user.selectOptions(screen.getByRole('combobox'), '1')
+    await waitFor(() => expect(seen.length).toBeGreaterThan(0))
+    expect(seen[0].get('route_id')).toBe('1')
+    expect(seen[0].has('route')).toBe(false)
   })
 })

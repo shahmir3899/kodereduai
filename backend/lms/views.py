@@ -2007,6 +2007,14 @@ class AssignmentSubmissionViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewse
     queryset = AssignmentSubmission.objects.all()
     permission_classes = [IsAuthenticated, HasSchoolAccess]
 
+    def get_permissions(self):
+        # Students/parents may only create and read; grade/return/edit/delete
+        # were open to every authenticated user of the school.
+        perms = super().get_permissions()
+        if self.action not in ('create', 'list', 'retrieve'):
+            perms.append(CanEditCurriculum())
+        return perms
+
     def get_serializer_class(self):
         if self.action in ('create',):
             return AssignmentSubmissionCreateSerializer
@@ -2067,7 +2075,7 @@ class AssignmentSubmissionViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewse
 
         # Determine if submission is late
         assignment = serializer.validated_data.get('assignment') or extra_kwargs.get('assignment')
-        if assignment and timezone.now() > assignment.due_date:
+        if assignment and assignment.due_date and timezone.now() > assignment.due_date:
             extra_kwargs['status'] = AssignmentSubmission.Status.LATE
 
         if extra_kwargs:
@@ -2133,6 +2141,27 @@ class AssignmentSubmissionViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewse
             f"Submission {submission.id} graded: {marks_obtained} marks by "
             f"{request.user.email}"
         )
+
+        serializer = AssignmentSubmissionReadSerializer(submission)
+        return Response(serializer.data)
+
+    @action(detail=True, methods=['post'], url_path='return')
+    def return_to_student(self, request, pk=None):
+        """
+        Send a graded submission back to the student.
+
+        POST /api/lms/submissions/{id}/return/
+        """
+        submission = self.get_object()
+
+        if submission.status != AssignmentSubmission.Status.GRADED:
+            return Response(
+                {'error': 'Only graded submissions can be returned.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        submission.status = AssignmentSubmission.Status.RETURNED
+        submission.save(update_fields=['status'])
 
         serializer = AssignmentSubmissionReadSerializer(submission)
         return Response(serializer.data)

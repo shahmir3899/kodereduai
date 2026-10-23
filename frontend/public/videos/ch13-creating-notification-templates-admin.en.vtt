@@ -1,0 +1,19 @@
+WEBVTT
+
+00:00:00.117 --> 00:00:06.211
+Notification templates
+
+00:00:06.261 --> 00:00:09.825
+Open Notifications and switch to the Templates tab.
+
+00:00:17.979 --> 00:00:26.493
+Press New Template, type a name, choose the event, and write the message. Placeholders use double braces.
+
+00:00:52.528 --> 00:00:57.167
+Press Save. The template is now ready to use when you send.
+
+00:00:58.745 --> 00:01:03.199
+Search for it and press Preview to see the message with sample values.
+
+00:01:12.969 --> 00:01:17.640
+Template saved

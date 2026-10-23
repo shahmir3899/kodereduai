@@ -75,3 +75,34 @@ class TestDailyAttendanceSummary:
         boot = _get_attendance_section(school.id, DAY, None)
         assert {k: v for k, v in boot.items() if k != 'absent_students'} == \
                {k: v for k, v in direct.items() if k != 'absent_students'}
+
+    def test_record_of_a_deactivated_student_is_not_counted(self, seed_data):
+        school, ay = seed_data['school_a'], seed_data['academic_year']
+        gone = seed_data['students'][0]
+        _mark(school, gone, ay, Status.PRESENT)
+        for st in seed_data['students'][1:]:
+            _mark(school, st, ay, Status.PRESENT)
+        type(gone).objects.filter(pk=gone.pk).update(is_active=False)
+
+        out = daily_attendance_summary(school.id, DAY)
+
+        assert out['present_count'] == len(seed_data['students']) - 1
+        assert out['present_count'] <= out['total_students']
+
+    def test_record_of_a_student_not_enrolled_that_year_is_not_counted(self, seed_data, seed_sections):
+        # The dashboard showed Attendance Rate 125%: present came from every record on the
+        # date, the total only from this year's enrolment.
+        school, ay = seed_data['school_a'], seed_data['academic_year']
+        stranger = type(seed_data['students'][0]).objects.create(
+            school=school, class_obj=seed_data['classes'][0], name='Not Enrolled', roll_number='99',
+        )
+        for st in seed_sections['a_students'] + seed_sections['b_students']:
+            _mark(school, st, ay, Status.PRESENT)
+        _mark(school, stranger, ay, Status.PRESENT)
+
+        out = daily_attendance_summary(school.id, DAY, ay.id)
+
+        assert out['total_students'] == 4
+        assert out['present_count'] == 4
+        assert out['present_count'] <= out['total_students']
+

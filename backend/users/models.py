@@ -46,6 +46,10 @@ class User(AbstractUser):
         TEACHER = 'TEACHER', 'Teacher'
         STAFF = 'STAFF', 'Staff'
         DRIVER = 'DRIVER', 'Driver'
+        # Portal accounts. Not assignable through the Users API (ROLE_HIERARCHY never lists them);
+        # they are set when the student/parent account is created.
+        STUDENT = 'STUDENT', 'Student'
+        PARENT = 'PARENT', 'Parent'
 
     # Role field
     role = models.CharField(
@@ -165,6 +169,11 @@ class User(AbstractUser):
         if self.school_id and self.school_id not in ids:
             ids.append(self.school_id)
         return ids
+
+    def role_label_in_school(self, school_id):
+        """Role to show for this user in a school: the membership role, since User.role is only a
+        base role (students and parents are stored as STAFF)."""
+        return self.get_role_for_school(school_id) or self.role
 
     def get_role_for_school(self, school_id):
         """Return the user's role for a specific school, or None."""

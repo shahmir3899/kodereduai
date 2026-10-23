@@ -3,7 +3,7 @@
     "title": "Education AI",
     "subtitle": "School Administration Guide",
     "version": "3.4 - Manual Attendance & Updated Navigation",
-    "generatedAt": "2026-10-22T11:55:22.078055+00:00",
+    "generatedAt": "2026-10-23T17:40:18.729056+00:00",
     "totalChapters": 22,
     "modules": [
       "Dashboard | Classes & Students | Attendance (Manual Entry)",
@@ -2837,22 +2837,22 @@
             {
               "type": "step",
               "number": 1,
-              "text": "Click 'Add Department'."
+              "text": "Click 'Add Department'. (The 'Quick Add Common Departments' chips add a department in one click.)"
             },
             {
               "type": "step",
               "number": 2,
-              "text": "Enter: Department Name (e.g., 'Science', 'Administration', 'Sports')."
+              "text": "Enter the Department Name (e.g., 'Science', 'Administration', 'Sports') and an optional description."
             },
             {
               "type": "step",
               "number": 3,
-              "text": "Add designations within each department (e.g., 'Head of Department', 'Senior Teacher')."
+              "text": "Click 'Add Department' to save. A success message appears and the department is used when adding staff members."
             },
             {
               "type": "step",
               "number": 4,
-              "text": "Save. Departments are used when adding staff members."
+              "text": "Designations are managed in the Designations section below the departments on the same page. Click 'Add Designation', enter a name (e.g., 'Senior Teacher') and optionally link it to a department."
             }
           ],
           "video": "ch8-setting-up-departments"
@@ -2864,13 +2864,13 @@
           "content": [
             {
               "type": "nav_path",
-              "path": "Sidebar > HR & Staff > Staff Directory > Add Staff",
+              "path": "Sidebar > HR & Staff > Staff Directory > Full Form",
               "href": "/hr/staff"
             },
             {
               "type": "step",
               "number": 1,
-              "text": "Click 'Add Staff Member'."
+              "text": "Click 'Full Form'. (Use 'Quick Add' instead to enter only a name, phone, department and designation and finish the details later.)"
             },
             {
               "type": "step",
@@ -2880,7 +2880,7 @@
             {
               "type": "step",
               "number": 3,
-              "text": "Fill in Employment Details: Department, Designation, Employee ID, Employment Type (Full-time/Part-time/Contract), Date of Joining."
+              "text": "Fill in Employment Details: Department, Designation, Employee ID (generated automatically if left blank), Employment Type (Full-time/Part-time/Contract), Date of Joining."
             },
             {
               "type": "step",
@@ -2890,7 +2890,7 @@
             {
               "type": "step",
               "number": 5,
-              "text": "Save. The staff member appears in the directory."
+              "text": "Click 'Add Staff Member'. A login account is optional and can be created now or later. The staff member appears in the directory."
             }
           ],
           "video": "ch8-adding-staff-members"
@@ -2940,22 +2940,22 @@
             {
               "type": "step",
               "number": 1,
-              "text": "Define salary structures per designation."
+              "text": "Click 'Add Salary Structure' and choose the staff member."
             },
             {
               "type": "step",
               "number": 2,
-              "text": "Set components: Basic Pay, HRA, DA, Allowances, Deductions."
+              "text": "Enter the Basic Salary, then add any Allowances (e.g., house rent) and Deductions (e.g., tax) as name and amount pairs with '+ Add'. The summary shows the net salary."
             },
             {
               "type": "step",
               "number": 3,
-              "text": "Assign salary structures to staff members."
+              "text": "Set 'Effective From' (and optionally 'Effective To'), then click 'Create'."
             },
             {
               "type": "step",
               "number": 4,
-              "text": "Salary structures feed directly into payroll generation."
+              "text": "Salary structures feed directly into payroll generation. A staff member needs one before a payslip can be generated."
             }
           ],
           "video": "ch8-salary-management"
@@ -2978,7 +2978,7 @@
             {
               "type": "step",
               "number": 2,
-              "text": "Click 'Generate Payslips' to create payslips for all active staff."
+              "text": "Click 'Generate Payslips', then 'Generate' to confirm. Payslips are created for active staff who have a salary structure; existing payslips for the month are skipped."
             },
             {
               "type": "step",
@@ -2998,7 +2998,7 @@
             {
               "type": "step",
               "number": 6,
-              "text": "Click the 'Download PDF' button on any payslip to download a printable payslip document. The PDF includes the school logo (if configured in school settings), school name, address, contact details, employee information, earnings breakdown, deductions breakdown, net salary, and signature lines."
+              "text": "Click the 'Download PDF' button on any payslip (or the 'PDF' button on its row) to download a printable payslip document, saved as payslip_<Name>_<month>_<year>.pdf. The PDF includes the school logo (if configured in school settings), school name, address, contact details, employee information, earnings breakdown, deductions breakdown, net salary, and signature lines."
             },
             {
               "type": "info_box",
@@ -3540,27 +3540,27 @@
             {
               "type": "step",
               "number": 2,
-              "text": "Enter: Route Name, Description, Start Location, End Location, Distance (km), Estimated Duration."
+              "text": "Enter: Route Name, Start Location, End Location and Estimated Duration (minutes) - these four are required. Description and Distance (km) are optional. You can also click the maps to mark the start and end points."
             },
             {
               "type": "step",
               "number": 3,
-              "text": "Save the route."
+              "text": "Click 'Create Route'. The route appears in the list."
             },
             {
               "type": "step",
               "number": 4,
-              "text": "Click on the route to add Stops."
+              "text": "Click 'Stops' on the route, then '+ Add Stop'."
             },
             {
               "type": "step",
               "number": 5,
-              "text": "For each stop, enter: Stop Name, Address, Order, Pickup Time, Drop Time."
+              "text": "For each stop, enter: Stop Name, Order, Pickup Time and Drop Time (all required). Address and a map location are optional."
             },
             {
               "type": "step",
               "number": 6,
-              "text": "Save stops. They appear in the route's stop list in order."
+              "text": "Click 'Add Stop'. Stops are listed in order. Use Edit or Delete on a stop to change it, and Duplicate on a route to copy it with all its stops."
             }
           ],
           "video": "ch10-setting-up-routes"
@@ -3583,22 +3583,22 @@
             {
               "type": "step",
               "number": 2,
-              "text": "Enter: Registration Number, Vehicle Type (Bus/Van/Mini-Bus), Seating Capacity."
+              "text": "Enter: Vehicle Number, Vehicle Type (Bus, Van or Car) and Capacity. Make / Model is optional."
             },
             {
               "type": "step",
               "number": 3,
-              "text": "Enter Driver Details: Driver Name, Contact Number."
+              "text": "Under Driver Information enter the Driver Name and Driver Phone (required). The Driver License Number is optional."
             },
             {
               "type": "step",
               "number": 4,
-              "text": "Assign the vehicle to a route."
+              "text": "Choose the Assigned Route this vehicle serves (optional)."
             },
             {
               "type": "step",
               "number": 5,
-              "text": "Save. The vehicle is now linked to the route."
+              "text": "Click 'Add Vehicle'. The vehicle appears in the list, linked to the route."
             }
           ],
           "video": "ch10-adding-vehicles"
@@ -3616,27 +3616,27 @@
             {
               "type": "step",
               "number": 1,
-              "text": "Click 'Assign Student'."
+              "text": "Click 'New Assignment'."
             },
             {
               "type": "step",
               "number": 2,
-              "text": "Select the student from the dropdown."
+              "text": "Search for a student by name or roll number and click the name. Repeat to add several students at once; they appear as chips above the list."
             },
             {
               "type": "step",
               "number": 3,
-              "text": "Select the route and pickup/drop stop."
+              "text": "Choose the Route, then the Stop (both required). Choosing a Vehicle is optional; only vehicles on that route are listed. Set the Transport Type: Pickup Only, Drop Only or Both."
             },
             {
               "type": "step",
               "number": 4,
-              "text": "Save. The student is now assigned to that bus route."
+              "text": "Click 'Assign'. A student can have one assignment per academic year; students who already have one are skipped."
             },
             {
               "type": "step",
               "number": 5,
-              "text": "View all assignments in the list. Edit or remove as needed."
+              "text": "Use the filters to find assignments by route, class or type, and 'Remove' to delete one."
             }
           ],
           "video": "ch10-assigning-students-to-routes"
@@ -3654,22 +3654,17 @@
             {
               "type": "step",
               "number": 1,
-              "text": "Select the date and route."
+              "text": "Select the date (today by default) and the route. The students assigned to it are listed."
             },
             {
               "type": "step",
               "number": 2,
-              "text": "Mark each student as: Picked Up, Not Picked Up, Absent."
+              "text": "Everyone starts as Boarded. Click 'Not Boarded' or 'Absent' for the students who did not ride."
             },
             {
               "type": "step",
               "number": 3,
-              "text": "Save attendance for the morning pickup."
-            },
-            {
-              "type": "step",
-              "number": 4,
-              "text": "Repeat for afternoon drop if needed."
+              "text": "Click 'Save All'. One record is saved per student, per route, per day; saving again for the same day updates it."
             }
           ],
           "video": "ch10-transport-attendance"
@@ -3694,15 +3689,19 @@
             },
             {
               "type": "bullet",
-              "text": "Total Vehicles - Fleet size"
+              "text": "Total Vehicles - Number of active vehicles"
             },
             {
               "type": "bullet",
-              "text": "Students Using Transport - Total students assigned to routes"
+              "text": "Students Assigned - Students with an active transport assignment"
             },
             {
               "type": "bullet",
-              "text": "Today's Attendance - Today's pickup/drop statistics"
+              "text": "Today's Attendance - Students whose transport attendance was recorded today"
+            },
+            {
+              "type": "body_text",
+              "text": "Only School Admins and Principals can add or change Transport data; other roles can view it."
             }
           ]
         }
@@ -4002,7 +4001,7 @@
             {
               "type": "step",
               "number": 2,
-              "text": "Click 'Add Book' to create a textbook entry. Enter title, author, publisher, edition, and language."
+              "text": "Click 'Add Book'. Choose the Class and Subject, enter the Title, and optionally the Author, Publisher, Edition, Language and Description, then click 'Add Book'. The toast 'Book created' confirms it."
             },
             {
               "type": "step",
@@ -4012,7 +4011,7 @@
             {
               "type": "step",
               "number": 4,
-              "text": "Add chapters and topics manually, or use 'Import TOC' for bulk import."
+              "text": "Click 'Add Chapter' (Title, Chapter Number, Description) and, inside a chapter, 'Add Topic' (Title, Topic Number, Estimated Periods, Description). Or use 'Import Table of Contents' for bulk import."
             },
             {
               "type": "sub_section",
@@ -4020,22 +4019,22 @@
             },
             {
               "type": "body_text",
-              "text": "The Import TOC feature supports two modes:"
+              "text": "The Import Table of Contents window has two tabs:"
             },
             {
               "type": "step",
               "number": 5,
-              "text": "Type / Paste: Manually type or paste the table of contents text with indentation for chapter/topic structure."
+              "text": "Manual Entry: type or paste the table of contents text with indentation for chapter/topic structure, then click 'Next: Review'."
             },
             {
               "type": "step",
               "number": 6,
-              "text": "Upload Photo: Take or upload a photo of the book's printed TOC page. The system uses OCR (Google Vision) with language-aware text extraction."
+              "text": "Upload Photo: upload a photo of the book's printed contents page. The system extracts the text with OCR so you can review it."
             },
             {
               "type": "step",
               "number": 7,
-              "text": "After OCR extraction, review and edit the text before clicking 'Import' to create chapters and topics."
+              "text": "Review and edit the chapters and topics, then apply them to create the structure."
             },
             {
               "type": "info_box",
@@ -4064,39 +4063,33 @@
               "href": "/academics/lesson-plans"
             },
             {
+              "type": "body_text",
+              "text": "This page is not available to the Manager role."
+            },
+            {
               "type": "step",
               "number": 1,
-              "text": "Click 'Create Lesson Plan'."
+              "text": "Click 'Add Lesson Plan'. This opens the bulk wizard; click 'Create single lesson plan' for one plan."
             },
             {
               "type": "step",
               "number": 2,
-              "text": "Select: Class, Subject (from assigned subjects)."
+              "text": "Choose Minimal (Class, Subject, chapters/topics, Lesson Date, Teacher; saved as a Draft with an automatic title) or Standard (full details)."
             },
             {
               "type": "step",
               "number": 3,
-              "text": "Enter: Title, Description, Learning Objectives."
+              "text": "In Standard mode enter Title, Description and Objectives, then set Duration (minutes), Materials Needed and Teaching Methods."
             },
             {
               "type": "step",
               "number": 4,
-              "text": "Set: Lesson Date, Duration (in minutes)."
+              "text": "Standard mode also has a Status of Draft or Published. Click 'Create Lesson Plan'; the toast 'Lesson plan created successfully!' confirms it."
             },
             {
               "type": "step",
               "number": 5,
-              "text": "Add: Materials Needed, Teaching Methods."
-            },
-            {
-              "type": "step",
-              "number": 6,
-              "text": "Save as 'Draft' or 'Publish' immediately."
-            },
-            {
-              "type": "step",
-              "number": 7,
-              "text": "Published lesson plans are visible to other teachers for reference."
+              "text": "A Draft can be published later with the 'Publish' button on its row."
             }
           ],
           "video": "ch12-creating-lesson-plans"
@@ -4119,27 +4112,27 @@
             {
               "type": "step",
               "number": 2,
-              "text": "Select Class and Subject."
+              "text": "Enter the Title, then select Class, Subject and Teacher."
             },
             {
               "type": "step",
               "number": 3,
-              "text": "Enter: Title, Description, Instructions."
+              "text": "Choose the Assignment Type: Homework, Project, Classwork or Lab. Diary entries use 'Create Daily Diary' instead."
             },
             {
               "type": "step",
               "number": 4,
-              "text": "Set: Due Date, Maximum Marks."
+              "text": "Set the Due Date (required when 'Require student submission' is on) and Total Marks; turn 'Allow file attachments' on or off."
             },
             {
               "type": "step",
               "number": 5,
-              "text": "Define submission criteria (file types, word count, etc.)."
+              "text": "Enter the Description (required) and Instructions."
             },
             {
               "type": "step",
               "number": 6,
-              "text": "Save. The assignment appears in student portals immediately."
+              "text": "Click 'Create Assignment'. New assignments start as Draft; click 'Publish' on the row to make them appear in student portals."
             }
           ],
           "video": "ch12-creating-assignments"
@@ -4150,24 +4143,29 @@
           "slug": "reviewing-submissions",
           "content": [
             {
+              "type": "nav_path",
+              "path": "Sidebar > Academics > Assignments > Submissions",
+              "href": "/academics/assignments"
+            },
+            {
               "type": "step",
               "number": 1,
-              "text": "Click on an assignment to see student submissions."
+              "text": "Click the number in the Submissions column of an assignment (or the 'Submissions' button in card view)."
             },
             {
               "type": "step",
               "number": 2,
-              "text": "For each submission, you can: View the submitted work, add comments, and assign a grade."
+              "text": "For each submission you can view the submitted text or attached file, enter Marks and Feedback, and click 'Grade' then 'Save'."
             },
             {
               "type": "step",
               "number": 3,
-              "text": "Use bulk grading to score multiple submissions quickly."
+              "text": "Graded submissions can be re-graded or sent back to the student with 'Return'."
             },
             {
               "type": "step",
               "number": 4,
-              "text": "Grades feed into the student's academic performance record."
+              "text": "The cards at the top count Total, Submitted, Graded, Returned, Pending and Late submissions."
             }
           ],
           "video": "ch12-reviewing-submissions"
@@ -4220,7 +4218,7 @@
             {
               "type": "step",
               "number": 3,
-              "text": "Unread notifications are highlighted with a blue dot. Click to mark as read."
+              "text": "Unread notifications stand out with a bold white card; click a notification to mark it as read (it also opens the related page, such as Fee Collection). Older ones are grouped under Today, Yesterday and Earlier."
             },
             {
               "type": "step",
@@ -4230,7 +4228,7 @@
             {
               "type": "step",
               "number": 5,
-              "text": "Filter by event type (Absence, Fee Due, Exam, Transport Update, etc.) using the dropdown."
+              "text": "Filter with the 'All Types' dropdown (Absence, Fee Due, Exam Result, Transport Update, etc.) or tick 'Unread only'."
             }
           ],
           "video": "ch13-viewing-notifications-all-users"
@@ -4253,17 +4251,17 @@
             {
               "type": "step",
               "number": 2,
-              "text": "Click 'Create Template'."
+              "text": "Click 'New Template'."
             },
             {
               "type": "step",
               "number": 3,
-              "text": "Enter: Template Name, Subject, Body (supports variables like {student_name})."
+              "text": "Enter a Template Name, pick the Event Type and Channel, add an optional Subject, and write the Message body (placeholders use double braces, like {{student_name}})."
             },
             {
               "type": "step",
               "number": 4,
-              "text": "Save. Templates can be reused when sending notifications."
+              "text": "Click 'Save'. Use Edit, Duplicate, Preview or Delete on any row later; untick 'Active' to hide a template from the Send tab. Templates marked 'Shared' belong to every school and cannot be changed."
             }
           ],
           "roles": [
@@ -4290,12 +4288,12 @@
             {
               "type": "step",
               "number": 2,
-              "text": "Choose mode: 'Broadcast' to send to all users of a role, or 'Single' for one recipient."
+              "text": "Choose the mode: 'Broadcast to Group' for everyone in a role, or 'Single Recipient' for one person (phone, email or user ID)."
             },
             {
               "type": "step",
               "number": 3,
-              "text": "In Broadcast mode, select a role group: All Parents, All Teachers, All Staff, Principals, Managers, Accountants, or All Students."
+              "text": "In Broadcast mode, select a group: All Parents, All Teachers, All Staff, All Admins, Principals, Managers, Accountants, or All Students. Optionally narrow parents or students to one session class."
             },
             {
               "type": "step",
@@ -4310,7 +4308,12 @@
             {
               "type": "step",
               "number": 6,
-              "text": "Click 'Send'. The system shows how many notifications were sent, failed, or skipped."
+              "text": "Click 'Review & Send Broadcast', check the estimated recipients, then 'Confirm Send' (Single mode: 'Send Notification'). If the text still contains {{placeholders}} a warning appears first; manual sends do not fill them in. A message shows how many were sent, skipped or failed. 'Test Send to Me' sends a copy to your own inbox."
+            },
+            {
+              "type": "info_box",
+              "title": "Run Now buttons",
+              "text": "At the top of the Send tab, 'Send Fee Reminders Now', 'Generate Daily Report Now' and 'Remind Teachers to Mark Attendance' fire this school's automatic notifications on demand."
             }
           ],
           "roles": [
@@ -4524,7 +4527,7 @@
             {
               "type": "step",
               "number": 2,
-              "text": "Select a recipient from the dropdown. Recipients are grouped by role (Teachers, Parents, Students, Staff)."
+              "text": "Pick who to write to using the Staff, Parent or Student tabs, then search for the name in the 'To' box."
             },
             {
               "type": "step",
@@ -4539,7 +4542,7 @@
             {
               "type": "step",
               "number": 5,
-              "text": "Type your message and click 'Send'."
+              "text": "Type your message and click 'Send Message'."
             },
             {
               "type": "info_box",
@@ -4572,7 +4575,7 @@
             {
               "type": "step",
               "number": 4,
-              "text": "Type your reply in the input box at the bottom and click 'Send' or press Enter."
+              "text": "Type your reply in the box at the bottom, then press Enter or click the paper-plane button (Shift+Enter starts a new line)."
             },
             {
               "type": "step",
@@ -4664,12 +4667,22 @@
             {
               "type": "step",
               "number": 1,
-              "text": "Click on a child's name to see their overview page."
+              "text": "On the dashboard, click 'Overview' on a child's card to open their overview page."
             },
             {
               "type": "step",
               "number": 2,
-              "text": "The overview shows: Profile photo, class, roll number, quick stats."
+              "text": "The header shows the child's photo, name, class and roll number."
+            },
+            {
+              "type": "step",
+              "number": 3,
+              "text": "Four cards summarise: Attendance Rate, Fees (amount due, or 'Nothing due'), Last Exam and Days Present."
+            },
+            {
+              "type": "step",
+              "number": 4,
+              "text": "Under 'Details', choose Attendance Calendar, Fee Details, Timetable, Exam Schedule or Exam Results for the full pages."
             },
             {
               "type": "sub_section",
@@ -4681,17 +4694,17 @@
             },
             {
               "type": "step",
-              "number": 3,
+              "number": 5,
               "text": "Click 'Attendance' to view the child's attendance records."
             },
             {
               "type": "step",
-              "number": 4,
+              "number": 6,
               "text": "See monthly and daily breakdowns with Present/Absent/Late counts."
             },
             {
               "type": "step",
-              "number": 5,
+              "number": 7,
               "text": "View attendance percentage and trends."
             },
             {
@@ -4704,17 +4717,17 @@
             },
             {
               "type": "step",
-              "number": 6,
+              "number": 8,
               "text": "View fee balance, payment history, and outstanding amounts."
             },
             {
               "type": "step",
-              "number": 7,
+              "number": 9,
               "text": "See due amounts and upcoming fee deadlines."
             },
             {
               "type": "step",
-              "number": 8,
+              "number": 10,
               "text": "Download fee receipts for past payments."
             },
             {
@@ -4732,47 +4745,47 @@
             },
             {
               "type": "step",
-              "number": 9,
+              "number": 11,
               "text": "If the school has configured online payment gateways, a 'Pay Now' button appears next to each unpaid fee."
             },
             {
               "type": "step",
-              "number": 10,
+              "number": 12,
               "text": "Click 'Pay Now' on the fee you wish to pay."
             },
             {
               "type": "step",
-              "number": 11,
+              "number": 13,
               "text": "A modal appears showing available payment methods (e.g., JazzCash, Easypaisa, Manual Transfer)."
             },
             {
               "type": "step",
-              "number": 12,
+              "number": 14,
               "text": "Select your preferred payment method and click 'Proceed to Pay'."
             },
             {
               "type": "step",
-              "number": 13,
+              "number": 15,
               "text": "For JazzCash/Easypaisa: You will be redirected to the gateway's checkout page to complete payment."
             },
             {
               "type": "step",
-              "number": 14,
+              "number": 16,
               "text": "For Manual Transfer: Bank account details are displayed. Make the transfer and inform the school office."
             },
             {
               "type": "step",
-              "number": 15,
+              "number": 17,
               "text": "After payment, you are redirected to a Payment Result page showing the transaction status."
             },
             {
               "type": "step",
-              "number": 16,
+              "number": 18,
               "text": "Payment statuses: Successful (green), Pending (yellow - being verified), Failed (red - try again)."
             },
             {
               "type": "step",
-              "number": 17,
+              "number": 19,
               "text": "Pending payments are automatically verified within a few minutes. The page auto-refreshes."
             },
             {
@@ -4790,12 +4803,12 @@
             },
             {
               "type": "step",
-              "number": 18,
+              "number": 20,
               "text": "View the child's class timetable."
             },
             {
               "type": "step",
-              "number": 19,
+              "number": 21,
               "text": "See subjects, teachers, and period timings for each day."
             },
             {
@@ -4804,22 +4817,17 @@
             },
             {
               "type": "nav_path",
-              "path": "Parent Portal > Child > Results"
-            },
-            {
-              "type": "step",
-              "number": 20,
-              "text": "View exam marks and grades (once published by the school)."
-            },
-            {
-              "type": "step",
-              "number": 21,
-              "text": "See subject-wise performance and GPA."
+              "path": "Parent Portal > Child > Exam Results"
             },
             {
               "type": "step",
               "number": 22,
-              "text": "Download report cards as PDF."
+              "text": "View exam marks and grades (once published by the school)."
+            },
+            {
+              "type": "step",
+              "number": 23,
+              "text": "See subject-wise marks, percentage and grade for each exam."
             }
           ],
           "video": "ch15-viewing-childs-information"
@@ -4837,17 +4845,27 @@
             {
               "type": "step",
               "number": 1,
-              "text": "Click 'Leave Requests' in the sidebar, then the 'Apply for Leave' tab."
+              "text": "Click 'Leave Requests' in the sidebar. The 'Apply for Leave' tab opens first."
             },
             {
               "type": "step",
               "number": 2,
-              "text": "Select the child, enter: From Date, To Date, Reason."
+              "text": "Select the child, then enter Start Date, End Date and Reason. A supporting document link is optional."
             },
             {
               "type": "step",
               "number": 3,
-              "text": "Submit the application. Track its status (Pending, Approved, Rejected)."
+              "text": "Click 'Submit Leave Request'. The message 'Leave request submitted successfully.' appears."
+            },
+            {
+              "type": "step",
+              "number": 4,
+              "text": "Open the 'My Requests' tab to track the status (Pending, Approved, Rejected or Cancelled) and read the school's remarks."
+            },
+            {
+              "type": "step",
+              "number": 5,
+              "text": "A request that is still Pending can be cancelled with 'Cancel'."
             }
           ],
           "video": "ch15-applying-for-leave"
@@ -4986,22 +5004,27 @@
             {
               "type": "step",
               "number": 1,
-              "text": "View all assignments from your teachers."
+              "text": "The page lists every assignment from your teachers with its subject, type, due date and status."
             },
             {
               "type": "step",
               "number": 2,
-              "text": "See due dates and submission status."
+              "text": "Diary entries are for reading only; they have no Submit button."
             },
             {
               "type": "step",
               "number": 3,
-              "text": "Submit your work before the deadline."
+              "text": "Click 'Submit' on an open assignment, type your answer in Submission Text (required), and optionally add a link to your file and a file name."
             },
             {
               "type": "step",
               "number": 4,
-              "text": "View grades and teacher feedback after review."
+              "text": "Click 'Submit Assignment'. The message 'Assignment submitted successfully!' appears. Late work is marked Late."
+            },
+            {
+              "type": "step",
+              "number": 5,
+              "text": "After the teacher grades it, the card shows your marks and feedback. Closed assignments can no longer be submitted."
             }
           ],
           "video": "ch16-my-assignments"
@@ -5041,20 +5064,14 @@
             {
               "type": "step",
               "number": 1,
-              "text": "View your exam marks and grades."
+              "text": "Each published exam appears as a card with your total, percentage and grade. Click its title to open or close the subject table."
             },
             {
               "type": "step",
               "number": 2,
-              "text": "See subject-wise performance."
-            },
-            {
-              "type": "step",
-              "number": 3,
-              "text": "Download report cards as PDF."
+              "text": "The table lists marks, total marks, percentage and a Pass or Fail badge for each subject; an absent paper shows 'Absent'."
             }
-          ],
-          "video": "ch16-my-results"
+          ]
         },
         {
           "id": "16.7",
@@ -5120,12 +5137,12 @@
             {
               "type": "step",
               "number": 6,
-              "text": "Use the suggestion chips (e.g., 'Explain a concept', 'Help with homework') for quick prompts."
+              "text": "Use the suggestion chips (e.g., 'Help me understand fractions', 'Explain photosynthesis') for quick prompts."
             },
             {
               "type": "step",
               "number": 7,
-              "text": "Click 'Clear History' to start a fresh conversation."
+              "text": "Click 'Clear Chat' to start a fresh conversation."
             },
             {
               "type": "info_box",
@@ -5659,12 +5676,12 @@
             {
               "type": "step",
               "number": 3,
-              "text": "Fill in Username (required), Email, Password, and select a Role from the dropdown."
+              "text": "Fill in First name, Last name, Username (required), Email, Password, Confirm password, select a Role from the dropdown, and add a Phone number if you want."
             },
             {
               "type": "step",
               "number": 4,
-              "text": "The role dropdown only shows roles you are allowed to create based on your role (see the table above)."
+              "text": "The role dropdown only shows roles you are allowed to create based on your role."
             },
             {
               "type": "step",
@@ -5679,11 +5696,16 @@
             {
               "type": "step",
               "number": 7,
-              "text": "To deactivate a user, click 'Deactivate'. The user will no longer be able to log in."
+              "text": "To reset a forgotten password, click 'Reset Password' on the user's row. Choose 'Set a new password now' and type the New Password (at least 8 characters) twice, or choose 'Email a reset link' (only available when the user has an email address), then press 'Reset Password' or 'Send Email'."
             },
             {
               "type": "step",
               "number": 8,
+              "text": "To deactivate a user, click 'Deactivate'. The user will no longer be able to log in."
+            },
+            {
+              "type": "step",
+              "number": 9,
               "text": "To reactivate, click 'Activate' on an inactive user."
             },
             {
@@ -6020,7 +6042,7 @@
             {
               "type": "step",
               "number": 1,
-              "text": "Open the Categories and Vendors tabs first and add the categories and vendors you use."
+              "text": "Click the 'Categories' and 'Vendors' buttons at the top first and add the categories and vendors you use."
             },
             {
               "type": "step",
@@ -6051,24 +6073,38 @@
               "href": "/inventory/transactions"
             },
             {
+              "type": "body_text",
+              "text": "School Admins and Principals record stock movements here; other roles with inventory access can only view the history. Issues and Returns are not entered by hand: they are created automatically when you assign an item or mark it returned (see Item Assignments)."
+            },
+            {
               "type": "step",
               "number": 1,
-              "text": "Press 'Record Transaction'."
+              "text": "Press '+ Record Transaction'."
             },
             {
               "type": "step",
               "number": 2,
-              "text": "Choose the type: Purchase, Issue, Return, Adjustment or Disposal."
+              "text": "Choose the type: Purchase (new stock from a vendor), Adjustment (correct a stock count) or Disposal (damaged or expired items)."
             },
             {
               "type": "step",
               "number": 3,
-              "text": "Select the Item, enter quantity, unit price, date, vendor, reference or invoice number and remarks, then save."
+              "text": "Select the Item. Its current stock is shown in the list and its unit price is filled in for you."
             },
             {
               "type": "step",
               "number": 4,
-              "text": "Filter the history by type and date range."
+              "text": "Enter the Quantity. For a Disposal enter a positive number; the stock is reduced for you. For an Adjustment use a negative number to reduce stock. Stock can never go below zero."
+            },
+            {
+              "type": "step",
+              "number": 5,
+              "text": "Choose the Vendor (Purchase only), set the Date, add a Reference number such as an invoice or PO, and any Remarks, then press 'Record Transaction'. A 'Transaction recorded' message appears and the item's stock updates."
+            },
+            {
+              "type": "step",
+              "number": 6,
+              "text": "Filter the history by Type and by From and To dates. Issue and Return rows created by assignments appear here too."
             }
           ],
           "video": "ch21-stock-transactions"
@@ -6084,19 +6120,28 @@
               "href": "/inventory/assignments"
             },
             {
+              "type": "body_text",
+              "text": "School Admins and Principals assign items and mark them returned. Accountants, Teachers and Staff can only view assignments (Teachers and Staff see just the items assigned to them)."
+            },
+            {
               "type": "step",
               "number": 1,
-              "text": "Press 'Assign Item', choose the item, the person and the quantity, and add notes (for example a serial number)."
+              "text": "Press '+ Assign Item'."
             },
             {
               "type": "step",
               "number": 2,
-              "text": "When the item comes back, press 'Return' and choose its condition: New, Good, Fair or Poor."
+              "text": "Choose the Item (only items in stock are listed) and the person under 'Assign To' (active staff accounts), set the Quantity, pick the item's Condition (New, Good, Fair or Poor) and add notes such as a serial number, then press 'Assign'. The assignment is dated today, the stock is reduced and an Issue transaction is recorded."
             },
             {
               "type": "step",
               "number": 3,
-              "text": "Filter assignments by Active or Returned."
+              "text": "Switch between the 'Active' and 'Returned' tabs, and search by person or item name."
+            },
+            {
+              "type": "step",
+              "number": 4,
+              "text": "When the item comes back, press 'Return' on its row, choose its condition and press 'Confirm Return'. The stock is restored and a Return transaction is recorded."
             }
           ],
           "roles": [

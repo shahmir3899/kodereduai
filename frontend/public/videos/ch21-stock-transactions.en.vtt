@@ -1,0 +1,25 @@
+WEBVTT
+
+00:00:00.116 --> 00:00:06.053
+Stock transactions
+
+00:00:06.103 --> 00:00:14.832
+Open Inventory in the sidebar and choose Transactions. Every stock movement is listed here with its date, type and quantity.
+
+00:00:21.224 --> 00:00:23.588
+Press Record Transaction.
+
+00:00:29.657 --> 00:00:39.645
+Choose Purchase, then the item. The unit price is filled in for you. Enter the quantity, choose the vendor and add the invoice number.
+
+00:00:45.070 --> 00:00:51.928
+Press Record Transaction. The purchase appears in the list, and the stock of the item goes up.
+
+00:00:53.259 --> 00:01:06.151
+For damaged or expired items choose Disposal and enter a positive quantity. The stock goes down by that amount. An Adjustment corrects a count, and takes a negative number to reduce stock.
+
+00:01:13.750 --> 00:01:19.759
+Use Type and the From and To dates to narrow the history. Here only disposals are shown.
+
+00:01:23.531 --> 00:01:29.372
+Every movement recorded

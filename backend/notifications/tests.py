@@ -170,3 +170,28 @@ class TestCarouselEndpoints:
         token = api.login(principal.username)
         resp = api.post('/api/notifications/mark-read-bulk/', {'ids': 'nope'}, token, seed_data['school_a'].id)
         assert resp.status_code == 400
+
+
+@pytest.mark.django_db
+class TestTemplateListing:
+    """Inactive templates stay listed for admins; shared (school=null) rows are read-only."""
+
+    def _make(self, school, **kw):
+        from notifications.models import NotificationTemplate
+        return NotificationTemplate.objects.create(
+            school=school, name=kw.pop('name', 'T'), event_type='GENERAL',
+            channel='IN_APP', body_template='Hi', **kw,
+        )
+
+    def test_inactive_template_is_listed_unless_active_requested(self, seed_data, api):
+        sid, token = seed_data['SID_A'], seed_data['tokens']['admin']
+        self._make(seed_data['school_a'], name='Dormant', is_active=False)
+        names = lambda r: {t['name'] for t in r.json().get('results', r.json())}
+        assert 'Dormant' in names(api.get('/api/notifications/templates/', token, sid))
+        assert 'Dormant' not in names(api.get('/api/notifications/templates/?active=1', token, sid))
+
+    def test_shared_template_cannot_be_edited_or_deleted(self, seed_data, api):
+        sid, token = seed_data['SID_A'], seed_data['tokens']['admin']
+        shared = self._make(None, name='Shared')
+        assert api.patch(f'/api/notifications/templates/{shared.id}/', {'name': 'x'}, token, sid).status_code == 403
+        assert api.delete(f'/api/notifications/templates/{shared.id}/', token, sid).status_code == 403

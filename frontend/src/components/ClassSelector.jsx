@@ -13,6 +13,7 @@ export default function ClassSelector({
   required = false,
   name,
   id,
+  'aria-label': ariaLabel,
   classes: externalClasses,
   schoolId,
   scope = 'master',
@@ -52,6 +53,7 @@ export default function ClassSelector({
       required={required}
       name={name}
       id={id}
+      aria-label={ariaLabel}
     >
       <option value="">
         {!externalClasses && isLoading ? 'Loading classes...' : (showAllOption ? allOptionLabel : placeholder)}

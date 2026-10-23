@@ -8,7 +8,8 @@ export function buildStaffNavigation(ctx, I) {
     effectiveRole, isModuleEnabled, isStaffLevel, isManager, isTeacher, isStaff,
     isSchoolAdminNav, hasInventoryAssignments,
   } = ctx
-  return [
+  const isDriver = ctx.isDriver ?? effectiveRole === 'DRIVER'
+  const nav = [
     // Dashboard - always visible at top
     { type: 'item', name: 'Dashboard', href: '/dashboard', icon: I.HomeIcon },
 
@@ -16,15 +17,17 @@ export function buildStaffNavigation(ctx, I) {
     // relevant to Staff (their own attendance lives in the Self Service
     // hub below, backed by hr.StaffAttendance, not this module).
     // Manager removed 2026-09: nav access scoped down to Dashboard/
-    // Academics/Content Creation/Management only.
-    ...(isModuleEnabled('attendance') && !isStaff && !isManager ? [{
+    // Academics/Content Creation/Management only. Student attendance is
+    // admins + teachers only (the API refuses every other role).
+    ...(isModuleEnabled('attendance') && (isSchoolAdminNav || isTeacher) ? [{
       type: 'group',
       name: 'Attendance',
       icon: I.ClipboardIcon,
       children: [
         { type: 'divider', label: 'Mark Attendance' },
         { name: '1. Manual Entry', href: '/attendance/manual-entry', icon: I.PencilIcon },
-        { name: '2. Face Attendance', href: '/face-attendance', icon: I.ClipboardCheckIcon },
+        // Face attendance runs on admin-only APIs (sessions, enrolment): teachers mark through Manual Entry.
+        ...(isSchoolAdminNav ? [{ name: '2. Face Attendance', href: '/face-attendance', icon: I.ClipboardCheckIcon }] : []),
         { type: 'divider', label: 'Records' },
         { name: 'Attendance Record', href: '/attendance/register', icon: I.TableIcon },
       ],
@@ -82,8 +85,11 @@ export function buildStaffNavigation(ctx, I) {
           ...(isSchoolAdminNav || isTeacher ? [{ name: 'Assessments', href: '/assessments', icon: I.DocumentIcon }] : []),
           ...(isSchoolAdminNav || isTeacher ? [{ name: 'Marks Entry', href: '/academics/marks-entry', icon: I.DocumentIcon }] : []),
           ...(isSchoolAdminNav ? [{ name: 'Grade Scale', href: '/academics/grade-scale', icon: I.SettingsIcon }] : []),
-          { name: 'Results', href: '/academics/results', icon: I.ChartIcon },
-          { name: 'Report Cards', href: '/academics/report-cards', icon: I.ReportIcon },
+          // Per-student marks: admins + teachers only (the API refuses the rest).
+          ...(isSchoolAdminNav || isTeacher ? [
+            { name: 'Results', href: '/academics/results', icon: I.ChartIcon },
+            { name: 'Report Cards', href: '/academics/report-cards', icon: I.ReportIcon },
+          ] : []),
         ] : []),
         ...(isModuleEnabled('lms') ? [
           { name: 'Assignments', href: '/academics/assignments', icon: I.DocumentIcon },
@@ -185,7 +191,7 @@ export function buildStaffNavigation(ctx, I) {
     // school hierarchy with no teaching/admin surface at all, so a single
     // entry point is clearer than scattering it across the sidebar. Also
     // reachable via the dashboard's "Apply Leave"/quick-action links.
-    ...(isModuleEnabled('hr') && isStaff
+    ...(isModuleEnabled('hr') && (isStaff || isDriver)
       ? [{ type: 'item', name: 'Self Service', href: '/hr/self-service', icon: I.CalendarIcon }]
       : []),
 
@@ -197,7 +203,8 @@ export function buildStaffNavigation(ctx, I) {
       children: [
         ...(isModuleEnabled('students') ? [
           { name: 'Classes', href: '/classes', icon: I.TableIcon },
-          { name: 'Students', href: '/students', icon: I.UsersIcon },
+          // Manager has no student-level data; classes stay for its pickers.
+          ...(!isManager ? [{ name: 'Students', href: '/students', icon: I.UsersIcon }] : []),
           ...(!isStaffLevel ? [{ name: 'Student Risk Score', href: '/students/risk-score', icon: I.ExclamationIcon }] : []),
           ...(effectiveRole === 'SCHOOL_ADMIN' || effectiveRole === 'PRINCIPAL' ? [{ name: 'Recently Deleted', href: '/students/deleted', icon: I.TableIcon }] : []),
         ] : []),
@@ -300,7 +307,12 @@ export function buildStaffNavigation(ctx, I) {
       ? [{ type: 'item', name: 'Settings', href: '/settings', icon: I.CogIcon }]
       : []),
   ]
+  return isDriver ? nav.filter((entry) => DRIVER_NAV.has(entry.name)) : nav
 }
+
+// A driver's work is transport plus their own HR self-service. Everything else in the staff
+// sidebar (finance, students, academics, inventory, ...) sits on APIs a driver is refused.
+const DRIVER_NAV = new Set(['Dashboard', 'Transport', 'Self Service', 'Notifications', 'Messages', 'User Guide'])
 
 export function buildParentNavigation(I) {
   return [

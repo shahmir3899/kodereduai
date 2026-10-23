@@ -46,6 +46,15 @@ function RoleBadge({ role }) {
   )
 }
 
+// DRF validation errors arrive as {field: [msg]}, not {error}; surface the real reason.
+const apiErrorText = (err, fallback) => {
+  const d = err?.response?.data
+  if (!d || typeof d === 'string') return fallback
+  if (d.error || d.detail) return d.error || d.detail
+  const first = Object.values(d)[0]
+  return (Array.isArray(first) ? first[0] : first) || fallback
+}
+
 export default function MessagesPage() {
   const { user } = useAuth()
   const queryClient = useQueryClient()
@@ -417,7 +426,7 @@ export default function MessagesPage() {
 
               {createThreadMutation.isError && (
                 <p className="text-sm text-red-600">
-                  {createThreadMutation.error?.response?.data?.error || 'Failed to send message. Please try again.'}
+                  {apiErrorText(createThreadMutation.error, 'Failed to send message. Please try again.')}
                 </p>
               )}
             </form>
@@ -655,7 +664,7 @@ export default function MessagesPage() {
                     </button>
                   </div>
                   {replyMutation.isError && (
-                    <p className="text-xs text-red-600 mt-1">Failed to send. Please try again.</p>
+                    <p className="text-xs text-red-600 mt-1">{apiErrorText(replyMutation.error, 'Failed to send. Please try again.')}</p>
                   )}
                 </form>
               </>

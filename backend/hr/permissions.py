@@ -11,7 +11,17 @@ HR_WRITE_ROLES = ('SUPER_ADMIN', 'SCHOOL_ADMIN', 'PRINCIPAL')
 # Roles that get self-service read/write (own record only, enforced in each
 # viewset's get_queryset) on the leave/attendance/payslip endpoints, even
 # though they have no write access to the rest of HR.
-HR_SELF_SERVICE_ROLES = ('TEACHER', 'STAFF', 'MANAGER')
+HR_SELF_SERVICE_ROLES = ('TEACHER', 'STAFF', 'MANAGER', 'ACCOUNTANT', 'DRIVER')
+
+
+def is_own_only(request):
+    """True for every role that is not an HR admin.
+
+    Deliberately "not an admin" rather than "in HR_SELF_SERVICE_ROLES": a role added
+    later (or one that slips past the role list) must default to own-record access,
+    not to the whole school's salaries and payslips.
+    """
+    return get_effective_role(request) not in HR_WRITE_ROLES
 
 
 class IsManagerOrAdminOrReadOnly(permissions.BasePermission):

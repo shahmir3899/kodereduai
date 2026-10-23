@@ -13,6 +13,7 @@ import { useConfirmModal } from '../components/ConfirmModal'
 import { useToast } from '../components/Toast'
 import Spinner from '../components/ui/Spinner'
 import Button from '../components/ui/Button'
+import ResetPasswordModal from './settings/ResetPasswordModal'
 import { useEscapeKey } from '../hooks/useEscapeKey'
 import { usePasswordPolicy } from '../hooks/usePasswordPolicy'
 import { RecordCard, CardGrid, ViewToggle } from '../components/cards'
@@ -22,7 +23,7 @@ export default function SettingsPage() {
   const queryClient = useQueryClient()
   const { isSchoolAdmin, isSuperAdmin, getAllowableRoles } = useAuth()
   const { confirm, ConfirmModalRoot } = useConfirmModal()
-  const { showError } = useToast()
+  const { showError, showSuccess } = useToast()
   const { validate: validatePassword } = usePasswordPolicy()
   const canManageUsers = isSchoolAdmin && !isSuperAdmin
   const [searchParams, setSearchParams] = useSearchParams()
@@ -55,6 +56,7 @@ export default function SettingsPage() {
   // --- Users State ---
   const [showUserModal, setShowUserModal] = useState(false)
   const [editingUser, setEditingUser] = useState(null)
+  const [resetUser, setResetUser] = useState(null)
   const [userSearch, setUserSearch] = useState('')
   const [userRoleFilter, setUserRoleFilter] = useState('')
   const EMPTY_USER_FORM = { username: '', email: '', password: '', confirm_password: '', first_name: '', last_name: '', role: 'STAFF', phone: '' }
@@ -163,6 +165,7 @@ export default function SettingsPage() {
     mutationFn: (data) => usersApi.createUser(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['schoolUsers'] })
+      showSuccess('User created successfully')
       closeUserModal()
     },
     onError: (error) => setUserError(getErrorMessage(error, 'Failed to create user')),
@@ -172,6 +175,7 @@ export default function SettingsPage() {
     mutationFn: ({ id, data }) => usersApi.updateUser(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['schoolUsers'] })
+      showSuccess('User updated successfully')
       closeUserModal()
     },
     onError: (error) => setUserError(getErrorMessage(error, 'Failed to update user')),
@@ -179,7 +183,11 @@ export default function SettingsPage() {
 
   const toggleUserActiveMutation = useMutation({
     mutationFn: ({ id, is_active }) => usersApi.updateUser(id, { is_active }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['schoolUsers'] }),
+    onSuccess: (_res, { is_active }) => {
+      queryClient.invalidateQueries({ queryKey: ['schoolUsers'] })
+      showSuccess(is_active ? 'User activated' : 'User deactivated')
+    },
+    onError: (error) => showError(getErrorMessage(error, 'Failed to update user status')),
   })
 
   const closeUserModal = () => {
@@ -590,6 +598,7 @@ export default function SettingsPage() {
                     ]}
                     actions={allowableRoles.includes(u.role) ? [
                       { label: 'Edit', tone: 'primary', onClick: () => openEditUser(u) },
+                      { label: 'Reset Password', tone: 'primary', onClick: () => setResetUser(u) },
                       { label: u.is_active ? 'Deactivate' : 'Activate', tone: u.is_active ? 'danger' : 'success', onClick: () => toggleUserActiveMutation.mutate({ id: u.id, is_active: !u.is_active }) },
                     ] : []}
                   />
@@ -629,6 +638,7 @@ export default function SettingsPage() {
                             {allowableRoles.includes(u.role) ? (
                               <>
                                 <button onClick={() => openEditUser(u)} className="text-sm text-primary-600 hover:underline mr-3">Edit</button>
+                                <button onClick={() => setResetUser(u)} className="text-sm text-primary-600 hover:underline mr-3">Reset Password</button>
                                 <button
                                   onClick={() => toggleUserActiveMutation.mutate({ id: u.id, is_active: !u.is_active })}
                                   className={`text-sm ${u.is_active ? 'text-red-600' : 'text-green-600'} hover:underline`}
@@ -705,6 +715,8 @@ export default function SettingsPage() {
           </div>
         </div>
       )}
+
+      {resetUser && <ResetPasswordModal user={resetUser} onClose={() => setResetUser(null)} />}
 
       <ConfirmModalRoot />
     </div>

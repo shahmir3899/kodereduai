@@ -20,7 +20,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from core.mixins import TenantQuerySetMixin, ensure_tenant_school_id
-from core.permissions import ADMIN_ROLES, IsSchoolAdmin, IsSchoolAdminOrReadOnly, HasSchoolAccess, ModuleAccessMixin, CanManageStudentAssessments, get_effective_role, get_teacher_combined_scope
+from core.permissions import ADMIN_ROLES, IsSchoolAdmin, IsSchoolAdminOrReadOnly, HasSchoolAccess, ModuleAccessMixin, CanManageStudentAssessments, CanViewStudentData, get_effective_role, get_teacher_combined_scope
 from core.class_scope import resolve_class_scope
 from core.ai_jobs import complete_ai_job, create_ai_job, fail_ai_job
 from core.embeddings import generate_text_embedding
@@ -1419,6 +1419,9 @@ class ExamViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet)
             'generate_comments', 'comment_job', 'cancel_comment_job',
         ):
             return [IsAuthenticated(), HasSchoolAccess()]
+        if self.action == 'results':
+            # Per-student marks and grades: not for roles that only read exam definitions.
+            return [IsAuthenticated(), CanViewStudentData(), HasSchoolAccess()]
         return super().get_permissions()
 
     def get_serializer_context(self):
@@ -2253,7 +2256,8 @@ class StudentMarkViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelV
     # class-teacher or assigned-subject scope. IsSchoolAdminOrReadOnly would
     # block that, so scoping is enforced per-action via _can_manage_exam_scope
     # in perform_create/perform_update/perform_destroy/bulk_entry instead.
-    permission_classes = [IsAuthenticated, HasSchoolAccess]
+    # CanViewStudentData keeps accountant/manager/staff/driver out of marks entirely.
+    permission_classes = [IsAuthenticated, CanViewStudentData, HasSchoolAccess]
 
     def get_serializer_class(self):
         if self.action in ('create', 'update', 'partial_update'):
@@ -3042,7 +3046,7 @@ def _report_exams_for(school_id, class_obj_id, year_id, exam_ids, published_only
 
 class ReportCardView(ModuleAccessMixin, APIView):
     required_module = 'examinations'
-    permission_classes = [IsAuthenticated, IsSchoolAdminOrReadOnly, HasSchoolAccess]
+    permission_classes = [IsAuthenticated, CanViewStudentData, HasSchoolAccess]
 
     @staticmethod
     def _months_in_range(start_date, end_date):
@@ -3540,7 +3544,7 @@ class ReportCardMetaView(ModuleAccessMixin, APIView):
     (last) exam, so exam_ids is required. Admins/managers edit within their school; a
     teacher only for students in a class they are class teacher of."""
     required_module = 'examinations'
-    permission_classes = [IsAuthenticated, HasSchoolAccess]
+    permission_classes = [IsAuthenticated, CanViewStudentData, HasSchoolAccess]
 
     SIGNATURE_KEYS = ('class_teacher', 'principal', 'parent')
 
@@ -3620,7 +3624,7 @@ class ReportCardBulkMetaView(ModuleAccessMixin, APIView):
     belong to one class, so every student must be enrolled in that class. Authorisation
     is checked against each student's own enrollment class, like the single endpoint."""
     required_module = 'examinations'
-    permission_classes = [IsAuthenticated, HasSchoolAccess]
+    permission_classes = [IsAuthenticated, CanViewStudentData, HasSchoolAccess]
 
     MAX_STUDENTS = 200
 

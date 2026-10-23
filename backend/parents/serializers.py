@@ -101,7 +101,7 @@ class ParentRegistrationSerializer(serializers.Serializer):
                 first_name=validated_data.get('first_name', ''),
                 last_name=validated_data.get('last_name', ''),
                 phone=validated_data['phone'],
-                role='STAFF',  # Legacy role field; real role is in membership
+                role=User.Role.PARENT,  # the school membership carries the same role
             )
             user.set_password(validated_data['password'])
             user.save()
@@ -150,6 +150,7 @@ class ParentRegistrationSerializer(serializers.Serializer):
 class ParentChildSerializer(serializers.ModelSerializer):
     parent_name = serializers.SerializerMethodField()
     student_name = serializers.CharField(source='student.name', read_only=True)
+    student_photo_url = serializers.CharField(source='student.photo_url', read_only=True)
     student_roll_number = serializers.SerializerMethodField()
     class_name = serializers.SerializerMethodField()
     school_name = serializers.CharField(source='school.name', read_only=True)
@@ -158,7 +159,7 @@ class ParentChildSerializer(serializers.ModelSerializer):
         model = ParentChild
         fields = [
             'id', 'parent', 'parent_name',
-            'student', 'student_name', 'student_roll_number', 'class_name',
+            'student', 'student_name', 'student_photo_url', 'student_roll_number', 'class_name',
             'school', 'school_name', 'relation',
             'is_primary', 'can_pickup', 'created_at',
         ]
@@ -310,6 +311,7 @@ class ChildOverviewSerializer(serializers.Serializer):
     """Aggregated child dashboard data for a parent."""
     student_id = serializers.IntegerField()
     student_name = serializers.CharField()
+    photo_url = serializers.CharField(allow_blank=True, default='')
     class_name = serializers.CharField()
     roll_number = serializers.CharField()
     school_name = serializers.CharField()

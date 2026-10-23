@@ -171,8 +171,16 @@ def latest_exam(student, segments=None, published_only=True):
 def portal_exam_results(student, segments=None):
     """Published results for the parent and student portals: grouped by exam (not by name,
     so two exams that share a name stay separate), newest first, earlier branches tagged."""
+    from examinations.models import GradeScale
+
     segments = segments or segments_for(student)
+    scales = defaultdict(list)
+    for scale in GradeScale.objects.filter(school_id__in={s.school_id for s in segments}):
+        scales[scale.school_id].append(scale)
+
     result = {}
+    school_of = {}
+    percentages = defaultdict(list)
     for mark in exam_marks(student, segments, published_only=True):
         exam = mark.exam_subject.exam
         entry = result.get(exam.id)
@@ -185,6 +193,10 @@ def portal_exam_results(student, segments=None):
                 'subjects': [],
             }, segments, mark.student_id, mark.school_id)
             result[exam.id] = entry
+            school_of[exam.id] = mark.school_id
+        pct = mark.percentage
+        if pct is not None and not mark.is_absent:
+            percentages[exam.id].append(pct)
         entry['subjects'].append({
             'subject': mark.exam_subject.subject.name,
             'marks_obtained': float(mark.marks_obtained) if mark.marks_obtained is not None else None,
@@ -192,6 +204,12 @@ def portal_exam_results(student, segments=None):
             'is_absent': mark.is_absent,
             'remarks': mark.remarks,
         })
+    # Overall grade = the school's scale applied to the average of the marked subjects.
+    for exam_id, entry in result.items():
+        pcts = percentages[exam_id]
+        entry['grade'] = (
+            GradeScale.grade_for(sum(pcts) / len(pcts), scales[school_of[exam_id]]) if pcts else None
+        )
     return list(result.values())
 
 

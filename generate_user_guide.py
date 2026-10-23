@@ -1214,19 +1214,22 @@ def build_guide():
 
     pdf.section_title("Setting Up Departments")
     pdf.nav_path("Sidebar > HR & Staff > Departments")
-    pdf.step("Click 'Add Department'.")
-    pdf.step("Enter: Department Name (e.g., 'Science', 'Administration', 'Sports').")
-    pdf.step("Add designations within each department (e.g., 'Head of Department', 'Senior Teacher').")
-    pdf.step("Save. Departments are used when adding staff members.")
+    pdf.step("Click 'Add Department'. (The 'Quick Add Common Departments' chips add a department in one click.)")
+    pdf.step("Enter the Department Name (e.g., 'Science', 'Administration', 'Sports') and an optional description.")
+    pdf.step("Click 'Add Department' to save. A success message appears and the department is used when adding staff members.")
+    pdf.step("Designations are managed in the Designations section below the departments on the same page. "
+             "Click 'Add Designation', enter a name (e.g., 'Senior Teacher') and optionally link it to a department.")
 
     pdf.section_title("Adding Staff Members")
-    pdf.nav_path("Sidebar > HR & Staff > Staff Directory > Add Staff")
-    pdf.step("Click 'Add Staff Member'.")
+    pdf.nav_path("Sidebar > HR & Staff > Staff Directory > Full Form")
+    pdf.step("Click 'Full Form'. (Use 'Quick Add' instead to enter only a name, phone, department and designation and "
+             "finish the details later.)")
     pdf.step("Fill in Personal Information: First Name, Last Name, Email, Phone, Gender, Date of Birth.")
-    pdf.step("Fill in Employment Details: Department, Designation, Employee ID, Employment Type "
+    pdf.step("Fill in Employment Details: Department, Designation, Employee ID (generated automatically if left blank), Employment Type "
              "(Full-time/Part-time/Contract), Date of Joining.")
     pdf.step("Add Address and Emergency Contact information.")
-    pdf.step("Save. The staff member appears in the directory.")
+    pdf.step("Click 'Add Staff Member'. A login account is optional and can be created now or later. "
+             "The staff member appears in the directory.")
 
     pdf.section_title("Staff Directory")
     pdf.nav_path("Sidebar > HR & Staff > Staff Directory")
@@ -1238,20 +1241,24 @@ def build_guide():
 
     pdf.section_title("Salary Management")
     pdf.nav_path("Sidebar > HR & Staff > Salary")
-    pdf.step("Define salary structures per designation.")
-    pdf.step("Set components: Basic Pay, HRA, DA, Allowances, Deductions.")
-    pdf.step("Assign salary structures to staff members.")
-    pdf.step("Salary structures feed directly into payroll generation.")
+    pdf.step("Click 'Add Salary Structure' and choose the staff member.")
+    pdf.step("Enter the Basic Salary, then add any Allowances (e.g., house rent) and Deductions (e.g., tax) as name "
+             "and amount pairs with '+ Add'. The summary shows the net salary.")
+    pdf.step("Set 'Effective From' (and optionally 'Effective To'), then click 'Create'.")
+    pdf.step("Salary structures feed directly into payroll generation. A staff member needs one before a payslip "
+             "can be generated.")
 
     pdf.section_title("Payroll Processing")
     pdf.nav_path("Sidebar > HR & Staff > Payroll")
     pdf.step("Select the month and year for payroll.")
-    pdf.step("Click 'Generate Payslips' to create payslips for all active staff.")
+    pdf.step("Click 'Generate Payslips', then 'Generate' to confirm. Payslips are created for active staff who have a "
+             "salary structure; existing payslips for the month are skipped.")
     pdf.step("Review generated payslips. Check amounts, deductions, and net pay.")
     pdf.step("Approve payslips individually or in bulk.")
     pdf.step("Mark approved payslips as 'Paid' once payment is disbursed.")
     pdf.step(
-        "Click the 'Download PDF' button on any payslip to download a printable payslip document. "
+        "Click the 'Download PDF' button on any payslip (or the 'PDF' button on its row) to download a printable "
+        "payslip document, saved as payslip_<Name>_<month>_<year>.pdf. "
         "The PDF includes the school logo (if configured in school settings), school name, address, "
         "contact details, employee information, earnings breakdown, deductions breakdown, net salary, "
         "and signature lines."
@@ -1439,43 +1446,53 @@ def build_guide():
     pdf.section_title("Setting Up Routes")
     pdf.nav_path("Sidebar > Transport > Routes")
     pdf.step("Click 'Add Route'.")
-    pdf.step("Enter: Route Name, Description, Start Location, End Location, Distance (km), "
-             "Estimated Duration.")
-    pdf.step("Save the route.")
-    pdf.step("Click on the route to add Stops.")
-    pdf.step("For each stop, enter: Stop Name, Address, Order, Pickup Time, Drop Time.")
-    pdf.step("Save stops. They appear in the route's stop list in order.")
+    pdf.step("Enter: Route Name, Start Location, End Location and Estimated Duration (minutes) - "
+             "these four are required. Description and Distance (km) are optional. "
+             "You can also click the maps to mark the start and end points.")
+    pdf.step("Click 'Create Route'. The route appears in the list.")
+    pdf.step("Click 'Stops' on the route, then '+ Add Stop'.")
+    pdf.step("For each stop, enter: Stop Name, Order, Pickup Time and Drop Time (all required). "
+             "Address and a map location are optional.")
+    pdf.step("Click 'Add Stop'. Stops are listed in order. Use Edit or Delete on a stop to change it, "
+             "and Duplicate on a route to copy it with all its stops.")
 
     pdf.section_title("Adding Vehicles")
     pdf.nav_path("Sidebar > Transport > Vehicles")
     pdf.step("Click 'Add Vehicle'.")
-    pdf.step("Enter: Registration Number, Vehicle Type (Bus/Van/Mini-Bus), Seating Capacity.")
-    pdf.step("Enter Driver Details: Driver Name, Contact Number.")
-    pdf.step("Assign the vehicle to a route.")
-    pdf.step("Save. The vehicle is now linked to the route.")
+    pdf.step("Enter: Vehicle Number, Vehicle Type (Bus, Van or Car) and Capacity. "
+             "Make / Model is optional.")
+    pdf.step("Under Driver Information enter the Driver Name and Driver Phone (required). "
+             "The Driver License Number is optional.")
+    pdf.step("Choose the Assigned Route this vehicle serves (optional).")
+    pdf.step("Click 'Add Vehicle'. The vehicle appears in the list, linked to the route.")
 
     pdf.section_title("Assigning Students to Routes")
     pdf.nav_path("Sidebar > Transport > Assignments")
-    pdf.step("Click 'Assign Student'.")
-    pdf.step("Select the student from the dropdown.")
-    pdf.step("Select the route and pickup/drop stop.")
-    pdf.step("Save. The student is now assigned to that bus route.")
-    pdf.step("View all assignments in the list. Edit or remove as needed.")
+    pdf.step("Click 'New Assignment'.")
+    pdf.step("Search for a student by name or roll number and click the name. "
+             "Repeat to add several students at once; they appear as chips above the list.")
+    pdf.step("Choose the Route, then the Stop (both required). Choosing a Vehicle is optional; "
+             "only vehicles on that route are listed. Set the Transport Type: Pickup Only, Drop Only or Both.")
+    pdf.step("Click 'Assign'. A student can have one assignment per academic year; students "
+             "who already have one are skipped.")
+    pdf.step("Use the filters to find assignments by route, class or type, and 'Remove' to delete one.")
 
     pdf.section_title("Transport Attendance")
     pdf.nav_path("Sidebar > Transport > Attendance")
-    pdf.step("Select the date and route.")
-    pdf.step("Mark each student as: Picked Up, Not Picked Up, Absent.")
-    pdf.step("Save attendance for the morning pickup.")
-    pdf.step("Repeat for afternoon drop if needed.")
+    pdf.step("Select the date (today by default) and the route. The students assigned to it are listed.")
+    pdf.step("Everyone starts as Boarded. Click 'Not Boarded' or 'Absent' for the students who did not ride.")
+    pdf.step("Click 'Save All'. One record is saved per student, per route, per day; "
+             "saving again for the same day updates it.")
 
     pdf.section_title("Transport Dashboard")
     pdf.nav_path("Sidebar > Transport > Dashboard")
     pdf.body_text("The Transport Dashboard shows:")
     pdf.bullet("Total Routes - Number of active routes")
-    pdf.bullet("Total Vehicles - Fleet size")
-    pdf.bullet("Students Using Transport - Total students assigned to routes")
-    pdf.bullet("Today's Attendance - Today's pickup/drop statistics")
+    pdf.bullet("Total Vehicles - Number of active vehicles")
+    pdf.bullet("Students Assigned - Students with an active transport assignment")
+    pdf.bullet("Today's Attendance - Students whose transport attendance was recorded today")
+    pdf.body_text("Only School Admins and Principals can add or change Transport data; "
+                  "other roles can view it.")
 
     # =========================================================================
     # CHAPTER 10: LIBRARY MODULE
@@ -1553,18 +1570,18 @@ def build_guide():
         "for each class and subject. This structure powers syllabus progress tracking and lesson plan topic selection."
     )
     pdf.step("Select a Class and Subject from the filter dropdowns.")
-    pdf.step("Click 'Add Book' to create a textbook entry. Enter title, author, publisher, edition, and language.")
+    pdf.step("Click 'Add Book'. Choose the Class and Subject, enter the Title, and optionally the Author, Publisher, Edition, Language and Description, then click 'Add Book'. The toast 'Book created' confirms it.")
     pdf.step("Click the book to view its chapters and topics in the tree view.")
-    pdf.step("Add chapters and topics manually, or use 'Import TOC' for bulk import.")
+    pdf.step("Click 'Add Chapter' (Title, Chapter Number, Description) and, inside a chapter, 'Add Topic' (Title, Topic Number, Estimated Periods, Description). Or use 'Import Table of Contents' for bulk import.")
 
     pdf.sub_section("Importing Table of Contents")
-    pdf.body_text("The Import TOC feature supports two modes:")
-    pdf.step("Type / Paste: Manually type or paste the table of contents text with indentation for chapter/topic structure.")
+    pdf.body_text("The Import Table of Contents window has two tabs:")
+    pdf.step("Manual Entry: type or paste the table of contents text with indentation for chapter/topic structure, then click 'Next: Review'.")
     pdf.step(
-        "Upload Photo: Take or upload a photo of the book's printed TOC page. "
-        "The system uses OCR (Google Vision) with language-aware text extraction."
+        "Upload Photo: upload a photo of the book's printed contents page. "
+        "The system extracts the text with OCR so you can review it."
     )
-    pdf.step("After OCR extraction, review and edit the text before clicking 'Import' to create chapters and topics.")
+    pdf.step("Review and edit the chapters and topics, then apply them to create the structure.")
     pdf.info_box("Multi-Language Support",
         "The OCR feature supports all configured languages. For non-English books, the system uses the book's "
         "language setting to optimize text recognition. The editor displays RTL direction automatically for supported languages."
@@ -1578,28 +1595,28 @@ def build_guide():
 
     pdf.section_title("Creating Lesson Plans")
     pdf.nav_path("Sidebar > Planning & Delivery > Lesson Plans")
-    pdf.step("Click 'Create Lesson Plan'.")
-    pdf.step("Select: Class, Subject (from assigned subjects).")
-    pdf.step("Enter: Title, Description, Learning Objectives.")
-    pdf.step("Set: Lesson Date, Duration (in minutes).")
-    pdf.step("Add: Materials Needed, Teaching Methods.")
-    pdf.step("Save as 'Draft' or 'Publish' immediately.")
-    pdf.step("Published lesson plans are visible to other teachers for reference.")
+    pdf.body_text("This page is not available to the Manager role.")
+    pdf.step("Click 'Add Lesson Plan'. This opens the bulk wizard; click 'Create single lesson plan' for one plan.")
+    pdf.step("Choose Minimal (Class, Subject, chapters/topics, Lesson Date, Teacher; saved as a Draft with an automatic title) or Standard (full details).")
+    pdf.step("In Standard mode enter Title, Description and Objectives, then set Duration (minutes), Materials Needed and Teaching Methods.")
+    pdf.step("Standard mode also has a Status of Draft or Published. Click 'Create Lesson Plan'; the toast 'Lesson plan created successfully!' confirms it.")
+    pdf.step("A Draft can be published later with the 'Publish' button on its row.")
 
     pdf.section_title("Creating Assignments")
     pdf.nav_path("Sidebar > Academics > Assignments")
     pdf.step("Click 'Create Assignment'.")
-    pdf.step("Select Class and Subject.")
-    pdf.step("Enter: Title, Description, Instructions.")
-    pdf.step("Set: Due Date, Maximum Marks.")
-    pdf.step("Define submission criteria (file types, word count, etc.).")
-    pdf.step("Save. The assignment appears in student portals immediately.")
+    pdf.step("Enter the Title, then select Class, Subject and Teacher.")
+    pdf.step("Choose the Assignment Type: Homework, Project, Classwork or Lab. Diary entries use 'Create Daily Diary' instead.")
+    pdf.step("Set the Due Date (required when 'Require student submission' is on) and Total Marks; turn 'Allow file attachments' on or off.")
+    pdf.step("Enter the Description (required) and Instructions.")
+    pdf.step("Click 'Create Assignment'. New assignments start as Draft; click 'Publish' on the row to make them appear in student portals.")
 
     pdf.section_title("Reviewing Submissions")
-    pdf.step("Click on an assignment to see student submissions.")
-    pdf.step("For each submission, you can: View the submitted work, add comments, and assign a grade.")
-    pdf.step("Use bulk grading to score multiple submissions quickly.")
-    pdf.step("Grades feed into the student's academic performance record.")
+    pdf.nav_path("Sidebar > Academics > Assignments > Submissions")
+    pdf.step("Click the number in the Submissions column of an assignment (or the 'Submissions' button in card view).")
+    pdf.step("For each submission you can view the submitted text or attached file, enter Marks and Feedback, and click 'Grade' then 'Save'.")
+    pdf.step("Graded submissions can be re-graded or sent back to the student with 'Return'.")
+    pdf.step("The cards at the top count Total, Submitted, Graded, Returned, Pending and Late submissions.")
 
     # =========================================================================
     # CHAPTER 12: NOTIFICATIONS
@@ -1615,25 +1632,27 @@ def build_guide():
     pdf.nav_path("Sidebar > Notifications")
     pdf.step("Click the Notification Bell icon in the top bar for a quick dropdown (shows 8 most recent). The bell bounces when new notifications arrive.")
     pdf.step("Or navigate to 'Notifications' in the sidebar for the full Inbox tab with pagination.")
-    pdf.step("Unread notifications are highlighted with a blue dot. Click to mark as read.")
+    pdf.step("Unread notifications stand out with a bold white card; click a notification to mark it as read (it also opens the related page, such as Fee Collection). Older ones are grouped under Today, Yesterday and Earlier.")
     pdf.step("Use 'Mark all read' (with confirmation) to clear all unread notifications at once.")
-    pdf.step("Filter by event type (Absence, Fee Due, Exam, Transport Update, etc.) using the dropdown.")
+    pdf.step("Filter with the 'All Types' dropdown (Absence, Fee Due, Exam Result, Transport Update, etc.) or tick 'Unread only'.")
 
     pdf.section_title("Creating Notification Templates (Admin)")
     pdf.nav_path("Sidebar > Notifications > Templates Tab")
     pdf.step("Switch to the 'Templates' tab.")
-    pdf.step("Click 'Create Template'.")
-    pdf.step("Enter: Template Name, Subject, Body (supports variables like {student_name}).")
-    pdf.step("Save. Templates can be reused when sending notifications.")
+    pdf.step("Click 'New Template'.")
+    pdf.step("Enter a Template Name, pick the Event Type and Channel, add an optional Subject, and write the Message body (placeholders use double braces, like {{student_name}}).")
+    pdf.step("Click 'Save'. Use Edit, Duplicate, Preview or Delete on any row later; untick 'Active' to hide a template from the Send tab. Templates marked 'Shared' belong to every school and cannot be changed.")
 
     pdf.section_title("Sending Notifications (Admin)")
     pdf.nav_path("Sidebar > Notifications > Send Tab")
     pdf.step("Switch to the 'Send' tab.")
-    pdf.step("Choose mode: 'Broadcast' to send to all users of a role, or 'Single' for one recipient.")
-    pdf.step("In Broadcast mode, select a role group: All Parents, All Teachers, All Staff, Principals, Managers, Accountants, or All Students.")
+    pdf.step("Choose the mode: 'Broadcast to Group' for everyone in a role, or 'Single Recipient' for one person (phone, email or user ID).")
+    pdf.step("In Broadcast mode, select a group: All Parents, All Teachers, All Staff, All Admins, Principals, Managers, Accountants, or All Students. Optionally narrow parents or students to one session class.")
     pdf.step("Optionally pick an existing template to pre-fill the message, or compose a custom message.")
     pdf.step("Choose the channel: In-App (also delivered as a mobile push notification) or Email.")
-    pdf.step("Click 'Send'. The system shows how many notifications were sent, failed, or skipped.")
+    pdf.step("Click 'Review & Send Broadcast', check the estimated recipients, then 'Confirm Send' (Single mode: 'Send Notification'). If the text still contains {{placeholders}} a warning appears first; manual sends do not fill them in. A message shows how many were sent, skipped or failed. 'Test Send to Me' sends a copy to your own inbox.")
+    pdf.info_box("Run Now buttons", "At the top of the Send tab, 'Send Fee Reminders Now', 'Generate Daily Report Now' and "
+                 "'Remind Teachers to Mark Attendance' fire this school's automatic notifications on demand.")
 
     pdf.section_title("Notification Analytics (Admin)")
     pdf.nav_path("Sidebar > Notifications > Analytics Tab")
@@ -1706,10 +1725,10 @@ def build_guide():
     pdf.section_title("Starting a New Conversation")
     pdf.nav_path("Messages > New Message button")
     pdf.step("Click the 'New Message' button (top of the thread list).")
-    pdf.step("Select a recipient from the dropdown. Recipients are grouped by role (Teachers, Parents, Students, Staff).")
+    pdf.step("Pick who to write to using the Staff, Parent or Student tabs, then search for the name in the 'To' box.")
     pdf.step("For teacher-parent/student conversations, the student context is automatically set based on the recipient.")
     pdf.step("Optionally enter a subject line for the conversation.")
-    pdf.step("Type your message and click 'Send'.")
+    pdf.step("Type your message and click 'Send Message'.")
     pdf.info_box("Thread Reuse", "If you already have an active conversation with the same person "
                  "(and same student context), your new message will be added to the existing thread "
                  "instead of creating a duplicate.")
@@ -1718,7 +1737,7 @@ def build_guide():
     pdf.step("Click on any thread in the thread list to open the conversation.")
     pdf.step("All messages in the thread are displayed chronologically (oldest first).")
     pdf.step("Your messages appear on the right side, the other person's on the left.")
-    pdf.step("Type your reply in the input box at the bottom and click 'Send' or press Enter.")
+    pdf.step("Type your reply in the box at the bottom, then press Enter or click the paper-plane button (Shift+Enter starts a new line).")
     pdf.step("The thread is automatically marked as read when you open it.")
 
     pdf.section_title("Unread Message Indicators")
@@ -1750,8 +1769,10 @@ def build_guide():
     pdf.bullet("Recent notifications from the school")
 
     pdf.section_title("Viewing Child's Information")
-    pdf.step("Click on a child's name to see their overview page.")
-    pdf.step("The overview shows: Profile photo, class, roll number, quick stats.")
+    pdf.step("On the dashboard, click 'Overview' on a child's card to open their overview page.")
+    pdf.step("The header shows the child's photo, name, class and roll number.")
+    pdf.step("Four cards summarise: Attendance Rate, Fees (amount due, or 'Nothing due'), Last Exam and Days Present.")
+    pdf.step("Under 'Details', choose Attendance Calendar, Fee Details, Timetable, Exam Schedule or Exam Results for the full pages.")
 
     pdf.sub_section("Attendance")
     pdf.nav_path("Parent Portal > Child > Attendance")
@@ -1787,16 +1808,17 @@ def build_guide():
     pdf.step("See subjects, teachers, and period timings for each day.")
 
     pdf.sub_section("Exam Results")
-    pdf.nav_path("Parent Portal > Child > Results")
+    pdf.nav_path("Parent Portal > Child > Exam Results")
     pdf.step("View exam marks and grades (once published by the school).")
-    pdf.step("See subject-wise performance and GPA.")
-    pdf.step("Download report cards as PDF.")
+    pdf.step("See subject-wise marks, percentage and grade for each exam.")
 
     pdf.section_title("Applying for Leave")
     pdf.nav_path("Parent Portal > Leave Application")
-    pdf.step("Click 'Leave Requests' in the sidebar, then the 'Apply for Leave' tab.")
-    pdf.step("Select the child, enter: From Date, To Date, Reason.")
-    pdf.step("Submit the application. Track its status (Pending, Approved, Rejected).")
+    pdf.step("Click 'Leave Requests' in the sidebar. The 'Apply for Leave' tab opens first.")
+    pdf.step("Select the child, then enter Start Date, End Date and Reason. A supporting document link is optional.")
+    pdf.step("Click 'Submit Leave Request'. The message 'Leave request submitted successfully.' appears.")
+    pdf.step("Open the 'My Requests' tab to track the status (Pending, Approved, Rejected or Cancelled) and read the school's remarks.")
+    pdf.step("A request that is still Pending can be cancelled with 'Cancel'.")
 
     pdf.section_title("Messages")
     pdf.nav_path("Sidebar > Messages")
@@ -1837,10 +1859,11 @@ def build_guide():
 
     pdf.section_title("My Assignments")
     pdf.nav_path("Student Portal > Assignments")
-    pdf.step("View all assignments from your teachers.")
-    pdf.step("See due dates and submission status.")
-    pdf.step("Submit your work before the deadline.")
-    pdf.step("View grades and teacher feedback after review.")
+    pdf.step("The page lists every assignment from your teachers with its subject, type, due date and status.")
+    pdf.step("Diary entries are for reading only; they have no Submit button.")
+    pdf.step("Click 'Submit' on an open assignment, type your answer in Submission Text (required), and optionally add a link to your file and a file name.")
+    pdf.step("Click 'Submit Assignment'. The message 'Assignment submitted successfully!' appears. Late work is marked Late.")
+    pdf.step("After the teacher grades it, the card shows your marks and feedback. Closed assignments can no longer be submitted.")
 
     pdf.section_title("My Fees")
     pdf.nav_path("Student Portal > Fees")
@@ -1849,9 +1872,8 @@ def build_guide():
 
     pdf.section_title("My Results")
     pdf.nav_path("Student Portal > Results")
-    pdf.step("View your exam marks and grades.")
-    pdf.step("See subject-wise performance.")
-    pdf.step("Download report cards as PDF.")
+    pdf.step("Each published exam appears as a card with your total, percentage and grade. Click its title to open or close the subject table.")
+    pdf.step("The table lists marks, total marks, percentage and a Pass or Fail badge for each subject; an absent paper shows 'Absent'.")
 
     pdf.section_title("My Profile")
     pdf.nav_path("Student Portal > My Profile")
@@ -1870,8 +1892,8 @@ def build_guide():
     pdf.step("Click Send or press Enter to submit your question.")
     pdf.step("The AI will respond with explanations, examples, and study tips tailored to your curriculum.")
     pdf.step("Your conversation history is saved and can be reviewed later.")
-    pdf.step("Use the suggestion chips (e.g., 'Explain a concept', 'Help with homework') for quick prompts.")
-    pdf.step("Click 'Clear History' to start a fresh conversation.")
+    pdf.step("Use the suggestion chips (e.g., 'Help me understand fractions', 'Explain photosynthesis') for quick prompts.")
+    pdf.step("Click 'Clear Chat' to start a fresh conversation.")
     pdf.info_box("Daily Limit", "Students can send up to 30 messages per day to the AI Study Helper. "
                  "The counter resets every 24 hours. This ensures fair usage for all students.")
     pdf.warning_box("The AI Study Helper is designed for academic topics only. Questions about personal information, "
@@ -2034,10 +2056,11 @@ def build_guide():
     )
     pdf.step("Navigate to Settings and click the 'Users' tab.")
     pdf.step("Click 'Add User' to open the user creation form.")
-    pdf.step("Fill in Username (required), Email, Password, and select a Role from the dropdown.")
-    pdf.step("The role dropdown only shows roles you are allowed to create based on your role (see the table above).")
+    pdf.step("Fill in First name, Last name, Username (required), Email, Password, Confirm password, select a Role from the dropdown, and add a Phone number if you want.")
+    pdf.step("The role dropdown only shows roles you are allowed to create based on your role.")
     pdf.step("Click 'Create User' to save. A school membership is automatically created.")
     pdf.step("To edit a user, click 'Edit' in the actions column. You can change name, email, role, and phone.")
+    pdf.step("To reset a forgotten password, click 'Reset Password' on the user's row. Choose 'Set a new password now' and type the New Password (at least 8 characters) twice, or choose 'Email a reset link' (only available when the user has an email address), then press 'Reset Password' or 'Send Email'.")
     pdf.step("To deactivate a user, click 'Deactivate'. The user will no longer be able to log in.")
     pdf.step("To reactivate, click 'Activate' on an inactive user.")
 
@@ -2190,23 +2213,28 @@ def build_guide():
 
     pdf.section_title("Items & Stock")
     pdf.nav_path("Sidebar > Inventory > Items")
-    pdf.step("Open the Categories and Vendors tabs first and add the categories and vendors you use.")
+    pdf.step("Click the 'Categories' and 'Vendors' buttons at the top first and add the categories and vendors you use.")
     pdf.step("Add an item: Name, Category, Unit (Pieces, Packets, Boxes, Kilograms, Litres, Sets, Reams, Dozens, Metres), Current Stock, Minimum Stock, Unit Price and Storage Location.")
     pdf.step("Filter the list by category and stock status: In Stock, Low Stock or Out of Stock.")
     pdf.step("Use 'AI Suggest' to get suggested items for the kind of school you describe, select the ones you want and add them.")
 
     pdf.section_title("Stock Transactions")
     pdf.nav_path("Sidebar > Inventory > Transactions")
-    pdf.step("Press 'Record Transaction'.")
-    pdf.step("Choose the type: Purchase, Issue, Return, Adjustment or Disposal.")
-    pdf.step("Select the Item, enter quantity, unit price, date, vendor, reference or invoice number and remarks, then save.")
-    pdf.step("Filter the history by type and date range.")
+    pdf.body_text("School Admins and Principals record stock movements here; other roles with inventory access can only view the history. Issues and Returns are not entered by hand: they are created automatically when you assign an item or mark it returned (see Item Assignments).")
+    pdf.step("Press '+ Record Transaction'.")
+    pdf.step("Choose the type: Purchase (new stock from a vendor), Adjustment (correct a stock count) or Disposal (damaged or expired items).")
+    pdf.step("Select the Item. Its current stock is shown in the list and its unit price is filled in for you.")
+    pdf.step("Enter the Quantity. For a Disposal enter a positive number; the stock is reduced for you. For an Adjustment use a negative number to reduce stock. Stock can never go below zero.")
+    pdf.step("Choose the Vendor (Purchase only), set the Date, add a Reference number such as an invoice or PO, and any Remarks, then press 'Record Transaction'. A 'Transaction recorded' message appears and the item's stock updates.")
+    pdf.step("Filter the history by Type and by From and To dates. Issue and Return rows created by assignments appear here too.")
 
     pdf.section_title("Item Assignments")
     pdf.nav_path("Sidebar > Inventory > Assignments")
-    pdf.step("Press 'Assign Item', choose the item, the person and the quantity, and add notes (for example a serial number).")
-    pdf.step("When the item comes back, press 'Return' and choose its condition: New, Good, Fair or Poor.")
-    pdf.step("Filter assignments by Active or Returned.")
+    pdf.body_text("School Admins and Principals assign items and mark them returned. Accountants, Teachers and Staff can only view assignments (Teachers and Staff see just the items assigned to them).")
+    pdf.step("Press '+ Assign Item'.")
+    pdf.step("Choose the Item (only items in stock are listed) and the person under 'Assign To' (active staff accounts), set the Quantity, pick the item's Condition (New, Good, Fair or Poor) and add notes such as a serial number, then press 'Assign'. The assignment is dated today, the stock is reduced and an Issue transaction is recorded.")
+    pdf.step("Switch between the 'Active' and 'Returned' tabs, and search by person or item name.")
+    pdf.step("When the item comes back, press 'Return' on its row, choose its condition and press 'Confirm Return'. The stock is restored and a Return transaction is recorded.")
 
     pdf.section_title("Reorder Prediction")
     pdf.nav_path("Sidebar > Inventory > Reorder Prediction")

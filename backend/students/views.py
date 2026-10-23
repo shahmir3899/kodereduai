@@ -64,6 +64,8 @@ class ClassViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet
     required_module = 'students'
     queryset = Class.objects.all()
     permission_classes = [IsAuthenticated, CanViewStudentRecords, HasSchoolAccess]
+    # Class names/sections are not student data; the Manager's pickers need them.
+    extra_read_roles = ('MANAGER',)
 
     def destroy(self, request, *args, **kwargs):
         # Student.class_obj cascades, so deleting a class used to erase every
@@ -934,7 +936,7 @@ class StudentViewSet(ModuleAccessMixin, TenantQuerySetMixin, AuditedDeleteMixin,
             email=email,
             first_name=student.name.split()[0] if student.name else '',
             last_name=' '.join(student.name.split()[1:]) if student.name and len(student.name.split()) > 1 else '',
-            role='STAFF',  # base role; school-level role is STUDENT via membership
+            role=User.Role.STUDENT,  # the school membership carries the same role
             school_id=student.school_id,
         )
         user.set_password(password)
@@ -1019,7 +1021,7 @@ class StudentViewSet(ModuleAccessMixin, TenantQuerySetMixin, AuditedDeleteMixin,
                     email=student.guardian_email or '',
                     first_name=first_name,
                     last_name=last_name,
-                    role='STAFF',  # base role; school-level role is STUDENT via membership
+                    role=User.Role.STUDENT,  # the school membership carries the same role
                     school_id=school_id,
                 )
                 user.set_password(default_password)
@@ -1385,9 +1387,13 @@ class StudentRegistrationView(APIView):
             return Response({'error': 'This student already has a portal account.'}, status=status.HTTP_400_BAD_REQUEST)
 
         # Create user + profile + membership
+        # The email doubles as the username: an invited student registers with just an email
+        # and a password (create_user() without a username raised, so this path never worked).
         user = User.objects.create_user(
+            username=email,
             email=email,
             password=password,
+            role=User.Role.STUDENT,
             first_name=full_name.split()[0] if full_name else '',
             last_name=' '.join(full_name.split()[1:]) if full_name and len(full_name.split()) > 1 else '',
         )
@@ -1782,22 +1788,22 @@ class StudentAssignmentsView(APIView):
                     'title': a.title,
                     'description': a.description,
                     'subject': a.subject.name,
-                    'teacher': a.teacher.user.get_full_name() if a.teacher else None,
+                    'teacher': (a.teacher.user.get_full_name() if a.teacher.user_id else a.teacher.full_name) if a.teacher else None,  # staff without a login have no user
                     'assignment_type': a.assignment_type,
                     'requires_submission': a.requires_submission,
                     'due_date': a.due_date.isoformat() if a.due_date else None,
-                    'total_marks': float(a.total_marks) if a.total_marks else None,
+                    'total_marks': float(a.total_marks) if a.total_marks is not None else None,
                     'status': a.status,
                     'submission': {
                         'id': submission.id,
                         'status': submission.status,
                         'submitted_at': submission.submitted_at.isoformat(),
-                        'marks_obtained': float(submission.marks_obtained) if submission.marks_obtained else None,
+                        'marks_obtained': float(submission.marks_obtained) if submission.marks_obtained is not None else None,
                         'feedback': submission.feedback,
                     } if submission else None,
                 })
             return Response(data)
-        except Exception:
+        except ImportError:  # LMS app not installed: nothing to list
             return Response([])
 
     def post(self, request):
@@ -1934,7 +1940,12 @@ class StudyHelperView(APIView):
         except Exception as e:
             import logging
             logging.getLogger(__name__).error(f"Study helper error: {e}")
-            response_text = "I'm sorry, I encountered an error. Please try again."
+            # Not a 200 with an apology as the "answer": the page would show it as a normal
+            # reply while nothing was saved, so a broken AI looked like a working one.
+            return Response(
+                {'error': 'The study helper is unavailable right now. Please try again in a moment.'},
+                status=503,
+            )
 
         return Response({'response': response_text})
 

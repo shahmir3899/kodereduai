@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { Fragment, useState, useMemo } from 'react'
 import Modal from '../../components/ui/Modal'
 import Field from '../../components/ui/Field'
 import { TONE } from '../../components/ui/statusTones'
@@ -8,6 +8,9 @@ import EmptyState from '../../components/ui/EmptyState'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { transportApi } from '../../services/api'
 import { useAuth } from '../../contexts/AuthContext'
+import { useToast } from '../../components/Toast'
+import { getErrorMessage } from '../../utils/errorUtils'
+import { canManageTransport } from './transportAccess'
 import LocationPickerMap from '../../components/LocationPickerMap'
 import RouteMapView from '../../components/RouteMapView'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
@@ -54,13 +57,16 @@ const emptyStopForm = {
 }
 
 export default function RoutesPage() {
-  const { user } = useAuth()
+  const { effectiveRole } = useAuth()
+  const canManage = canManageTransport(effectiveRole)
   const queryClient = useQueryClient()
+  const toast = useToast()
 
   const [showModal, setShowModal] = useState(false)
   const [editingRoute, setEditingRoute] = useState(null)
   const [routeForm, setRouteForm] = useState(emptyRouteForm)
   const [deleteConfirm, setDeleteConfirm] = useState(null)
+  const [deleteStopConfirm, setDeleteStopConfirm] = useState(null)
   const [expandedRoute, setExpandedRoute] = useState(null)
   const [view, setView] = useViewPreference('transport-routes')
   const [showStopModal, setShowStopModal] = useState(false)
@@ -87,6 +93,7 @@ export default function RoutesPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['transport-routes'] })
       queryClient.invalidateQueries({ queryKey: ['transport-dashboard'] })
+      toast.showSuccess('Route created')
       closeRouteModal()
     },
   })
@@ -96,6 +103,7 @@ export default function RoutesPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['transport-routes'] })
       queryClient.invalidateQueries({ queryKey: ['transport-dashboard'] })
+      toast.showSuccess('Route updated')
       closeRouteModal()
     },
   })
@@ -105,6 +113,7 @@ export default function RoutesPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['transport-routes'] })
       queryClient.invalidateQueries({ queryKey: ['transport-dashboard'] })
+      toast.showSuccess('Route deleted')
       setDeleteConfirm(null)
     },
   })
@@ -114,7 +123,9 @@ export default function RoutesPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['transport-routes'] })
       queryClient.invalidateQueries({ queryKey: ['transport-dashboard'] })
+      toast.showSuccess('Route duplicated')
     },
+    onError: (err) => toast.showError(getErrorMessage(err, 'Failed to duplicate route')),
   })
 
   // Stop mutations
@@ -122,6 +133,8 @@ export default function RoutesPage() {
     mutationFn: (data) => transportApi.createStop(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['transport-stops', expandedRoute] })
+      queryClient.invalidateQueries({ queryKey: ['transport-routes'] })
+      toast.showSuccess('Stop added')
       closeStopModal()
     },
   })
@@ -130,6 +143,7 @@ export default function RoutesPage() {
     mutationFn: ({ id, data }) => transportApi.updateStop(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['transport-stops', expandedRoute] })
+      toast.showSuccess('Stop updated')
       closeStopModal()
     },
   })
@@ -138,11 +152,18 @@ export default function RoutesPage() {
     mutationFn: (id) => transportApi.deleteStop(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['transport-stops', expandedRoute] })
+      queryClient.invalidateQueries({ queryKey: ['transport-routes'] })
+      toast.showSuccess('Stop deleted')
+      setDeleteStopConfirm(null)
     },
   })
 
   const routes = routesData?.data?.results || routesData?.data || []
   const stops = stopsData?.data?.results || stopsData?.data || []
+  const sortedStops = useMemo(
+    () => [...stops].sort((a, b) => (a.stop_order || 0) - (b.stop_order || 0)),
+    [stops],
+  )
 
   // Route modal handlers
   const openAddRouteModal = () => {
@@ -174,8 +195,11 @@ export default function RoutesPage() {
     setRouteForm(emptyRouteForm)
   }
 
+  const routeFormValid = !!routeForm.name.trim() && !!routeForm.start_location.trim()
+    && !!routeForm.end_location.trim() && !!String(routeForm.estimated_duration_minutes).trim()
+
   const handleRouteSubmit = () => {
-    if (!routeForm.name.trim()) return
+    if (!routeFormValid) return
 
     const payload = {
       ...routeForm,
@@ -196,7 +220,7 @@ export default function RoutesPage() {
     setStopRouteId(routeId)
     setStopForm({
       ...emptyStopForm,
-      stop_order: (stops.length + 1).toString(),
+      stop_order: (Math.max(0, ...stops.map((s) => s.stop_order || 0)) + 1).toString(),
     })
     setShowStopModal(true)
   }
@@ -226,9 +250,12 @@ export default function RoutesPage() {
   useEscapeKey(closeRouteModal, showModal)
   useEscapeKey(() => setDeleteConfirm(null), !!deleteConfirm)
   useEscapeKey(closeStopModal, showStopModal)
+  useEscapeKey(() => setDeleteStopConfirm(null), !!deleteStopConfirm)
+
+  const stopFormValid = !!stopForm.name.trim() && !!stopForm.pickup_time && !!stopForm.drop_time
 
   const handleStopSubmit = () => {
-    if (!stopForm.name.trim()) return
+    if (!stopFormValid) return
 
     const payload = {
       ...stopForm,
@@ -258,7 +285,7 @@ export default function RoutesPage() {
         <p className="text-xs text-gray-400 py-2">No stops added yet.</p>
       ) : (
         <div className="space-y-2 mt-2">
-          {stops.sort((a, b) => (a.stop_order || 0) - (b.stop_order || 0)).map((stop) => (
+          {sortedStops.map((stop) => (
             <div key={stop.id} className="flex items-center justify-between bg-white p-2 rounded border border-gray-100">
               <div className="min-w-0">
                 <p className="text-xs font-medium text-gray-900">#{stop.stop_order} {stop.name}</p>
@@ -266,8 +293,8 @@ export default function RoutesPage() {
                 <p className="text-xs text-gray-400">Pickup: {stop.pickup_time || '--'} | Drop: {stop.drop_time || '--'}</p>
               </div>
               <div className="flex gap-2 flex-none ml-2">
-                <button onClick={() => openEditStopModal(stop)} className="text-xs text-blue-600 font-medium">Edit</button>
-                <button onClick={() => deleteStopMutation.mutate(stop.id)} className="text-xs text-red-600 font-medium">Delete</button>
+                {canManage && <button onClick={() => openEditStopModal(stop)} className="text-xs text-blue-600 font-medium">Edit</button>}
+                {canManage && <button onClick={() => setDeleteStopConfirm(stop)} className="text-xs text-red-600 font-medium">Delete</button>}
               </div>
             </div>
           ))}
@@ -290,11 +317,11 @@ export default function RoutesPage() {
 
   return (
     <div>
-      <PageHeader title="Transport Routes" subtitle="Manage routes and their stops" className="mb-6" actions={<>
-<button onClick={openAddRouteModal} className="btn btn-primary">
+      <PageHeader title="Transport Routes" subtitle="Manage routes and their stops" className="mb-6" actions={canManage ? (
+        <button onClick={openAddRouteModal} className="btn btn-primary">
           Add Route
         </button>
-</>} />
+      ) : null} />
 
       <div className="card">
         {isLoading ? (
@@ -319,7 +346,7 @@ export default function RoutesPage() {
                 Assign Students
               </div>
             </div>
-            <p className="text-sm text-gray-500 mt-3">No routes yet. Click "Add Route" to create your first one.</p>
+            <p className="text-sm text-gray-500 mt-3">No routes yet.{canManage && ' Click "Add Route" to create your first one.'}</p>
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mt-3">
               <p className="text-xs text-blue-700">
                 <span className="font-semibold">Tip:</span> Add pickup/drop-off stops with times to build your bus schedule.
@@ -341,7 +368,12 @@ export default function RoutesPage() {
                   meta={`${route.start_location || 'Start'} → ${route.end_location || 'End'}`}
                   open={expandedRoute === route.id}
                   onToggle={() => toggleExpand(route.id)}
-                  onAddStop={() => openAddStopModal(route.id)}
+                  onAddStop={canManage ? () => openAddStopModal(route.id) : undefined}
+                  actions={canManage ? [
+                    { label: 'Edit', onClick: () => openEditRouteModal(route) },
+                    { label: 'Duplicate', tone: 'success', onClick: () => duplicateRouteMutation.mutate(route.id), disabled: duplicateRouteMutation.isPending },
+                    { label: 'Delete', tone: 'danger', onClick: () => setDeleteConfirm(route) },
+                  ] : []}
                   renderStops={() => renderStopsForRoute(route)}
                   stats={[
                     ...(route.distance_km ? [{ label: 'Distance', value: `${route.distance_km} km` }] : []),
@@ -370,8 +402,8 @@ export default function RoutesPage() {
                 </thead>
                 <tbody className="divide-y divide-gray-100">
                   {routes.map((route) => (
-                    <>
-                      <tr key={route.id} className="hover:bg-gray-50">
+                    <Fragment key={route.id}>
+                      <tr className="hover:bg-gray-50">
                         <td className="px-4 py-3 text-sm font-medium text-gray-900">{route.name}</td>
                         <td className="px-4 py-3 text-sm text-gray-500">{route.start_location || '--'}</td>
                         <td className="px-4 py-3 text-sm text-gray-500">{route.end_location || '--'}</td>
@@ -386,41 +418,47 @@ export default function RoutesPage() {
                           >
                             {expandedRoute === route.id ? 'Hide Stops' : 'Stops'}
                           </button>
-                          <button
-                            onClick={() => openEditRouteModal(route)}
-                            className="text-sm text-blue-600 hover:text-blue-800 font-medium mr-3"
-                          >
-                            Edit
-                          </button>
-                          <button
-                            onClick={() => duplicateRouteMutation.mutate(route.id)}
-                            disabled={duplicateRouteMutation.isPending}
-                            className="text-sm text-emerald-600 hover:text-emerald-800 font-medium mr-3"
-                          >
-                            Duplicate
-                          </button>
-                          <button
-                            onClick={() => setDeleteConfirm(route)}
-                            className="text-sm text-red-600 hover:text-red-800 font-medium"
-                          >
-                            Delete
-                          </button>
+                          {canManage && (
+                            <>
+                              <button
+                                onClick={() => openEditRouteModal(route)}
+                                className="text-sm text-blue-600 hover:text-blue-800 font-medium mr-3"
+                              >
+                                Edit
+                              </button>
+                              <button
+                                onClick={() => duplicateRouteMutation.mutate(route.id)}
+                                disabled={duplicateRouteMutation.isPending}
+                                className="text-sm text-emerald-600 hover:text-emerald-800 font-medium mr-3"
+                              >
+                                Duplicate
+                              </button>
+                              <button
+                                onClick={() => setDeleteConfirm(route)}
+                                className="text-sm text-red-600 hover:text-red-800 font-medium"
+                              >
+                                Delete
+                              </button>
+                            </>
+                          )}
                         </td>
                       </tr>
 
                       {/* Expanded stops row */}
                       {expandedRoute === route.id && (
-                        <tr key={`stops-${route.id}`}>
+                        <tr>
                           <td colSpan={8} className="px-4 py-0">
                             <div className="bg-gray-50 rounded-lg p-4 my-2 border border-gray-200">
                               <div className="flex items-center justify-between mb-3">
                                 <h4 className="text-sm font-semibold text-gray-700">Stops for {route.name}</h4>
-                                <button
-                                  onClick={() => openAddStopModal(route.id)}
-                                  className="text-sm text-primary-600 hover:text-primary-700 font-medium"
-                                >
-                                  + Add Stop
-                                </button>
+                                {canManage && (
+                                  <button
+                                    onClick={() => openAddStopModal(route.id)}
+                                    className="text-sm text-primary-600 hover:text-primary-700 font-medium"
+                                  >
+                                    + Add Stop
+                                  </button>
+                                )}
                               </div>
 
                               {!stopsLoading && <RouteMapView route={route} stops={stops} />}
@@ -444,7 +482,7 @@ export default function RoutesPage() {
                                     </tr>
                                   </thead>
                                   <tbody className="divide-y divide-gray-100">
-                                    {stops.sort((a, b) => (a.stop_order || 0) - (b.stop_order || 0)).map((stop) => (
+                                    {sortedStops.map((stop) => (
                                       <tr key={stop.id} className="hover:bg-white">
                                         <td className="px-3 py-2 text-sm text-gray-500">{stop.stop_order || '--'}</td>
                                         <td className="px-3 py-2 text-sm font-medium text-gray-900">{stop.name}</td>
@@ -452,18 +490,22 @@ export default function RoutesPage() {
                                         <td className="px-3 py-2 text-sm text-gray-500">{stop.pickup_time || '--'}</td>
                                         <td className="px-3 py-2 text-sm text-gray-500">{stop.drop_time || '--'}</td>
                                         <td className="px-3 py-2 text-right">
-                                          <button
-                                            onClick={() => openEditStopModal(stop)}
-                                            className="text-xs text-blue-600 hover:text-blue-800 font-medium mr-2"
-                                          >
-                                            Edit
-                                          </button>
-                                          <button
-                                            onClick={() => deleteStopMutation.mutate(stop.id)}
-                                            className="text-xs text-red-600 hover:text-red-800 font-medium"
-                                          >
-                                            Delete
-                                          </button>
+                                          {canManage && (
+                                            <>
+                                              <button
+                                                onClick={() => openEditStopModal(stop)}
+                                                className="text-xs text-blue-600 hover:text-blue-800 font-medium mr-2"
+                                              >
+                                                Edit
+                                              </button>
+                                              <button
+                                                onClick={() => setDeleteStopConfirm(stop)}
+                                                className="text-xs text-red-600 hover:text-red-800 font-medium"
+                                              >
+                                                Delete
+                                              </button>
+                                            </>
+                                          )}
                                         </td>
                                       </tr>
                                     ))}
@@ -474,7 +516,7 @@ export default function RoutesPage() {
                           </td>
                         </tr>
                       )}
-                    </>
+                    </Fragment>
                   ))}
                 </tbody>
               </table>
@@ -503,8 +545,9 @@ export default function RoutesPage() {
 </Field>
 
               <div>
-                <label className="label">Description</label>
+                <label className="label" htmlFor="route-description">Description</label>
                 <textarea
+                  id="route-description"
                   className="input"
                   rows={2}
                   placeholder="Optional description"
@@ -514,7 +557,7 @@ export default function RoutesPage() {
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <Field label="Start Location">
+                <Field label="Start Location" required>
 <input
                     type="text"
                     className="input"
@@ -523,7 +566,7 @@ export default function RoutesPage() {
                     onChange={(e) => setRouteForm({ ...routeForm, start_location: e.target.value })}
                   />
 </Field>
-                <Field label="End Location">
+                <Field label="End Location" required>
 <input
                     type="text"
                     className="input"
@@ -584,7 +627,7 @@ export default function RoutesPage() {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="label">
+                  <label className="label" htmlFor="route-distance">
                     Distance (km)
                     {routeForm.start_latitude && routeForm.end_latitude && (
                       <button
@@ -603,17 +646,20 @@ export default function RoutesPage() {
                     )}
                   </label>
                   <input
+                    id="route-distance"
                     type="number"
                     step="0.1"
+                    min="0"
                     className="input"
                     placeholder="e.g. 15.5"
                     value={routeForm.distance_km}
                     onChange={(e) => setRouteForm({ ...routeForm, distance_km: e.target.value })}
                   />
                 </div>
-                <Field label="Estimated Duration (minutes)">
+                <Field label="Estimated Duration (minutes)" required>
 <input
                     type="number"
+                    min="1"
                     className="input"
                     placeholder="e.g. 45"
                     value={routeForm.estimated_duration_minutes}
@@ -625,9 +671,7 @@ export default function RoutesPage() {
 
             {(createRouteMutation.isError || updateRouteMutation.isError) && (
               <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
-                {createRouteMutation.error?.response?.data?.detail ||
-                  updateRouteMutation.error?.response?.data?.detail ||
-                  'Failed to save route. Please try again.'}
+                {getErrorMessage(createRouteMutation.error || updateRouteMutation.error, 'Failed to save route. Please try again.')}
               </div>
             )}
 
@@ -637,7 +681,7 @@ export default function RoutesPage() {
               </button>
               <button
                 onClick={handleRouteSubmit}
-                disabled={createRouteMutation.isPending || updateRouteMutation.isPending || !routeForm.name.trim()}
+                disabled={createRouteMutation.isPending || updateRouteMutation.isPending || !routeFormValid}
                 className="btn btn-primary"
               >
                 {(createRouteMutation.isPending || updateRouteMutation.isPending)
@@ -703,6 +747,7 @@ export default function RoutesPage() {
               <Field label="Order">
 <input
                   type="number"
+                  min="1"
                   className="input"
                   placeholder="Stop order (1, 2, 3...)"
                   value={stopForm.stop_order}
@@ -711,7 +756,7 @@ export default function RoutesPage() {
 </Field>
 
               <div className="grid grid-cols-2 gap-4">
-                <Field label="Pickup Time">
+                <Field label="Pickup Time" required>
 <input
                     type="time"
                     className="input"
@@ -719,7 +764,7 @@ export default function RoutesPage() {
                     onChange={(e) => setStopForm({ ...stopForm, pickup_time: e.target.value })}
                   />
 </Field>
-                <Field label="Drop Time">
+                <Field label="Drop Time" required>
 <input
                     type="time"
                     className="input"
@@ -732,9 +777,7 @@ export default function RoutesPage() {
 
             {(createStopMutation.isError || updateStopMutation.isError) && (
               <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
-                {createStopMutation.error?.response?.data?.detail ||
-                  updateStopMutation.error?.response?.data?.detail ||
-                  'Failed to save stop. Please try again.'}
+                {getErrorMessage(createStopMutation.error || updateStopMutation.error, 'Failed to save stop. Please try again.')}
               </div>
             )}
 
@@ -744,7 +787,7 @@ export default function RoutesPage() {
               </button>
               <button
                 onClick={handleStopSubmit}
-                disabled={createStopMutation.isPending || updateStopMutation.isPending || !stopForm.name.trim()}
+                disabled={createStopMutation.isPending || updateStopMutation.isPending || !stopFormValid}
                 className="btn btn-primary"
               >
                 {(createStopMutation.isPending || updateStopMutation.isPending)
@@ -755,18 +798,48 @@ export default function RoutesPage() {
           </Modal>
       )}
 
+      {/* Delete Stop Confirmation Modal */}
+      {deleteStopConfirm && (
+        <Modal open size="sm" closeOnBackdrop={false}>
+          <h2 className="text-xl font-bold text-gray-900 mb-2">Delete Stop</h2>
+          <p className="text-gray-600 mb-6">
+            Are you sure you want to delete stop <strong>{deleteStopConfirm.name}</strong>?
+            Students assigned to this stop will lose their transport assignment.
+          </p>
+
+          {deleteStopMutation.isError && (
+            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+              {getErrorMessage(deleteStopMutation.error, 'Failed to delete stop.')}
+            </div>
+          )}
+
+          <div className="flex justify-end space-x-3">
+            <button onClick={() => setDeleteStopConfirm(null)} className="btn btn-secondary">
+              Cancel
+            </button>
+            <button
+              onClick={() => deleteStopMutation.mutate(deleteStopConfirm.id)}
+              disabled={deleteStopMutation.isPending}
+              className="btn btn-danger"
+            >
+              {deleteStopMutation.isPending ? 'Deleting...' : 'Delete'}
+            </button>
+          </div>
+        </Modal>
+      )}
+
       {/* Delete Confirmation Modal */}
       {deleteConfirm && (
         <Modal open  size="sm" closeOnBackdrop={false}>
             <h2 className="text-xl font-bold text-gray-900 mb-2">Delete Route</h2>
             <p className="text-gray-600 mb-6">
               Are you sure you want to delete route <strong>{deleteConfirm.name}</strong>?
-              This will also remove all associated stops, vehicle assignments, and student assignments.
+              This will also remove its stops and student assignments, and unlink any vehicles from it.
             </p>
 
             {deleteRouteMutation.isError && (
               <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
-                {deleteRouteMutation.error?.response?.data?.detail || 'Failed to delete route.'}
+                {getErrorMessage(deleteRouteMutation.error, 'Failed to delete route.')}
               </div>
             )}
 

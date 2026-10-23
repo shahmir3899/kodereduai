@@ -15,7 +15,10 @@ from core.permissions import (
     IsSchoolAdmin, IsSchoolAdminOrReadOnly, HasSchoolAccess, ModuleAccessMixin,
     IsDriverOrAdmin, ADMIN_ROLES, get_effective_role, get_parent_children_ids,
 )
-from core.mixins import TenantQuerySetMixin, ensure_tenant_school_id
+from core.mixins import TenantQuerySetMixin
+
+from .utils import resolve_school_id as _resolve_school_id, annotate_route_counts
+from core.mixins import ensure_tenant_school_id
 
 from .models import (
     TransportRoute, TransportStop, TransportVehicle,
@@ -34,38 +37,6 @@ from .serializers import (
 )
 
 logger = logging.getLogger(__name__)
-
-
-def _resolve_school_id(request):
-    """
-    Resolve school_id from: X-School-ID header -> params -> user.school_id -> fallback.
-    """
-    tenant_sid = ensure_tenant_school_id(request)
-    if tenant_sid:
-        return tenant_sid
-
-    # If X-School-ID header was sent but rejected, don't fall back
-    if request.headers.get('X-School-ID'):
-        return None
-
-    school_id = (
-        request.query_params.get('school_id')
-        or request.data.get('school_id')
-        or request.data.get('school')
-    )
-    if school_id:
-        return int(school_id)
-
-    if request.user.school_id:
-        return request.user.school_id
-
-    if request.user.is_super_admin:
-        from schools.models import School
-        schools = list(School.objects.filter(is_active=True).values_list('id', flat=True)[:2])
-        if len(schools) == 1:
-            return schools[0]
-
-    return None
 
 
 # =============================================================================
@@ -119,13 +90,7 @@ class TransportRouteViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Mod
         return TransportRouteReadSerializer
 
     def get_queryset(self):
-        from django.db.models import Count, Q, Sum
-        queryset = TransportRoute.objects.select_related('school').annotate(
-            stops_count=Count('stops'),
-            vehicles_count=Count('vehicles', filter=Q(vehicles__is_active=True)),
-            students_count=Count('transport_assignments', filter=Q(transport_assignments__is_active=True)),
-            total_capacity=Sum('vehicles__capacity', filter=Q(vehicles__is_active=True), default=0),
-        )
+        queryset = annotate_route_counts(TransportRoute.objects.select_related('school'))
 
         school_id = _resolve_school_id(self.request)
         if school_id:
@@ -207,14 +172,7 @@ class TransportRouteViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Mod
                 drop_time=stop.drop_time,
             )
 
-        # Re-fetch with annotations
-        from django.db.models import Count, Q, Sum
-        annotated = TransportRoute.objects.filter(id=new_route.id).annotate(
-            stops_count=Count('stops'),
-            vehicles_count=Count('vehicles', filter=Q(vehicles__is_active=True)),
-            students_count=Count('transport_assignments', filter=Q(transport_assignments__is_active=True)),
-            total_capacity=Sum('vehicles__capacity', filter=Q(vehicles__is_active=True), default=0),
-        ).first()
+        annotated = annotate_route_counts(TransportRoute.objects.filter(id=new_route.id)).first()
 
         return Response(
             TransportRouteReadSerializer(annotated).data,
@@ -409,6 +367,19 @@ class TransportAssignmentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewset
         if transport_type:
             queryset = queryset.filter(transport_type=transport_type.upper())
 
+        class_id = self.request.query_params.get('class_id')
+        if class_id and school_id:
+            from academic_sessions.roster import filter_students_in_scope
+            from students.models import Student
+
+            # Placement is per year: scope by the assignment's own year when
+            # one is filtered, else the current year.
+            in_class = filter_students_in_scope(
+                Student.objects.filter(school_id=school_id), school_id,
+                academic_year_id=academic_year_id or None, class_obj_id=class_id,
+            )
+            queryset = queryset.filter(student__in=in_class)
+
         # Security fix (2026-09): PARENT/STUDENT get read access via
         # IsSchoolAdminOrReadOnly like everyone else, but with no ownership
         # scoping that unrestricted read let them see every student's bus
@@ -494,11 +465,49 @@ class TransportAssignmentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewset
                 status=status.HTTP_404_NOT_FOUND,
             )
 
+        if transport_type not in dict(TransportAssignment.TRANSPORT_TYPE_CHOICES):
+            return Response(
+                {'detail': 'transport_type must be PICKUP, DROP or BOTH.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        from academic_sessions.models import AcademicYear
+        from students.models import Student
+
+        if not AcademicYear.objects.filter(id=academic_year_id, school_id=school_id).exists():
+            return Response(
+                {'detail': 'Academic year not found for this school.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        vehicle = None
+        if vehicle_id:
+            try:
+                vehicle = TransportVehicle.objects.get(id=vehicle_id, school_id=school_id)
+            except TransportVehicle.DoesNotExist:
+                return Response(
+                    {'detail': 'Vehicle not found for this school.'},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+            if vehicle.assigned_route_id and vehicle.assigned_route_id != route.id:
+                return Response(
+                    {'detail': 'The selected vehicle is not assigned to the selected route.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        # Ids from another school are ignored, not an error: they count as skipped.
+        valid_ids = set(
+            Student.objects.filter(school_id=school_id, id__in=student_ids).values_list('id', flat=True)
+        )
+
         created_count = 0
         skipped_count = 0
 
         with transaction.atomic():
             for student_id in student_ids:
+                if student_id not in valid_ids:
+                    skipped_count += 1
+                    continue
                 # Check if assignment already exists
                 existing = TransportAssignment.objects.filter(
                     school_id=school_id,
@@ -516,7 +525,7 @@ class TransportAssignmentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewset
                     student_id=student_id,
                     route=route,
                     stop=stop,
-                    vehicle_id=vehicle_id,
+                    vehicle=vehicle,
                     transport_type=transport_type,
                     is_active=True,
                 )
@@ -634,10 +643,23 @@ class TransportAttendanceViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewset
         updated_count = 0
         errors = []
 
+        assigned_ids = set(
+            TransportAssignment.objects.filter(
+                school_id=school_id, route=route, is_active=True,
+            ).values_list('student_id', flat=True)
+        )
+
         with transaction.atomic():
             for record in records:
                 student_id = record['student_id']
                 boarding_status_val = record['boarding_status']
+
+                if student_id not in assigned_ids:
+                    errors.append({
+                        'student_id': student_id,
+                        'error': 'Student is not assigned to this route.',
+                    })
+                    continue
 
                 try:
                     attendance, created = TransportAttendance.objects.update_or_create(

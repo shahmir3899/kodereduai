@@ -207,7 +207,10 @@ export default function StudentsPage() {
     })
     const newStudent = response.data
 
-    if (account && newStudent?.id) {
+    if (account && !newStudent?.id) {
+      // The login can only be created for a saved student we can name; saying "added" here hid that it was skipped.
+      showWarning('Student created but the user account was not created. Use Create Account on the student row.')
+    } else if (account) {
       try {
         await studentsApi.createStudentUserAccount(newStudent.id, {
           username: account.username,

@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import { useToast } from '../../components/Toast'
+import { useAuth } from '../../contexts/AuthContext'
 import Modal from '../../components/ui/Modal'
 import { TONE } from '../../components/ui/statusTones'
 import Button from '../../components/ui/Button'
@@ -31,6 +33,10 @@ const emptyTxForm = {
 
 export default function StockTransactionsPage() {
   const queryClient = useQueryClient()
+  const { showSuccess } = useToast()
+  const { effectiveRole } = useAuth()
+  // Recording is admin-only on the API; accountants and drivers only read.
+  const canRecord = ['SUPER_ADMIN', 'SCHOOL_ADMIN', 'PRINCIPAL'].includes(effectiveRole)
 
   // Filters
   const [typeFilter, setTypeFilter] = useState('')
@@ -46,6 +52,7 @@ export default function StockTransactionsPage() {
   const { data: txData, isLoading } = useQuery({
     queryKey: ['inventoryTransactions', typeFilter, dateFrom, dateTo],
     queryFn: () => inventoryApi.getTransactions({
+      page_size: 200,
       transaction_type: typeFilter || undefined,
       date_from: dateFrom || undefined,
       date_to: dateTo || undefined,
@@ -59,7 +66,7 @@ export default function StockTransactionsPage() {
 
   const { data: vendorsData } = useQuery({
     queryKey: ['inventoryVendors'],
-    queryFn: () => inventoryApi.getVendors(),
+    queryFn: () => inventoryApi.getVendors({ page_size: 1000 }),
   })
 
   const transactions = txData?.data?.results || txData?.data || []
@@ -77,6 +84,7 @@ export default function StockTransactionsPage() {
       // so the stock count shown here updates without a reload.
       queryClient.invalidateQueries({ queryKey: ['inventoryItemsAll'] })
       queryClient.invalidateQueries({ queryKey: ['inventoryDashboard'] })
+      showSuccess('Transaction recorded')
       closeModal()
     },
   })
@@ -88,6 +96,13 @@ export default function StockTransactionsPage() {
   const closeModal = () => { setShowModal(false); setTxForm(emptyTxForm) }
 
   useEscapeKey(closeModal, showModal)
+
+  // Item and type are picked first; the price follows the item so a disposal or
+  // adjustment is not valued at Rs 0.
+  const pickItem = (id) => {
+    const picked = items.find((i) => String(i.id) === String(id))
+    setTxForm({ ...txForm, item: id, unit_price: picked ? String(picked.unit_price ?? '') : txForm.unit_price })
+  }
 
   const handleSubmit = (e) => {
     e.preventDefault()
@@ -102,7 +117,7 @@ export default function StockTransactionsPage() {
       transaction_type: txForm.transaction_type,
       quantity: finalQty,
       unit_price: Number(txForm.unit_price) || 0,
-      vendor: txForm.vendor ? parseInt(txForm.vendor) : null,
+      vendor: txForm.transaction_type === 'PURCHASE' && txForm.vendor ? parseInt(txForm.vendor) : null,
       reference_number: txForm.reference_number || '',
       remarks: txForm.remarks || '',
       date: txForm.date,
@@ -129,7 +144,7 @@ export default function StockTransactionsPage() {
   return (
     <div>
       {/* Header */}
-      <PageHeader title="Stock Transactions" subtitle="Record and view stock movements" className="mb-6" actions={<>
+      <PageHeader title="Stock Transactions" subtitle="Record and view stock movements" className="mb-6" actions={canRecord && <>
 <button
           onClick={openModal}
           className="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 transition-colors"
@@ -202,7 +217,7 @@ export default function StockTransactionsPage() {
                   meta={formatDate(tx.date)}
                   status={
                     <span className={`flex-shrink-0 px-2 py-0.5 rounded text-xs font-medium whitespace-nowrap ${txTypeColors[tx.transaction_type] || TONE.neutral}`}>
-                      {tx.transaction_type}
+                      {tx.transaction_type_display || tx.transaction_type}
                     </span>
                   }
                   fields={[
@@ -241,7 +256,7 @@ export default function StockTransactionsPage() {
                       <td className="px-4 py-3 text-sm font-medium text-gray-900">{tx.item_name || tx.item?.name || '-'}</td>
                       <td className="px-4 py-3 text-center">
                         <span className={`inline-flex px-2 py-0.5 rounded text-xs font-medium ${txTypeColors[tx.transaction_type] || TONE.neutral}`}>
-                          {tx.transaction_type}
+                          {tx.transaction_type_display || tx.transaction_type}
                         </span>
                       </td>
                       <td className="px-4 py-3 text-sm text-right font-medium">
@@ -301,7 +316,7 @@ export default function StockTransactionsPage() {
                 <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Item *</label>
                 <select required
                   className="input"
-                  value={txForm.item} onChange={(e) => setTxForm({ ...txForm, item: e.target.value })}>
+                  value={txForm.item} onChange={(e) => pickItem(e.target.value)}>
                   <option value="">-- Select Item --</option>
                   {items.map((i) => <option key={i.id} value={i.id}>{i.name} (Stock: {i.current_stock} {i.unit})</option>)}
                 </select>
@@ -312,7 +327,7 @@ export default function StockTransactionsPage() {
                   <label className="block text-xs font-medium text-gray-500 uppercase mb-1">
                     Quantity * {txForm.transaction_type === 'ADJUSTMENT' && '(negative to reduce)'}
                   </label>
-                  <input type="number" required
+                  <input type="number" required min={txForm.transaction_type === 'ADJUSTMENT' ? undefined : 1}
                     className="input"
                     value={txForm.quantity} onChange={(e) => setTxForm({ ...txForm, quantity: e.target.value })} />
                 </div>

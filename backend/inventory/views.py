@@ -4,6 +4,7 @@ Inventory views for categories, vendors, items, assignments, transactions, and d
 
 from datetime import date
 
+from django.db import transaction as db_transaction
 from django.db.models import Sum, Count, Q, F
 from rest_framework import viewsets, status
 from rest_framework.decorators import action, api_view, permission_classes as perm_classes
@@ -112,9 +113,19 @@ class InventoryItemViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Mode
             active_assignments_count=Count('assignments', filter=Q(assignments__is_active=True)),
         )
 
-        category_id = self.request.query_params.get('category_id')
+        # The Items page sends `category` and `stock_status`; `category_id` stays for older callers.
+        category_id = self.request.query_params.get('category') or self.request.query_params.get('category_id')
         if category_id:
             queryset = queryset.filter(category_id=category_id)
+
+        # Same thresholds as the stock badge on the page: out <= 0, low <= minimum.
+        stock_status = self.request.query_params.get('stock_status')
+        if stock_status == 'out':
+            queryset = queryset.filter(current_stock__lte=0)
+        elif stock_status == 'low':
+            queryset = queryset.filter(current_stock__gt=0, current_stock__lte=F('minimum_stock'))
+        elif stock_status == 'ok':
+            queryset = queryset.filter(current_stock__gt=F('minimum_stock'))
 
         is_active = self.request.query_params.get('is_active')
         if is_active is not None:
@@ -190,6 +201,7 @@ class ItemAssignmentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Mod
 
         return queryset
 
+    @db_transaction.atomic
     def perform_create(self, serializer):
         """Create assignment and auto-create ISSUE stock transaction."""
         assignment = serializer.save(
@@ -216,6 +228,7 @@ class ItemAssignmentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Mod
         detail=True, methods=['post'], url_path='return',
         permission_classes=[IsAuthenticated, IsSchoolAdmin, HasSchoolAccess],
     )
+    @db_transaction.atomic
     def return_item(self, request, pk=None):
         """Mark an assignment as returned. Increases stock back."""
         assignment = self.get_object()
@@ -227,6 +240,11 @@ class ItemAssignmentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Mod
             )
 
         condition = request.data.get('condition_on_return', 'GOOD')
+        if condition not in dict(ItemAssignment.CONDITION_CHOICES):
+            return Response(
+                {'condition_on_return': 'Choose New, Good, Fair or Poor.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         notes = request.data.get('notes', '')
 
         assignment.is_active = False

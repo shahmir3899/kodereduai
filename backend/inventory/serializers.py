@@ -2,7 +2,11 @@
 Inventory serializers with Read (nested details) and Create (flat IDs) pattern.
 """
 
+from datetime import date
+
 from rest_framework import serializers
+
+from core.mixins import ensure_tenant_school_id
 from .models import InventoryCategory, Vendor, InventoryItem, ItemAssignment, StockTransaction
 
 
@@ -135,7 +139,16 @@ class ItemAssignmentReadSerializer(serializers.ModelSerializer):
         return full or user.username
 
 
+def _active_school_id(serializer):
+    request = serializer.context.get('request')
+    return ensure_tenant_school_id(request) if request else None
+
+
 class ItemAssignmentCreateSerializer(serializers.ModelSerializer):
+    quantity = serializers.IntegerField(min_value=1, default=1)
+    # The page has no date field; the item leaves the store today.
+    assigned_date = serializers.DateField(required=False, default=date.today)
+
     class Meta:
         model = ItemAssignment
         fields = [
@@ -147,6 +160,16 @@ class ItemAssignmentCreateSerializer(serializers.ModelSerializer):
     def validate(self, attrs):
         item = attrs.get('item')
         quantity = attrs.get('quantity', 1)
+        school_id = _active_school_id(self)
+
+        # Ids come from the client, so they must belong to the active school.
+        if school_id and item and item.school_id != school_id:
+            raise serializers.ValidationError({'item': 'Item not found in this school.'})
+        assignee = attrs.get('assigned_to')
+        if school_id and assignee and (
+            not assignee.is_active or school_id not in assignee.get_accessible_school_ids()
+        ):
+            raise serializers.ValidationError({'assigned_to': 'User not found in this school.'})
 
         if item and quantity > item.current_stock:
             raise serializers.ValidationError({
@@ -202,6 +225,17 @@ class StockTransactionCreateSerializer(serializers.ModelSerializer):
     def validate(self, attrs):
         tx_type = attrs.get('transaction_type')
         quantity = attrs.get('quantity', 0)
+        item = attrs.get('item')
+        school_id = _active_school_id(self)
+
+        if school_id and item and item.school_id != school_id:
+            raise serializers.ValidationError({'item': 'Item not found in this school.'})
+        vendor = attrs.get('vendor')
+        if school_id and vendor and vendor.school_id != school_id:
+            raise serializers.ValidationError({'vendor': 'Vendor not found in this school.'})
+
+        if quantity == 0:
+            raise serializers.ValidationError({'quantity': 'Quantity cannot be zero.'})
 
         # Ensure correct sign based on transaction type
         if tx_type in ('PURCHASE', 'RETURN') and quantity < 0:
@@ -213,12 +247,15 @@ class StockTransactionCreateSerializer(serializers.ModelSerializer):
                 'quantity': f'{tx_type} transactions must have a negative quantity.',
             })
 
-        # Check stock for outgoing transactions
-        item = attrs.get('item')
-        if tx_type in ('ISSUE', 'DISPOSAL') and item:
+        # Check stock for outgoing transactions (an adjustment down is outgoing too)
+        if item and (tx_type in ('ISSUE', 'DISPOSAL') or (tx_type == 'ADJUSTMENT' and quantity < 0)):
             if abs(quantity) > item.current_stock:
                 raise serializers.ValidationError({
                     'quantity': f'Not enough stock. Available: {item.current_stock}.',
                 })
+
+        # Vendor only means something on a purchase.
+        if tx_type != 'PURCHASE':
+            attrs['vendor'] = None
 
         return attrs

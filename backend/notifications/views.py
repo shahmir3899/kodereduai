@@ -7,6 +7,7 @@ from rest_framework.decorators import action
 from rest_framework.generics import ListAPIView
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.permissions import IsAuthenticated
 from django.utils import timezone
 from django.db.models import Count, F, Q
@@ -144,12 +145,28 @@ class NotificationTemplateViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewse
         # Also include system-wide templates (school=null)
         school_id = ensure_tenant_school_id(self.request)
         if school_id:
-            from django.db.models import Q
             qs = NotificationTemplate.objects.filter(
                 Q(school_id=school_id) | Q(school__isnull=True),
-                is_active=True,
             ).select_related('school')
+        # Inactive rows stay listed so an admin can re-activate or delete them;
+        # only the Send tab's picker asks for ?active=1.
+        if self.request.query_params.get('active') in ('1', 'true'):
+            qs = qs.filter(is_active=True)
         return qs
+
+    def _guard_shared(self, instance):
+        # school=null rows are shared by every school, so one admin must not
+        # be able to edit or delete them for the rest.
+        if instance.school_id is None:
+            raise PermissionDenied('Shared templates cannot be changed.')
+
+    def perform_update(self, serializer):
+        self._guard_shared(serializer.instance)
+        super().perform_update(serializer)
+
+    def perform_destroy(self, instance):
+        self._guard_shared(instance)
+        super().perform_destroy(instance)
 
 
 class NotificationLogViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ReadOnlyModelViewSet):

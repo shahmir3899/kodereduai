@@ -100,6 +100,24 @@ class StaffMemberSerializer(serializers.ModelSerializer):
             'created_at', 'updated_at',
         ]
 
+    # What a non-admin may see of a colleague. Everything else on the record
+    # (contact details, DOB, address, emergency contact, notes, salary-adjacent
+    # dates, employee id) stays admin-only or own-record-only.
+    PEER_FIELDS = (
+        'id', 'user', 'first_name', 'last_name', 'full_name', 'photo_url',
+        'department', 'department_name', 'designation', 'designation_name',
+        'user_role', 'employment_status', 'is_active',
+    )
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        if not self.context.get('peer_view'):
+            return data
+        request = self.context.get('request')
+        if request is not None and instance.user_id == request.user.id:
+            return data
+        return {k: v for k, v in data.items() if k in self.PEER_FIELDS}
+
 
 class StaffMemberCreateSerializer(serializers.ModelSerializer):
     class Meta:

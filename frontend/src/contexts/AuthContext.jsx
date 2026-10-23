@@ -442,8 +442,9 @@ export function AuthProvider({ children }) {
             const childClassId = child.class_id || child.class_obj || child.class_obj_id || null
             const subtasks = [
               queryClient.prefetchQuery({
-                queryKey: ['childOverview', child.id],
-                queryFn: () => parentsApi.getChildOverview(child.id),
+                // child is a ParentChild link: its own id is not the student's, and the dashboard reads this key as a string student id.
+                queryKey: ['childOverview', String(child.student)],
+                queryFn: () => parentsApi.getChildOverview(child.student),
                 staleTime: 5 * 60 * 1000,
               }),
             ]

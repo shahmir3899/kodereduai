@@ -30,7 +30,9 @@ function formatDate(dateStr) {
 }
 
 export default function OverdueBooksPage() {
-  const { user } = useAuth()
+  const { user, effectiveRole } = useAuth()
+  // The fine config is an admin-only endpoint; other roles still see each issue's own fine.
+  const canSeeFineConfig = ['SUPER_ADMIN', 'SCHOOL_ADMIN', 'PRINCIPAL'].includes(effectiveRole)
   const queryClient = useQueryClient()
 
   const [view, setView] = useViewPreference('overdue-books')
@@ -48,6 +50,7 @@ export default function OverdueBooksPage() {
   const { data: configData } = useQuery({
     queryKey: ['libraryConfig'],
     queryFn: () => libraryApi.getFineConfig(),
+    enabled: canSeeFineConfig,
   })
 
   const overdueBooks = overdueData?.data?.results || overdueData?.data || []
@@ -157,7 +160,7 @@ export default function OverdueBooksPage() {
             </div>
             <div>
               <p className="text-2xl font-bold text-gray-900">
-                Rs. {finePerDay}
+                {canSeeFineConfig ? `Rs. ${finePerDay}` : '—'}
               </p>
               <p className="text-xs font-medium text-gray-500 uppercase">Fine Per Day</p>
             </div>

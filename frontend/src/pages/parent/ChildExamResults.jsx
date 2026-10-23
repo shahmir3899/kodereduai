@@ -80,8 +80,10 @@ export default function ChildExamResults() {
         <div className="space-y-6">
           {exams.map((exam, examIdx) => {
             const marks = exam.marks || exam.subjects || []
-            const totalObtained = marks.reduce((sum, m) => sum + (parseFloat(m.marks_obtained) || 0), 0)
-            const totalMax = marks.reduce((sum, m) => sum + (parseFloat(m.total_marks) || 0), 0)
+            // Absent subjects carry no marks; counting their total would drag the percentage down.
+            const sat = marks.filter((m) => !m.is_absent && m.marks_obtained != null)
+            const totalObtained = sat.reduce((sum, m) => sum + (parseFloat(m.marks_obtained) || 0), 0)
+            const totalMax = sat.reduce((sum, m) => sum + (parseFloat(m.total_marks) || 0), 0)
             const overallPct = totalMax > 0 ? Math.round((totalObtained / totalMax) * 100) : 0
 
             return (
@@ -129,7 +131,8 @@ export default function ChildExamResults() {
                 {/* Subject Marks - Mobile Card View */}
                 <div className="sm:hidden divide-y divide-gray-100">
                   {marks.map((m, idx) => {
-                    const pct = m.total_marks ? Math.round((m.marks_obtained / m.total_marks) * 100) : 0
+                    const absent = m.is_absent || m.marks_obtained == null
+                    const pct = m.total_marks && !absent ? Math.round((m.marks_obtained / m.total_marks) * 100) : 0
                     return (
                       <div key={idx} className="px-4 py-3">
                         <div className="flex items-center justify-between mb-2">
@@ -138,9 +141,9 @@ export default function ChildExamResults() {
                           </span>
                           <div className="flex items-center gap-2">
                             <span className="text-sm text-gray-600">
-                              {m.marks_obtained}/{m.total_marks}
+                              {absent ? 'Absent' : `${m.marks_obtained}/${m.total_marks}`}
                             </span>
-                            <span className={`text-sm font-semibold ${gradeColor(pct)}`}>{pct}%</span>
+                            <span className={`text-sm font-semibold ${absent ? 'text-gray-400' : gradeColor(pct)}`}>{absent ? '-' : `${pct}%`}</span>
                           </div>
                         </div>
                         {/* Progress bar */}
@@ -173,13 +176,14 @@ export default function ChildExamResults() {
                     </thead>
                     <tbody className="divide-y divide-gray-100">
                       {marks.map((m, idx) => {
-                        const pct = m.total_marks ? Math.round((m.marks_obtained / m.total_marks) * 100) : 0
+                        const absent = m.is_absent || m.marks_obtained == null
+                    const pct = m.total_marks && !absent ? Math.round((m.marks_obtained / m.total_marks) * 100) : 0
                         return (
                           <tr key={idx} className="hover:bg-gray-50">
                             <td className="px-4 py-3 text-sm font-medium text-gray-900">
                               {m.subject_name || m.subject}
                             </td>
-                            <td className="px-4 py-3 text-sm text-gray-900 text-right">{m.marks_obtained}</td>
+                            <td className="px-4 py-3 text-sm text-gray-900 text-right">{absent ? 'Absent' : m.marks_obtained}</td>
                             <td className="px-4 py-3 text-sm text-gray-500 text-right">{m.total_marks}</td>
                             <td className="px-4 py-3">
                               <div className={`w-full h-2.5 rounded-full ${barBgColor(pct)}`}>
@@ -190,7 +194,7 @@ export default function ChildExamResults() {
                               </div>
                             </td>
                             <td className="px-4 py-3 text-right">
-                              <span className={`text-sm font-semibold ${gradeColor(pct)}`}>{pct}%</span>
+                              <span className={`text-sm font-semibold ${absent ? 'text-gray-400' : gradeColor(pct)}`}>{absent ? '-' : `${pct}%`}</span>
                             </td>
                             <td className="px-4 py-3 text-center text-sm text-gray-600 font-medium">
                               {m.grade || '-'}

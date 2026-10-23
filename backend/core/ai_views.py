@@ -8,6 +8,7 @@ from rest_framework.permissions import IsAuthenticated
 from django.utils import timezone
 
 from core.mixins import ensure_tenant_school_id
+from core.permissions import HasSchoolAccess
 
 
 class AIInsightsView(APIView):
@@ -15,7 +16,9 @@ class AIInsightsView(APIView):
     Returns AI-generated insights across attendance, finance, academics, and HR.
     GET /api/tasks/ai-insights/
     """
-    permission_classes = [IsAuthenticated]
+    # HasSchoolAccess also checks ?school_id against the user's schools: this view used to build
+    # insights for any school id and any role, portal accounts included.
+    permission_classes = [IsAuthenticated, HasSchoolAccess]
 
     def get(self, request):
         school_id = request.query_params.get('school_id') or ensure_tenant_school_id(request) or request.user.school_id

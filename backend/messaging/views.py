@@ -102,6 +102,17 @@ class MessagingViewSet(viewsets.ViewSet):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
+        # The picker only offers role-appropriate people, but the API must hold
+        # the same line or any user id can be messaged by hand.
+        if not any(
+            r['id'] == recipient_user_id and r['student_id'] in (None, student_id)
+            for r in _build_recipients(request)
+        ):
+            return Response(
+                {'error': 'You cannot message this person.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
         # Validate teacher scope
         if role == 'TEACHER' and message_type in ('TEACHER_PARENT', 'TEACHER_STUDENT'):
             if not student_id:
@@ -243,160 +254,7 @@ class MessagingViewSet(viewsets.ViewSet):
 
     def list_recipients(self, request):
         """GET /api/messaging/recipients/ - Role-based available recipients."""
-        school_id = ensure_tenant_school_id(request) or getattr(request.user, 'school_id', None)
-        role = get_effective_role(request)
-        user = request.user
-        recipients = []
-
-        if role in ADMIN_ROLES:
-            # Admins can message any staff member in the school
-            staff = StaffMember.objects.filter(
-                school_id=school_id,
-                is_active=True,
-                user__isnull=False,
-            ).exclude(user=user).select_related('user', 'department')
-
-            for s in staff:
-                # Use the per-school membership role, not the base User.role —
-                # a multi-school user's role can differ per school (e.g. Teacher
-                # at one, Manager at another), and base role would show the
-                # wrong one for whichever school isn't their "home" assignment.
-                recipient_role = (s.user.get_role_for_school(school_id) or s.user.role) if s.user else 'STAFF'
-                recipients.append({
-                    'id': s.user_id,
-                    'name': s.full_name,
-                    'role': recipient_role,
-                    'department': s.department.name if s.department else None,
-                    'student_id': None,
-                    'student_name': None,
-                    'class_name': None,
-                })
-
-        elif role == 'TEACHER':
-            try:
-                staff_member = user.staff_profile
-            except StaffMember.DoesNotExist:
-                staff_member = None
-
-            if staff_member:
-                # Students in the sections this teacher teaches this year.
-                # Scoping by master class (and the Student.class_obj snapshot)
-                # let a Class 2-A teacher message Class 2-B families.
-                students, label_by_student = _students_taught_by(staff_member, school_id)
-
-                # Parents of those students
-                parent_links = ParentChild.objects.filter(
-                    student__in=students,
-                    school_id=school_id,
-                ).select_related('parent', 'parent__user', 'student', 'student__class_obj')
-
-                seen = set()
-                for link in parent_links:
-                    if link.parent.user_id:
-                        key = (link.parent.user_id, link.student_id)
-                        if key not in seen:
-                            seen.add(key)
-                            recipients.append({
-                                'id': link.parent.user_id,
-                                'name': link.parent.user.get_full_name() or link.parent.user.username,
-                                'role': 'PARENT',
-                                'department': None,
-                                'student_id': link.student_id,
-                                'student_name': link.student.name,
-                                'class_name': label_by_student.get(link.student_id),
-                            })
-
-                # Students with user accounts
-                student_profiles = StudentProfile.objects.filter(
-                    student__in=students,
-                ).select_related('user', 'student', 'student__class_obj')
-
-                for sp in student_profiles:
-                    recipients.append({
-                        'id': sp.user_id,
-                        'name': sp.user.get_full_name() or sp.user.username,
-                        'role': 'STUDENT',
-                        'department': None,
-                        'student_id': sp.student_id,
-                        'student_name': sp.student.name,
-                        'class_name': label_by_student.get(sp.student_id),
-                    })
-
-            # Teachers can also message admins
-            admin_memberships = UserSchoolMembership.objects.filter(
-                school_id=school_id,
-                role__in=['SCHOOL_ADMIN', 'PRINCIPAL'],
-            ).exclude(user=user).select_related('user')
-
-            seen_admins = set()
-            for m in admin_memberships:
-                if m.user_id not in seen_admins:
-                    seen_admins.add(m.user_id)
-                    recipients.append({
-                        'id': m.user_id,
-                        'name': m.user.get_full_name() or m.user.username,
-                        'role': m.role,
-                        'department': None,
-                        'student_id': None,
-                        'student_name': None,
-                        'class_name': None,
-                    })
-
-        elif role in STAFF_LEVEL_ROLES:
-            # Other staff can message admins
-            admin_memberships = UserSchoolMembership.objects.filter(
-                school_id=school_id,
-                role__in=['SCHOOL_ADMIN', 'PRINCIPAL'],
-            ).exclude(user=user).select_related('user')
-
-            for m in admin_memberships:
-                recipients.append({
-                    'id': m.user_id,
-                    'name': m.user.get_full_name() or m.user.username,
-                    'role': m.role,
-                    'department': None,
-                    'student_id': None,
-                    'student_name': None,
-                    'class_name': None,
-                })
-
-        elif role == 'PARENT':
-            # Parents can message teachers of their children
-            try:
-                profile = user.parent_profile
-            except ParentProfile.DoesNotExist:
-                return Response(recipients)
-
-            child_links = ParentChild.objects.filter(
-                parent=profile,
-                school_id=school_id,
-            ).select_related('student', 'student__class_obj')
-
-            seen = set()
-            for link in child_links:
-                # Teachers of the child's own section, not every section of
-                # the master class.
-                class_subjects, class_label = _class_subjects_for_student(link.student, school_id)
-                class_subjects = class_subjects.filter(
-                    teacher__isnull=False,
-                    teacher__user__isnull=False,
-                ).select_related('teacher', 'teacher__user')
-
-                for cs in class_subjects:
-                    key = (cs.teacher.user_id, link.student_id)
-                    if key not in seen:
-                        seen.add(key)
-                        recipients.append({
-                            'id': cs.teacher.user_id,
-                            'name': cs.teacher.full_name,
-                            'role': 'TEACHER',
-                            'department': None,
-                            'student_id': link.student_id,
-                            'student_name': link.student.name,
-                            'class_name': class_label,
-                        })
-
-        return Response(recipients)
+        return Response(_build_recipients(request))
 
     def unread_count(self, request):
         """GET /api/messaging/unread-count/ - Total unread for badge."""
@@ -419,6 +277,164 @@ class MessagingViewSet(viewsets.ViewSet):
             total_unread += qs.count()
 
         return Response({'unread_count': total_unread})
+
+
+def _build_recipients(request):
+    """Role-based recipient rows; shared by the picker and create_thread's check."""
+    school_id = ensure_tenant_school_id(request) or getattr(request.user, 'school_id', None)
+    role = get_effective_role(request)
+    user = request.user
+    recipients = []
+
+    if role in ADMIN_ROLES:
+        # Admins can message any staff member in the school
+        staff = StaffMember.objects.filter(
+            school_id=school_id,
+            is_active=True,
+            user__isnull=False,
+        ).exclude(user=user).select_related('user', 'department')
+
+        for s in staff:
+            # Use the per-school membership role, not the base User.role —
+            # a multi-school user's role can differ per school (e.g. Teacher
+            # at one, Manager at another), and base role would show the
+            # wrong one for whichever school isn't their "home" assignment.
+            recipient_role = (s.user.get_role_for_school(school_id) or s.user.role) if s.user else 'STAFF'
+            recipients.append({
+                'id': s.user_id,
+                'name': s.full_name,
+                'role': recipient_role,
+                'department': s.department.name if s.department else None,
+                'student_id': None,
+                'student_name': None,
+                'class_name': None,
+            })
+
+    elif role == 'TEACHER':
+        try:
+            staff_member = user.staff_profile
+        except StaffMember.DoesNotExist:
+            staff_member = None
+
+        if staff_member:
+            # Students in the sections this teacher teaches this year.
+            # Scoping by master class (and the Student.class_obj snapshot)
+            # let a Class 2-A teacher message Class 2-B families.
+            students, label_by_student = _students_taught_by(staff_member, school_id)
+
+            # Parents of those students
+            parent_links = ParentChild.objects.filter(
+                student__in=students,
+                school_id=school_id,
+            ).select_related('parent', 'parent__user', 'student', 'student__class_obj')
+
+            seen = set()
+            for link in parent_links:
+                if link.parent.user_id:
+                    key = (link.parent.user_id, link.student_id)
+                    if key not in seen:
+                        seen.add(key)
+                        recipients.append({
+                            'id': link.parent.user_id,
+                            'name': link.parent.user.get_full_name() or link.parent.user.username,
+                            'role': 'PARENT',
+                            'department': None,
+                            'student_id': link.student_id,
+                            'student_name': link.student.name,
+                            'class_name': label_by_student.get(link.student_id),
+                        })
+
+            # Students with user accounts
+            student_profiles = StudentProfile.objects.filter(
+                student__in=students,
+            ).select_related('user', 'student', 'student__class_obj')
+
+            for sp in student_profiles:
+                recipients.append({
+                    'id': sp.user_id,
+                    'name': sp.user.get_full_name() or sp.user.username,
+                    'role': 'STUDENT',
+                    'department': None,
+                    'student_id': sp.student_id,
+                    'student_name': sp.student.name,
+                    'class_name': label_by_student.get(sp.student_id),
+                })
+
+        # Teachers can also message admins
+        admin_memberships = UserSchoolMembership.objects.filter(
+            school_id=school_id,
+            role__in=['SCHOOL_ADMIN', 'PRINCIPAL'],
+        ).exclude(user=user).select_related('user')
+
+        seen_admins = set()
+        for m in admin_memberships:
+            if m.user_id not in seen_admins:
+                seen_admins.add(m.user_id)
+                recipients.append({
+                    'id': m.user_id,
+                    'name': m.user.get_full_name() or m.user.username,
+                    'role': m.role,
+                    'department': None,
+                    'student_id': None,
+                    'student_name': None,
+                    'class_name': None,
+                })
+
+    elif role in STAFF_LEVEL_ROLES:
+        # Other staff can message admins
+        admin_memberships = UserSchoolMembership.objects.filter(
+            school_id=school_id,
+            role__in=['SCHOOL_ADMIN', 'PRINCIPAL'],
+        ).exclude(user=user).select_related('user')
+
+        for m in admin_memberships:
+            recipients.append({
+                'id': m.user_id,
+                'name': m.user.get_full_name() or m.user.username,
+                'role': m.role,
+                'department': None,
+                'student_id': None,
+                'student_name': None,
+                'class_name': None,
+            })
+
+    elif role == 'PARENT':
+        # Parents can message teachers of their children
+        try:
+            profile = user.parent_profile
+        except ParentProfile.DoesNotExist:
+            return recipients
+
+        child_links = ParentChild.objects.filter(
+            parent=profile,
+            school_id=school_id,
+        ).select_related('student', 'student__class_obj')
+
+        seen = set()
+        for link in child_links:
+            # Teachers of the child's own section, not every section of
+            # the master class.
+            class_subjects, class_label = _class_subjects_for_student(link.student, school_id)
+            class_subjects = class_subjects.filter(
+                teacher__isnull=False,
+                teacher__user__isnull=False,
+            ).select_related('teacher', 'teacher__user')
+
+            for cs in class_subjects:
+                key = (cs.teacher.user_id, link.student_id)
+                if key not in seen:
+                    seen.add(key)
+                    recipients.append({
+                        'id': cs.teacher.user_id,
+                        'name': cs.teacher.full_name,
+                        'role': 'TEACHER',
+                        'department': None,
+                        'student_id': link.student_id,
+                        'student_name': link.student.name,
+                        'class_name': class_label,
+                    })
+
+    return recipients
 
 
 def _teacher_has_student_access(user, student_id, school_id):

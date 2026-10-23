@@ -19,9 +19,12 @@ def daily_attendance_summary(school_id, date_obj, academic_year_id=None):
         )
     enrolled_ids = set(students_qs.values_list('id', flat=True).distinct())
 
+    # Only the enrolled students: the total is the enrolled set, so counting every record on the
+    # date (deactivated students, other years) pushed present above the total (Rate 125%).
     records = AttendanceRecord.objects.filter(
         school_id=school_id,
         date=date_obj,
+        student_id__in=enrolled_ids,
     ).select_related('student', 'student__class_obj', 'academic_year')
 
     Status = AttendanceRecord.AttendanceStatus

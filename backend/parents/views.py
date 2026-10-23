@@ -189,6 +189,7 @@ class ChildOverviewView(APIView):
         data = {
             'student_id': student.id,
             'student_name': student.name,
+            'photo_url': student.photo_url or '',
             'class_name': placement_label(placement, student),
             'roll_number': placement_roll(placement, student),
             'school_name': student.school.name,
@@ -909,8 +910,13 @@ class AdminLeaveReviewView(APIView):
     permission_classes = [IsAuthenticated, IsSchoolAdmin]
 
     def patch(self, request, pk):
+        # Scoped to the admin's own schools: an unscoped get() let an admin of one school
+        # approve another school's leave request by id.
+        qs = ParentLeaveRequest.objects.all()
+        if not request.user.is_super_admin:
+            qs = qs.filter(school_id__in=ensure_tenant_schools(request) or [])
         try:
-            leave_request = ParentLeaveRequest.objects.get(id=pk)
+            leave_request = qs.get(id=pk)
         except ParentLeaveRequest.DoesNotExist:
             return Response(
                 {'error': 'Leave request not found.'},

@@ -979,6 +979,387 @@
       }
     },
     {
+      "id": "ch10-setting-up-routes",
+      "status": "ready",
+      "title": {
+        "en": "Setting Up Routes",
+        "ur": "روٹس بنانا"
+      },
+      "section": "10.1",
+      "chapter": 10,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL"
+      ],
+      "module": "transport",
+      "seconds": {
+        "en": 94,
+        "ur": 93
+      }
+    },
+    {
+      "id": "ch10-adding-vehicles",
+      "status": "ready",
+      "title": {
+        "en": "Adding Vehicles",
+        "ur": "گاڑیاں شامل کرنا"
+      },
+      "section": "10.2",
+      "chapter": 10,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL"
+      ],
+      "module": "transport",
+      "seconds": {
+        "en": 61,
+        "ur": 64
+      }
+    },
+    {
+      "id": "ch10-assigning-students-to-routes",
+      "status": "ready",
+      "title": {
+        "en": "Assigning Students to Routes",
+        "ur": "طلبہ کو روٹس میں شامل کرنا"
+      },
+      "section": "10.3",
+      "chapter": 10,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL"
+      ],
+      "module": "transport",
+      "seconds": {
+        "en": 63,
+        "ur": 65
+      }
+    },
+    {
+      "id": "ch10-transport-attendance",
+      "status": "ready",
+      "title": {
+        "en": "Transport Attendance",
+        "ur": "ٹرانسپورٹ حاضری"
+      },
+      "section": "10.4",
+      "chapter": 10,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL"
+      ],
+      "module": "transport",
+      "seconds": {
+        "en": 46,
+        "ur": 48
+      }
+    },
+    {
+      "id": "ch12-managing-curriculum-books-chapters-topics",
+      "status": "ready",
+      "title": {
+        "en": "Managing Curriculum (Books, Chapters, Topics)",
+        "ur": "نصاب کا انتظام"
+      },
+      "section": "12.1",
+      "chapter": 12,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL",
+        "MANAGER",
+        "TEACHER"
+      ],
+      "module": "lms",
+      "seconds": {
+        "en": 104,
+        "ur": 107
+      }
+    },
+    {
+      "id": "ch12-creating-lesson-plans",
+      "status": "ready",
+      "title": {
+        "en": "Creating Lesson Plans",
+        "ur": "لیسن پلان بنانا"
+      },
+      "section": "12.2",
+      "chapter": 12,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL",
+        "TEACHER"
+      ],
+      "module": "lms",
+      "seconds": {
+        "en": 111,
+        "ur": 114
+      }
+    },
+    {
+      "id": "ch12-creating-assignments",
+      "status": "ready",
+      "title": {
+        "en": "Creating Assignments",
+        "ur": "اسائنمنٹ بنانا"
+      },
+      "section": "12.3",
+      "chapter": 12,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL",
+        "MANAGER",
+        "TEACHER"
+      ],
+      "module": "lms",
+      "seconds": {
+        "en": 89,
+        "ur": 92
+      }
+    },
+    {
+      "id": "ch12-reviewing-submissions",
+      "status": "ready",
+      "title": {
+        "en": "Reviewing Submissions",
+        "ur": "سبمشنز کا جائزہ"
+      },
+      "section": "12.4",
+      "chapter": 12,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL",
+        "MANAGER",
+        "TEACHER"
+      ],
+      "module": "lms",
+      "seconds": {
+        "en": 50,
+        "ur": 53
+      }
+    },
+    {
+      "id": "ch13-viewing-notifications-all-users",
+      "status": "ready",
+      "title": {
+        "en": "Viewing Notifications (All Users)",
+        "ur": "نوٹیفکیشنز دیکھنا"
+      },
+      "section": "13.1",
+      "chapter": 13,
+      "module": "notifications",
+      "seconds": {
+        "en": 48,
+        "ur": 49
+      }
+    },
+    {
+      "id": "ch13-creating-notification-templates-admin",
+      "status": "ready",
+      "title": {
+        "en": "Creating Notification Templates (Admin)",
+        "ur": "نوٹیفکیشن ٹیمپلیٹس"
+      },
+      "section": "13.2",
+      "chapter": 13,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL"
+      ],
+      "module": "notifications",
+      "seconds": {
+        "en": 78,
+        "ur": 81
+      }
+    },
+    {
+      "id": "ch13-sending-notifications-admin",
+      "status": "ready",
+      "title": {
+        "en": "Sending Notifications (Admin)",
+        "ur": "نوٹیفکیشن بھیجنا"
+      },
+      "section": "13.3",
+      "chapter": 13,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL"
+      ],
+      "module": "notifications",
+      "seconds": {
+        "en": 49,
+        "ur": 50
+      }
+    },
+    {
+      "id": "ch14-starting-a-new-conversation",
+      "status": "ready",
+      "title": {
+        "en": "Starting a New Conversation",
+        "ur": "نئی گفتگو شروع کرنا"
+      },
+      "section": "14.3",
+      "chapter": 14,
+      "seconds": {
+        "en": 62,
+        "ur": 63
+      }
+    },
+    {
+      "id": "ch14-replying-to-messages",
+      "status": "ready",
+      "title": {
+        "en": "Replying to Messages",
+        "ur": "پیغامات کا جواب دینا"
+      },
+      "section": "14.4",
+      "chapter": 14,
+      "seconds": {
+        "en": 45,
+        "ur": 46
+      }
+    },
+    {
+      "id": "ch15-viewing-childs-information",
+      "status": "ready",
+      "title": {
+        "en": "Viewing Child's Information",
+        "ur": "اپنے بچے کی معلومات دیکھنا"
+      },
+      "section": "15.2",
+      "chapter": 15,
+      "roles": [
+        "PARENT"
+      ],
+      "seconds": {
+        "en": 47,
+        "ur": 46
+      }
+    },
+    {
+      "id": "ch15-applying-for-leave",
+      "status": "ready",
+      "title": {
+        "en": "Applying for Leave",
+        "ur": "چھٹی کی درخواست دینا"
+      },
+      "section": "15.3",
+      "chapter": 15,
+      "roles": [
+        "PARENT"
+      ],
+      "seconds": {
+        "en": 66,
+        "ur": 69
+      }
+    },
+    {
+      "id": "ch16-my-assignments",
+      "status": "ready",
+      "title": {
+        "en": "My Assignments",
+        "ur": "میری اسائنمنٹس"
+      },
+      "section": "16.4",
+      "chapter": 16,
+      "roles": [
+        "STUDENT"
+      ],
+      "seconds": {
+        "en": 66,
+        "ur": 68
+      }
+    },
+    {
+      "id": "ch16-my-results",
+      "status": "ready",
+      "title": {
+        "en": "My Results",
+        "ur": "میرے نتائج"
+      },
+      "section": "16.6",
+      "chapter": 16,
+      "roles": [
+        "STUDENT"
+      ],
+      "seconds": {
+        "en": 39,
+        "ur": 39
+      }
+    },
+    {
+      "id": "ch16-ai-study-helper",
+      "status": "ready",
+      "title": {
+        "en": "AI Study Helper",
+        "ur": "اے آئی اسٹڈی ہیلپر"
+      },
+      "section": "16.8",
+      "chapter": 16,
+      "roles": [
+        "STUDENT"
+      ],
+      "seconds": {
+        "en": 53,
+        "ur": 58
+      }
+    },
+    {
+      "id": "ch19-managing-users-school-admin-principal",
+      "status": "ready",
+      "title": {
+        "en": "Managing Users (School Admin & Principal)",
+        "ur": "صارفین کا نظم"
+      },
+      "section": "19.2",
+      "chapter": 19,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL"
+      ],
+      "seconds": {
+        "en": 118,
+        "ur": 116
+      }
+    },
+    {
+      "id": "ch21-items-stock",
+      "status": "ready",
+      "title": {
+        "en": "Items & Stock",
+        "ur": "آئٹمز اور اسٹاک"
+      },
+      "section": "21.2",
+      "chapter": 21,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL",
+        "ACCOUNTANT"
+      ],
+      "module": "inventory",
+      "seconds": {
+        "en": 99,
+        "ur": 102
+      }
+    },
+    {
+      "id": "ch19-creating-student-user-accounts",
+      "status": "ready",
+      "title": {
+        "en": "Creating Student User Accounts",
+        "ur": "طالب علم کا اکاؤنٹ"
+      },
+      "section": "19.3",
+      "chapter": 19,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL"
+      ],
+      "seconds": {
+        "en": 79,
+        "ur": 83
+      }
+    },
+    {
       "id": "ch4-step-1-enroll-student-faces",
       "status": "planned",
       "title": {
@@ -1041,82 +1422,6 @@
         "TEACHER"
       ],
       "module": "attendance"
-    },
-    {
-      "id": "ch10-setting-up-routes",
-      "status": "planned",
-      "title": {
-        "en": "Setting Up Routes",
-        "ur": ""
-      },
-      "section": "10.1",
-      "chapter": 10,
-      "roles": [
-        "SCHOOL_ADMIN",
-        "PRINCIPAL",
-        "TEACHER",
-        "ACCOUNTANT",
-        "STAFF",
-        "DRIVER"
-      ],
-      "module": "transport"
-    },
-    {
-      "id": "ch10-adding-vehicles",
-      "status": "planned",
-      "title": {
-        "en": "Adding Vehicles",
-        "ur": ""
-      },
-      "section": "10.2",
-      "chapter": 10,
-      "roles": [
-        "SCHOOL_ADMIN",
-        "PRINCIPAL",
-        "TEACHER",
-        "ACCOUNTANT",
-        "STAFF",
-        "DRIVER"
-      ],
-      "module": "transport"
-    },
-    {
-      "id": "ch10-assigning-students-to-routes",
-      "status": "planned",
-      "title": {
-        "en": "Assigning Students to Routes",
-        "ur": ""
-      },
-      "section": "10.3",
-      "chapter": 10,
-      "roles": [
-        "SCHOOL_ADMIN",
-        "PRINCIPAL",
-        "TEACHER",
-        "ACCOUNTANT",
-        "STAFF",
-        "DRIVER"
-      ],
-      "module": "transport"
-    },
-    {
-      "id": "ch10-transport-attendance",
-      "status": "planned",
-      "title": {
-        "en": "Transport Attendance",
-        "ur": ""
-      },
-      "section": "10.4",
-      "chapter": 10,
-      "roles": [
-        "SCHOOL_ADMIN",
-        "PRINCIPAL",
-        "TEACHER",
-        "ACCOUNTANT",
-        "STAFF",
-        "DRIVER"
-      ],
-      "module": "transport"
     },
     {
       "id": "ch11-setting-up-book-categories",
@@ -1214,200 +1519,6 @@
       "module": "library"
     },
     {
-      "id": "ch12-managing-curriculum-books-chapters-topics",
-      "status": "planned",
-      "title": {
-        "en": "Managing Curriculum (Books, Chapters, Topics)",
-        "ur": ""
-      },
-      "section": "12.1",
-      "chapter": 12,
-      "roles": [
-        "SCHOOL_ADMIN",
-        "PRINCIPAL",
-        "MANAGER",
-        "TEACHER"
-      ],
-      "module": "lms"
-    },
-    {
-      "id": "ch12-creating-lesson-plans",
-      "status": "planned",
-      "title": {
-        "en": "Creating Lesson Plans",
-        "ur": ""
-      },
-      "section": "12.2",
-      "chapter": 12,
-      "roles": [
-        "SCHOOL_ADMIN",
-        "PRINCIPAL",
-        "MANAGER",
-        "TEACHER"
-      ],
-      "module": "lms"
-    },
-    {
-      "id": "ch12-creating-assignments",
-      "status": "planned",
-      "title": {
-        "en": "Creating Assignments",
-        "ur": ""
-      },
-      "section": "12.3",
-      "chapter": 12,
-      "roles": [
-        "SCHOOL_ADMIN",
-        "PRINCIPAL",
-        "MANAGER",
-        "TEACHER"
-      ],
-      "module": "lms"
-    },
-    {
-      "id": "ch12-reviewing-submissions",
-      "status": "planned",
-      "title": {
-        "en": "Reviewing Submissions",
-        "ur": ""
-      },
-      "section": "12.4",
-      "chapter": 12,
-      "roles": [
-        "SCHOOL_ADMIN",
-        "PRINCIPAL",
-        "MANAGER",
-        "TEACHER"
-      ],
-      "module": "lms"
-    },
-    {
-      "id": "ch13-viewing-notifications-all-users",
-      "status": "planned",
-      "title": {
-        "en": "Viewing Notifications (All Users)",
-        "ur": ""
-      },
-      "section": "13.1",
-      "chapter": 13,
-      "module": "notifications"
-    },
-    {
-      "id": "ch13-creating-notification-templates-admin",
-      "status": "planned",
-      "title": {
-        "en": "Creating Notification Templates (Admin)",
-        "ur": ""
-      },
-      "section": "13.2",
-      "chapter": 13,
-      "roles": [
-        "SCHOOL_ADMIN",
-        "PRINCIPAL"
-      ],
-      "module": "notifications"
-    },
-    {
-      "id": "ch13-sending-notifications-admin",
-      "status": "planned",
-      "title": {
-        "en": "Sending Notifications (Admin)",
-        "ur": ""
-      },
-      "section": "13.3",
-      "chapter": 13,
-      "roles": [
-        "SCHOOL_ADMIN",
-        "PRINCIPAL"
-      ],
-      "module": "notifications"
-    },
-    {
-      "id": "ch14-starting-a-new-conversation",
-      "status": "planned",
-      "title": {
-        "en": "Starting a New Conversation",
-        "ur": ""
-      },
-      "section": "14.3",
-      "chapter": 14
-    },
-    {
-      "id": "ch14-replying-to-messages",
-      "status": "planned",
-      "title": {
-        "en": "Replying to Messages",
-        "ur": ""
-      },
-      "section": "14.4",
-      "chapter": 14
-    },
-    {
-      "id": "ch15-viewing-childs-information",
-      "status": "planned",
-      "title": {
-        "en": "Viewing Child's Information",
-        "ur": ""
-      },
-      "section": "15.2",
-      "chapter": 15,
-      "roles": [
-        "PARENT"
-      ]
-    },
-    {
-      "id": "ch15-applying-for-leave",
-      "status": "planned",
-      "title": {
-        "en": "Applying for Leave",
-        "ur": ""
-      },
-      "section": "15.3",
-      "chapter": 15,
-      "roles": [
-        "PARENT"
-      ]
-    },
-    {
-      "id": "ch16-my-assignments",
-      "status": "planned",
-      "title": {
-        "en": "My Assignments",
-        "ur": ""
-      },
-      "section": "16.4",
-      "chapter": 16,
-      "roles": [
-        "STUDENT"
-      ]
-    },
-    {
-      "id": "ch16-my-results",
-      "status": "planned",
-      "title": {
-        "en": "My Results",
-        "ur": ""
-      },
-      "section": "16.6",
-      "chapter": 16,
-      "roles": [
-        "STUDENT"
-      ]
-    },
-    {
-      "id": "ch16-ai-study-helper",
-      "status": "planned",
-      "title": {
-        "en": "AI Study Helper",
-        "ur": ""
-      },
-      "section": "16.8",
-      "chapter": 16,
-      "roles": [
-        "STUDENT"
-      ]
-    },
-    {
       "id": "ch17-managing-hostels-rooms",
       "status": "planned",
       "title": {
@@ -1465,55 +1576,11 @@
       "module": "hostel"
     },
     {
-      "id": "ch19-managing-users-school-admin-principal",
-      "status": "planned",
-      "title": {
-        "en": "Managing Users (School Admin & Principal)",
-        "ur": ""
-      },
-      "section": "19.2",
-      "chapter": 19,
-      "roles": [
-        "SCHOOL_ADMIN",
-        "PRINCIPAL"
-      ]
-    },
-    {
-      "id": "ch19-creating-student-user-accounts",
-      "status": "planned",
-      "title": {
-        "en": "Creating Student User Accounts",
-        "ur": ""
-      },
-      "section": "19.3",
-      "chapter": 19,
-      "roles": [
-        "SCHOOL_ADMIN",
-        "PRINCIPAL"
-      ]
-    },
-    {
-      "id": "ch21-items-stock",
-      "status": "planned",
-      "title": {
-        "en": "Items & Stock",
-        "ur": ""
-      },
-      "section": "21.2",
-      "chapter": 21,
-      "roles": [
-        "SCHOOL_ADMIN",
-        "PRINCIPAL",
-        "ACCOUNTANT"
-      ],
-      "module": "inventory"
-    },
-    {
       "id": "ch21-stock-transactions",
-      "status": "planned",
+      "status": "ready",
       "title": {
         "en": "Stock Transactions",
-        "ur": ""
+        "ur": "اسٹاک ٹرانزیکشنز"
       },
       "section": "21.3",
       "chapter": 21,
@@ -1522,14 +1589,18 @@
         "PRINCIPAL",
         "ACCOUNTANT"
       ],
-      "module": "inventory"
+      "module": "inventory",
+      "seconds": {
+        "en": 89,
+        "ur": 93
+      }
     },
     {
       "id": "ch21-item-assignments",
-      "status": "planned",
+      "status": "ready",
       "title": {
         "en": "Item Assignments",
-        "ur": ""
+        "ur": "آئٹمز کی تفویض"
       },
       "section": "21.4",
       "chapter": 21,
@@ -1540,7 +1611,11 @@
         "TEACHER",
         "STAFF"
       ],
-      "module": "inventory"
+      "module": "inventory",
+      "seconds": {
+        "en": 84,
+        "ur": 90
+      }
     }
   ]
 }

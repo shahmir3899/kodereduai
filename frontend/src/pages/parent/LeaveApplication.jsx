@@ -180,8 +180,8 @@ export default function LeaveApplication() {
               >
                 <option value="">-- Select child --</option>
                 {children.map((child) => (
-                  <option key={child.id} value={child.id}>
-                    {child.name} ({child.class_name || 'N/A'})
+                  <option key={child.id} value={child.student}>
+                    {child.student_name} ({child.class_name || 'N/A'})
                   </option>
                 ))}
               </select>
@@ -316,10 +316,10 @@ export default function LeaveApplication() {
                     ] : []}
                   >
                     <p className="text-xs text-gray-500 line-clamp-2">{req.reason}</p>
-                    {req.admin_remarks && (
+                    {req.review_note && (
                       <div className="mt-2 p-2 bg-gray-50 rounded-lg">
                         <p className="text-xs text-gray-500">
-                          <span className="font-medium">Remarks:</span> {req.admin_remarks}
+                          <span className="font-medium">Remarks:</span> {req.review_note}
                         </p>
                       </div>
                     )}
@@ -352,8 +352,11 @@ export default function LeaveApplication() {
                           <td className="px-4 py-3 text-sm text-gray-600">
                             {getDayCount(req.start_date, req.end_date)}
                           </td>
-                          <td className="px-4 py-3 text-sm text-gray-600 max-w-xs truncate">
-                            {req.reason}
+                          <td className="px-4 py-3 text-sm text-gray-600 max-w-xs">
+                            <p className="truncate">{req.reason}</p>
+                            {req.review_note && (
+                              <p className="text-xs text-gray-500 mt-0.5"><span className="font-medium">Remarks:</span> {req.review_note}</p>
+                            )}
                           </td>
                           <td className="px-4 py-3">
                             <span className={`px-2 py-0.5 rounded text-xs font-medium ${STATUS_COLORS[req.status] || TONE.neutral}`}>
