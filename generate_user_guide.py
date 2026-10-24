@@ -1501,56 +1501,62 @@ def build_guide():
 
     pdf.body_text(
         "The Library module provides a complete book management system including cataloging, "
-        "issuing/returning books, and tracking overdue items."
+        "issuing/returning books, and tracking overdue items. Only School Admins and Principals can "
+        "change anything here; other staff roles can browse the catalog and see which books are out."
     )
 
     pdf.section_title("Setting Up Book Categories")
     pdf.nav_path("Sidebar > Library > Catalog")
     pdf.step("On the Book Catalog page, click 'Manage Categories'.")
-    pdf.step("Add categories: Fiction, Non-Fiction, Science, Mathematics, History, Reference, etc.")
-    pdf.step("Categories help organize and filter the book catalog.")
+    pdf.step("Type a Category Name (for example Fiction, Science, Mathematics, History, Reference), add an optional description and click 'Add Category'.")
+    pdf.step("Use Edit to rename a category, or Delete to remove it. Its books stay in the catalog without a category.")
+    pdf.step("Category names must be unique. Categories help organize and filter the book catalog.")
 
     pdf.section_title("Adding Books to the Catalog")
     pdf.nav_path("Sidebar > Library > Catalog")
     pdf.step("Click 'Add Book'.")
-    pdf.step("Enter: Title, Author, ISBN, Publisher, Category, Total Copies, Shelf Location.")
-    pdf.step("Save. The book appears in the catalog.")
-    pdf.step("Use the search bar to find books by title, author, or ISBN.")
-    pdf.step("Filter by category to browse specific sections.")
+    pdf.step("Enter Title and Author (both required), then ISBN, Publisher, Category, Total Copies and Shelf Location.")
+    pdf.step("Click 'Add Book'. The book appears in the catalog with all copies available.")
+    pdf.step("Use the search bar to find books by title, author, or ISBN, and the Category filter to browse one section.")
+    pdf.step("Edit changes a book. Total Copies cannot go below the copies currently issued.")
+    pdf.step("A book that has ever been issued cannot be deleted because its history is kept. Edit it and untick Active to take it off the shelf instead.")
 
     pdf.section_title("Issuing Books")
     pdf.nav_path("Sidebar > Library > Issue / Return")
-    pdf.step("Click 'Issue Book'.")
-    pdf.step("Select Borrower Type: Student or Staff.")
-    pdf.step("Search and select the borrower (student name or staff name).")
-    pdf.step("Search and select the book to issue.")
-    pdf.step("Set the Due Date (typically 14 days from today).")
-    pdf.step("Add optional notes and click 'Issue'.")
-    pdf.step("The book's available copies count decreases by 1.")
+    pdf.step("On the 'Issue Book' tab, choose Student or Staff as the Borrower Type.")
+    pdf.step("Type at least two letters of the borrower's name and pick them from the list.")
+    pdf.step("Type at least two letters of the book title and pick the book (only books with copies available are listed).")
+    pdf.step("Check the Due Date. It starts at today plus the loan period set in Library Settings (14 days by default).")
+    pdf.step("Add optional notes and click 'Issue Book'. The book's available copies drop by 1.")
+    pdf.step("A borrower cannot go over the limit set in Library Settings (3 books for a student, 5 for staff by default) or take a second copy of the same book. You can also start from the catalog: click 'Issue' next to a book.")
 
     pdf.section_title("Returning Books")
     pdf.nav_path("Sidebar > Library > Issue / Return")
-    pdf.step("Find the issued book in the list (search by student name or book title).")
-    pdf.step("Click 'Return' next to the entry.")
-    pdf.step("Confirm the return. The book's available copies increase by 1.")
-    pdf.step("If the book is overdue, any applicable fine is recorded.")
+    pdf.step("Open the 'Return Book' tab and search by student name, staff name or book title.")
+    pdf.step("Click 'Process Return' next to the entry.")
+    pdf.step("Check the summary. For a late book it shows the days overdue and the fine (days overdue x the daily fine in Library Settings).")
+    pdf.step("Click 'Confirm Return'. The book's available copies increase by 1 and the fine is recorded on the issue.")
 
     pdf.section_title("Tracking Overdue Books")
     pdf.nav_path("Sidebar > Library > Overdue")
-    pdf.step("View all books that are past their due date.")
-    pdf.step("See borrower details and number of days overdue.")
-    pdf.step("Send reminders to borrowers.")
-    pdf.step("Update due dates if an extension is granted.")
+    pdf.step("The page lists every book past its due date that has not come back, oldest first, with the borrower, days overdue and the fine so far.")
+    pdf.step("The summary shows the number of overdue books, the total estimated fines and the fine per day.")
+    pdf.step("Click 'Return' on a row to take the book back and record its fine.")
+    pdf.step("Due-date reminders to borrowers and parents are sent by the Notifications module's on-demand job, not from this page.")
 
     pdf.section_title("Library Dashboard")
     pdf.nav_path("Sidebar > Library > Dashboard")
     pdf.body_text("The Library Dashboard displays:")
-    pdf.bullet("Total Books - Total unique titles in the catalog")
-    pdf.bullet("Total Copies - Sum of all book copies")
-    pdf.bullet("Currently Issued - Books currently checked out")
-    pdf.bullet("Overdue Count - Books past their due date")
+    pdf.bullet("Book Titles - Number of active titles in the catalog")
+    pdf.bullet("Total Copies - Sum of all copies of active titles")
+    pdf.bullet("Currently Issued - Books checked out and not yet returned")
+    pdf.bullet("Overdue Books - Issued books past their due date")
     pdf.bullet("Categories - Number of book categories")
-    pdf.bullet("Most Issued Books - Popular titles chart")
+    pdf.bullet("Most Issued Books - The five most borrowed titles")
+    pdf.body_text(
+        "School Admins and Principals also get a 'Library Settings' button for the loan period, the borrowing "
+        "limits for students and staff, and the fine per overdue day."
+    )
 
     # =========================================================================
     # CHAPTER 11: LMS (LEARNING MANAGEMENT)
@@ -1907,84 +1913,86 @@ def build_guide():
     pdf.body_text(
         "The Hostel Management module helps schools manage their boarding facilities. "
         "It covers hostel buildings, rooms, student allocations, and gate passes for "
-        "students leaving and returning to the hostel."
+        "students leaving and returning to the hostel. Hostel pages are available to "
+        "School Admin and Principal roles only, because they list students and the reasons "
+        "for their leave."
     )
 
     pdf.section_title("Hostel Dashboard")
     pdf.nav_path("Sidebar > Hostel > Dashboard")
     pdf.body_text("The Hostel Dashboard provides a quick overview of all hostel operations:")
-    pdf.bullet("Total hostels, rooms, and current occupancy")
-    pdf.bullet("Occupancy rate (percentage of beds filled)")
-    pdf.bullet("Active allocations count")
+    pdf.bullet("Total hostels and rooms, total capacity and current occupancy")
+    pdf.bullet("Occupancy rate (percentage of available beds filled) and available beds")
     pdf.bullet("Pending gate pass requests")
     pdf.bullet("Students currently out on gate passes")
-    pdf.bullet("Available beds count")
+    pdf.bullet("Number of boys' and girls' hostels")
     pdf.bullet("Quick action links to manage rooms, allocations, and gate passes")
 
     pdf.section_title("Managing Hostels & Rooms")
     pdf.nav_path("Sidebar > Hostel > Rooms")
     pdf.sub_section("Creating a Hostel")
-    pdf.step("Navigate to Hostel > Rooms in the sidebar.")
-    pdf.step("Switch to the 'Hostels' tab.")
+    pdf.step("Navigate to Hostel > Rooms in the sidebar. The 'Hostels' tab is open.")
     pdf.step("Click 'Add Hostel'.")
-    pdf.step("Enter: Name, Hostel Type (Boys / Girls / Mixed), Capacity.")
-    pdf.step("Optionally assign a Warden (from staff members).")
-    pdf.step("Save. The hostel appears in the list.")
+    pdf.step("Enter the Hostel Name, choose the Hostel Type (Boys / Girls / Mixed) and enter the Capacity.")
+    pdf.step("Optionally enter the Address and Contact Number, and choose a Warden from your active staff.")
+    pdf.step("Click 'Add Hostel'. The hostel appears in the list with its occupancy.")
 
     pdf.sub_section("Creating Rooms")
-    pdf.step("Switch to the 'Rooms' tab.")
+    pdf.step("Open the 'Rooms' tab and choose a hostel in 'Select Hostel'.")
     pdf.step("Click 'Add Room'.")
-    pdf.step("Select the Hostel this room belongs to.")
-    pdf.step("Enter: Room Number, Floor, Room Type (Single / Double / Dormitory), Capacity.")
-    pdf.step("Save. The room shows current occupancy vs. capacity.")
-    pdf.info_box("Room Availability", "Rooms are automatically marked as unavailable when they reach full capacity. "
-                 "The system prevents over-allocation by checking capacity before each new allocation.")
+    pdf.step("Enter the Room Number, Floor and Capacity, and choose the Room Type (Single / Double / Dormitory).")
+    pdf.step("Click 'Add Room'. The room shows its occupancy and whether it is Available, Full or Unavailable.")
+    pdf.info_box("Room status", "A room shows Full when every bed is taken. Untick 'Available for allocation' "
+                 "when you take a room out of use; it is then shown as Unavailable and cannot be chosen for new allocations. "
+                 "A room's capacity cannot be lowered below the number of students in it.")
+    pdf.warning_box("A hostel or room that has student allocation records cannot be deleted, so the history is kept. "
+                    "Mark a hostel Inactive, or a room Unavailable, instead.")
 
     pdf.section_title("Student Allocations")
     pdf.nav_path("Sidebar > Hostel > Allocations")
     pdf.body_text(
-        "Allocations assign students to specific hostel rooms for an academic year."
+        "Allocations assign students to specific hostel rooms for an academic year. "
+        "The list can be filtered by hostel, by status (Active or Vacated) and searched by student name."
     )
     pdf.sub_section("Allocating a Student")
-    pdf.step("Navigate to Hostel > Allocations.")
-    pdf.step("Click 'Add Allocation'.")
-    pdf.step("Select: Student, Room (from available rooms), Academic Year.")
-    pdf.step("The system validates that the room has capacity and the student isn't already allocated.")
-    pdf.step("Save. The student is now assigned to the room.")
+    pdf.step("Navigate to Hostel > Allocations and click 'Allocate Student'.")
+    pdf.step("The Academic Year is the current one. Search for and choose the Student; students who already hold a bed this year are not listed.")
+    pdf.step("Choose the Hostel, then a Room. Only rooms with a free bed are listed.")
+    pdf.step("Click 'Allocate'. The student appears in the list with the room.")
     pdf.sub_section("Vacating a Student")
-    pdf.step("Find the active allocation in the list.")
-    pdf.step("Click the 'Vacate' button.")
-    pdf.step("The allocation is marked as inactive, and the room's occupancy count decreases.")
-    pdf.warning_box("Each student can only have one active hostel allocation per academic year. "
-                    "Vacate the current allocation before assigning to a new room.")
+    pdf.step("Find the active allocation in the list and click 'Vacate'.")
+    pdf.step("Confirm. The allocation is marked Vacated with today's date and the room's occupancy decreases.")
+    pdf.step("Choose 'Vacated' in the status filter to see students who have left.")
+    pdf.warning_box("Each student can only hold one active hostel bed per academic year. "
+                    "Vacate the current allocation before placing the student in another room; "
+                    "a vacated student can be allocated again in the same year.")
 
     pdf.section_title("Gate Passes")
     pdf.nav_path("Sidebar > Hostel > Gate Passes")
     pdf.body_text(
         "Gate passes track students leaving and returning to the hostel. "
-        "They follow a workflow: Request > Approve/Reject > Checkout > Return."
+        "They follow a workflow: Request > Approve/Reject > Check Out > Return."
     )
     pdf.sub_section("Creating a Gate Pass")
     pdf.step("Click 'New Gate Pass'.")
-    pdf.step("Select: Student, Pass Type (Day Out / Weekend / Holiday / Emergency).")
-    pdf.step("Enter: Departure Date, Expected Return Date/Time, Destination, Reason.")
-    pdf.step("Submit. The pass is created with 'Pending' status.")
+    pdf.step("Choose the Student (only students who currently hold a hostel bed are listed) and the Pass Type (Day Pass / Overnight / Weekend / Vacation Leave).")
+    pdf.step("Enter the Reason and where the student is Going To, and optionally a contact number at the destination.")
+    pdf.step("The Departure Date and Expected Return are filled in (the next full hour, and eight hours later); change them if needed, then click 'Create Gate Pass'. The pass starts as Pending Approval.")
     pdf.sub_section("Approving / Rejecting Gate Passes")
     pdf.step("Review pending gate passes in the list.")
-    pdf.step("Click 'Approve' to authorize the student's departure.")
-    pdf.step("Click 'Reject' with a reason to deny the request.")
-    pdf.sub_section("Checkout & Return")
-    pdf.step("When the student physically leaves, click 'Checkout' to record departure time.")
-    pdf.step("When the student returns, click 'Return' to record the actual return time.")
+    pdf.step("Click 'Approve' to authorize the student's departure, or 'Reject' to deny the request.")
+    pdf.step("Add optional remarks in the box and confirm.")
+    pdf.sub_section("Check Out & Return")
+    pdf.step("When the student leaves the gate, click 'Check Out' on the approved pass.")
+    pdf.step("When the student is back, click 'Mark Returned'. The actual return time is recorded.")
     pdf.simple_table(
         ["Status", "Meaning", "Next Action"],
         [
-            ["Pending", "Pass requested, awaiting approval", "Approve or Reject"],
-            ["Approved", "Pass approved, student may leave", "Checkout when departing"],
-            ["Rejected", "Pass denied by admin", "No further action"],
-            ["Checked Out", "Student has left the hostel", "Return when student comes back"],
+            ["Pending Approval", "Pass requested, awaiting approval", "Approve or Reject"],
+            ["Approved", "Pass approved, student may leave", "Check Out when departing"],
+            ["Rejected", "Pass denied", "No further action"],
+            ["Checked Out", "Student has left the hostel", "Mark Returned when student comes back"],
             ["Returned", "Student has returned to hostel", "Complete - no action needed"],
-            ["Cancelled", "Pass was cancelled", "No further action"],
         ],
         [35, 75, 80]
     )

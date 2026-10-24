@@ -31,12 +31,12 @@ CHAPTER_TAGS = {
     8: {'roles': ADM, 'module': 'hr'},
     9: {'roles': ADM, 'module': 'admissions'},
     10: {'roles': NON_MANAGER_STAFF, 'module': 'transport'},
-    11: {'roles': NON_MANAGER_STAFF, 'module': 'library'},
+    11: {'roles': ADM, 'module': 'library'},  # every Library write is admin/principal only; other staff roles can only browse
     12: {'roles': ADM + MGR + TCH, 'module': 'lms'},
     13: {'module': 'notifications'},
     15: {'roles': ['PARENT']},
     16: {'roles': ['STUDENT']},
-    17: {'roles': NON_MANAGER_STAFF, 'module': 'hostel'},
+    17: {'roles': ADM, 'module': 'hostel'},  # Hostel lists students and gate-pass reasons: admin/principal only (API refuses the rest)
     18: {'roles': ADM},
     19: {'roles': ADM},
     20: {'roles': ADM},

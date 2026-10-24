@@ -1,5 +1,12 @@
 RewriteEngine On
 
+# Old brand domain: send kodereduai.pk (apex, www or a school subdomain) to the same host on educationai.pk.
+# One shared folder serves both domains until kodereduai.pk expires, so this is keyed on the host.
+RewriteCond %{HTTP_HOST} ^(?:www\.)?kodereduai\.pk$ [NC]
+RewriteRule ^ https://educationai.pk%{REQUEST_URI} [L,R=301]
+RewriteCond %{HTTP_HOST} ^([^.]+)\.kodereduai\.pk$ [NC]
+RewriteRule ^ https://%1.educationai.pk%{REQUEST_URI} [L,R=301]
+
 # Force HTTPS in production hosting
 RewriteCond %{HTTPS} !=on
 RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
