@@ -275,6 +275,12 @@ class StudentCreateSerializer(serializers.ModelSerializer):
             section = sections[0] if sections else None
         self.resolved_session_class = section
 
+        # Attendance can't be recorded before the admission date, so a new student always has one.
+        if not attrs.get('admission_date'):
+            from django.utils import timezone
+
+            attrs['admission_date'] = timezone.localdate()
+
         # Rolls are per section; a class with no section set up falls back to the class.
         taken = StudentEnrollment.objects.filter(
             school=school, academic_year=current_year, roll_number=roll_number, is_active=True,
@@ -369,9 +375,27 @@ class StudentUpdateSerializer(serializers.ModelSerializer):
                 'is_active': "A student's active flag cannot be changed directly.",
             })
 
+    def _refuse_admission_after_records(self, student, attrs):
+        """An admission date later than a day already marked would leave attendance
+        from before the student was admitted, so it is refused with the first marked day."""
+        new_date = attrs.get('admission_date')
+        if not student or not new_date or new_date == student.admission_date:
+            return
+        from attendance.models import AttendanceRecord
+
+        first = AttendanceRecord.objects.filter(student=student).order_by('date').values_list('date', flat=True).first()
+        if first and first < new_date:
+            raise serializers.ValidationError({
+                'admission_date': (
+                    f"{student.name} already has attendance from {first.strftime('%d %b %Y')}. "
+                    f"Use {first.strftime('%d %b %Y')} or earlier, or remove those records first."
+                ),
+            })
+
     def validate(self, attrs):
         student = self.instance
         self._refuse_direct_status_change(student, attrs)
+        self._refuse_admission_after_records(student, attrs)
         school = student.school if student else None
         class_obj = attrs.get('class_obj', student.class_obj if student else None)
         roll_number = attrs.get('roll_number', student.roll_number if student else None)
@@ -593,6 +617,7 @@ class StudentBulkCreateSerializer(serializers.Serializer):
 
         from academic_sessions.models import AcademicYear, StudentEnrollment
         from academic_sessions.enrollment_service import resolve_session_class
+        from django.utils import timezone
         current_year = AcademicYear.objects.filter(
             school_id=school_id, is_current=True,
         ).first()
@@ -635,6 +660,7 @@ class StudentBulkCreateSerializer(serializers.Serializer):
                         name=student_data['name'],
                         parent_phone=student_data.get('parent_phone', ''),
                         parent_name=student_data.get('parent_name', ''),
+                        admission_date=timezone.localdate(),
                     )
                     if current_year:
                         StudentEnrollment.objects.create(

@@ -13,10 +13,15 @@ def daily_attendance_summary(school_id, date_obj, academic_year_id=None):
 
     students_qs = Student.objects.filter(school_id=school_id, is_active=True)
     if academic_year_id:
+        # Expected on *this date*, not "enrolled today": a student admitted later wasn't
+        # expected yet, and one who has since left still counts on the days before leaving.
+        from academic_sessions.leaving import expected_student_ids
+
         students_qs = students_qs.filter(
-            enrollments__academic_year_id=academic_year_id,
-            enrollments__is_active=True,
+            id__in=expected_student_ids(school_id, date_obj, academic_year_id),
         )
+    else:
+        students_qs = students_qs.filter(Q(admission_date__isnull=True) | Q(admission_date__lte=date_obj))
     enrolled_ids = set(students_qs.values_list('id', flat=True).distinct())
 
     # Only the enrolled students: the total is the enrolled set, so counting every record on the

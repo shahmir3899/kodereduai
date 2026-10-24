@@ -20,11 +20,13 @@ def upsert_attendance_record(*, student, date, school, academic_year, attendance
     existing row rather than creating a duplicate.
 
     Returns (None, False) without writing when the student had left the
-    school by ``date``: callers must not record attendance for them.
+    school by ``date`` or was not yet admitted: callers must not record
+    attendance for them.
     """
-    from academic_sessions.leaving import left_by
+    from academic_sessions.leaving import left_by, not_yet_admitted
 
-    if left_by(school.id if school else student.school_id, [student.id], date):
+    school_id = school.id if school else student.school_id
+    if left_by(school_id, [student.id], date) or not_yet_admitted(school_id, [student.id], date):
         return None, False
     return AttendanceRecord.objects.update_or_create(
         student=student,

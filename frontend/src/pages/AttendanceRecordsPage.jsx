@@ -43,6 +43,18 @@ function leftFromDay(leftDate, year, month, daysInMonth) {
   return ld <= daysInMonth ? ld : null
 }
 
+// Days of this month that fall before the admission date (0 when admitted by the
+// 1st, the whole month when admitted later), so those cells can be left blank.
+function joinedBeforeDay(admissionDate, year, month, daysInMonth) {
+  if (!admissionDate) return 0
+  const [ay, am, ad] = admissionDate.split('-').map(Number)
+  const monthIndex = year * 12 + month
+  const admitIndex = ay * 12 + (am - 1)
+  if (admitIndex < monthIndex) return 0
+  if (admitIndex > monthIndex) return daysInMonth
+  return Math.min(ad - 1, daysInMonth)
+}
+
 export default function AttendanceRecordsPage() {
   const { activeAcademicYear } = useAcademicYear()
   const { isPrincipal, isManager, isTeacher, isSchoolAdmin } = useAuth()
@@ -195,6 +207,8 @@ export default function AttendanceRecordsPage() {
         leftDate: s.left_date || null,
         leftStatus: s.status,
         leftFrom: leftFromDay(s.left_date, year, month, daysInMonth),
+        admissionDate: s.admission_date || null,
+        joinedBefore: joinedBeforeDay(s.admission_date, year, month, daysInMonth),
         awayDays: awayDaysInMonth(s.away_periods, year, month, daysInMonth),
       }))
       .sort((a, b) => {
@@ -496,6 +510,13 @@ export default function AttendanceRecordsPage() {
                     const bandFrom = leftFrom !== null
                       && !Object.keys(student.dates).some((d) => Number(d) >= leftFrom)
                       ? leftFrom : null
+                    // Days before admission are not expected: one blank band, unless a
+                    // record somehow sits there (then show it rather than hide it).
+                    const joinedBefore = student.joinedBefore
+                    const joinBand = joinedBefore > 0
+                      && !Object.keys(student.dates).some((d) => Number(d) <= joinedBefore)
+                      ? joinedBefore : 0
+                    const joinLabel = student.admissionDate ? `Joined ${formatShortDate(student.admissionDate)}` : null
                     const leftLabel = student.leftDate
                       ? `${student.leftStatus === 'TRANSFERRED' ? 'Transferred' : 'Left'} ${formatShortDate(student.leftDate)}`
                       : null
@@ -521,6 +542,19 @@ export default function AttendanceRecordsPage() {
                           )}
                         </td>
                         {allDays.map((day) => {
+                          if (joinBand > 0 && day <= joinBand) {
+                            if (day > 1) return null
+                            return (
+                              <td
+                                key={day}
+                                colSpan={joinBand}
+                                className="px-2 py-1 text-[10px] font-medium text-gray-500 bg-gray-100 border-r-2 border-r-gray-300"
+                                title={joinLabel || 'Not yet admitted'}
+                              >
+                                {joinBand >= 3 && <span className="whitespace-nowrap">{joinLabel}</span>}
+                              </td>
+                            )
+                          }
                           if (bandFrom !== null && day > bandFrom) return null
                           if (bandFrom !== null && day === bandFrom) {
                             return (
@@ -537,7 +571,7 @@ export default function AttendanceRecordsPage() {
                           const s = student.dates[day]
                           const off = offDays[day]
                           const awayThatDay = student.awayDays?.has(day)
-                          const enrolledThatDay = (leftFrom === null || day < leftFrom) && !awayThatDay
+                          const enrolledThatDay = (leftFrom === null || day < leftFrom) && !awayThatDay && day > joinedBefore
                           const unmarked = !s && !off && enrolledThatDay && isPastOrToday(day) && datesWithData.includes(day)
                           return (
                             <td
@@ -582,6 +616,7 @@ export default function AttendanceRecordsPage() {
               <span className="flex items-center gap-1"><span className="inline-block w-5 h-3 rounded-sm bg-indigo-50 border border-indigo-100" /> Multi-day holiday (named above)</span>
               <span><span className="font-bold text-amber-500">·</span> Not marked</span>
               <span className="flex items-center gap-1"><span className="inline-block w-5 h-3 rounded-sm bg-gray-100 border-l-2 border-gray-300" /> Left the school</span>
+              <span className="flex items-center gap-1"><span className="inline-block w-5 h-3 rounded-sm bg-gray-100 border-r-2 border-gray-300" /> Not yet admitted</span>
               <span className="flex items-center gap-1"><span className="inline-block w-5 h-3 rounded-sm bg-gray-200" /> Away (not enrolled)</span>
             </div>
           </div>

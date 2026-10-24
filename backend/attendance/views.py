@@ -459,10 +459,11 @@ class AttendanceUploadViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.M
             )
 
         # Never write for students who had left by the upload's date.
-        from academic_sessions.leaving import left_by
+        from academic_sessions.leaving import left_by, not_yet_admitted
 
         departed = left_by(upload.school_id, [s.id for s in all_students], upload.date)
-        all_students = [s for s in all_students if s.id not in departed]
+        early = not_yet_admitted(upload.school_id, [s.id for s in all_students], upload.date)
+        all_students = [s for s in all_students if s.id not in departed and s.id not in early]
 
         # Create attendance records using bulk operations
         student_ids = [s.id for s in all_students]
@@ -1471,8 +1472,19 @@ class AttendanceRecordViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.R
                 if not any(d >= first for d in attendance_matrix[student_id]):
                     band_from = first.day
 
+            # Not yet admitted: the days before admission are not expected, so they get
+            # no dots. Banded only when no record sits there (a stray one stays visible).
+            admitted_on = getattr(student_objs.get(student_id), 'admission_date', None)
+            joined_to = None
+            if admitted_on and admitted_on > date_from:
+                if not any(d < admitted_on for d in attendance_matrix[student_id]):
+                    joined_to = admitted_on.day - 1 if admitted_on <= date_to else n_days
+
             for day_date in dates_in_month:
                 col = day_col0 + day_date.day - 1
+                if joined_to and day_date.day <= joined_to:
+                    row.append(f"Joined {admitted_on.strftime('%d %b')}" if day_date.day == 1 and joined_to >= 4 else '')
+                    continue
                 if band_from is not None and day_date.day >= band_from:
                     if day_date.day == band_from:
                         verb = 'Transferred' if left_status == 'TRANSFERRED' else 'Left'
@@ -1497,6 +1509,14 @@ class AttendanceRecordViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.R
                 else:
                     row.append('')
 
+            if joined_to and joined_to >= 4:
+                cell_styles += [
+                    ('SPAN', (day_col0, row_idx), (day_col0 + joined_to - 1, row_idx)),
+                    ('BACKGROUND', (day_col0, row_idx), (day_col0 + joined_to - 1, row_idx), off_bg),
+                    ('ALIGN', (day_col0, row_idx), (day_col0 + joined_to - 1, row_idx), 'LEFT'),
+                    ('TEXTCOLOR', (day_col0, row_idx), (day_col0 + joined_to - 1, row_idx), colors.HexColor('#4B5563')),
+                    ('FONTNAME', (day_col0, row_idx), (day_col0 + joined_to - 1, row_idx), 'Helvetica-Oblique'),
+                ]
             if band_from is not None:
                 c0 = day_col0 + band_from - 1
                 c1 = pal_col0 - 1
@@ -1994,17 +2014,28 @@ class AttendanceRecordViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.R
                 ).values_list('id', flat=True)
             )
 
-        from academic_sessions.leaving import left_by, left_message, returns_after
+        from academic_sessions.leaving import (
+            admitted_message, left_by, left_message, not_yet_admitted, returns_after,
+        )
 
         departed = left_by(school_id, [e['student_id'] for e in entries], date)
+        early = not_yet_admitted(school_id, [e['student_id'] for e in entries], date)
         returns = returns_after(school_id, list(departed), date) if departed else {}
-        departed_names = dict(Student.objects.filter(id__in=departed).values_list('id', 'name')) if departed else {}
+        departed_names = dict(
+            Student.objects.filter(id__in=[*departed, *early]).values_list('id', 'name')
+        ) if (departed or early) else {}
 
         errors = []
         to_save = {}  # student_id -> status; a repeated student keeps the last entry
         for entry in entries:
             student_id = entry['student_id']
 
+            if student_id in early:
+                errors.append({
+                    'student_id': student_id,
+                    'error': admitted_message(departed_names.get(student_id, 'This student'), early[student_id]),
+                })
+                continue
             if student_id in departed:
                 errors.append({
                     'student_id': student_id,

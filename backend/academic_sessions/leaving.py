@@ -35,7 +35,9 @@ def enrolled_on_q(day, prefix=''):
     away = EnrollmentBreak.objects.filter(
         student_id=OuterRef(f'{p}student_id'), start_date__lte=day,
     ).filter(Q(end_date__isnull=True) | Q(end_date__gt=day))
-    return (Q(**{f'{p}is_active': True}) | Q(**{f'{p}left_date__gt': day})) & ~Exists(away)
+    # A missing admission date means no lower bound, so unfilled legacy rows keep working.
+    admitted = Q(**{f'{p}student__admission_date__isnull': True}) | Q(**{f'{p}student__admission_date__lte': day})
+    return (Q(**{f'{p}is_active': True}) | Q(**{f'{p}left_date__gt': day})) & ~Exists(away) & admitted
 
 
 def _breaks_covering(school_id, student_ids, day):
@@ -86,6 +88,40 @@ def returns_after(school_id, student_ids, day):
         for sid, end in _breaks_covering(school_id, ids, day)
         .filter(end_date__isnull=False).values_list('student_id', 'end_date')
     }
+
+
+def not_yet_admitted(school_id, student_ids, day):
+    """{student_id: admission_date} for students whose admission date is after
+    ``day``: the mirror of ``left_by`` for the other end of the window. A student
+    with no admission date has no lower bound."""
+    from students.models import Student
+
+    ids = [sid for sid in student_ids if sid]
+    if not ids or not day:
+        return {}
+    return dict(
+        Student.objects.filter(school_id=school_id, id__in=ids, admission_date__gt=day)
+        .values_list('id', 'admission_date')
+    )
+
+
+def admitted_message(name, admission_date, what='attendance'):
+    when = admission_date.strftime('%d %b %Y') if admission_date else 'a later date'
+    return (
+        f"{name} was admitted on {when}; {what} can't be recorded before that date. "
+        f"If the admission date is wrong, correct it on the student's profile first."
+    )
+
+
+def expected_student_ids(school_id, day, academic_year_id):
+    """Students expected at school on ``day`` in that year: enrolled, already
+    admitted, not yet departed and not inside a break. What a day's head-count
+    is measured against."""
+    return set(
+        StudentEnrollment.objects.filter(school_id=school_id, academic_year_id=academic_year_id)
+        .filter(enrolled_on_q(day))
+        .values_list('student_id', flat=True)
+    )
 
 
 def departed_in_year(school_id, student_ids, academic_year_id):
