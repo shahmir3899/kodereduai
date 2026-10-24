@@ -1,0 +1,30 @@
+{
+  "voice": "en-US-AriaNeural",
+  "rate": "-5%",
+  "cues": [
+    {
+      "start": 0.115,
+      "text": "Let's check how much of the curriculum has been covered."
+    },
+    {
+      "start": 5.826,
+      "text": "Open Planning and Delivery, then choose Curriculum Coverage."
+    },
+    {
+      "start": 11.504,
+      "text": "Choose a class and a subject. The tiles show the total, taught and tested topics."
+    },
+    {
+      "start": 22.666,
+      "text": "Use the coverage filter to show only the topics that aren't covered yet."
+    },
+    {
+      "start": 30.221,
+      "text": "Switch to Timeline to see the topics spread across the year."
+    },
+    {
+      "start": 37.662,
+      "text": "Coverage checked."
+    }
+  ]
+}

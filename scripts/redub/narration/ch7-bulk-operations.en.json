@@ -1,0 +1,30 @@
+{
+  "voice": "en-US-AriaNeural",
+  "rate": "-5%",
+  "cues": [
+    {
+      "start": 0.115,
+      "text": "Let's handle fees in bulk."
+    },
+    {
+      "start": 5.806,
+      "text": "Open Finance, then choose Collect Payments."
+    },
+    {
+      "start": 14.102,
+      "text": "Tick the header box to select every student, or tick students one by one."
+    },
+    {
+      "start": 21.435,
+      "text": "At the bottom bar, choose the account that receives the money."
+    },
+    {
+      "start": 26.201,
+      "text": "Press Pay Full, and every selected student is marked fully paid at once. The bar also lets you delete the selected records."
+    },
+    {
+      "start": 39.298,
+      "text": "All paid in one step."
+    }
+  ]
+}

@@ -1,0 +1,34 @@
+{
+  "voice": "en-US-AriaNeural",
+  "rate": "-5%",
+  "cues": [
+    {
+      "start": 0.104,
+      "text": "Let's look at report cards."
+    },
+    {
+      "start": 5.982,
+      "text": "Open Academics, then choose Report Cards."
+    },
+    {
+      "start": 13.525,
+      "text": "Choose a class, then pick a student."
+    },
+    {
+      "start": 25.765,
+      "text": "Filter by session and exams if you like."
+    },
+    {
+      "start": 29.525,
+      "text": "The preview shows the exam results, grades and GPA."
+    },
+    {
+      "start": 37.479,
+      "text": "Press Download PDF to get a printable report card."
+    },
+    {
+      "start": 43.605,
+      "text": "Ready to print."
+    }
+  ]
+}

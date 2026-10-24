@@ -1,0 +1,34 @@
+{
+  "voice": "en-US-AriaNeural",
+  "rate": "-5%",
+  "cues": [
+    {
+      "start": 0.104,
+      "text": "Let's enter the exam marks."
+    },
+    {
+      "start": 5.796,
+      "text": "Open Academics, then choose Marks Entry."
+    },
+    {
+      "start": 11.699,
+      "text": "Choose the exam, then the class and the subject."
+    },
+    {
+      "start": 23.519,
+      "text": "All the students of that class load automatically."
+    },
+    {
+      "start": 29.794,
+      "text": "Type each student's marks. The maximum marks are checked for you."
+    },
+    {
+      "start": 40.656,
+      "text": "Press Save All Marks. You can come back and edit until the results are published."
+    },
+    {
+      "start": 49.165,
+      "text": "Marks are saved."
+    }
+  ]
+}

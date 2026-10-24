@@ -1,0 +1,34 @@
+{
+  "voice": "en-US-AriaNeural",
+  "rate": "-5%",
+  "cues": [
+    {
+      "start": 0.107,
+      "text": "Let's get an overview of your school's fees."
+    },
+    {
+      "start": 5.81,
+      "text": "Open Finance, then choose Fee Overview. It shows the status of your fees at a glance."
+    },
+    {
+      "start": 13.686,
+      "text": "Choose Monthly or Annual view, then the month and year."
+    },
+    {
+      "start": 18.143,
+      "text": "Category-wise Collection shows how much of each fee category has been collected."
+    },
+    {
+      "start": 25.868,
+      "text": "Collection Progress shows how much of the total due is paid."
+    },
+    {
+      "start": 30.938,
+      "text": "Use Collect Payments to record payments, or Fee Setup to change the fee amounts."
+    },
+    {
+      "start": 40.468,
+      "text": "Fees at a glance."
+    }
+  ]
+}

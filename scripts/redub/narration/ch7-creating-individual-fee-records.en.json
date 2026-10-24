@@ -1,0 +1,34 @@
+{
+  "voice": "en-US-AriaNeural",
+  "rate": "-5%",
+  "cues": [
+    {
+      "start": 0.117,
+      "text": "Let's create a single fee record."
+    },
+    {
+      "start": 5.827,
+      "text": "Open Finance, then choose Collect Payments."
+    },
+    {
+      "start": 14.192,
+      "text": "Press Generate Single Fee Record."
+    },
+    {
+      "start": 19.376,
+      "text": "Select the class, then search for the student and pick them from the list."
+    },
+    {
+      "start": 29.635,
+      "text": "Choose the fee category. The amount fills in from the fee structure."
+    },
+    {
+      "start": 36.073,
+      "text": "If the student has already paid, enter the amount paid. Then press Create. The window closes and the new record appears in the table."
+    },
+    {
+      "start": 48.733,
+      "text": "Fee record created."
+    }
+  ]
+}

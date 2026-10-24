@@ -1,0 +1,34 @@
+{
+  "voice": "en-US-AriaNeural",
+  "rate": "-5%",
+  "cues": [
+    {
+      "start": 0.116,
+      "text": "Now let's create the exam types."
+    },
+    {
+      "start": 5.826,
+      "text": "Open Academics, then choose Exam Types."
+    },
+    {
+      "start": 11.638,
+      "text": "Press Add Exam Type."
+    },
+    {
+      "start": 15.891,
+      "text": "Type the name, and set the weight: how much this exam counts toward the final result."
+    },
+    {
+      "start": 27.353,
+      "text": "Tick Final exam only for exams that decide promotion. Leave it off for a unit test."
+    },
+    {
+      "start": 34.437,
+      "text": "Press Create, and the new exam type appears in the list."
+    },
+    {
+      "start": 42.096,
+      "text": "Exam type added."
+    }
+  ]
+}

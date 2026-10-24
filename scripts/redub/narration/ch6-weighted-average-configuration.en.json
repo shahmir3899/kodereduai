@@ -1,0 +1,30 @@
+{
+  "voice": "en-US-AriaNeural",
+  "rate": "-5%",
+  "cues": [
+    {
+      "start": 0.114,
+      "text": "Let's turn on the weighted average."
+    },
+    {
+      "start": 5.808,
+      "text": "Open Settings and go to the School Profile tab."
+    },
+    {
+      "start": 10.001,
+      "text": "Scroll to Examination Settings. Weighted Average is off, so simple averaging is used."
+    },
+    {
+      "start": 19.704,
+      "text": "Click the switch to turn Weighted Average on. Each exam type now counts by its weight."
+    },
+    {
+      "start": 28.651,
+      "text": "Then check the weight of each exam type on the Exam Types page."
+    },
+    {
+      "start": 35.947,
+      "text": "Weighted average is on."
+    }
+  ]
+}

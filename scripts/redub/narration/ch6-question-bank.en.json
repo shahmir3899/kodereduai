@@ -1,0 +1,34 @@
+{
+  "voice": "en-US-AriaNeural",
+  "rate": "-5%",
+  "cues": [
+    {
+      "start": 0.106,
+      "text": "Let's add a question to the question bank."
+    },
+    {
+      "start": 5.809,
+      "text": "Open Content Creation, then choose Question Bank."
+    },
+    {
+      "start": 11.553,
+      "text": "Press Add Question."
+    },
+    {
+      "start": 16.488,
+      "text": "Choose the class, subject, book and chapter. Then choose the type, type your question, and tick the topic it tests."
+    },
+    {
+      "start": 47.948,
+      "text": "Save, and the question appears in the bank."
+    },
+    {
+      "start": 53.963,
+      "text": "Choose the class and subject in the filters, and your new question shows up in the list."
+    },
+    {
+      "start": 67.656,
+      "text": "Question added."
+    }
+  ]
+}

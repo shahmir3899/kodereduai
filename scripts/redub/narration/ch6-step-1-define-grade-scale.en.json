@@ -1,0 +1,34 @@
+{
+  "voice": "en-US-AriaNeural",
+  "rate": "-5%",
+  "cues": [
+    {
+      "start": 0.115,
+      "text": "Let's set up the grade scale."
+    },
+    {
+      "start": 5.823,
+      "text": "Open Academics, then choose Grade Scale."
+    },
+    {
+      "start": 13.225,
+      "text": "To add a higher grade, first lower the top of grade A. Press Edit, set Max to 89.99, and press Update."
+    },
+    {
+      "start": 29.504,
+      "text": "Now press Add Grade."
+    },
+    {
+      "start": 33.141,
+      "text": "Enter the grade label, the minimum and maximum percentage, and the grade point."
+    },
+    {
+      "start": 48.788,
+      "text": "Press Create, and the new grade appears in the list."
+    },
+    {
+      "start": 55.898,
+      "text": "Your grade scale is updated."
+    }
+  ]
+}

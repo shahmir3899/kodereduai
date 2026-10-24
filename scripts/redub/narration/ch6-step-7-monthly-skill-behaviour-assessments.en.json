@@ -1,0 +1,30 @@
+{
+  "voice": "en-US-AriaNeural",
+  "rate": "-5%",
+  "cues": [
+    {
+      "start": 0.115,
+      "text": "Let's record the monthly skill and behaviour assessments."
+    },
+    {
+      "start": 5.799,
+      "text": "Open Academics, then choose Assessments."
+    },
+    {
+      "start": 11.464,
+      "text": "Choose the class and month, and the roster loads every student."
+    },
+    {
+      "start": 17.554,
+      "text": "Rate a skill and a behaviour for the first student, then write a teacher remark."
+    },
+    {
+      "start": 33.785,
+      "text": "Press Save Month to save the whole class at once."
+    },
+    {
+      "start": 45.46,
+      "text": "Assessments saved."
+    }
+  ]
+}

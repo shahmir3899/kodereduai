@@ -1,0 +1,42 @@
+{
+  "voice": "en-US-AriaNeural",
+  "rate": "-5%",
+  "cues": [
+    {
+      "start": 0.545,
+      "text": "Let's create an exam."
+    },
+    {
+      "start": 6.226,
+      "text": "Open Academics, then choose Exams."
+    },
+    {
+      "start": 12.011,
+      "text": "Press Create Exam."
+    },
+    {
+      "start": 15.768,
+      "text": "Choose the academic year, the term and the exam type."
+    },
+    {
+      "start": 30.849,
+      "text": "Enter the dates, then press Next to choose the classes."
+    },
+    {
+      "start": 37.752,
+      "text": "Select the class, then continue through the date sheet to the preview."
+    },
+    {
+      "start": 44.78,
+      "text": "Check the preview, then press Create Exam."
+    },
+    {
+      "start": 52.362,
+      "text": "A new exam starts as Scheduled. You move it forward as marks are entered and results are published."
+    },
+    {
+      "start": 61.775,
+      "text": "Your exam is ready."
+    }
+  ]
+}

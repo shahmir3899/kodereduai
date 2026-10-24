@@ -1,0 +1,38 @@
+{
+  "voice": "en-US-AriaNeural",
+  "rate": "-5%",
+  "cues": [
+    {
+      "start": 0.104,
+      "text": "Let's build a question paper from your question bank."
+    },
+    {
+      "start": 5.782,
+      "text": "Open Content Creation, then choose Paper Builder."
+    },
+    {
+      "start": 11.457,
+      "text": "Choose the class and subject, then finish the title. It starts from your class and subject."
+    },
+    {
+      "start": 27.505,
+      "text": "Go to Paper Structure. Sections are optional. A marks warning appears, so press Continue, then choose Type manually."
+    },
+    {
+      "start": 44.125,
+      "text": "Type the question, then add it to the paper."
+    },
+    {
+      "start": 56.186,
+      "text": "Open the draft to save it. All your papers are listed under Question Papers."
+    },
+    {
+      "start": 64.757,
+      "text": "Your paper is now saved as a draft."
+    },
+    {
+      "start": 70.716,
+      "text": "Paper saved."
+    }
+  ]
+}

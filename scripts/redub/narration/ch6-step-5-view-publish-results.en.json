@@ -1,0 +1,34 @@
+{
+  "voice": "en-US-AriaNeural",
+  "rate": "-5%",
+  "cues": [
+    {
+      "start": 0.105,
+      "text": "Let's view the results, and announce them."
+    },
+    {
+      "start": 5.789,
+      "text": "Open Academics, then choose Results."
+    },
+    {
+      "start": 13.436,
+      "text": "Choose the class and the exam to see the computed results, with marks and grades."
+    },
+    {
+      "start": 23.385,
+      "text": "Review the results for accuracy before you announce them."
+    },
+    {
+      "start": 30.282,
+      "text": "To make the results visible, open Exams and expand the exam group."
+    },
+    {
+      "start": 37.918,
+      "text": "Press Announce Results, then confirm. Students and parents can now see the results."
+    },
+    {
+      "start": 49.965,
+      "text": "Results announced."
+    }
+  ]
+}
