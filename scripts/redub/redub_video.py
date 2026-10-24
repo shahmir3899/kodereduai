@@ -8,7 +8,7 @@ placed at the cue's start, over ducked background music from the skill's assets.
 Usage: python redub_video.py <narration.json> <in.mp4> <out.mp4> [--music calm|warm|minimal|none]
 Needs: pip install edge-tts, ffmpeg/ffprobe. Narration text is sent to Microsoft.
 """
-import argparse, asyncio, json, subprocess, tempfile
+import argparse, asyncio, json, os, subprocess, tempfile
 from pathlib import Path
 
 import edge_tts
@@ -24,7 +24,9 @@ def duration(path):
 
 
 async def synth(text, voice, rate, out):
-    await edge_tts.Communicate(text, voice, rate=rate).save(str(out))
+    # aiohttp ignores HTTPS_PROXY by default; sandboxed/corporate networks only allow egress through it.
+    proxy = os.environ.get("HTTPS_PROXY") or os.environ.get("https_proxy")
+    await edge_tts.Communicate(text, voice, rate=rate, proxy=proxy).save(str(out))
 
 
 def main():

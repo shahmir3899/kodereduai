@@ -2,11 +2,29 @@
   "voice": "en-US-AriaNeural",
   "rate": "-5%",
   "cues": [
-    {"start": 0.1,  "text": "Let's say attendance for a class has already been taken today, and you need to fix a mistake. Here's how to do that safely, without creating duplicates."},
-    {"start": 7.7,  "text": "Open Manual Entry from the Attendance menu, then pick the same class and the same date."},
-    {"start": 23.0, "text": "Notice the blue message. It tells you that records already exist for this date, so saving will update them rather than create new ones."},
-    {"start": 30.7, "text": "The saved statuses load automatically. If a student was marked wrongly, just tap their status to change it."},
-    {"start": 37.5, "text": "Now press Save Attendance. The confirmation says the records were updated, and nothing was created twice."},
-    {"start": 47.6, "text": "That's it. Corrections are safe, so you can fix attendance any time without worrying about duplicates."}
+    {
+      "start": 0.1,
+      "text": "Attendance already taken, but you spotted a mistake? Here's how to correct it safely, with no duplicates."
+    },
+    {
+      "start": 7.7,
+      "text": "Open Manual Entry from the Attendance menu, then pick the same class and the same date."
+    },
+    {
+      "start": 23.0,
+      "text": "The blue notice says records already exist for this date, so saving updates them instead of creating new ones."
+    },
+    {
+      "start": 30.7,
+      "text": "The saved statuses load automatically. To fix a mistake, just tap the student's status."
+    },
+    {
+      "start": 37.5,
+      "text": "Now press Save Attendance. The confirmation says the records were updated, and nothing was created twice."
+    },
+    {
+      "start": 47.6,
+      "text": "That's it. Corrections are safe, so fix attendance any time."
+    }
   ]
 }
