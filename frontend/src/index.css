@@ -96,3 +96,42 @@ textarea[dir="rtl"] {
 .notif-progress {
   animation: notif-progress-fill 6s linear forwards;
 }
+
+/* Two overlaid native range inputs form one start/end slider (components/timeline/TermRangeSlider.jsx).
+   The inputs ignore the pointer so the thumbs, which opt back in, are the only draggable parts and
+   neither input blocks the other. Native inputs keep arrow-key and touch support for free. */
+.range-dual input[type='range'] {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  background: transparent;
+  pointer-events: none;
+  -webkit-appearance: none;
+  appearance: none;
+}
+.range-dual input[type='range']::-webkit-slider-runnable-track { background: transparent; height: 100%; }
+.range-dual input[type='range']::-moz-range-track { background: transparent; height: 100%; }
+.range-dual input[type='range']::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  pointer-events: auto;
+  width: 20px;
+  height: 28px;
+  margin-top: 4px; /* centre the 28px thumb in the 36px track (WebKit top-aligns it) */
+  border-radius: 6px;
+  background: #fff;
+  border: 2px solid currentColor;
+  cursor: grab;
+}
+.range-dual input[type='range']::-moz-range-thumb {
+  pointer-events: auto;
+  width: 16px;
+  height: 24px;
+  border-radius: 6px;
+  background: #fff;
+  border: 2px solid currentColor;
+  cursor: grab;
+}
+.range-dual input[type='range']:focus-visible::-webkit-slider-thumb { outline: 2px solid currentColor; outline-offset: 2px; }
+.range-dual input[type='range']:focus-visible::-moz-range-thumb { outline: 2px solid currentColor; outline-offset: 2px; }

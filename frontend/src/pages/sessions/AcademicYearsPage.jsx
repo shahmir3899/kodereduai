@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import Modal from '../../components/ui/Modal'
 import Field from '../../components/ui/Field'
 import { TONE } from '../../components/ui/statusTones'
@@ -12,12 +12,11 @@ import SessionSetupWizard from './SessionSetupWizard'
 import Spinner from '../../components/ui/Spinner'
 import Badge from '../../components/ui/Badge'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
-import { formatDay, nextTermDefaults } from './termDefaults'
+import TermsModal from './TermsModal'
 import YearTimeline from '../../components/timeline/YearTimeline'
 import YearsStrip from '../../components/timeline/YearsStrip'
 
 const EMPTY_YEAR = { name: '', start_date: '', end_date: '' }
-const EMPTY_TERM = { academic_year: '', name: '', term_type: 'TERM', order: 1, start_date: '', end_date: '' }
 const EMPTY_TERM_IMPORT = {
   source_academic_year_id: '',
   target_academic_year_id: '',
@@ -30,7 +29,7 @@ export default function AcademicYearsPage() {
   const { refresh: refreshAcademicYear, activeAcademicYear } = useAcademicYear()
   const { showSuccess, showError } = useToast()
   const { confirm, ConfirmModalRoot } = useConfirmModal()
-  const [tab, setTab] = useState('years')
+  const [termsYearId, setTermsYearId] = useState(null) // year whose terms modal is open
 
   // Year state
   const [showYearModal, setShowYearModal] = useState(false)
@@ -39,11 +38,6 @@ export default function AcademicYearsPage() {
   const [yearErrors, setYearErrors] = useState({})
 
   // Term state
-  const [yearFilter, setYearFilter] = useState('')
-  const [showTermModal, setShowTermModal] = useState(false)
-  const [editTermId, setEditTermId] = useState(null)
-  const [termForm, setTermForm] = useState(EMPTY_TERM)
-  const [termErrors, setTermErrors] = useState({})
   const [showImportModal, setShowImportModal] = useState(false)
   const [importForm, setImportForm] = useState(EMPTY_TERM_IMPORT)
   const [importErrors, setImportErrors] = useState({})
@@ -61,12 +55,6 @@ export default function AcademicYearsPage() {
     queryFn: () => sessionsApi.getAcademicYears({ page_size: 9999 }),
   })
 
-  const { data: termsRes, isLoading: termsLoading } = useQuery({
-    queryKey: ['terms', yearFilter],
-    queryFn: () => sessionsApi.getTerms({ academic_year: yearFilter || undefined, page_size: 9999 }),
-    enabled: tab === 'terms',
-  })
-
   // Every year's terms, for the timeline on each year card. Refetched with the ['terms'] prefix after any term change.
   const { data: allTermsRes } = useQuery({
     queryKey: ['terms', 'all'],
@@ -80,28 +68,9 @@ export default function AcademicYearsPage() {
   })
 
   const years = yearsRes?.data?.results || yearsRes?.data || []
-  const terms = termsRes?.data?.results || termsRes?.data || []
   const summary = summaryRes?.data || null
+  const termsYear = years.find(y => y.id === termsYearId) || null
   const allTerms = allTermsRes?.data?.results || allTermsRes?.data || []
-
-  // The term form works against the year picked in the modal, which may differ from the
-  // list filter above, so it loads that year's terms itself.
-  const termFormYear = years.find(y => y.id === termForm.academic_year) || null
-  const { data: formYearTermsRes } = useQuery({
-    queryKey: ['terms', 'formDefaults', termForm.academic_year],
-    queryFn: () => sessionsApi.getTerms({ academic_year: termForm.academic_year, page_size: 9999 }),
-    enabled: showTermModal && !editTermId && !!termForm.academic_year,
-  })
-  // Suggest the next order and start date once per year picked in the create form; typing
-  // afterwards is never overwritten.
-  const defaultedYearRef = useRef(null)
-  useEffect(() => {
-    if (!showTermModal || editTermId) { defaultedYearRef.current = null; return }
-    if (!termFormYear || !formYearTermsRes || defaultedYearRef.current === termFormYear.id) return
-    defaultedYearRef.current = termFormYear.id
-    const yearTerms = formYearTermsRes.data?.results || formYearTermsRes.data || []
-    setTermForm(p => ({ ...p, ...nextTermDefaults(termFormYear, yearTerms) }))
-  }, [showTermModal, editTermId, termFormYear, formYearTermsRes])
 
   // Sync expanded year with activeAcademicYear from dropdown
   useEffect(() => {
@@ -131,49 +100,6 @@ export default function AcademicYearsPage() {
   const setCurrentMut = useMutation({
     mutationFn: (id) => sessionsApi.setCurrentYear(id),
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['academicYears'] }); refreshAcademicYear() },
-  })
-
-  // Term mutations
-  const createTermMut = useMutation({
-    mutationFn: (data) => sessionsApi.createTerm(data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['terms'] })
-      queryClient.invalidateQueries({ queryKey: ['academicYears'] })
-      showSuccess('Term created successfully')
-      closeTermModal()
-    },
-    onError: (err) => {
-      const data = err.response?.data || {}
-      setTermErrors(data)
-      showError(data.detail || data.non_field_errors?.[0] || 'Failed to create term')
-    },
-  })
-
-  const updateTermMut = useMutation({
-    mutationFn: ({ id, data }) => sessionsApi.updateTerm(id, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['terms'] })
-      queryClient.invalidateQueries({ queryKey: ['academicYears'] })
-      showSuccess('Term updated successfully')
-      closeTermModal()
-    },
-    onError: (err) => {
-      const data = err.response?.data || {}
-      setTermErrors(data)
-      showError(data.detail || data.non_field_errors?.[0] || 'Failed to update term')
-    },
-  })
-
-  const deleteTermMut = useMutation({
-    mutationFn: (id) => sessionsApi.deleteTerm(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['terms'] })
-      queryClient.invalidateQueries({ queryKey: ['academicYears'] })
-      showSuccess('Term deleted')
-    },
-    onError: (err) => {
-      showError(err.response?.data?.detail || 'Failed to delete term')
-    },
   })
 
   const importPreviewMut = useMutation({
@@ -220,26 +146,12 @@ export default function AcademicYearsPage() {
     else createYearMut.mutate(yearForm)
   }
 
-  // Term modal helpers
-  const openCreateTerm = (yearId) => {
-    setTermForm({ ...EMPTY_TERM, academic_year: yearId ? parseInt(yearId) : '' })
-    setEditTermId(null); setTermErrors({}); setShowTermModal(true)
-  }
-  const openEditTerm = (t) => {
-    setTermForm({
-      academic_year: t.academic_year, name: t.name, term_type: t.term_type,
-      order: t.order, start_date: t.start_date || '', end_date: t.end_date || '',
-    })
-    setEditTermId(t.id); setTermErrors({}); setShowTermModal(true)
-  }
-  const closeTermModal = () => { setShowTermModal(false); setEditTermId(null); setTermForm(EMPTY_TERM); setTermErrors({}) }
-
-  const openImportModal = () => {
+  const openImportModal = (yearId) => {
     setImportErrors({})
     setImportPreview(null)
     setImportForm({
       ...EMPTY_TERM_IMPORT,
-      target_academic_year_id: yearFilter ? parseInt(yearFilter) : '',
+      target_academic_year_id: yearId || '',
     })
     setShowImportModal(true)
   }
@@ -252,7 +164,6 @@ export default function AcademicYearsPage() {
   }
 
   useEscapeKey(closeYearModal, showYearModal)
-  useEscapeKey(closeTermModal, showTermModal)
   useEscapeKey(closeImportModal, showImportModal)
 
   const handleImportPreview = (e) => {
@@ -272,41 +183,12 @@ export default function AcademicYearsPage() {
     importApplyMut.mutate(importForm)
   }
 
-  const handleTermSubmit = (e) => {
-    e.preventDefault()
-    const ayId = parseInt(termForm.academic_year)
-    if (!ayId) {
-      setTermErrors({ academic_year: 'Please select an academic year.' })
-      return
-    }
-    const payload = { ...termForm, academic_year: ayId, order: parseInt(termForm.order) || 1 }
-    if (editTermId) updateTermMut.mutate({ id: editTermId, data: payload })
-    else createTermMut.mutate(payload)
-  }
-
   return (
     <div>
-      <PageHeader title="Academic Sessions" subtitle="Manage academic years and terms" className="mb-6" />
+      <PageHeader title="Academic Sessions" subtitle="Manage academic years and their terms" className="mb-6" />
 
-      {/* Tabs */}
-      <div className="flex gap-1 mb-6 bg-gray-100 p-1 rounded-lg w-fit">
-        <button
-          onClick={() => setTab('years')}
-          className={`px-4 py-2 text-sm rounded-md transition-colors ${tab === 'years' ? 'bg-white shadow text-primary-700 font-medium' : 'text-gray-600 hover:text-gray-800'}`}
-        >
-          Academic Years
-        </button>
-        <button
-          onClick={() => setTab('terms')}
-          className={`px-4 py-2 text-sm rounded-md transition-colors ${tab === 'terms' ? 'bg-white shadow text-primary-700 font-medium' : 'text-gray-600 hover:text-gray-800'}`}
-        >
-          Terms
-        </button>
-      </div>
-
-      {/* ─── Academic Years Tab ─── */}
-      {tab === 'years' && (
-        <>
+      {/* ─── Academic Years ─── */}
+      <>
           <div className="flex justify-end gap-2 mb-4">
             {years.length > 0 && (
               <button onClick={() => setShowSetupWizard(true)} className="btn-secondary text-sm px-4 py-2 flex items-center gap-1.5">
@@ -371,7 +253,7 @@ export default function AcademicYearsPage() {
                     {y.terms_count !== undefined && <p className="text-xs text-gray-500">{y.terms_count} term(s)</p>}
                   </div>
                   <div className="mt-3">
-                    <YearTimeline year={y} terms={allTerms.filter(t => t.academic_year === y.id)} />
+                    <YearTimeline year={y} terms={allTerms.filter(t => t.academic_year === y.id)} onTermClick={() => setTermsYearId(y.id)} />
                   </div>
 
                   {/* Summary toggle */}
@@ -397,6 +279,7 @@ export default function AcademicYearsPage() {
                       onClick={() => setExpandedYearId(expandedYearId === y.id ? null : y.id)}
                       className="text-xs text-blue-600 hover:underline"
                     >{expandedYearId === y.id ? 'Hide Summary' : 'Summary'}</button>
+                    <button onClick={() => setTermsYearId(y.id)} className="text-xs text-primary-600 font-medium hover:underline">Manage terms</button>
                     <button onClick={() => openEditYear(y)} className="text-xs text-primary-600 hover:underline">Edit</button>
                     <button
                       onClick={async () => {
@@ -466,194 +349,7 @@ export default function AcademicYearsPage() {
                 </form>
               </Modal>
           )}
-        </>
-      )}
-
-      {/* ─── Terms Tab ─── */}
-      {tab === 'terms' && (
-        <>
-          <div className="flex flex-col sm:flex-row gap-3 mb-4">
-            <select
-              value={yearFilter}
-              onChange={e => setYearFilter(e.target.value)}
-              className="input w-full sm:w-52"
-            >
-              <option value="">All Years</option>
-              {years.map(y => <option key={y.id} value={y.id}>{y.name}</option>)}
-            </select>
-            <button onClick={() => openCreateTerm(yearFilter)} className="btn-primary text-sm px-4 py-2 whitespace-nowrap">
-              + Add Term
-            </button>
-            <button onClick={openImportModal} className="btn-secondary text-sm px-4 py-2 whitespace-nowrap">
-              Import Terms
-            </button>
-          </div>
-
-          {termsLoading ? (
-            <div className="text-center py-12">
-              <Spinner size="md" className="mx-auto" />
-            </div>
-          ) : terms.length === 0 ? (
-            <div className="card text-center py-8 text-gray-500">No terms found.</div>
-          ) : (
-            <>
-              {/* Desktop Table */}
-              <div className="hidden md:block overflow-x-auto">
-                <table className="min-w-full bg-white rounded-xl shadow-sm border border-gray-200">
-                  <thead>
-                    <tr className="bg-gray-50 text-xs text-gray-500 uppercase">
-                      <th className="px-4 py-3 text-left">Name</th>
-                      <th className="px-4 py-3 text-left">Academic Year</th>
-                      <th className="px-4 py-3 text-left">Type</th>
-                      <th className="px-4 py-3 text-center">Order</th>
-                      <th className="px-4 py-3 text-left">Start</th>
-                      <th className="px-4 py-3 text-left">End</th>
-                      <th className="px-4 py-3 text-center">Current</th>
-                      <th className="px-4 py-3 text-right">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {terms.map(t => (
-                      <tr key={t.id} className="hover:bg-gray-50">
-                        <td className="px-4 py-2 text-sm font-medium text-gray-900">{t.name}</td>
-                        <td className="px-4 py-2 text-sm text-gray-600">{t.academic_year_name}</td>
-                        <td className="px-4 py-2 text-sm">
-                          <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs">{t.term_type}</span>
-                        </td>
-                        <td className="px-4 py-2 text-sm text-center">{t.order}</td>
-                        <td className="px-4 py-2 text-sm text-gray-600">{t.start_date}</td>
-                        <td className="px-4 py-2 text-sm text-gray-600">{t.end_date}</td>
-                        <td className="px-4 py-2 text-center">
-                          {t.is_current && <Badge tone="success">Current</Badge>}
-                        </td>
-                        <td className="px-4 py-2 text-right">
-                          <button onClick={() => openEditTerm(t)} className="text-xs text-primary-600 hover:underline mr-2">Edit</button>
-                          <button
-                            onClick={async () => {
-                              const ok = await confirm({ title: 'Delete Term', message: `Delete term "${t.name}"? This cannot be undone.` })
-                              if (ok) deleteTermMut.mutate(t.id)
-                            }}
-                            className="text-xs text-red-600 hover:underline"
-                          >Delete</button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-
-              {/* Mobile Cards */}
-              <div className="md:hidden space-y-3">
-                {terms.map(t => (
-                  <div key={t.id} className="card">
-                    <div className="flex items-start justify-between mb-1">
-                      <div>
-                        <p className="font-medium text-gray-900 text-sm">{t.name}</p>
-                        <p className="text-xs text-gray-500">{t.academic_year_name}</p>
-                      </div>
-                      <div className="flex gap-1">
-                        <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs">{t.term_type}</span>
-                        {t.is_current && <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded text-xs">Current</span>}
-                      </div>
-                    </div>
-                    <p className="text-xs text-gray-500">{t.start_date} — {t.end_date} (Order: {t.order})</p>
-                    <div className="flex gap-2 mt-2">
-                      <button onClick={() => openEditTerm(t)} className="text-xs text-primary-600 hover:underline">Edit</button>
-                      <button onClick={async () => {
-                        const ok = await confirm({ title: 'Delete Term', message: `Delete term "${t.name}"? This cannot be undone.` })
-                        if (ok) deleteTermMut.mutate(t.id)
-                      }} className="text-xs text-red-600 hover:underline">Delete</button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </>
-          )}
-
-          {/* Term Modal */}
-          {showTermModal && (
-            <Modal open onClose={closeTermModal} title={editTermId ? 'Edit Term' : 'Add Term'}>
-
-                {(termErrors.detail || termErrors.non_field_errors) && (
-                  <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-lg text-sm">
-                    {termErrors.detail || termErrors.non_field_errors}
-                  </div>
-                )}
-
-                <form onSubmit={handleTermSubmit} className="space-y-4">
-                  <div>
-                    <label className="label">Academic Year *</label>
-                    <select
-                      value={termForm.academic_year}
-                      onChange={e => setTermForm(p => ({ ...p, academic_year: e.target.value ? parseInt(e.target.value) : '' }))}
-                      className="input w-full"
-                      required
-                    >
-                      <option value="">Select year...</option>
-                      {years.map(y => <option key={y.id} value={y.id}>{y.name}</option>)}
-                    </select>
-                    {termErrors.academic_year && <p className="text-xs text-red-600 mt-1">{termErrors.academic_year}</p>}
-                  </div>
-                  <div>
-                    <label className="label">Name *</label>
-                    <input
-                      type="text"
-                      value={termForm.name}
-                      onChange={e => setTermForm(p => ({ ...p, name: e.target.value }))}
-                      className="input w-full"
-                      required
-                      placeholder="e.g. Term 1"
-                    />
-                    {termErrors.name && <p className="text-xs text-red-600 mt-1">{termErrors.name}</p>}
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <Field label="Type">
-<select
-                        value={termForm.term_type}
-                        onChange={e => setTermForm(p => ({ ...p, term_type: e.target.value }))}
-                        className="input w-full"
-                      >
-                        <option value="TERM">Term</option>
-                        <option value="SEMESTER">Semester</option>
-                        <option value="QUARTER">Quarter</option>
-                      </select>
-</Field>
-                    <div>
-                      <label className="label">Order</label>
-                      <input
-                        type="number"
-                        min="1"
-                        value={termForm.order}
-                        onChange={e => setTermForm(p => ({ ...p, order: e.target.value }))}
-                        className="input w-full"
-                      />
-                      {termErrors.order && <p className="text-xs text-red-600 mt-1">{termErrors.order}</p>}
-                    </div>
-                  </div>
-                  <div>
-                    <label className="label">Start Date *</label>
-                    <input type="date" value={termForm.start_date} min={termFormYear?.start_date} max={termFormYear?.end_date} onChange={e => setTermForm(p => ({ ...p, start_date: e.target.value }))} className="input w-full" required />
-                    {termFormYear && (
-                      <p className="text-xs text-gray-500 mt-1">
-                        {termFormYear.name} runs {formatDay(termFormYear.start_date)} – {formatDay(termFormYear.end_date)}
-                      </p>
-                    )}
-                    {termErrors.start_date && <p className="text-xs text-red-600 mt-1">{termErrors.start_date}</p>}
-                  </div>
-                  <div>
-                    <label className="label">End Date *</label>
-                    <input type="date" value={termForm.end_date} min={termFormYear?.start_date} max={termFormYear?.end_date} onChange={e => setTermForm(p => ({ ...p, end_date: e.target.value }))} className="input w-full" required />
-                    {termErrors.end_date && <p className="text-xs text-red-600 mt-1">{termErrors.end_date}</p>}
-                  </div>
-                  <div className="flex justify-end gap-3 pt-2">
-                    <button type="button" onClick={closeTermModal} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">Cancel</button>
-                    <button type="submit" disabled={createTermMut.isPending || updateTermMut.isPending} className="btn-primary px-4 py-2 text-sm disabled:opacity-50">
-                      {createTermMut.isPending || updateTermMut.isPending ? 'Saving...' : editTermId ? 'Update' : 'Create'}
-                    </button>
-                  </div>
-                </form>
-              </Modal>
-          )}
+      </>
 
           {showImportModal && (
             <Modal open onClose={closeImportModal} title="Import Terms From Previous Session" size="3xl">
@@ -789,7 +485,12 @@ export default function AcademicYearsPage() {
                 )}
               </Modal>
           )}
-        </>
+      {termsYear && (
+        <TermsModal
+          year={termsYear}
+          onClose={() => setTermsYearId(null)}
+          onImport={() => openImportModal(termsYear.id)}
+        />
       )}
       {/* AI Setup Wizard Modal */}
       {showSetupWizard && (
