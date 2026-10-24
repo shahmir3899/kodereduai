@@ -1,0 +1,30 @@
+{
+  "voice": "en-US-AriaNeural",
+  "rate": "-5%",
+  "cues": [
+    {
+      "start": 0.109,
+      "text": "Next, let's create your classes and sections."
+    },
+    {
+      "start": 5.82,
+      "text": "Open Management, then choose Classes."
+    },
+    {
+      "start": 13.134,
+      "text": "Switch to the Master view and press Class. Choose the grade level, confirm the name, and save without any sections."
+    },
+    {
+      "start": 27.951,
+      "text": "Repeat for each grade. Master classes are shared across every academic year."
+    },
+    {
+      "start": 34.731,
+      "text": "Now switch to Session Classes for the active year, and create sections such as A and B."
+    },
+    {
+      "start": 51.444,
+      "text": "Your classes are ready."
+    }
+  ]
+}

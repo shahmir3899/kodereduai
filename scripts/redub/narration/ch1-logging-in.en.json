@@ -1,0 +1,26 @@
+{
+  "voice": "en-US-AriaNeural",
+  "rate": "-5%",
+  "cues": [
+    {
+      "start": 0.11,
+      "text": "Welcome! Let's start with the very first step: logging in to your school account."
+    },
+    {
+      "start": 5.799,
+      "text": "Open the application in your browser, and type your username into the login page."
+    },
+    {
+      "start": 13.548,
+      "text": "Next, type in your password."
+    },
+    {
+      "start": 18.12,
+      "text": "Now press Sign In, and you'll land right on your dashboard."
+    },
+    {
+      "start": 24.5,
+      "text": "That's it. You're logged in and ready to go."
+    }
+  ]
+}

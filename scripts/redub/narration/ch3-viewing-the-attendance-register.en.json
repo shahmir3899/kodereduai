@@ -1,0 +1,34 @@
+{
+  "voice": "en-US-AriaNeural",
+  "rate": "-5%",
+  "cues": [
+    {
+      "start": 0.108,
+      "text": "Let's see how to read the attendance register."
+    },
+    {
+      "start": 5.804,
+      "text": "Open Attendance, then choose Attendance Record."
+    },
+    {
+      "start": 11.392,
+      "text": "Select a class to see its register."
+    },
+    {
+      "start": 16.957,
+      "text": "Use the month arrows to move between months."
+    },
+    {
+      "start": 24.756,
+      "text": "Students are listed in rows and days run across in columns. Each cell shows that day's mark."
+    },
+    {
+      "start": 33.537,
+      "text": "To keep a copy, press the download button to save the register as a PDF."
+    },
+    {
+      "start": 40.828,
+      "text": "Your register is ready."
+    }
+  ]
+}

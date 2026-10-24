@@ -1,0 +1,34 @@
+{
+  "voice": "en-US-AriaNeural",
+  "rate": "-5%",
+  "cues": [
+    {
+      "start": 0.105,
+      "text": "Now let's add the subjects your school teaches."
+    },
+    {
+      "start": 5.809,
+      "text": "Open Academics, then choose Subjects."
+    },
+    {
+      "start": 11.693,
+      "text": "In the Subjects tab, press Add Subject."
+    },
+    {
+      "start": 16.587,
+      "text": "Type the subject name. The code is filled in for you, and you can edit it if you like."
+    },
+    {
+      "start": 28.884,
+      "text": "Press Create, and the subject appears in the list."
+    },
+    {
+      "start": 35.378,
+      "text": "To use the subject in a class, open the class assignments tab."
+    },
+    {
+      "start": 41.938,
+      "text": "The subject is added."
+    }
+  ]
+}

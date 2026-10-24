@@ -1,0 +1,108 @@
+{
+ "ch1-logging-in.en": [
+  "Welcome! Let's start with the very first step: logging in to your school account.",
+  "Open the application in your browser, and type your username into the login page.",
+  "Next, type in your password.",
+  "Now press Sign In, and you'll land right on your dashboard.",
+  "That's it. You're logged in and ready to go."
+ ],
+ "ch2-school-setup-wizard.en": [
+  "The school setup wizard guides you through everything, one step at a time.",
+  "Open School Setup from the sidebar.",
+  "It walks you through setup in order, from the school profile to the final review.",
+  "Finish a step, then press Next Step to move on.",
+  "Not ready yet? Press Skip, and leave that step for later.",
+  "You can press Exit Setup at any time, and come back whenever you like.",
+  "Set up step by step, at your own pace."
+ ],
+ "ch2-step-1-academic-year-terms.en": [
+  "Every school year begins here: let's create your academic year and its terms.",
+  "Open Management, then choose Sessions from the menu.",
+  "On the Academic Years tab, press Add Academic Year.",
+  "Enter a name for the year, along with its start date and end date, then press Save.",
+  "Press Set Current to make it the active year, which the whole system will follow.",
+  "Now open the Terms tab, and press Add Term.",
+  "Enter the term name, its type, the dates and the order. Then repeat this for every term in the year.",
+  "Your academic year is ready."
+ ],
+ "ch2-step-2-create-classes.en": [
+  "Next, let's create your classes and sections.",
+  "Open Management, then choose Classes.",
+  "Switch to the Master view and press Class. Choose the grade level, confirm the name, and save without any sections.",
+  "Repeat for each grade. Master classes are shared across every academic year.",
+  "Now switch to Session Classes for the active year, and create sections such as A and B.",
+  "Your classes are ready."
+ ],
+ "ch2-step-3-add-students.en": [
+  "Let's add your first student.",
+  "Open Management, then choose Students.",
+  "Press Add Student.",
+  "Choose the class and enter the student's name. The roll number is suggested for you. Then add the parent's name and phone number.",
+  "Save, and the student appears in the list.",
+  "Use the class filter to view one class. Big lists can be imported from Excel.",
+  "Student added."
+ ],
+ "ch2-step-4-add-subjects.en": [
+  "Now let's add the subjects your school teaches.",
+  "Open Academics, then choose Subjects.",
+  "In the Subjects tab, press Add Subject.",
+  "Type the subject name. The code is filled in for you, and you can edit it if you like.",
+  "Press Create, and the subject appears in the list.",
+  "To use the subject in a class, open the class assignments tab.",
+  "The subject is added."
+ ],
+ "ch2-step-5-create-timetable.en": [
+  "Let's build a timetable for a class.",
+  "Open Academics, then choose Timetable.",
+  "Select the class whose timetable you want to create.",
+  "Rows are the time slots. Click a cell, choose the subject for that period, and press Set. The teacher assigned to the subject is filled in automatically.",
+  "Press Save Timetable. Students and parents can see it right away.",
+  "Your timetable is saved."
+ ],
+ "ch3-viewing-the-attendance-register.en": [
+  "Let's see how to read the attendance register.",
+  "Open Attendance, then choose Attendance Record.",
+  "Select a class to see its register.",
+  "Use the month arrows to move between months.",
+  "Students are listed in rows and days run across in columns. Each cell shows that day's mark.",
+  "To keep a copy, press the download button to save the register as a PDF.",
+  "Your register is ready."
+ ],
+ "ch5-academic-calendar.en": [
+  "Keep everyone informed with the academic calendar.",
+  "Open Management, then choose Academic Calendar.",
+  "Use the month selectors to move around. Sundays are marked off automatically.",
+  "Press Add Event or Off Day.",
+  "Enter a title, choose OFF Day, pick a category, and set the start and end dates.",
+  "Press Save, and the off day appears on the calendar.",
+  "Your calendar is up to date."
+ ],
+ "ch5-student-promotion.en": [
+  "At the end of the year, here's how to promote your students.",
+  "Open Management, then choose Promotion.",
+  "Select the year you're promoting from, and the year you're promoting to. Then press Next.",
+  "Choose the class to promote, and press Next.",
+  "This is the highest class, so students default to Graduate. Change each action to Promote, then choose the target class for everyone.",
+  "Press Promote Students. The result tells you how many were promoted.",
+  "Your students are promoted."
+ ],
+ "ch5-academic-sessions-years-terms.en": [
+  "Every school year begins here: let's create your academic year and its terms.",
+  "Open Management, then choose Sessions from the menu.",
+  "On the Academic Years tab, press Add Academic Year.",
+  "Enter a name for the year, along with its start date and end date, then press Save.",
+  "Press Set Current to make it the active year, which the whole system will follow.",
+  "Now open the Terms tab, and press Add Term.",
+  "Enter the term name, its type, the dates and the order. Then repeat this for every term in the year.",
+  "Your academic year is ready."
+ ],
+ "ch5-managing-subjects.en": [
+  "Now let's add the subjects your school teaches.",
+  "Open Academics, then choose Subjects.",
+  "In the Subjects tab, press Add Subject.",
+  "Type the subject name. The code is filled in for you, and you can edit it if you like.",
+  "Press Create, and the subject appears in the list.",
+  "To use the subject in a class, open the class assignments tab.",
+  "The subject is added."
+ ]
+}

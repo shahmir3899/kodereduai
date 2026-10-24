@@ -1,0 +1,34 @@
+{
+  "voice": "en-US-AriaNeural",
+  "rate": "-5%",
+  "cues": [
+    {
+      "start": 0.111,
+      "text": "The school setup wizard guides you through everything, one step at a time."
+    },
+    {
+      "start": 5.795,
+      "text": "Open School Setup from the sidebar."
+    },
+    {
+      "start": 11.854,
+      "text": "It walks you through setup in order, from the school profile to the final review."
+    },
+    {
+      "start": 17.992,
+      "text": "Finish a step, then press Next Step to move on."
+    },
+    {
+      "start": 25.201,
+      "text": "Not ready yet? Press Skip, and leave that step for later."
+    },
+    {
+      "start": 32.193,
+      "text": "You can press Exit Setup at any time, and come back whenever you like."
+    },
+    {
+      "start": 37.948,
+      "text": "Set up step by step, at your own pace."
+    }
+  ]
+}

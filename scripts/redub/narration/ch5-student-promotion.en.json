@@ -1,0 +1,34 @@
+{
+  "voice": "en-US-AriaNeural",
+  "rate": "-5%",
+  "cues": [
+    {
+      "start": 0.119,
+      "text": "At the end of the year, here's how to promote your students."
+    },
+    {
+      "start": 5.815,
+      "text": "Open Management, then choose Promotion."
+    },
+    {
+      "start": 13.464,
+      "text": "Select the year you're promoting from, and the year you're promoting to. Then press Next."
+    },
+    {
+      "start": 23.442,
+      "text": "Choose the class to promote, and press Next."
+    },
+    {
+      "start": 31.302,
+      "text": "This is the highest class, so students default to Graduate. Change each action to Promote, then choose the target class for everyone."
+    },
+    {
+      "start": 49.176,
+      "text": "Press Promote Students. The result tells you how many were promoted."
+    },
+    {
+      "start": 59.175,
+      "text": "Your students are promoted."
+    }
+  ]
+}

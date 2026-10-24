@@ -1,0 +1,38 @@
+{
+  "voice": "en-US-AriaNeural",
+  "rate": "-5%",
+  "cues": [
+    {
+      "start": 0.115,
+      "text": "Every school year begins here: let's create your academic year and its terms."
+    },
+    {
+      "start": 6.137,
+      "text": "Open Management, then choose Sessions from the menu."
+    },
+    {
+      "start": 13.802,
+      "text": "On the Academic Years tab, press Add Academic Year."
+    },
+    {
+      "start": 19.816,
+      "text": "Enter a name for the year, along with its start date and end date, then press Save."
+    },
+    {
+      "start": 35.869,
+      "text": "Press Set Current to make it the active year, which the whole system will follow."
+    },
+    {
+      "start": 41.654,
+      "text": "Now open the Terms tab, and press Add Term."
+    },
+    {
+      "start": 46.803,
+      "text": "Enter the term name, its type, the dates and the order. Then repeat this for every term in the year."
+    },
+    {
+      "start": 64.447,
+      "text": "Your academic year is ready."
+    }
+  ]
+}

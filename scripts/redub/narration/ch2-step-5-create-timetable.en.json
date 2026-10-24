@@ -1,0 +1,30 @@
+{
+  "voice": "en-US-AriaNeural",
+  "rate": "-5%",
+  "cues": [
+    {
+      "start": 0.111,
+      "text": "Let's build a timetable for a class."
+    },
+    {
+      "start": 5.805,
+      "text": "Open Academics, then choose Timetable."
+    },
+    {
+      "start": 11.767,
+      "text": "Select the class whose timetable you want to create."
+    },
+    {
+      "start": 16.949,
+      "text": "Rows are the time slots. Click a cell, choose the subject for that period, and press Set. The teacher assigned to the subject is filled in automatically."
+    },
+    {
+      "start": 28.22,
+      "text": "Press Save Timetable. Students and parents can see it right away."
+    },
+    {
+      "start": 36.124,
+      "text": "Your timetable is saved."
+    }
+  ]
+}

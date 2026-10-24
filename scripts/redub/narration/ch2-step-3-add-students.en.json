@@ -1,0 +1,34 @@
+{
+  "voice": "en-US-AriaNeural",
+  "rate": "-5%",
+  "cues": [
+    {
+      "start": 0.116,
+      "text": "Let's add your first student."
+    },
+    {
+      "start": 5.802,
+      "text": "Open Management, then choose Students."
+    },
+    {
+      "start": 13.552,
+      "text": "Press Add Student."
+    },
+    {
+      "start": 17.668,
+      "text": "Choose the class and enter the student's name. The roll number is suggested for you. Then add the parent's name and phone number."
+    },
+    {
+      "start": 34.484,
+      "text": "Save, and the student appears in the list."
+    },
+    {
+      "start": 38.57,
+      "text": "Use the class filter to view one class. Big lists can be imported from Excel."
+    },
+    {
+      "start": 45.948,
+      "text": "Student added."
+    }
+  ]
+}
