@@ -1,0 +1,38 @@
+{
+  "voice": "ur-PK-UzmaNeural",
+  "rate": "-5%",
+  "cues": [
+    {
+      "start": 0.114,
+      "text": "آئیے رعایتیں اور وظائف ترتیب دیں۔"
+    },
+    {
+      "start": 5.82,
+      "text": "Finance کھولیں، پھر Discounts۔ اس میں تین ٹیب ہیں: Discounts، Scholarships اور Student Assignments۔"
+    },
+    {
+      "start": 16.588,
+      "text": "Discounts ٹیب میں Add Discount دبائیں۔"
+    },
+    {
+      "start": 21.379,
+      "text": "رعایت کا نام لکھیں۔ قسم منتخب کریں، Percentage یا Fixed Amount، اور ویلیو لکھیں۔"
+    },
+    {
+      "start": 32.583,
+      "text": "Applies To میں سب طلبہ، گریڈ لیول، کلاس یا بہن بھائی منتخب کریں۔ تاریخیں بھی رکھ سکتے ہیں اور اسے stackable بنا سکتے ہیں۔"
+    },
+    {
+      "start": 41.8,
+      "text": "Create Discount دبائیں، اور نئی رعایت فہرست میں آ جاتی ہے۔"
+    },
+    {
+      "start": 49.61,
+      "text": "Scholarships اسی طرح بنتے ہیں، Merit، Need، Sports یا Staff Child قسموں کے ساتھ۔ انہیں Fee Setup سے طلبہ کو دیں۔"
+    },
+    {
+      "start": 60.01,
+      "text": "رعایت بن گئی۔"
+    }
+  ]
+}
