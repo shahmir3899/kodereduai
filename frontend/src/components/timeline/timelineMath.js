@@ -77,3 +77,21 @@ export function findGaps(items, rangeStart, rangeEnd) {
     days: g.days,
   }))
 }
+
+/**
+ * Which years the all-years strip shows by default: `size` rows around the current year (or the year
+ * nearest today when none is current), so ten years of history never become ten rows.
+ * `years` must be sorted by start_date.
+ */
+export function pickYearWindow(years, size = 3, today = todayIso()) {
+  if (years.length <= size) return years
+  let anchor = years.findIndex(y => y.is_current)
+  if (anchor < 0) {
+    const t = dayNumber(today)
+    const distance = y => (t < dayNumber(y.start_date) ? dayNumber(y.start_date) - t : Math.max(0, t - dayNumber(y.end_date)))
+    anchor = years.reduce((best, y, i) => (distance(y) < distance(years[best]) ? i : best), 0)
+  }
+  // One year before the anchor, the rest after; slide the window back in when it hits either end.
+  const start = Math.min(Math.max(0, anchor - 1), years.length - size)
+  return years.slice(start, start + size)
+}

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { findGaps, findOverlaps, positionPercent, spanStyle, spansOverlap } from './timelineMath'
+import { findGaps, findOverlaps, pickYearWindow, positionPercent, spanStyle, spansOverlap } from './timelineMath'
 
 const t = (id, start_date, end_date) => ({ id, start_date, end_date })
 
@@ -41,5 +41,31 @@ describe('timeline maths', () => {
 
   it('reports the whole range as one gap when there are no terms', () => {
     expect(findGaps([], '2026-01-01', '2026-01-10')).toHaveLength(1)
+  })
+})
+
+describe('year window', () => {
+  const y = (id, start_date, end_date, is_current = false) => ({ id, start_date, end_date, is_current })
+  const years = [
+    y(1, '2021-04-01', '2022-03-31'), y(2, '2022-04-01', '2023-03-31'), y(3, '2023-04-01', '2024-03-31'),
+    y(4, '2024-04-01', '2025-03-31'), y(5, '2025-04-01', '2026-03-31'),
+  ]
+
+  it('shows everything when there are few years', () => {
+    expect(pickYearWindow(years.slice(0, 3)).map(x => x.id)).toEqual([1, 2, 3])
+  })
+
+  it('centres on the current year', () => {
+    const marked = years.map(x => (x.id === 3 ? { ...x, is_current: true } : x))
+    expect(pickYearWindow(marked).map(x => x.id)).toEqual([2, 3, 4])
+  })
+
+  it('slides back in at the ends', () => {
+    expect(pickYearWindow(years.map(x => (x.id === 1 ? { ...x, is_current: true } : x))).map(x => x.id)).toEqual([1, 2, 3])
+    expect(pickYearWindow(years.map(x => (x.id === 5 ? { ...x, is_current: true } : x))).map(x => x.id)).toEqual([3, 4, 5])
+  })
+
+  it('uses the year nearest today when none is current', () => {
+    expect(pickYearWindow(years, 3, '2023-06-01').map(x => x.id)).toEqual([2, 3, 4])
   })
 })
