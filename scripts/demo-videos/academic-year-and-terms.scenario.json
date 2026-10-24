@@ -1,0 +1,190 @@
+// Guide video "Academic year and terms" (replaces ch2-step-1 and ch5 sessions videos).
+// Runs against the local scratch app: backend :8000 (SQLite), frontend :3000, school seeded by seed_terms_demo.py.
+// The sign-in password comes from the DEMO_PASSWORD environment variable and is never written here.
+{
+  "version": 1,
+  "name": "ch2-step-1-academic-year-terms",
+  "languages": ["en", "ur"],
+  "meta": {
+    "app": "Education AI",
+    "title": { "en": "Academic year and terms", "ur": "تعلیمی سال اور ٹرمز" },
+    "subtitle": { "en": "Set up a year's terms on one timeline", "ur": "ایک ٹائم لائن پر سال کی ٹرمز بنائیں" },
+    "learn": {
+      "en": ["See every term on a timeline", "Drag the handles to set the dates", "Get a warning if terms overlap"],
+      "ur": ["ہر ٹرم کو ٹائم لائن پر دیکھیں", "تاریخیں طے کرنے کے لیے ہینڈل کھینچیں", "ٹرمز مل جائیں تو وارننگ پائیں"]
+    }
+  },
+  "target": {
+    "url": "http://localhost:3000/login?subdomain=greenfield-demo",
+    "viewport": { "width": 1280, "height": 720 },
+    "forbidden": ["@gmail\\.com", "@yahoo\\.com"]
+  },
+  "setup": {
+    "login": [
+      { "type": "demo.admin", "into": { "label": "Username" } },
+      { "type": "${ENV:DEMO_PASSWORD}", "into": { "label": "Password", "nth": 0 } },
+      { "click": { "role": "button", "name": "Sign In" } },
+      { "waitFor": { "url": "/dashboard" } }
+    ],
+    "reset": [
+      { "run": "python3 ../scripts/demo-videos/seed_terms_demo.py", "cwd": "../../backend", "env": { "ENVIRONMENT": "local" } }
+    ]
+  },
+  "style": { "speed": "normal", "theme": "teal", "captionPosition": "bottom", "keys": "shortcuts" },
+  "voice": {
+    "engine": "edge",
+    "voices": { "en": "en-US-AriaNeural", "ur": "ur-PK-UzmaNeural" },
+    "rate": -0.5
+  },
+  "music": { "track": "calm", "volume": 0.2, "duck": true },
+  "intro": {
+    "seconds": 5,
+    "say": {
+      "en": "Every academic year is split into terms. Here is how to set them up on one timeline.",
+      "ur": "ہر تعلیمی سال کو ٹرمز میں تقسیم کیا جاتا ہے۔ آئیے ایک ٹائم لائن پر ٹرمز بنائیں۔"
+    }
+  },
+  "outro": {
+    "seconds": 4,
+    "headline": { "en": "Your terms are set up", "ur": "آپ کی ٹرمز تیار ہیں" },
+    "say": { "en": "That is it. Your terms are set up.", "ur": "بس اتنا ہی۔ آپ کی ٹرمز تیار ہیں۔" }
+  },
+  "output": { "dir": "../../.demo-out" },
+  "steps": [
+    {
+      "id": "open-management",
+      "caption": { "en": "Open Management", "ur": "Management کھولیں" },
+      "say": { "en": "Open Management, then Sessions.", "ur": "Management کھولیں، پھر Sessions۔" },
+      "do": [{ "click": { "text": "Management", "exact": true } }],
+      "expect": { "text": "Sessions" }
+    },
+    {
+      "id": "open-sessions",
+      "caption": { "en": "Choose Sessions", "ur": "Sessions منتخب کریں" },
+      "do": [{ "click": { "text": "Sessions", "exact": true } }],
+      "expect": { "text": "Academic Sessions" },
+      "hold": 0.8
+    },
+    {
+      "id": "see-timeline",
+      "caption": { "en": "Every year has a timeline", "ur": "ہر سال کی ایک ٹائم لائن ہے" },
+      "say": {
+        "en": "Each year card shows its terms on a timeline. This year has none yet, so the bar is hatched.",
+        "ur": "ہر سال کا کارڈ اس کی ٹرمز ٹائم لائن پر دکھاتا ہے۔ اس سال میں ابھی کوئی ٹرم نہیں، اس لیے پٹی خالی ہے۔"
+      },
+      "do": [{ "hover": { "css": "[role=img]", "nth": 0 }, "for": 1.5 }],
+      "hold": 0.5
+    },
+    {
+      "id": "open-terms",
+      "caption": { "en": "Press Manage terms", "ur": "Manage terms دبائیں" },
+      "say": { "en": "Press Manage terms on the year.", "ur": "سال پر Manage terms دبائیں۔" },
+      "do": [{ "click": { "text": "Manage terms", "nth": 0 } }],
+      "expect": { "text": "Terms - 2026-27" }
+    },
+    {
+      "id": "add-first-term",
+      "caption": { "en": "Press Add Term", "ur": "Add Term دبائیں" },
+      "say": {
+        "en": "Press Add Term. The first term is created for you, starting on the first day of the year.",
+        "ur": "Add Term دبائیں۔ پہلی ٹرم خود بن جاتی ہے، جو سال کے پہلے دن سے شروع ہوتی ہے۔"
+      },
+      "do": [{ "click": { "role": "button", "name": "+ Add Term" } }],
+      "expect": { "text": "All changes saved" },
+      "hold": 0.8
+    },
+    {
+      "id": "drag-first-end",
+      "caption": { "en": "Drag the end handle", "ur": "اختتامی ہینڈل کھینچیں" },
+      "say": {
+        "en": "Drag the end handle to stretch it. Changes save by themselves, so there is no Save button.",
+        "ur": "اسے بڑھانے کے لیے اختتامی ہینڈل کو کھینچیں۔ تبدیلیاں خود محفوظ ہو جاتی ہیں، اس لیے Save کا بٹن نہیں ہے۔"
+      },
+      "do": [
+        { "drag": { "from": { "role": "slider", "name": "Term end" }, "to": { "css": "[role=dialog] [role=group]" } } },
+        { "wait": 1.4 }
+      ],
+      "expect": { "text": "All changes saved" },
+      "hold": 0.8
+    },
+    {
+      "id": "add-second-term",
+      "caption": { "en": "Add the next term", "ur": "اگلی ٹرم شامل کریں" },
+      "say": {
+        "en": "Add the next term. It starts the day after the first one ends.",
+        "ur": "اگلی ٹرم شامل کریں۔ یہ پہلی ٹرم ختم ہونے کے اگلے دن سے شروع ہوتی ہے۔"
+      },
+      "do": [{ "click": { "role": "button", "name": "+ Add Term" } }],
+      "expect": { "text": "2 terms" },
+      "hold": 0.8
+    },
+    {
+      "id": "drag-second-end",
+      "caption": { "en": "Drag towards the year end", "ur": "سال کے آخر کی طرف کھینچیں" },
+      "say": {
+        "en": "Drag its end handle towards the end of the year.",
+        "ur": "اس کے اختتامی ہینڈل کو سال کے آخر کی طرف کھینچیں۔"
+      },
+      "do": [
+        { "drag": { "from": { "role": "slider", "name": "Term end" }, "to": { "text": "31 Mar 2027", "exact": true, "within": { "css": "[role=dialog]" } } } },
+        { "wait": 1.4 }
+      ],
+      "expect": { "text": "All changes saved" }
+    },
+    {
+      "id": "fine-tune",
+      "caption": { "en": "Fine tune with arrow keys", "ur": "تیر والی کیز سے باریک ایڈجسٹمنٹ" },
+      "say": {
+        "en": "Fine tune with the arrow keys. Hold Shift to move a week at a time.",
+        "ur": "تیر والی کیز سے باریک ایڈجسٹمنٹ کریں۔ Shift دبائے رکھیں تو ایک وقت میں ایک ہفتہ آگے بڑھتا ہے۔"
+      },
+      "do": [
+        { "press": "Shift+ArrowRight" }, { "press": "Shift+ArrowRight" }, { "press": "Shift+ArrowRight" },
+        { "wait": 1.4 }
+      ],
+      "expect": { "text": "All changes saved" },
+      "hold": 0.6
+    },
+    {
+      "id": "overlap-warning",
+      "caption": { "en": "Overlapping terms warn you", "ur": "ٹرمز مل جائیں تو وارننگ" },
+      "say": {
+        "en": "If a term overlaps another, you get a warning, and the change waits until you confirm.",
+        "ur": "اگر ایک ٹرم دوسری سے مل جائے تو وارننگ آتی ہے، اور آپ کی تصدیق تک تبدیلی محفوظ نہیں ہوتی۔"
+      },
+      "do": [
+        { "drag": { "from": { "role": "slider", "name": "Term start" }, "to": { "text": "Term 1", "within": { "css": "[role=dialog] [role=group]" } } } }
+      ],
+      "expect": { "text": "not saved yet" },
+      "hold": 2.5
+    },
+    {
+      "id": "fix-overlap",
+      "caption": { "en": "Move the start back", "ur": "ابتدائی تاریخ واپس لے جائیں" },
+      "say": {
+        "en": "Move the start back out of the other term, and it saves again.",
+        "ur": "ابتدائی تاریخ کو دوسری ٹرم سے باہر لے جائیں، تو تبدیلی دوبارہ خود محفوظ ہو جاتی ہے۔"
+      },
+      "do": [
+        { "press": "Shift+ArrowRight" }, { "press": "Shift+ArrowRight" }, { "press": "Shift+ArrowRight" }, { "press": "Shift+ArrowRight" },
+        { "press": "Shift+ArrowRight" }, { "press": "Shift+ArrowRight" }, { "press": "Shift+ArrowRight" }, { "press": "Shift+ArrowRight" },
+        { "press": "Shift+ArrowRight" }, { "press": "Shift+ArrowRight" }, { "press": "Shift+ArrowRight" }, { "press": "Shift+ArrowRight" },
+        { "press": "Shift+ArrowRight" }, { "press": "Shift+ArrowRight" },
+        { "wait": 1.6 }
+      ],
+      "expect": { "text": "All changes saved", "notText": "not saved yet" },
+      "hold": 1
+    },
+    {
+      "id": "close-and-review",
+      "caption": { "en": "Close the window", "ur": "ونڈو بند کریں" },
+      "say": {
+        "en": "Close the window, and both terms show on the year's timeline.",
+        "ur": "ونڈو بند کریں، اور دونوں ٹرمز سال کی ٹائم لائن پر نظر آتی ہیں۔"
+      },
+      "do": [{ "press": "Escape" }, { "wait": 0.8 }, { "hover": { "css": "[role=img]", "nth": 0 }, "for": 1.2 }],
+      "expect": { "text": "2 term(s)" },
+      "hold": 1.2
+    }
+  ]
+}

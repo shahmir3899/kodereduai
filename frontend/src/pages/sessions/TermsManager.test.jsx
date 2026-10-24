@@ -41,7 +41,8 @@ beforeEach(() => {
   vi.clearAllMocks()
   api.getTerms.mockResolvedValue({ data: { results: [term1, term2] } })
   api.updateTerm.mockResolvedValue({ data: {} })
-  api.createTerm.mockResolvedValue({ data: { ...term2, id: 12, name: 'Term 3', order: 3, start_date: '2026-12-01', end_date: '2027-02-28' } })
+  // The real create endpoint answers without an id; the manager finds the new term in the refreshed list.
+  api.createTerm.mockResolvedValue({ data: { academic_year: 1, name: 'Term 3', term_type: 'TERM', order: 3, start_date: '2026-12-01', end_date: '2027-02-28' } })
 })
 
 describe('TermsManager', () => {
@@ -96,10 +97,15 @@ describe('TermsManager', () => {
   it('creates the next term straight away with suggested dates and selects it', async () => {
     renderManager()
     await screen.findByText('2 terms')
+    const term3 = { id: 12, academic_year: 1, name: 'Term 3', term_type: 'TERM', order: 3, start_date: '2026-12-01', end_date: '2027-02-28' }
+    api.getTerms.mockResolvedValue({ data: { results: [term1, term2, term3] } })
     await userEvent.click(screen.getByRole('button', { name: '+ Add Term' }))
     await waitFor(() => expect(api.createTerm).toHaveBeenCalled())
     expect(api.createTerm.mock.calls[0][0]).toMatchObject({ academic_year: 1, name: 'Term 3', order: 3, start_date: '2026-12-01' })
     expect(await screen.findByLabelText('Name *')).toHaveValue('Term 3')
+    // selected, and not flagged as overlapping itself
+    expect(screen.queryByText(/overlap another term/i)).not.toBeInTheDocument()
+    expect(screen.getAllByRole('slider')).toHaveLength(2)
   })
 
   it('offers "Save anyway" when the server asks for confirmation', async () => {

@@ -120,7 +120,8 @@ export default function YearTimeline({ year, terms = [], onTermClick, selectedId
               aria-valuetext={formatDay(value)}
               title={`${edge === 'start' ? 'Start' : 'End'}: ${formatDay(value)} (drag, or use the arrow keys)`}
               onKeyDown={onKeyDown}
-              onPointerDown={(e) => { e.preventDefault(); grabRef.current = e.clientX - edgePx(); e.currentTarget.setPointerCapture(e.pointerId) }}
+              // preventDefault stops text selection while dragging but also skips the focus a click gives, so focus by hand: the arrow keys then work right after a drag.
+              onPointerDown={(e) => { e.preventDefault(); e.currentTarget.focus(); grabRef.current = e.clientX - edgePx(); e.currentTarget.setPointerCapture(e.pointerId) }}
               onPointerMove={(e) => { if (e.currentTarget.hasPointerCapture(e.pointerId)) move(dayAt(e.clientX)) }}
               // A 40px-wide target (finger sized) around a 12px grip. The start target leans left and the
               // end target leans right, so the two stay separately reachable on a short term.

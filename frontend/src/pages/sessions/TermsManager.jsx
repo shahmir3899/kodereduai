@@ -120,13 +120,18 @@ export default function TermsManager({ year, onImport, onChanged }) {
     }
     if (dirty && valid && !clashes.length) await persist(selectedId, form)
     const end = addDays(next.start_date, SUGGESTED_TERM_DAYS - 1)
+    const name = `Term ${next.order}`
     try {
-      const res = await sessionsApi.createTerm({
-        academic_year: year.id, name: `Term ${next.order}`, term_type: 'TERM', order: next.order,
+      await sessionsApi.createTerm({
+        academic_year: year.id, name, term_type: 'TERM', order: next.order,
         start_date: next.start_date, end_date: end > year.end_date ? year.end_date : end,
       })
+      // The create response carries no id, so find the new term in the fresh list to select it.
+      const fresh = await sessionsApi.getTerms({ academic_year: year.id, page_size: 9999 })
+      const list = fresh.data?.results || fresh.data || []
+      const created = list.find(t => t.order === next.order && t.name === name)
       refresh()
-      const created = res.data
+      if (!created) { setStatus('idle'); return }
       setSelectedId(created.id); setForm(formOf(created)); savedRef.current = snapshot(formOf(created))
       setErrors({}); setServerWarnings(null); setStatus('saved')
     } catch (err) {

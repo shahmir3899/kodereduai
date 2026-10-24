@@ -88,3 +88,6 @@ infra/waha/sessions/
 /*.zip
 /frontend/dist-build-*.zip
 *.mp4
+
+# web-demo-video scratch output
+.demo-out/
