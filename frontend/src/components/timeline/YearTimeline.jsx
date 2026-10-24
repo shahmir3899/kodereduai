@@ -20,6 +20,7 @@ const HATCH = {
  */
 export default function YearTimeline({ year, terms = [], onTermClick, selectedId = null, onRangeChange, compact = false }) {
   const barRef = useRef(null)
+  const grabRef = useRef(0) // px between the pointer and the edge it grabbed, so the edge follows the finger instead of jumping to it
   if (!year?.start_date || !year?.end_date) return null
   const { start_date: from, end_date: to } = year
 
@@ -45,7 +46,7 @@ export default function YearTimeline({ year, terms = [], onTermClick, selectedId
         ref={barRef}
         role={selected ? 'group' : 'img'}
         aria-label={summary}
-        className={`relative w-full overflow-hidden rounded-md bg-gray-100 dark:bg-gray-700 ${compact ? 'h-6' : 'h-9'}`}
+        className={`relative w-full overflow-hidden rounded-md bg-gray-100 dark:bg-gray-700 ${compact ? 'h-6' : onRangeChange ? 'h-12 sm:h-9' : 'h-9'}`}
       >
         {gaps.map(g => {
           const style = spanStyle(g.start_date, g.end_date, from, to)
@@ -81,10 +82,17 @@ export default function YearTimeline({ year, terms = [], onTermClick, selectedId
         {selected && ['start', 'end'].map(edge => {
           const style = spanStyle(selected.start_date, selected.end_date, from, to)
           const value = edge === 'start' ? selected.start_date : selected.end_date
-          // Day under the pointer, clamped to the year; the end handle owns the whole day it sits on.
+          // The edge sits on a day boundary: a start edge is the first day's left side, an end edge the last
+          // day's right side. Snap the edge (not the raw pointer) to the nearest boundary and keep it in the year.
+          const edgePx = () => {
+            const rect = barRef.current.getBoundingClientRect()
+            const pct = edge === 'start' ? style.left : style.left + style.width
+            return rect.left + (rect.width * pct) / 100
+          }
           const dayAt = (clientX) => {
             const rect = barRef.current.getBoundingClientRect()
-            const idx = Math.floor(((clientX - rect.left) / rect.width) * totalDays)
+            const boundary = Math.round((((clientX - grabRef.current) - rect.left) / rect.width) * totalDays)
+            const idx = edge === 'start' ? boundary : boundary - 1
             return addDays(from, Math.min(totalDays - 1, Math.max(0, idx)))
           }
           const move = (day) => {
@@ -112,12 +120,19 @@ export default function YearTimeline({ year, terms = [], onTermClick, selectedId
               aria-valuetext={formatDay(value)}
               title={`${edge === 'start' ? 'Start' : 'End'}: ${formatDay(value)} (drag, or use the arrow keys)`}
               onKeyDown={onKeyDown}
-              onPointerDown={(e) => { e.preventDefault(); e.currentTarget.setPointerCapture(e.pointerId) }}
+              onPointerDown={(e) => { e.preventDefault(); grabRef.current = e.clientX - edgePx(); e.currentTarget.setPointerCapture(e.pointerId) }}
               onPointerMove={(e) => { if (e.currentTarget.hasPointerCapture(e.pointerId)) move(dayAt(e.clientX)) }}
-              className="absolute inset-y-0 z-10 flex w-3 cursor-ew-resize touch-none items-center justify-center rounded bg-white shadow ring-1 ring-gray-900/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-600"
-              style={{ left: `calc(${edge === 'start' ? style.left : style.left + style.width}% - ${edge === 'start' ? 0 : 12}px)` }}
+              // A 40px-wide target (finger sized) around a 12px grip. The start target leans left and the
+              // end target leans right, so the two stay separately reachable on a short term.
+              className="group absolute inset-y-0 z-10 w-10 cursor-ew-resize touch-none select-none focus:outline-none"
+              style={{ left: `calc(${edge === 'start' ? style.left : style.left + style.width}% - ${edge === 'start' ? 28 : 12}px)` }}
             >
-              <span className="h-4 w-0.5 rounded bg-gray-500" />
+              <span
+                className="absolute inset-y-0 flex w-3 items-center justify-center rounded bg-white shadow ring-1 ring-gray-900/60 group-focus-visible:ring-2 group-focus-visible:ring-primary-600"
+                style={{ left: edge === 'start' ? 28 : 0 }}
+              >
+                <span className="h-4 w-0.5 rounded bg-gray-500" />
+              </span>
             </div>
           )
         })}
