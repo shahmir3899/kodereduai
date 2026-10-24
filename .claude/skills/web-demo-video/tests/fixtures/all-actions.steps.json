@@ -1,0 +1,11 @@
+[
+  { "id": "hover-menu", "caption": { "en": "Hover" }, "do": [{ "hover": "Reports", "for": 0.3 }, { "click": "Daily report" }], "expect": { "url": "#daily" } },
+  { "id": "tab", "do": [{ "click": { "role": "tab", "name": "Details" } }], "expect": { "text": "Details content." } },
+  { "id": "fill", "do": [{ "type": "Aisha Khan", "into": { "label": "Full name" } }, { "select": "Green", "in": { "css": "#pick" } }, { "check": "I agree" }, { "press": "Control+S" }], "expect": { "text": "SHORTCUT save" } },
+  { "id": "urdu", "do": [{ "type": "علی", "into": { "placeholder": "نام لکھیں" } }] },
+  { "id": "save", "do": [{ "click": { "css": "#save" } }], "expect": { "text": "Saved!" } },
+  { "id": "details", "do": [{ "click": "More options" }], "expect": { "text": "Hidden details text" } },
+  { "id": "scroll-inside", "do": [{ "scroll": { "by": 200, "within": { "css": "#scroller" } } }] },
+  { "id": "scroll-to", "do": [{ "scroll": { "to": "Bottom of the page" } }] },
+  { "id": "look", "do": [{ "highlight": { "css": "#bottom" }, "for": 0.2 }, { "zoom": { "css": "#bottom" }, "for": 0.2 }, { "wait": 0.1 }, { "waitFor": { "text": "Bottom of the page" } }, { "waitFor": "idle" }] }
+]

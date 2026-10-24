@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Demo test app</title>
+<style>
+  body { font-family: system-ui, sans-serif; margin: 0; background: #f6f7f9; color: #111; }
+  header { display: flex; gap: 24px; align-items: center; padding: 12px 24px; background: #fff; border-bottom: 1px solid #ddd; }
+  header h1 { font-size: 18px; margin: 0; }
+  .menu { position: relative; }
+  .menu > button { font: inherit; padding: 8px 14px; border: 1px solid #bbb; border-radius: 8px; background: #fff; cursor: pointer; }
+  .menu .drop { display: none; position: absolute; top: 100%; left: 0; background: #fff; border: 1px solid #ccc; border-radius: 8px; min-width: 180px; padding: 6px; z-index: 5; }
+  .menu:hover .drop { display: block; }
+  .menu .drop a { display: block; padding: 8px 10px; color: #111; text-decoration: none; border-radius: 6px; }
+  .menu .drop a:hover { background: #e6f4f1; }
+  main { padding: 24px; max-width: 900px; }
+  section { background: #fff; border: 1px solid #ddd; border-radius: 12px; padding: 18px; margin-bottom: 20px; }
+  label { display: block; margin: 8px 0 4px; font-weight: 600; }
+  input[type=text], select, textarea { font: inherit; padding: 8px 10px; border: 1px solid #aaa; border-radius: 8px; width: 320px; }
+  button.primary { font: inherit; padding: 9px 18px; border: 0; border-radius: 8px; background: #0f766e; color: #fff; cursor: pointer; }
+  button.primary:hover { background: #0b5f58; }
+  #scroller { height: 160px; overflow: auto; border: 1px solid #ccc; border-radius: 8px; padding: 8px; }
+  #scroller p { margin: 0 0 40px; }
+  .tabs button { font: inherit; padding: 8px 14px; border: 0; border-bottom: 3px solid transparent; background: none; cursor: pointer; }
+  .tabs button[aria-selected=true] { border-color: #0f766e; color: #0f766e; }
+  #log { font: 12px monospace; background: #111; color: #9f9; padding: 8px; border-radius: 8px; min-height: 40px; white-space: pre-wrap; }
+  .urdu { font-size: 22px; direction: rtl; }
+  .spacer { height: 900px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Demo test app</h1>
+  <div class="menu" id="menu"><button type="button">Reports</button>
+    <div class="drop"><a href="#daily" id="daily">Daily report</a><a href="#monthly" id="monthly">Monthly report</a></div>
+  </div>
+  <a href="#form" id="gotoform">Go to form</a>
+</header>
+<main>
+  <section id="tabs">
+    <div class="tabs" role="tablist">
+      <button role="tab" aria-selected="true" id="tab-a">Overview</button>
+      <button role="tab" aria-selected="false" id="tab-b">Details</button>
+    </div>
+    <p id="tabtext">Overview content.</p>
+  </section>
+  <section id="form">
+    <label for="name">Full name</label>
+    <input type="text" id="name" placeholder="Your name">
+    <label for="pick">Colour</label>
+    <select id="pick"><option value="">Choose</option><option value="red">Red</option><option value="green">Green</option></select>
+    <label><input type="checkbox" id="agree"> I agree</label>
+    <p><button class="primary" id="save" type="button">Save</button> <span id="saved" hidden>Saved!</span></p>
+    <details id="more"><summary>More options</summary><p>Hidden details text</p></details>
+  </section>
+  <section>
+    <label for="urdu">اردو نام</label>
+    <input type="text" id="urdu" class="urdu" placeholder="نام لکھیں">
+  </section>
+  <section>
+    <div id="scroller"><p>One</p><p>Two</p><p>Three</p><p>Four</p><p>Five</p><p>Six</p><p>Seven</p><p>Eight</p></div>
+  </section>
+  <section><div id="log"></div></section>
+  <div class="spacer"></div>
+  <section id="bottom">Bottom of the page</section>
+</main>
+<script>
+  const log = document.getElementById('log');
+  const events = (window.__events = []);
+  const note = (s) => { events.push(s); log.textContent = events.slice(-6).join('\n'); };
+  document.addEventListener('keydown', (e) => note(`keydown ${e.key} trusted=${e.isTrusted} ctrl=${e.ctrlKey}`));
+  document.addEventListener('keyup', (e) => note(`keyup ${e.key}`));
+  document.addEventListener('keydown', (e) => { if (e.ctrlKey && e.key.toLowerCase() === 's') { e.preventDefault(); note('SHORTCUT save'); } });
+  document.getElementById('save').addEventListener('click', (e) => { document.getElementById('saved').hidden = false; note(`click trusted=${e.isTrusted}`); });
+  document.querySelectorAll('[role=tab]').forEach((t) => t.addEventListener('click', () => {
+    document.querySelectorAll('[role=tab]').forEach((x) => x.setAttribute('aria-selected', String(x === t)));
+    document.getElementById('tabtext').textContent = t.id === 'tab-a' ? 'Overview content.' : 'Details content.';
+  }));
+  document.getElementById('pick').addEventListener('change', (e) => note(`select ${e.target.value}`));
+</script>
+</body>
+</html>
