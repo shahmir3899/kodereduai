@@ -1,0 +1,30 @@
+{
+  "voice": "ur-PK-UzmaNeural",
+  "rate": "-5%",
+  "cues": [
+    {
+      "start": 0.326,
+      "text": "آئیے ویٹڈ ایوریج آن کریں۔"
+    },
+    {
+      "start": 6.238,
+      "text": "Settings کھولیں اور School Profile ٹیب پر جائیں۔"
+    },
+    {
+      "start": 10.604,
+      "text": "Examination Settings تک اسکرول کریں۔ Weighted Average بند ہے، اس لیے سادہ اوسط استعمال ہوتی ہے۔"
+    },
+    {
+      "start": 20.791,
+      "text": "Weighted Average آن کرنے کے لیے سوئچ پر کلک کریں۔ اب ہر امتحانی قسم اپنے وزن کے مطابق شمار ہوگی۔"
+    },
+    {
+      "start": 31.488,
+      "text": "پھر Exam Types صفحے پر ہر امتحانی قسم کا وزن دیکھیں۔"
+    },
+    {
+      "start": 38.911,
+      "text": "ویٹڈ ایوریج آن ہے۔"
+    }
+  ]
+}

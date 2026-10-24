@@ -1,0 +1,34 @@
+{
+  "voice": "ur-PK-UzmaNeural",
+  "rate": "-5%",
+  "cues": [
+    {
+      "start": 0.11,
+      "text": "آئیے اسکول کی فیس کا جائزہ دیکھیں۔"
+    },
+    {
+      "start": 6.018,
+      "text": "Finance کھولیں، پھر Fee Overview۔ یہ فیس کی صورتحال ایک نظر میں دکھاتا ہے۔"
+    },
+    {
+      "start": 13.85,
+      "text": "Monthly یا Annual منتخب کریں، پھر مہینہ اور سال۔"
+    },
+    {
+      "start": 18.182,
+      "text": "Category-wise Collection ہر فیس زمرے کی وصولی دکھاتا ہے۔"
+    },
+    {
+      "start": 24.391,
+      "text": "Collection Progress بار دکھاتا ہے کہ کل واجب الادا میں سے کتنا ادا ہو چکا۔"
+    },
+    {
+      "start": 30.127,
+      "text": "ادائیگیاں درج کرنے کے لیے Collect Payments، اور فیس کی رقم بدلنے کے لیے Fee Setup استعمال کریں۔"
+    },
+    {
+      "start": 40.176,
+      "text": "فیس ایک نظر میں۔"
+    }
+  ]
+}
