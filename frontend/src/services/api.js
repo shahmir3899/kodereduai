@@ -673,7 +673,7 @@ export const sessionsApi = {
   createAcademicYear: (data) => api.post('/api/sessions/academic-years/', data),
   updateAcademicYear: (id, data) => api.patch(`/api/sessions/academic-years/${id}/`, data),
   deleteAcademicYear: (id) => api.delete(`/api/sessions/academic-years/${id}/`),
-  setCurrentYear: (id) => api.post(`/api/sessions/academic-years/${id}/set_current/`),
+  setCurrentYear: (id, data) => api.post(`/api/sessions/academic-years/${id}/set_current/`, data),
   getYearSummary: (id) => api.get(`/api/sessions/academic-years/${id}/summary/`),
   getCurrentYear: () => api.get('/api/sessions/academic-years/current/'),
 

@@ -1,7 +1,13 @@
 // Date maths for the year/term timelines. Dates are ISO "YYYY-MM-DD" strings handled in UTC so a
 // timezone can never shift a boundary by a day (same rule as pages/sessions/termDefaults.js).
 
+import { formatDay } from '../../pages/sessions/termDefaults'
+
 const DAY_MS = 86400000
+
+// Same limits as the server (AcademicYearCreateSerializer): outside them a year is almost always a typo.
+export const YEAR_MIN_DAYS = 60
+export const YEAR_MAX_DAYS = 430
 
 /** Whole days since 1970-01-01 for an ISO date; NaN when it is empty or invalid. */
 export function dayNumber(iso) {
@@ -94,4 +100,21 @@ export function pickYearWindow(years, size = 3, today = todayIso()) {
   // One year before the anchor, the rest after; slide the window back in when it hits either end.
   const start = Math.min(Math.max(0, anchor - 1), years.length - size)
   return years.slice(start, start + size)
+}
+
+/**
+ * Warnings the server would also raise for an academic year with these dates, so the form can show them
+ * while the admin types: overlap with another year, or an odd length. `others` excludes the year being edited.
+ */
+export function yearWarnings({ start_date, end_date }, others = []) {
+  if (!start_date || !end_date || start_date >= end_date) return []
+  const warnings = []
+  const clash = [...others]
+    .sort((a, b) => a.start_date.localeCompare(b.start_date))
+    .find(y => spansOverlap({ start_date, end_date }, y))
+  if (clash) warnings.push(`These dates overlap ${clash.name} (${formatDay(clash.start_date)} - ${formatDay(clash.end_date)}).`)
+  const days = dayNumber(end_date) - dayNumber(start_date)
+  if (days < YEAR_MIN_DAYS) warnings.push(`This year is only ${days} days long.`)
+  else if (days > YEAR_MAX_DAYS) warnings.push(`This year is ${days} days long, more than a year.`)
+  return warnings
 }

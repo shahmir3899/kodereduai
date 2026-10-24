@@ -13,7 +13,7 @@ vi.mock('../../services/api', () => ({ sessionsApi: api }))
 vi.mock('../../components/Toast', () => ({ useToast: () => ({ showSuccess: vi.fn(), showError: vi.fn() }) }))
 vi.mock('../../components/ConfirmModal', () => ({ useConfirmModal: () => ({ confirm: vi.fn(), ConfirmModalRoot: () => null }) }))
 
-import TermsModal from './TermsModal'
+import TermsManager from './TermsManager'
 
 const year = { id: 1, name: '2026-27', start_date: '2026-04-01', end_date: '2027-03-31' }
 const term1 = { id: 10, academic_year: 1, name: 'Term 1', term_type: 'TERM', order: 1, start_date: '2026-04-01', end_date: '2026-07-31' }
@@ -22,7 +22,7 @@ function renderModal() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
     <QueryClientProvider client={client}>
-      <TermsModal year={year} onClose={() => {}} />
+      <TermsManager year={year} />
     </QueryClientProvider>,
   )
 }

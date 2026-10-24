@@ -13,6 +13,7 @@ import Spinner from '../../components/ui/Spinner'
 import Badge from '../../components/ui/Badge'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
 import TermsModal from './TermsModal'
+import { yearWarnings } from '../../components/timeline/timelineMath'
 import YearTimeline from '../../components/timeline/YearTimeline'
 import YearsStrip from '../../components/timeline/YearsStrip'
 
@@ -98,8 +99,10 @@ export default function AcademicYearsPage() {
   })
 
   const setCurrentMut = useMutation({
-    mutationFn: (id) => sessionsApi.setCurrentYear(id),
+    // The dialog the admin just accepted is the confirmation the server asks for on a past or future year.
+    mutationFn: (id) => sessionsApi.setCurrentYear(id, { confirm_warnings: true }),
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['academicYears'] }); refreshAcademicYear() },
+    onError: (err) => showError(err.response?.data?.detail || 'Could not set the current year'),
   })
 
   const importPreviewMut = useMutation({
@@ -140,11 +143,19 @@ export default function AcademicYearsPage() {
   }
   const closeYearModal = () => { setShowYearModal(false); setEditYearId(null); setYearForm(EMPTY_YEAR); setYearErrors({}) }
 
-  const handleYearSubmit = (e) => {
-    e.preventDefault()
-    if (editYearId) updateYearMut.mutate({ id: editYearId, data: yearForm })
-    else createYearMut.mutate(yearForm)
+  // Overlap and odd length are warnings the admin can accept: the form shows them while typing and the
+  // button then reads "Save anyway". The server asks again if it sees something the form could not.
+  const otherYears = years.filter(y => y.id !== editYearId)
+  const yearFormWarnings = showYearModal ? yearWarnings(yearForm, otherYears) : []
+  const serverYearWarnings = yearErrors.confirm_warnings ? [].concat(yearErrors.non_field_errors || []) : []
+
+  const submitYear = (confirmed) => {
+    const data = { ...yearForm }
+    if (confirmed || yearFormWarnings.length) data.confirm_warnings = true
+    if (editYearId) updateYearMut.mutate({ id: editYearId, data })
+    else createYearMut.mutate(data)
   }
+  const handleYearSubmit = (e) => { e.preventDefault(); submitYear(false) }
 
   const openImportModal = (yearId) => {
     setImportErrors({})
@@ -269,7 +280,9 @@ export default function AcademicYearsPage() {
                     {!y.is_current && (
                       <button
                         onClick={async () => {
-                          const ok = await confirm({ title: 'Set as Current', message: `Set "${y.name}" as current academic year?`, variant: 'warning', confirmLabel: 'Set as Current' })
+                          const today = new Date().toISOString().slice(0, 10)
+                          const outside = today < y.start_date ? ' It has not started yet.' : today > y.end_date ? ' It has already ended.' : ''
+                          const ok = await confirm({ title: 'Set as Current', message: `Set "${y.name}" as current academic year?${outside}`, variant: 'warning', confirmLabel: 'Set as Current' })
                           if (ok) setCurrentMut.mutate(y.id)
                         }}
                         className="text-xs text-green-600 hover:underline"
@@ -299,9 +312,15 @@ export default function AcademicYearsPage() {
           {showYearModal && (
             <Modal open onClose={closeYearModal} title={editYearId ? 'Edit Academic Year' : 'Add Academic Year'}>
 
-                {(yearErrors.detail || yearErrors.non_field_errors) && (
+                {(yearErrors.detail || yearErrors.non_field_errors) && !yearErrors.confirm_warnings && (
                   <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-lg text-sm">
                     {yearErrors.detail || yearErrors.non_field_errors}
+                  </div>
+                )}
+                {(yearFormWarnings.length > 0 || serverYearWarnings.length > 0) && (
+                  <div className="mb-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-800 dark:bg-amber-900/30 dark:text-amber-200">
+                    {[...new Set([...yearFormWarnings, ...serverYearWarnings])].map(w => <p key={w}>{w}</p>)}
+                    <p className="mt-1">You can still save it.</p>
                   </div>
                 )}
 
@@ -343,7 +362,7 @@ export default function AcademicYearsPage() {
                   <div className="flex justify-end gap-3 pt-2">
                     <button type="button" onClick={closeYearModal} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">Cancel</button>
                     <button type="submit" disabled={createYearMut.isPending || updateYearMut.isPending} className="btn-primary px-4 py-2 text-sm disabled:opacity-50">
-                      {createYearMut.isPending || updateYearMut.isPending ? 'Saving...' : editYearId ? 'Update' : 'Create'}
+                      {createYearMut.isPending || updateYearMut.isPending ? 'Saving...' : (yearFormWarnings.length || serverYearWarnings.length) ? 'Save anyway' : editYearId ? 'Update' : 'Create'}
                     </button>
                   </div>
                 </form>

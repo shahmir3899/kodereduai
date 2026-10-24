@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { findGaps, findOverlaps, pickYearWindow, positionPercent, spanStyle, spansOverlap } from './timelineMath'
+import { findGaps, findOverlaps, pickYearWindow, positionPercent, spanStyle, spansOverlap, yearWarnings } from './timelineMath'
 
 const t = (id, start_date, end_date) => ({ id, start_date, end_date })
 
@@ -67,5 +67,29 @@ describe('year window', () => {
 
   it('uses the year nearest today when none is current', () => {
     expect(pickYearWindow(years, 3, '2023-06-01').map(x => x.id)).toEqual([2, 3, 4])
+  })
+})
+
+describe('year warnings', () => {
+  const other = { id: 1, name: '2025-26', start_date: '2025-04-01', end_date: '2026-03-31' }
+
+  it('is quiet for a normal year that follows the previous one', () => {
+    expect(yearWarnings({ start_date: '2026-04-01', end_date: '2027-03-31' }, [other])).toEqual([])
+  })
+
+  it('names the overlapped year and its dates', () => {
+    const [w] = yearWarnings({ start_date: '2026-03-01', end_date: '2027-02-28' }, [other])
+    expect(w).toContain('2025-26')
+    expect(w).toContain('1 Apr 2025')
+  })
+
+  it('flags very short and very long years', () => {
+    expect(yearWarnings({ start_date: '2027-01-01', end_date: '2027-01-11' })[0]).toContain('10 days')
+    expect(yearWarnings({ start_date: '2027-01-01', end_date: '2028-12-31' })[0]).toContain('more than a year')
+  })
+
+  it('says nothing until both dates are valid', () => {
+    expect(yearWarnings({ start_date: '2027-01-01', end_date: '' })).toEqual([])
+    expect(yearWarnings({ start_date: '2027-02-01', end_date: '2027-01-01' })).toEqual([])
   })
 })

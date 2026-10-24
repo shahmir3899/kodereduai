@@ -95,15 +95,17 @@ export default function YearTimeline({ year, terms = [], draft = null, onTermCli
       </div>
 
       {!compact && (
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-x-3 text-[11px] text-gray-500 dark:text-gray-400">
-          <span>{formatDay(from)}</span>
+        <div className="mt-1 text-[11px] text-gray-500 dark:text-gray-400">
+          <div className="flex justify-between">
+            <span>{formatDay(from)}</span>
+            <span>{formatDay(to)}</span>
+          </div>
           {(overlapping.size > 0 || gapDays > 0) && (
-            <span className="flex gap-2">
+            <div className="mt-0.5 flex flex-wrap justify-center gap-x-3">
               {overlapping.size > 0 && <span className="font-medium text-red-600 dark:text-red-400">Terms overlap</span>}
               {gapDays > 0 && <span>{gapDays} days without a term</span>}
-            </span>
+            </div>
           )}
-          <span>{formatDay(to)}</span>
         </div>
       )}
     </div>
