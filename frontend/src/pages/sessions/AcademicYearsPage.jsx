@@ -13,6 +13,8 @@ import Spinner from '../../components/ui/Spinner'
 import Badge from '../../components/ui/Badge'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
 import { formatDay, nextTermDefaults } from './termDefaults'
+import YearTimeline from '../../components/timeline/YearTimeline'
+import YearsStrip from '../../components/timeline/YearsStrip'
 
 const EMPTY_YEAR = { name: '', start_date: '', end_date: '' }
 const EMPTY_TERM = { academic_year: '', name: '', term_type: 'TERM', order: 1, start_date: '', end_date: '' }
@@ -65,6 +67,12 @@ export default function AcademicYearsPage() {
     enabled: tab === 'terms',
   })
 
+  // Every year's terms, for the timeline on each year card. Refetched with the ['terms'] prefix after any term change.
+  const { data: allTermsRes } = useQuery({
+    queryKey: ['terms', 'all'],
+    queryFn: () => sessionsApi.getTerms({ page_size: 9999 }),
+  })
+
   const { data: summaryRes } = useQuery({
     queryKey: ['yearSummary', expandedYearId],
     queryFn: () => sessionsApi.getYearSummary(expandedYearId),
@@ -74,6 +82,7 @@ export default function AcademicYearsPage() {
   const years = yearsRes?.data?.results || yearsRes?.data || []
   const terms = termsRes?.data?.results || termsRes?.data || []
   const summary = summaryRes?.data || null
+  const allTerms = allTermsRes?.data?.results || allTermsRes?.data || []
 
   // The term form works against the year picked in the modal, which may differ from the
   // list filter above, so it loads that year's terms itself.
@@ -340,6 +349,8 @@ export default function AcademicYearsPage() {
               </div>
             </div>
           ) : (
+            <>
+            <YearsStrip years={years} />
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {years.map(y => (
                 <div key={y.id} className={`card border-2 ${y.id === activeAcademicYear?.id ? 'border-blue-400 bg-blue-50/30' : y.is_current ? 'border-green-400 bg-green-50/30' : 'border-transparent'}`}>
@@ -358,6 +369,9 @@ export default function AcademicYearsPage() {
                     <p>Start: {y.start_date}</p>
                     <p>End: {y.end_date}</p>
                     {y.terms_count !== undefined && <p className="text-xs text-gray-500">{y.terms_count} term(s)</p>}
+                  </div>
+                  <div className="mt-3">
+                    <YearTimeline year={y} terms={allTerms.filter(t => t.academic_year === y.id)} />
                   </div>
 
                   {/* Summary toggle */}
@@ -395,6 +409,7 @@ export default function AcademicYearsPage() {
                 </div>
               ))}
             </div>
+            </>
           )}
 
           {/* Year Modal */}
