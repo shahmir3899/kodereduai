@@ -1,0 +1,34 @@
+{
+  "voice": "en-US-AriaNeural",
+  "rate": "-5%",
+  "cues": [
+    {
+      "start": 0.121,
+      "text": "Let's record a new admission enquiry."
+    },
+    {
+      "start": 5.815,
+      "text": "Open Admissions and Enquiries, then press New Enquiry."
+    },
+    {
+      "start": 19.575,
+      "text": "Enter the student's name and the father's name."
+    },
+    {
+      "start": 30.291,
+      "text": "Enter the mobile number, and choose the grade applied for."
+    },
+    {
+      "start": 39.509,
+      "text": "Choose how the family found you, and add a note."
+    },
+    {
+      "start": 51.402,
+      "text": "Press Create Enquiry, and it appears in the list with status New."
+    },
+    {
+      "start": 59.637,
+      "text": "Enquiry saved."
+    }
+  ]
+}

@@ -1,0 +1,42 @@
+{
+  "voice": "en-US-AriaNeural",
+  "rate": "-5%",
+  "cues": [
+    {
+      "start": 0.102,
+      "text": "Let's manage staff qualifications and documents."
+    },
+    {
+      "start": 6.344,
+      "text": "Open HR and Staff, then Documents. There are two tabs: Qualifications and Documents."
+    },
+    {
+      "start": 17.14,
+      "text": "On Qualifications, press Add Qualification and choose the staff member."
+    },
+    {
+      "start": 26.591,
+      "text": "Choose the type, then enter the qualification name, the institution and the year."
+    },
+    {
+      "start": 43.174,
+      "text": "Press Create, and the qualification is added to the list."
+    },
+    {
+      "start": 50.391,
+      "text": "Open the Documents tab. It lists files such as contracts and ID cards. A yellow badge warns when a document is about to expire."
+    },
+    {
+      "start": 63.025,
+      "text": "To add one, press Add Document, choose the staff member and type, give it a title and attach the file. The file is required."
+    },
+    {
+      "start": 74.74,
+      "text": "Cancel for now."
+    },
+    {
+      "start": 79.418,
+      "text": "Records kept."
+    }
+  ]
+}

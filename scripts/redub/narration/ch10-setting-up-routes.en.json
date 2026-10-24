@@ -1,0 +1,38 @@
+{
+  "voice": "en-US-AriaNeural",
+  "rate": "-5%",
+  "cues": [
+    {
+      "start": 0.109,
+      "text": "Let's set up a transport route."
+    },
+    {
+      "start": 6.331,
+      "text": "Open Transport and Routes, then press Add Route."
+    },
+    {
+      "start": 20.234,
+      "text": "Enter the route name, where it starts, where it ends, and the estimated minutes."
+    },
+    {
+      "start": 43.251,
+      "text": "Press Create Route, and the route appears in the list."
+    },
+    {
+      "start": 56.343,
+      "text": "Press Stops on the route, then Add Stop."
+    },
+    {
+      "start": 64.483,
+      "text": "Name the stop, and set the pickup and drop times."
+    },
+    {
+      "start": 80.533,
+      "text": "Press Add Stop, and the stop shows in the route with its order and times."
+    },
+    {
+      "start": 89.729,
+      "text": "Route ready."
+    }
+  ]
+}

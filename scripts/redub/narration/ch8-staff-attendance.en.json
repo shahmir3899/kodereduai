@@ -1,0 +1,38 @@
+{
+  "voice": "en-US-AriaNeural",
+  "rate": "-5%",
+  "cues": [
+    {
+      "start": 0.116,
+      "text": "Let's mark staff attendance."
+    },
+    {
+      "start": 5.802,
+      "text": "Open HR and Staff, then Attendance. The page opens on today, with every staff member unmarked."
+    },
+    {
+      "start": 16.507,
+      "text": "Press Mark All Present for a full day."
+    },
+    {
+      "start": 20.674,
+      "text": "Change Bilal to Absent."
+    },
+    {
+      "start": 25.227,
+      "text": "Change Kamran to Late. Check-in times are optional."
+    },
+    {
+      "start": 30.739,
+      "text": "Press Save All, and attendance is saved for every staff member."
+    },
+    {
+      "start": 38.869,
+      "text": "Open the Summary tab to see each staff member's month: present, absent, late and the attendance rate."
+    },
+    {
+      "start": 49.284,
+      "text": "Attendance saved."
+    }
+  ]
+}

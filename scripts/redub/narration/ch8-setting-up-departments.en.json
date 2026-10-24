@@ -1,0 +1,30 @@
+{
+  "voice": "en-US-AriaNeural",
+  "rate": "-5%",
+  "cues": [
+    {
+      "start": 0.116,
+      "text": "Let's set up departments."
+    },
+    {
+      "start": 5.817,
+      "text": "Open HR and Staff, then Departments. Departments group your staff, such as Science or Administration."
+    },
+    {
+      "start": 17.173,
+      "text": "Press Add Department."
+    },
+    {
+      "start": 21.183,
+      "text": "Type the department name, and a short description if you like."
+    },
+    {
+      "start": 35.869,
+      "text": "Press Add Department again to save, and the new department appears in the list."
+    },
+    {
+      "start": 44.562,
+      "text": "Department added."
+    }
+  ]
+}

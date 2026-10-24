@@ -1,0 +1,34 @@
+{
+  "voice": "en-US-AriaNeural",
+  "rate": "-5%",
+  "cues": [
+    {
+      "start": 0.227,
+      "text": "Let's issue a book."
+    },
+    {
+      "start": 6.805,
+      "text": "Open Library and Issue / Return. The Issue Book tab is ready."
+    },
+    {
+      "start": 16.834,
+      "text": "Choose Student or Staff, type at least two letters of the name, and pick the person from the list."
+    },
+    {
+      "start": 26.274,
+      "text": "Type part of the title. Only books with copies available are listed."
+    },
+    {
+      "start": 35.395,
+      "text": "The due date is already set from the loan period, 14 days from today. Change it only if this loan is different."
+    },
+    {
+      "start": 44.33,
+      "text": "Press Issue Book. It appears under Currently Issued Books, and the available copies drop by one."
+    },
+    {
+      "start": 54.604,
+      "text": "Book issued."
+    }
+  ]
+}

@@ -1,0 +1,30 @@
+{
+  "voice": "en-US-AriaNeural",
+  "rate": "-5%",
+  "cues": [
+    {
+      "start": 0.117,
+      "text": "Let's add a vehicle."
+    },
+    {
+      "start": 5.822,
+      "text": "Open Transport and Vehicles, then press Add Vehicle."
+    },
+    {
+      "start": 19.835,
+      "text": "Enter the number plate, then choose the type, the number of seats, and the make."
+    },
+    {
+      "start": 35.346,
+      "text": "Enter the driver's name and phone, then choose the route this vehicle serves."
+    },
+    {
+      "start": 47.93,
+      "text": "Press Add Vehicle, and it appears in the list with its driver and route."
+    },
+    {
+      "start": 56.79,
+      "text": "Vehicle added."
+    }
+  ]
+}

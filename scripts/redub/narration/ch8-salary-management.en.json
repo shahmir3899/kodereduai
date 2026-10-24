@@ -1,0 +1,42 @@
+{
+  "voice": "en-US-AriaNeural",
+  "rate": "-5%",
+  "cues": [
+    {
+      "start": 0.106,
+      "text": "Let's set up a salary structure."
+    },
+    {
+      "start": 5.796,
+      "text": "Open HR and Staff, then Salary. Each staff member needs a salary structure before payroll can be run."
+    },
+    {
+      "start": 16.909,
+      "text": "Press Add Salary Structure."
+    },
+    {
+      "start": 21.238,
+      "text": "Choose the staff member."
+    },
+    {
+      "start": 27.453,
+      "text": "Enter the basic salary."
+    },
+    {
+      "start": 31.713,
+      "text": "Add an allowance, such as house rent, and a deduction, such as tax. The summary shows the net salary."
+    },
+    {
+      "start": 51.592,
+      "text": "Set the date the salary starts from."
+    },
+    {
+      "start": 56.528,
+      "text": "Save it, and Ali now appears in the salary list with his net pay."
+    },
+    {
+      "start": 66.157,
+      "text": "Salary saved."
+    }
+  ]
+}

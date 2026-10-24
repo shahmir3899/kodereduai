@@ -1,0 +1,38 @@
+{
+  "voice": "en-US-AriaNeural",
+  "rate": "-5%",
+  "cues": [
+    {
+      "start": 0.436,
+      "text": "Let's add books to the library catalog."
+    },
+    {
+      "start": 6.567,
+      "text": "Open Library and Catalog, then press Add Book."
+    },
+    {
+      "start": 20.574,
+      "text": "Enter the title and the author, both required, then the ISBN and the publisher."
+    },
+    {
+      "start": 44.407,
+      "text": "Choose the category, set how many copies the library owns, and note the shelf location."
+    },
+    {
+      "start": 54.728,
+      "text": "Press Add Book, and the new book appears in the catalog with every copy available."
+    },
+    {
+      "start": 62.216,
+      "text": "Type part of a title, author or ISBN in the search box."
+    },
+    {
+      "start": 69.436,
+      "text": "Clear the search and pick a category to browse one section of the library."
+    },
+    {
+      "start": 80.892,
+      "text": "Catalog updated."
+    }
+  ]
+}

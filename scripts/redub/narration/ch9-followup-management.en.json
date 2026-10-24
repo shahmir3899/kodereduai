@@ -1,0 +1,30 @@
+{
+  "voice": "en-US-AriaNeural",
+  "rate": "-5%",
+  "cues": [
+    {
+      "start": 0.218,
+      "text": "Let's schedule a follow-up for an enquiry."
+    },
+    {
+      "start": 5.919,
+      "text": "Find the family you need to call back."
+    },
+    {
+      "start": 19.763,
+      "text": "Press Edit to open the enquiry."
+    },
+    {
+      "start": 25.242,
+      "text": "Pick the next follow-up date, and write what was discussed."
+    },
+    {
+      "start": 39.728,
+      "text": "Press Update Enquiry. The date now shows in the Follow-up column, in red once it is overdue."
+    },
+    {
+      "start": 50.528,
+      "text": "Follow-up scheduled."
+    }
+  ]
+}

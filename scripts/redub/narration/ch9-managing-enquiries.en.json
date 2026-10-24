@@ -1,0 +1,34 @@
+{
+  "voice": "en-US-AriaNeural",
+  "rate": "-5%",
+  "cues": [
+    {
+      "start": 0.112,
+      "text": "Let's manage the admission pipeline."
+    },
+    {
+      "start": 6.696,
+      "text": "The Admission funnel counts enquiries at each stage: New, Confirmed, Converted and Cancelled."
+    },
+    {
+      "start": 18.36,
+      "text": "Click a stage to filter the list. Here, we see only New enquiries."
+    },
+    {
+      "start": 25.031,
+      "text": "Search by the child's name or phone number."
+    },
+    {
+      "start": 30.583,
+      "text": "When the family agrees, press Confirm, and the enquiry moves out of New."
+    },
+    {
+      "start": 39.134,
+      "text": "If a family withdraws, search for them and press Cancel."
+    },
+    {
+      "start": 54.444,
+      "text": "Pipeline updated."
+    }
+  ]
+}

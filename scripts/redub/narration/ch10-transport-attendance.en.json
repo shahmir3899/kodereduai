@@ -1,0 +1,30 @@
+{
+  "voice": "en-US-AriaNeural",
+  "rate": "-5%",
+  "cues": [
+    {
+      "start": 0.109,
+      "text": "Let's mark transport attendance."
+    },
+    {
+      "start": 5.85,
+      "text": "Open Transport and Attendance. The date is today."
+    },
+    {
+      "start": 16.92,
+      "text": "Choose the route. Its students are listed, all starting as Boarded."
+    },
+    {
+      "start": 24.603,
+      "text": "Press Not Boarded for a student who missed the bus, or Absent for one at home."
+    },
+    {
+      "start": 31.771,
+      "text": "Press Save All, and one record is saved for every student on the route for this day."
+    },
+    {
+      "start": 40.345,
+      "text": "Attendance saved."
+    }
+  ]
+}

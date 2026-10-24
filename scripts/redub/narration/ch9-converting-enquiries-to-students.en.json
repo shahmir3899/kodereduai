@@ -1,0 +1,34 @@
+{
+  "voice": "en-US-AriaNeural",
+  "rate": "-5%",
+  "cues": [
+    {
+      "start": 0.108,
+      "text": "Let's turn an enquiry into a student."
+    },
+    {
+      "start": 6.132,
+      "text": "Only Confirmed enquiries can be converted. They have a checkbox."
+    },
+    {
+      "start": 16.338,
+      "text": "Tick the enquiry, and a bar appears with Convert to students."
+    },
+    {
+      "start": 24.369,
+      "text": "Press Convert to students."
+    },
+    {
+      "start": 29.722,
+      "text": "Choose the academic year, then the class and section."
+    },
+    {
+      "start": 38.613,
+      "text": "Press Convert, and the student record and enrollment are created."
+    },
+    {
+      "start": 47.213,
+      "text": "Student admitted."
+    }
+  ]
+}
