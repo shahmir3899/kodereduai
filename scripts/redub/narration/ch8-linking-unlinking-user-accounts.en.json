@@ -1,0 +1,38 @@
+{
+  "voice": "en-US-AriaNeural",
+  "rate": "-5%",
+  "cues": [
+    {
+      "start": 0.107,
+      "text": "Let's link a staff member to a user account."
+    },
+    {
+      "start": 5.805,
+      "text": "Open HR and Staff, then the Staff Directory. Search for Hina, who has no login yet."
+    },
+    {
+      "start": 17.952,
+      "text": "Press Link Account to connect her to an existing user."
+    },
+    {
+      "start": 23.032,
+      "text": "Search for the user by name or username."
+    },
+    {
+      "start": 30.382,
+      "text": "Click the right user. The account is linked, and the username shows on her row."
+    },
+    {
+      "start": 38.734,
+      "text": "To remove the link, press Unlink."
+    },
+    {
+      "start": 45.399,
+      "text": "Confirm. The user account is not deleted, only the link is removed."
+    },
+    {
+      "start": 54.676,
+      "text": "Account unlinked."
+    }
+  ]
+}

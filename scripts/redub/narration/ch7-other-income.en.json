@@ -1,0 +1,34 @@
+{
+  "voice": "en-US-AriaNeural",
+  "rate": "-5%",
+  "cues": [
+    {
+      "start": 0.104,
+      "text": "Let's record income that isn't fees."
+    },
+    {
+      "start": 5.785,
+      "text": "Open Finance, then Other Income. Use it for income that is not fees, such as sales and donations."
+    },
+    {
+      "start": 15.293,
+      "text": "Press Add Income."
+    },
+    {
+      "start": 19.335,
+      "text": "Enter the amount, then choose the category and the account that receives the money."
+    },
+    {
+      "start": 28.844,
+      "text": "Add a short description. The date is today by default."
+    },
+    {
+      "start": 35.722,
+      "text": "Press Add Income. The entry appears in the list, and the total is shown at the top."
+    },
+    {
+      "start": 44.713,
+      "text": "Income recorded."
+    }
+  ]
+}

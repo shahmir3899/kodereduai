@@ -1,0 +1,30 @@
+{
+  "voice": "en-US-AriaNeural",
+  "rate": "-5%",
+  "cues": [
+    {
+      "start": 0.104,
+      "text": "Let's review a leave request."
+    },
+    {
+      "start": 6.018,
+      "text": "Open HR and Staff, then Leave."
+    },
+    {
+      "start": 13.629,
+      "text": "Find the pending request. It shows the leave type, the dates and the reason."
+    },
+    {
+      "start": 19.951,
+      "text": "Approve or reject it, and add remarks if you like."
+    },
+    {
+      "start": 37.142,
+      "text": "When a request is approved, the leave balance updates automatically."
+    },
+    {
+      "start": 42.718,
+      "text": "Leave reviewed."
+    }
+  ]
+}

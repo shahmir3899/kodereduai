@@ -1,0 +1,34 @@
+{
+  "voice": "en-US-AriaNeural",
+  "rate": "-5%",
+  "cues": [
+    {
+      "start": 0.114,
+      "text": "Let's record an expense."
+    },
+    {
+      "start": 5.811,
+      "text": "Open Finance, then Expenses."
+    },
+    {
+      "start": 11.487,
+      "text": "Press Add Expense."
+    },
+    {
+      "start": 15.43,
+      "text": "Enter the amount, the category, the account that pays, and a description. The date is today by default."
+    },
+    {
+      "start": 31.632,
+      "text": "Save, and the expense is recorded while the account balance updates."
+    },
+    {
+      "start": 39.043,
+      "text": "Filter by category to review expenses by type."
+    },
+    {
+      "start": 43.917,
+      "text": "Expenses are tracked."
+    }
+  ]
+}

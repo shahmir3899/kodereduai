@@ -1,0 +1,38 @@
+{
+  "voice": "en-US-AriaNeural",
+  "rate": "-5%",
+  "cues": [
+    {
+      "start": 0.116,
+      "text": "Let's set up discounts and scholarships."
+    },
+    {
+      "start": 5.812,
+      "text": "Open Finance, then Discounts. It has three tabs: Discounts, Scholarships and Student Assignments."
+    },
+    {
+      "start": 17.485,
+      "text": "On the Discounts tab, press Add Discount."
+    },
+    {
+      "start": 22.875,
+      "text": "Enter the discount name. Choose the type, Percentage or Fixed Amount, and enter the value."
+    },
+    {
+      "start": 35.001,
+      "text": "In Applies To, choose all students, a grade level, a class, or siblings. You can also set dates, and make the discount stackable."
+    },
+    {
+      "start": 44.64,
+      "text": "Press Create Discount, and the new discount appears in the list."
+    },
+    {
+      "start": 52.451,
+      "text": "Scholarships work the same way, with Merit, Need, Sports or Staff Child types. Assign them to students from Fee Setup."
+    },
+    {
+      "start": 63.064,
+      "text": "Discount created."
+    }
+  ]
+}

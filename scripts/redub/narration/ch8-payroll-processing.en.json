@@ -1,0 +1,38 @@
+{
+  "voice": "en-US-AriaNeural",
+  "rate": "-5%",
+  "cues": [
+    {
+      "start": 0.109,
+      "text": "Let's run payroll for the month."
+    },
+    {
+      "start": 5.787,
+      "text": "Open HR and Staff, then Payroll. It shows one month at a time."
+    },
+    {
+      "start": 14.433,
+      "text": "Press Generate Payslips, then confirm. A payslip is made for every staff member with a salary structure."
+    },
+    {
+      "start": 26.343,
+      "text": "Each payslip starts as a draft. Press Approve on one to check and confirm it."
+    },
+    {
+      "start": 33.343,
+      "text": "After you pay the salary, press Mark Paid."
+    },
+    {
+      "start": 37.86,
+      "text": "Press View to see the full breakdown of the payslip."
+    },
+    {
+      "start": 43.244,
+      "text": "Press Download PDF. The file is saved to your Downloads folder, named with the staff name, month and year. The PDF button on each row does the same."
+    },
+    {
+      "start": 57.884,
+      "text": "Payroll done."
+    }
+  ]
+}

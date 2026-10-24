@@ -1,0 +1,34 @@
+{
+  "voice": "en-US-AriaNeural",
+  "rate": "-5%",
+  "cues": [
+    {
+      "start": 0.104,
+      "text": "Let's update the fees for a class."
+    },
+    {
+      "start": 5.793,
+      "text": "Open Finance, then Fee Setup. The Monthly Structure tab shows the monthly fee of each class."
+    },
+    {
+      "start": 14.305,
+      "text": "Choose By Class, then press Edit on the class you want to change."
+    },
+    {
+      "start": 20.372,
+      "text": "Change the amount for the fee category. You can add or remove charges here too."
+    },
+    {
+      "start": 27.308,
+      "text": "Press Review and Save to check the new total before it's saved."
+    },
+    {
+      "start": 33.71,
+      "text": "Press Confirm and Save. Fee records you generate later will use this amount."
+    },
+    {
+      "start": 42.422,
+      "text": "Class fee updated."
+    }
+  ]
+}

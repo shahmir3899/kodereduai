@@ -1,0 +1,34 @@
+{
+  "voice": "en-US-AriaNeural",
+  "rate": "-5%",
+  "cues": [
+    {
+      "start": 0.103,
+      "text": "Let's set up your finance accounts."
+    },
+    {
+      "start": 5.772,
+      "text": "Open Finance, then Accounts, and go to Manage Accounts."
+    },
+    {
+      "start": 13.62,
+      "text": "Press Add Account."
+    },
+    {
+      "start": 17.37,
+      "text": "Enter the account name and choose its type: Cash, Bank or Person. Then enter the opening balance."
+    },
+    {
+      "start": 27.819,
+      "text": "Keep Visible to Staff ticked if staff members should see this account."
+    },
+    {
+      "start": 32.62,
+      "text": "Press Save, and the new account appears in the list. Create at least one Cash and one Bank account before collecting fees."
+    },
+    {
+      "start": 44.766,
+      "text": "Account created."
+    }
+  ]
+}

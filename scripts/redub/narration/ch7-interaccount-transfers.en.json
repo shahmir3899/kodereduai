@@ -1,0 +1,38 @@
+{
+  "voice": "en-US-AriaNeural",
+  "rate": "-5%",
+  "cues": [
+    {
+      "start": 0.109,
+      "text": "Let's move money between two accounts."
+    },
+    {
+      "start": 5.79,
+      "text": "Open Finance, then Accounts, and go to the Transfers tab."
+    },
+    {
+      "start": 15.264,
+      "text": "Press Record Transfer."
+    },
+    {
+      "start": 18.992,
+      "text": "Choose the account the money leaves, and the account that receives it."
+    },
+    {
+      "start": 26.119,
+      "text": "Enter the amount and a short description."
+    },
+    {
+      "start": 35.258,
+      "text": "Press Review Transfer to check the details before anything is saved."
+    },
+    {
+      "start": 42.133,
+      "text": "Press Confirm Transfer. Both account balances update, and the transfer appears in the list."
+    },
+    {
+      "start": 52.249,
+      "text": "Transfer recorded."
+    }
+  ]
+}

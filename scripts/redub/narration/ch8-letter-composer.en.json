@@ -1,0 +1,34 @@
+{
+  "voice": "en-US-AriaNeural",
+  "rate": "-5%",
+  "cues": [
+    {
+      "start": 0.21,
+      "text": "Let's write an official letter."
+    },
+    {
+      "start": 5.897,
+      "text": "Open HR and Staff, then Letter Composer."
+    },
+    {
+      "start": 15.296,
+      "text": "Under To, press Employee and pick the staff member. Their name and ID fill in automatically."
+    },
+    {
+      "start": 23.214,
+      "text": "Choose a Quick Draft Template, such as Warning Letter. The subject and body are written for you, with the employee details filled in."
+    },
+    {
+      "start": 35.36,
+      "text": "Read the preview and edit the text. Replace the REASON placeholder with the real reason before you generate the PDF."
+    },
+    {
+      "start": 45.094,
+      "text": "Press Generate PDF. The letter downloads on your school letterhead, and is saved in the history below."
+    },
+    {
+      "start": 57.257,
+      "text": "Letter ready."
+    }
+  ]
+}

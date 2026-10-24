@@ -1,0 +1,30 @@
+{
+  "voice": "en-US-AriaNeural",
+  "rate": "-5%",
+  "cues": [
+    {
+      "start": 0.112,
+      "text": "Let's record a fee payment."
+    },
+    {
+      "start": 5.804,
+      "text": "Open Finance, then Collect Payments."
+    },
+    {
+      "start": 11.347,
+      "text": "Tick the student's row in the fee table."
+    },
+    {
+      "start": 16.511,
+      "text": "In the bar that appears, enter the amount, the account and the payment method."
+    },
+    {
+      "start": 22.868,
+      "text": "Press Update, then confirm with Yes. Or use Pay Full to take the whole balance. The status updates by itself."
+    },
+    {
+      "start": 34.797,
+      "text": "Payment recorded."
+    }
+  ]
+}

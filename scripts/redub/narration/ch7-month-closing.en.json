@@ -1,0 +1,30 @@
+{
+  "voice": "en-US-AriaNeural",
+  "rate": "-5%",
+  "cues": [
+    {
+      "start": 0.103,
+      "text": "Let's close the books for a month."
+    },
+    {
+      "start": 5.819,
+      "text": "Open Finance, then Accounts. Close Month is at the top of the page."
+    },
+    {
+      "start": 13.26,
+      "text": "At the month's end, press Close Month and pick the month and year."
+    },
+    {
+      "start": 20.983,
+      "text": "Closing locks the period: no transactions can be added or edited in that month afterwards. Tick the box to confirm."
+    },
+    {
+      "start": 30.909,
+      "text": "Press Close Month again, and the page now shows the last closed month."
+    },
+    {
+      "start": 39.771,
+      "text": "Month closed."
+    }
+  ]
+}

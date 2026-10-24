@@ -1,0 +1,42 @@
+{
+  "voice": "en-US-AriaNeural",
+  "rate": "-5%",
+  "cues": [
+    {
+      "start": 0.116,
+      "text": "Let's record a performance appraisal."
+    },
+    {
+      "start": 5.804,
+      "text": "Open HR and Staff, then Performance. This page keeps every staff review."
+    },
+    {
+      "start": 15.572,
+      "text": "Press New Appraisal."
+    },
+    {
+      "start": 19.522,
+      "text": "Choose the staff member."
+    },
+    {
+      "start": 25.82,
+      "text": "Set the start and end dates of the review period."
+    },
+    {
+      "start": 35.17,
+      "text": "Click the stars to give a rating. Four stars means Good."
+    },
+    {
+      "start": 40.818,
+      "text": "Write the strengths, and the goals for the next period."
+    },
+    {
+      "start": 60.32,
+      "text": "Press Create, and the review now shows in the list with its rating."
+    },
+    {
+      "start": 70.264,
+      "text": "Appraisal saved."
+    }
+  ]
+}
