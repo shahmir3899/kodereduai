@@ -98,6 +98,14 @@ class AcademicYearViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
     @action(detail=True, methods=['post'])
     def set_current(self, request, pk=None):
         year = self.get_object()
+        # A year that is over or has not started is usually a misclick, so the admin must confirm it.
+        today = date.today()
+        if not request.data.get('confirm_warnings') and not (year.start_date <= today <= year.end_date):
+            when = 'has already ended' if year.end_date < today else 'has not started yet'
+            return Response({
+                'non_field_errors': [f'{year.name} {when}. Make it the current year anyway?'],
+                'confirm_warnings': ['Confirm to set it as current.'],
+            }, status=status.HTTP_400_BAD_REQUEST)
         # Unset any other current year for this school first
         AcademicYear.objects.filter(
             school_id=year.school_id, is_current=True,

@@ -1,3 +1,4 @@
+from django.db.models import Q
 from rest_framework import serializers
 from students.models import Class
 from .models import (
@@ -27,14 +28,35 @@ class AcademicYearSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'school', 'created_at', 'updated_at']
 
 
+# A year outside this range is almost always a typo (a 2026-2062 year, or a few days).
+YEAR_MIN_DAYS = 60
+YEAR_MAX_DAYS = 430
+
+# Sent by the client after the admin has seen the warnings and chosen to save anyway.
+CONFIRM_KEY = 'confirm_warnings'
+
+
+def _needs_confirmation(warnings):
+    """Soft problems the admin may knowingly accept. The text is shown as-is next to the Save button."""
+    return serializers.ValidationError({
+        'non_field_errors': warnings,
+        CONFIRM_KEY: ['Review the warnings above, then confirm to save anyway.'],
+    })
+
+
 class AcademicYearCreateSerializer(serializers.ModelSerializer):
+    confirm_warnings = serializers.BooleanField(write_only=True, required=False, default=False)
+
     class Meta:
         model = AcademicYear
-        fields = ['name', 'start_date', 'end_date', 'is_current']
+        fields = ['name', 'start_date', 'end_date', 'is_current', 'confirm_warnings']
 
     def validate(self, data):
-        if data.get('start_date') and data.get('end_date'):
-            if data['start_date'] >= data['end_date']:
+        confirmed = data.pop(CONFIRM_KEY, False)
+        start_date = data.get('start_date', getattr(self.instance, 'start_date', None))
+        end_date = data.get('end_date', getattr(self.instance, 'end_date', None))
+        if start_date and end_date:
+            if start_date >= end_date:
                 raise serializers.ValidationError(
                     {'end_date': 'End date must be after start date.'}
                 )
@@ -48,6 +70,40 @@ class AcademicYearCreateSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError(
                     {'name': 'An academic year with this name already exists.'}
                 )
+
+        # Shrinking a year must not strand terms outside it - the term form blocks the same thing.
+        if self.instance and start_date and end_date:
+            stranded = self.instance.terms.filter(
+                Q(start_date__lt=start_date) | Q(end_date__gt=end_date),
+            ).order_by('start_date').first()
+            if stranded:
+                raise serializers.ValidationError({
+                    'end_date': (
+                        f'{stranded.name} ({_fmt_day(stranded.start_date)} - {_fmt_day(stranded.end_date)}) '
+                        'would fall outside these dates. Change that term first.'
+                    ),
+                })
+
+        warnings = []
+        if school_id and start_date and end_date:
+            clash_qs = AcademicYear.objects.filter(
+                school_id=school_id, start_date__lt=end_date, end_date__gt=start_date,
+            )
+            if self.instance:
+                clash_qs = clash_qs.exclude(pk=self.instance.pk)
+            clash = clash_qs.order_by('start_date').first()
+            if clash:
+                warnings.append(
+                    f'These dates overlap {clash.name} '
+                    f'({_fmt_day(clash.start_date)} - {_fmt_day(clash.end_date)}).'
+                )
+            days = (end_date - start_date).days
+            if days < YEAR_MIN_DAYS:
+                warnings.append(f'This year is only {days} days long.')
+            elif days > YEAR_MAX_DAYS:
+                warnings.append(f'This year is {days} days long, more than a year.')
+        if warnings and not confirmed:
+            raise _needs_confirmation(warnings)
         return data
 
 
@@ -74,11 +130,14 @@ def _fmt_day(value):
 
 
 class TermCreateSerializer(serializers.ModelSerializer):
+    confirm_warnings = serializers.BooleanField(write_only=True, required=False, default=False)
+
     class Meta:
         model = Term
-        fields = ['academic_year', 'name', 'term_type', 'order', 'start_date', 'end_date', 'is_current']
+        fields = ['academic_year', 'name', 'term_type', 'order', 'start_date', 'end_date', 'is_current', 'confirm_warnings']
 
     def validate(self, data):
+        confirmed = data.pop(CONFIRM_KEY, False)
         school_id = self.context.get('school_id')
         academic_year = data.get('academic_year') or getattr(self.instance, 'academic_year', None)
         name = data.get('name', getattr(self.instance, 'name', ''))
@@ -92,6 +151,7 @@ class TermCreateSerializer(serializers.ModelSerializer):
                 data['name'] = name
 
         errors = {}
+        overlap_warning = None
 
         if start_date and end_date and start_date >= end_date:
             errors['end_date'] = 'End date must be after start date.'
@@ -147,13 +207,16 @@ class TermCreateSerializer(serializers.ModelSerializer):
                 overlap_qs = overlap_qs.exclude(pk=self.instance.pk)
             clash = overlap_qs.order_by('start_date').first()
             if clash:
-                errors['non_field_errors'] = [
+                overlap_warning = (
                     f'Term date range overlaps with {clash.name} '
                     f'({_fmt_day(clash.start_date)} - {_fmt_day(clash.end_date)}) in this academic year.'
-                ]
+                )
 
         if errors:
             raise serializers.ValidationError(errors)
+        # Overlap is only a warning: a school may run terms side by side on purpose.
+        if overlap_warning and not confirmed:
+            raise _needs_confirmation([overlap_warning])
 
         return data
 
