@@ -1,32 +1,36 @@
-import { useMemo, useState } from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import Spinner from '../../components/ui/Spinner'
 import { sessionsApi } from '../../services/api'
 import { useToast } from '../../components/Toast'
 import { useConfirmModal } from '../../components/ConfirmModal'
 import YearTimeline from '../../components/timeline/YearTimeline'
-import TermRangeSlider from '../../components/timeline/TermRangeSlider'
 import { findOverlaps, spansOverlap } from '../../components/timeline/timelineMath'
 import { addDays, formatDay, nextTermDefaults } from './termDefaults'
 
-const EMPTY = { name: '', term_type: 'TERM', order: 1, start_date: '', end_date: '' }
 const SUGGESTED_TERM_DAYS = 90
+const AUTOSAVE_MS = 700
 
 const firstMessage = (value) => (Array.isArray(value) ? value[0] : value)
+const snapshot = (f) => JSON.stringify([f.name.trim(), f.term_type, Number(f.order) || 1, f.start_date, f.end_date])
+const formOf = (t) => ({ name: t.name, term_type: t.term_type, order: t.order, start_date: t.start_date || '', end_date: t.end_date || '' })
 
 /**
- * All of one academic year's terms in one place: the year's timeline on top (click a term to edit
- * it), the term list, and an add/edit panel with a slider. Overlapping terms are a warning here:
- * the admin sees it live, and the server asks for confirmation before saving.
+ * All of one academic year's terms in one place: a single timeline bar (click a term, then drag its
+ * edge handles), the term list, and the selected term's fields. Edits save by themselves a moment
+ * after you stop. Overlapping terms are only a warning: the change is held back, with a "Save anyway"
+ * button, rather than saved silently.
  */
 export default function TermsManager({ year, onImport, onChanged }) {
   const queryClient = useQueryClient()
-  const { showSuccess, showError } = useToast()
+  const { showError } = useToast()
   const { confirm, ConfirmModalRoot } = useConfirmModal()
-  const [editing, setEditing] = useState(null) // null = list only; { id } | { id: null } = form open
-  const [form, setForm] = useState(EMPTY)
+  const [selectedId, setSelectedId] = useState(null)
+  const [form, setForm] = useState(null) // the selected term's fields, edited live
   const [errors, setErrors] = useState({})
-  const [serverWarnings, setServerWarnings] = useState(null) // set when the server wants a confirmation
+  const [serverWarnings, setServerWarnings] = useState(null) // the server asked for a confirmation
+  const [status, setStatus] = useState('idle') // idle | saving | saved | held | error
+  const savedRef = useRef('') // snapshot of what the server has for the selected term
 
   const { data: termsRes, isLoading } = useQuery({
     queryKey: ['terms', 'year', year.id],
@@ -37,84 +41,123 @@ export default function TermsManager({ year, onImport, onChanged }) {
     return [...list].sort((a, b) => a.order - b.order)
   }, [termsRes])
 
-  const refresh = () => {
+  const refresh = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: ['terms'] })
     queryClient.invalidateQueries({ queryKey: ['academicYears'] })
     onChanged?.()
-  }
+  }, [queryClient, onChanged])
 
-  const closeForm = () => { setEditing(null); setForm(EMPTY); setErrors({}); setServerWarnings(null) }
+  const others = terms.filter(t => t.id !== selectedId)
+  const live = form ? { id: selectedId, ...form } : null
+  // The selected term is drawn from the live form, so dragging and typing move the same bar.
+  const drawn = terms.map(t => (t.id === selectedId && live ? { ...t, ...live } : t))
+  const clashes = live ? others.filter(t => spansOverlap(live, t)) : []
+  const inverted = !!live && live.start_date >= live.end_date
+  const outsideYear = !!live && (live.start_date < year.start_date || live.end_date > year.end_date)
+  const valid = !!live && live.name.trim() !== '' && !inverted && !outsideYear
+  const dirty = !!form && snapshot(form) !== savedRef.current
 
-  const saveMut = useMutation({
-    mutationFn: ({ id, data }) => (id ? sessionsApi.updateTerm(id, data) : sessionsApi.createTerm(data)),
-    onSuccess: (_res, vars) => {
+  const persist = useCallback(async (id, f, confirmed = false) => {
+    const sent = snapshot(f)
+    setStatus('saving'); setErrors({}); setServerWarnings(null)
+    try {
+      await sessionsApi.updateTerm(id, {
+        name: f.name.trim(), term_type: f.term_type, order: Number(f.order) || 1,
+        start_date: f.start_date, end_date: f.end_date,
+        ...(confirmed ? { confirm_warnings: true } : {}),
+      })
+      savedRef.current = sent
+      setStatus('saved')
       refresh()
-      showSuccess(vars.id ? 'Term updated' : 'Term created')
-      closeForm()
-    },
-    onError: (err) => {
+    } catch (err) {
       const data = err.response?.data || {}
       if (data.confirm_warnings) {
         setServerWarnings([].concat(data.non_field_errors || []))
-        setErrors({})
-        return
+        setStatus('held')
+      } else {
+        setErrors(data)
+        setStatus('error')
+        if (data.detail) showError(firstMessage(data.detail))
       }
-      setErrors(data)
-      showError(firstMessage(data.detail) || firstMessage(data.non_field_errors) || 'Could not save the term')
-    },
-  })
-
-  const deleteMut = useMutation({
-    mutationFn: (id) => sessionsApi.deleteTerm(id),
-    onSuccess: () => { refresh(); showSuccess('Term deleted') },
-    onError: (err) => showError(err.response?.data?.detail || 'Failed to delete term'),
-  })
-
-  const openAdd = () => {
-    const next = nextTermDefaults(year, terms)
-    const end = next.start_date ? addDays(next.start_date, SUGGESTED_TERM_DAYS - 1) : ''
-    setForm({
-      ...EMPTY,
-      order: next.order,
-      name: `Term ${next.order}`,
-      start_date: next.start_date,
-      end_date: end && end > year.end_date ? year.end_date : end,
-    })
-    setErrors({}); setServerWarnings(null); setEditing({ id: null })
-  }
-  const openEdit = (t) => {
-    setForm({ name: t.name, term_type: t.term_type, order: t.order, start_date: t.start_date || '', end_date: t.end_date || '' })
-    setErrors({}); setServerWarnings(null); setEditing({ id: t.id })
-  }
-
-  const draft = editing && form.start_date && form.end_date
-    ? { id: editing.id ?? 'draft', name: form.name || 'New term', start_date: form.start_date, end_date: form.end_date }
-    : null
-
-  // Live overlap check against the saved terms, so the warning appears while dragging, not after Save.
-  const clashes = draft
-    ? terms.filter(t => t.id !== editing.id && spansOverlap(draft, t))
-    : []
-  const outsideYear = draft && (draft.start_date < year.start_date || draft.end_date > year.end_date)
-  const inverted = draft && draft.start_date >= draft.end_date
-
-  const save = (confirmed) => {
-    const payload = {
-      academic_year: year.id,
-      name: form.name,
-      term_type: form.term_type,
-      order: parseInt(form.order, 10) || 1,
-      start_date: form.start_date,
-      end_date: form.end_date,
     }
-    // Showing the overlap warning live counts as seeing it; the button then reads "Save anyway".
-    if (confirmed || clashes.length) payload.confirm_warnings = true
-    saveMut.mutate({ id: editing.id, data: payload })
+  }, [refresh, showError])
+
+  // Autosave: a valid, non-overlapping change goes out once the admin pauses.
+  useEffect(() => {
+    if (!form || !dirty) return undefined
+    if (!valid) { setStatus('error'); return undefined }
+    if (clashes.length) { setStatus('held'); return undefined }
+    setStatus('saving')
+    const timer = setTimeout(() => persist(selectedId, form), AUTOSAVE_MS)
+    return () => clearTimeout(timer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form && snapshot(form), selectedId, valid, clashes.length])
+
+  // Closing the dialog or the step mid-pause must not lose the last edit.
+  const latest = useRef({})
+  latest.current = { selectedId, form, dirty, valid, clashes: clashes.length, persist }
+  useEffect(() => () => {
+    const { selectedId: id, form: f, dirty: d, valid: v, clashes: c, persist: save } = latest.current
+    if (id && f && d && v && !c) save(id, f)
+  }, [])
+
+  const select = async (t) => {
+    if (t.id === selectedId) return
+    if (dirty && valid && !clashes.length) await persist(selectedId, form)
+    else if (dirty) {
+      const ok = await confirm({ title: 'Discard changes?', message: 'This term has changes that were not saved. Discard them?', variant: 'warning', confirmLabel: 'Discard' })
+      if (!ok) return
+    }
+    setSelectedId(t.id); setForm(formOf(t)); savedRef.current = snapshot(formOf(t))
+    setErrors({}); setServerWarnings(null); setStatus('idle')
   }
 
-  const onSubmit = (e) => { e.preventDefault(); save(false) }
+  const addTerm = async () => {
+    const next = nextTermDefaults(year, terms)
+    if (!next.start_date) {
+      showError('Every day of this year is already inside a term. Shorten a term first.')
+      return
+    }
+    if (dirty && valid && !clashes.length) await persist(selectedId, form)
+    const end = addDays(next.start_date, SUGGESTED_TERM_DAYS - 1)
+    try {
+      const res = await sessionsApi.createTerm({
+        academic_year: year.id, name: `Term ${next.order}`, term_type: 'TERM', order: next.order,
+        start_date: next.start_date, end_date: end > year.end_date ? year.end_date : end,
+      })
+      refresh()
+      const created = res.data
+      setSelectedId(created.id); setForm(formOf(created)); savedRef.current = snapshot(formOf(created))
+      setErrors({}); setServerWarnings(null); setStatus('saved')
+    } catch (err) {
+      const data = err.response?.data || {}
+      showError(firstMessage(data.name) || firstMessage(data.order) || firstMessage(data.non_field_errors) || firstMessage(data.detail) || 'Could not add the term')
+    }
+  }
+
+  const removeTerm = async (t) => {
+    const ok = await confirm({ title: 'Delete Term', message: `Delete term "${t.name}"? This cannot be undone.` })
+    if (!ok) return
+    try {
+      await sessionsApi.deleteTerm(t.id)
+      if (t.id === selectedId) { setSelectedId(null); setForm(null); setStatus('idle') }
+      refresh()
+    } catch (err) {
+      showError(err.response?.data?.detail || 'Failed to delete term')
+    }
+  }
+
   const set = (patch) => setForm(p => ({ ...p, ...patch }))
+  const onRangeChange = (_id, range) => set(range)
   const timelineOverlaps = findOverlaps(terms)
+
+  const statusText = {
+    saving: 'Saving...',
+    saved: 'All changes saved',
+    held: clashes.length ? `Not saved: overlaps ${clashes.map(t => t.name).join(', ')}` : 'Waiting for your confirmation',
+    error: 'Not saved: fix the highlighted problem',
+    idle: '',
+  }[status]
 
   return (
     <div>
@@ -124,68 +167,58 @@ export default function TermsManager({ year, onImport, onChanged }) {
 
       <YearTimeline
         year={year}
-        terms={terms.filter(t => t.id !== editing?.id)}
-        draft={draft}
-        onTermClick={openEdit}
+        terms={drawn}
+        selectedId={selectedId}
+        onTermClick={select}
+        onRangeChange={onRangeChange}
       />
+      <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+        {selectedId ? 'Drag the handles on the selected term, or use the date fields below.' : 'Click a term on the bar to adjust it.'}
+      </p>
 
-      {!editing && (
-        <div className="mt-4">
-          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-            <h4 className="text-sm font-semibold text-gray-800 dark:text-gray-100">
-              {terms.length} term{terms.length === 1 ? '' : 's'}
-            </h4>
-            <div className="flex gap-2">
-              {onImport && <button type="button" onClick={onImport} className="btn-secondary px-3 py-1.5 text-sm">Import from another year</button>}
-              <button type="button" onClick={openAdd} className="btn-primary px-3 py-1.5 text-sm">+ Add Term</button>
-            </div>
+      <div className="mt-4">
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+          <h4 className="text-sm font-semibold text-gray-800 dark:text-gray-100">
+            {terms.length} term{terms.length === 1 ? '' : 's'}
+          </h4>
+          <div className="flex gap-2">
+            {onImport && <button type="button" onClick={onImport} className="btn-secondary px-3 py-1.5 text-sm">Import from another year</button>}
+            <button type="button" onClick={addTerm} className="btn-primary px-3 py-1.5 text-sm">+ Add Term</button>
           </div>
-
-          {isLoading ? (
-            <div className="py-8 text-center"><Spinner size="md" className="mx-auto" /></div>
-          ) : terms.length === 0 ? (
-            <p className="rounded-lg border border-dashed border-gray-300 py-6 text-center text-sm text-gray-500 dark:border-gray-600">
-              No terms yet. Add the first one, or import them from another year.
-            </p>
-          ) : (
-            <ul className="divide-y divide-gray-100 rounded-lg border border-gray-200 dark:divide-gray-700 dark:border-gray-700">
-              {terms.map(t => (
-                <li key={t.id} className="flex flex-wrap items-center justify-between gap-2 px-3 py-2">
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-medium text-gray-900 dark:text-gray-100">
-                      {t.name}
-                      {timelineOverlaps.has(t.id) && <span className="ml-2 text-xs font-medium text-red-600">Overlaps</span>}
-                    </p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">
-                      {formatDay(t.start_date)} - {formatDay(t.end_date)} · {t.term_type.toLowerCase()} · order {t.order}
-                    </p>
-                  </div>
-                  <div className="flex gap-3">
-                    <button type="button" onClick={() => openEdit(t)} className="text-xs text-primary-600 hover:underline">Edit</button>
-                    <button
-                      type="button"
-                      onClick={async () => {
-                        const ok = await confirm({ title: 'Delete Term', message: `Delete term "${t.name}"? This cannot be undone.` })
-                        if (ok) deleteMut.mutate(t.id)
-                      }}
-                      className="text-xs text-red-600 hover:underline"
-                    >Delete</button>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
         </div>
-      )}
 
-      {editing && (
-        <form onSubmit={onSubmit} className="mt-4 space-y-4 rounded-lg border border-gray-200 p-3 dark:border-gray-700 sm:p-4">
-          <h4 className="text-sm font-semibold text-gray-800 dark:text-gray-100">{editing.id ? 'Edit term' : 'Add term'}</h4>
+        {isLoading ? (
+          <div className="py-8 text-center"><Spinner size="md" className="mx-auto" /></div>
+        ) : terms.length === 0 ? (
+          <p className="rounded-lg border border-dashed border-gray-300 py-6 text-center text-sm text-gray-500 dark:border-gray-600">
+            No terms yet. Add the first one, or import them from another year.
+          </p>
+        ) : (
+          <ul className="divide-y divide-gray-100 rounded-lg border border-gray-200 dark:divide-gray-700 dark:border-gray-700">
+            {drawn.map(t => (
+              <li key={t.id} className={`flex flex-wrap items-center justify-between gap-2 px-3 py-2 ${t.id === selectedId ? 'bg-primary-50 dark:bg-primary-900/20' : ''}`}>
+                <button type="button" onClick={() => select(t)} className="min-w-0 flex-1 text-left">
+                  <p className="truncate text-sm font-medium text-gray-900 dark:text-gray-100">
+                    {t.name}
+                    {(timelineOverlaps.has(t.id) || (t.id === selectedId && clashes.length > 0)) && <span className="ml-2 text-xs font-medium text-red-600">Overlaps</span>}
+                  </p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                    {formatDay(t.start_date)} - {formatDay(t.end_date)} · {t.term_type.toLowerCase()} · order {t.order}
+                  </p>
+                </button>
+                <button type="button" onClick={() => removeTerm(t)} className="text-xs text-red-600 hover:underline">Delete</button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
 
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <div className="sm:col-span-1">
+      {form && (
+        <div className="mt-4 space-y-3 rounded-lg border border-gray-200 p-3 dark:border-gray-700 sm:p-4">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
+            <div className="sm:col-span-2">
               <label className="label" htmlFor="term-name">Name *</label>
-              <input id="term-name" className="input w-full" required value={form.name} onChange={e => set({ name: e.target.value })} placeholder="e.g. Term 1" />
+              <input id="term-name" className="input w-full" value={form.name} onChange={e => set({ name: e.target.value })} placeholder="e.g. Term 1" />
               {errors.name && <p className="mt-1 text-xs text-red-600">{firstMessage(errors.name)}</p>}
             </div>
             <div>
@@ -202,25 +235,15 @@ export default function TermsManager({ year, onImport, onChanged }) {
               {errors.order && <p className="mt-1 text-xs text-red-600">{firstMessage(errors.order)}</p>}
             </div>
           </div>
-
-          <TermRangeSlider
-            min={year.start_date}
-            max={year.end_date}
-            start={form.start_date || year.start_date}
-            end={form.end_date || year.end_date}
-            invalid={clashes.length > 0 || inverted}
-            onChange={set}
-          />
-
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
               <label className="label" htmlFor="term-start">Start date *</label>
-              <input id="term-start" type="date" required className="input w-full" value={form.start_date} min={year.start_date} max={year.end_date} onChange={e => set({ start_date: e.target.value })} />
+              <input id="term-start" type="date" className="input w-full" value={form.start_date} min={year.start_date} max={year.end_date} onChange={e => set({ start_date: e.target.value })} />
               {errors.start_date && <p className="mt-1 text-xs text-red-600">{firstMessage(errors.start_date)}</p>}
             </div>
             <div>
               <label className="label" htmlFor="term-end">End date *</label>
-              <input id="term-end" type="date" required className="input w-full" value={form.end_date} min={year.start_date} max={year.end_date} onChange={e => set({ end_date: e.target.value })} />
+              <input id="term-end" type="date" className="input w-full" value={form.end_date} min={year.start_date} max={year.end_date} onChange={e => set({ end_date: e.target.value })} />
               {errors.end_date && <p className="mt-1 text-xs text-red-600">{firstMessage(errors.end_date)}</p>}
             </div>
           </div>
@@ -232,17 +255,17 @@ export default function TermsManager({ year, onImport, onChanged }) {
           )}
           {clashes.length > 0 && (
             <div className="rounded-lg bg-amber-50 p-3 text-sm text-amber-800 dark:bg-amber-900/30 dark:text-amber-200">
-              <p className="font-medium">These dates overlap another term.</p>
+              <p className="font-medium">These dates overlap another term, so this change is not saved yet.</p>
               <ul className="mt-1 list-disc pl-5">
                 {clashes.map(t => <li key={t.id}>{t.name} ({formatDay(t.start_date)} - {formatDay(t.end_date)})</li>)}
               </ul>
-              <p className="mt-1">You can still save; the terms will run side by side.</p>
+              <button type="button" onClick={() => persist(selectedId, form, true)} className="mt-2 rounded bg-amber-600 px-3 py-1 text-white hover:bg-amber-700">Save anyway</button>
             </div>
           )}
-          {serverWarnings && (
+          {serverWarnings && !clashes.length && (
             <div className="rounded-lg bg-amber-50 p-3 text-sm text-amber-800 dark:bg-amber-900/30 dark:text-amber-200">
               {serverWarnings.map(w => <p key={w}>{w}</p>)}
-              <button type="button" onClick={() => save(true)} className="mt-2 rounded bg-amber-600 px-3 py-1 text-white hover:bg-amber-700">Save anyway</button>
+              <button type="button" onClick={() => persist(selectedId, form, true)} className="mt-2 rounded bg-amber-600 px-3 py-1 text-white hover:bg-amber-700">Save anyway</button>
             </div>
           )}
           {(errors.detail || errors.non_field_errors) && !errors.confirm_warnings && (
@@ -251,13 +274,8 @@ export default function TermsManager({ year, onImport, onChanged }) {
             </p>
           )}
 
-          <div className="flex justify-end gap-3">
-            <button type="button" onClick={closeForm} className="rounded-lg px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700">Cancel</button>
-            <button type="submit" disabled={saveMut.isPending || inverted || outsideYear} className="btn-primary px-4 py-2 text-sm disabled:opacity-50">
-              {saveMut.isPending ? 'Saving...' : clashes.length ? 'Save anyway' : editing.id ? 'Update' : 'Create'}
-            </button>
-          </div>
-        </form>
+          <p className={`text-xs ${status === 'held' || status === 'error' ? 'text-amber-700 dark:text-amber-300' : 'text-gray-500 dark:text-gray-400'}`} aria-live="polite">{statusText}</p>
+        </div>
       )}
       <ConfirmModalRoot />
     </div>
