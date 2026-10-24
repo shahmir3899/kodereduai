@@ -1,0 +1,38 @@
+{
+  "voice": "en-US-AriaNeural",
+  "rate": "-5%",
+  "cues": [
+    {
+      "start": 0.111,
+      "text": "Let's assign items to people."
+    },
+    {
+      "start": 6.767,
+      "text": "Open Inventory in the sidebar and choose Assignments. It shows who currently holds which item."
+    },
+    {
+      "start": 19.849,
+      "text": "Press Assign Item."
+    },
+    {
+      "start": 28.341,
+      "text": "Choose the item, the person and the quantity. Add a note, such as a serial number or the purpose."
+    },
+    {
+      "start": 48.666,
+      "text": "Press Assign. The item is dated today, and its stock goes down."
+    },
+    {
+      "start": 54.735,
+      "text": "When an item comes back, press Return on its row, choose its condition and confirm. The stock is restored."
+    },
+    {
+      "start": 68.179,
+      "text": "Open the Returned tab to see items that came back, with the date and condition. You can also search by person or item."
+    },
+    {
+      "start": 79.197,
+      "text": "Know who has what."
+    }
+  ]
+}

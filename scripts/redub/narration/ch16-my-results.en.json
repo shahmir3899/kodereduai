@@ -1,0 +1,26 @@
+{
+  "voice": "en-US-AriaNeural",
+  "rate": "-5%",
+  "cues": [
+    {
+      "start": 0.103,
+      "text": "Let's check your exam results."
+    },
+    {
+      "start": 5.803,
+      "text": "Click Results in the sidebar. Each published exam is a card with your total, percentage and grade."
+    },
+    {
+      "start": 15.918,
+      "text": "Under each exam you see marks, percentage and a Pass or Fail badge for every subject."
+    },
+    {
+      "start": 23.241,
+      "text": "Click an exam title to show only that exam. A paper you missed shows as Absent."
+    },
+    {
+      "start": 33.346,
+      "text": "Your results."
+    }
+  ]
+}

@@ -1,0 +1,34 @@
+{
+  "voice": "en-US-AriaNeural",
+  "rate": "-5%",
+  "cues": [
+    {
+      "start": 0.112,
+      "text": "Meet the AI Study Helper."
+    },
+    {
+      "start": 6.028,
+      "text": "Click AI Study Helper in the sidebar. It is a tutor that knows your class and subjects."
+    },
+    {
+      "start": 15.354,
+      "text": "Click one of the suggestions to ask it right away."
+    },
+    {
+      "start": 23.199,
+      "text": "Or type your own question in the box and press Enter. Shift and Enter start a new line."
+    },
+    {
+      "start": 33.706,
+      "text": "You can send up to 30 messages a day. Your chat is saved, so you can come back to it later."
+    },
+    {
+      "start": 41.533,
+      "text": "Click Clear Chat to delete the conversation and start again."
+    },
+    {
+      "start": 48.166,
+      "text": "Learn with help."
+    }
+  ]
+}

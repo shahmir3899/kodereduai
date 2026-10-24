@@ -1,0 +1,50 @@
+{
+  "voice": "en-US-AriaNeural",
+  "rate": "-5%",
+  "cues": [
+    {
+      "start": 0.113,
+      "text": "Let's manage the users of your school."
+    },
+    {
+      "start": 5.798,
+      "text": "Open Settings in the sidebar and click the Users tab. It lists every user of your school."
+    },
+    {
+      "start": 18.95,
+      "text": "Press Add User to open the form."
+    },
+    {
+      "start": 24.099,
+      "text": "Enter the name, a username, an email and a password, then choose the role. The list only offers roles you are allowed to create."
+    },
+    {
+      "start": 54.204,
+      "text": "Press Create User. A green message confirms it, and the user can log in straight away."
+    },
+    {
+      "start": 62.150999999999996,
+      "text": "Search by name, username or email, or filter by role, to find the user in the list."
+    },
+    {
+      "start": 72.401,
+      "text": "Click Edit to change the name, email, role or phone. The username cannot be changed."
+    },
+    {
+      "start": 84.801,
+      "text": "If someone forgets their password, click Reset Password. Set a new password now, or email them a reset link when they have an email address."
+    },
+    {
+      "start": 102.705,
+      "text": "Click Deactivate, and the user can no longer log in."
+    },
+    {
+      "start": 108.62299999999999,
+      "text": "Click Activate to give the access back."
+    },
+    {
+      "start": 113.494,
+      "text": "Users managed."
+    }
+  ]
+}

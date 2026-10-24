@@ -1,0 +1,38 @@
+{
+  "voice": "en-US-AriaNeural",
+  "rate": "-5%",
+  "cues": [
+    {
+      "start": 0.112,
+      "text": "Let's manage your items and stock."
+    },
+    {
+      "start": 5.917,
+      "text": "Open Inventory in the sidebar and choose Items. Each item shows its stock, price and a status."
+    },
+    {
+      "start": 18.149,
+      "text": "Open Categories and add one. Vendors work the same way."
+    },
+    {
+      "start": 34.92,
+      "text": "Press Add Item. Enter the name, choose the category and unit, and set the current stock, the minimum stock and the price."
+    },
+    {
+      "start": 69.568,
+      "text": "Press Create, and the item appears in the list."
+    },
+    {
+      "start": 75.047,
+      "text": "Use Stock Status to see only Low Stock or Out of Stock items, so you know what to reorder."
+    },
+    {
+      "start": 83.469,
+      "text": "Press AI Suggest and choose a kind of school, such as Science Lab. Tick the items you want and add them in one go."
+    },
+    {
+      "start": 94.577,
+      "text": "Stock under control."
+    }
+  ]
+}

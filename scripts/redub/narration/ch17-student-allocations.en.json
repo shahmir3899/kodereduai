@@ -1,0 +1,34 @@
+{
+  "voice": "en-US-AriaNeural",
+  "rate": "-5%",
+  "cues": [
+    {
+      "start": 0.117,
+      "text": "Let's allocate students to hostel beds."
+    },
+    {
+      "start": 5.939,
+      "text": "Open Hostel and Allocations. The students who hold a bed are listed."
+    },
+    {
+      "start": 15.49,
+      "text": "Press Allocate Student. Choose the student, the hostel and a room that has a free bed."
+    },
+    {
+      "start": 31.549,
+      "text": "Press Allocate, and the student appears in the list with the room."
+    },
+    {
+      "start": 38.886,
+      "text": "To free a bed, press Vacate on the student and confirm."
+    },
+    {
+      "start": 47.229,
+      "text": "Choose Vacated in the status filter to see students who left, with the date."
+    },
+    {
+      "start": 55.85,
+      "text": "Allocations up to date."
+    }
+  ]
+}

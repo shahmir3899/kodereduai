@@ -1,0 +1,38 @@
+{
+  "voice": "en-US-AriaNeural",
+  "rate": "-5%",
+  "cues": [
+    {
+      "start": 0.224,
+      "text": "Let's set up hostels and rooms."
+    },
+    {
+      "start": 5.931,
+      "text": "Open Hostel and Rooms, then press Add Hostel."
+    },
+    {
+      "start": 19.897,
+      "text": "Enter the hostel name, choose Boys, Girls or Mixed, and set the capacity and a warden."
+    },
+    {
+      "start": 31.7,
+      "text": "Press Add Hostel, and the hostel appears in the list."
+    },
+    {
+      "start": 38.829,
+      "text": "Open the Rooms tab and choose the hostel."
+    },
+    {
+      "start": 47.803,
+      "text": "Press Add Room. Enter the room number, the floor and the capacity, and choose the room type."
+    },
+    {
+      "start": 61.447,
+      "text": "Press Add Room again. The room shows its capacity and how many beds are taken."
+    },
+    {
+      "start": 70.958,
+      "text": "Hostel ready."
+    }
+  ]
+}

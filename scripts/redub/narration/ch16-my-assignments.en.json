@@ -1,0 +1,38 @@
+{
+  "voice": "en-US-AriaNeural",
+  "rate": "-5%",
+  "cues": [
+    {
+      "start": 0.106,
+      "text": "Let's look at your assignments."
+    },
+    {
+      "start": 5.94,
+      "text": "Click Assignments in the sidebar to see work from all your teachers."
+    },
+    {
+      "start": 13.412,
+      "text": "Each card shows the subject, type, due date and status. Graded work shows your marks and the teacher's feedback."
+    },
+    {
+      "start": 22.901,
+      "text": "A Diary Entry is for reading only, so it has no Submit button."
+    },
+    {
+      "start": 28.665,
+      "text": "For an open assignment, press Submit."
+    },
+    {
+      "start": 37.017,
+      "text": "Type your answer. Submission Text is required. A link to your file is optional."
+    },
+    {
+      "start": 51.798,
+      "text": "Press Submit Assignment. A green message confirms it, and the card now shows Submitted."
+    },
+    {
+      "start": 61.16,
+      "text": "Work submitted."
+    }
+  ]
+}

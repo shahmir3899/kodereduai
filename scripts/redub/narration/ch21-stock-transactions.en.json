@@ -1,0 +1,38 @@
+{
+  "voice": "en-US-AriaNeural",
+  "rate": "-5%",
+  "cues": [
+    {
+      "start": 0.116,
+      "text": "Let's record stock transactions."
+    },
+    {
+      "start": 6.103,
+      "text": "Open Inventory in the sidebar and choose Transactions. Every stock movement is listed here with its date, type and quantity."
+    },
+    {
+      "start": 21.224,
+      "text": "Press Record Transaction."
+    },
+    {
+      "start": 29.657,
+      "text": "Choose Purchase, then the item. The unit price is filled in for you. Enter the quantity, choose the vendor and add the invoice number."
+    },
+    {
+      "start": 45.07,
+      "text": "Press Record Transaction. The purchase appears in the list, and the stock of the item goes up."
+    },
+    {
+      "start": 53.259,
+      "text": "For damaged or expired items choose Disposal and enter a positive quantity. The stock goes down by that amount. An Adjustment corrects a count, and takes a negative number to reduce stock."
+    },
+    {
+      "start": 73.75,
+      "text": "Use Type and the From and To dates to narrow the history. Here only disposals are shown."
+    },
+    {
+      "start": 83.531,
+      "text": "Every movement recorded."
+    }
+  ]
+}

@@ -1,0 +1,30 @@
+{
+  "voice": "en-US-AriaNeural",
+  "rate": "-5%",
+  "cues": [
+    {
+      "start": 0.114,
+      "text": "Let's see how to view your child's information."
+    },
+    {
+      "start": 5.901,
+      "text": "After you sign in, the dashboard shows a card for each of your children, with a quick summary."
+    },
+    {
+      "start": 14.18,
+      "text": "Click Overview on the card to open the full page for that child."
+    },
+    {
+      "start": 21.7,
+      "text": "The top shows the photo, class and roll number. The cards below show attendance, fees due, the last exam and days present."
+    },
+    {
+      "start": 31.705,
+      "text": "Under Details, choose a page, for example Exam Results, to see marks and grades."
+    },
+    {
+      "start": 40.838,
+      "text": "All in one place."
+    }
+  ]
+}

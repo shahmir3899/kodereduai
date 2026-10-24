@@ -1,0 +1,38 @@
+{
+  "voice": "en-US-AriaNeural",
+  "rate": "-5%",
+  "cues": [
+    {
+      "start": 0.108,
+      "text": "Let's mark daily attendance."
+    },
+    {
+      "start": 6.909,
+      "text": "First, open Attendance and choose Manual Entry."
+    },
+    {
+      "start": 12.874,
+      "text": "Pick your class and confirm today's date."
+    },
+    {
+      "start": 23.524,
+      "text": "The student list appears. Tap Mark All Present to start from a clean slate."
+    },
+    {
+      "start": 31.24,
+      "text": "Now change only the exceptions. Mark one student absent, and another on leave."
+    },
+    {
+      "start": 39.144,
+      "text": "The counts at the top update as you go."
+    },
+    {
+      "start": 43.052,
+      "text": "Finally, press Save Attendance. A confirmation shows how many records were saved."
+    },
+    {
+      "start": 54.295,
+      "text": "Attendance recorded."
+    }
+  ]
+}

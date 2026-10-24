@@ -1,0 +1,42 @@
+{
+  "voice": "en-US-AriaNeural",
+  "rate": "-5%",
+  "cues": [
+    {
+      "start": 0.108,
+      "text": "Let's create and manage a gate pass."
+    },
+    {
+      "start": 6.0,
+      "text": "Open Hostel and Gate Passes, then press New Gate Pass."
+    },
+    {
+      "start": 22.258,
+      "text": "Choose the student and the pass type, then enter the reason and where the student is going."
+    },
+    {
+      "start": 43.794,
+      "text": "The leaving time and the expected return are already filled in. Change them if the student leaves at a different time."
+    },
+    {
+      "start": 55.163,
+      "text": "Press Create Gate Pass. It starts as Pending Approval."
+    },
+    {
+      "start": 63.378,
+      "text": "Press Approve, add a remark if you like, and confirm."
+    },
+    {
+      "start": 77.255,
+      "text": "When the student leaves the gate, press Check Out."
+    },
+    {
+      "start": 82.55,
+      "text": "When the student is back, press Mark Returned, and the pass is complete."
+    },
+    {
+      "start": 91.132,
+      "text": "Pass completed."
+    }
+  ]
+}

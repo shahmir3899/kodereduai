@@ -1,0 +1,38 @@
+{
+  "voice": "en-US-AriaNeural",
+  "rate": "-5%",
+  "cues": [
+    {
+      "start": 0.214,
+      "text": "Let's create a student account with a login."
+    },
+    {
+      "start": 6.388,
+      "text": "Open Management, then Students."
+    },
+    {
+      "start": 16.488,
+      "text": "Press Add Student."
+    },
+    {
+      "start": 25.262,
+      "text": "Choose the class and enter the student's name and the parent details. The roll number is suggested for you."
+    },
+    {
+      "start": 43.514,
+      "text": "At the bottom, tick Create User Account. The username is suggested from the name."
+    },
+    {
+      "start": 56.238,
+      "text": "Enter a password of at least eight characters and confirm it. The email is optional."
+    },
+    {
+      "start": 64.884,
+      "text": "Press Add Student. The student and login are created together, so the student can sign in to the Student Portal."
+    },
+    {
+      "start": 74.305,
+      "text": "Login created."
+    }
+  ]
+}
