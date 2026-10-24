@@ -91,3 +91,4 @@ infra/waha/sessions/
 
 # web-demo-video scratch output
 .demo-out/
+scripts/demo-videos/audio/

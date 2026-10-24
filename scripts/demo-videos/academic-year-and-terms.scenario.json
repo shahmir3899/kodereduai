@@ -31,11 +31,9 @@
     ]
   },
   "style": { "speed": "normal", "theme": "teal", "captionPosition": "bottom", "keys": "shortcuts" },
-  "voice": {
-    "engine": "edge",
-    "voices": { "en": "en-US-AriaNeural", "ur": "ur-PK-UzmaNeural" },
-    "rate": -0.5
-  },
+  // Audio is made by make_voice.py (Microsoft neural voices, en-US-AriaNeural / ur-PK-UzmaNeural, rate -5%) because the
+  // skill's own online voice cannot reach Microsoft through this environment's proxy. One file per step id.
+  "voice": { "engine": "files", "dir": "audio" },
   "music": { "track": "calm", "volume": 0.2, "duck": true },
   "intro": {
     "seconds": 5,
