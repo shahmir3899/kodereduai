@@ -1050,7 +1050,7 @@
       ],
       "module": "transport",
       "seconds": {
-        "en": 46,
+        "en": 45,
         "ur": 48
       }
     },
@@ -1360,6 +1360,200 @@
       }
     },
     {
+      "id": "ch17-managing-hostels-rooms",
+      "status": "ready",
+      "title": {
+        "en": "Managing Hostels & Rooms",
+        "ur": "ہوسٹل اور کمروں کا انتظام"
+      },
+      "section": "17.2",
+      "chapter": 17,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL"
+      ],
+      "module": "hostel",
+      "seconds": {
+        "en": 76,
+        "ur": 77
+      }
+    },
+    {
+      "id": "ch17-student-allocations",
+      "status": "ready",
+      "title": {
+        "en": "Student Allocations",
+        "ur": "طلبہ کی الاٹمنٹ"
+      },
+      "section": "17.3",
+      "chapter": 17,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL"
+      ],
+      "module": "hostel",
+      "seconds": {
+        "en": 60,
+        "ur": 62
+      }
+    },
+    {
+      "id": "ch17-gate-passes",
+      "status": "ready",
+      "title": {
+        "en": "Gate Passes",
+        "ur": "گیٹ پاس"
+      },
+      "section": "17.4",
+      "chapter": 17,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL"
+      ],
+      "module": "hostel",
+      "seconds": {
+        "en": 96,
+        "ur": 96
+      }
+    },
+    {
+      "id": "ch21-stock-transactions",
+      "status": "ready",
+      "title": {
+        "en": "Stock Transactions",
+        "ur": "اسٹاک ٹرانزیکشنز"
+      },
+      "section": "21.3",
+      "chapter": 21,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL",
+        "ACCOUNTANT"
+      ],
+      "module": "inventory",
+      "seconds": {
+        "en": 89,
+        "ur": 93
+      }
+    },
+    {
+      "id": "ch21-item-assignments",
+      "status": "ready",
+      "title": {
+        "en": "Item Assignments",
+        "ur": "آئٹمز کی تفویض"
+      },
+      "section": "21.4",
+      "chapter": 21,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL",
+        "ACCOUNTANT",
+        "TEACHER",
+        "STAFF"
+      ],
+      "module": "inventory",
+      "seconds": {
+        "en": 84,
+        "ur": 90
+      }
+    },
+    {
+      "id": "ch11-setting-up-book-categories",
+      "status": "ready",
+      "title": {
+        "en": "Setting Up Book Categories",
+        "ur": "کتابوں کی اقسام ترتیب دینا"
+      },
+      "section": "11.1",
+      "chapter": 11,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL"
+      ],
+      "module": "library",
+      "seconds": {
+        "en": 74,
+        "ur": 75
+      }
+    },
+    {
+      "id": "ch11-adding-books-to-the-catalog",
+      "status": "ready",
+      "title": {
+        "en": "Adding Books to the Catalog",
+        "ur": "کیٹلاگ میں کتابیں شامل کرنا"
+      },
+      "section": "11.2",
+      "chapter": 11,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL"
+      ],
+      "module": "library",
+      "seconds": {
+        "en": 86,
+        "ur": 89
+      }
+    },
+    {
+      "id": "ch11-issuing-books",
+      "status": "ready",
+      "title": {
+        "en": "Issuing Books",
+        "ur": "کتابیں جاری کرنا"
+      },
+      "section": "11.3",
+      "chapter": 11,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL"
+      ],
+      "module": "library",
+      "seconds": {
+        "en": 59,
+        "ur": 62
+      }
+    },
+    {
+      "id": "ch11-returning-books",
+      "status": "ready",
+      "title": {
+        "en": "Returning Books",
+        "ur": "کتابیں واپس لینا"
+      },
+      "section": "11.4",
+      "chapter": 11,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL"
+      ],
+      "module": "library",
+      "seconds": {
+        "en": 72,
+        "ur": 75
+      }
+    },
+    {
+      "id": "ch11-tracking-overdue-books",
+      "status": "ready",
+      "title": {
+        "en": "Tracking Overdue Books",
+        "ur": "تاخیر شدہ کتابوں کی نگرانی"
+      },
+      "section": "11.5",
+      "chapter": 11,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL"
+      ],
+      "module": "library",
+      "seconds": {
+        "en": 49,
+        "ur": 55
+      }
+    },
+    {
       "id": "ch4-step-1-enroll-student-faces",
       "status": "planned",
       "title": {
@@ -1422,200 +1616,6 @@
         "TEACHER"
       ],
       "module": "attendance"
-    },
-    {
-      "id": "ch11-setting-up-book-categories",
-      "status": "planned",
-      "title": {
-        "en": "Setting Up Book Categories",
-        "ur": ""
-      },
-      "section": "11.1",
-      "chapter": 11,
-      "roles": [
-        "SCHOOL_ADMIN",
-        "PRINCIPAL",
-        "TEACHER",
-        "ACCOUNTANT",
-        "STAFF",
-        "DRIVER"
-      ],
-      "module": "library"
-    },
-    {
-      "id": "ch11-adding-books-to-the-catalog",
-      "status": "planned",
-      "title": {
-        "en": "Adding Books to the Catalog",
-        "ur": ""
-      },
-      "section": "11.2",
-      "chapter": 11,
-      "roles": [
-        "SCHOOL_ADMIN",
-        "PRINCIPAL",
-        "TEACHER",
-        "ACCOUNTANT",
-        "STAFF",
-        "DRIVER"
-      ],
-      "module": "library"
-    },
-    {
-      "id": "ch11-issuing-books",
-      "status": "planned",
-      "title": {
-        "en": "Issuing Books",
-        "ur": ""
-      },
-      "section": "11.3",
-      "chapter": 11,
-      "roles": [
-        "SCHOOL_ADMIN",
-        "PRINCIPAL",
-        "TEACHER",
-        "ACCOUNTANT",
-        "STAFF",
-        "DRIVER"
-      ],
-      "module": "library"
-    },
-    {
-      "id": "ch11-returning-books",
-      "status": "planned",
-      "title": {
-        "en": "Returning Books",
-        "ur": ""
-      },
-      "section": "11.4",
-      "chapter": 11,
-      "roles": [
-        "SCHOOL_ADMIN",
-        "PRINCIPAL",
-        "TEACHER",
-        "ACCOUNTANT",
-        "STAFF",
-        "DRIVER"
-      ],
-      "module": "library"
-    },
-    {
-      "id": "ch11-tracking-overdue-books",
-      "status": "planned",
-      "title": {
-        "en": "Tracking Overdue Books",
-        "ur": ""
-      },
-      "section": "11.5",
-      "chapter": 11,
-      "roles": [
-        "SCHOOL_ADMIN",
-        "PRINCIPAL",
-        "TEACHER",
-        "ACCOUNTANT",
-        "STAFF",
-        "DRIVER"
-      ],
-      "module": "library"
-    },
-    {
-      "id": "ch17-managing-hostels-rooms",
-      "status": "planned",
-      "title": {
-        "en": "Managing Hostels & Rooms",
-        "ur": ""
-      },
-      "section": "17.2",
-      "chapter": 17,
-      "roles": [
-        "SCHOOL_ADMIN",
-        "PRINCIPAL",
-        "TEACHER",
-        "ACCOUNTANT",
-        "STAFF",
-        "DRIVER"
-      ],
-      "module": "hostel"
-    },
-    {
-      "id": "ch17-student-allocations",
-      "status": "planned",
-      "title": {
-        "en": "Student Allocations",
-        "ur": ""
-      },
-      "section": "17.3",
-      "chapter": 17,
-      "roles": [
-        "SCHOOL_ADMIN",
-        "PRINCIPAL",
-        "TEACHER",
-        "ACCOUNTANT",
-        "STAFF",
-        "DRIVER"
-      ],
-      "module": "hostel"
-    },
-    {
-      "id": "ch17-gate-passes",
-      "status": "planned",
-      "title": {
-        "en": "Gate Passes",
-        "ur": ""
-      },
-      "section": "17.4",
-      "chapter": 17,
-      "roles": [
-        "SCHOOL_ADMIN",
-        "PRINCIPAL",
-        "TEACHER",
-        "ACCOUNTANT",
-        "STAFF",
-        "DRIVER"
-      ],
-      "module": "hostel"
-    },
-    {
-      "id": "ch21-stock-transactions",
-      "status": "ready",
-      "title": {
-        "en": "Stock Transactions",
-        "ur": "اسٹاک ٹرانزیکشنز"
-      },
-      "section": "21.3",
-      "chapter": 21,
-      "roles": [
-        "SCHOOL_ADMIN",
-        "PRINCIPAL",
-        "ACCOUNTANT"
-      ],
-      "module": "inventory",
-      "seconds": {
-        "en": 89,
-        "ur": 93
-      }
-    },
-    {
-      "id": "ch21-item-assignments",
-      "status": "ready",
-      "title": {
-        "en": "Item Assignments",
-        "ur": "آئٹمز کی تفویض"
-      },
-      "section": "21.4",
-      "chapter": 21,
-      "roles": [
-        "SCHOOL_ADMIN",
-        "PRINCIPAL",
-        "ACCOUNTANT",
-        "TEACHER",
-        "STAFF"
-      ],
-      "module": "inventory",
-      "seconds": {
-        "en": 84,
-        "ur": 90
-      }
     }
   ]
 }

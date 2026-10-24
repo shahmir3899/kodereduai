@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { TONE } from '../../components/ui/statusTones'
 import PageHeader from '../../components/ui/PageHeader'
 import LoadingState from '../../components/ui/LoadingState'
+import { RecordCard, CardGrid } from '../../components/cards'
 import { Link } from 'react-router-dom'
 import { transportApi } from '../../services/api'
 import { useAuth } from '../../contexts/AuthContext'
@@ -211,23 +212,20 @@ export default function TransportDashboard() {
         ) : (
           <>
             {/* Mobile card view */}
-            <div className="sm:hidden space-y-2">
+            <CardGrid className="sm:hidden">
               {recentRoutes.slice(0, 5).map((route) => (
-                <div key={route.id} className="p-3 border border-gray-200 rounded-lg">
-                  <div className="flex items-center justify-between">
-                    <p className="font-medium text-sm text-gray-900">{route.name}</p>
-                    <span className="text-xs text-gray-500">{route.distance_km ? `${route.distance_km} km` : '--'}</span>
-                  </div>
-                  <p className="text-xs text-gray-500 mt-1">
-                    {route.start_location || 'Start'} → {route.end_location || 'End'}
-                  </p>
-                  <div className="flex gap-4 mt-2 text-xs text-gray-500">
-                    <span>{route.vehicles_count || 0} vehicles</span>
-                    <span>{route.students_count || 0} students</span>
-                  </div>
-                </div>
+                <RecordCard
+                  key={route.id}
+                  title={route.name}
+                  meta={`${route.start_location || 'Start'} → ${route.end_location || 'End'}`}
+                  fields={[
+                    { label: 'Distance', value: route.distance_km ? `${route.distance_km} km` : '--' },
+                    { label: 'Vehicles', value: route.vehicles_count || 0 },
+                    { label: 'Students', value: route.students_count || 0 },
+                  ]}
+                />
               ))}
-            </div>
+            </CardGrid>
 
             {/* Desktop table view */}
             <div className="hidden sm:block overflow-x-auto">

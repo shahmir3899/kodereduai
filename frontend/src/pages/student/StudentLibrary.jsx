@@ -2,7 +2,8 @@ import { useQuery } from '@tanstack/react-query'
 import Badge from '../../components/ui/Badge'
 import { TONE } from '../../components/ui/statusTones'
 import { studentPortalApi } from '../../services/api'
-import Spinner from '../../components/ui/Spinner'
+import LoadingState from '../../components/ui/LoadingState'
+import { formatDate } from '../library/libraryUtils'
 import { RecordCard, CardGrid, ViewToggle } from '../../components/cards'
 import { useViewPreference } from '../../hooks/useViewPreference'
 
@@ -21,14 +22,13 @@ export default function StudentLibrary() {
   })
 
   const issues = data?.data || []
-  const current = issues.filter((i) => i.status === 'ISSUED' || i.status === 'OVERDUE')
-  const past = issues.filter((i) => i.status === 'RETURNED' || i.status === 'LOST')
+  const withOverdue = issues.map((i) => (i.is_overdue ? { ...i, status: 'OVERDUE' } : i))
+  const current = withOverdue.filter((i) => i.status === 'ISSUED' || i.status === 'OVERDUE')
+  const past = withOverdue.filter((i) => i.status === 'RETURNED' || i.status === 'LOST')
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center py-20">
-        <Spinner size="md" />
-      </div>
+      <LoadingState label="Loading library records..." compact />
     )
   }
 
@@ -73,8 +73,8 @@ export default function StudentLibrary() {
                       </span>
                     }
                     fields={[
-                      { label: 'Issued', value: issue.issue_date },
-                      { label: 'Due', value: issue.due_date },
+                      { label: 'Issued', value: formatDate(issue.issue_date) },
+                      { label: 'Due', value: formatDate(issue.due_date) },
                       ...(Number(issue.fine_amount) > 0 ? [{ label: 'Fine', value: <span className="text-red-600">PKR {issue.fine_amount}</span> }] : []),
                     ]}
                   />
@@ -102,8 +102,8 @@ export default function StudentLibrary() {
                       </Badge>
                     }
                     fields={[
-                      { label: 'Issued', value: issue.issue_date },
-                      { label: 'Returned', value: issue.return_date || '—' },
+                      { label: 'Issued', value: formatDate(issue.issue_date) },
+                      { label: 'Returned', value: formatDate(issue.return_date) },
                     ]}
                   />
                 ))}

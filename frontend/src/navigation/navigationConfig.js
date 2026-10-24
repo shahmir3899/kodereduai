@@ -263,8 +263,8 @@ export function buildStaffNavigation(ctx, I) {
       ],
     }] : []),
 
-    // Hostel group — Manager removed 2026-09 (see Attendance comment above).
-    ...(isModuleEnabled('hostel') && !isManager ? [{
+    // Hostel group — admin and principal only: it lists students and gate-pass reasons.
+    ...(isModuleEnabled('hostel') && !isStaffLevel ? [{
       type: 'group',
       name: 'Hostel',
       icon: I.HomeIcon,

@@ -3,11 +3,8 @@ import PageHeader from '../../components/ui/PageHeader'
 import LoadingState from '../../components/ui/LoadingState'
 import { Link } from 'react-router-dom'
 import { hostelApi } from '../../services/api'
-import { useAuth } from '../../contexts/AuthContext'
 
 export default function HostelDashboard() {
-  const { user } = useAuth()
-
   const { data: dashboardData, isLoading, error } = useQuery({
     queryKey: ['hostelDashboard'],
     queryFn: () => hostelApi.getDashboard(),
@@ -137,7 +134,7 @@ export default function HostelDashboard() {
   return (
     <div>
       {/* Header */}
-      <PageHeader title="Hostel Management" subtitle={<>Hostel management overview &mdash; Welcome, {user?.username}</>} className="mb-6" />
+      <PageHeader title="Hostel Management" subtitle="Hostel management overview" className="mb-6" />
 
       {/* Stats Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 mb-8">

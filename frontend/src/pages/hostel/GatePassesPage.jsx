@@ -1,31 +1,49 @@
 import { useState } from 'react'
 import Modal from '../../components/ui/Modal'
+import Field from '../../components/ui/Field'
+import Badge from '../../components/ui/Badge'
 import { TONE } from '../../components/ui/statusTones'
-import Button from '../../components/ui/Button'
 import PageHeader from '../../components/ui/PageHeader'
 import LoadingState from '../../components/ui/LoadingState'
+import EmptyState from '../../components/ui/EmptyState'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { hostelApi } from '../../services/api'
-import { useAuth } from '../../contexts/AuthContext'
+import { useToast } from '../../components/Toast'
+import { getErrorMessage } from '../../utils/errorUtils'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
-
-function formatDate(dateStr) {
-  if (!dateStr) return '-'
-  return new Date(dateStr).toLocaleDateString('en-US', {
-    year: 'numeric', month: 'short', day: 'numeric',
-  })
-}
+import { useDebounce } from '../../hooks/useDebounce'
+import { RecordCard, CardGrid, ViewToggle } from '../../components/cards'
+import { useViewPreference } from '../../hooks/useViewPreference'
 
 function formatDateTime(dateStr) {
-  if (!dateStr) return '-'
+  if (!dateStr) return '--'
   return new Date(dateStr).toLocaleString('en-US', {
     year: 'numeric', month: 'short', day: 'numeric',
     hour: '2-digit', minute: '2-digit',
   })
 }
 
+// Values match hostel.models.GatePass.STATUS_CHOICES / PASS_TYPES.
+const STATUSES = [
+  { value: 'PENDING', label: 'Pending Approval', colors: TONE.warning },
+  { value: 'APPROVED', label: 'Approved', colors: TONE.info },
+  { value: 'REJECTED', label: 'Rejected', colors: TONE.danger },
+  { value: 'USED', label: 'Checked Out', colors: TONE.accent },
+  { value: 'RETURNED', label: 'Returned', colors: TONE.success },
+  { value: 'EXPIRED', label: 'Expired', colors: TONE.neutral },
+]
+
+const PASS_TYPES = [
+  { value: 'DAY', label: 'Day Pass', colors: TONE.sky },
+  { value: 'OVERNIGHT', label: 'Overnight', colors: TONE.indigo },
+  { value: 'WEEKEND', label: 'Weekend', colors: TONE.accent },
+  { value: 'VACATION', label: 'Vacation Leave', colors: TONE.teal },
+]
+
+const statusInfo = (value) => STATUSES.find((s) => s.value === value) || { label: value, colors: TONE.neutral }
+const typeInfo = (value) => PASS_TYPES.find((t) => t.value === value) || { label: value, colors: TONE.neutral }
+
 const emptyGatePassForm = {
-  student: '',
   allocation: '',
   pass_type: 'DAY',
   reason: '',
@@ -35,42 +53,64 @@ const emptyGatePassForm = {
   expected_return: '',
 }
 
-export default function GatePassesPage() {
-  const { user } = useAuth()
-  const queryClient = useQueryClient()
+// datetime-local wants local time as YYYY-MM-DDTHH:mm. Most passes are same-day, so start at the
+// next full hour and expect the student back eight hours later; the admin edits if that is wrong.
+function defaultTimes() {
+  const pad = (n) => String(n).padStart(2, '0')
+  const fmt = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+  const start = new Date()
+  start.setMinutes(0, 0, 0)
+  start.setHours(start.getHours() + 1)
+  const end = new Date(start.getTime() + 8 * 60 * 60 * 1000)
+  return { departure_date: fmt(start), expected_return: fmt(end) }
+}
 
-  // Filters
+export default function GatePassesPage() {
+  const queryClient = useQueryClient()
+  const toast = useToast()
+
+  const [view, setView] = useViewPreference('hostel-gate-passes')
   const [statusFilter, setStatusFilter] = useState('')
   const [passTypeFilter, setPassTypeFilter] = useState('')
+  const [search, setSearch] = useState('')
+  const debouncedSearch = useDebounce(search, 300)
 
-  // Modal
   const [showModal, setShowModal] = useState(false)
   const [gatePassForm, setGatePassForm] = useState(emptyGatePassForm)
 
-  // Action modals
-  const [actionModal, setActionModal] = useState(null) // { type: 'approve'|'reject', pass: {...} }
+  const [actionModal, setActionModal] = useState(null) // { type: 'approve'|'reject', pass }
   const [actionRemark, setActionRemark] = useState('')
 
-  // ---- Queries ----
-
-  const { data: gatePassesData, isLoading } = useQuery({
-    queryKey: ['hostelGatePasses', statusFilter, passTypeFilter],
+  const { data: gatePassesData, isLoading, error } = useQuery({
+    queryKey: ['hostelGatePasses', statusFilter, passTypeFilter, debouncedSearch],
     queryFn: () => hostelApi.getGatePasses({
       status: statusFilter || undefined,
       pass_type: passTypeFilter || undefined,
+      search: debouncedSearch || undefined,
       page_size: 9999,
     }),
   })
 
-  const gatePasses = gatePassesData?.data?.results || gatePassesData?.data || []
+  // A pass is issued to a student who currently holds a bed, so the picker lists active allocations.
+  const { data: allocationsData } = useQuery({
+    queryKey: ['hostelAllocations', 'for-gate-pass'],
+    queryFn: () => hostelApi.getAllocations({ is_active: 'true', page_size: 9999 }),
+    enabled: showModal,
+  })
 
-  // ---- Mutations ----
+  const gatePasses = gatePassesData?.data?.results || gatePassesData?.data || []
+  const allocations = allocationsData?.data?.results || allocationsData?.data || []
+
+  const refresh = () => {
+    queryClient.invalidateQueries({ queryKey: ['hostelGatePasses'] })
+    queryClient.invalidateQueries({ queryKey: ['hostelDashboard'] })
+  }
 
   const createMutation = useMutation({
     mutationFn: (data) => hostelApi.createGatePass(data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['hostelGatePasses'] })
-      queryClient.invalidateQueries({ queryKey: ['hostelDashboard'] })
+      refresh()
+      toast.showSuccess('Gate pass created')
       closeModal()
     },
   })
@@ -78,8 +118,8 @@ export default function GatePassesPage() {
   const approveMutation = useMutation({
     mutationFn: ({ id, data }) => hostelApi.approveGatePass(id, data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['hostelGatePasses'] })
-      queryClient.invalidateQueries({ queryKey: ['hostelDashboard'] })
+      refresh()
+      toast.showSuccess('Gate pass approved')
       closeActionModal()
     },
   })
@@ -87,8 +127,8 @@ export default function GatePassesPage() {
   const rejectMutation = useMutation({
     mutationFn: ({ id, data }) => hostelApi.rejectGatePass(id, data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['hostelGatePasses'] })
-      queryClient.invalidateQueries({ queryKey: ['hostelDashboard'] })
+      refresh()
+      toast.showSuccess('Gate pass rejected')
       closeActionModal()
     },
   })
@@ -96,29 +136,30 @@ export default function GatePassesPage() {
   const checkoutMutation = useMutation({
     mutationFn: (id) => hostelApi.checkoutGatePass(id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['hostelGatePasses'] })
-      queryClient.invalidateQueries({ queryKey: ['hostelDashboard'] })
+      refresh()
+      toast.showSuccess('Student checked out')
     },
+    onError: (err) => toast.showError(getErrorMessage(err, 'Failed to check out')),
   })
 
   const returnMutation = useMutation({
     mutationFn: (id) => hostelApi.returnGatePass(id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['hostelGatePasses'] })
-      queryClient.invalidateQueries({ queryKey: ['hostelDashboard'] })
+      refresh()
+      toast.showSuccess('Student marked as returned')
     },
+    onError: (err) => toast.showError(getErrorMessage(err, 'Failed to mark as returned')),
   })
 
-  // ---- Modal Handlers ----
-
   const openModal = () => {
-    setGatePassForm(emptyGatePassForm)
+    setGatePassForm({ ...emptyGatePassForm, ...defaultTimes() })
     setShowModal(true)
   }
 
   const closeModal = () => {
     setShowModal(false)
     setGatePassForm(emptyGatePassForm)
+    createMutation.reset()
   }
 
   const openActionModal = (type, pass) => {
@@ -129,18 +170,23 @@ export default function GatePassesPage() {
   const closeActionModal = () => {
     setActionModal(null)
     setActionRemark('')
+    approveMutation.reset()
+    rejectMutation.reset()
   }
 
   useEscapeKey(closeModal, showModal)
   useEscapeKey(closeActionModal, !!actionModal)
 
-  // ---- Submit Handler ----
-
   const handleSubmit = (e) => {
     e.preventDefault()
+    const allocation = allocations.find((a) => String(a.id) === String(gatePassForm.allocation))
+    if (!allocation) {
+      toast.showError('Choose a student')
+      return
+    }
     createMutation.mutate({
-      student: parseInt(gatePassForm.student),
-      allocation: parseInt(gatePassForm.allocation),
+      student: allocation.student,
+      allocation: allocation.id,
       pass_type: gatePassForm.pass_type,
       reason: gatePassForm.reason,
       going_to: gatePassForm.going_to,
@@ -153,450 +199,314 @@ export default function GatePassesPage() {
   const handleAction = () => {
     if (!actionModal) return
     const { type, pass } = actionModal
-    if (type === 'approve') {
-      approveMutation.mutate({ id: pass.id, data: { remarks: actionRemark } })
-    } else if (type === 'reject') {
-      rejectMutation.mutate({ id: pass.id, data: { remarks: actionRemark } })
-    }
+    const mutation = type === 'approve' ? approveMutation : rejectMutation
+    mutation.mutate({ id: pass.id, data: { remarks: actionRemark } })
   }
 
   const actionPending = approveMutation.isPending || rejectMutation.isPending
   const actionError = approveMutation.error || rejectMutation.error
 
-  // ---- Status badge colors ----
-
-  const statusColors = {
-    PENDING: TONE.warning,
-    APPROVED: TONE.info,
-    REJECTED: TONE.danger,
-    CHECKED_OUT: TONE.accent,
-    RETURNED: TONE.success,
-    EXPIRED: TONE.neutral,
-  }
-
-  const passTypeColors = {
-    DAY: TONE.sky,
-    OVERNIGHT: TONE.indigo,
-    WEEKEND: TONE.accent,
-    VACATION: TONE.teal,
-  }
-
-  // ---- Determine available actions for a pass ----
-
   const getActions = (pass) => {
-    const status = pass.status?.toUpperCase() || ''
     const actions = []
-    if (status === 'PENDING') {
-      actions.push({ label: 'Approve', color: 'text-green-600 hover:text-green-800', action: () => openActionModal('approve', pass) })
-      actions.push({ label: 'Reject', color: 'text-red-600 hover:text-red-800', action: () => openActionModal('reject', pass) })
+    if (pass.status === 'PENDING') {
+      actions.push({ label: 'Approve', tone: 'success', onClick: () => openActionModal('approve', pass) })
+      actions.push({ label: 'Reject', tone: 'danger', onClick: () => openActionModal('reject', pass) })
     }
-    if (status === 'APPROVED') {
-      actions.push({
-        label: 'Check Out',
-        color: 'text-purple-600 hover:text-purple-800',
-        action: () => checkoutMutation.mutate(pass.id),
-        pending: checkoutMutation.isPending,
-      })
+    if (pass.status === 'APPROVED') {
+      actions.push({ label: 'Check Out', tone: 'accent', disabled: checkoutMutation.isPending, onClick: () => checkoutMutation.mutate(pass.id) })
     }
-    if (status === 'CHECKED_OUT') {
-      actions.push({
-        label: 'Mark Returned',
-        color: 'text-blue-600 hover:text-blue-800',
-        action: () => returnMutation.mutate(pass.id),
-        pending: returnMutation.isPending,
-      })
+    if (pass.status === 'USED') {
+      actions.push({ label: 'Mark Returned', tone: 'info', disabled: returnMutation.isPending, onClick: () => returnMutation.mutate(pass.id) })
     }
     return actions
   }
 
+  const filtersActive = !!(statusFilter || passTypeFilter || search)
+
   return (
     <div>
-      {/* Header */}
-      <PageHeader title="Gate Passes" subtitle="Manage student gate passes and leave requests" className="mb-6" actions={<>
-<button
-          onClick={openModal}
-          className="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 transition-colors"
-        >
-          New Gate Pass
-        </button>
-</>} />
+      <PageHeader title="Gate Passes" subtitle="Manage student gate passes and leave requests" className="mb-6" actions={
+        <button onClick={openModal} className="btn btn-primary">New Gate Pass</button>
+      } />
 
-      {/* Filters */}
-      <div className="bg-white rounded-lg shadow-sm p-4 mb-6">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Status</label>
-            <select
+      <div className="card mb-6">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <Field label="Search">
+            <input
+              type="search"
               className="input"
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-            >
+              placeholder="Student name"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </Field>
+          <Field label="Status">
+            <select className="input" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
               <option value="">All Statuses</option>
-              <option value="PENDING">Pending</option>
-              <option value="APPROVED">Approved</option>
-              <option value="REJECTED">Rejected</option>
-              <option value="CHECKED_OUT">Checked Out</option>
-              <option value="RETURNED">Returned</option>
-              <option value="EXPIRED">Expired</option>
+              {STATUSES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
             </select>
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Pass Type</label>
-            <select
-              className="input"
-              value={passTypeFilter}
-              onChange={(e) => setPassTypeFilter(e.target.value)}
-            >
+          </Field>
+          <Field label="Pass Type">
+            <select className="input" value={passTypeFilter} onChange={(e) => setPassTypeFilter(e.target.value)}>
               <option value="">All Types</option>
-              <option value="DAY">Day</option>
-              <option value="OVERNIGHT">Overnight</option>
-              <option value="WEEKEND">Weekend</option>
-              <option value="VACATION">Vacation</option>
+              {PASS_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
             </select>
-          </div>
+          </Field>
         </div>
       </div>
 
-      {/* Table */}
-      <div className="bg-white rounded-lg shadow-sm">
-        {isLoading ? (
-          <div className="text-center py-16">
-            <LoadingState label="Loading gate passes..." compact />
-          </div>
-        ) : gatePasses.length === 0 ? (
-          <div className="text-center py-16">
-            <svg className="w-12 h-12 text-gray-300 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 5v2m0 4v2m0 4v2M5 5a2 2 0 00-2 2v3a2 2 0 110 4v3a2 2 0 002 2h14a2 2 0 002-2v-3a2 2 0 110-4V7a2 2 0 00-2-2H5z" />
-            </svg>
-            <p className="text-gray-500 font-medium">No gate passes found</p>
-            <p className="text-gray-400 text-sm mt-1">
-              {statusFilter || passTypeFilter ? 'Try adjusting your filters.' : 'Create a new gate pass to get started.'}
-            </p>
-          </div>
-        ) : (
-          <>
-            {/* Mobile card view */}
-            <div className="sm:hidden divide-y divide-gray-200">
-              {gatePasses.map((pass) => {
-                const actions = getActions(pass)
-                return (
-                  <div key={pass.id} className="p-4">
-                    <div className="flex items-start justify-between mb-2">
-                      <div className="min-w-0 flex-1">
-                        <p className="font-medium text-sm text-gray-900 truncate">
-                          {pass.student_name || pass.student?.name || '-'}
-                        </p>
-                        <p className="text-xs text-gray-500">
-                          Room: {pass.room_number || pass.allocation?.room_number || '-'}
-                        </p>
-                      </div>
-                      <div className="flex-shrink-0 ml-2 flex flex-col items-end gap-1">
-                        <span className={`px-2 py-0.5 rounded text-xs font-medium ${
-                          statusColors[pass.status?.toUpperCase()] || TONE.neutral
-                        }`}>
-                          {pass.status}
-                        </span>
-                        <span className={`px-2 py-0.5 rounded text-xs font-medium ${
-                          passTypeColors[pass.pass_type?.toUpperCase()] || TONE.neutral
-                        }`}>
-                          {pass.pass_type}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="text-xs text-gray-500 space-y-0.5">
-                      <p>Reason: {pass.reason || '-'}</p>
-                      <p>Departure: {formatDateTime(pass.departure_date)}</p>
-                      <p>Return: {formatDateTime(pass.expected_return)}</p>
-                    </div>
-                    {actions.length > 0 && (
-                      <div className="flex gap-3 mt-3 pt-2 border-t border-gray-100">
-                        {actions.map((a) => (
-                          <button
-                            key={a.label}
-                            onClick={a.action}
-                            disabled={a.pending}
-                            className={`text-xs font-medium ${a.color} disabled:opacity-50`}
-                          >
-                            {a.pending ? 'Processing...' : a.label}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )
-              })}
+      {error ? (
+        <div className="card text-center py-12">
+          <h3 className="text-lg font-medium text-gray-900 mb-2">Failed to load gate passes</h3>
+          <p className="text-gray-500">{getErrorMessage(error, 'Something went wrong.')}</p>
+        </div>
+      ) : (
+        <div className="card">
+          {isLoading ? (
+            <div className="text-center py-8">
+              <LoadingState label="Loading gate passes..." compact />
             </div>
+          ) : gatePasses.length === 0 ? (
+            <EmptyState
+              title="No gate passes found"
+              description={filtersActive ? 'Try adjusting your filters.' : 'Create a new gate pass to get started.'}
+            />
+          ) : (
+            <>
+              <div className="flex justify-end mb-3">
+                <ViewToggle view={view} onChange={setView} />
+              </div>
 
-            {/* Desktop table */}
-            <div className="hidden sm:block overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Student</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Room</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Reason</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Departure</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Return</th>
-                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Status</th>
-                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {gatePasses.map((pass) => {
-                    const actions = getActions(pass)
-                    return (
-                      <tr key={pass.id} className="hover:bg-gray-50">
-                        <td className="px-4 py-3 text-sm font-medium text-gray-900">
-                          {pass.student_name || pass.student?.name || '-'}
-                        </td>
-                        <td className="px-4 py-3 text-sm text-gray-600">
-                          {pass.room_number || pass.allocation?.room_number || '-'}
-                        </td>
-                        <td className="px-4 py-3">
-                          <span className={`inline-flex px-2 py-0.5 rounded text-xs font-medium ${
-                            passTypeColors[pass.pass_type?.toUpperCase()] || TONE.neutral
-                          }`}>
-                            {pass.pass_type}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 text-sm text-gray-500 max-w-xs truncate">
-                          {pass.reason || '-'}
-                        </td>
-                        <td className="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">
-                          {formatDateTime(pass.departure_date)}
-                        </td>
-                        <td className="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">
-                          {formatDateTime(pass.expected_return)}
-                        </td>
-                        <td className="px-4 py-3 text-center">
-                          <span className={`inline-flex px-2 py-0.5 rounded text-xs font-medium ${
-                            statusColors[pass.status?.toUpperCase()] || TONE.neutral
-                          }`}>
-                            {pass.status}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 text-right whitespace-nowrap">
-                          {actions.map((a, i) => (
-                            <button
-                              key={a.label}
-                              onClick={a.action}
-                              disabled={a.pending}
-                              className={`text-sm font-medium ${a.color} disabled:opacity-50 ${i > 0 ? 'ml-3' : ''}`}
-                            >
-                              {a.pending ? '...' : a.label}
-                            </button>
-                          ))}
-                        </td>
+              {view === 'cards' ? (
+                <CardGrid>
+                  {gatePasses.map((pass) => (
+                    <RecordCard
+                      key={pass.id}
+                      title={pass.student_name}
+                      meta={`${pass.hostel_name} · Room ${pass.room_number}`}
+                      status={<Badge colors={statusInfo(pass.status).colors}>{statusInfo(pass.status).label}</Badge>}
+                      fields={[
+                        { label: 'Type', value: <Badge colors={typeInfo(pass.pass_type).colors}>{typeInfo(pass.pass_type).label}</Badge> },
+                        { label: 'Going to', value: pass.going_to },
+                        { label: 'Reason', value: pass.reason || '--' },
+                        { label: 'Departure', value: formatDateTime(pass.departure_date) },
+                        { label: 'Return', value: formatDateTime(pass.expected_return) },
+                      ]}
+                      actions={getActions(pass)}
+                    />
+                  ))}
+                </CardGrid>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Student</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Reason</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Leaves / Returns</th>
+                        <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Status</th>
+                        <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
                       </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </>
-        )}
-      </div>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {gatePasses.map((pass) => (
+                        <tr key={pass.id} className="hover:bg-gray-50">
+                          <td className="px-4 py-3 text-sm">
+                            <p className="font-medium text-gray-900">{pass.student_name}</p>
+                            <p className="text-xs text-gray-500">{pass.hostel_name} / {pass.room_number}</p>
+                          </td>
+                          <td className="px-4 py-3">
+                            <Badge colors={typeInfo(pass.pass_type).colors}>{typeInfo(pass.pass_type).label}</Badge>
+                          </td>
+                          <td className="px-4 py-3 text-sm text-gray-500 max-w-[10rem] truncate">{pass.reason || '--'}</td>
+                          <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">
+                            <p>{formatDateTime(pass.departure_date)}</p>
+                            <p>{formatDateTime(pass.expected_return)}</p>
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            <Badge colors={statusInfo(pass.status).colors}>{statusInfo(pass.status).label}</Badge>
+                          </td>
+                          <td className="px-4 py-3 text-right whitespace-nowrap">
+                            {getActions(pass).map((a, i) => (
+                              <button
+                                key={a.label}
+                                onClick={a.onClick}
+                                disabled={a.disabled}
+                                className={`text-sm font-medium disabled:opacity-50 ${i > 0 ? 'ml-3' : ''} ${
+                                  { success: 'text-green-600 hover:text-green-800', danger: 'text-red-600 hover:text-red-800', accent: 'text-purple-600 hover:text-purple-800', info: 'text-blue-600 hover:text-blue-800' }[a.tone]
+                                }`}
+                              >
+                                {a.label}
+                              </button>
+                            ))}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
 
       {/* ============ New Gate Pass Modal ============ */}
       {showModal && (
-        <Modal open  size="lg" closeOnBackdrop={false}>
-            <h2 className="text-xl font-bold text-gray-900 mb-4">New Gate Pass</h2>
+        <Modal open size="lg" closeOnBackdrop={false}>
+          <h2 className="text-xl font-bold text-gray-900 mb-4">New Gate Pass</h2>
+
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <Field label="Student" required hint="Only students who currently hold a hostel bed are listed.">
+              <select
+                required
+                className="input"
+                value={gatePassForm.allocation}
+                onChange={(e) => setGatePassForm({ ...gatePassForm, allocation: e.target.value })}
+              >
+                <option value="">-- Select Student --</option>
+                {allocations.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.student_name} ({a.hostel_name}, Room {a.room_number})
+                  </option>
+                ))}
+              </select>
+            </Field>
+
+            <Field label="Pass Type" required>
+              <select
+                required
+                className="input"
+                value={gatePassForm.pass_type}
+                onChange={(e) => setGatePassForm({ ...gatePassForm, pass_type: e.target.value })}
+              >
+                {PASS_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+              </select>
+            </Field>
+
+            <Field label="Reason" required>
+              <textarea
+                rows={2}
+                required
+                className="input"
+                placeholder="Reason for leave"
+                value={gatePassForm.reason}
+                onChange={(e) => setGatePassForm({ ...gatePassForm, reason: e.target.value })}
+              />
+            </Field>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <Field label="Going To" required>
+                <input
+                  type="text"
+                  required
+                  className="input"
+                  placeholder="Destination"
+                  value={gatePassForm.going_to}
+                  onChange={(e) => setGatePassForm({ ...gatePassForm, going_to: e.target.value })}
+                />
+              </Field>
+              <Field label="Contact at Destination">
+                <input
+                  type="text"
+                  className="input"
+                  placeholder="Phone number"
+                  value={gatePassForm.contact_at_destination}
+                  onChange={(e) => setGatePassForm({ ...gatePassForm, contact_at_destination: e.target.value })}
+                />
+              </Field>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <Field label="Departure Date" required>
+                <input
+                  type="datetime-local"
+                  required
+                  className="input"
+                  value={gatePassForm.departure_date}
+                  onChange={(e) => setGatePassForm({ ...gatePassForm, departure_date: e.target.value })}
+                />
+              </Field>
+              <Field label="Expected Return" required>
+                <input
+                  type="datetime-local"
+                  required
+                  className="input"
+                  value={gatePassForm.expected_return}
+                  onChange={(e) => setGatePassForm({ ...gatePassForm, expected_return: e.target.value })}
+                />
+              </Field>
+            </div>
 
             {createMutation.error && (
-              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
-                {createMutation.error.response?.data?.detail ||
-                 createMutation.error.response?.data?.non_field_errors?.[0] ||
-                 createMutation.error.message || 'An error occurred.'}
+              <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+                {getErrorMessage(createMutation.error, 'Failed to create gate pass. Please try again.')}
               </div>
             )}
 
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Student ID *</label>
-                  <input
-                    type="number"
-                    required
-                    className="input"
-                    placeholder="Enter student ID"
-                    value={gatePassForm.student}
-                    onChange={(e) => setGatePassForm({ ...gatePassForm, student: e.target.value })}
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Allocation ID *</label>
-                  <input
-                    type="number"
-                    required
-                    className="input"
-                    placeholder="Enter allocation ID"
-                    value={gatePassForm.allocation}
-                    onChange={(e) => setGatePassForm({ ...gatePassForm, allocation: e.target.value })}
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Pass Type *</label>
-                <select
-                  required
-                  className="input"
-                  value={gatePassForm.pass_type}
-                  onChange={(e) => setGatePassForm({ ...gatePassForm, pass_type: e.target.value })}
-                >
-                  <option value="DAY">Day</option>
-                  <option value="OVERNIGHT">Overnight</option>
-                  <option value="WEEKEND">Weekend</option>
-                  <option value="VACATION">Vacation</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Reason *</label>
-                <textarea
-                  rows={2}
-                  required
-                  className="input"
-                  placeholder="Reason for leave"
-                  value={gatePassForm.reason}
-                  onChange={(e) => setGatePassForm({ ...gatePassForm, reason: e.target.value })}
-                />
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Going To *</label>
-                  <input
-                    type="text"
-                    required
-                    className="input"
-                    placeholder="Destination"
-                    value={gatePassForm.going_to}
-                    onChange={(e) => setGatePassForm({ ...gatePassForm, going_to: e.target.value })}
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Contact at Destination</label>
-                  <input
-                    type="text"
-                    className="input"
-                    placeholder="Phone number"
-                    value={gatePassForm.contact_at_destination}
-                    onChange={(e) => setGatePassForm({ ...gatePassForm, contact_at_destination: e.target.value })}
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Departure Date *</label>
-                  <input
-                    type="datetime-local"
-                    required
-                    className="input"
-                    value={gatePassForm.departure_date}
-                    onChange={(e) => setGatePassForm({ ...gatePassForm, departure_date: e.target.value })}
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Expected Return *</label>
-                  <input
-                    type="datetime-local"
-                    required
-                    className="input"
-                    value={gatePassForm.expected_return}
-                    onChange={(e) => setGatePassForm({ ...gatePassForm, expected_return: e.target.value })}
-                  />
-                </div>
-              </div>
-
-              <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
-                <Button variant="secondary"
- type="button"
- onClick={closeModal}>
-                  Cancel
-                </Button>
-                <button
-                  type="submit"
-                  disabled={createMutation.isPending}
-                  className="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {createMutation.isPending ? 'Creating...' : 'Create Gate Pass'}
-                </button>
-              </div>
-            </form>
-          </Modal>
+            <div className="flex justify-end space-x-3 pt-4 border-t border-gray-200">
+              <button type="button" onClick={closeModal} className="btn btn-secondary">Cancel</button>
+              <button type="submit" disabled={createMutation.isPending} className="btn btn-primary">
+                {createMutation.isPending ? 'Creating...' : 'Create Gate Pass'}
+              </button>
+            </div>
+          </form>
+        </Modal>
       )}
 
       {/* ============ Approve/Reject Modal ============ */}
       {actionModal && (
-        <Modal open  size="sm" closeOnBackdrop={false}>
-            <h2 className="text-xl font-bold text-gray-900 mb-2">
-              {actionModal.type === 'approve' ? 'Approve' : 'Reject'} Gate Pass
-            </h2>
-            <p className="text-gray-600 mb-4">
-              {actionModal.type === 'approve'
-                ? 'Approve this gate pass request?'
-                : 'Reject this gate pass request?'}
-            </p>
+        <Modal open size="sm" closeOnBackdrop={false}>
+          <h2 className="text-xl font-bold text-gray-900 mb-2">
+            {actionModal.type === 'approve' ? 'Approve' : 'Reject'} Gate Pass
+          </h2>
+          <p className="text-gray-600 mb-4">
+            {actionModal.type === 'approve' ? 'Approve this gate pass request?' : 'Reject this gate pass request?'}
+          </p>
 
-            <div className="space-y-2 mb-4">
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-500">Student:</span>
-                <span className="font-medium text-gray-900">
-                  {actionModal.pass.student_name || actionModal.pass.student?.name || '-'}
-                </span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-500">Type:</span>
-                <span className="font-medium text-gray-900">{actionModal.pass.pass_type}</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-500">Departure:</span>
-                <span className="font-medium text-gray-900">{formatDateTime(actionModal.pass.departure_date)}</span>
-              </div>
+          <div className="space-y-2 mb-4">
+            <div className="flex justify-between text-sm">
+              <span className="text-gray-500">Student:</span>
+              <span className="font-medium text-gray-900">{actionModal.pass.student_name}</span>
             </div>
-
-            <div className="mb-4">
-              <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Remarks</label>
-              <textarea
-                rows={2}
-                className="input"
-                placeholder="Optional remarks..."
-                value={actionRemark}
-                onChange={(e) => setActionRemark(e.target.value)}
-              />
+            <div className="flex justify-between text-sm">
+              <span className="text-gray-500">Type:</span>
+              <span className="font-medium text-gray-900">{typeInfo(actionModal.pass.pass_type).label}</span>
             </div>
-
-            {actionError && (
-              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
-                {actionError.response?.data?.detail || actionError.message || 'An error occurred.'}
-              </div>
-            )}
-
-            <div className="flex justify-end gap-3">
-              <Button variant="secondary"
- onClick={closeActionModal}>
-                Cancel
-              </Button>
-              <button
-                onClick={handleAction}
-                disabled={actionPending}
-                className={`px-4 py-2 text-sm font-medium text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed ${
-                  actionModal.type === 'approve'
-                    ? 'bg-green-600 hover:bg-green-700'
-                    : 'bg-red-600 hover:bg-red-700'
-                }`}
-              >
-                {actionPending
-                  ? 'Processing...'
-                  : actionModal.type === 'approve'
-                    ? 'Approve'
-                    : 'Reject'}
-              </button>
+            <div className="flex justify-between text-sm">
+              <span className="text-gray-500">Departure:</span>
+              <span className="font-medium text-gray-900">{formatDateTime(actionModal.pass.departure_date)}</span>
             </div>
-          </Modal>
+          </div>
+
+          <Field label="Remarks" className="mb-4">
+            <textarea
+              rows={2}
+              className="input"
+              placeholder="Optional remarks..."
+              value={actionRemark}
+              onChange={(e) => setActionRemark(e.target.value)}
+            />
+          </Field>
+
+          {actionError && (
+            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+              {getErrorMessage(actionError, 'An error occurred.')}
+            </div>
+          )}
+
+          <div className="flex justify-end space-x-3">
+            <button onClick={closeActionModal} className="btn btn-secondary">Cancel</button>
+            <button
+              onClick={handleAction}
+              disabled={actionPending}
+              className={`btn ${actionModal.type === 'approve' ? 'btn-primary' : 'btn-danger'}`}
+            >
+              {actionPending ? 'Processing...' : actionModal.type === 'approve' ? 'Approve' : 'Reject'}
+            </button>
+          </div>
+        </Modal>
       )}
     </div>
   )

@@ -1642,6 +1642,7 @@ class StudentLibraryView(APIView):
                 'return_date': issue.return_date,
                 'status': issue.status,
                 'fine_amount': str(issue.fine_amount),
+                'is_overdue': issue.status in ('ISSUED', 'OVERDUE') and issue.due_date < timezone.localdate(),
             })
 
         return Response(result)

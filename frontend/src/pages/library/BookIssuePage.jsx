@@ -1,540 +1,181 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import Modal from '../../components/ui/Modal'
-import { TONE } from '../../components/ui/statusTones'
 import Button from '../../components/ui/Button'
 import PageHeader from '../../components/ui/PageHeader'
 import LoadingState from '../../components/ui/LoadingState'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import EmptyState from '../../components/ui/EmptyState'
+import ErrorState from '../../components/ui/ErrorState'
+import Field from '../../components/ui/Field'
 import { libraryApi } from '../../services/api'
 import { useAuth } from '../../contexts/AuthContext'
-import Spinner from '../../components/ui/Spinner'
-import Badge from '../../components/ui/Badge'
+import { useToast } from '../../components/Toast'
+import { getErrorMessage } from '../../utils/errorUtils'
 import { useDebounce } from '../../hooks/useDebounce'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
-import { RecordCard, CardGrid, ViewToggle } from '../../components/cards'
 import { useViewPreference } from '../../hooks/useViewPreference'
+import IssueFields, { issuePayload } from './IssueFields'
+import IssueList, { ReturnSummary } from './IssueList'
+import { OPEN_STATUS, canManageLibrary, defaultDueDate, listOf } from './libraryUtils'
 
-function getDaysOverdue(dueDateStr) {
-  if (!dueDateStr) return 0
-  const due = new Date(dueDateStr)
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  due.setHours(0, 0, 0, 0)
-  const diff = Math.floor((today - due) / (1000 * 60 * 60 * 24))
-  return diff > 0 ? diff : 0
-}
-
-function formatDate(dateStr) {
-  if (!dateStr) return '-'
-  return new Date(dateStr).toLocaleDateString('en-US', {
-    year: 'numeric', month: 'short', day: 'numeric',
-  })
-}
+const newForm = (loanDays, borrowerType = 'STUDENT') => ({
+  borrower_type: borrowerType,
+  borrower: null,
+  book: null,
+  due_date: defaultDueDate(loanDays),
+  notes: '',
+  borrowerQuery: '',
+  bookQuery: '',
+})
 
 export default function BookIssuePage() {
-  const { user } = useAuth()
+  const { effectiveRole } = useAuth()
+  const canManage = canManageLibrary(effectiveRole)
   const queryClient = useQueryClient()
+  const toast = useToast()
 
-  const [activeTab, setActiveTab] = useState('issue')
+  const [activeTab, setActiveTab] = useState(canManage ? 'issue' : 'return')
   const [activeView, setActiveView] = useViewPreference('book-issues-active')
   const [returnView, setReturnView] = useViewPreference('book-issues-return')
 
-  // --- Issue Tab State ---
-  const [issueForm, setIssueForm] = useState({
-    borrower_type: 'STUDENT',
-    borrower_id: '',
-    book_id: '',
-    due_date: (() => {
-      const d = new Date()
-      d.setDate(d.getDate() + 14)
-      return d.toISOString().split('T')[0]
-    })(),
-    notes: '',
+  // The configured loan period sets the default due date (admins only: the endpoint is admin-only).
+  const { data: configRes } = useQuery({
+    queryKey: ['libraryConfig'],
+    queryFn: () => libraryApi.getFineConfig(),
+    enabled: canManage,
   })
+  const loanDays = configRes?.data?.loan_period_days || 14
 
-  const [borrowerSearch, setBorrowerSearch] = useState('')
-  const debouncedBorrowerSearch = useDebounce(borrowerSearch, 300)
-  const [bookSearch, setBookSearch] = useState('')
-  const debouncedBookSearch = useDebounce(bookSearch, 300)
-
-  // --- Return Tab State ---
+  const [form, setForm] = useState(() => newForm(14))
+  // The config arrives after first paint; refresh the default so the form never shows a stale 14.
+  useEffect(() => setForm((f) => ({ ...f, due_date: defaultDueDate(loanDays) })), [loanDays])
   const [returnSearch, setReturnSearch] = useState('')
   const debouncedReturnSearch = useDebounce(returnSearch, 300)
   const [returnConfirm, setReturnConfirm] = useState(null)
-
   useEscapeKey(() => setReturnConfirm(null), !!returnConfirm)
 
   // ---- Queries ----
-
-  // Search borrowers (students or staff)
-  const { data: borrowerResults } = useQuery({
-    queryKey: ['borrowerSearch', issueForm.borrower_type, debouncedBorrowerSearch],
-    queryFn: () => {
-      if (issueForm.borrower_type === 'STUDENT') {
-        return libraryApi.searchStudents({ search: debouncedBorrowerSearch })
-      }
-      return libraryApi.searchStaff({ search: debouncedBorrowerSearch })
-    },
-    enabled: debouncedBorrowerSearch.length >= 2,
-  })
-
-  // Search books for issue
-  const { data: bookResults } = useQuery({
-    queryKey: ['bookSearch', debouncedBookSearch],
-    queryFn: () => libraryApi.getBooks({ search: debouncedBookSearch }),
-    enabled: debouncedBookSearch.length >= 2,
-  })
-
-  // Active issues list (ISSUED status)
-  const { data: activeIssuesData, isLoading: issuesLoading } = useQuery({
+  const { data: activeRes, isLoading: issuesLoading, isError: issuesError, refetch } = useQuery({
     queryKey: ['libraryIssues', 'active'],
-    queryFn: () => libraryApi.getIssues({ status: 'ISSUED', page_size: 9999 }),
+    queryFn: () => libraryApi.getIssues({ status: OPEN_STATUS, page_size: 2000 }),
   })
 
-  // Filtered issues for return tab
-  const { data: returnIssuesData, isLoading: returnLoading } = useQuery({
+  const { data: returnRes, isLoading: returnLoading } = useQuery({
     queryKey: ['libraryIssues', 'return', debouncedReturnSearch],
-    queryFn: () => libraryApi.getIssues({ status: 'ISSUED', search: debouncedReturnSearch || undefined, page_size: 9999 }),
+    queryFn: () => libraryApi.getIssues({ status: OPEN_STATUS, search: debouncedReturnSearch || undefined, page_size: 2000 }),
     enabled: activeTab === 'return',
   })
 
-  const borrowers = borrowerResults?.data?.results || borrowerResults?.data || []
-  const availableBooks = (bookResults?.data?.results || bookResults?.data || []).filter(
-    (b) => (b.available_copies ?? (b.total_copies - (b.issued_copies || 0))) > 0
-  )
-  const activeIssues = activeIssuesData?.data?.results || activeIssuesData?.data || []
-  const returnIssues = returnIssuesData?.data?.results || returnIssuesData?.data || []
+  const activeIssues = listOf(activeRes)
+  const returnIssues = listOf(returnRes)
+
+  const refreshAll = () => {
+    ;['libraryIssues', 'libraryBooks', 'bookSearch', 'libraryStats', 'libraryOverdue']
+      .forEach((key) => queryClient.invalidateQueries({ queryKey: [key] }))
+  }
 
   // ---- Mutations ----
-
   const issueMutation = useMutation({
     mutationFn: (data) => libraryApi.createIssue(data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['libraryIssues'] })
-      queryClient.invalidateQueries({ queryKey: ['libraryBooks'] })
-      queryClient.invalidateQueries({ queryKey: ['libraryStats'] })
-      setIssueForm({
-        borrower_type: issueForm.borrower_type,
-        borrower_id: '',
-        book_id: '',
-        due_date: (() => {
-          const d = new Date()
-          d.setDate(d.getDate() + 14)
-          return d.toISOString().split('T')[0]
-        })(),
-        notes: '',
-      })
-      setBorrowerSearch('')
-      setBookSearch('')
+    onSuccess: (res) => {
+      refreshAll()
+      toast.showSuccess(`Issued "${res.data.book_title}" to ${res.data.borrower_name}`)
+      setForm(newForm(loanDays, form.borrower_type))
     },
+    onError: (err) => toast.showError(getErrorMessage(err, 'Failed to issue the book.')),
   })
 
   const returnMutation = useMutation({
-    mutationFn: ({ id, data }) => libraryApi.returnBook(id, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['libraryIssues'] })
-      queryClient.invalidateQueries({ queryKey: ['libraryBooks'] })
-      queryClient.invalidateQueries({ queryKey: ['libraryStats'] })
-      queryClient.invalidateQueries({ queryKey: ['libraryOverdue'] })
+    mutationFn: (id) => libraryApi.returnBook(id, {}),
+    onSuccess: (res) => {
+      refreshAll()
+      const fine = Number(res.data.fine_amount)
+      toast.showSuccess(fine > 0
+        ? `Book returned. Fine: Rs. ${fine.toLocaleString()}`
+        : 'Book returned')
       setReturnConfirm(null)
     },
+    onError: (err) => toast.showError(getErrorMessage(err, 'Failed to process the return.')),
   })
-
-  // ---- Handlers ----
 
   const handleIssueSubmit = (e) => {
     e.preventDefault()
-    issueMutation.mutate({
-      book: parseInt(issueForm.book_id),
-      borrower_type: issueForm.borrower_type,
-      // backend takes the borrower as `student` or `staff` (by borrower_type)
-      [issueForm.borrower_type === 'STAFF' ? 'staff' : 'student']: parseInt(issueForm.borrower_id),
-      due_date: issueForm.due_date,
-      notes: issueForm.notes,
-    })
-  }
-
-  const handleReturn = (issue) => {
-    setReturnConfirm(issue)
-  }
-
-  const confirmReturn = () => {
-    if (!returnConfirm) return
-    returnMutation.mutate({ id: returnConfirm.id, data: {} })
-  }
-
-  const selectBorrower = (b) => {
-    setIssueForm({ ...issueForm, borrower_id: String(b.id) })
-    setBorrowerSearch(b.name || b.full_name || `${b.first_name || ''} ${b.last_name || ''}`.trim())
-  }
-
-  const selectBook = (book) => {
-    setIssueForm({ ...issueForm, book_id: String(book.id) })
-    setBookSearch(book.title)
+    if (!form.borrower) return toast.showError(`Choose a ${form.borrower_type === 'STAFF' ? 'staff member' : 'student'}`)
+    if (!form.book) return toast.showError('Choose a book')
+    issueMutation.mutate(issuePayload(form))
   }
 
   const tabs = [
-    { key: 'issue', label: 'Issue Book' },
-    { key: 'return', label: 'Return Book' },
+    ...(canManage ? [{ key: 'issue', label: 'Issue Book' }] : []),
+    { key: 'return', label: canManage ? 'Return Book' : 'Issued Books' },
   ]
+  const onReturn = canManage ? setReturnConfirm : undefined
 
   return (
     <div>
-      {/* Header */}
-      <PageHeader title="Issue / Return Books" subtitle="Issue books to borrowers and process returns" className="mb-6" />
+      <PageHeader
+        title={canManage ? 'Issue / Return Books' : 'Issued Books'}
+        subtitle={canManage ? 'Issue books to borrowers and process returns' : 'Books currently out of the library'}
+        className="mb-6"
+      />
 
-      {/* Tabs */}
-      <div className="border-b border-gray-200 mb-6">
-        <nav className="flex gap-6">
-          {tabs.map((tab) => (
-            <button
-              key={tab.key}
-              onClick={() => setActiveTab(tab.key)}
-              className={`pb-3 text-sm font-medium border-b-2 transition-colors ${
-                activeTab === tab.key
-                  ? 'border-blue-600 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </nav>
-      </div>
+      {tabs.length > 1 && (
+        <div className="border-b border-gray-200 mb-6">
+          <nav className="flex gap-6">
+            {tabs.map((tab) => (
+              <button
+                key={tab.key}
+                onClick={() => setActiveTab(tab.key)}
+                className={`pb-3 text-sm font-medium border-b-2 transition-colors ${
+                  activeTab === tab.key
+                    ? 'border-blue-600 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </nav>
+        </div>
+      )}
 
       {/* ============ ISSUE TAB ============ */}
-      {activeTab === 'issue' && (
+      {canManage && activeTab === 'issue' && (
         <div className="space-y-6">
-          {/* Issue Form */}
           <div className="bg-white rounded-lg shadow-sm p-5">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Issue a Book</h3>
-
-            {/* Getting started guide */}
-            {!issueForm.borrower_id && !issueForm.book_id && (
-              <div className="mb-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
-                <div className="flex items-center gap-3 flex-wrap">
-                  {/* Step 1 */}
-                  <div className="flex items-center gap-2 px-3 py-1.5 rounded-full text-sm bg-blue-100 text-blue-700 ring-2 ring-blue-300">
-                    <span className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold bg-blue-500 text-white">1</span>
-                    Search Borrower
-                  </div>
-                  <svg className="w-4 h-4 text-gray-300 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
-                  {/* Step 2 */}
-                  <div className="flex items-center gap-2 px-3 py-1.5 rounded-full text-sm bg-gray-100 text-gray-400">
-                    <span className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold bg-gray-300 text-white">2</span>
-                    Search Book
-                  </div>
-                  <svg className="w-4 h-4 text-gray-300 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
-                  {/* Step 3 */}
-                  <div className="flex items-center gap-2 px-3 py-1.5 rounded-full text-sm bg-gray-100 text-gray-400">
-                    <span className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold bg-gray-300 text-white">3</span>
-                    Set Due Date
-                  </div>
-                  <svg className="w-4 h-4 text-gray-300 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
-                  {/* Step 4 */}
-                  <div className="flex items-center gap-2 px-3 py-1.5 rounded-full text-sm bg-gray-100 text-gray-400">
-                    <span className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold bg-gray-300 text-white">4</span>
-                    Issue
-                  </div>
-                </div>
-                <p className="text-xs text-gray-500 mt-2">
-                  Type at least 2 characters to search for borrowers or books.
-                </p>
-              </div>
-            )}
-
-            {/* Progressive guide when partially filled */}
-            {issueForm.borrower_id && !issueForm.book_id && (
-              <div className="mb-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
-                <div className="flex items-center gap-3 flex-wrap">
-                  <div className="flex items-center gap-2 px-3 py-1.5 rounded-full text-sm bg-green-100 text-green-700">
-                    <span className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold bg-green-500 text-white">{'\u2713'}</span>
-                    Borrower Selected
-                  </div>
-                  <svg className="w-4 h-4 text-gray-300 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
-                  <div className="flex items-center gap-2 px-3 py-1.5 rounded-full text-sm bg-blue-100 text-blue-700 ring-2 ring-blue-300">
-                    <span className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold bg-blue-500 text-white">2</span>
-                    Search Book
-                  </div>
-                  <svg className="w-4 h-4 text-gray-300 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
-                  <div className="flex items-center gap-2 px-3 py-1.5 rounded-full text-sm bg-gray-100 text-gray-400">
-                    <span className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold bg-gray-300 text-white">3</span>
-                    Set Due Date &amp; Issue
-                  </div>
-                </div>
-                <p className="text-xs text-gray-500 mt-2">Now search for the book to issue.</p>
-              </div>
-            )}
-
-            {issueMutation.error && (
-              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
-                {issueMutation.error.response?.data?.detail ||
-                 issueMutation.error.response?.data?.non_field_errors?.[0] ||
-                 issueMutation.error.message || 'Failed to issue book.'}
-              </div>
-            )}
-
-            {issueMutation.isSuccess && (
-              <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg text-sm text-green-700">
-                Book issued successfully!
-              </div>
-            )}
-
+            <h3 className="text-lg font-semibold text-gray-900 mb-1">Issue a Book</h3>
+            <p className="text-sm text-gray-500 mb-4">
+              Pick the borrower and the book, check the due date ({loanDays} days from today by default), then issue.
+            </p>
             <form onSubmit={handleIssueSubmit} className="space-y-4">
-              {/* Borrower Type */}
-              <div>
-                <label className="block text-xs font-medium text-gray-500 uppercase mb-2">Borrower Type *</label>
-                <div className="flex gap-6">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="btype"
-                      value="STUDENT"
-                      checked={issueForm.borrower_type === 'STUDENT'}
-                      onChange={(e) => {
-                        setIssueForm({ ...issueForm, borrower_type: e.target.value, borrower_id: '' })
-                        setBorrowerSearch('')
-                      }}
-                      className="text-blue-600 focus:ring-blue-500"
-                    />
-                    <span className="text-sm text-gray-700">Student</span>
-                  </label>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="btype"
-                      value="STAFF"
-                      checked={issueForm.borrower_type === 'STAFF'}
-                      onChange={(e) => {
-                        setIssueForm({ ...issueForm, borrower_type: e.target.value, borrower_id: '' })
-                        setBorrowerSearch('')
-                      }}
-                      className="text-blue-600 focus:ring-blue-500"
-                    />
-                    <span className="text-sm text-gray-700">Staff</span>
-                  </label>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {/* Borrower Search */}
-                <div className="relative">
-                  <label className="block text-xs font-medium text-gray-500 uppercase mb-1">
-                    {issueForm.borrower_type === 'STUDENT' ? 'Student' : 'Staff Member'} *
-                  </label>
-                  <input
-                    type="text"
-                    className="input"
-                    placeholder={`Search ${issueForm.borrower_type === 'STUDENT' ? 'student' : 'staff'} by name...`}
-                    value={borrowerSearch}
-                    onChange={(e) => {
-                      setBorrowerSearch(e.target.value)
-                      if (!e.target.value) setIssueForm({ ...issueForm, borrower_id: '' })
-                    }}
-                  />
-                  {borrowerSearch.length >= 2 && borrowers.length > 0 && !issueForm.borrower_id && (
-                    <div className="absolute z-20 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
-                      {borrowers.map((b) => {
-                        const displayName = b.name || b.full_name || `${b.first_name || ''} ${b.last_name || ''}`.trim()
-                        const sub = issueForm.borrower_type === 'STUDENT'
-                          ? `Roll #${b.roll_number || ''} - ${b.class_name || ''}`
-                          : (b.designation_name || b.department_name || '')
-                        return (
-                          <button
-                            key={b.id}
-                            type="button"
-                            onClick={() => selectBorrower(b)}
-                            className="w-full text-left px-3 py-2 hover:bg-blue-50 text-sm"
-                          >
-                            <p className="font-medium text-gray-900">{displayName}</p>
-                            {sub && <p className="text-xs text-gray-500">{sub}</p>}
-                          </button>
-                        )
-                      })}
-                    </div>
-                  )}
-                  {issueForm.borrower_id && (
-                    <p className="text-xs text-green-600 mt-1">Selected ID: {issueForm.borrower_id}</p>
-                  )}
-                </div>
-
-                {/* Book Search */}
-                <div className="relative">
-                  <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Book *</label>
-                  <input
-                    type="text"
-                    className="input"
-                    placeholder="Search book by title..."
-                    value={bookSearch}
-                    onChange={(e) => {
-                      setBookSearch(e.target.value)
-                      if (!e.target.value) setIssueForm({ ...issueForm, book_id: '' })
-                    }}
-                  />
-                  {bookSearch.length >= 2 && availableBooks.length > 0 && !issueForm.book_id && (
-                    <div className="absolute z-20 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
-                      {availableBooks.map((book) => (
-                        <button
-                          key={book.id}
-                          type="button"
-                          onClick={() => selectBook(book)}
-                          className="w-full text-left px-3 py-2 hover:bg-blue-50 text-sm"
-                        >
-                          <p className="font-medium text-gray-900">{book.title}</p>
-                          <p className="text-xs text-gray-500">
-                            {book.author}{book.isbn ? ` | ISBN: ${book.isbn}` : ''} |
-                            Available: {book.available_copies ?? (book.total_copies - (book.issued_copies || 0))}
-                          </p>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                  {issueForm.book_id && (
-                    <p className="text-xs text-green-600 mt-1">Selected ID: {issueForm.book_id}</p>
-                  )}
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Due Date *</label>
-                  <input
-                    type="date"
-                    required
-                    className="input"
-                    value={issueForm.due_date}
-                    onChange={(e) => setIssueForm({ ...issueForm, due_date: e.target.value })}
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Notes</label>
-                  <input
-                    type="text"
-                    className="input"
-                    placeholder="Optional notes..."
-                    value={issueForm.notes}
-                    onChange={(e) => setIssueForm({ ...issueForm, notes: e.target.value })}
-                  />
-                </div>
-              </div>
-
+              <IssueFields form={form} setForm={setForm} />
               <div className="pt-2">
-                <button
-                  type="submit"
-                  disabled={issueMutation.isPending || !issueForm.borrower_id || !issueForm.book_id}
-                  className="px-6 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {issueMutation.isPending ? 'Issuing...' : 'Issue Book'}
-                </button>
+                <Button type="submit" loading={issueMutation.isPending} disabled={issueMutation.isPending}>
+                  Issue Book
+                </Button>
               </div>
             </form>
           </div>
 
-          {/* Active Issues Table */}
           <div className="bg-white rounded-lg shadow-sm">
             <div className="px-5 py-4 border-b border-gray-200">
               <h3 className="text-lg font-semibold text-gray-900">Currently Issued Books</h3>
-              <p className="text-sm text-gray-500">All active book issues</p>
+              <p className="text-sm text-gray-500">All books that are still out</p>
             </div>
             {issuesLoading ? (
-              <div className="text-center py-12">
-                <LoadingState label="Loading issues..." compact />
-              </div>
+              <LoadingState label="Loading issues..." compact />
+            ) : issuesError ? (
+              <ErrorState message="Could not load the issued books." onRetry={refetch} compact />
             ) : activeIssues.length === 0 ? (
-              <div className="text-center py-12 text-gray-400">
-                <svg className="w-10 h-10 mx-auto mb-2 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-                <p className="text-sm">No books are currently issued.</p>
-              </div>
+              <EmptyState title="No books are currently issued" description="Issued books will appear here." />
             ) : (
-              <>
-                <div className="flex justify-end p-2">
-                  <ViewToggle view={activeView} onChange={setActiveView} />
-                </div>
-
-                {activeView === 'cards' ? (
-                <CardGrid className="p-2">
-                  {activeIssues.map((issue) => {
-                    const days = getDaysOverdue(issue.due_date)
-                    return (
-                      <RecordCard
-                        key={issue.id}
-                        title={issue.book_title || issue.book?.title || '-'}
-                        meta={`${issue.borrower_name || '-'} (${issue.borrower_type})`}
-                        status={days > 0 ? <Badge tone="danger">{days}d overdue</Badge> : null}
-                        fields={[
-                          { label: 'Issued', value: formatDate(issue.issue_date) },
-                          { label: 'Due', value: formatDate(issue.due_date) },
-                        ]}
-                        actions={[
-                          { label: 'Return', tone: 'info', onClick: () => handleReturn(issue) },
-                        ]}
-                      />
-                    )
-                  })}
-                </CardGrid>
-                ) : (
-                <div className="overflow-x-auto">
-                  <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-gray-50">
-                      <tr>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Book Title</th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Borrower</th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Issue Date</th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Due Date</th>
-                        <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Overdue</th>
-                        <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-100">
-                      {activeIssues.map((issue) => {
-                        const days = getDaysOverdue(issue.due_date)
-                        return (
-                          <tr key={issue.id} className="hover:bg-gray-50">
-                            <td className="px-4 py-3 text-sm font-medium text-gray-900">
-                              {issue.book_title || issue.book?.title || '-'}
-                            </td>
-                            <td className="px-4 py-3 text-sm text-gray-600">
-                              {issue.borrower_name || '-'}
-                            </td>
-                            <td className="px-4 py-3">
-                              <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${
-                                issue.borrower_type === 'STUDENT'
-                                  ? TONE.info
-                                  : TONE.accent
-                              }`}>
-                                {issue.borrower_type}
-                              </span>
-                            </td>
-                            <td className="px-4 py-3 text-sm text-gray-500">{formatDate(issue.issue_date)}</td>
-                            <td className="px-4 py-3 text-sm text-gray-500">{formatDate(issue.due_date)}</td>
-                            <td className="px-4 py-3 text-center">
-                              {days > 0 ? (
-                                <Badge tone="danger">
-                                  {days} days
-                                </Badge>
-                              ) : (
-                                <span className="text-xs text-gray-400">-</span>
-                              )}
-                            </td>
-                            <td className="px-4 py-3 text-right">
-                              <button
-                                onClick={() => handleReturn(issue)}
-                                className="text-sm text-blue-600 hover:text-blue-800 font-medium"
-                              >
-                                Return
-                              </button>
-                            </td>
-                          </tr>
-                        )
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-                )}
-              </>
+              <IssueList
+                issues={activeIssues}
+                view={activeView}
+                onViewChange={setActiveView}
+                actionLabel="Return"
+                onAction={onReturn}
+              />
             )}
           </div>
         </div>
@@ -543,135 +184,39 @@ export default function BookIssuePage() {
       {/* ============ RETURN TAB ============ */}
       {activeTab === 'return' && (
         <div className="space-y-6">
-          {/* Return Search */}
           <div className="bg-white rounded-lg shadow-sm p-5">
-            <h3 className="text-lg font-semibold text-gray-900 mb-3">Search Issued Books</h3>
-            <input
-              type="text"
-              className="input"
-              placeholder="Search by student name, staff name, or book title..."
-              value={returnSearch}
-              onChange={(e) => setReturnSearch(e.target.value)}
-            />
+            <Field label="Search Issued Books">
+              <input
+                type="text"
+                className="input"
+                placeholder="Search by student name, staff name, or book title..."
+                value={returnSearch}
+                onChange={(e) => setReturnSearch(e.target.value)}
+              />
+            </Field>
           </div>
 
-          {/* Return Results */}
           <div className="bg-white rounded-lg shadow-sm">
             <div className="px-5 py-4 border-b border-gray-200">
               <h3 className="text-lg font-semibold text-gray-900">Issued Books</h3>
-              <p className="text-sm text-gray-500">Select a book to process the return</p>
+              {canManage && <p className="text-sm text-gray-500">Select a book to process the return</p>}
             </div>
-
             {returnLoading ? (
-              <div className="text-center py-12">
-                <Spinner size="md" className="mx-auto" />
-                <p className="text-gray-500 mt-3">Searching...</p>
-              </div>
+              <LoadingState label="Searching..." compact />
             ) : returnIssues.length === 0 ? (
-              <div className="text-center py-12 text-gray-400">
-                <svg className="w-10 h-10 mx-auto mb-2 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                </svg>
-                <p className="text-sm">
-                  {returnSearch ? 'No issued books match your search.' : 'No books are currently issued.'}
-                </p>
-              </div>
+              <EmptyState
+                title={returnSearch ? 'No issued books match your search' : 'No books are currently issued'}
+                description={returnSearch ? 'Try a different name or title.' : undefined}
+              />
             ) : (
-              <>
-                <div className="flex justify-end p-2">
-                  <ViewToggle view={returnView} onChange={setReturnView} />
-                </div>
-
-                {returnView === 'cards' ? (
-                <CardGrid className="p-2">
-                  {returnIssues.map((issue) => {
-                    const days = getDaysOverdue(issue.due_date)
-                    const fineAmount = issue.fine_amount || (days > 0 ? days * (issue.fine_per_day || 0) : 0)
-                    return (
-                      <RecordCard
-                        key={issue.id}
-                        title={issue.book_title || issue.book?.title || '-'}
-                        meta={`${issue.borrower_name || '-'} (${issue.borrower_type})`}
-                        status={days > 0 ? <Badge tone="danger">{days}d overdue</Badge> : null}
-                        fields={[
-                          { label: 'Issued', value: formatDate(issue.issue_date) },
-                          { label: 'Due', value: formatDate(issue.due_date) },
-                          ...(fineAmount > 0 ? [{ label: 'Fine', value: `Rs. ${fineAmount}` }] : []),
-                        ]}
-                        actions={[
-                          { label: 'Process Return', tone: 'info', onClick: () => handleReturn(issue) },
-                        ]}
-                      />
-                    )
-                  })}
-                </CardGrid>
-                ) : (
-                <div className="overflow-x-auto">
-                  <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-gray-50">
-                      <tr>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Book Title</th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Borrower</th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Issue Date</th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Due Date</th>
-                        <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Days Overdue</th>
-                        <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Fine</th>
-                        <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-100">
-                      {returnIssues.map((issue) => {
-                        const days = getDaysOverdue(issue.due_date)
-                        const fineAmount = issue.fine_amount || (days > 0 ? days * (issue.fine_per_day || 0) : 0)
-                        return (
-                          <tr key={issue.id} className="hover:bg-gray-50">
-                            <td className="px-4 py-3 text-sm font-medium text-gray-900">
-                              {issue.book_title || issue.book?.title || '-'}
-                            </td>
-                            <td className="px-4 py-3 text-sm text-gray-600">
-                              <span>{issue.borrower_name || '-'}</span>
-                              <span className={`ml-2 inline-flex px-1.5 py-0.5 rounded text-xs font-medium ${
-                                issue.borrower_type === 'STUDENT'
-                                  ? TONE.info
-                                  : TONE.accent
-                              }`}>
-                                {issue.borrower_type}
-                              </span>
-                            </td>
-                            <td className="px-4 py-3 text-sm text-gray-500">{formatDate(issue.issue_date)}</td>
-                            <td className="px-4 py-3 text-sm text-gray-500">{formatDate(issue.due_date)}</td>
-                            <td className="px-4 py-3 text-center">
-                              {days > 0 ? (
-                                <Badge tone="danger">
-                                  {days} days
-                                </Badge>
-                              ) : (
-                                <span className="text-xs text-gray-400">-</span>
-                              )}
-                            </td>
-                            <td className="px-4 py-3 text-center text-sm">
-                              {fineAmount > 0 ? (
-                                <span className="font-medium text-red-600">Rs. {fineAmount}</span>
-                              ) : (
-                                <span className="text-gray-400">-</span>
-                              )}
-                            </td>
-                            <td className="px-4 py-3 text-right">
-                              <button
-                                onClick={() => handleReturn(issue)}
-                                className="text-sm text-blue-600 hover:text-blue-800 font-medium"
-                              >
-                                Return
-                              </button>
-                            </td>
-                          </tr>
-                        )
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-                )}
-              </>
+              <IssueList
+                issues={returnIssues}
+                view={returnView}
+                onViewChange={setReturnView}
+                actionLabel="Process Return"
+                onAction={onReturn}
+                showFine
+              />
             )}
           </div>
         </div>
@@ -679,60 +224,21 @@ export default function BookIssuePage() {
 
       {/* ============ Return Confirmation Modal ============ */}
       {returnConfirm && (
-        <Modal open  size="sm" closeOnBackdrop={false}>
-            <h2 className="text-xl font-bold text-gray-900 mb-2">Confirm Return</h2>
-
-            <div className="space-y-2 mb-4">
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-500">Book:</span>
-                <span className="font-medium text-gray-900">{returnConfirm.book_title || returnConfirm.book?.title || '-'}</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-500">Borrower:</span>
-                <span className="font-medium text-gray-900">{returnConfirm.borrower_name || '-'}</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-500">Due Date:</span>
-                <span className="font-medium text-gray-900">{formatDate(returnConfirm.due_date)}</span>
-              </div>
-              {getDaysOverdue(returnConfirm.due_date) > 0 && (
-                <>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-500">Days Overdue:</span>
-                    <span className="font-semibold text-red-600">{getDaysOverdue(returnConfirm.due_date)} days</span>
-                  </div>
-                  {(returnConfirm.fine_amount || returnConfirm.fine_per_day) && (
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-500">Estimated Fine:</span>
-                      <span className="font-semibold text-red-600">
-                        Rs. {returnConfirm.fine_amount || (getDaysOverdue(returnConfirm.due_date) * (returnConfirm.fine_per_day || 0))}
-                      </span>
-                    </div>
-                  )}
-                </>
-              )}
+        <Modal open size="sm" closeOnBackdrop={false}>
+          <h2 className="text-xl font-bold text-gray-900 mb-2">Confirm Return</h2>
+          <ReturnSummary issue={returnConfirm} />
+          {returnMutation.error && (
+            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+              {getErrorMessage(returnMutation.error, 'Failed to process the return.')}
             </div>
-
-            {returnMutation.error && (
-              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
-                {returnMutation.error.response?.data?.detail || returnMutation.error.message || 'Failed to process return.'}
-              </div>
-            )}
-
-            <div className="flex justify-end gap-3">
-              <Button variant="secondary"
- onClick={() => setReturnConfirm(null)}>
-                Cancel
-              </Button>
-              <button
-                onClick={confirmReturn}
-                disabled={returnMutation.isPending}
-                className="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {returnMutation.isPending ? 'Processing...' : 'Confirm Return'}
-              </button>
-            </div>
-          </Modal>
+          )}
+          <div className="flex justify-end gap-3">
+            <Button variant="secondary" onClick={() => setReturnConfirm(null)}>Cancel</Button>
+            <Button onClick={() => returnMutation.mutate(returnConfirm.id)} loading={returnMutation.isPending}>
+              Confirm Return
+            </Button>
+          </div>
+        </Modal>
       )}
     </div>
   )

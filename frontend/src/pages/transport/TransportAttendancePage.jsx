@@ -5,6 +5,9 @@ import LoadingState from '../../components/ui/LoadingState'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { transportApi } from '../../services/api'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
+import { useAuth } from '../../contexts/AuthContext'
+import { useToast } from '../../components/Toast'
+import { canManageTransport } from './transportAccess'
 import { getErrorMessage } from '../../utils/errorUtils'
 import { RecordCard, CardGrid, ViewToggle } from '../../components/cards'
 import { useViewPreference } from '../../hooks/useViewPreference'
@@ -17,6 +20,10 @@ const BOARDING_STATUSES = [
 
 export default function TransportAttendancePage() {
   const { activeAcademicYear } = useAcademicYear()
+  const { effectiveRole } = useAuth()
+  // Saving is admin-only on the server; other roles can look but not mark.
+  const canManage = canManageTransport(effectiveRole)
+  const toast = useToast()
   const queryClient = useQueryClient()
 
   // Local date: toISOString() is UTC, which is still yesterday before 05:00 in Pakistan.
@@ -27,7 +34,6 @@ export default function TransportAttendancePage() {
   const [view, setView] = useViewPreference('transport-attendance')
   const [attendanceMap, setAttendanceMap] = useState({})
   const [isSaving, setIsSaving] = useState(false)
-  const [saveSuccess, setSaveSuccess] = useState(false)
 
   // Fetch routes
   const { data: routesData } = useQuery({
@@ -57,11 +63,11 @@ export default function TransportAttendancePage() {
   // Bulk mark mutation
   const bulkMarkMutation = useMutation({
     mutationFn: (data) => transportApi.bulkMarkAttendance(data),
-    onSuccess: () => {
+    onSuccess: ({ data }) => {
       queryClient.invalidateQueries({ queryKey: ['transport-attendance', selectedRoute, selectedDate] })
       queryClient.invalidateQueries({ queryKey: ['transport-dashboard'] })
-      setSaveSuccess(true)
-      setTimeout(() => setSaveSuccess(false), 3000)
+      const saved = assignments.length - (data?.errors?.length || 0)
+      toast.showSuccess(`Attendance saved for ${saved} student${saved === 1 ? '' : 's'}`)
     },
   })
 
@@ -91,14 +97,12 @@ export default function TransportAttendancePage() {
       ...prev,
       [studentId]: status,
     }))
-    setSaveSuccess(false)
   }
 
   const handleSaveAll = async () => {
     if (assignments.length === 0 || !selectedRoute || !selectedDate) return
 
     setIsSaving(true)
-    setSaveSuccess(false)
 
     const records = assignments.map((assignment) => ({
       student_id: assignment.student,
@@ -121,13 +125,11 @@ export default function TransportAttendancePage() {
   const handleRouteChange = (routeId) => {
     setSelectedRoute(routeId)
     setAttendanceMap({})
-    setSaveSuccess(false)
   }
 
   const handleDateChange = (date) => {
     setSelectedDate(date)
     setAttendanceMap({})
-    setSaveSuccess(false)
   }
 
   // Summary stats
@@ -149,7 +151,7 @@ export default function TransportAttendancePage() {
 
   return (
     <div>
-      <PageHeader title="Transport Attendance" subtitle="Mark daily transport boarding attendance" className="mb-6" />
+      <PageHeader title="Transport Attendance" subtitle={canManage ? 'Mark daily transport boarding attendance' : 'Daily transport boarding attendance'} className="mb-6" />
 
       {/* Filters */}
       <div className="card mb-6">
@@ -228,14 +230,7 @@ export default function TransportAttendancePage() {
                 </span>
               </h2>
               <div className="flex items-center gap-3">
-                {saveSuccess && (
-                  <span className="text-sm text-green-600 font-medium flex items-center gap-1">
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                    </svg>
-                    Saved!
-                  </span>
-                )}
+                {canManage && (
                 <button
                   onClick={handleSaveAll}
                   disabled={isSaving || bulkMarkMutation.isPending}
@@ -243,6 +238,7 @@ export default function TransportAttendancePage() {
                 >
                   {isSaving || bulkMarkMutation.isPending ? 'Saving...' : 'Save All'}
                 </button>
+                )}
               </div>
             </div>
 
@@ -281,6 +277,7 @@ export default function TransportAttendancePage() {
                         <button
                           key={status.value}
                           aria-pressed={currentStatus === status.value}
+                          disabled={!canManage}
                           onClick={() => handleStatusChange(assignment.student, status.value)}
                           className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-medium border transition-colors ${
                             currentStatus === status.value
@@ -323,7 +320,8 @@ export default function TransportAttendancePage() {
                               <button
                                 key={status.value}
                                 aria-pressed={currentStatus === status.value}
-                                onClick={() => handleStatusChange(assignment.student, status.value)}
+                                disabled={!canManage}
+                          onClick={() => handleStatusChange(assignment.student, status.value)}
                                 className={`py-1 px-3 rounded-lg text-xs font-medium border transition-colors ${
                                   currentStatus === status.value
                                     ? status.activeColor
@@ -344,17 +342,9 @@ export default function TransportAttendancePage() {
             )}
 
             {/* Bottom Save button for long lists */}
-            {assignments.length > 10 && (
+            {canManage && assignments.length > 10 && (
               <div className="flex justify-end mt-4 pt-4 border-t border-gray-200">
                 <div className="flex items-center gap-3">
-                  {saveSuccess && (
-                    <span className="text-sm text-green-600 font-medium flex items-center gap-1">
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                      </svg>
-                      Saved!
-                    </span>
-                  )}
                   <button
                     onClick={handleSaveAll}
                     disabled={isSaving || bulkMarkMutation.isPending}

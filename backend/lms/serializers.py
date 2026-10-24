@@ -876,6 +876,19 @@ class AssignmentSubmissionCreateSerializer(serializers.ModelSerializer):
                     'student': 'Student does not belong to the section this assignment is for.',
                 })
 
+        # A student who has left can't submit. One admitted after the due date still can
+        # (they are just left out of reminders and missing-submission lists).
+        if assignment and student:
+            from django.utils import timezone
+
+            from academic_sessions.leaving import left_by, left_message
+
+            left = left_by(assignment.school_id, [student.id], timezone.localdate())
+            if student.id in left:
+                raise serializers.ValidationError({
+                    'student': left_message(student.name, left[student.id], what='submissions'),
+                })
+
         # Ensure the student belongs to the same school
         if assignment and student and student.school_id != assignment.school_id:
             raise serializers.ValidationError({

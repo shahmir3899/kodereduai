@@ -56,6 +56,9 @@ const emptyStopForm = {
   drop_time: '',
 }
 
+// The API sends 07:45:00; the seconds are noise on a timetable.
+const hhmm = (t) => (t ? t.slice(0, 5) : '--')
+
 export default function RoutesPage() {
   const { effectiveRole } = useAuth()
   const canManage = canManageTransport(effectiveRole)
@@ -290,7 +293,7 @@ export default function RoutesPage() {
               <div className="min-w-0">
                 <p className="text-xs font-medium text-gray-900">#{stop.stop_order} {stop.name}</p>
                 <p className="text-xs text-gray-500">{stop.address || '--'}</p>
-                <p className="text-xs text-gray-400">Pickup: {stop.pickup_time || '--'} | Drop: {stop.drop_time || '--'}</p>
+                <p className="text-xs text-gray-400">Pickup: {hhmm(stop.pickup_time)} | Drop: {hhmm(stop.drop_time)}</p>
               </div>
               <div className="flex gap-2 flex-none ml-2">
                 {canManage && <button onClick={() => openEditStopModal(stop)} className="text-xs text-blue-600 font-medium">Edit</button>}
@@ -487,8 +490,8 @@ export default function RoutesPage() {
                                         <td className="px-3 py-2 text-sm text-gray-500">{stop.stop_order || '--'}</td>
                                         <td className="px-3 py-2 text-sm font-medium text-gray-900">{stop.name}</td>
                                         <td className="px-3 py-2 text-sm text-gray-500">{stop.address || '--'}</td>
-                                        <td className="px-3 py-2 text-sm text-gray-500">{stop.pickup_time || '--'}</td>
-                                        <td className="px-3 py-2 text-sm text-gray-500">{stop.drop_time || '--'}</td>
+                                        <td className="px-3 py-2 text-sm text-gray-500">{hhmm(stop.pickup_time)}</td>
+                                        <td className="px-3 py-2 text-sm text-gray-500">{hhmm(stop.drop_time)}</td>
                                         <td className="px-3 py-2 text-right">
                                           {canManage && (
                                             <>

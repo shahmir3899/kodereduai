@@ -189,7 +189,7 @@ export default function DashboardPage({ variant }) {
   const { data: hostelData, isLoading: loadingHostelQuery } = useQuery({
     queryKey: ['hostelDashboard'],
     queryFn: () => hostelApi.getDashboard(),
-    enabled: !!activeSchool?.id && isModuleEnabled('hostel') && bootstrapSettled,
+    enabled: !!activeSchool?.id && isModuleEnabled('hostel') && canSeeLeadershipInsights && bootstrapSettled,
   })
 
   // Inventory
@@ -321,7 +321,8 @@ export default function DashboardPage({ variant }) {
     })
   }
 
-  if (isModuleEnabled('hostel')) {
+  // Hostel data is admin/principal only (the API refuses everyone else).
+  if (isModuleEnabled('hostel') && canSeeLeadershipInsights) {
     const hd = hostelData?.data
     const occupancy = hd?.total_capacity > 0
       ? Math.round((hd.current_occupancy / hd.total_capacity) * 100) : null

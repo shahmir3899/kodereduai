@@ -382,6 +382,10 @@ def _students_for_exam(exam):
     enrollment_filter = Q(school=exam.school, academic_year_id=exam.academic_year_id, class_obj=exam.class_obj)
     enrollment_filter &= _exam_section_q(exam)
     enrollment_filter &= enrollment_covers_month(exam_date.year, exam_date.month) if exam_date else Q(is_active=True)
+    # Not students admitted after the exam's last day: they could not have sat it.
+    exam_last_day = exam.end_date or exam.start_date
+    if exam_last_day:
+        enrollment_filter &= Q(student__admission_date__isnull=True) | Q(student__admission_date__lte=exam_last_day)
 
     enrolled_ids = list(StudentEnrollment.objects.filter(enrollment_filter).values_list('student_id', flat=True))
 
@@ -1278,11 +1282,14 @@ def trigger_assignment_due_soon(school, window_hours=48):
         # enrollment rows at all (legacy data predating StudentEnrollment).
         enrolled_ids = []
         if assignment.academic_year_id:
-            from academic_sessions.utils import enrollment_covers_month
+            # Day-precise on today (a reminder goes out before the due date): not a student
+            # who has already left, and not one inside a break. Admitted-by-due-date holds
+            # for anyone enrolled today.
+            from academic_sessions.leaving import enrolled_on_q
 
             enrollment_filter = Q(
                 school=school, academic_year_id=assignment.academic_year_id, class_obj=assignment.class_obj,
-            ) & enrollment_covers_month(assignment.due_date.year, assignment.due_date.month)
+            ) & enrolled_on_q(today)
             if assignment.session_class_id:
                 # A section-only assignment reminds only that section.
                 enrollment_filter &= Q(session_class_id=assignment.session_class_id)

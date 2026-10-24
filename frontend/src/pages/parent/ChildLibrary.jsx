@@ -3,7 +3,8 @@ import Badge from '../../components/ui/Badge'
 import { TONE } from '../../components/ui/statusTones'
 import { useQuery } from '@tanstack/react-query'
 import { parentsApi } from '../../services/api'
-import Spinner from '../../components/ui/Spinner'
+import LoadingState from '../../components/ui/LoadingState'
+import { formatDate } from '../library/libraryUtils'
 import { RecordCard, CardGrid, ViewToggle } from '../../components/cards'
 import { useViewPreference } from '../../hooks/useViewPreference'
 
@@ -25,8 +26,9 @@ export default function ChildLibrary() {
   })
 
   const issues = data?.data || []
-  const current = issues.filter((i) => i.status === 'ISSUED' || i.status === 'OVERDUE')
-  const past = issues.filter((i) => i.status === 'RETURNED' || i.status === 'LOST')
+  const withOverdue = issues.map((i) => (i.is_overdue ? { ...i, status: 'OVERDUE' } : i))
+  const current = withOverdue.filter((i) => i.status === 'ISSUED' || i.status === 'OVERDUE')
+  const past = withOverdue.filter((i) => i.status === 'RETURNED' || i.status === 'LOST')
 
   return (
     <div className="space-y-6">
@@ -43,9 +45,7 @@ export default function ChildLibrary() {
       </div>
 
       {isLoading ? (
-        <div className="flex items-center justify-center py-16">
-          <Spinner size="md" />
-        </div>
+        <LoadingState label="Loading library records..." compact />
       ) : issues.length === 0 ? (
         <div className="bg-white rounded-xl border border-gray-200 p-8 text-center text-gray-500">
           No book issues on record.
@@ -67,8 +67,8 @@ export default function ChildLibrary() {
                       </span>
                     }
                     fields={[
-                      { label: 'Issued', value: issue.issue_date },
-                      { label: 'Due', value: issue.due_date },
+                      { label: 'Issued', value: formatDate(issue.issue_date) },
+                      { label: 'Due', value: formatDate(issue.due_date) },
                       ...(Number(issue.fine_amount) > 0 ? [{ label: 'Fine', value: <span className="text-red-600">Rs. {issue.fine_amount}</span> }] : []),
                     ]}
                   />
@@ -96,8 +96,8 @@ export default function ChildLibrary() {
                       </Badge>
                     }
                     fields={[
-                      { label: 'Issued', value: issue.issue_date },
-                      { label: 'Returned', value: issue.return_date || '—' },
+                      { label: 'Issued', value: formatDate(issue.issue_date) },
+                      { label: 'Returned', value: formatDate(issue.return_date) },
                     ]}
                   />
                 ))}
@@ -120,8 +120,8 @@ export default function ChildLibrary() {
                           <p className="font-medium text-gray-900">{issue.book_title}</p>
                           <p className="text-xs text-gray-500">{issue.book_author}</p>
                         </td>
-                        <td className="py-2 pr-4 text-gray-600">{issue.issue_date}</td>
-                        <td className="py-2 pr-4 text-gray-600">{issue.return_date || '—'}</td>
+                        <td className="py-2 pr-4 text-gray-600">{formatDate(issue.issue_date)}</td>
+                        <td className="py-2 pr-4 text-gray-600">{formatDate(issue.return_date)}</td>
                         <td className="py-2">
                           <Badge colors={statusBadge[issue.status] || 'bg-gray-100'}>
                             {issue.status}

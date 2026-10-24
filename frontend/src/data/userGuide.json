@@ -3,7 +3,7 @@
     "title": "Education AI",
     "subtitle": "School Administration Guide",
     "version": "3.4 - Manual Attendance & Updated Navigation",
-    "generatedAt": "2026-10-23T17:40:18.729056+00:00",
+    "generatedAt": "2026-10-24T08:42:32.180915+00:00",
     "totalChapters": 22,
     "modules": [
       "Dashboard | Classes & Students | Attendance (Manual Entry)",
@@ -3728,7 +3728,7 @@
           "content": [
             {
               "type": "body_text",
-              "text": "The Library module provides a complete book management system including cataloging, issuing/returning books, and tracking overdue items."
+              "text": "The Library module provides a complete book management system including cataloging, issuing/returning books, and tracking overdue items. Only School Admins and Principals can change anything here; other staff roles can browse the catalog and see which books are out."
             }
           ]
         },
@@ -3750,12 +3750,17 @@
             {
               "type": "step",
               "number": 2,
-              "text": "Add categories: Fiction, Non-Fiction, Science, Mathematics, History, Reference, etc."
+              "text": "Type a Category Name (for example Fiction, Science, Mathematics, History, Reference), add an optional description and click 'Add Category'."
             },
             {
               "type": "step",
               "number": 3,
-              "text": "Categories help organize and filter the book catalog."
+              "text": "Use Edit to rename a category, or Delete to remove it. Its books stay in the catalog without a category."
+            },
+            {
+              "type": "step",
+              "number": 4,
+              "text": "Category names must be unique. Categories help organize and filter the book catalog."
             }
           ],
           "video": "ch11-setting-up-book-categories"
@@ -3778,22 +3783,27 @@
             {
               "type": "step",
               "number": 2,
-              "text": "Enter: Title, Author, ISBN, Publisher, Category, Total Copies, Shelf Location."
+              "text": "Enter Title and Author (both required), then ISBN, Publisher, Category, Total Copies and Shelf Location."
             },
             {
               "type": "step",
               "number": 3,
-              "text": "Save. The book appears in the catalog."
+              "text": "Click 'Add Book'. The book appears in the catalog with all copies available."
             },
             {
               "type": "step",
               "number": 4,
-              "text": "Use the search bar to find books by title, author, or ISBN."
+              "text": "Use the search bar to find books by title, author, or ISBN, and the Category filter to browse one section."
             },
             {
               "type": "step",
               "number": 5,
-              "text": "Filter by category to browse specific sections."
+              "text": "Edit changes a book. Total Copies cannot go below the copies currently issued."
+            },
+            {
+              "type": "step",
+              "number": 6,
+              "text": "A book that has ever been issued cannot be deleted because its history is kept. Edit it and untick Active to take it off the shelf instead."
             }
           ],
           "video": "ch11-adding-books-to-the-catalog"
@@ -3811,37 +3821,32 @@
             {
               "type": "step",
               "number": 1,
-              "text": "Click 'Issue Book'."
+              "text": "On the 'Issue Book' tab, choose Student or Staff as the Borrower Type."
             },
             {
               "type": "step",
               "number": 2,
-              "text": "Select Borrower Type: Student or Staff."
+              "text": "Type at least two letters of the borrower's name and pick them from the list."
             },
             {
               "type": "step",
               "number": 3,
-              "text": "Search and select the borrower (student name or staff name)."
+              "text": "Type at least two letters of the book title and pick the book (only books with copies available are listed)."
             },
             {
               "type": "step",
               "number": 4,
-              "text": "Search and select the book to issue."
+              "text": "Check the Due Date. It starts at today plus the loan period set in Library Settings (14 days by default)."
             },
             {
               "type": "step",
               "number": 5,
-              "text": "Set the Due Date (typically 14 days from today)."
+              "text": "Add optional notes and click 'Issue Book'. The book's available copies drop by 1."
             },
             {
               "type": "step",
               "number": 6,
-              "text": "Add optional notes and click 'Issue'."
-            },
-            {
-              "type": "step",
-              "number": 7,
-              "text": "The book's available copies count decreases by 1."
+              "text": "A borrower cannot go over the limit set in Library Settings (3 books for a student, 5 for staff by default) or take a second copy of the same book. You can also start from the catalog: click 'Issue' next to a book."
             }
           ],
           "video": "ch11-issuing-books"
@@ -3859,22 +3864,22 @@
             {
               "type": "step",
               "number": 1,
-              "text": "Find the issued book in the list (search by student name or book title)."
+              "text": "Open the 'Return Book' tab and search by student name, staff name or book title."
             },
             {
               "type": "step",
               "number": 2,
-              "text": "Click 'Return' next to the entry."
+              "text": "Click 'Process Return' next to the entry."
             },
             {
               "type": "step",
               "number": 3,
-              "text": "Confirm the return. The book's available copies increase by 1."
+              "text": "Check the summary. For a late book it shows the days overdue and the fine (days overdue x the daily fine in Library Settings)."
             },
             {
               "type": "step",
               "number": 4,
-              "text": "If the book is overdue, any applicable fine is recorded."
+              "text": "Click 'Confirm Return'. The book's available copies increase by 1 and the fine is recorded on the issue."
             }
           ],
           "video": "ch11-returning-books"
@@ -3892,22 +3897,22 @@
             {
               "type": "step",
               "number": 1,
-              "text": "View all books that are past their due date."
+              "text": "The page lists every book past its due date that has not come back, oldest first, with the borrower, days overdue and the fine so far."
             },
             {
               "type": "step",
               "number": 2,
-              "text": "See borrower details and number of days overdue."
+              "text": "The summary shows the number of overdue books, the total estimated fines and the fine per day."
             },
             {
               "type": "step",
               "number": 3,
-              "text": "Send reminders to borrowers."
+              "text": "Click 'Return' on a row to take the book back and record its fine."
             },
             {
               "type": "step",
               "number": 4,
-              "text": "Update due dates if an extension is granted."
+              "text": "Due-date reminders to borrowers and parents are sent by the Notifications module's on-demand job, not from this page."
             }
           ],
           "video": "ch11-tracking-overdue-books"
@@ -3928,19 +3933,19 @@
             },
             {
               "type": "bullet",
-              "text": "Total Books - Total unique titles in the catalog"
+              "text": "Book Titles - Number of active titles in the catalog"
             },
             {
               "type": "bullet",
-              "text": "Total Copies - Sum of all book copies"
+              "text": "Total Copies - Sum of all copies of active titles"
             },
             {
               "type": "bullet",
-              "text": "Currently Issued - Books currently checked out"
+              "text": "Currently Issued - Books checked out and not yet returned"
             },
             {
               "type": "bullet",
-              "text": "Overdue Count - Books past their due date"
+              "text": "Overdue Books - Issued books past their due date"
             },
             {
               "type": "bullet",
@@ -3948,18 +3953,18 @@
             },
             {
               "type": "bullet",
-              "text": "Most Issued Books - Popular titles chart"
+              "text": "Most Issued Books - The five most borrowed titles"
+            },
+            {
+              "type": "body_text",
+              "text": "School Admins and Principals also get a 'Library Settings' button for the loan period, the borrowing limits for students and staff, and the fine per overdue day."
             }
           ]
         }
       ],
       "roles": [
         "SCHOOL_ADMIN",
-        "PRINCIPAL",
-        "TEACHER",
-        "ACCOUNTANT",
-        "STAFF",
-        "DRIVER"
+        "PRINCIPAL"
       ],
       "module": "library"
     },
@@ -5173,7 +5178,7 @@
           "content": [
             {
               "type": "body_text",
-              "text": "The Hostel Management module helps schools manage their boarding facilities. It covers hostel buildings, rooms, student allocations, and gate passes for students leaving and returning to the hostel."
+              "text": "The Hostel Management module helps schools manage their boarding facilities. It covers hostel buildings, rooms, student allocations, and gate passes for students leaving and returning to the hostel. Hostel pages are available to School Admin and Principal roles only, because they list students and the reasons for their leave."
             }
           ]
         },
@@ -5193,15 +5198,11 @@
             },
             {
               "type": "bullet",
-              "text": "Total hostels, rooms, and current occupancy"
+              "text": "Total hostels and rooms, total capacity and current occupancy"
             },
             {
               "type": "bullet",
-              "text": "Occupancy rate (percentage of beds filled)"
-            },
-            {
-              "type": "bullet",
-              "text": "Active allocations count"
+              "text": "Occupancy rate (percentage of available beds filled) and available beds"
             },
             {
               "type": "bullet",
@@ -5213,7 +5214,7 @@
             },
             {
               "type": "bullet",
-              "text": "Available beds count"
+              "text": "Number of boys' and girls' hostels"
             },
             {
               "type": "bullet",
@@ -5238,32 +5239,27 @@
             {
               "type": "step",
               "number": 1,
-              "text": "Navigate to Hostel > Rooms in the sidebar."
+              "text": "Navigate to Hostel > Rooms in the sidebar. The 'Hostels' tab is open."
             },
             {
               "type": "step",
               "number": 2,
-              "text": "Switch to the 'Hostels' tab."
-            },
-            {
-              "type": "step",
-              "number": 3,
               "text": "Click 'Add Hostel'."
             },
             {
               "type": "step",
+              "number": 3,
+              "text": "Enter the Hostel Name, choose the Hostel Type (Boys / Girls / Mixed) and enter the Capacity."
+            },
+            {
+              "type": "step",
               "number": 4,
-              "text": "Enter: Name, Hostel Type (Boys / Girls / Mixed), Capacity."
+              "text": "Optionally enter the Address and Contact Number, and choose a Warden from your active staff."
             },
             {
               "type": "step",
               "number": 5,
-              "text": "Optionally assign a Warden (from staff members)."
-            },
-            {
-              "type": "step",
-              "number": 6,
-              "text": "Save. The hostel appears in the list."
+              "text": "Click 'Add Hostel'. The hostel appears in the list with its occupancy."
             },
             {
               "type": "sub_section",
@@ -5271,33 +5267,32 @@
             },
             {
               "type": "step",
-              "number": 7,
-              "text": "Switch to the 'Rooms' tab."
+              "number": 6,
+              "text": "Open the 'Rooms' tab and choose a hostel in 'Select Hostel'."
             },
             {
               "type": "step",
-              "number": 8,
+              "number": 7,
               "text": "Click 'Add Room'."
             },
             {
               "type": "step",
+              "number": 8,
+              "text": "Enter the Room Number, Floor and Capacity, and choose the Room Type (Single / Double / Dormitory)."
+            },
+            {
+              "type": "step",
               "number": 9,
-              "text": "Select the Hostel this room belongs to."
-            },
-            {
-              "type": "step",
-              "number": 10,
-              "text": "Enter: Room Number, Floor, Room Type (Single / Double / Dormitory), Capacity."
-            },
-            {
-              "type": "step",
-              "number": 11,
-              "text": "Save. The room shows current occupancy vs. capacity."
+              "text": "Click 'Add Room'. The room shows its occupancy and whether it is Available, Full or Unavailable."
             },
             {
               "type": "info_box",
-              "title": "Room Availability",
-              "text": "Rooms are automatically marked as unavailable when they reach full capacity. The system prevents over-allocation by checking capacity before each new allocation."
+              "title": "Room status",
+              "text": "A room shows Full when every bed is taken. Untick 'Available for allocation' when you take a room out of use; it is then shown as Unavailable and cannot be chosen for new allocations. A room's capacity cannot be lowered below the number of students in it."
+            },
+            {
+              "type": "warning_box",
+              "text": "A hostel or room that has student allocation records cannot be deleted, so the history is kept. Mark a hostel Inactive, or a room Unavailable, instead."
             }
           ],
           "video": "ch17-managing-hostels-rooms"
@@ -5314,7 +5309,7 @@
             },
             {
               "type": "body_text",
-              "text": "Allocations assign students to specific hostel rooms for an academic year."
+              "text": "Allocations assign students to specific hostel rooms for an academic year. The list can be filtered by hostel, by status (Active or Vacated) and searched by student name."
             },
             {
               "type": "sub_section",
@@ -5323,27 +5318,22 @@
             {
               "type": "step",
               "number": 1,
-              "text": "Navigate to Hostel > Allocations."
+              "text": "Navigate to Hostel > Allocations and click 'Allocate Student'."
             },
             {
               "type": "step",
               "number": 2,
-              "text": "Click 'Add Allocation'."
+              "text": "The Academic Year is the current one. Search for and choose the Student; students who already hold a bed this year are not listed."
             },
             {
               "type": "step",
               "number": 3,
-              "text": "Select: Student, Room (from available rooms), Academic Year."
+              "text": "Choose the Hostel, then a Room. Only rooms with a free bed are listed."
             },
             {
               "type": "step",
               "number": 4,
-              "text": "The system validates that the room has capacity and the student isn't already allocated."
-            },
-            {
-              "type": "step",
-              "number": 5,
-              "text": "Save. The student is now assigned to the room."
+              "text": "Click 'Allocate'. The student appears in the list with the room."
             },
             {
               "type": "sub_section",
@@ -5351,22 +5341,22 @@
             },
             {
               "type": "step",
+              "number": 5,
+              "text": "Find the active allocation in the list and click 'Vacate'."
+            },
+            {
+              "type": "step",
               "number": 6,
-              "text": "Find the active allocation in the list."
+              "text": "Confirm. The allocation is marked Vacated with today's date and the room's occupancy decreases."
             },
             {
               "type": "step",
               "number": 7,
-              "text": "Click the 'Vacate' button."
-            },
-            {
-              "type": "step",
-              "number": 8,
-              "text": "The allocation is marked as inactive, and the room's occupancy count decreases."
+              "text": "Choose 'Vacated' in the status filter to see students who have left."
             },
             {
               "type": "warning_box",
-              "text": "Each student can only have one active hostel allocation per academic year. Vacate the current allocation before assigning to a new room."
+              "text": "Each student can only hold one active hostel bed per academic year. Vacate the current allocation before placing the student in another room; a vacated student can be allocated again in the same year."
             }
           ],
           "video": "ch17-student-allocations"
@@ -5383,7 +5373,7 @@
             },
             {
               "type": "body_text",
-              "text": "Gate passes track students leaving and returning to the hostel. They follow a workflow: Request > Approve/Reject > Checkout > Return."
+              "text": "Gate passes track students leaving and returning to the hostel. They follow a workflow: Request > Approve/Reject > Check Out > Return."
             },
             {
               "type": "sub_section",
@@ -5397,17 +5387,17 @@
             {
               "type": "step",
               "number": 2,
-              "text": "Select: Student, Pass Type (Day Out / Weekend / Holiday / Emergency)."
+              "text": "Choose the Student (only students who currently hold a hostel bed are listed) and the Pass Type (Day Pass / Overnight / Weekend / Vacation Leave)."
             },
             {
               "type": "step",
               "number": 3,
-              "text": "Enter: Departure Date, Expected Return Date/Time, Destination, Reason."
+              "text": "Enter the Reason and where the student is Going To, and optionally a contact number at the destination."
             },
             {
               "type": "step",
               "number": 4,
-              "text": "Submit. The pass is created with 'Pending' status."
+              "text": "The Departure Date and Expected Return are filled in (the next full hour, and eight hours later); change them if needed, then click 'Create Gate Pass'. The pass starts as Pending Approval."
             },
             {
               "type": "sub_section",
@@ -5421,26 +5411,26 @@
             {
               "type": "step",
               "number": 6,
-              "text": "Click 'Approve' to authorize the student's departure."
+              "text": "Click 'Approve' to authorize the student's departure, or 'Reject' to deny the request."
             },
             {
               "type": "step",
               "number": 7,
-              "text": "Click 'Reject' with a reason to deny the request."
+              "text": "Add optional remarks in the box and confirm."
             },
             {
               "type": "sub_section",
-              "title": "Checkout & Return"
+              "title": "Check Out & Return"
             },
             {
               "type": "step",
               "number": 8,
-              "text": "When the student physically leaves, click 'Checkout' to record departure time."
+              "text": "When the student leaves the gate, click 'Check Out' on the approved pass."
             },
             {
               "type": "step",
               "number": 9,
-              "text": "When the student returns, click 'Return' to record the actual return time."
+              "text": "When the student is back, click 'Mark Returned'. The actual return time is recorded."
             },
             {
               "type": "table",
@@ -5451,34 +5441,29 @@
               ],
               "rows": [
                 [
-                  "Pending",
+                  "Pending Approval",
                   "Pass requested, awaiting approval",
                   "Approve or Reject"
                 ],
                 [
                   "Approved",
                   "Pass approved, student may leave",
-                  "Checkout when departing"
+                  "Check Out when departing"
                 ],
                 [
                   "Rejected",
-                  "Pass denied by admin",
+                  "Pass denied",
                   "No further action"
                 ],
                 [
                   "Checked Out",
                   "Student has left the hostel",
-                  "Return when student comes back"
+                  "Mark Returned when student comes back"
                 ],
                 [
                   "Returned",
                   "Student has returned to hostel",
                   "Complete - no action needed"
-                ],
-                [
-                  "Cancelled",
-                  "Pass was cancelled",
-                  "No further action"
                 ]
               ]
             }
@@ -5488,11 +5473,7 @@
       ],
       "roles": [
         "SCHOOL_ADMIN",
-        "PRINCIPAL",
-        "TEACHER",
-        "ACCOUNTANT",
-        "STAFF",
-        "DRIVER"
+        "PRINCIPAL"
       ],
       "module": "hostel"
     },

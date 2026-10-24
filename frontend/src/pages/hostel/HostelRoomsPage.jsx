@@ -1,16 +1,40 @@
 import { useState } from 'react'
 import Modal from '../../components/ui/Modal'
+import Field from '../../components/ui/Field'
+import Badge from '../../components/ui/Badge'
 import { TONE } from '../../components/ui/statusTones'
-import Button from '../../components/ui/Button'
 import PageHeader from '../../components/ui/PageHeader'
 import LoadingState from '../../components/ui/LoadingState'
+import EmptyState from '../../components/ui/EmptyState'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { hostelApi } from '../../services/api'
-import { useAuth } from '../../contexts/AuthContext'
-import Badge from '../../components/ui/Badge'
+import { hostelApi, hrApi } from '../../services/api'
+import { useToast } from '../../components/Toast'
+import { getErrorMessage } from '../../utils/errorUtils'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
 import { RecordCard, CardGrid, ViewToggle } from '../../components/cards'
 import { useViewPreference } from '../../hooks/useViewPreference'
+
+const HOSTEL_TYPES = [
+  { value: 'BOYS', label: 'Boys' },
+  { value: 'GIRLS', label: 'Girls' },
+  { value: 'MIXED', label: 'Mixed' },
+]
+
+// Must match hostel.models.Room.ROOM_TYPES: anything else is a 400.
+const ROOM_TYPES = [
+  { value: 'SINGLE', label: 'Single' },
+  { value: 'DOUBLE', label: 'Double' },
+  { value: 'DORMITORY', label: 'Dormitory' },
+]
+
+const hostelTypeLabel = (value) => HOSTEL_TYPES.find((t) => t.value === value)?.label || value
+const roomTypeLabel = (value) => ROOM_TYPES.find((t) => t.value === value)?.label || value
+
+const HOSTEL_TYPE_COLORS = {
+  BOYS: TONE.sky,
+  GIRLS: TONE.pink,
+  MIXED: TONE.accent,
+}
 
 const emptyHostelForm = {
   name: '',
@@ -26,57 +50,71 @@ const emptyRoomForm = {
   hostel: '',
   room_number: '',
   floor: '',
-  room_type: 'SHARED',
+  room_type: 'DOUBLE',
   capacity: '',
   is_available: true,
 }
 
+// A full room is a normal state; "unavailable" is the admin taking the room out of use.
+function roomStatus(room) {
+  if (!room.is_available) return { label: 'Unavailable', colors: TONE.neutral }
+  if (room.is_full) return { label: 'Full', colors: TONE.warning }
+  return { label: 'Available', colors: TONE.success }
+}
+
 export default function HostelRoomsPage() {
-  const { user } = useAuth()
   const queryClient = useQueryClient()
+  const toast = useToast()
 
   const [activeTab, setActiveTab] = useState('hostels')
   const [hostelsView, setHostelsView] = useViewPreference('hostels')
   const [roomsView, setRoomsView] = useViewPreference('hostel-rooms')
   const [selectedHostel, setSelectedHostel] = useState('')
 
-  // Hostel modal
   const [showHostelModal, setShowHostelModal] = useState(false)
   const [editingHostel, setEditingHostel] = useState(null)
   const [hostelForm, setHostelForm] = useState(emptyHostelForm)
 
-  // Room modal
   const [showRoomModal, setShowRoomModal] = useState(false)
   const [editingRoom, setEditingRoom] = useState(null)
   const [roomForm, setRoomForm] = useState(emptyRoomForm)
 
-  // Delete confirmation
   const [deleteConfirm, setDeleteConfirm] = useState(null)
   const [deleteType, setDeleteType] = useState(null)
 
-  // ---- Queries ----
-
-  const { data: hostelsData, isLoading: hostelsLoading } = useQuery({
+  const { data: hostelsData, isLoading: hostelsLoading, error: hostelsError } = useQuery({
     queryKey: ['hostels'],
     queryFn: () => hostelApi.getHostels({ page_size: 9999 }),
   })
 
-  const { data: roomsData, isLoading: roomsLoading } = useQuery({
+  const { data: roomsData, isLoading: roomsLoading, error: roomsError } = useQuery({
     queryKey: ['hostelRooms', selectedHostel],
     queryFn: () => hostelApi.getRooms({ hostel_id: selectedHostel, page_size: 9999 }),
     enabled: !!selectedHostel,
   })
 
+  // Wardens are picked from active staff; only needed while the hostel form is open.
+  const { data: staffData } = useQuery({
+    queryKey: ['hostel-wardens'],
+    queryFn: () => hrApi.getStaff({ employment_status: 'ACTIVE', page_size: 500 }),
+    enabled: showHostelModal,
+  })
+
   const hostels = hostelsData?.data?.results || hostelsData?.data || []
   const rooms = roomsData?.data?.results || roomsData?.data || []
+  const staff = staffData?.data?.results || staffData?.data || []
 
-  // ---- Hostel Mutations ----
+  const refreshAll = () => {
+    queryClient.invalidateQueries({ queryKey: ['hostels'] })
+    queryClient.invalidateQueries({ queryKey: ['hostelRooms'] })
+    queryClient.invalidateQueries({ queryKey: ['hostelDashboard'] })
+  }
 
   const createHostelMutation = useMutation({
     mutationFn: (data) => hostelApi.createHostel(data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['hostels'] })
-      queryClient.invalidateQueries({ queryKey: ['hostelDashboard'] })
+      refreshAll()
+      toast.showSuccess('Hostel added')
       closeHostelModal()
     },
   })
@@ -84,8 +122,8 @@ export default function HostelRoomsPage() {
   const updateHostelMutation = useMutation({
     mutationFn: ({ id, data }) => hostelApi.updateHostel(id, data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['hostels'] })
-      queryClient.invalidateQueries({ queryKey: ['hostelDashboard'] })
+      refreshAll()
+      toast.showSuccess('Hostel updated')
       closeHostelModal()
     },
   })
@@ -93,24 +131,18 @@ export default function HostelRoomsPage() {
   const deleteHostelMutation = useMutation({
     mutationFn: (id) => hostelApi.deleteHostel(id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['hostels'] })
-      queryClient.invalidateQueries({ queryKey: ['hostelDashboard'] })
-      setDeleteConfirm(null)
-      setDeleteType(null)
-      if (selectedHostel === String(deleteConfirm?.id)) {
-        setSelectedHostel('')
-      }
+      refreshAll()
+      toast.showSuccess('Hostel deleted')
+      if (selectedHostel === String(deleteConfirm?.id)) setSelectedHostel('')
+      closeDeleteConfirm()
     },
   })
-
-  // ---- Room Mutations ----
 
   const createRoomMutation = useMutation({
     mutationFn: (data) => hostelApi.createRoom(data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['hostelRooms'] })
-      queryClient.invalidateQueries({ queryKey: ['hostels'] })
-      queryClient.invalidateQueries({ queryKey: ['hostelDashboard'] })
+      refreshAll()
+      toast.showSuccess('Room added')
       closeRoomModal()
     },
   })
@@ -118,9 +150,8 @@ export default function HostelRoomsPage() {
   const updateRoomMutation = useMutation({
     mutationFn: ({ id, data }) => hostelApi.updateRoom(id, data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['hostelRooms'] })
-      queryClient.invalidateQueries({ queryKey: ['hostels'] })
-      queryClient.invalidateQueries({ queryKey: ['hostelDashboard'] })
+      refreshAll()
+      toast.showSuccess('Room updated')
       closeRoomModal()
     },
   })
@@ -128,15 +159,11 @@ export default function HostelRoomsPage() {
   const deleteRoomMutation = useMutation({
     mutationFn: (id) => hostelApi.deleteRoom(id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['hostelRooms'] })
-      queryClient.invalidateQueries({ queryKey: ['hostels'] })
-      queryClient.invalidateQueries({ queryKey: ['hostelDashboard'] })
-      setDeleteConfirm(null)
-      setDeleteType(null)
+      refreshAll()
+      toast.showSuccess('Room deleted')
+      closeDeleteConfirm()
     },
   })
-
-  // ---- Modal Handlers ----
 
   const openAddHostel = () => {
     setEditingHostel(null)
@@ -149,10 +176,10 @@ export default function HostelRoomsPage() {
     setHostelForm({
       name: hostel.name || '',
       hostel_type: hostel.hostel_type || 'BOYS',
-      capacity: hostel.capacity || '',
+      capacity: hostel.capacity?.toString() || '',
       address: hostel.address || '',
       contact_number: hostel.contact_number || '',
-      warden: hostel.warden || '',
+      warden: hostel.warden?.toString() || '',
       is_active: hostel.is_active !== false,
     })
     setShowHostelModal(true)
@@ -162,25 +189,24 @@ export default function HostelRoomsPage() {
     setShowHostelModal(false)
     setEditingHostel(null)
     setHostelForm(emptyHostelForm)
+    createHostelMutation.reset()
+    updateHostelMutation.reset()
   }
 
   const openAddRoom = () => {
     setEditingRoom(null)
-    setRoomForm({
-      ...emptyRoomForm,
-      hostel: selectedHostel || '',
-    })
+    setRoomForm({ ...emptyRoomForm, hostel: selectedHostel || '' })
     setShowRoomModal(true)
   }
 
   const openEditRoom = (room) => {
     setEditingRoom(room)
     setRoomForm({
-      hostel: room.hostel?.toString() || room.hostel_id?.toString() || selectedHostel || '',
+      hostel: room.hostel?.toString() || selectedHostel || '',
       room_number: room.room_number || '',
-      floor: room.floor ?? '',
-      room_type: room.room_type || 'SHARED',
-      capacity: room.capacity || '',
+      floor: room.floor?.toString() ?? '',
+      room_type: room.room_type || 'DOUBLE',
+      capacity: room.capacity?.toString() || '',
       is_available: room.is_available !== false,
     })
     setShowRoomModal(true)
@@ -190,25 +216,32 @@ export default function HostelRoomsPage() {
     setShowRoomModal(false)
     setEditingRoom(null)
     setRoomForm(emptyRoomForm)
+    createRoomMutation.reset()
+    updateRoomMutation.reset()
   }
-
-  useEscapeKey(closeHostelModal, showHostelModal)
-  useEscapeKey(closeRoomModal, showRoomModal)
-  useEscapeKey(() => setDeleteConfirm(null), !!deleteConfirm)
 
   const openDeleteConfirm = (item, type) => {
     setDeleteConfirm(item)
     setDeleteType(type)
   }
 
-  // ---- Submit Handlers ----
+  const closeDeleteConfirm = () => {
+    setDeleteConfirm(null)
+    setDeleteType(null)
+    deleteHostelMutation.reset()
+    deleteRoomMutation.reset()
+  }
+
+  useEscapeKey(closeHostelModal, showHostelModal)
+  useEscapeKey(closeRoomModal, showRoomModal)
+  useEscapeKey(closeDeleteConfirm, !!deleteConfirm)
 
   const handleHostelSubmit = (e) => {
     e.preventDefault()
     const payload = {
       ...hostelForm,
       capacity: parseInt(hostelForm.capacity) || 0,
-      warden: hostelForm.warden || null,
+      warden: hostelForm.warden ? parseInt(hostelForm.warden) : null,
     }
     if (editingHostel) {
       updateHostelMutation.mutate({ id: editingHostel.id, data: payload })
@@ -248,40 +281,34 @@ export default function HostelRoomsPage() {
   const deletePending = deleteHostelMutation.isPending || deleteRoomMutation.isPending
   const deleteError = deleteHostelMutation.error || deleteRoomMutation.error
 
-  const hostelTypeColors = {
-    BOYS: TONE.sky,
-    GIRLS: TONE.pink,
-    MIXED: TONE.accent,
-  }
-
   const tabs = [
     { key: 'hostels', label: 'Hostels' },
     { key: 'rooms', label: 'Rooms' },
   ]
 
+  const showRooms = (hostel) => {
+    setSelectedHostel(String(hostel.id))
+    setActiveTab('rooms')
+  }
+
+  const errorBlock = (err, fallback) => (
+    <div className="card text-center py-12">
+      <h3 className="text-lg font-medium text-gray-900 mb-2">{fallback}</h3>
+      <p className="text-gray-500">{getErrorMessage(err, 'Something went wrong.')}</p>
+    </div>
+  )
+
   return (
     <div>
-      {/* Header */}
       <PageHeader title="Hostels & Rooms" subtitle="Manage hostels and room inventory" className="mb-6" actions={<>
-{activeTab === 'hostels' && (
-            <button
-              onClick={openAddHostel}
-              className="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 transition-colors"
-            >
-              Add Hostel
-            </button>
-          )}
-          {activeTab === 'rooms' && selectedHostel && (
-            <button
-              onClick={openAddRoom}
-              className="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 transition-colors"
-            >
-              Add Room
-            </button>
-          )}
-</>} />
+        {activeTab === 'hostels' && (
+          <button onClick={openAddHostel} className="btn btn-primary">Add Hostel</button>
+        )}
+        {activeTab === 'rooms' && selectedHostel && (
+          <button onClick={openAddRoom} className="btn btn-primary">Add Room</button>
+        )}
+      </>} />
 
-      {/* Tabs */}
       <div className="border-b border-gray-200 mb-6">
         <nav className="flex gap-6">
           {tabs.map((tab) => (
@@ -290,7 +317,7 @@ export default function HostelRoomsPage() {
               onClick={() => setActiveTab(tab.key)}
               className={`pb-3 text-sm font-medium border-b-2 transition-colors ${
                 activeTab === tab.key
-                  ? 'border-blue-600 text-blue-600'
+                  ? 'border-primary-600 text-primary-600'
                   : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
               }`}
             >
@@ -301,244 +328,178 @@ export default function HostelRoomsPage() {
       </div>
 
       {/* ============ HOSTELS TAB ============ */}
-      {activeTab === 'hostels' && (
-        <div className="bg-white rounded-lg shadow-sm">
+      {activeTab === 'hostels' && (hostelsError ? errorBlock(hostelsError, 'Failed to load hostels') : (
+        <div className="card">
           {hostelsLoading ? (
-            <div className="text-center py-16">
+            <div className="text-center py-8">
               <LoadingState label="Loading hostels..." compact />
             </div>
           ) : hostels.length === 0 ? (
-            <div className="text-center py-16">
-              <svg className="w-12 h-12 text-gray-300 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-              </svg>
-              <p className="text-gray-500 font-medium">No hostels found</p>
-              <p className="text-gray-400 text-sm mt-1">Add your first hostel to get started.</p>
-            </div>
+            <EmptyState title="No hostels found" description="Add your first hostel to get started." />
           ) : (
             <>
-              <div className="flex justify-end p-2">
+              <div className="flex justify-end mb-3">
                 <ViewToggle view={hostelsView} onChange={setHostelsView} />
               </div>
 
               {hostelsView === 'cards' ? (
-              <CardGrid className="p-2">
-                {hostels.map((hostel) => (
-                  <RecordCard
-                    key={hostel.id}
-                    title={hostel.name}
-                    meta={
-                      <span className={`inline-flex px-2 py-0.5 rounded text-xs font-medium ${hostelTypeColors[hostel.hostel_type] || TONE.neutral}`}>
-                        {hostel.hostel_type}
-                      </span>
-                    }
-                    status={
-                      <span className={`flex-shrink-0 px-2 py-0.5 rounded text-xs font-medium whitespace-nowrap ${
-                        hostel.is_active ? TONE.success : TONE.danger
-                      }`}>
-                        {hostel.is_active ? 'Active' : 'Inactive'}
-                      </span>
-                    }
-                    fields={[
-                      { label: 'Capacity', value: hostel.capacity || 0 },
-                      { label: 'Occupancy', value: hostel.current_occupancy ?? hostel.occupancy ?? 0 },
-                      ...(hostel.warden_name ? [{ label: 'Warden', value: hostel.warden_name }] : []),
-                    ]}
-                    actions={[
-                      { label: 'View Rooms', tone: 'success', onClick: () => { setSelectedHostel(String(hostel.id)); setActiveTab('rooms') } },
-                      { label: 'Edit', tone: 'info', onClick: () => openEditHostel(hostel) },
-                      { label: 'Delete', tone: 'danger', onClick: () => openDeleteConfirm(hostel, 'hostel') },
-                    ]}
-                  />
-                ))}
-              </CardGrid>
+                <CardGrid>
+                  {hostels.map((hostel) => (
+                    <RecordCard
+                      key={hostel.id}
+                      title={hostel.name}
+                      meta={<Badge colors={HOSTEL_TYPE_COLORS[hostel.hostel_type] || TONE.neutral}>{hostelTypeLabel(hostel.hostel_type)}</Badge>}
+                      status={<Badge tone={hostel.is_active ? 'success' : 'danger'}>{hostel.is_active ? 'Active' : 'Inactive'}</Badge>}
+                      fields={[
+                        { label: 'Capacity', value: hostel.capacity || 0 },
+                        { label: 'Occupancy', value: hostel.current_occupancy ?? 0 },
+                        { label: 'Rooms', value: hostel.rooms_count ?? 0 },
+                        ...(hostel.warden_name ? [{ label: 'Warden', value: hostel.warden_name }] : []),
+                      ]}
+                      actions={[
+                        { label: 'View Rooms', tone: 'success', onClick: () => showRooms(hostel) },
+                        { label: 'Edit', tone: 'info', onClick: () => openEditHostel(hostel) },
+                        { label: 'Delete', tone: 'danger', onClick: () => openDeleteConfirm(hostel, 'hostel') },
+                      ]}
+                    />
+                  ))}
+                </CardGrid>
               ) : (
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
-                      <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Capacity</th>
-                      <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Occupancy</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Warden</th>
-                      <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Status</th>
-                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {hostels.map((hostel) => (
-                      <tr key={hostel.id} className="hover:bg-gray-50">
-                        <td className="px-4 py-3 text-sm font-medium text-gray-900">{hostel.name}</td>
-                        <td className="px-4 py-3">
-                          <span className={`inline-flex px-2 py-0.5 rounded text-xs font-medium ${hostelTypeColors[hostel.hostel_type] || TONE.neutral}`}>
-                            {hostel.hostel_type}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 text-sm text-center text-gray-700">{hostel.capacity || 0}</td>
-                        <td className="px-4 py-3 text-sm text-center text-gray-700">{hostel.current_occupancy ?? hostel.occupancy ?? 0}</td>
-                        <td className="px-4 py-3 text-sm text-gray-500">{hostel.warden_name || '-'}</td>
-                        <td className="px-4 py-3 text-center">
-                          <span className={`inline-flex px-2 py-0.5 rounded text-xs font-medium ${
-                            hostel.is_active ? TONE.success : TONE.danger
-                          }`}>
-                            {hostel.is_active ? 'Active' : 'Inactive'}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 text-right whitespace-nowrap">
-                          <button
-                            onClick={() => { setSelectedHostel(String(hostel.id)); setActiveTab('rooms') }}
-                            className="text-sm text-green-600 hover:text-green-800 font-medium mr-3"
-                          >
-                            Rooms
-                          </button>
-                          <button
-                            onClick={() => openEditHostel(hostel)}
-                            className="text-sm text-blue-600 hover:text-blue-800 font-medium mr-3"
-                          >
-                            Edit
-                          </button>
-                          <button
-                            onClick={() => openDeleteConfirm(hostel, 'hostel')}
-                            className="text-sm text-red-600 hover:text-red-800 font-medium"
-                          >
-                            Delete
-                          </button>
-                        </td>
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
+                        <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Occupancy</th>
+                        <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Rooms</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Warden</th>
+                        <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Status</th>
+                        <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {hostels.map((hostel) => (
+                        <tr key={hostel.id} className="hover:bg-gray-50">
+                          <td className="px-4 py-3 text-sm font-medium text-gray-900">{hostel.name}</td>
+                          <td className="px-4 py-3">
+                            <Badge colors={HOSTEL_TYPE_COLORS[hostel.hostel_type] || TONE.neutral}>{hostelTypeLabel(hostel.hostel_type)}</Badge>
+                          </td>
+                          <td className="px-4 py-3 text-sm text-center text-gray-700">{hostel.current_occupancy ?? 0} / {hostel.capacity || 0}</td>
+                          <td className="px-4 py-3 text-sm text-center text-gray-700">{hostel.rooms_count ?? 0}</td>
+                          <td className="px-4 py-3 text-sm text-gray-500">{hostel.warden_name || '--'}</td>
+                          <td className="px-4 py-3 text-center">
+                            <Badge tone={hostel.is_active ? 'success' : 'danger'}>{hostel.is_active ? 'Active' : 'Inactive'}</Badge>
+                          </td>
+                          <td className="px-4 py-3 text-right whitespace-nowrap">
+                            <button onClick={() => showRooms(hostel)} className="text-sm text-green-600 hover:text-green-800 font-medium mr-3">Rooms</button>
+                            <button onClick={() => openEditHostel(hostel)} className="text-sm text-blue-600 hover:text-blue-800 font-medium mr-3">Edit</button>
+                            <button onClick={() => openDeleteConfirm(hostel, 'hostel')} className="text-sm text-red-600 hover:text-red-800 font-medium">Delete</button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               )}
             </>
           )}
         </div>
-      )}
+      ))}
 
       {/* ============ ROOMS TAB ============ */}
       {activeTab === 'rooms' && (
         <div className="space-y-4">
-          {/* Hostel filter */}
-          <div className="bg-white rounded-lg shadow-sm p-4">
-            <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Select Hostel</label>
-            <select
-              className="w-full sm:w-64 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              value={selectedHostel}
-              onChange={(e) => setSelectedHostel(e.target.value)}
-            >
-              <option value="">-- Select Hostel --</option>
-              {hostels.map((h) => (
-                <option key={h.id} value={h.id}>{h.name}</option>
-              ))}
-            </select>
+          <div className="card">
+            <Field label="Select Hostel" className="sm:w-64">
+              <select
+                className="input"
+                value={selectedHostel}
+                onChange={(e) => setSelectedHostel(e.target.value)}
+              >
+                <option value="">-- Select Hostel --</option>
+                {hostels.map((h) => (
+                  <option key={h.id} value={h.id}>{h.name}</option>
+                ))}
+              </select>
+            </Field>
           </div>
 
           {!selectedHostel ? (
-            <div className="bg-white rounded-lg shadow-sm text-center py-16">
-              <svg className="w-12 h-12 text-gray-300 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-              </svg>
-              <p className="text-gray-500 font-medium">Select a hostel to view rooms</p>
-              <p className="text-gray-400 text-sm mt-1">Choose a hostel from the dropdown above.</p>
+            <div className="card">
+              <EmptyState title="Select a hostel to view rooms" description="Choose a hostel from the dropdown above." />
             </div>
-          ) : (
-            <div className="bg-white rounded-lg shadow-sm">
+          ) : roomsError ? errorBlock(roomsError, 'Failed to load rooms') : (
+            <div className="card">
               {roomsLoading ? (
-                <div className="text-center py-16">
+                <div className="text-center py-8">
                   <LoadingState label="Loading rooms..." compact />
                 </div>
               ) : rooms.length === 0 ? (
-                <div className="text-center py-16">
-                  <svg className="w-12 h-12 text-gray-300 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
-                  </svg>
-                  <p className="text-gray-500 font-medium">No rooms found</p>
-                  <p className="text-gray-400 text-sm mt-1">Add rooms to this hostel to get started.</p>
-                </div>
+                <EmptyState title="No rooms found" description="Add rooms to this hostel to get started." />
               ) : (
                 <>
-                  <div className="flex justify-end p-2">
+                  <div className="flex justify-end mb-3">
                     <ViewToggle view={roomsView} onChange={setRoomsView} />
                   </div>
 
                   {roomsView === 'cards' ? (
-                  <CardGrid className="p-2">
-                    {rooms.map((room) => (
-                      <RecordCard
-                        key={room.id}
-                        title={`Room ${room.room_number}`}
-                        meta={`Floor ${room.floor} · ${room.room_type}`}
-                        status={
-                          <span className={`flex-shrink-0 px-2 py-0.5 rounded text-xs font-medium whitespace-nowrap ${
-                            room.is_available ? TONE.success : TONE.danger
-                          }`}>
-                            {room.is_available ? 'Available' : 'Full'}
-                          </span>
-                        }
-                        fields={[
-                          { label: 'Capacity', value: room.capacity },
-                          { label: 'Occupancy', value: room.current_occupancy ?? room.occupancy ?? 0 },
-                        ]}
-                        actions={[
-                          { label: 'Edit', tone: 'info', onClick: () => openEditRoom(room) },
-                          { label: 'Delete', tone: 'danger', onClick: () => openDeleteConfirm(room, 'room') },
-                        ]}
-                      />
-                    ))}
-                  </CardGrid>
+                    <CardGrid>
+                      {rooms.map((room) => {
+                        const state = roomStatus(room)
+                        return (
+                          <RecordCard
+                            key={room.id}
+                            title={`Room ${room.room_number}`}
+                            meta={`Floor ${room.floor} · ${roomTypeLabel(room.room_type)}`}
+                            status={<Badge colors={state.colors}>{state.label}</Badge>}
+                            fields={[
+                              { label: 'Capacity', value: room.capacity },
+                              { label: 'Occupancy', value: room.current_occupancy ?? 0 },
+                            ]}
+                            actions={[
+                              { label: 'Edit', tone: 'info', onClick: () => openEditRoom(room) },
+                              { label: 'Delete', tone: 'danger', onClick: () => openDeleteConfirm(room, 'room') },
+                            ]}
+                          />
+                        )
+                      })}
+                    </CardGrid>
                   ) : (
-                  <div className="overflow-x-auto">
-                    <table className="min-w-full divide-y divide-gray-200">
-                      <thead className="bg-gray-50">
-                        <tr>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Room Number</th>
-                          <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Floor</th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
-                          <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Capacity</th>
-                          <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Occupancy</th>
-                          <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Availability</th>
-                          <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-100">
-                        {rooms.map((room) => (
-                          <tr key={room.id} className="hover:bg-gray-50">
-                            <td className="px-4 py-3 text-sm font-medium text-gray-900">{room.room_number}</td>
-                            <td className="px-4 py-3 text-sm text-center text-gray-700">{room.floor}</td>
-                            <td className="px-4 py-3">
-                              <Badge tone="neutral">
-                                {room.room_type}
-                              </Badge>
-                            </td>
-                            <td className="px-4 py-3 text-sm text-center text-gray-700">{room.capacity}</td>
-                            <td className="px-4 py-3 text-sm text-center text-gray-700">{room.current_occupancy ?? room.occupancy ?? 0}</td>
-                            <td className="px-4 py-3 text-center">
-                              <span className={`inline-flex px-2 py-0.5 rounded text-xs font-medium ${
-                                room.is_available ? TONE.success : TONE.danger
-                              }`}>
-                                {room.is_available ? 'Available' : 'Full'}
-                              </span>
-                            </td>
-                            <td className="px-4 py-3 text-right whitespace-nowrap">
-                              <button
-                                onClick={() => openEditRoom(room)}
-                                className="text-sm text-blue-600 hover:text-blue-800 font-medium mr-3"
-                              >
-                                Edit
-                              </button>
-                              <button
-                                onClick={() => openDeleteConfirm(room, 'room')}
-                                className="text-sm text-red-600 hover:text-red-800 font-medium"
-                              >
-                                Delete
-                              </button>
-                            </td>
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full divide-y divide-gray-200">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Room Number</th>
+                            <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Floor</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
+                            <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Capacity</th>
+                            <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Occupancy</th>
+                            <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Availability</th>
+                            <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100">
+                          {rooms.map((room) => {
+                            const state = roomStatus(room)
+                            return (
+                              <tr key={room.id} className="hover:bg-gray-50">
+                                <td className="px-4 py-3 text-sm font-medium text-gray-900">{room.room_number}</td>
+                                <td className="px-4 py-3 text-sm text-center text-gray-700">{room.floor}</td>
+                                <td className="px-4 py-3"><Badge tone="neutral">{roomTypeLabel(room.room_type)}</Badge></td>
+                                <td className="px-4 py-3 text-sm text-center text-gray-700">{room.capacity}</td>
+                                <td className="px-4 py-3 text-sm text-center text-gray-700">{room.current_occupancy ?? 0}</td>
+                                <td className="px-4 py-3 text-center"><Badge colors={state.colors}>{state.label}</Badge></td>
+                                <td className="px-4 py-3 text-right whitespace-nowrap">
+                                  <button onClick={() => openEditRoom(room)} className="text-sm text-blue-600 hover:text-blue-800 font-medium mr-3">Edit</button>
+                                  <button onClick={() => openDeleteConfirm(room, 'room')} className="text-sm text-red-600 hover:text-red-800 font-medium">Delete</button>
+                                </td>
+                              </tr>
+                            )
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
                   )}
                 </>
               )}
@@ -549,261 +510,234 @@ export default function HostelRoomsPage() {
 
       {/* ============ Add/Edit Hostel Modal ============ */}
       {showHostelModal && (
-        <Modal open  size="lg" closeOnBackdrop={false}>
-            <h2 className="text-xl font-bold text-gray-900 mb-4">
-              {editingHostel ? 'Edit Hostel' : 'Add Hostel'}
-            </h2>
+        <Modal open size="lg" closeOnBackdrop={false}>
+          <h2 className="text-xl font-bold text-gray-900 mb-4">
+            {editingHostel ? 'Edit Hostel' : 'Add Hostel'}
+          </h2>
+
+          <form onSubmit={handleHostelSubmit} className="space-y-4">
+            <Field label="Hostel Name" required>
+              <input
+                type="text"
+                required
+                className="input"
+                placeholder="e.g. Al-Falah Boys Hostel"
+                value={hostelForm.name}
+                onChange={(e) => setHostelForm({ ...hostelForm, name: e.target.value })}
+              />
+            </Field>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <Field label="Hostel Type" required>
+                <select
+                  required
+                  className="input"
+                  value={hostelForm.hostel_type}
+                  onChange={(e) => setHostelForm({ ...hostelForm, hostel_type: e.target.value })}
+                >
+                  {HOSTEL_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+                </select>
+              </Field>
+              <Field label="Capacity" required>
+                <input
+                  type="number"
+                  min="1"
+                  required
+                  className="input"
+                  placeholder="e.g. 40"
+                  value={hostelForm.capacity}
+                  onChange={(e) => setHostelForm({ ...hostelForm, capacity: e.target.value })}
+                />
+              </Field>
+            </div>
+
+            <Field label="Address">
+              <textarea
+                rows={2}
+                className="input"
+                value={hostelForm.address}
+                onChange={(e) => setHostelForm({ ...hostelForm, address: e.target.value })}
+              />
+            </Field>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <Field label="Contact Number">
+                <input
+                  type="text"
+                  className="input"
+                  placeholder="0300-1234567"
+                  value={hostelForm.contact_number}
+                  onChange={(e) => setHostelForm({ ...hostelForm, contact_number: e.target.value })}
+                />
+              </Field>
+              <Field label="Warden">
+                <select
+                  className="input"
+                  value={hostelForm.warden}
+                  onChange={(e) => setHostelForm({ ...hostelForm, warden: e.target.value })}
+                >
+                  <option value="">-- No Warden --</option>
+                  {staff.map((m) => (
+                    <option key={m.id} value={m.id}>{m.full_name}</option>
+                  ))}
+                </select>
+              </Field>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="hostel_active"
+                className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                checked={hostelForm.is_active}
+                onChange={(e) => setHostelForm({ ...hostelForm, is_active: e.target.checked })}
+              />
+              <label htmlFor="hostel_active" className="text-sm text-gray-700">Active</label>
+            </div>
 
             {hostelMutationError && (
-              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
-                {hostelMutationError.response?.data?.detail || hostelMutationError.message || 'An error occurred.'}
+              <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+                {getErrorMessage(hostelMutationError, 'Failed to save hostel. Please try again.')}
               </div>
             )}
 
-            <form onSubmit={handleHostelSubmit} className="space-y-4">
-              <div>
-                <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Hostel Name *</label>
-                <input
-                  type="text"
-                  required
-                  className="input"
-                  value={hostelForm.name}
-                  onChange={(e) => setHostelForm({ ...hostelForm, name: e.target.value })}
-                />
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Hostel Type *</label>
-                  <select
-                    required
-                    className="input"
-                    value={hostelForm.hostel_type}
-                    onChange={(e) => setHostelForm({ ...hostelForm, hostel_type: e.target.value })}
-                  >
-                    <option value="BOYS">Boys</option>
-                    <option value="GIRLS">Girls</option>
-                    <option value="MIXED">Mixed</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Capacity *</label>
-                  <input
-                    type="number"
-                    min="1"
-                    required
-                    className="input"
-                    value={hostelForm.capacity}
-                    onChange={(e) => setHostelForm({ ...hostelForm, capacity: e.target.value })}
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Address</label>
-                <textarea
-                  rows={2}
-                  className="input"
-                  value={hostelForm.address}
-                  onChange={(e) => setHostelForm({ ...hostelForm, address: e.target.value })}
-                />
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Contact Number</label>
-                  <input
-                    type="text"
-                    className="input"
-                    value={hostelForm.contact_number}
-                    onChange={(e) => setHostelForm({ ...hostelForm, contact_number: e.target.value })}
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Warden (Staff ID)</label>
-                  <input
-                    type="text"
-                    className="input"
-                    placeholder="Optional"
-                    value={hostelForm.warden}
-                    onChange={(e) => setHostelForm({ ...hostelForm, warden: e.target.value })}
-                  />
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  id="hostel_active"
-                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                  checked={hostelForm.is_active}
-                  onChange={(e) => setHostelForm({ ...hostelForm, is_active: e.target.checked })}
-                />
-                <label htmlFor="hostel_active" className="text-sm text-gray-700">Active</label>
-              </div>
-
-              <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
-                <Button variant="secondary"
- type="button"
- onClick={closeHostelModal}>
-                  Cancel
-                </Button>
-                <button
-                  type="submit"
-                  disabled={hostelMutationPending}
-                  className="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {hostelMutationPending ? 'Saving...' : (editingHostel ? 'Save Changes' : 'Add Hostel')}
-                </button>
-              </div>
-            </form>
-          </Modal>
+            <div className="flex justify-end space-x-3 pt-4 border-t border-gray-200">
+              <button type="button" onClick={closeHostelModal} className="btn btn-secondary">Cancel</button>
+              <button type="submit" disabled={hostelMutationPending} className="btn btn-primary">
+                {hostelMutationPending ? 'Saving...' : (editingHostel ? 'Save Changes' : 'Add Hostel')}
+              </button>
+            </div>
+          </form>
+        </Modal>
       )}
 
       {/* ============ Add/Edit Room Modal ============ */}
       {showRoomModal && (
-        <Modal open  size="lg" closeOnBackdrop={false}>
-            <h2 className="text-xl font-bold text-gray-900 mb-4">
-              {editingRoom ? 'Edit Room' : 'Add Room'}
-            </h2>
+        <Modal open size="lg" closeOnBackdrop={false}>
+          <h2 className="text-xl font-bold text-gray-900 mb-4">
+            {editingRoom ? 'Edit Room' : 'Add Room'}
+          </h2>
 
-            {roomMutationError && (
-              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
-                {roomMutationError.response?.data?.detail || roomMutationError.message || 'An error occurred.'}
-              </div>
-            )}
+          <form onSubmit={handleRoomSubmit} className="space-y-4">
+            <Field label="Hostel" required>
+              <select
+                required
+                className="input"
+                value={roomForm.hostel}
+                onChange={(e) => setRoomForm({ ...roomForm, hostel: e.target.value })}
+              >
+                <option value="">-- Select Hostel --</option>
+                {hostels.map((h) => (
+                  <option key={h.id} value={h.id}>{h.name}</option>
+                ))}
+              </select>
+            </Field>
 
-            <form onSubmit={handleRoomSubmit} className="space-y-4">
-              <div>
-                <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Hostel *</label>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <Field label="Room Number" required>
+                <input
+                  type="text"
+                  required
+                  className="input"
+                  placeholder="e.g. 101"
+                  value={roomForm.room_number}
+                  onChange={(e) => setRoomForm({ ...roomForm, room_number: e.target.value })}
+                />
+              </Field>
+              <Field label="Floor" required>
+                <input
+                  type="number"
+                  min="0"
+                  required
+                  className="input"
+                  placeholder="e.g. 1"
+                  value={roomForm.floor}
+                  onChange={(e) => setRoomForm({ ...roomForm, floor: e.target.value })}
+                />
+              </Field>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <Field label="Room Type" required>
                 <select
                   required
                   className="input"
-                  value={roomForm.hostel}
-                  onChange={(e) => setRoomForm({ ...roomForm, hostel: e.target.value })}
+                  value={roomForm.room_type}
+                  onChange={(e) => setRoomForm({ ...roomForm, room_type: e.target.value })}
                 >
-                  <option value="">-- Select Hostel --</option>
-                  {hostels.map((h) => (
-                    <option key={h.id} value={h.id}>{h.name}</option>
-                  ))}
+                  {ROOM_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
                 </select>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Room Number *</label>
-                  <input
-                    type="text"
-                    required
-                    className="input"
-                    placeholder="e.g. 101"
-                    value={roomForm.room_number}
-                    onChange={(e) => setRoomForm({ ...roomForm, room_number: e.target.value })}
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Floor *</label>
-                  <input
-                    type="number"
-                    min="0"
-                    required
-                    className="input"
-                    value={roomForm.floor}
-                    onChange={(e) => setRoomForm({ ...roomForm, floor: e.target.value })}
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Room Type *</label>
-                  <select
-                    required
-                    className="input"
-                    value={roomForm.room_type}
-                    onChange={(e) => setRoomForm({ ...roomForm, room_type: e.target.value })}
-                  >
-                    <option value="SINGLE">Single</option>
-                    <option value="DOUBLE">Double</option>
-                    <option value="TRIPLE">Triple</option>
-                    <option value="SHARED">Shared</option>
-                    <option value="DORMITORY">Dormitory</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Capacity *</label>
-                  <input
-                    type="number"
-                    min="1"
-                    required
-                    className="input"
-                    value={roomForm.capacity}
-                    onChange={(e) => setRoomForm({ ...roomForm, capacity: e.target.value })}
-                  />
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2">
+              </Field>
+              <Field label="Capacity" required>
                 <input
-                  type="checkbox"
-                  id="room_available"
-                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                  checked={roomForm.is_available}
-                  onChange={(e) => setRoomForm({ ...roomForm, is_available: e.target.checked })}
+                  type="number"
+                  min="1"
+                  required
+                  className="input"
+                  placeholder="e.g. 2"
+                  value={roomForm.capacity}
+                  onChange={(e) => setRoomForm({ ...roomForm, capacity: e.target.value })}
                 />
-                <label htmlFor="room_available" className="text-sm text-gray-700">Available</label>
-              </div>
+              </Field>
+            </div>
 
-              <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
-                <Button variant="secondary"
- type="button"
- onClick={closeRoomModal}>
-                  Cancel
-                </Button>
-                <button
-                  type="submit"
-                  disabled={roomMutationPending}
-                  className="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {roomMutationPending ? 'Saving...' : (editingRoom ? 'Save Changes' : 'Add Room')}
-                </button>
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="room_available"
+                className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                checked={roomForm.is_available}
+                onChange={(e) => setRoomForm({ ...roomForm, is_available: e.target.checked })}
+              />
+              <label htmlFor="room_available" className="text-sm text-gray-700">Available for allocation</label>
+            </div>
+
+            {roomMutationError && (
+              <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+                {getErrorMessage(roomMutationError, 'Failed to save room. Please try again.')}
               </div>
-            </form>
-          </Modal>
+            )}
+
+            <div className="flex justify-end space-x-3 pt-4 border-t border-gray-200">
+              <button type="button" onClick={closeRoomModal} className="btn btn-secondary">Cancel</button>
+              <button type="submit" disabled={roomMutationPending} className="btn btn-primary">
+                {roomMutationPending ? 'Saving...' : (editingRoom ? 'Save Changes' : 'Add Room')}
+              </button>
+            </div>
+          </form>
+        </Modal>
       )}
 
       {/* ============ Delete Confirmation Modal ============ */}
       {deleteConfirm && (
-        <Modal open  size="sm" closeOnBackdrop={false}>
-            <h2 className="text-xl font-bold text-gray-900 mb-2">
-              Delete {deleteType === 'hostel' ? 'Hostel' : 'Room'}
-            </h2>
-            <p className="text-gray-600 mb-6">
-              Are you sure you want to delete{' '}
-              <strong>{deleteType === 'hostel' ? deleteConfirm.name : `Room ${deleteConfirm.room_number}`}</strong>?
-              This action cannot be undone.
-            </p>
+        <Modal open size="sm" closeOnBackdrop={false}>
+          <h2 className="text-xl font-bold text-gray-900 mb-2">
+            Delete {deleteType === 'hostel' ? 'Hostel' : 'Room'}
+          </h2>
+          <p className="text-gray-600 mb-2">
+            Are you sure you want to delete{' '}
+            <strong>{deleteType === 'hostel' ? deleteConfirm.name : `Room ${deleteConfirm.room_number}`}</strong>?
+            This action cannot be undone.
+          </p>
+          <p className="text-sm text-gray-500 mb-6">
+            {deleteType === 'hostel'
+              ? 'A hostel with student records cannot be deleted; mark it Inactive instead.'
+              : 'A room with student records cannot be deleted; mark it unavailable instead.'}
+          </p>
 
-            {deleteError && (
-              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
-                {deleteError.response?.data?.detail || deleteError.message || 'Failed to delete.'}
-              </div>
-            )}
-
-            <div className="flex justify-end gap-3">
-              <Button variant="secondary"
- onClick={() => { setDeleteConfirm(null); setDeleteType(null) }}>
-                Cancel
-              </Button>
-              <button
-                onClick={handleDelete}
-                disabled={deletePending}
-                className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {deletePending ? 'Deleting...' : 'Delete'}
-              </button>
+          {deleteError && (
+            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+              {getErrorMessage(deleteError, 'Failed to delete.')}
             </div>
-          </Modal>
+          )}
+
+          <div className="flex justify-end space-x-3">
+            <button onClick={closeDeleteConfirm} className="btn btn-secondary">Cancel</button>
+            <button onClick={handleDelete} disabled={deletePending} className="btn btn-danger">
+              {deletePending ? 'Deleting...' : 'Delete'}
+            </button>
+          </div>
+        </Modal>
       )}
     </div>
   )

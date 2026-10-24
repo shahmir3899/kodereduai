@@ -5,7 +5,7 @@ from datetime import date
 from decimal import Decimal
 from core.cache_utils import cached_api
 from django.db import IntegrityError, transaction
-from django.db.models import Case, Count, IntegerField, OuterRef, Q, Subquery, When
+from django.db.models import Case, Count, DateField, IntegerField, OuterRef, Q, Subquery, Value, When
 from django.db.models.functions import Coalesce
 from django.http import HttpResponse
 from django.utils import timezone
@@ -88,16 +88,26 @@ def _annotate_marks_completion(qs):
     second Count() over a different join (exam_subjects -> student_marks) on the same
     query would cross-multiply with that join and inflate both counts.
 
-    - enrolled_count: actively-enrolled students in this exam's (school, class, year).
-      Assumes every enrolled student sits every subject of the exam (no per-subject
-      roster), matching StudentMarkCreateSerializer._resolve_enrollment's lookup.
+    - enrolled_count: actively-enrolled students in this exam's (school, class, year)
+      who were admitted by the exam's last day. Assumes every enrolled student sits
+      every subject of the exam (no per-subject roster), matching
+      StudentMarkCreateSerializer._resolve_enrollment's lookup. Admission bound only:
+      a student who left mid-exam can't have marks entered (see _departed_mark_errors),
+      so counting them would block Announce Results for good.
     - marks_entered_count: StudentMark rows across this exam's active subjects that
       have a value (marks_obtained set, or explicitly marked absent) -- a row with
       neither means "not entered yet".
     """
     from academic_sessions.models import StudentEnrollment
 
+    # No exam dates at all means no admission bound (the far-future fallback).
+    exam_last_day = Coalesce(
+        OuterRef('end_date'), OuterRef('start_date'), Value(date.max), output_field=DateField(),
+    )
+    admitted = Q(student__admission_date__isnull=True) | Q(student__admission_date__lte=exam_last_day)
+
     class_enrolled = StudentEnrollment.objects.filter(
+        admitted,
         school_id=OuterRef('school_id'),
         class_obj_id=OuterRef('class_obj_id'),
         academic_year_id=OuterRef('academic_year_id'),
@@ -105,6 +115,7 @@ def _annotate_marks_completion(qs):
     ).order_by().values('class_obj_id').annotate(c=Count('id')).values('c')
     # A section exam expects marks only from its section's students.
     section_enrolled = StudentEnrollment.objects.filter(
+        admitted,
         session_class_id=OuterRef('session_class_id'),
         is_active=True,
     ).order_by().values('session_class_id').annotate(c=Count('id')).values('c')
@@ -275,7 +286,8 @@ def _can_manage_exam_scope(request, class_id=None, subject_id=None, school_id=No
     )
 
 
-def _class_roster(school_id, class_obj_id, academic_year_id, as_of_date=None, session_class_id=None):
+def _class_roster(school_id, class_obj_id, academic_year_id, as_of_date=None, session_class_id=None,
+                  admitted_by_date=None):
     """Students to show for a given (class, academic year) -- shared by the exam
     results/class-summary endpoints and the single-student report card's
     classmate stats (rank, class average).
@@ -297,10 +309,28 @@ def _class_roster(school_id, class_obj_id, academic_year_id, as_of_date=None, se
     master class, so without it two sections sharing a master class (e.g.
     "Class 2 - A"/"Class 2 - B") were ranked and averaged as one class.
 
+    `admitted_by_date` (typically the exam's last day) leaves out students admitted
+    after it: they could not have sat the exam, and as blank rows they dragged
+    down the class average and ranks.
+
     Falls back to the current class roster when this (class, year) has no
     enrollment rows at all (legacy data predating StudentEnrollment).
     Returns (students, {student_id: that year's roll_number}).
     """
+    students, roll_by_student = _class_roster_unbounded(
+        school_id, class_obj_id, academic_year_id, as_of_date, session_class_id,
+    )
+    if admitted_by_date and students:
+        from academic_sessions.leaving import not_yet_admitted
+
+        early = not_yet_admitted(school_id, [s.id for s in students], admitted_by_date)
+        if early:
+            students = [s for s in students if s.id not in early]
+            roll_by_student = {sid: roll for sid, roll in roll_by_student.items() if sid not in early}
+    return students, roll_by_student
+
+
+def _class_roster_unbounded(school_id, class_obj_id, academic_year_id, as_of_date, session_class_id):
     from students.models import Student
     from academic_sessions.roster import enrollments_in_scope
 
@@ -362,6 +392,7 @@ def _exam_roster(school_id, exam, session_class_id=None, for_entry=False):
         school_id, exam.class_obj_id, exam.academic_year_id,
         as_of_date=exam.start_date or exam.end_date,
         session_class_id=exam.session_class_id or session_class_id,
+        admitted_by_date=exam.end_date or exam.start_date,
     )
     from academic_sessions.leaving import departed_in_year
 
@@ -387,18 +418,28 @@ def _exam_roster(school_id, exam, session_class_id=None, for_entry=False):
 
 def _departed_mark_errors(school_id, exam, student_ids):
     """{student_id: message} for students marks can't be saved for: they
-    withdrew or transferred out during the exam's year."""
-    from academic_sessions.leaving import departed_in_year, departed_message
+    withdrew or transferred out during the exam's year, or were admitted after
+    the exam's last day."""
+    from academic_sessions.leaving import admitted_message, departed_in_year, departed_message, not_yet_admitted
     from students.models import Student
 
     departed = departed_in_year(school_id, student_ids, exam.academic_year_id)
-    if not departed:
+    last_day = exam.end_date or exam.start_date
+    early = {
+        sid: adm for sid, adm in not_yet_admitted(school_id, student_ids, last_day).items() if sid not in departed
+    }
+    if not departed and not early:
         return {}
-    names = dict(Student.objects.filter(id__in=departed).values_list('id', 'name'))
-    return {
+    names = dict(Student.objects.filter(id__in=[*departed, *early]).values_list('id', 'name'))
+    errors = {
         sid: departed_message(names.get(sid, 'This student'), status, left)
         for sid, (status, left) in departed.items()
     }
+    errors.update({
+        sid: admitted_message(names.get(sid, 'This student'), adm, what='marks')
+        for sid, adm in early.items()
+    })
+    return errors
 
 
 def _exam_section_param(request, school_id, exam):
@@ -3295,6 +3336,7 @@ class ReportCardView(ModuleAccessMixin, APIView):
             school_id, enrollment.class_obj_id, enrollment.academic_year_id,
             as_of_date=(main_exam.start_date or main_exam.end_date) if main_exam else None,
             session_class_id=enrollment.session_class_id,
+            admitted_by_date=(main_exam.end_date or main_exam.start_date) if main_exam else None,
         )
         class_marks = StudentMark.objects.filter(exam_subject__in=all_exam_subjects, school_id=school_id)
         marks_by_key = {(m.student_id, m.exam_subject_id): m for m in class_marks}

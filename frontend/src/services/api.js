@@ -1284,13 +1284,14 @@ export const libraryApi = {
   // Book Issues
   getIssues: (params) => api.get('/api/library/issues/', { params }),
   createIssue: (data) => api.post('/api/library/issues/', data),
-  returnBook: (id, data) => api.post(`/api/library/issues/${id}/return/`, data),
+  returnBook: (id, data) => api.post(`/api/library/issues/${id}/return_book/`, data),
 
   // Overdue
   getOverdueBooks: (params) => api.get('/api/library/issues/overdue/', { params }),
 
   // Fine configuration
   getFineConfig: () => api.get('/api/library/config/'),
+  updateFineConfig: (data) => api.patch('/api/library/config/', data),
 
   // Search helpers
   searchStudents: (params) => api.get('/api/students/', { params }),

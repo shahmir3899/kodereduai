@@ -200,7 +200,7 @@ class TestBooks:
             'available_copies': 1,
         }, seed_data['tokens']['admin'], seed_data['SID_A'])
 
-        resp = api.get('/api/library/books/search/?q=Physics', seed_data['tokens']['admin'], seed_data['SID_A'])
+        resp = api.get('/api/library/books/?search=Physics', seed_data['tokens']['admin'], seed_data['SID_A'])
         assert resp.status_code == 200, f"Expected 200, got {resp.status_code}"
 
     def test_b6_retrieve_single_book(self, seed_data, api, category_for_books):

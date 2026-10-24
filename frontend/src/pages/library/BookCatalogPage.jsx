@@ -1,273 +1,230 @@
 import { useState } from 'react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import Modal from '../../components/ui/Modal'
-import { TONE } from '../../components/ui/statusTones'
 import Button from '../../components/ui/Button'
+import Badge from '../../components/ui/Badge'
+import Field from '../../components/ui/Field'
 import PageHeader from '../../components/ui/PageHeader'
 import LoadingState from '../../components/ui/LoadingState'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import EmptyState from '../../components/ui/EmptyState'
+import ErrorState from '../../components/ui/ErrorState'
 import { libraryApi } from '../../services/api'
 import { useAuth } from '../../contexts/AuthContext'
+import { useToast } from '../../components/Toast'
+import { getErrorMessage } from '../../utils/errorUtils'
 import { useDebounce } from '../../hooks/useDebounce'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
 import { RecordCard, CardGrid, ViewToggle } from '../../components/cards'
 import { useViewPreference } from '../../hooks/useViewPreference'
+import IssueFields, { issuePayload } from './IssueFields'
+import { canManageLibrary, defaultDueDate, listOf } from './libraryUtils'
 
 const emptyBookForm = {
-  title: '',
-  author: '',
-  isbn: '',
-  publisher: '',
-  category: '',
-  total_copies: 1,
-  shelf_location: '',
+  title: '', author: '', isbn: '', publisher: '', category: '',
+  total_copies: 1, shelf_location: '', is_active: true,
 }
 
-const emptyCategoryForm = {
-  name: '',
-  description: '',
+const emptyIssueForm = (loanDays = 14) => ({
+  borrower_type: 'STUDENT', borrower: null, due_date: defaultDueDate(loanDays), notes: '', borrowerQuery: '',
+})
+
+function ErrorBanner({ error, fallback }) {
+  if (!error) return null
+  return (
+    <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+      {getErrorMessage(error, fallback)}
+    </div>
+  )
+}
+
+function AvailabilityBadge({ book }) {
+  if (!book.is_active) return <Badge tone="neutral">Inactive</Badge>
+  return <Badge tone={book.available_copies > 0 ? 'success' : 'danger'}>{book.available_copies} avail.</Badge>
 }
 
 export default function BookCatalogPage() {
-  const { user } = useAuth()
+  const { effectiveRole } = useAuth()
+  const canManage = canManageLibrary(effectiveRole)
   const queryClient = useQueryClient()
+  const toast = useToast()
 
-  // Filters
   const [search, setSearch] = useState('')
   const debouncedSearch = useDebounce(search, 300)
   const [categoryFilter, setCategoryFilter] = useState('')
-
-  // Book modal
   const [view, setView] = useViewPreference('book-catalog')
+
   const [showBookModal, setShowBookModal] = useState(false)
   const [editingBook, setEditingBook] = useState(null)
   const [bookForm, setBookForm] = useState(emptyBookForm)
 
-  // Category modal
-  const [showCategoryModal, setShowCategoryModal] = useState(false)
+  const [showCategories, setShowCategories] = useState(false)
   const [editingCategory, setEditingCategory] = useState(null)
-  const [categoryForm, setCategoryForm] = useState(emptyCategoryForm)
+  const [categoryForm, setCategoryForm] = useState({ name: '', description: '' })
+  const [deleteCategory, setDeleteCategory] = useState(null)
 
-  // Delete confirmation
   const [deleteConfirm, setDeleteConfirm] = useState(null)
 
-  // Issue modal (quick issue from catalog)
-  const [showIssueModal, setShowIssueModal] = useState(false)
   const [issueBook, setIssueBook] = useState(null)
-  const [issueForm, setIssueForm] = useState({
-    borrower_type: 'STUDENT',
-    borrower_id: '',
-    due_date: '',
-    notes: '',
-  })
+  const [issueForm, setIssueForm] = useState(emptyIssueForm())
 
   // ---- Queries ----
-
-  const { data: booksData, isLoading: booksLoading } = useQuery({
+  const { data: booksData, isLoading, isError, refetch } = useQuery({
     queryKey: ['libraryBooks', debouncedSearch, categoryFilter],
     queryFn: () => libraryApi.getBooks({
       search: debouncedSearch || undefined,
       category: categoryFilter || undefined,
-      page_size: 9999,
+      page_size: 2000,
     }),
   })
 
   const { data: categoriesData } = useQuery({
     queryKey: ['libraryCategories'],
-    queryFn: () => libraryApi.getCategories({ page_size: 9999 }),
+    queryFn: () => libraryApi.getCategories({ page_size: 2000 }),
   })
 
-  const books = booksData?.data?.results || booksData?.data || []
-  const categories = categoriesData?.data?.results || categoriesData?.data || []
+  const { data: configRes } = useQuery({
+    queryKey: ['libraryConfig'],
+    queryFn: () => libraryApi.getFineConfig(),
+    enabled: canManage,
+  })
+  const loanDays = configRes?.data?.loan_period_days || 14
 
-  // ---- Book Mutations ----
+  const books = listOf(booksData)
+  const categories = listOf(categoriesData)
 
-  const createBookMutation = useMutation({
-    mutationFn: (data) => libraryApi.createBook(data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['libraryBooks'] })
-      queryClient.invalidateQueries({ queryKey: ['libraryStats'] })
+  const invalidate = (...keys) => keys.forEach((key) => queryClient.invalidateQueries({ queryKey: [key] }))
+
+  // ---- Close helpers ----
+  const closeBookModal = () => { setShowBookModal(false); setEditingBook(null); setBookForm(emptyBookForm) }
+  const closeCategories = () => { setShowCategories(false); setEditingCategory(null); setCategoryForm({ name: '', description: '' }) }
+  const closeIssueModal = () => { setIssueBook(null); setIssueForm(emptyIssueForm(loanDays)) }
+
+  useEscapeKey(closeBookModal, showBookModal)
+  useEscapeKey(closeCategories, showCategories && !deleteCategory)
+  useEscapeKey(() => setDeleteConfirm(null), !!deleteConfirm)
+  useEscapeKey(() => setDeleteCategory(null), !!deleteCategory)
+  useEscapeKey(closeIssueModal, !!issueBook)
+
+  // ---- Mutations ----
+  const saveBook = useMutation({
+    mutationFn: ({ id, data }) => (id ? libraryApi.updateBook(id, data) : libraryApi.createBook(data)),
+    onSuccess: (_res, { id }) => {
+      invalidate('libraryBooks', 'bookSearch', 'libraryStats')
+      toast.showSuccess(id ? 'Book updated' : 'Book added to the catalog')
       closeBookModal()
     },
   })
 
-  const updateBookMutation = useMutation({
-    mutationFn: ({ id, data }) => libraryApi.updateBook(id, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['libraryBooks'] })
-      queryClient.invalidateQueries({ queryKey: ['libraryStats'] })
-      closeBookModal()
-    },
-  })
-
-  const deleteBookMutation = useMutation({
+  const deleteBook = useMutation({
     mutationFn: (id) => libraryApi.deleteBook(id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['libraryBooks'] })
-      queryClient.invalidateQueries({ queryKey: ['libraryStats'] })
+      invalidate('libraryBooks', 'bookSearch', 'libraryStats')
+      toast.showSuccess('Book deleted')
       setDeleteConfirm(null)
     },
   })
 
-  // ---- Category Mutations ----
-
-  const createCategoryMutation = useMutation({
-    mutationFn: (data) => libraryApi.createCategory(data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['libraryCategories'] })
-      queryClient.invalidateQueries({ queryKey: ['libraryStats'] })
-      closeCategoryModal()
+  const saveCategory = useMutation({
+    mutationFn: ({ id, data }) => (id ? libraryApi.updateCategory(id, data) : libraryApi.createCategory(data)),
+    onSuccess: (_res, { id }) => {
+      invalidate('libraryCategories', 'libraryBooks', 'libraryStats')
+      toast.showSuccess(id ? 'Category updated' : 'Category added')
+      setEditingCategory(null)
+      setCategoryForm({ name: '', description: '' })
     },
   })
 
-  const updateCategoryMutation = useMutation({
-    mutationFn: ({ id, data }) => libraryApi.updateCategory(id, data),
+  const removeCategory = useMutation({
+    mutationFn: (id) => libraryApi.deleteCategory(id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['libraryCategories'] })
-      closeCategoryModal()
+      invalidate('libraryCategories', 'libraryBooks', 'libraryStats')
+      toast.showSuccess('Category deleted')
+      if (categoryFilter === String(deleteCategory?.id)) setCategoryFilter('')
+      setDeleteCategory(null)
     },
   })
 
-  // ---- Issue Mutation (quick issue) ----
-
-  const createIssueMutation = useMutation({
+  const issue = useMutation({
     mutationFn: (data) => libraryApi.createIssue(data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['libraryBooks'] })
-      queryClient.invalidateQueries({ queryKey: ['libraryIssues'] })
-      queryClient.invalidateQueries({ queryKey: ['libraryStats'] })
+    onSuccess: (res) => {
+      invalidate('libraryBooks', 'bookSearch', 'libraryIssues', 'libraryStats', 'libraryOverdue')
+      toast.showSuccess(`Issued "${res.data.book_title}" to ${res.data.borrower_name}`)
       closeIssueModal()
     },
   })
 
-  // ---- Modal Handlers ----
-
-  const openAddBook = () => {
-    setEditingBook(null)
-    setBookForm(emptyBookForm)
-    setShowBookModal(true)
-  }
+  // ---- Handlers ----
+  const openAddBook = () => { saveBook.reset(); setEditingBook(null); setBookForm(emptyBookForm); setShowBookModal(true) }
 
   const openEditBook = (book) => {
+    saveBook.reset()
     setEditingBook(book)
     setBookForm({
       title: book.title || '',
       author: book.author || '',
       isbn: book.isbn || '',
       publisher: book.publisher || '',
-      category: book.category?.toString() || book.category_id?.toString() || '',
+      category: book.category ? String(book.category) : '',
       total_copies: book.total_copies || 1,
       shelf_location: book.shelf_location || '',
+      is_active: book.is_active,
     })
     setShowBookModal(true)
   }
 
-  const closeBookModal = () => {
-    setShowBookModal(false)
-    setEditingBook(null)
-    setBookForm(emptyBookForm)
-  }
-
-  const openAddCategory = () => {
-    setEditingCategory(null)
-    setCategoryForm(emptyCategoryForm)
-    setShowCategoryModal(true)
-  }
-
-  const openEditCategory = (cat) => {
-    setEditingCategory(cat)
-    setCategoryForm({ name: cat.name || '', description: cat.description || '' })
-    setShowCategoryModal(true)
-  }
-
-  const closeCategoryModal = () => {
-    setShowCategoryModal(false)
-    setEditingCategory(null)
-    setCategoryForm(emptyCategoryForm)
-  }
-
-  const openIssueModal = (book) => {
-    setIssueBook(book)
-    const defaultDue = new Date()
-    defaultDue.setDate(defaultDue.getDate() + 14)
-    setIssueForm({
-      borrower_type: 'STUDENT',
-      borrower_id: '',
-      due_date: defaultDue.toISOString().split('T')[0],
-      notes: '',
-    })
-    setShowIssueModal(true)
-  }
-
-  const closeIssueModal = () => {
-    setShowIssueModal(false)
-    setIssueBook(null)
-    setIssueForm({ borrower_type: 'STUDENT', borrower_id: '', due_date: '', notes: '' })
-  }
-
-  useEscapeKey(closeBookModal, showBookModal)
-  useEscapeKey(closeCategoryModal, showCategoryModal)
-  useEscapeKey(() => setDeleteConfirm(null), !!deleteConfirm)
-  useEscapeKey(closeIssueModal, showIssueModal)
-
-  // ---- Submit Handlers ----
-
-  const handleBookSubmit = (e) => {
+  const submitBook = (e) => {
     e.preventDefault()
-    const payload = {
-      ...bookForm,
-      category: bookForm.category ? parseInt(bookForm.category) : null,
-      total_copies: parseInt(bookForm.total_copies) || 1,
-    }
-    if (editingBook) {
-      updateBookMutation.mutate({ id: editingBook.id, data: payload })
-    } else {
-      createBookMutation.mutate(payload)
-    }
-  }
-
-  const handleCategorySubmit = (e) => {
-    e.preventDefault()
-    if (editingCategory) {
-      updateCategoryMutation.mutate({ id: editingCategory.id, data: categoryForm })
-    } else {
-      createCategoryMutation.mutate(categoryForm)
-    }
-  }
-
-  const handleIssueSubmit = (e) => {
-    e.preventDefault()
-    createIssueMutation.mutate({
-      book: issueBook.id,
-      borrower_type: issueForm.borrower_type,
-      // backend takes the borrower as `student` or `staff` (by borrower_type)
-      [issueForm.borrower_type === 'STAFF' ? 'staff' : 'student']: parseInt(issueForm.borrower_id),
-      due_date: issueForm.due_date,
-      notes: issueForm.notes,
+    saveBook.mutate({
+      id: editingBook?.id,
+      data: {
+        ...bookForm,
+        category: bookForm.category ? parseInt(bookForm.category, 10) : null,
+        total_copies: parseInt(bookForm.total_copies, 10) || 1,
+      },
     })
   }
 
-  const mutationError = createBookMutation.error || updateBookMutation.error
-  const bookMutationPending = createBookMutation.isPending || updateBookMutation.isPending
-  const catMutationError = createCategoryMutation.error || updateCategoryMutation.error
-  const catMutationPending = createCategoryMutation.isPending || updateCategoryMutation.isPending
+  const submitCategory = (e) => {
+    e.preventDefault()
+    saveCategory.mutate({ id: editingCategory?.id, data: categoryForm })
+  }
+
+  const openIssue = (book) => { issue.reset(); setIssueBook(book); setIssueForm(emptyIssueForm(loanDays)) }
+
+  const submitIssue = (e) => {
+    e.preventDefault()
+    if (!issueForm.borrower) return toast.showError(`Choose a ${issueForm.borrower_type === 'STAFF' ? 'staff member' : 'student'}`)
+    issue.mutate(issuePayload(issueForm, issueBook))
+  }
+
+  const setBook = (changes) => setBookForm((f) => ({ ...f, ...changes }))
+
+  const bookActions = (book) => [
+    ...(canManage && book.is_active && book.available_copies > 0 ? [{ label: 'Issue', tone: 'amber', onClick: () => openIssue(book) }] : []),
+    ...(canManage ? [
+      { label: 'Edit', tone: 'info', onClick: () => openEditBook(book) },
+      { label: 'Delete', tone: 'danger', onClick: () => { deleteBook.reset(); setDeleteConfirm(book) } },
+    ] : []),
+  ]
 
   return (
     <div>
-      {/* Header */}
-      <PageHeader title="Book Catalog" subtitle="Browse and manage your library collection" className="mb-6" actions={<>
-<Button variant="secondary" onClick={openAddCategory}>
-            Manage Categories
-          </Button>
-          <button onClick={openAddBook} className="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 transition-colors">
-            Add Book
-          </button>
-</>} />
+      <PageHeader
+        title="Book Catalog"
+        subtitle="Browse and manage your library collection"
+        className="mb-6"
+        actions={canManage ? (
+          <>
+            <Button variant="secondary" onClick={() => setShowCategories(true)}>Manage Categories</Button>
+            <Button onClick={openAddBook}>Add Book</Button>
+          </>
+        ) : null}
+      />
 
       {/* Filters */}
       <div className="bg-white rounded-lg shadow-sm p-4 mb-6">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div className="sm:col-span-2">
-            <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Search</label>
+          <Field label="Search" className="sm:col-span-2">
             <input
               type="text"
               className="input"
@@ -275,60 +232,32 @@ export default function BookCatalogPage() {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Category</label>
-            <select
-              className="input"
-              value={categoryFilter}
-              onChange={(e) => setCategoryFilter(e.target.value)}
-            >
+          </Field>
+          <Field label="Category">
+            <select className="input" value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}>
               <option value="">All Categories</option>
-              {categories.map((cat) => (
-                <option key={cat.id} value={cat.id}>{cat.name}</option>
-              ))}
+              {categories.map((cat) => <option key={cat.id} value={cat.id}>{cat.name}</option>)}
             </select>
-          </div>
+          </Field>
         </div>
       </div>
 
-      {/* Books Table */}
       <div className="bg-white rounded-lg shadow-sm">
-        {booksLoading ? (
-          <div className="text-center py-16">
-            <LoadingState label="Loading books..." compact />
-          </div>
+        {isLoading ? (
+          <LoadingState label="Loading books..." compact />
+        ) : isError ? (
+          <ErrorState message="Could not load the book catalog." onRetry={refetch} />
         ) : books.length === 0 ? (
           search || categoryFilter ? (
-            <div className="text-center py-16">
-              <p className="text-gray-500 font-medium">No books found</p>
-              <p className="text-gray-400 text-sm mt-1">Try adjusting your filters.</p>
-            </div>
+            <EmptyState title="No books found" description="Try adjusting your search or category." />
           ) : (
-            <div className="p-4 sm:p-6">
-              <div className="flex items-center gap-3 flex-wrap">
-                <div className="flex items-center gap-2 px-3 py-1.5 rounded-full text-sm bg-blue-100 text-blue-700 ring-2 ring-blue-300">
-                  <span className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold bg-blue-500 text-white">1</span>
-                  Set Up Categories
-                </div>
-                <svg className="w-4 h-4 text-gray-300 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
-                <div className="flex items-center gap-2 px-3 py-1.5 rounded-full text-sm bg-gray-100 text-gray-400">
-                  <span className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold bg-gray-300 text-white">2</span>
-                  Add Books
-                </div>
-                <svg className="w-4 h-4 text-gray-300 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
-                <div className="flex items-center gap-2 px-3 py-1.5 rounded-full text-sm bg-gray-100 text-gray-400">
-                  <span className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold bg-gray-300 text-white">3</span>
-                  Issue to Borrowers
-                </div>
-              </div>
-              <p className="text-sm text-gray-500 mt-3">No books in the catalog yet. Click "Add Book" to add your first one.</p>
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mt-3">
-                <p className="text-xs text-blue-700">
-                  <span className="font-semibold">Tip:</span> Organize your library with categories before adding books for easier browsing.
-                </p>
-              </div>
-            </div>
+            <EmptyState
+              title="No books in the catalog yet"
+              description={canManage
+                ? 'Set up a few categories first, then add your first book.'
+                : 'Books will appear here once the library adds them.'}
+              action={canManage ? <Button onClick={openAddBook}>Add Book</Button> : null}
+            />
           )
         ) : (
           <>
@@ -337,98 +266,71 @@ export default function BookCatalogPage() {
             </div>
 
             {view === 'cards' ? (
-            <CardGrid className="p-2">
-              {books.map((book) => {
-                const available = (book.available_copies ?? (book.total_copies - (book.issued_copies || 0)))
-                return (
+              <CardGrid className="p-2">
+                {books.map((book) => (
                   <RecordCard
                     key={book.id}
                     title={book.title}
                     meta={book.author}
-                    status={
-                      <span className={`flex-shrink-0 px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap ${
-                        available > 0 ? TONE.success : TONE.danger
-                      }`}>
-                        {available} avail.
-                      </span>
-                    }
+                    status={<AvailabilityBadge book={book} />}
                     fields={[
                       ...(book.isbn ? [{ label: 'ISBN', value: book.isbn, mono: true }] : []),
                       ...(book.category_name ? [{ label: 'Category', value: book.category_name }] : []),
                       ...(book.shelf_location ? [{ label: 'Shelf', value: book.shelf_location }] : []),
                     ]}
-                    actions={[
-                      ...(available > 0 ? [{ label: 'Issue', tone: 'amber', onClick: () => openIssueModal(book) }] : []),
-                      { label: 'Edit', tone: 'info', onClick: () => openEditBook(book) },
-                      { label: 'Delete', tone: 'danger', onClick: () => setDeleteConfirm(book) },
-                    ]}
+                    actions={bookActions(book)}
                   />
-                )
-              })}
-            </CardGrid>
+                ))}
+              </CardGrid>
             ) : (
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Title</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Author</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">ISBN</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Publisher</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Category</th>
-                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Total</th>
-                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Available</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Shelf</th>
-                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {books.map((book) => {
-                    const available = (book.available_copies ?? (book.total_copies - (book.issued_copies || 0)))
-                    return (
-                      <tr key={book.id} className="hover:bg-gray-50">
-                        <td className="px-4 py-3 text-sm font-medium text-gray-900">{book.title}</td>
-                        <td className="px-4 py-3 text-sm text-gray-600">{book.author || '-'}</td>
-                        <td className="px-4 py-3 text-sm text-gray-500 font-mono">{book.isbn || '-'}</td>
-                        <td className="px-4 py-3 text-sm text-gray-500">{book.publisher || '-'}</td>
-                        <td className="px-4 py-3 text-sm text-gray-500">{book.category_name || '-'}</td>
-                        <td className="px-4 py-3 text-sm text-center text-gray-700">{book.total_copies}</td>
-                        <td className="px-4 py-3 text-center">
-                          <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-semibold ${
-                            available > 0 ? TONE.success : TONE.danger
-                          }`}>
-                            {available}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 text-sm text-gray-500">{book.shelf_location || '-'}</td>
-                        <td className="px-4 py-3 text-right whitespace-nowrap">
-                          {available > 0 && (
-                            <button
-                              onClick={() => openIssueModal(book)}
-                              className="text-sm text-amber-600 hover:text-amber-800 font-medium mr-3"
-                            >
-                              Issue
-                            </button>
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      {['Title', 'Author', 'ISBN', 'Category'].map((h) => (
+                        <th key={h} className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">{h}</th>
+                      ))}
+                      <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Total</th>
+                      <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Available</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Shelf</th>
+                      {canManage && <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {books.map((book) => {
+                      const actions = bookActions(book)
+                      return (
+                        <tr key={book.id} className="hover:bg-gray-50">
+                          <td className="px-4 py-3 text-sm font-medium text-gray-900">{book.title}</td>
+                          <td className="px-4 py-3 text-sm text-gray-600">{book.author || '-'}</td>
+                          <td className="px-4 py-3 text-sm text-gray-500 font-mono">{book.isbn || '-'}</td>
+                          <td className="px-4 py-3 text-sm text-gray-500">{book.category_name || '-'}</td>
+                          <td className="px-4 py-3 text-sm text-center text-gray-700">{book.total_copies}</td>
+                          <td className="px-4 py-3 text-center"><AvailabilityBadge book={book} /></td>
+                          <td className="px-4 py-3 text-sm text-gray-500">{book.shelf_location || '-'}</td>
+                          {canManage && (
+                            <td className="px-4 py-3 text-right whitespace-nowrap">
+                              {actions.map((a) => (
+                                <button
+                                  key={a.label}
+                                  onClick={a.onClick}
+                                  className={`text-sm font-medium ml-3 ${
+                                    a.tone === 'danger' ? 'text-red-600 hover:text-red-800'
+                                      : a.tone === 'amber' ? 'text-amber-600 hover:text-amber-800'
+                                        : 'text-blue-600 hover:text-blue-800'
+                                  }`}
+                                >
+                                  {a.label}
+                                </button>
+                              ))}
+                            </td>
                           )}
-                          <button
-                            onClick={() => openEditBook(book)}
-                            className="text-sm text-blue-600 hover:text-blue-800 font-medium mr-3"
-                          >
-                            Edit
-                          </button>
-                          <button
-                            onClick={() => setDeleteConfirm(book)}
-                            className="text-sm text-red-600 hover:text-red-800 font-medium"
-                          >
-                            Delete
-                          </button>
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
             )}
           </>
         )}
@@ -436,318 +338,183 @@ export default function BookCatalogPage() {
 
       {/* ============ Add/Edit Book Modal ============ */}
       {showBookModal && (
-        <Modal open  size="lg" closeOnBackdrop={false}>
-            <h2 className="text-xl font-bold text-gray-900 mb-4">
-              {editingBook ? 'Edit Book' : 'Add Book'}
-            </h2>
-
-            {mutationError && (
-              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
-                {mutationError.response?.data?.detail || mutationError.message || 'An error occurred.'}
-              </div>
-            )}
-
-            <form onSubmit={handleBookSubmit} className="space-y-4">
-              <div>
-                <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Title *</label>
-                <input
-                  type="text"
-                  required
-                  className="input"
-                  value={bookForm.title}
-                  onChange={(e) => setBookForm({ ...bookForm, title: e.target.value })}
-                />
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Author</label>
-                  <input
-                    type="text"
-                    className="input"
-                    value={bookForm.author}
-                    onChange={(e) => setBookForm({ ...bookForm, author: e.target.value })}
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-500 uppercase mb-1">ISBN</label>
-                  <input
-                    type="text"
-                    className="input"
-                    value={bookForm.isbn}
-                    onChange={(e) => setBookForm({ ...bookForm, isbn: e.target.value })}
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Publisher</label>
-                  <input
-                    type="text"
-                    className="input"
-                    value={bookForm.publisher}
-                    onChange={(e) => setBookForm({ ...bookForm, publisher: e.target.value })}
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Category</label>
-                  <select
-                    className="input"
-                    value={bookForm.category}
-                    onChange={(e) => setBookForm({ ...bookForm, category: e.target.value })}
-                  >
-                    <option value="">-- No Category --</option>
-                    {categories.map((cat) => (
-                      <option key={cat.id} value={cat.id}>{cat.name}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Total Copies *</label>
-                  <input
-                    type="number"
-                    min="1"
-                    required
-                    className="input"
-                    value={bookForm.total_copies}
-                    onChange={(e) => setBookForm({ ...bookForm, total_copies: e.target.value })}
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Shelf Location</label>
-                  <input
-                    type="text"
-                    className="input"
-                    placeholder="e.g. A-12"
-                    value={bookForm.shelf_location}
-                    onChange={(e) => setBookForm({ ...bookForm, shelf_location: e.target.value })}
-                  />
-                </div>
-              </div>
-
-              <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
-                <Button variant="secondary"
- type="button"
- onClick={closeBookModal}>
-                  Cancel
-                </Button>
-                <button
-                  type="submit"
-                  disabled={bookMutationPending}
-                  className="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {bookMutationPending ? 'Saving...' : (editingBook ? 'Save Changes' : 'Add Book')}
-                </button>
-              </div>
-            </form>
-          </Modal>
-      )}
-
-      {/* ============ Add/Edit Category Modal ============ */}
-      {showCategoryModal && (
-        <Modal open  closeOnBackdrop={false}>
-            <h2 className="text-xl font-bold text-gray-900 mb-4">
-              {editingCategory ? 'Edit Category' : 'Add Category'}
-            </h2>
-
-            {catMutationError && (
-              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
-                {catMutationError.response?.data?.detail || catMutationError.message || 'An error occurred.'}
-              </div>
-            )}
-
-            <form onSubmit={handleCategorySubmit} className="space-y-4">
-              <div>
-                <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Category Name *</label>
-                <input
-                  type="text"
-                  required
-                  className="input"
-                  value={categoryForm.name}
-                  onChange={(e) => setCategoryForm({ ...categoryForm, name: e.target.value })}
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Description</label>
-                <textarea
-                  rows={3}
-                  className="input"
-                  value={categoryForm.description}
-                  onChange={(e) => setCategoryForm({ ...categoryForm, description: e.target.value })}
-                />
-              </div>
-
-              {/* Existing categories list */}
-              {categories.length > 0 && !editingCategory && (
-                <div>
-                  <label className="block text-xs font-medium text-gray-500 uppercase mb-2">Existing Categories</label>
-                  <div className="max-h-40 overflow-y-auto border border-gray-200 rounded-lg divide-y divide-gray-100">
-                    {categories.map((cat) => (
-                      <div key={cat.id} className="flex items-center justify-between px-3 py-2">
-                        <div>
-                          <p className="text-sm font-medium text-gray-900">{cat.name}</p>
-                          {cat.description && <p className="text-xs text-gray-500">{cat.description}</p>}
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => openEditCategory(cat)}
-                          className="text-xs text-blue-600 hover:text-blue-800 font-medium"
-                        >
-                          Edit
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
-                <Button variant="secondary"
- type="button"
- onClick={closeCategoryModal}>
-                  Cancel
-                </Button>
-                <button
-                  type="submit"
-                  disabled={catMutationPending}
-                  className="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {catMutationPending ? 'Saving...' : (editingCategory ? 'Save Changes' : 'Add Category')}
-                </button>
-              </div>
-            </form>
-          </Modal>
-      )}
-
-      {/* ============ Delete Confirmation Modal ============ */}
-      {deleteConfirm && (
-        <Modal open  size="sm" closeOnBackdrop={false}>
-            <h2 className="text-xl font-bold text-gray-900 mb-2">Delete Book</h2>
-            <p className="text-gray-600 mb-6">
-              Are you sure you want to delete <strong>{deleteConfirm.title}</strong>?
-              This action cannot be undone.
-            </p>
-
-            {deleteBookMutation.error && (
-              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
-                {deleteBookMutation.error.response?.data?.detail || deleteBookMutation.error.message || 'Failed to delete.'}
-              </div>
-            )}
-
-            <div className="flex justify-end gap-3">
-              <Button variant="secondary"
- onClick={() => setDeleteConfirm(null)}>
-                Cancel
-              </Button>
-              <button
-                onClick={() => deleteBookMutation.mutate(deleteConfirm.id)}
-                disabled={deleteBookMutation.isPending}
-                className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {deleteBookMutation.isPending ? 'Deleting...' : 'Delete'}
-              </button>
+        <Modal open size="lg" closeOnBackdrop={false}>
+          <h2 className="text-xl font-bold text-gray-900 mb-4">{editingBook ? 'Edit Book' : 'Add Book'}</h2>
+          <ErrorBanner error={saveBook.error} fallback="Failed to save the book." />
+          <form onSubmit={submitBook} className="space-y-4">
+            <Field label="Title" required>
+              <input type="text" required className="input" value={bookForm.title} onChange={(e) => setBook({ title: e.target.value })} />
+            </Field>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <Field label="Author" required>
+                <input type="text" required className="input" value={bookForm.author} onChange={(e) => setBook({ author: e.target.value })} />
+              </Field>
+              <Field label="ISBN">
+                <input type="text" className="input" value={bookForm.isbn} onChange={(e) => setBook({ isbn: e.target.value })} />
+              </Field>
             </div>
-          </Modal>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <Field label="Publisher">
+                <input type="text" className="input" value={bookForm.publisher} onChange={(e) => setBook({ publisher: e.target.value })} />
+              </Field>
+              <Field label="Category">
+                <select className="input" value={bookForm.category} onChange={(e) => setBook({ category: e.target.value })}>
+                  <option value="">-- No Category --</option>
+                  {categories.map((cat) => <option key={cat.id} value={cat.id}>{cat.name}</option>)}
+                </select>
+              </Field>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <Field label="Total Copies" required hint={editingBook ? 'Cannot be lower than the copies currently issued' : undefined}>
+                <input type="number" min="1" required className="input" value={bookForm.total_copies} onChange={(e) => setBook({ total_copies: e.target.value })} />
+              </Field>
+              <Field label="Shelf Location">
+                <input type="text" className="input" placeholder="e.g. A-12" value={bookForm.shelf_location} onChange={(e) => setBook({ shelf_location: e.target.value })} />
+              </Field>
+            </div>
+            {editingBook && (
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" checked={bookForm.is_active} onChange={(e) => setBook({ is_active: e.target.checked })} className="rounded text-blue-600" />
+                <span className="text-sm text-gray-700">Active (untick to take it off the shelf without deleting its history)</span>
+              </label>
+            )}
+            <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
+              <Button variant="secondary" type="button" onClick={closeBookModal}>Cancel</Button>
+              <Button type="submit" loading={saveBook.isPending}>{editingBook ? 'Save Changes' : 'Add Book'}</Button>
+            </div>
+          </form>
+        </Modal>
       )}
 
-      {/* ============ Quick Issue Book Modal ============ */}
-      {showIssueModal && issueBook && (
-        <Modal open  closeOnBackdrop={false}>
-            <h2 className="text-xl font-bold text-gray-900 mb-1">Issue Book</h2>
-            <p className="text-sm text-gray-500 mb-4">
-              Issuing: <span className="font-medium text-gray-700">{issueBook.title}</span>
-            </p>
+      {/* ============ Manage Categories Modal ============ */}
+      {showCategories && (
+        <Modal open size="lg" closeOnBackdrop={false}>
+          <h2 className="text-xl font-bold text-gray-900 mb-4">Manage Categories</h2>
+          <ErrorBanner error={saveCategory.error} fallback="Failed to save the category." />
+          <form onSubmit={submitCategory} className="space-y-4">
+            <Field label="Category Name" required>
+              <input
+                type="text"
+                required
+                className="input"
+                value={categoryForm.name}
+                onChange={(e) => setCategoryForm({ ...categoryForm, name: e.target.value })}
+              />
+            </Field>
+            <Field label="Description">
+              <textarea
+                rows={2}
+                className="input"
+                value={categoryForm.description}
+                onChange={(e) => setCategoryForm({ ...categoryForm, description: e.target.value })}
+              />
+            </Field>
+            <div className="flex justify-end gap-3">
+              {editingCategory && (
+                <Button
+                  variant="secondary"
+                  type="button"
+                  onClick={() => { setEditingCategory(null); setCategoryForm({ name: '', description: '' }) }}
+                >
+                  Cancel Edit
+                </Button>
+              )}
+              <Button type="submit" loading={saveCategory.isPending}>
+                {editingCategory ? 'Save Changes' : 'Add Category'}
+              </Button>
+            </div>
+          </form>
 
-            {createIssueMutation.error && (
-              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
-                {createIssueMutation.error.response?.data?.detail || createIssueMutation.error.message || 'Failed to issue book.'}
+          <div className="mt-5">
+            <p className="label">Existing Categories</p>
+            {categories.length === 0 ? (
+              <EmptyState title="No categories yet" compact />
+            ) : (
+              <div className="max-h-48 overflow-y-auto border border-gray-200 rounded-lg divide-y divide-gray-100">
+                {categories.map((cat) => (
+                  <div key={cat.id} className="flex items-center justify-between px-3 py-2">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-gray-900 truncate">{cat.name}</p>
+                      {cat.description && <p className="text-xs text-gray-500 truncate">{cat.description}</p>}
+                    </div>
+                    <div className="flex gap-3 flex-shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => { saveCategory.reset(); setEditingCategory(cat); setCategoryForm({ name: cat.name, description: cat.description || '' }) }}
+                        className="text-xs text-blue-600 hover:text-blue-800 font-medium"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { removeCategory.reset(); setDeleteCategory(cat) }}
+                        className="text-xs text-red-600 hover:text-red-800 font-medium"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
+          </div>
 
-            <form onSubmit={handleIssueSubmit} className="space-y-4">
-              <div>
-                <label className="block text-xs font-medium text-gray-500 uppercase mb-2">Borrower Type</label>
-                <div className="flex gap-4">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="borrower_type"
-                      value="STUDENT"
-                      checked={issueForm.borrower_type === 'STUDENT'}
-                      onChange={(e) => setIssueForm({ ...issueForm, borrower_type: e.target.value, borrower_id: '' })}
-                      className="text-blue-600 focus:ring-blue-500"
-                    />
-                    <span className="text-sm text-gray-700">Student</span>
-                  </label>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="borrower_type"
-                      value="STAFF"
-                      checked={issueForm.borrower_type === 'STAFF'}
-                      onChange={(e) => setIssueForm({ ...issueForm, borrower_type: e.target.value, borrower_id: '' })}
-                      className="text-blue-600 focus:ring-blue-500"
-                    />
-                    <span className="text-sm text-gray-700">Staff</span>
-                  </label>
-                </div>
-              </div>
+          <div className="flex justify-end pt-4 mt-4 border-t border-gray-200">
+            <Button variant="secondary" type="button" onClick={closeCategories}>Done</Button>
+          </div>
+        </Modal>
+      )}
 
-              <div>
-                <label className="block text-xs font-medium text-gray-500 uppercase mb-1">
-                  {issueForm.borrower_type === 'STUDENT' ? 'Student' : 'Staff'} ID *
-                </label>
-                <input
-                  type="number"
-                  required
-                  className="input"
-                  placeholder={`Enter ${issueForm.borrower_type === 'STUDENT' ? 'student' : 'staff'} ID`}
-                  value={issueForm.borrower_id}
-                  onChange={(e) => setIssueForm({ ...issueForm, borrower_id: e.target.value })}
-                />
-              </div>
+      {/* ============ Delete Category Confirmation ============ */}
+      {deleteCategory && (
+        <Modal open size="sm" layer="top" closeOnBackdrop={false}>
+          <h2 className="text-xl font-bold text-gray-900 mb-2">Delete Category</h2>
+          <p className="text-gray-600 mb-6">
+            Delete <strong>{deleteCategory.name}</strong>? Its books stay in the catalog without a category.
+          </p>
+          <ErrorBanner error={removeCategory.error} fallback="Failed to delete the category." />
+          <div className="flex justify-end gap-3">
+            <Button variant="secondary" onClick={() => setDeleteCategory(null)}>Cancel</Button>
+            <Button variant="danger" onClick={() => removeCategory.mutate(deleteCategory.id)} loading={removeCategory.isPending}>
+              Delete
+            </Button>
+          </div>
+        </Modal>
+      )}
 
-              <div>
-                <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Due Date *</label>
-                <input
-                  type="date"
-                  required
-                  className="input"
-                  value={issueForm.due_date}
-                  onChange={(e) => setIssueForm({ ...issueForm, due_date: e.target.value })}
-                />
-              </div>
+      {/* ============ Delete Book Confirmation ============ */}
+      {deleteConfirm && (
+        <Modal open size="sm" closeOnBackdrop={false}>
+          <h2 className="text-xl font-bold text-gray-900 mb-2">Delete Book</h2>
+          <p className="text-gray-600 mb-6">
+            Are you sure you want to delete <strong>{deleteConfirm.title}</strong>? This action cannot be undone.
+          </p>
+          <ErrorBanner error={deleteBook.error} fallback="Failed to delete the book." />
+          <div className="flex justify-end gap-3">
+            <Button variant="secondary" onClick={() => setDeleteConfirm(null)}>Cancel</Button>
+            <Button variant="danger" onClick={() => deleteBook.mutate(deleteConfirm.id)} loading={deleteBook.isPending}>
+              Delete
+            </Button>
+          </div>
+        </Modal>
+      )}
 
-              <div>
-                <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Notes</label>
-                <textarea
-                  rows={2}
-                  className="input"
-                  value={issueForm.notes}
-                  onChange={(e) => setIssueForm({ ...issueForm, notes: e.target.value })}
-                />
-              </div>
-
-              <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
-                <Button variant="secondary"
- type="button"
- onClick={closeIssueModal}>
-                  Cancel
-                </Button>
-                <button
-                  type="submit"
-                  disabled={createIssueMutation.isPending}
-                  className="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {createIssueMutation.isPending ? 'Issuing...' : 'Issue Book'}
-                </button>
-              </div>
-            </form>
-          </Modal>
+      {/* ============ Quick Issue Modal ============ */}
+      {issueBook && (
+        <Modal open size="lg" closeOnBackdrop={false}>
+          <h2 className="text-xl font-bold text-gray-900 mb-1">Issue Book</h2>
+          <p className="text-sm text-gray-500 mb-4">
+            Issuing: <span className="font-medium text-gray-700">{issueBook.title}</span>
+          </p>
+          <ErrorBanner error={issue.error} fallback="Failed to issue the book." />
+          <form onSubmit={submitIssue} className="space-y-4">
+            <IssueFields form={issueForm} setForm={setIssueForm} fixedBook={issueBook} />
+            <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
+              <Button variant="secondary" type="button" onClick={closeIssueModal}>Cancel</Button>
+              <Button type="submit" loading={issue.isPending}>Issue Book</Button>
+            </div>
+          </form>
+        </Modal>
       )}
     </div>
   )

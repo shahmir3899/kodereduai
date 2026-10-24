@@ -651,10 +651,10 @@ function App() {
             <Route path="student/study-helper" element={<StudentRoute><StudentStudyHelper /></StudentRoute>} />
 
             {/* Hostel routes */}
-            <Route path="hostel" element={<SchoolRoute><ModuleRoute module="hostel"><ManagerRestrictedRoute><HostelDashboard /></ManagerRestrictedRoute></ModuleRoute></SchoolRoute>} />
-            <Route path="hostel/rooms" element={<SchoolRoute><ModuleRoute module="hostel"><ManagerRestrictedRoute><HostelRoomsPage /></ManagerRestrictedRoute></ModuleRoute></SchoolRoute>} />
-            <Route path="hostel/allocations" element={<SchoolRoute><ModuleRoute module="hostel"><ManagerRestrictedRoute><HostelAllocationsPage /></ManagerRestrictedRoute></ModuleRoute></SchoolRoute>} />
-            <Route path="hostel/gate-passes" element={<SchoolRoute><ModuleRoute module="hostel"><ManagerRestrictedRoute><GatePassesPage /></ManagerRestrictedRoute></ModuleRoute></SchoolRoute>} />
+            <Route path="hostel" element={<SchoolRoute><ModuleRoute module="hostel"><AdminPrincipalRoute><HostelDashboard /></AdminPrincipalRoute></ModuleRoute></SchoolRoute>} />
+            <Route path="hostel/rooms" element={<SchoolRoute><ModuleRoute module="hostel"><AdminPrincipalRoute><HostelRoomsPage /></AdminPrincipalRoute></ModuleRoute></SchoolRoute>} />
+            <Route path="hostel/allocations" element={<SchoolRoute><ModuleRoute module="hostel"><AdminPrincipalRoute><HostelAllocationsPage /></AdminPrincipalRoute></ModuleRoute></SchoolRoute>} />
+            <Route path="hostel/gate-passes" element={<SchoolRoute><ModuleRoute module="hostel"><AdminPrincipalRoute><GatePassesPage /></AdminPrincipalRoute></ModuleRoute></SchoolRoute>} />
 
             {/* Transport routes */}
             <Route path="transport" element={<SchoolRoute><ModuleRoute module="transport"><ManagerRestrictedRoute><TransportDashboard /></ManagerRestrictedRoute></ModuleRoute></SchoolRoute>} />

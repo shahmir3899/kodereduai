@@ -238,8 +238,8 @@ class TestHostelCRUD:
         assert "rooms_count" in entry
         assert "hostel_type_display" in entry
 
-    def test_a6_teacher_can_read_hostels(self, seed_data, api):
-        """A6 -- Teacher GET list -> 200 (read-only access)."""
+    def test_a6_teacher_cannot_read_hostels(self, seed_data, api):
+        """A6 -- Teacher GET list -> 403 (hostel data is admin-only)."""
         _create_hostel(api, seed_data, "Boys Block A")
 
         resp = api.get(
@@ -247,8 +247,8 @@ class TestHostelCRUD:
             seed_data["tokens"]["teacher"],
             seed_data["SID_A"],
         )
-        assert resp.status_code == 200, (
-            f"A6 Teacher can read hostels: status={resp.status_code}"
+        assert resp.status_code == 403, (
+            f"A6 Teacher cannot read hostels: status={resp.status_code}"
         )
 
     def test_a7_update_hostel(self, seed_data, api):
@@ -392,8 +392,8 @@ class TestRoomCRUD:
             f"B4 List rooms (filter by hostel): expected 2, got {len(data)}"
         )
 
-    def test_b5_teacher_can_read_rooms(self, seed_data, api):
-        """B5 -- Teacher GET rooms -> 200 (read-only)."""
+    def test_b5_teacher_cannot_read_rooms(self, seed_data, api):
+        """B5 -- Teacher GET rooms -> 403 (admin-only)."""
         hostel_id = _create_hostel(api, seed_data)
         _create_room(api, seed_data, hostel_id, "A-101")
 
@@ -402,8 +402,8 @@ class TestRoomCRUD:
             seed_data["tokens"]["teacher"],
             seed_data["SID_A"],
         )
-        assert resp.status_code == 200, (
-            f"B5 Teacher can read rooms: status={resp.status_code}"
+        assert resp.status_code == 403, (
+            f"B5 Teacher cannot read rooms: status={resp.status_code}"
         )
 
     def test_b6_teacher_cannot_create_room(self, seed_data, api):
@@ -1047,14 +1047,14 @@ class TestDashboard:
         assert data["total_rooms"] == 0
         assert data["current_occupancy"] == 0
 
-    def test_e3_teacher_can_view_dashboard(self, seed_data, api):
-        """E3 -- Teacher GET dashboard -> 200."""
+    def test_e3_teacher_cannot_view_dashboard(self, seed_data, api):
+        """E3 -- Teacher GET dashboard -> 403 (admin-only)."""
         resp = api.get(
             "/api/hostel/dashboard/",
             seed_data["tokens"]["teacher"],
             seed_data["SID_A"],
         )
-        assert resp.status_code == 200, (
+        assert resp.status_code == 403, (
             f"E3 Teacher dashboard: status={resp.status_code}"
         )
 

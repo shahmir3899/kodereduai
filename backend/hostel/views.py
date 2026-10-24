@@ -6,6 +6,7 @@ from datetime import date
 
 from core.cache_utils import cached_api
 from django.db.models import Sum, Count, Q
+from rest_framework.exceptions import ValidationError
 from django.utils import timezone
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
@@ -13,9 +14,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 
-from core.permissions import (
-    IsSchoolAdmin, IsSchoolAdminOrReadOnly, HasSchoolAccess, ModuleAccessMixin,
-)
+from core.permissions import IsSchoolAdmin, HasSchoolAccess, ModuleAccessMixin
 from core.mixins import TenantQuerySetMixin, ensure_tenant_school_id
 
 from .models import Hostel, Room, HostelAllocation, GatePass
@@ -34,11 +33,11 @@ from .serializers import (
 class HostelViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet):
     """
     CRUD for hostel buildings.
-    Admins get full access; other authenticated users get read-only access.
+    Admin and principal only: it lists students and their gate-pass reasons.
     """
     required_module = 'hostel'
     queryset = Hostel.objects.all()
-    permission_classes = [IsAuthenticated, IsSchoolAdminOrReadOnly, HasSchoolAccess]
+    permission_classes = [IsAuthenticated, IsSchoolAdmin, HasSchoolAccess]
 
 
     def get_serializer_class(self):
@@ -47,7 +46,12 @@ class HostelViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSe
         return HostelReadSerializer
 
     def get_queryset(self):
-        queryset = super().get_queryset().select_related('school', 'warden')
+        queryset = super().get_queryset().select_related('school', 'warden').annotate(
+            occupied_count=Count(
+                'rooms__allocations', filter=Q(rooms__allocations__is_active=True), distinct=True,
+            ),
+            room_total=Count('rooms', distinct=True),
+        ).order_by('name')
 
         # Optional filters
         hostel_type = self.request.query_params.get('hostel_type')
@@ -60,6 +64,12 @@ class HostelViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSe
 
         return queryset
 
+    def perform_destroy(self, instance):
+        # Deleting would cascade to every allocation and gate pass, losing the history.
+        if HostelAllocation.objects.filter(room__hostel=instance).exists():
+            raise ValidationError('This hostel has student allocations. Mark it Inactive instead of deleting it.')
+        instance.delete()
+
 
 # =============================================================================
 # Room ViewSet
@@ -68,12 +78,11 @@ class HostelViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSe
 class RoomViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet):
     """
     CRUD for rooms within hostels.
-    Filterable by hostel_id query parameter.
-    Admins get full access; other authenticated users get read-only access.
+    Filterable by hostel_id query parameter. Admin and principal only.
     """
     required_module = 'hostel'
     queryset = Room.objects.all()
-    permission_classes = [IsAuthenticated, IsSchoolAdminOrReadOnly, HasSchoolAccess]
+    permission_classes = [IsAuthenticated, IsSchoolAdmin, HasSchoolAccess]
 
     tenant_field = 'hostel__school_id'
 
@@ -83,7 +92,9 @@ class RoomViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet)
         return RoomReadSerializer
 
     def get_queryset(self):
-        queryset = super().get_queryset().select_related('hostel', 'hostel__school')
+        queryset = super().get_queryset().select_related('hostel', 'hostel__school').annotate(
+            occupied_count=Count('allocations', filter=Q(allocations__is_active=True)),
+        ).order_by('hostel', 'floor', 'room_number')
 
         # Filter by hostel
         hostel_id = self.request.query_params.get('hostel_id')
@@ -114,6 +125,11 @@ class RoomViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet)
     def perform_update(self, serializer):
         serializer.save()
 
+    def perform_destroy(self, instance):
+        if instance.allocations.exists():
+            raise ValidationError('This room has student allocations. Mark it Unavailable instead of deleting it.')
+        instance.delete()
+
 
 # =============================================================================
 # HostelAllocation ViewSet
@@ -127,7 +143,7 @@ class HostelAllocationViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.M
     """
     required_module = 'hostel'
     queryset = HostelAllocation.objects.all()
-    permission_classes = [IsAuthenticated, IsSchoolAdminOrReadOnly, HasSchoolAccess]
+    permission_classes = [IsAuthenticated, IsSchoolAdmin, HasSchoolAccess]
 
 
     def get_serializer_class(self):
@@ -165,6 +181,10 @@ class HostelAllocationViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.M
         is_active = self.request.query_params.get('is_active')
         if is_active is not None:
             queryset = queryset.filter(is_active=is_active.lower() == 'true')
+
+        search = self.request.query_params.get('search')
+        if search:
+            queryset = queryset.filter(student__name__icontains=search)
 
         return queryset
 
@@ -205,7 +225,7 @@ class GatePassViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelView
     """
     required_module = 'hostel'
     queryset = GatePass.objects.all()
-    permission_classes = [IsAuthenticated, IsSchoolAdminOrReadOnly, HasSchoolAccess]
+    permission_classes = [IsAuthenticated, IsSchoolAdmin, HasSchoolAccess]
 
 
     def get_serializer_class(self):
@@ -238,6 +258,10 @@ class GatePassViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelView
         hostel_id = self.request.query_params.get('hostel_id')
         if hostel_id:
             queryset = queryset.filter(allocation__room__hostel_id=hostel_id)
+
+        search = self.request.query_params.get('search')
+        if search:
+            queryset = queryset.filter(student__name__icontains=search)
 
         return queryset
 
@@ -335,52 +359,39 @@ class GatePassViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelView
 
 def build_dashboard_summary(school_id):
     """Shared by HostelDashboardView and the admin-dashboard bootstrap."""
-    total_hostels = Hostel.objects.filter(
-        school_id=school_id, is_active=True,
-    ).count()
+    hostels = Hostel.objects.filter(school_id=school_id, is_active=True)
+    total_hostels = hostels.count()
 
-    total_rooms = Room.objects.filter(
-        hostel__school_id=school_id, hostel__is_active=True,
-    ).count()
+    rooms = Room.objects.filter(hostel__school_id=school_id, hostel__is_active=True)
+    total_rooms = rooms.count()
 
-    total_capacity = Room.objects.filter(
-        hostel__school_id=school_id, hostel__is_active=True, is_available=True,
-    ).aggregate(total=Sum('capacity'))['total'] or 0
-
+    # Beds and occupancy are both counted over the same rooms; otherwise a student in
+    # an unavailable room pushed available beds below zero and the rate over 100%.
+    total_capacity = rooms.filter(is_available=True).aggregate(total=Sum('capacity'))['total'] or 0
     current_occupancy = HostelAllocation.objects.filter(
         school_id=school_id, is_active=True,
+        room__hostel__is_active=True, room__is_available=True,
     ).count()
 
     pending_gate_passes = GatePass.objects.filter(
         school_id=school_id, status='PENDING',
     ).count()
 
-    available_beds = total_capacity - current_occupancy
-
-    boys_hostels = Hostel.objects.filter(
-        school_id=school_id, is_active=True, hostel_type='BOYS',
-    ).count()
-
-    girls_hostels = Hostel.objects.filter(
-        school_id=school_id, is_active=True, hostel_type='GIRLS',
-    ).count()
-
     students_on_leave = GatePass.objects.filter(
         school_id=school_id, status='USED',
     ).count()
 
-    payload = {
+    return {
         'total_hostels': total_hostels,
         'total_rooms': total_rooms,
         'total_capacity': total_capacity,
         'current_occupancy': current_occupancy,
-        'available_beds': available_beds,
+        'available_beds': max(total_capacity - current_occupancy, 0),
         'pending_gate_passes': pending_gate_passes,
-        'boys_hostels': boys_hostels,
-        'girls_hostels': girls_hostels,
+        'boys_hostels': hostels.filter(hostel_type='BOYS').count(),
+        'girls_hostels': hostels.filter(hostel_type='GIRLS').count(),
         'students_on_leave': students_on_leave,
     }
-    return payload
 
 
 class HostelDashboardView(ModuleAccessMixin, APIView):
@@ -389,7 +400,7 @@ class HostelDashboardView(ModuleAccessMixin, APIView):
     {total_hostels, total_rooms, total_capacity, current_occupancy, pending_gate_passes}
     """
     required_module = 'hostel'
-    permission_classes = [IsAuthenticated, HasSchoolAccess]
+    permission_classes = [IsAuthenticated, IsSchoolAdmin, HasSchoolAccess]
 
     @cached_api('hostel_dashboard', timeout=60)
     def get(self, request):
