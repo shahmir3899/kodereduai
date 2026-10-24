@@ -1,0 +1,30 @@
+{
+  "voice": "en-US-AriaNeural",
+  "rate": "-5%",
+  "cues": [
+    {
+      "start": 0.117,
+      "text": "Let's create a notification template."
+    },
+    {
+      "start": 6.261,
+      "text": "Open Notifications and switch to the Templates tab."
+    },
+    {
+      "start": 17.979,
+      "text": "Press New Template, type a name, choose the event, and write the message. Placeholders use double braces."
+    },
+    {
+      "start": 52.528,
+      "text": "Press Save, and the template is now ready to use when you send."
+    },
+    {
+      "start": 58.745,
+      "text": "Search for it and press Preview to see the message with sample values."
+    },
+    {
+      "start": 72.969,
+      "text": "Template saved."
+    }
+  ]
+}

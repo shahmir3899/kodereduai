@@ -1,0 +1,38 @@
+{
+  "voice": "en-US-AriaNeural",
+  "rate": "-5%",
+  "cues": [
+    {
+      "start": 0.106,
+      "text": "Let's return a borrowed book."
+    },
+    {
+      "start": 7.681,
+      "text": "Open Library and Issue / Return, then the Return Book tab."
+    },
+    {
+      "start": 20.934,
+      "text": "Search by the borrower or the book title."
+    },
+    {
+      "start": 28.047,
+      "text": "Press Process Return, and check the summary."
+    },
+    {
+      "start": 34.716,
+      "text": "Press Confirm Return. The copy goes back on the shelf, and the loan leaves the list."
+    },
+    {
+      "start": 42.899,
+      "text": "Search for a late borrower. The summary shows the days overdue and the fine."
+    },
+    {
+      "start": 58.053,
+      "text": "Confirm the return. The fine is calculated for you and recorded on the loan."
+    },
+    {
+      "start": 67.018,
+      "text": "Books returned."
+    }
+  ]
+}

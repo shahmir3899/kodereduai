@@ -1,0 +1,30 @@
+{
+  "voice": "en-US-AriaNeural",
+  "rate": "-5%",
+  "cues": [
+    {
+      "start": 0.11,
+      "text": "Let's look at your notifications."
+    },
+    {
+      "start": 5.817,
+      "text": "Open Notifications in the sidebar. New ones are listed under Today."
+    },
+    {
+      "start": 15.953,
+      "text": "Use the All Types list to see only one kind, for example Fee due."
+    },
+    {
+      "start": 23.277,
+      "text": "Switch back to All Types and tick Unread only to hide what you have read."
+    },
+    {
+      "start": 33.746,
+      "text": "Press Mark all read and confirm, to clear everything at once."
+    },
+    {
+      "start": 43.386,
+      "text": "Inbox cleared."
+    }
+  ]
+}

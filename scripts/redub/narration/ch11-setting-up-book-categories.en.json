@@ -1,0 +1,34 @@
+{
+  "voice": "en-US-AriaNeural",
+  "rate": "-5%",
+  "cues": [
+    {
+      "start": 0.105,
+      "text": "Let's set up book categories."
+    },
+    {
+      "start": 6.627,
+      "text": "Open Library and Catalog, then press Manage Categories."
+    },
+    {
+      "start": 21.107,
+      "text": "Type the category name and a short description."
+    },
+    {
+      "start": 36.092,
+      "text": "Press Add Category, and it appears in the list below."
+    },
+    {
+      "start": 42.003,
+      "text": "Press Edit next to a category to change its name or description, then Save Changes."
+    },
+    {
+      "start": 60.608,
+      "text": "Press Done. The categories now appear in the catalog filter and the Add Book form."
+    },
+    {
+      "start": 69.465,
+      "text": "Categories ready."
+    }
+  ]
+}

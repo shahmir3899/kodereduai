@@ -1,0 +1,30 @@
+{
+  "voice": "en-US-AriaNeural",
+  "rate": "-5%",
+  "cues": [
+    {
+      "start": 0.104,
+      "text": "Let's start a new conversation."
+    },
+    {
+      "start": 5.814,
+      "text": "Open Messages in the sidebar and press New Message."
+    },
+    {
+      "start": 19.462,
+      "text": "Open the To box, search for a name and pick the person."
+    },
+    {
+      "start": 32.226,
+      "text": "Add a subject if you like, then type your message."
+    },
+    {
+      "start": 49.573,
+      "text": "Press Send Message, and the conversation opens on the right."
+    },
+    {
+      "start": 56.964,
+      "text": "Message sent."
+    }
+  ]
+}

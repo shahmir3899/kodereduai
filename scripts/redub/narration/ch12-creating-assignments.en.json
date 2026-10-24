@@ -1,0 +1,38 @@
+{
+  "voice": "en-US-AriaNeural",
+  "rate": "-5%",
+  "cues": [
+    {
+      "start": 0.111,
+      "text": "Let's create an assignment."
+    },
+    {
+      "start": 5.818,
+      "text": "Open Academics, then Assignments, and press Create Assignment."
+    },
+    {
+      "start": 20.169,
+      "text": "Enter the title, then choose the class, the subject and the teacher."
+    },
+    {
+      "start": 42.168,
+      "text": "Set the due date and the total marks."
+    },
+    {
+      "start": 51.379,
+      "text": "Write the description, which is required, and the instructions for students."
+    },
+    {
+      "start": 72.982,
+      "text": "Press Create Assignment. It starts as a Draft."
+    },
+    {
+      "start": 78.958,
+      "text": "Press Publish so students can see it in their portal."
+    },
+    {
+      "start": 84.729,
+      "text": "Assignment published."
+    }
+  ]
+}

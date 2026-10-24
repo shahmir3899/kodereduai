@@ -1,0 +1,30 @@
+{
+  "voice": "en-US-AriaNeural",
+  "rate": "-5%",
+  "cues": [
+    {
+      "start": 0.106,
+      "text": "Let's send a notification."
+    },
+    {
+      "start": 5.939,
+      "text": "Open Notifications and switch to the Send tab. Broadcast to Group is selected."
+    },
+    {
+      "start": 18.46,
+      "text": "Choose a template to fill in the title and message."
+    },
+    {
+      "start": 25.059,
+      "text": "Choose the group, here All Teachers. The channel stays In-App."
+    },
+    {
+      "start": 31.426,
+      "text": "Press Review and Send Broadcast, check the number of recipients, and press Confirm Send."
+    },
+    {
+      "start": 44.175,
+      "text": "Notification sent."
+    }
+  ]
+}

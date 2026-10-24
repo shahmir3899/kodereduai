@@ -1,0 +1,26 @@
+{
+  "voice": "en-US-AriaNeural",
+  "rate": "-5%",
+  "cues": [
+    {
+      "start": 0.115,
+      "text": "Let's reply to a message."
+    },
+    {
+      "start": 5.797,
+      "text": "Open Messages. Unread conversations show a number. Click one to read it."
+    },
+    {
+      "start": 19.349,
+      "text": "Type your reply in the box at the bottom."
+    },
+    {
+      "start": 30.534,
+      "text": "Press Enter, or the arrow button, to send. Your message appears on the right."
+    },
+    {
+      "start": 40.471,
+      "text": "Reply sent."
+    }
+  ]
+}

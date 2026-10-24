@@ -1,0 +1,42 @@
+{
+  "voice": "en-US-AriaNeural",
+  "rate": "-5%",
+  "cues": [
+    {
+      "start": 0.122,
+      "text": "Let's create a lesson plan."
+    },
+    {
+      "start": 5.852,
+      "text": "Open Planning and Delivery, then Lesson Plans."
+    },
+    {
+      "start": 13.799,
+      "text": "Press Add Lesson Plan, then Create single lesson plan. Choose Standard for the full details."
+    },
+    {
+      "start": 25.993,
+      "text": "Enter the title, then choose the class, the subject and the teacher."
+    },
+    {
+      "start": 48.256,
+      "text": "Press Select chapter or topic, tick a topic from the book, and press Apply."
+    },
+    {
+      "start": 62.685,
+      "text": "Set the lesson date and write an objective."
+    },
+    {
+      "start": 79.615,
+      "text": "Leave the status as Draft and press Create Lesson Plan. To see it, choose the class and the lesson date."
+    },
+    {
+      "start": 99.904,
+      "text": "Press Publish on the plan to share it."
+    },
+    {
+      "start": 105.833,
+      "text": "Lesson plan published."
+    }
+  ]
+}

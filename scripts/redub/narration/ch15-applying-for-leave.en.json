@@ -1,0 +1,34 @@
+{
+  "voice": "en-US-AriaNeural",
+  "rate": "-5%",
+  "cues": [
+    {
+      "start": 0.109,
+      "text": "Let's apply for leave for your child."
+    },
+    {
+      "start": 5.919,
+      "text": "Click Leave Requests in the sidebar. The Apply for Leave tab opens first."
+    },
+    {
+      "start": 14.463,
+      "text": "Choose the child, then enter the start date and the end date."
+    },
+    {
+      "start": 30.069,
+      "text": "Write the reason. A link to a supporting document is optional."
+    },
+    {
+      "start": 40.776,
+      "text": "Press Submit Leave Request. A green message confirms it was sent to the school."
+    },
+    {
+      "start": 49.231,
+      "text": "Open My Requests. The new request is Pending. Earlier ones show the school's decision and remarks."
+    },
+    {
+      "start": 60.96,
+      "text": "Request sent."
+    }
+  ]
+}

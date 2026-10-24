@@ -1,0 +1,26 @@
+{
+  "voice": "en-US-AriaNeural",
+  "rate": "-5%",
+  "cues": [
+    {
+      "start": 0.125,
+      "text": "Let's review student submissions."
+    },
+    {
+      "start": 6.162,
+      "text": "Open Assignments, and click the number in the Submissions column."
+    },
+    {
+      "start": 21.871,
+      "text": "Press Grade, enter the marks and some feedback, and press Save."
+    },
+    {
+      "start": 38.556,
+      "text": "A graded submission can be sent back to the student with Return."
+    },
+    {
+      "start": 45.393,
+      "text": "Submission graded."
+    }
+  ]
+}

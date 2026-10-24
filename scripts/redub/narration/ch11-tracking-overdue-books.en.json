@@ -1,0 +1,30 @@
+{
+  "voice": "en-US-AriaNeural",
+  "rate": "-5%",
+  "cues": [
+    {
+      "start": 0.115,
+      "text": "Let's keep track of overdue books."
+    },
+    {
+      "start": 6.404,
+      "text": "Open Library and Overdue."
+    },
+    {
+      "start": 16.404,
+      "text": "The tiles show the overdue books, the fines so far, and the fine per day."
+    },
+    {
+      "start": 23.575,
+      "text": "Each row shows the borrower, the due date, the days overdue and the fine. The oldest loans come first."
+    },
+    {
+      "start": 33.487,
+      "text": "Press Return on a row and confirm. The fine is recorded, and the loan leaves the overdue list."
+    },
+    {
+      "start": 44.702,
+      "text": "Overdue under control."
+    }
+  ]
+}

@@ -1,0 +1,46 @@
+{
+  "voice": "en-US-AriaNeural",
+  "rate": "-5%",
+  "cues": [
+    {
+      "start": 0.112,
+      "text": "Let's manage the curriculum."
+    },
+    {
+      "start": 6.869,
+      "text": "Open Content Creation, then Curriculum."
+    },
+    {
+      "start": 14.35,
+      "text": "Choose the class and the subject, and the books for them are listed."
+    },
+    {
+      "start": 23.822,
+      "text": "Press Add Book. Choose the class and subject, enter the title and the edition, then press Add Book again."
+    },
+    {
+      "start": 45.301,
+      "text": "The book is created and listed."
+    },
+    {
+      "start": 50.13,
+      "text": "Click the book to see its chapters."
+    },
+    {
+      "start": 55.302,
+      "text": "Press Add Chapter, enter the title, and save it."
+    },
+    {
+      "start": 68.125,
+      "text": "Open the chapter and press Add Topic. Enter the title and save it."
+    },
+    {
+      "start": 86.65899999999999,
+      "text": "For a whole book, press Import Table of Contents. On the Manual Entry tab, you type or paste the chapters and topics."
+    },
+    {
+      "start": 99.668,
+      "text": "Curriculum ready."
+    }
+  ]
+}
