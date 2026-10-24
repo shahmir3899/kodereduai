@@ -57,16 +57,16 @@ def main():
             filters.append(f"[{i + 1}:a]atempo={speed:.3f},adelay={ms}|{ms}[v{i}]")
             labels.append(f"[v{i}]")
         n = len(cues)
-        filters.append(f"{''.join(labels)}amix=inputs={n}:normalize=0,apad=whole_dur={total},"
-                       f"asplit=2[voice][key]")
+        filters.append(f"{''.join(labels)}amix=inputs={n}:normalize=0:duration=longest,"
+                       f"apad=whole_dur={total},atrim=0:{total},asplit=2[voice][key]")
         if a.music != "none":
             inputs += ["-stream_loop", "-1", "-i", str(MUSIC_DIR / f"{a.music}.m4a")]
             filters.append(f"[{n + 1}:a]volume=0.5,atrim=0:{total}[m]")
             # Music dips under speech, like the skill's own mix.
             filters.append("[m][key]sidechaincompress=threshold=0.02:ratio=8:attack=20:release=400[md]")
-            filters.append("[voice][md]amix=inputs=2:normalize=0[aout]")
+            filters.append("[voice][md]amix=inputs=2:normalize=0:duration=first,loudnorm=I=-16:TP=-1.5[aout]")
         else:
-            filters.append("[voice]anull[aout]")
+            filters.append("[voice]loudnorm=I=-16:TP=-1.5[aout]")
         subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", *inputs,
                         "-filter_complex", ";".join(filters), "-map", "0:v", "-map", "[aout]",
                         "-c:v", "copy", "-c:a", "aac", "-b:a", "160k", "-t", str(total), a.dst], check=True)
