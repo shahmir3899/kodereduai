@@ -1,0 +1,30 @@
+{
+  "voice": "ur-PK-UzmaNeural",
+  "rate": "-5%",
+  "cues": [
+    {
+      "start": 0.105,
+      "text": "آئیے اپنے نوٹیفکیشنز دیکھیں۔"
+    },
+    {
+      "start": 6.941,
+      "text": "سائڈبار سے Notifications کھولیں۔ نئے نوٹیفکیشن Today کے نیچے ہوتے ہیں۔"
+    },
+    {
+      "start": 17.539,
+      "text": "All Types فہرست سے ایک قسم چنیں، مثلاً Fee due۔"
+    },
+    {
+      "start": 24.925,
+      "text": "All Types پر واپس جائیں اور Unread only پر ٹک لگائیں۔"
+    },
+    {
+      "start": 35.172,
+      "text": "Mark all read دبائیں اور تصدیق کریں۔"
+    },
+    {
+      "start": 44.779,
+      "text": "ان باکس صاف ہو گیا۔"
+    }
+  ]
+}

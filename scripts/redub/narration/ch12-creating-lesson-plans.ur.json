@@ -1,0 +1,42 @@
+{
+  "voice": "ur-PK-UzmaNeural",
+  "rate": "-5%",
+  "cues": [
+    {
+      "start": 0.118,
+      "text": "آئیے ایک لیسن پلان بنائیں۔"
+    },
+    {
+      "start": 6.795,
+      "text": "Planning & Delivery کھولیں، پھر Lesson Plans۔"
+    },
+    {
+      "start": 14.695,
+      "text": "Add Lesson Plan دبائیں، پھر Create single lesson plan۔ مکمل تفصیل کے لیے Standard چنیں۔"
+    },
+    {
+      "start": 27.437,
+      "text": "عنوان لکھیں، پھر کلاس، مضمون اور ٹیچر منتخب کریں۔"
+    },
+    {
+      "start": 50.6,
+      "text": "Select chapter / topic دبائیں، کتاب میں سے ایک ٹاپک منتخب کریں اور Apply دبائیں۔"
+    },
+    {
+      "start": 64.824,
+      "text": "سبق کی تاریخ مقرر کریں اور مقصد لکھیں۔"
+    },
+    {
+      "start": 81.97200000000001,
+      "text": "اسٹیٹس Draft رہنے دیں اور Create Lesson Plan دبائیں۔ اسے دیکھنے کے لیے کلاس اور سبق کی تاریخ منتخب کریں۔"
+    },
+    {
+      "start": 102.988,
+      "text": "پلان پر Publish دبا کر اسے شیئر کریں۔"
+    },
+    {
+      "start": 108.862,
+      "text": "لیسن پلان پبلش ہو گیا۔"
+    }
+  ]
+}

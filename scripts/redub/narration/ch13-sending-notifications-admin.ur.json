@@ -1,0 +1,30 @@
+{
+  "voice": "ur-PK-UzmaNeural",
+  "rate": "-5%",
+  "cues": [
+    {
+      "start": 0.119,
+      "text": "آئیے ایک نوٹیفکیشن بھیجیں۔"
+    },
+    {
+      "start": 6.703,
+      "text": "Notifications کھولیں اور Send ٹیب پر جائیں۔ Broadcast to Group منتخب ہے۔"
+    },
+    {
+      "start": 19.167,
+      "text": "ٹائٹل اور پیغام بھرنے کے لیے ٹیمپلیٹ چنیں۔"
+    },
+    {
+      "start": 25.78,
+      "text": "گروپ چنیں، یہاں All Teachers۔ چینل In-App ہی رہے گا۔"
+    },
+    {
+      "start": 32.373,
+      "text": "Review & Send Broadcast دبائیں، وصول کنندگان کی تعداد دیکھیں اور Confirm Send دبائیں۔"
+    },
+    {
+      "start": 45.182,
+      "text": "نوٹیفکیشن بھیج دیا گیا۔"
+    }
+  ]
+}
