@@ -9,6 +9,8 @@ import GuideVideoModal from '../components/guide/GuideVideoModal'
 import guideData from '../data/userGuide.json'
 import videoData from '../data/guideVideos.json'
 
+const START_HERE = guideData.meta.startHere || {}
+
 // Tells nav_path blocks whether the current user can open a linked page.
 const GuideAccessContext = createContext(() => true)
 // Lets a section open its tutorial video in the player dialog.
@@ -62,11 +64,6 @@ const LinkIcon = () => (
   </svg>
 )
 
-const ListIcon = () => (
-  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
-  </svg>
-)
 
 const XIcon = () => (
   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -249,8 +246,9 @@ function VideoSlot({ videoId }) {
   )
 }
 
-function SectionBlock({ section, chapterId, searchHighlight, showCopyLink }) {
+function SectionBlock({ section, chapterId, searchHighlight, showCopyLink, isOpen, onToggle }) {
   const { showSuccess } = useToast()
+  const video = section.video && VIDEOS_BY_ID[section.video]?.status === 'ready' ? VIDEOS_BY_ID[section.video] : null
 
   const handleCopyLink = () => {
     const sectionNum = section.id.split('.')[1]
@@ -260,63 +258,128 @@ function SectionBlock({ section, chapterId, searchHighlight, showCopyLink }) {
   }
 
   return (
-    <div id={`section-${section.id}`} className="scroll-mt-20">
-      <div className="flex items-center gap-2 group mb-3">
-        <h3 className="text-base font-semibold text-primary-700">
-          {section.id} &nbsp;
+    <div id={`section-${section.id}`} className="scroll-mt-20 rounded-lg border border-gray-200 bg-white">
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={isOpen}
+        className="flex w-full items-center gap-3 px-4 py-3 text-left"
+      >
+        <ChevronRightIcon className={`flex-shrink-0 text-gray-400 transition-transform duration-200 ${isOpen ? 'rotate-90' : ''}`} />
+        <span className="flex-1 text-sm font-medium text-gray-900">
           <HighlightText text={section.title} highlight={searchHighlight} />
-        </h3>
-        {showCopyLink && (
-          <button
-            onClick={handleCopyLink}
-            className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-600"
-            title="Copy link to section"
-          >
-            <LinkIcon />
-          </button>
-        )}
-      </div>
-      <div className="space-y-3 pl-1">
-        {section.video && <VideoSlot videoId={section.video} />}
-        {section.content.map((item, idx) => (
-          <ContentBlock key={idx} item={item} searchHighlight={searchHighlight} />
-        ))}
-      </div>
+        </span>
+        {video && <span className="flex-shrink-0 rounded bg-primary-50 px-2 py-0.5 text-xs font-medium text-primary-700">&#9654; Video</span>}
+      </button>
+      {isOpen && (
+        <div className="space-y-3 border-t border-gray-100 px-4 py-4">
+          {section.video && <VideoSlot videoId={section.video} />}
+          {section.content.map((item, idx) => (
+            <ContentBlock key={idx} item={item} searchHighlight={searchHighlight} />
+          ))}
+          {showCopyLink && (
+            <button type="button" onClick={handleCopyLink} className="inline-flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600">
+              <LinkIcon /> Copy link to this topic
+            </button>
+          )}
+        </div>
+      )}
     </div>
   )
 }
 
 // --- Chapter Renderer ---
-function ChapterBlock({ chapter, isExpanded, onToggle, searchHighlight }) {
+// A chapter is one quiet row. Opened, it shows its introduction and a list of topics; each topic opens on demand.
+function ChapterBlock({ chapter, isExpanded, onToggle, searchHighlight, expandedSections, onToggleSection }) {
+  const intro = chapter.sections.filter((section) => section.title === 'Introduction')
+  const topics = chapter.sections.filter((section) => section.title !== 'Introduction')
+  const videoCount = topics.filter((section) => section.video && VIDEOS_BY_ID[section.video]?.status === 'ready').length
+
   return (
     <div id={`chapter-${chapter.id}`} className="scroll-mt-16">
       <button
+        type="button"
         onClick={onToggle}
-        className="w-full flex items-center justify-between p-4 bg-white rounded-lg shadow-sm border border-gray-200 hover:border-primary-300 transition-colors"
+        aria-expanded={isExpanded}
+        className="flex w-full items-center justify-between gap-3 rounded-lg border border-gray-200 bg-white p-3 transition-colors hover:border-primary-300 sm:p-4"
       >
-        <div className="flex items-center gap-3">
-          <span className="flex items-center justify-center w-8 h-8 rounded-full bg-primary-100 text-primary-700 font-bold text-sm flex-shrink-0">
+        <div className="flex min-w-0 items-center gap-3">
+          <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-primary-100 text-sm font-bold text-primary-700">
             {chapter.id}
           </span>
-          <h2 className="text-lg font-bold text-gray-900 text-left">{chapter.title}</h2>
+          <div className="min-w-0 text-left">
+            <h2 className="truncate text-base font-semibold text-gray-900">{chapter.title}</h2>
+            <p className="text-xs text-gray-500">
+              {topics.length} topic{topics.length === 1 ? '' : 's'}
+              {videoCount > 0 && ` · ${videoCount} video${videoCount === 1 ? '' : 's'}`}
+            </p>
+          </div>
         </div>
-        <ChevronRightIcon className={`transition-transform duration-200 text-gray-400 flex-shrink-0 ${isExpanded ? 'rotate-90' : ''}`} />
+        <ChevronRightIcon className={`flex-shrink-0 text-gray-400 transition-transform duration-200 ${isExpanded ? 'rotate-90' : ''}`} />
       </button>
 
       {isExpanded && (
-        <div className="mt-4 ml-2 space-y-6 pb-2">
-          {chapter.sections.map(section => (
+        <div className="mt-2 space-y-2 pl-2 sm:pl-4">
+          {intro.map((section) => (
+            <div key={section.id} id={`section-${section.id}`} className="space-y-2 px-1 pb-1">
+              {section.content.map((item, idx) => (
+                <ContentBlock key={idx} item={item} searchHighlight={searchHighlight} />
+              ))}
+            </div>
+          ))}
+          {topics.map((section) => (
             <SectionBlock
               key={section.id}
               section={section}
               chapterId={chapter.id}
               searchHighlight={searchHighlight}
               showCopyLink
+              isOpen={expandedSections.has(section.id)}
+              onToggle={() => onToggleSection(section.id)}
             />
           ))}
         </div>
       )}
     </div>
+  )
+}
+
+// --- "Start here": the short ordered path a new user follows first ---
+const plainTitle = (title) => title.replace(/^Step \d+:\s*/, '')
+
+function StartHere({ sectionIds, chapters, onRead, onWatch }) {
+  const byId = useMemo(() => {
+    const map = {}
+    chapters.forEach((chapter) => chapter.sections.forEach((section) => { map[section.id] = { section, chapterId: chapter.id } }))
+    return map
+  }, [chapters])
+  const steps = sectionIds.map((id) => byId[id]).filter(Boolean)
+  if (steps.length < 2) return null
+
+  return (
+    <section aria-labelledby="start-here" className="rounded-xl border border-primary-200 bg-primary-50/50 p-4 sm:p-5">
+      <h2 id="start-here" className="text-lg font-bold text-gray-900">New here? Start with these</h2>
+      <p className="mb-3 text-sm text-gray-600">Do them in this order. Each one takes a few minutes.</p>
+      <ol className="space-y-2">
+        {steps.map(({ section, chapterId }, index) => {
+          const video = section.video && VIDEOS_BY_ID[section.video]?.status === 'ready' ? VIDEOS_BY_ID[section.video] : null
+          return (
+            <li key={section.id} className="flex items-center gap-3 rounded-lg bg-white px-3 py-2 shadow-sm">
+              <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-primary-600 text-sm font-bold text-white">{index + 1}</span>
+              <span className="min-w-0 flex-1 text-sm font-medium text-gray-900">{plainTitle(section.title)}</span>
+              {video && (
+                <button type="button" onClick={() => onWatch(video.id)} className="flex-shrink-0 rounded-md bg-primary-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-primary-700">
+                  &#9654; Watch
+                </button>
+              )}
+              <button type="button" onClick={() => onRead(chapterId, section.id)} className="flex-shrink-0 rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50">
+                Read
+              </button>
+            </li>
+          )
+        })}
+      </ol>
+    </section>
   )
 }
 
@@ -434,13 +497,24 @@ export default function UserGuidePage() {
   const playingVideo = selectedVideoId ? videoData.videos.find((v) => v.id === selectedVideoId && v.status !== 'planned') : null
   const [searchQuery, setSearchQuery] = useState('')
   const debouncedSearch = useDebounce(searchQuery, 300)
-  const [mobileTocOpen, setMobileTocOpen] = useState(false)
   const contentRef = useRef(null)
 
   // Initialize from URL
-  const initialChapter = parseInt(searchParams.get('chapter')) || 1
-  const [activeChapterId, setActiveChapterId] = useState(initialChapter)
-  const [expandedChapters, setExpandedChapters] = useState(new Set([initialChapter]))
+  const [, setActiveChapterId] = useState(parseInt(searchParams.get('chapter')) || null)
+  // Everything starts closed: a new reader sees the short "Start here" path and a quiet list, not a wall of text.
+  // A deep link (?chapter=&section=) opens just what it points at.
+  const linkedChapter = parseInt(searchParams.get('chapter')) || null
+  const linkedSection = searchParams.get('section')
+  const [expandedChapters, setExpandedChapters] = useState(new Set(linkedChapter ? [linkedChapter] : []))
+  const [expandedSections, setExpandedSections] = useState(new Set(linkedChapter && linkedSection ? [`${linkedChapter}.${linkedSection}`] : []))
+  const toggleSection = useCallback((sectionId) => {
+    setExpandedSections((prev) => {
+      const next = new Set(prev)
+      if (next.has(sectionId)) next.delete(sectionId)
+      else next.add(sectionId)
+      return next
+    })
+  }, [])
 
   // Build search index
   const searchIndex = useMemo(() => {
@@ -502,8 +576,8 @@ export default function UserGuidePage() {
   const navigateTo = useCallback((chapterId, sectionId) => {
     setActiveChapterId(chapterId)
     setExpandedChapters(prev => new Set([...prev, chapterId]))
+    if (sectionId) setExpandedSections(prev => new Set([...prev, sectionId]))
     setSearchQuery('')
-    setMobileTocOpen(false)
 
     const sectionNum = sectionId ? sectionId.split('.')[1] : null
     const view = searchParams.get('view') === 'all' ? { view: 'all' } : {}
@@ -533,11 +607,6 @@ export default function UserGuidePage() {
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // TOC click handler
-  const handleTocClick = useCallback((chapterId) => {
-    navigateTo(chapterId)
-  }, [navigateTo])
-
   const isSearchMode = searchResults !== null
 
   return (
@@ -545,7 +614,7 @@ export default function UserGuidePage() {
     <GuideVideoContext.Provider value={openVideo}>
     <div className="space-y-4">
       {/* Header */}
-      <PageHeader title="User Guide" subtitle={<>{guideData.meta.version} &middot; Updated {formatDate(guideData.meta.generatedAt)}</>} actions={<>
+      <PageHeader title="User Guide" subtitle="Short steps and videos to get your school running" actions={<>
 {/* Search */}
         <div className="relative w-full sm:w-80">
           <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none text-gray-400">
@@ -585,32 +654,14 @@ export default function UserGuidePage() {
         ))}
       </div>
 
-      {/* View toggle: role-based or whole guide */}
-      {!isSuperAdmin && (
-        <div className="flex items-center gap-3 flex-wrap text-sm">
-          <div className="inline-flex rounded-lg border border-gray-300 overflow-hidden" role="group" aria-label="Guide view">
-            <button
-              type="button"
-              onClick={() => setView('role')}
-              className={`px-3 py-1.5 ${!viewAll ? 'bg-primary-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
-              aria-pressed={!viewAll}
-            >
-              For my role
-            </button>
-            <button
-              type="button"
-              onClick={() => setView('all')}
-              className={`px-3 py-1.5 border-l border-gray-300 ${viewAll ? 'bg-primary-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
-              aria-pressed={viewAll}
-            >
-              Show all
-            </button>
-          </div>
-          <span className="text-gray-500">
-            Showing {chapters.length} of {guideData.chapters.length} chapters
-            {!viewAll && " for your role and your school's modules"}
-          </span>
-        </div>
+      {/* Who this is for: one quiet line instead of a toggle and a count */}
+      {!isSuperAdmin && roleViewUsable && (
+        <p className="text-sm text-gray-500">
+          {viewAll ? 'Showing every topic.' : 'Showing the topics for your role.'}{' '}
+          <button type="button" onClick={() => setView(viewAll ? 'role' : 'all')} className="text-primary-600 hover:underline">
+            {viewAll ? 'Show only mine' : 'Show everything'}
+          </button>
+        </p>
       )}
 
       {/* Search results count */}
@@ -620,90 +671,57 @@ export default function UserGuidePage() {
         </div>
       )}
 
-      {/* Mobile TOC toggle */}
-      <button
-        className="lg:hidden flex items-center gap-2 px-4 py-2 bg-white rounded-lg shadow-sm border border-gray-200 w-full"
-        onClick={() => setMobileTocOpen(!mobileTocOpen)}
-      >
-        <ListIcon />
-        <span className="text-sm font-medium text-gray-700">Table of Contents</span>
-        <ChevronRightIcon className={`ml-auto transition-transform duration-200 text-gray-400 ${mobileTocOpen ? 'rotate-90' : ''}`} />
-      </button>
-
-      {/* Main layout */}
       {tab === 'videos' ? (
         <VideosTab videos={visibleVideos} onSelect={openVideo} />
-      ) : (
-      <div className="flex flex-col lg:flex-row gap-6">
-        {/* TOC Sidebar */}
-        <aside className={`${mobileTocOpen ? 'block' : 'hidden'} lg:block lg:w-72 lg:flex-shrink-0`}>
-          <div className="lg:sticky lg:top-4 bg-white rounded-lg shadow-sm border border-gray-200 overflow-y-auto" style={{ maxHeight: 'calc(100vh - 120px)' }}>
-            <div className="p-3 border-b border-gray-100">
-              <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Contents</h3>
-            </div>
-            <nav className="p-2">
-              {chapters.map(chapter => (
-                <button
-                  key={chapter.id}
-                  onClick={() => handleTocClick(chapter.id)}
-                  className={`w-full text-left px-3 py-2 rounded-md text-sm transition-colors mb-0.5 ${
-                    activeChapterId === chapter.id
-                      ? 'bg-primary-50 text-primary-700 font-medium'
-                      : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-                  }`}
-                >
-                  <span className="text-xs text-gray-400 mr-2">{chapter.id}.</span>
-                  {chapter.title}
-                </button>
-              ))}
-            </nav>
-          </div>
-        </aside>
-
-        {/* Content Area */}
-        <main className="flex-1 min-w-0" ref={contentRef}>
-          {isSearchMode ? (
-            /* Search Results View */
-            <div className="space-y-4">
-              {Object.keys(searchResults.grouped).length === 0 ? (
-                <div className="text-center py-12 text-gray-500">
-                  <p className="text-lg">No results found</p>
-                  <p className="text-sm mt-1">Try different keywords</p>
-                </div>
-              ) : (
-                Object.entries(searchResults.grouped).map(([chapterId, group]) => (
-                  <div key={chapterId} className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-                    <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                      <span className="flex items-center justify-center w-6 h-6 rounded-full bg-primary-100 text-primary-700 font-bold text-xs">
-                        {chapterId}
-                      </span>
-                      {group.title}
-                    </h3>
-                    <div className="space-y-2">
-                      {group.results.map((result, idx) => (
-                        <SearchResultItem key={idx} result={result} onNavigate={navigateTo} />
-                      ))}
-                    </div>
-                  </div>
-                ))
-              )}
+      ) : isSearchMode ? (
+        <div className="space-y-4">
+          {Object.keys(searchResults.grouped).length === 0 ? (
+            <div className="text-center py-12 text-gray-500">
+              <p className="text-lg">No results found</p>
+              <p className="text-sm mt-1">Try different keywords</p>
             </div>
           ) : (
-            /* Normal Chapter View */
-            <div className="space-y-4">
-              {chapters.map(chapter => (
-                <ChapterBlock
-                  key={chapter.id}
-                  chapter={chapter}
-                  isExpanded={expandedChapters.has(chapter.id)}
-                  onToggle={() => toggleChapter(chapter.id)}
-                  searchHighlight={null}
-                />
-              ))}
-            </div>
+            Object.entries(searchResults.grouped).map(([chapterId, group]) => (
+              <div key={chapterId} className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+                <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                  <span className="flex items-center justify-center w-6 h-6 rounded-full bg-primary-100 text-primary-700 font-bold text-xs">
+                    {chapterId}
+                  </span>
+                  {group.title}
+                </h3>
+                <div className="space-y-2">
+                  {group.results.map((result, idx) => (
+                    <SearchResultItem key={idx} result={result} onNavigate={navigateTo} />
+                  ))}
+                </div>
+              </div>
+            ))
           )}
-        </main>
-      </div>
+        </div>
+      ) : (
+        <div className="space-y-6" ref={contentRef}>
+          <StartHere
+            sectionIds={START_HERE[isSuperAdmin ? 'SCHOOL_ADMIN' : effectiveRole] || []}
+            chapters={chapters}
+            onRead={navigateTo}
+            onWatch={openVideo}
+          />
+          <div className="space-y-2">
+            <h2 className="text-sm font-semibold uppercase tracking-wider text-gray-500">Browse by topic</h2>
+            {chapters.map(chapter => (
+              <ChapterBlock
+                key={chapter.id}
+                chapter={chapter}
+                isExpanded={expandedChapters.has(chapter.id)}
+                onToggle={() => toggleChapter(chapter.id)}
+                searchHighlight={null}
+                expandedSections={expandedSections}
+                onToggleSection={toggleSection}
+              />
+            ))}
+          </div>
+          <p className="text-xs text-gray-400">Guide updated {formatDate(guideData.meta.generatedAt)}</p>
+        </div>
       )}
       {playingVideo && (
         <GuideVideoModal

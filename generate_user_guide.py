@@ -9,7 +9,7 @@ Run:    python generate_user_guide.py
 """
 
 from fpdf import FPDF
-from guide_meta import apply_meta, sync_video_catalog
+from guide_meta import apply_meta, sync_video_catalog, START_HERE
 import os
 import json
 from datetime import datetime, timezone
@@ -2322,7 +2322,8 @@ def build_guide():
             "version": "3.4 - Manual Attendance & Updated Navigation",
             "generatedAt": datetime.now(timezone.utc).isoformat(),
             "totalChapters": len(pdf.json_chapters),
-            "modules": pdf.json_modules
+            "modules": pdf.json_modules,
+            "startHere": START_HERE
         },
         "chapters": apply_meta(pdf.json_chapters)
     }

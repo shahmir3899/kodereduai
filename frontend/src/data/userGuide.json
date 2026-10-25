@@ -3,7 +3,7 @@
     "title": "Education AI",
     "subtitle": "School Administration Guide",
     "version": "3.4 - Manual Attendance & Updated Navigation",
-    "generatedAt": "2026-10-24T08:42:32.180915+00:00",
+    "generatedAt": "2026-10-25T09:31:16.402461+00:00",
     "totalChapters": 22,
     "modules": [
       "Dashboard | Classes & Students | Attendance (Manual Entry)",
@@ -12,7 +12,68 @@
       "Admissions CRM | Transport | Library | Hostel | Inventory",
       "LMS | Notifications | Messaging | Parent & Student Portals | AI Study Helper",
       "AI Features: OR-Tools Timetable | AI Report Comments | AI Letter Drafting"
-    ]
+    ],
+    "startHere": {
+      "SCHOOL_ADMIN": [
+        "1.3",
+        "2.8",
+        "2.1",
+        "2.2",
+        "2.3",
+        "2.4",
+        "2.5",
+        "3.1"
+      ],
+      "PRINCIPAL": [
+        "1.3",
+        "2.8",
+        "2.1",
+        "2.2",
+        "2.3",
+        "2.4",
+        "2.5",
+        "3.1"
+      ],
+      "TEACHER": [
+        "1.3",
+        "3.1",
+        "3.2",
+        "3.3",
+        "6.4",
+        "12.2"
+      ],
+      "MANAGER": [
+        "1.3",
+        "5.1",
+        "5.5"
+      ],
+      "ACCOUNTANT": [
+        "1.3",
+        "7.1",
+        "7.3",
+        "7.6",
+        "7.9"
+      ],
+      "STAFF": [
+        "1.3",
+        "13.1"
+      ],
+      "DRIVER": [
+        "1.3",
+        "10.4"
+      ],
+      "PARENT": [
+        "1.3",
+        "15.2",
+        "15.3"
+      ],
+      "STUDENT": [
+        "1.3",
+        "16.4",
+        "16.6",
+        "16.8"
+      ]
+    }
   },
   "chapters": [
     {
