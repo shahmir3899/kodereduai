@@ -21,6 +21,7 @@ import { useFeeMonthSummary } from '../hooks/useFeeMonthSummary'
 import ModuleHealthCard from '../components/dashboard/ModuleHealthCard'
 import QuickActionGrid from '../components/dashboard/QuickActionGrid'
 import NotificationsFeed from '../components/dashboard/NotificationsFeed'
+import GuideProgressPanel from '../components/dashboard/GuideProgressPanel'
 import LeadershipInsightsPanels from '../components/dashboard/LeadershipInsightsPanels'
 
 // ─── SVG Icons ──────────────────────────────────────────────────────────────────
@@ -508,6 +509,8 @@ export default function DashboardPage({ variant }) {
           </div>
         </div>
       </div>
+
+      {isPrincipal && <GuideProgressPanel />}
     </div>
   )
 }
