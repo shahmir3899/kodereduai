@@ -575,18 +575,11 @@ def build_guide():
     pdf.chapter_title("Academics Module")
 
     pdf.section_title("Managing Subjects")
-    pdf.nav_path("Sidebar > Academics > Subjects > Subjects Tab")
-    pdf.step("Click 'Add Subject' to create a new subject.")
-    pdf.step("Fill in: Subject Name, Code (e.g., MATH, ENG), Description.")
-    pdf.step("Check 'Elective subject' if the subject is optional for students.")
-    pdf.step("Save. The subject appears in the list with AI-generated insights about workload.")
-
-    pdf.sub_section("Assigning Subjects to Classes")
-    pdf.nav_path("Sidebar > Academics > Subjects > Assignments Tab")
-    pdf.step("Switch to the 'Assignments' tab.")
-    pdf.step("Click 'Assign Subject' and select: Class, Subject, Teacher, Periods Per Week.")
-    pdf.step("Save. This links the subject, teacher, and class together.")
-    pdf.step("Repeat for all subject-class-teacher combinations.")
+    pdf.nav_path("Sidebar > Academics > Subjects")
+    pdf.step("In the 'Subjects' tab, click '+ Add Subject'. Enter the name; the code is filled in and you can change it.")
+    pdf.step("Tick 'Elective subject' if students can choose it, then click 'Create'. The subject appears in the list.")
+    pdf.step("Open 'Class Assignments' and click 'Assign Subject'. Choose the class, subject, teacher and periods per week, then save. Repeat for each combination.")
+    pdf.body_text("The 'AI Insights' tab shows workload balance across subjects.")
 
     pdf.section_title("Academic Sessions (Years & Terms)")
     pdf.nav_path("Sidebar > Management > Sessions")
@@ -614,207 +607,109 @@ def build_guide():
 
     pdf.section_title("Student Promotion")
     pdf.nav_path("Sidebar > Management > Promotion")
-    pdf.step("Select the source academic year and source class/session class.")
-    pdf.step("Select the target academic year.")
-    pdf.step("Review each student row and choose an action: PROMOTE, REPEAT, or GRADUATE.")
-    pdf.step("For PROMOTE/REPEAT, confirm the target class or target session class and set roll numbers as needed.")
-    pdf.step("Use preview helpers where available, then run bulk promotion.")
-    pdf.step("After execution, open the Promotion History tab to verify generated event rows.")
-
-    pdf.sub_section("Action Meanings")
-    pdf.bullet("PROMOTE: Student moves to next class in the target academic year; source enrollment becomes PROMOTED.")
-    pdf.bullet("REPEAT: Student remains at same grade intent in the target academic year; source enrollment becomes REPEAT.")
-    pdf.bullet("GRADUATE: Student is marked terminal graduate in source context; no target class is required.")
-
-    pdf.sub_section("Corrections (Single/Bulk)")
-    pdf.step("If a promotion result is wrong, use Correct Single or Correct Bulk from Promotion History.")
-    pdf.step("Provide source/target years and the correction action.")
-    pdf.step("For REPEAT corrections, the system now normalizes stale promoted targets to same-grade repeat targets automatically.")
-    pdf.step("When session-class IDs differ across years, correction resolves target-year session class mapping safely.")
-
-    pdf.warning_box("Promotion and correction are audited operations. Always verify source year, target year, and class mappings before confirming.")
-    pdf.info_box("Promotion & New Admissions",
-                 "New admissions can happen in a future session before promotion is run for the current "
-                 "session. For example, you can admit students to Playgroup for 2026-27 while 2025-26 "
-                 "students are still in Playgroup. Roll numbers are independent per session, so there "
-                 "are no conflicts. When you promote the old students, they move to the next class.")
+    pdf.step("Choose the year you are promoting from and the year you are promoting to, then click 'Next'.")
+    pdf.step("Choose the class to promote and click 'Next'.")
+    pdf.step("For each student choose an action: Promote, Repeat or Graduate. For the highest class the default is Graduate. Choose the target class for everyone.")
+    pdf.step("Click 'Promote Students'. The result shows how many were promoted.")
+    pdf.info_box("Fixing a mistake", "Open 'Promotion History' to check what happened. Correct one student from their row, or tick several rows for a Bulk Correction. A reason is required, and every correction is recorded.")
+    pdf.info_box("New admissions", "You can admit new students to next year's classes before promoting. Roll numbers are separate for each year, so nothing clashes.")
 
     pdf.section_title("AI Analytics")
     pdf.nav_path("Sidebar > AI Analytics")
-    pdf.body_text(
-        "The AI Analytics page provides intelligent insights about academic performance, "
-        "subject workload balance, attendance correlation with grades, and more. Use it to "
-        "identify struggling students and subjects that need attention."
-    )
+    pdf.body_text("Shows how subjects, attendance and marks relate, to help you spot students and subjects that need attention.")
 
     pdf.section_title("Academic Calendar")
     pdf.nav_path("Sidebar > Management > Academic Calendar")
-    pdf.body_text(
-        "The Academic Calendar is a large month view of sessions, terms, off-days and school events."
-    )
-    pdf.step("Choose the Academic Year, and filter by Class or 'Whole School'.")
-    pdf.step("Use the Year and Month selectors and the Previous/Next buttons to move around.")
-    pdf.step("Press 'Add Event / Off Day' to add an entry.")
-    pdf.step("Enter the Title and Type, and switch on 'OFF Day' if school is closed.")
-    pdf.step("Choose who it applies to (Students, Staff or both) and the scope (whole school or specific classes).")
-    pdf.step("For off-days, pick an OFF Day Category (for example Summer Vacation or Religious Holiday).")
-    pdf.step("Set the Start and End Date, an optional Color Tag and Description, then save.")
-    pdf.bullet("Sundays are marked OFF automatically.")
-    pdf.bullet("The side panel lists Terms touching the month, Entries in the month and Exam groups this month.")
-    pdf.bullet("Calendar Completeness shows how many days of the month are configured.")
-    pdf.warning_box("Attendance cannot be saved on OFF days (see Chapter 3).")
+    pdf.body_text("A month view of terms, off days and school events. Sundays are off automatically.")
+    pdf.step("Use the year and month selectors to move around. Filter by class or 'Whole School' if you need to.")
+    pdf.step("Click 'Add Event / Off Day'. Enter a title and choose the type. Switch on 'OFF Day' if school is closed, and pick a category such as Summer Vacation or Religious Holiday.")
+    pdf.step("Choose who it applies to, set the start and end date, and click 'Save'. It appears on the calendar.")
+    pdf.warning_box("Attendance cannot be saved on off days (see Chapter 3).")
 
     # =========================================================================
     # CHAPTER 5: EXAMINATIONS
     # =========================================================================
     pdf.chapter_title("Examinations Module")
 
-    pdf.body_text(
-        "The Examinations module covers the complete exam lifecycle: defining grade scales, "
-        "creating exam types, scheduling exams, entering marks, viewing results, and generating report cards."
-    )
+    pdf.body_text("The exam cycle, in order: grade scale, exam types, create an exam, enter marks, announce results, report cards.")
 
     pdf.section_title("Step 1: Define Grade Scale")
     pdf.nav_path("Sidebar > Academics > Grade Scale")
-    pdf.step("Navigate to Academics > Grade Scale in the sidebar.")
-    pdf.step("Click 'Add Grade' and define each grade level.")
-    pdf.step("For each grade, enter: Grade Name (A+, A, B+...), Min Marks, Max Marks, Grade Point (GPA).")
-    pdf.step("Save all grades. This scale is used to auto-calculate student grades from marks.")
-
-    pdf.simple_table(
-        ["Grade", "Min %", "Max %", "Grade Point"],
-        [
-            ["A+", "90", "100", "4.0"],
-            ["A", "80", "89", "3.7"],
-            ["B+", "70", "79", "3.3"],
-            ["B", "60", "69", "3.0"],
-            ["C+", "50", "59", "2.5"],
-            ["C", "40", "49", "2.0"],
-            ["F", "0", "39", "0.0"],
-        ],
-        [40, 40, 40, 70]
-    )
+    pdf.step("Click 'Add Grade'. Enter the grade label, the minimum and maximum percentage, and the grade point, then click 'Create'.")
+    pdf.step("To add a grade above an existing one, first lower the top of the grade below: click 'Edit', change its maximum, and click 'Update'.")
+    pdf.body_text("Grades and GPA on results and report cards are worked out from this scale.")
 
     pdf.section_title("Step 2: Create Exam Types")
     pdf.nav_path("Sidebar > Academics > Exam Types")
-    pdf.step("Click 'Add Exam Type'.")
-    pdf.step("Enter: Type Name (e.g., 'Mid-Term Exam', 'Final Exam', 'Unit Test').")
-    pdf.step("Set the weightage (how much this exam type counts toward the final grade).")
-    pdf.step("Save. Exam types can be reused across terms and years.")
+    pdf.step("Click 'Add Exam Type'. Type the name (for example Unit Test or Final Exam).")
+    pdf.step("Set the weight: how much this exam counts toward the final result.")
+    pdf.step("Tick 'Final exam' only for exams that decide promotion, then click 'Create'.")
 
     pdf.section_title("Step 3: Create an Exam")
     pdf.nav_path("Sidebar > Academics > Exams")
-    pdf.step("Click 'Create Exam'.")
-    pdf.step("Select: Academic Year, Term, Class, Exam Type.")
-    pdf.step("Enter: Exam Name, Start Date, End Date.")
-    pdf.step("The exam status will be 'SCHEDULED' initially.")
-    pdf.step("As the exam progresses, update status: SCHEDULED > IN_PROGRESS > MARKS_ENTRY > COMPLETED > PUBLISHED.")
+    pdf.step("Click 'Create Exam'. Choose the academic year, term and exam type.")
+    pdf.step("Enter the dates, click 'Next', and choose the classes.")
+    pdf.step("Continue through the date sheet to the preview, check it, then click 'Create Exam'.")
+    pdf.body_text("A new exam starts as Scheduled. You move it forward as marks are entered and results are published.")
 
     pdf.section_title("Step 4: Enter Marks")
     pdf.nav_path("Sidebar > Academics > Marks Entry")
-    pdf.step("Select the Exam, Class, and Subject from the dropdowns.")
-    pdf.step("The system loads all students in that class.")
-    pdf.step("Enter marks for each student. The max marks are validated automatically.")
-    pdf.step("Save marks. You can return and edit marks until the exam is published.")
-    pdf.step("Bulk import from Excel is also available for large classes.")
+    pdf.step("Choose the exam, the class and the subject. The class's students load automatically.")
+    pdf.step("Type each student's marks. The maximum marks are checked for you.")
+    pdf.step("Click 'Save All Marks'. You can come back and edit until the results are published.")
 
     pdf.section_title("Step 5: View & Publish Results")
     pdf.nav_path("Sidebar > Academics > Results")
-    pdf.step("Select the Exam and Class to view computed results.")
-    pdf.step("Results show: Subject-wise marks, grades (auto-calculated from grade scale), GPA.")
-    pdf.step("Review results for accuracy.")
-    pdf.step("Click 'Generate Comments' to create personalized per-subject comments for all students.")
-    pdf.step("Click on any student row to expand and view/edit their AI-generated comments.")
-    pdf.step("To make results visible to students and parents, open Sidebar > Academics > Exams, find the exam group and click 'Announce Results' (or 'Announce Ready Classes' if some classes are still missing marks). The button stays disabled until all marks for that exam are entered.")
+    pdf.step("Choose the class and the exam to see marks and grades. Check them before you announce.")
+    pdf.step("Optional: click 'Generate Comments' to draft a comment for every student. Open a student's row to read or edit it.")
+    pdf.step("To show results to students and parents, open 'Exams', expand the exam group and click 'Announce Results', then confirm. If some classes are still missing marks, use 'Announce Ready Classes'.")
 
     pdf.section_title("Step 6: Generate Report Cards")
     pdf.nav_path("Sidebar > Academics > Report Cards")
-    pdf.step("Select a Class from the dropdown to filter students.")
-    pdf.step("Search or select the student from the filtered list (sorted by roll number).")
-    pdf.step("Optionally filter by Academic Year and Term.")
-    pdf.step("Preview the report card with all exam results, grades, and GPA.")
-    pdf.step("Click 'Download PDF' to generate a printable report card with the school logo, "
-             "marks table, grade scale reference, and page footer.")
+    pdf.step("Choose a class, then the student. You can also filter by session and exams.")
+    pdf.step("The preview shows exam results, grades and GPA. Click 'Download PDF' for a printable report card.")
 
     pdf.section_title("Weighted Average Configuration")
     pdf.nav_path("Sidebar > Settings > School Profile > Examination Settings")
-    pdf.body_text(
-        "Schools can choose between two calculation modes for report cards:"
-    )
-    pdf.bullet("Simple Average (default) - All exam marks summed and divided by total possible marks.")
-    pdf.bullet("Weighted Average - Each exam type contributes based on its weight "
-               "(e.g., Mid-Term 30%, Final 70%). Enable this toggle if your institution uses weighted grading.")
-    pdf.step("Go to Settings > School Profile and scroll to 'Examination Settings'.")
-    pdf.step("Toggle 'Weighted Average' ON or OFF.")
-    pdf.step("When enabled, set appropriate weights on each Exam Type (Step 2 above).")
-
-    pdf.info_box("Complete Exam Workflow",
-                 "Grade Scale > Exam Types > Create Exam > Enter Marks > View Results > Publish > Report Cards. "
-                 "Each step depends on the previous one.")
+    pdf.body_text("By default report cards use a simple average. With weighted average, each exam type counts by its weight (for example Mid-Term 30%, Final 70%).")
+    pdf.step("Open Settings, go to the 'School Profile' tab and scroll to 'Examination Settings'.")
+    pdf.step("Click the 'Weighted Average' switch on, then check each exam type's weight on the Exam Types page.")
 
     pdf.section_title("Step 7: Monthly Skill & Behaviour Assessments")
     pdf.nav_path("Sidebar > Academics > Assessments")
-    pdf.body_text(
-        "Separately from exam marks, teachers record a monthly snapshot of each student's skills "
-        "(Listening, Speaking, Writing, Reading, Participation, Confidence, Social Skills) and behaviour "
-        "(Discipline, Respect, Teamwork, Class Participation, Responsibility), plus a Teacher Remark and "
-        "a Principal Remark. Each snapshot is scoped to one student, one academic year, and one calendar "
-        "month, so a fresh set of ratings can be entered every month."
-    )
-    pdf.step("Select the Academic Year, Class, and Month from the filters at the top of the page.")
-    pdf.step("The roster loads every student enrolled in that class for the selected month.")
-    pdf.step("Rate each skill and behaviour on a 5-point scale: Needs Improvement, Fair, Good, Very Good, Excellent.")
-    pdf.step("Write a Teacher Remark, or click 'AI Suggest' next to the remark box to draft one from the "
-             "ratings already entered for that student. Review and edit any AI draft before saving.")
-    pdf.step("Click 'Save' on a single student's row to save just that student, or 'Save Month' to save "
-             "the whole class roster at once.")
-    pdf.bullet("The page also works on a phone or tablet - the table becomes a scrollable list of cards.")
-    pdf.info_box("Principal Remark access",
-                 "Only School Admins, Principals, and Super Admins can edit the Principal Remark field. "
-                 "Teachers can view it, and their saves never overwrite an existing Principal Remark.")
-    pdf.body_text(
-        "The most recently saved month's ratings and remarks for the student's academic year appear "
-        "automatically on that student's Comprehensive Report (Skills Assessment, Behaviour Evaluation, "
-        "and Remarks sections) - no separate step is needed to publish them to the report."
-    )
+    pdf.body_text("Each month, teachers rate every student's skills and behaviour and add a remark. This is separate from exam marks.")
+    pdf.step("Choose the class and the month. Every student in the class is listed.")
+    pdf.step("Rate each skill and behaviour (Needs Improvement to Excellent), then write a teacher remark. 'AI Suggest' can draft one from the ratings; check it before saving.")
+    pdf.step("Click 'Save' on a row for one student, or 'Save Month' for the whole class.")
+    pdf.info_box("Principal remark", "Only School Admins and Principals can edit the principal remark. A teacher's save never overwrites it.")
+    pdf.body_text("The latest saved month appears automatically on the student's Comprehensive Report.")
 
     pdf.section_title("Question Bank")
     pdf.nav_path("Sidebar > Content Creation > Question Bank")
-    pdf.body_text("The Question Bank stores reusable questions for the paper builder and curriculum coverage.")
-    pdf.step("Press 'Add Question'.")
-    pdf.step("Choose Class and Subject, then the Book, Chapter and topic.")
-    pdf.step("Choose the Question Type, Difficulty, Bloom's Level and Marks.")
-    pdf.step("Type the Question Text. For multiple choice, enter the options and select the correct one.")
-    pdf.step("Tick at least one Linked Topic. The bank lists questions by class through their topics, so a question without a topic is saved but does not appear when you filter by class.")
-    pdf.step("Optionally add tags and link a Source Content Block from the book.")
-    pdf.step("To find the question again, choose the Class (and Subject) in the filters at the top. The list stays empty until a class is selected.")
-    pdf.body_text("Filter questions by keyword or semantic search, type, difficulty, Bloom level, tag and source (Human, AI Unverified, AI Verified). Mark AI-generated questions as verified after you check them.")
+    pdf.body_text("Reusable questions for papers and curriculum coverage.")
+    pdf.step("Click 'Add Question'. Choose the class, subject, book and chapter.")
+    pdf.step("Choose the type, difficulty and marks, then type the question. For multiple choice, add the options and mark the correct one.")
+    pdf.step("Tick the topic it tests, then save. The bank lists questions by class through their topics, so a question with no topic will not appear when you filter by class.")
+    pdf.step("To find it again, choose the class (and subject) in the filters. The list stays empty until a class is chosen.")
+    pdf.info_box("AI questions", "Questions made by AI are marked Unverified. Check them, then mark them Verified.")
 
     pdf.section_title("Question Paper Builder and Question Papers")
     pdf.nav_path("Sidebar > Content Creation > Paper Builder")
-    pdf.info_box("Availability", "The paper builder appears only if the feature is enabled for your school.")
-    pdf.step("Paper Setup: choose Class, Subject, optional Exam, Paper Title, Total Marks, Duration and Instructions.")
-    pdf.step("The Paper Title is filled in from the exam, class and subject. Edit it if you want a different title; clear it to get the suggestion back.")
-    pdf.step("Paper Structure: define the sections of the paper. Sections are optional. If the section marks do not add up to the Total Marks, a 'Marks mismatch' message asks you to confirm - press Continue to go on anyway.")
-    pdf.step("Choose how to add questions: 'Type manually', 'From question bank / lesson plans' or 'Capture from image' (a handwritten paper). You can change the source later.")
-    pdf.step("For image capture, take a clear, well-lit photo and review the extracted questions before confirming.")
-    pdf.step("Check the Curriculum Coverage and Bloom distribution panel, and fix any marks mismatch warning.")
-    pdf.body_text("Open 'Question Papers' to see papers as Draft, Ready or Published. Resume drafts, duplicate or delete papers, and export published papers. Teachers can open Responses for a paper.")
+    pdf.step("Choose the class and subject, then finish the title; it starts from the exam, class and subject.")
+    pdf.step("Under 'Paper Structure', sections are optional. If section marks do not add up to the total, a 'Marks mismatch' message asks you to click 'Continue' to confirm.")
+    pdf.step("Add questions with 'Type manually', 'From question bank / lesson plans' or 'Capture from image' (a handwritten paper; check the extracted questions).")
+    pdf.step("Open the draft to save it. All your papers are listed under 'Question Papers' as Draft, Ready or Published.")
+    pdf.info_box("Availability", "The paper builder appears only if the feature is turned on for your school.")
 
     pdf.section_title("Worksheets")
     pdf.nav_path("Sidebar > Content Creation > Worksheets")
-    pdf.body_text(
-        "Worksheets are practice or homework sheets. Create them manually, from the question bank, or by scanning a printed sheet. "
-        "Status is Draft, Ready or Published. Marks are optional because worksheets are usually ungraded. You can duplicate or delete a worksheet."
-    )
+    pdf.body_text("Practice or homework sheets. Create them by hand, from the question bank, or by scanning a printed sheet. Marks are optional. Each is Draft, Ready or Published.")
 
     pdf.section_title("Curriculum Coverage")
     pdf.nav_path("Sidebar > Planning & Delivery > Curriculum Coverage")
-    pdf.step("Select a Class and a Subject.")
-    pdf.step("Use the Coverage Filter: All topics, Taught only, Tested only, Taught & tested, or Uncovered.")
-    pdf.step("Read each topic's status, Planned Date, Taught Date, linked Lesson Plans and Questions.")
-    pdf.step("Switch between 'List' and 'Timeline' views.")
-    pdf.body_text("Summary tiles show Total Topics, Taught and Tested. This page is not shown to Manager and Staff roles.")
+    pdf.step("Choose a class and a subject. The tiles show total, taught and tested topics.")
+    pdf.step("Use the coverage filter to see only what is not covered yet, and switch to 'Timeline' to see topics across the year.")
+    pdf.body_text("This page is not shown to Managers or Staff.")
 
     # =========================================================================
     # CHAPTER 6: FINANCE MODULE

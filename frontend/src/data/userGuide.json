@@ -3,7 +3,7 @@
     "title": "Education AI",
     "subtitle": "School Administration Guide",
     "version": "3.4 - Manual Attendance & Updated Navigation",
-    "generatedAt": "2026-10-25T09:39:37.156173+00:00",
+    "generatedAt": "2026-10-25T09:41:08.818747+00:00",
     "totalChapters": 22,
     "modules": [
       "Dashboard | Classes & Students | Attendance (Manual Entry)",
@@ -872,57 +872,27 @@
           "content": [
             {
               "type": "nav_path",
-              "path": "Sidebar > Academics > Subjects > Subjects Tab",
+              "path": "Sidebar > Academics > Subjects",
               "href": "/academics/subjects"
             },
             {
               "type": "step",
               "number": 1,
-              "text": "Click 'Add Subject' to create a new subject."
+              "text": "In the 'Subjects' tab, click '+ Add Subject'. Enter the name; the code is filled in and you can change it."
             },
             {
               "type": "step",
               "number": 2,
-              "text": "Fill in: Subject Name, Code (e.g., MATH, ENG), Description."
+              "text": "Tick 'Elective subject' if students can choose it, then click 'Create'. The subject appears in the list."
             },
             {
               "type": "step",
               "number": 3,
-              "text": "Check 'Elective subject' if the subject is optional for students."
+              "text": "Open 'Class Assignments' and click 'Assign Subject'. Choose the class, subject, teacher and periods per week, then save. Repeat for each combination."
             },
             {
-              "type": "step",
-              "number": 4,
-              "text": "Save. The subject appears in the list with AI-generated insights about workload."
-            },
-            {
-              "type": "sub_section",
-              "title": "Assigning Subjects to Classes"
-            },
-            {
-              "type": "nav_path",
-              "path": "Sidebar > Academics > Subjects > Assignments Tab",
-              "href": "/academics/subjects"
-            },
-            {
-              "type": "step",
-              "number": 5,
-              "text": "Switch to the 'Assignments' tab."
-            },
-            {
-              "type": "step",
-              "number": 6,
-              "text": "Click 'Assign Subject' and select: Class, Subject, Teacher, Periods Per Week."
-            },
-            {
-              "type": "step",
-              "number": 7,
-              "text": "Save. This links the subject, teacher, and class together."
-            },
-            {
-              "type": "step",
-              "number": 8,
-              "text": "Repeat for all subject-class-teacher combinations."
+              "type": "body_text",
+              "text": "The 'AI Insights' tab shows workload balance across subjects."
             }
           ],
           "video": "ch5-managing-subjects"
@@ -1024,81 +994,32 @@
             {
               "type": "step",
               "number": 1,
-              "text": "Select the source academic year and source class/session class."
+              "text": "Choose the year you are promoting from and the year you are promoting to, then click 'Next'."
             },
             {
               "type": "step",
               "number": 2,
-              "text": "Select the target academic year."
+              "text": "Choose the class to promote and click 'Next'."
             },
             {
               "type": "step",
               "number": 3,
-              "text": "Review each student row and choose an action: PROMOTE, REPEAT, or GRADUATE."
+              "text": "For each student choose an action: Promote, Repeat or Graduate. For the highest class the default is Graduate. Choose the target class for everyone."
             },
             {
               "type": "step",
               "number": 4,
-              "text": "For PROMOTE/REPEAT, confirm the target class or target session class and set roll numbers as needed."
-            },
-            {
-              "type": "step",
-              "number": 5,
-              "text": "Use preview helpers where available, then run bulk promotion."
-            },
-            {
-              "type": "step",
-              "number": 6,
-              "text": "After execution, open the Promotion History tab to verify generated event rows."
-            },
-            {
-              "type": "sub_section",
-              "title": "Action Meanings"
-            },
-            {
-              "type": "bullet",
-              "text": "PROMOTE: Student moves to next class in the target academic year; source enrollment becomes PROMOTED."
-            },
-            {
-              "type": "bullet",
-              "text": "REPEAT: Student remains at same grade intent in the target academic year; source enrollment becomes REPEAT."
-            },
-            {
-              "type": "bullet",
-              "text": "GRADUATE: Student is marked terminal graduate in source context; no target class is required."
-            },
-            {
-              "type": "sub_section",
-              "title": "Corrections (Single/Bulk)"
-            },
-            {
-              "type": "step",
-              "number": 7,
-              "text": "If a promotion result is wrong, use Correct Single or Correct Bulk from Promotion History."
-            },
-            {
-              "type": "step",
-              "number": 8,
-              "text": "Provide source/target years and the correction action."
-            },
-            {
-              "type": "step",
-              "number": 9,
-              "text": "For REPEAT corrections, the system now normalizes stale promoted targets to same-grade repeat targets automatically."
-            },
-            {
-              "type": "step",
-              "number": 10,
-              "text": "When session-class IDs differ across years, correction resolves target-year session class mapping safely."
-            },
-            {
-              "type": "warning_box",
-              "text": "Promotion and correction are audited operations. Always verify source year, target year, and class mappings before confirming."
+              "text": "Click 'Promote Students'. The result shows how many were promoted."
             },
             {
               "type": "info_box",
-              "title": "Promotion & New Admissions",
-              "text": "New admissions can happen in a future session before promotion is run for the current session. For example, you can admit students to Playgroup for 2026-27 while 2025-26 students are still in Playgroup. Roll numbers are independent per session, so there are no conflicts. When you promote the old students, they move to the next class."
+              "title": "Fixing a mistake",
+              "text": "Open 'Promotion History' to check what happened. Correct one student from their row, or tick several rows for a Bulk Correction. A reason is required, and every correction is recorded."
+            },
+            {
+              "type": "info_box",
+              "title": "New admissions",
+              "text": "You can admit new students to next year's classes before promoting. Roll numbers are separate for each year, so nothing clashes."
             }
           ],
           "roles": [
@@ -1119,7 +1040,7 @@
             },
             {
               "type": "body_text",
-              "text": "The AI Analytics page provides intelligent insights about academic performance, subject workload balance, attendance correlation with grades, and more. Use it to identify struggling students and subjects that need attention."
+              "text": "Shows how subjects, attendance and marks relate, to help you spot students and subjects that need attention."
             }
           ]
         },
@@ -1135,58 +1056,26 @@
             },
             {
               "type": "body_text",
-              "text": "The Academic Calendar is a large month view of sessions, terms, off-days and school events."
+              "text": "A month view of terms, off days and school events. Sundays are off automatically."
             },
             {
               "type": "step",
               "number": 1,
-              "text": "Choose the Academic Year, and filter by Class or 'Whole School'."
+              "text": "Use the year and month selectors to move around. Filter by class or 'Whole School' if you need to."
             },
             {
               "type": "step",
               "number": 2,
-              "text": "Use the Year and Month selectors and the Previous/Next buttons to move around."
+              "text": "Click 'Add Event / Off Day'. Enter a title and choose the type. Switch on 'OFF Day' if school is closed, and pick a category such as Summer Vacation or Religious Holiday."
             },
             {
               "type": "step",
               "number": 3,
-              "text": "Press 'Add Event / Off Day' to add an entry."
-            },
-            {
-              "type": "step",
-              "number": 4,
-              "text": "Enter the Title and Type, and switch on 'OFF Day' if school is closed."
-            },
-            {
-              "type": "step",
-              "number": 5,
-              "text": "Choose who it applies to (Students, Staff or both) and the scope (whole school or specific classes)."
-            },
-            {
-              "type": "step",
-              "number": 6,
-              "text": "For off-days, pick an OFF Day Category (for example Summer Vacation or Religious Holiday)."
-            },
-            {
-              "type": "step",
-              "number": 7,
-              "text": "Set the Start and End Date, an optional Color Tag and Description, then save."
-            },
-            {
-              "type": "bullet",
-              "text": "Sundays are marked OFF automatically."
-            },
-            {
-              "type": "bullet",
-              "text": "The side panel lists Terms touching the month, Entries in the month and Exam groups this month."
-            },
-            {
-              "type": "bullet",
-              "text": "Calendar Completeness shows how many days of the month are configured."
+              "text": "Choose who it applies to, set the start and end date, and click 'Save'. It appears on the calendar."
             },
             {
               "type": "warning_box",
-              "text": "Attendance cannot be saved on OFF days (see Chapter 3)."
+              "text": "Attendance cannot be saved on off days (see Chapter 3)."
             }
           ],
           "roles": [
@@ -1217,7 +1106,7 @@
           "content": [
             {
               "type": "body_text",
-              "text": "The Examinations module covers the complete exam lifecycle: defining grade scales, creating exam types, scheduling exams, entering marks, viewing results, and generating report cards."
+              "text": "The exam cycle, in order: grade scale, exam types, create an exam, enter marks, announce results, report cards."
             }
           ]
         },
@@ -1234,75 +1123,16 @@
             {
               "type": "step",
               "number": 1,
-              "text": "Navigate to Academics > Grade Scale in the sidebar."
+              "text": "Click 'Add Grade'. Enter the grade label, the minimum and maximum percentage, and the grade point, then click 'Create'."
             },
             {
               "type": "step",
               "number": 2,
-              "text": "Click 'Add Grade' and define each grade level."
+              "text": "To add a grade above an existing one, first lower the top of the grade below: click 'Edit', change its maximum, and click 'Update'."
             },
             {
-              "type": "step",
-              "number": 3,
-              "text": "For each grade, enter: Grade Name (A+, A, B+...), Min Marks, Max Marks, Grade Point (GPA)."
-            },
-            {
-              "type": "step",
-              "number": 4,
-              "text": "Save all grades. This scale is used to auto-calculate student grades from marks."
-            },
-            {
-              "type": "table",
-              "headers": [
-                "Grade",
-                "Min %",
-                "Max %",
-                "Grade Point"
-              ],
-              "rows": [
-                [
-                  "A+",
-                  "90",
-                  "100",
-                  "4.0"
-                ],
-                [
-                  "A",
-                  "80",
-                  "89",
-                  "3.7"
-                ],
-                [
-                  "B+",
-                  "70",
-                  "79",
-                  "3.3"
-                ],
-                [
-                  "B",
-                  "60",
-                  "69",
-                  "3.0"
-                ],
-                [
-                  "C+",
-                  "50",
-                  "59",
-                  "2.5"
-                ],
-                [
-                  "C",
-                  "40",
-                  "49",
-                  "2.0"
-                ],
-                [
-                  "F",
-                  "0",
-                  "39",
-                  "0.0"
-                ]
-              ]
+              "type": "body_text",
+              "text": "Grades and GPA on results and report cards are worked out from this scale."
             }
           ],
           "roles": [
@@ -1324,22 +1154,17 @@
             {
               "type": "step",
               "number": 1,
-              "text": "Click 'Add Exam Type'."
+              "text": "Click 'Add Exam Type'. Type the name (for example Unit Test or Final Exam)."
             },
             {
               "type": "step",
               "number": 2,
-              "text": "Enter: Type Name (e.g., 'Mid-Term Exam', 'Final Exam', 'Unit Test')."
+              "text": "Set the weight: how much this exam counts toward the final result."
             },
             {
               "type": "step",
               "number": 3,
-              "text": "Set the weightage (how much this exam type counts toward the final grade)."
-            },
-            {
-              "type": "step",
-              "number": 4,
-              "text": "Save. Exam types can be reused across terms and years."
+              "text": "Tick 'Final exam' only for exams that decide promotion, then click 'Create'."
             }
           ],
           "video": "ch6-step-2-create-exam-types"
@@ -1357,27 +1182,21 @@
             {
               "type": "step",
               "number": 1,
-              "text": "Click 'Create Exam'."
+              "text": "Click 'Create Exam'. Choose the academic year, term and exam type."
             },
             {
               "type": "step",
               "number": 2,
-              "text": "Select: Academic Year, Term, Class, Exam Type."
+              "text": "Enter the dates, click 'Next', and choose the classes."
             },
             {
               "type": "step",
               "number": 3,
-              "text": "Enter: Exam Name, Start Date, End Date."
+              "text": "Continue through the date sheet to the preview, check it, then click 'Create Exam'."
             },
             {
-              "type": "step",
-              "number": 4,
-              "text": "The exam status will be 'SCHEDULED' initially."
-            },
-            {
-              "type": "step",
-              "number": 5,
-              "text": "As the exam progresses, update status: SCHEDULED > IN_PROGRESS > MARKS_ENTRY > COMPLETED > PUBLISHED."
+              "type": "body_text",
+              "text": "A new exam starts as Scheduled. You move it forward as marks are entered and results are published."
             }
           ],
           "video": "ch6-step-3-create-an-exam"
@@ -1395,27 +1214,17 @@
             {
               "type": "step",
               "number": 1,
-              "text": "Select the Exam, Class, and Subject from the dropdowns."
+              "text": "Choose the exam, the class and the subject. The class's students load automatically."
             },
             {
               "type": "step",
               "number": 2,
-              "text": "The system loads all students in that class."
+              "text": "Type each student's marks. The maximum marks are checked for you."
             },
             {
               "type": "step",
               "number": 3,
-              "text": "Enter marks for each student. The max marks are validated automatically."
-            },
-            {
-              "type": "step",
-              "number": 4,
-              "text": "Save marks. You can return and edit marks until the exam is published."
-            },
-            {
-              "type": "step",
-              "number": 5,
-              "text": "Bulk import from Excel is also available for large classes."
+              "text": "Click 'Save All Marks'. You can come back and edit until the results are published."
             }
           ],
           "video": "ch6-step-4-enter-marks"
@@ -1433,32 +1242,17 @@
             {
               "type": "step",
               "number": 1,
-              "text": "Select the Exam and Class to view computed results."
+              "text": "Choose the class and the exam to see marks and grades. Check them before you announce."
             },
             {
               "type": "step",
               "number": 2,
-              "text": "Results show: Subject-wise marks, grades (auto-calculated from grade scale), GPA."
+              "text": "Optional: click 'Generate Comments' to draft a comment for every student. Open a student's row to read or edit it."
             },
             {
               "type": "step",
               "number": 3,
-              "text": "Review results for accuracy."
-            },
-            {
-              "type": "step",
-              "number": 4,
-              "text": "Click 'Generate Comments' to create personalized per-subject comments for all students."
-            },
-            {
-              "type": "step",
-              "number": 5,
-              "text": "Click on any student row to expand and view/edit their AI-generated comments."
-            },
-            {
-              "type": "step",
-              "number": 6,
-              "text": "To make results visible to students and parents, open Sidebar > Academics > Exams, find the exam group and click 'Announce Results' (or 'Announce Ready Classes' if some classes are still missing marks). The button stays disabled until all marks for that exam are entered."
+              "text": "To show results to students and parents, open 'Exams', expand the exam group and click 'Announce Results', then confirm. If some classes are still missing marks, use 'Announce Ready Classes'."
             }
           ],
           "video": "ch6-step-5-view-publish-results"
@@ -1476,27 +1270,12 @@
             {
               "type": "step",
               "number": 1,
-              "text": "Select a Class from the dropdown to filter students."
+              "text": "Choose a class, then the student. You can also filter by session and exams."
             },
             {
               "type": "step",
               "number": 2,
-              "text": "Search or select the student from the filtered list (sorted by roll number)."
-            },
-            {
-              "type": "step",
-              "number": 3,
-              "text": "Optionally filter by Academic Year and Term."
-            },
-            {
-              "type": "step",
-              "number": 4,
-              "text": "Preview the report card with all exam results, grades, and GPA."
-            },
-            {
-              "type": "step",
-              "number": 5,
-              "text": "Click 'Download PDF' to generate a printable report card with the school logo, marks table, grade scale reference, and page footer."
+              "text": "The preview shows exam results, grades and GPA. Click 'Download PDF' for a printable report card."
             }
           ],
           "video": "ch6-step-6-generate-report-cards"
@@ -1513,35 +1292,17 @@
             },
             {
               "type": "body_text",
-              "text": "Schools can choose between two calculation modes for report cards:"
-            },
-            {
-              "type": "bullet",
-              "text": "Simple Average (default) - All exam marks summed and divided by total possible marks."
-            },
-            {
-              "type": "bullet",
-              "text": "Weighted Average - Each exam type contributes based on its weight (e.g., Mid-Term 30%, Final 70%). Enable this toggle if your institution uses weighted grading."
+              "text": "By default report cards use a simple average. With weighted average, each exam type counts by its weight (for example Mid-Term 30%, Final 70%)."
             },
             {
               "type": "step",
               "number": 1,
-              "text": "Go to Settings > School Profile and scroll to 'Examination Settings'."
+              "text": "Open Settings, go to the 'School Profile' tab and scroll to 'Examination Settings'."
             },
             {
               "type": "step",
               "number": 2,
-              "text": "Toggle 'Weighted Average' ON or OFF."
-            },
-            {
-              "type": "step",
-              "number": 3,
-              "text": "When enabled, set appropriate weights on each Exam Type (Step 2 above)."
-            },
-            {
-              "type": "info_box",
-              "title": "Complete Exam Workflow",
-              "text": "Grade Scale > Exam Types > Create Exam > Enter Marks > View Results > Publish > Report Cards. Each step depends on the previous one."
+              "text": "Click the 'Weighted Average' switch on, then check each exam type's weight on the Exam Types page."
             }
           ],
           "roles": [
@@ -1562,45 +1323,31 @@
             },
             {
               "type": "body_text",
-              "text": "Separately from exam marks, teachers record a monthly snapshot of each student's skills (Listening, Speaking, Writing, Reading, Participation, Confidence, Social Skills) and behaviour (Discipline, Respect, Teamwork, Class Participation, Responsibility), plus a Teacher Remark and a Principal Remark. Each snapshot is scoped to one student, one academic year, and one calendar month, so a fresh set of ratings can be entered every month."
+              "text": "Each month, teachers rate every student's skills and behaviour and add a remark. This is separate from exam marks."
             },
             {
               "type": "step",
               "number": 1,
-              "text": "Select the Academic Year, Class, and Month from the filters at the top of the page."
+              "text": "Choose the class and the month. Every student in the class is listed."
             },
             {
               "type": "step",
               "number": 2,
-              "text": "The roster loads every student enrolled in that class for the selected month."
+              "text": "Rate each skill and behaviour (Needs Improvement to Excellent), then write a teacher remark. 'AI Suggest' can draft one from the ratings; check it before saving."
             },
             {
               "type": "step",
               "number": 3,
-              "text": "Rate each skill and behaviour on a 5-point scale: Needs Improvement, Fair, Good, Very Good, Excellent."
-            },
-            {
-              "type": "step",
-              "number": 4,
-              "text": "Write a Teacher Remark, or click 'AI Suggest' next to the remark box to draft one from the ratings already entered for that student. Review and edit any AI draft before saving."
-            },
-            {
-              "type": "step",
-              "number": 5,
-              "text": "Click 'Save' on a single student's row to save just that student, or 'Save Month' to save the whole class roster at once."
-            },
-            {
-              "type": "bullet",
-              "text": "The page also works on a phone or tablet - the table becomes a scrollable list of cards."
+              "text": "Click 'Save' on a row for one student, or 'Save Month' for the whole class."
             },
             {
               "type": "info_box",
-              "title": "Principal Remark access",
-              "text": "Only School Admins, Principals, and Super Admins can edit the Principal Remark field. Teachers can view it, and their saves never overwrite an existing Principal Remark."
+              "title": "Principal remark",
+              "text": "Only School Admins and Principals can edit the principal remark. A teacher's save never overwrites it."
             },
             {
               "type": "body_text",
-              "text": "The most recently saved month's ratings and remarks for the student's academic year appear automatically on that student's Comprehensive Report (Skills Assessment, Behaviour Evaluation, and Remarks sections) - no separate step is needed to publish them to the report."
+              "text": "The latest saved month appears automatically on the student's Comprehensive Report."
             }
           ],
           "video": "ch6-step-7-monthly-skill-behaviour-assessments"
@@ -1617,46 +1364,32 @@
             },
             {
               "type": "body_text",
-              "text": "The Question Bank stores reusable questions for the paper builder and curriculum coverage."
+              "text": "Reusable questions for papers and curriculum coverage."
             },
             {
               "type": "step",
               "number": 1,
-              "text": "Press 'Add Question'."
+              "text": "Click 'Add Question'. Choose the class, subject, book and chapter."
             },
             {
               "type": "step",
               "number": 2,
-              "text": "Choose Class and Subject, then the Book, Chapter and topic."
+              "text": "Choose the type, difficulty and marks, then type the question. For multiple choice, add the options and mark the correct one."
             },
             {
               "type": "step",
               "number": 3,
-              "text": "Choose the Question Type, Difficulty, Bloom's Level and Marks."
+              "text": "Tick the topic it tests, then save. The bank lists questions by class through their topics, so a question with no topic will not appear when you filter by class."
             },
             {
               "type": "step",
               "number": 4,
-              "text": "Type the Question Text. For multiple choice, enter the options and select the correct one."
+              "text": "To find it again, choose the class (and subject) in the filters. The list stays empty until a class is chosen."
             },
             {
-              "type": "step",
-              "number": 5,
-              "text": "Tick at least one Linked Topic. The bank lists questions by class through their topics, so a question without a topic is saved but does not appear when you filter by class."
-            },
-            {
-              "type": "step",
-              "number": 6,
-              "text": "Optionally add tags and link a Source Content Block from the book."
-            },
-            {
-              "type": "step",
-              "number": 7,
-              "text": "To find the question again, choose the Class (and Subject) in the filters at the top. The list stays empty until a class is selected."
-            },
-            {
-              "type": "body_text",
-              "text": "Filter questions by keyword or semantic search, type, difficulty, Bloom level, tag and source (Human, AI Unverified, AI Verified). Mark AI-generated questions as verified after you check them."
+              "type": "info_box",
+              "title": "AI questions",
+              "text": "Questions made by AI are marked Unverified. Check them, then mark them Verified."
             }
           ],
           "video": "ch6-question-bank"
@@ -1672,43 +1405,29 @@
               "href": "/academics/paper-builder"
             },
             {
-              "type": "info_box",
-              "title": "Availability",
-              "text": "The paper builder appears only if the feature is enabled for your school."
-            },
-            {
               "type": "step",
               "number": 1,
-              "text": "Paper Setup: choose Class, Subject, optional Exam, Paper Title, Total Marks, Duration and Instructions."
+              "text": "Choose the class and subject, then finish the title; it starts from the exam, class and subject."
             },
             {
               "type": "step",
               "number": 2,
-              "text": "The Paper Title is filled in from the exam, class and subject. Edit it if you want a different title; clear it to get the suggestion back."
+              "text": "Under 'Paper Structure', sections are optional. If section marks do not add up to the total, a 'Marks mismatch' message asks you to click 'Continue' to confirm."
             },
             {
               "type": "step",
               "number": 3,
-              "text": "Paper Structure: define the sections of the paper. Sections are optional. If the section marks do not add up to the Total Marks, a 'Marks mismatch' message asks you to confirm - press Continue to go on anyway."
+              "text": "Add questions with 'Type manually', 'From question bank / lesson plans' or 'Capture from image' (a handwritten paper; check the extracted questions)."
             },
             {
               "type": "step",
               "number": 4,
-              "text": "Choose how to add questions: 'Type manually', 'From question bank / lesson plans' or 'Capture from image' (a handwritten paper). You can change the source later."
+              "text": "Open the draft to save it. All your papers are listed under 'Question Papers' as Draft, Ready or Published."
             },
             {
-              "type": "step",
-              "number": 5,
-              "text": "For image capture, take a clear, well-lit photo and review the extracted questions before confirming."
-            },
-            {
-              "type": "step",
-              "number": 6,
-              "text": "Check the Curriculum Coverage and Bloom distribution panel, and fix any marks mismatch warning."
-            },
-            {
-              "type": "body_text",
-              "text": "Open 'Question Papers' to see papers as Draft, Ready or Published. Resume drafts, duplicate or delete papers, and export published papers. Teachers can open Responses for a paper."
+              "type": "info_box",
+              "title": "Availability",
+              "text": "The paper builder appears only if the feature is turned on for your school."
             }
           ],
           "video": "ch6-question-paper-builder-and-question-papers"
@@ -1725,7 +1444,7 @@
             },
             {
               "type": "body_text",
-              "text": "Worksheets are practice or homework sheets. Create them manually, from the question bank, or by scanning a printed sheet. Status is Draft, Ready or Published. Marks are optional because worksheets are usually ungraded. You can duplicate or delete a worksheet."
+              "text": "Practice or homework sheets. Create them by hand, from the question bank, or by scanning a printed sheet. Marks are optional. Each is Draft, Ready or Published."
             }
           ]
         },
@@ -1742,26 +1461,16 @@
             {
               "type": "step",
               "number": 1,
-              "text": "Select a Class and a Subject."
+              "text": "Choose a class and a subject. The tiles show total, taught and tested topics."
             },
             {
               "type": "step",
               "number": 2,
-              "text": "Use the Coverage Filter: All topics, Taught only, Tested only, Taught & tested, or Uncovered."
-            },
-            {
-              "type": "step",
-              "number": 3,
-              "text": "Read each topic's status, Planned Date, Taught Date, linked Lesson Plans and Questions."
-            },
-            {
-              "type": "step",
-              "number": 4,
-              "text": "Switch between 'List' and 'Timeline' views."
+              "text": "Use the coverage filter to see only what is not covered yet, and switch to 'Timeline' to see topics across the year."
             },
             {
               "type": "body_text",
-              "text": "Summary tiles show Total Topics, Taught and Tested. This page is not shown to Manager and Staff roles."
+              "text": "This page is not shown to Managers or Staff."
             }
           ],
           "roles": [
@@ -4723,7 +4432,8 @@
               "number": 2,
               "text": "The table lists marks, total marks, percentage and a Pass or Fail badge for each subject; an absent paper shows 'Absent'."
             }
-          ]
+          ],
+          "video": "ch16-my-results"
         },
         {
           "id": "16.7",

@@ -1584,38 +1584,6 @@
         "TEACHER"
       ],
       "module": "attendance"
-    },
-    {
-      "id": "ch4-step-4-confirm-attendance",
-      "status": "planned",
-      "title": {
-        "en": "Confirm Attendance",
-        "ur": ""
-      },
-      "section": "4.5",
-      "chapter": 4,
-      "roles": [
-        "SCHOOL_ADMIN",
-        "PRINCIPAL",
-        "TEACHER"
-      ],
-      "module": "attendance"
-    },
-    {
-      "id": "ch4-viewing-past-sessions",
-      "status": "planned",
-      "title": {
-        "en": "Viewing Past Sessions",
-        "ur": ""
-      },
-      "section": "4.6",
-      "chapter": 4,
-      "roles": [
-        "SCHOOL_ADMIN",
-        "PRINCIPAL",
-        "TEACHER"
-      ],
-      "module": "attendance"
     }
   ]
 }

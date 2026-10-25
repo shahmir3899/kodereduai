@@ -232,6 +232,11 @@ def sync_video_catalog(chapters, catalog_path):
     planned = []
     for chapter in chapters:
         for section in chapter['sections']:
+            # A finished video always stays linked, however short the written steps become.
+            ready_vid = _video_id(chapter, section)
+            if ready_vid in ready_ids:
+                section['video'] = ready_vid
+                continue
             steps = sum(1 for item in section['content'] if item['type'] == 'step')
             if section['id'] in VIDEO_EXCLUDE or (steps < VIDEO_MIN_STEPS and not section.get('video')):
                 continue
