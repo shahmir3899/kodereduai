@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import Modal from '../ui/Modal'
+import { videoUrl } from '../../utils/guideAssets'
 import GuideVideoPlayer from './GuideVideoPlayer'
 
 const LANGS = [['en', 'English'], ['ur', 'اردو']]
@@ -15,7 +16,7 @@ export default function GuideVideoModal({ video, lang, onLang, onClose, nextVide
   const [ended, setEnded] = useState(false)
   const [restartKey, setRestartKey] = useState(0)
   const [resumed, setResumed] = useState(resumeAt > 0)
-  const base = `/videos/${video.id}.${lang}`
+  const file = (ext) => videoUrl(`${video.id}.${lang}.${ext}`)
 
   // A different video starts clean: not ended, and from where this person stopped last time, if they did.
   useEffect(() => {
@@ -62,11 +63,11 @@ export default function GuideVideoModal({ video, lang, onLang, onClose, nextVide
       </div>
 
       <GuideVideoPlayer
-        src={`${base}.mp4`}
-        captionsSrc={`${base}.vtt`}
+        src={file('mp4')}
+        captionsSrc={file('vtt')}
         captionsLang={lang}
         captionsLabel={lang === 'ur' ? 'اردو' : 'English'}
-        poster={`${base}.poster.jpg`}
+        poster={file('poster.jpg')}
         startAt={startAtRef.current}
         restartKey={restartKey}
         onTime={(t) => { timeRef.current = t }}

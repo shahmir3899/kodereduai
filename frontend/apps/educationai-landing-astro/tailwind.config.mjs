@@ -1,6 +1,10 @@
 /** @type {import('tailwindcss').Config} */
 export default {
-  content: ['./src/**/*.{astro,html,js,jsx,ts,tsx,svelte}'],
+  content: [
+    './src/**/*.{astro,html,js,jsx,ts,tsx,svelte}',
+    // the public guide reuses the app's guide components, so their classes must be generated too
+    '../../src/components/guide/**/*.jsx',
+  ],
   theme: {
     extend: {
       colors: {

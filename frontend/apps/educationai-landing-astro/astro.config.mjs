@@ -11,6 +11,7 @@ export default defineConfig({
   output: 'static',
   vite: {
     server: {
+      fs: { allow: ['../..'] }, // the public guide imports from the main app's src/
       proxy: {
         '/api': 'http://127.0.0.1:8000',
       },

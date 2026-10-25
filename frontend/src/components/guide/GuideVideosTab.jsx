@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { videoUrl } from '../../utils/guideAssets'
 import { groupVideos } from '../../utils/guideVideoGroups'
 
 const PER_GROUP = 4
@@ -19,10 +20,10 @@ function VideoCard({ video, lang, watched, onSelect, step }) {
     <button
       type="button"
       onClick={() => onSelect(video.id)}
-      className="group overflow-hidden rounded-lg border border-gray-200 bg-white text-left shadow-sm transition-colors hover:border-primary-300"
+      className="group flex flex-col overflow-hidden rounded-lg border border-gray-200 bg-white text-left shadow-sm transition-colors hover:border-primary-300"
     >
       <div className="relative">
-        <img src={`/videos/${video.id}.${lang}.poster.jpg`} onError={(e) => { e.currentTarget.src = `/videos/${video.id}.en.poster.jpg` }} alt="" className="aspect-video w-full bg-gray-100 object-cover" loading="lazy" />
+        <img src={videoUrl(`${video.id}.${lang}.poster.jpg`)} onError={(e) => { e.currentTarget.src = videoUrl(`${video.id}.en.poster.jpg`) }} alt="" className="aspect-video w-full bg-gray-100 object-cover" loading="lazy" />
         {step && <span className="absolute left-2 top-2 flex h-6 w-6 items-center justify-center rounded-full bg-primary-600 text-xs font-bold text-white">{step}</span>}
         <span className="absolute bottom-2 right-2 rounded bg-black/75 px-1.5 py-0.5 text-xs font-medium text-white">{formatSeconds(seconds)}</span>
         {watched && (

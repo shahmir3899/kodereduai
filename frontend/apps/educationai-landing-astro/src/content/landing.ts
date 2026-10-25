@@ -21,6 +21,8 @@ export const siteConfig = {
     import.meta.env.PUBLIC_CAREERS_FORM_ENDPOINT ||
     `${publicApiBase || ''}/api/public/careers/apply/`,
   demoUrl: 'https://demo.educationai.pk',
+  // The guide videos are uploaded once, with the main app; the public guide plays them from there.
+  guideVideoBase: (import.meta.env.PUBLIC_GUIDE_VIDEO_BASE || 'https://demo.educationai.pk').replace(/\/$/, ''),
   twitterUrl: 'https://twitter.com/koderkidspk',
   linkedInUrl: 'https://www.linkedin.com/company/koderkids',
   youtubeUrl: 'https://youtube.com/@koderkids',

@@ -1,0 +1,44 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import Footer from '../components/sections/Footer.astro';
+import PublicGuide from '../components/islands/PublicGuide.jsx';
+import { siteConfig } from '../content/landing';
+
+const siteUrl = Astro.site?.toString().replace(/\/$/, '') ?? siteConfig.siteUrl.replace(/\/$/, '');
+---
+
+<BaseLayout
+  title="User Guide and Video Tutorials | Education AI"
+  description="Free step-by-step guide and short video tutorials, in English and Urdu, for running a school on Education AI: attendance, fees, exams, staff and more."
+  canonical="/guide"
+  robots="index,follow"
+  ogImage="/dashboard.jpg"
+  jsonLd={{
+    '@context': 'https://schema.org',
+    '@type': 'CollectionPage',
+    name: 'Education AI user guide',
+    url: `${siteUrl}/guide`,
+    isPartOf: { '@type': 'WebSite', url: siteUrl, name: 'Education AI' },
+  }}
+>
+  <header class="bg-brand-light/85 border-b border-gray-200/60">
+    <div class="flex items-center justify-between h-16 px-6 max-w-6xl mx-auto">
+      <a href="/" class="flex items-center gap-2.5">
+        <img src="/Logo.jpeg" alt="Education AI logo" class="h-8 w-8 rounded-md object-contain" width="32" height="32" />
+        <span class="font-display font-semibold text-brand-dark tracking-tight">Education <span class="text-primary">AI</span></span>
+      </a>
+      <a href="/" class="text-sm font-medium text-brand-gray hover:text-brand-dark">&larr; Back to home</a>
+    </div>
+  </header>
+  <main id="main-content" class="py-10 bg-brand-light min-h-screen">
+    <div class="max-w-6xl mx-auto px-6">
+      <span class="section-label mb-2 block">GUIDE</span>
+      <h1 class="font-display text-3xl sm:text-4xl font-bold text-brand-dark mb-2">User Guide</h1>
+      <p class="text-brand-gray mb-8 max-w-2xl">
+        Short videos in English and Urdu, and the full written guide. Free to watch, no sign-in.
+      </p>
+      <PublicGuide client:load videoBase={siteConfig.guideVideoBase} />
+    </div>
+  </main>
+  <Footer />
+</BaseLayout>

@@ -1,0 +1,5 @@
+# The public guide on www.educationai.pk plays these videos and reads their captions from here.
+<IfModule mod_headers.c>
+  Header set Access-Control-Allow-Origin "https://www.educationai.pk"
+  Header set Vary "Origin"
+</IfModule>

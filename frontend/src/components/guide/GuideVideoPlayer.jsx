@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { videoCrossOrigin } from '../../utils/guideAssets'
 import { countsAsViewing, mergeRanges } from '../../utils/guideProgressRules'
 
 const SPEEDS = [0.75, 1, 1.25, 1.5, 2]
@@ -177,6 +178,7 @@ export default function GuideVideoPlayer({ src, captionsSrc, captionsLang, capti
         playsInline
         preload="metadata"
         poster={poster}
+        crossOrigin={videoCrossOrigin()}
         onClick={toggle}
         onPlay={() => setPlaying(true)}
         onPause={() => { setPlaying(false); emit(true) }}
