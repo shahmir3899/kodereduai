@@ -137,6 +137,10 @@ export const guideProgressApi = {
   video: (body) => api.post('/api/guide/progress/video/', body),
   step: (body) => api.post('/api/guide/progress/step/', body),
   sync: (body) => api.post('/api/guide/progress/sync/', body),
+  // admin dashboard
+  overview: (params) => api.get('/api/guide/progress/overview/', { params }),
+  exportOverview: (params) => api.get('/api/guide/progress/overview/export/', { params, responseType: 'blob' }),
+  userDetail: (userId) => api.get(`/api/guide/progress/user/${userId}/`),
 }
 
 // Attendance API

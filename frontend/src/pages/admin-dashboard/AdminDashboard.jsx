@@ -19,6 +19,7 @@ import DateStepper, { toLocalISODate } from '../../components/dashboard/DateStep
 import MonthlyFeeCollectionCard from '../../components/dashboard/MonthlyFeeCollectionCard'
 import { useFeeMonthSummary } from '../../hooks/useFeeMonthSummary'
 import { useDashboardBootstrap } from '../../hooks/useDashboardBootstrap'
+import GuideProgressPanel from '../../components/dashboard/GuideProgressPanel'
 import LeadershipInsightsPanels from '../../components/dashboard/LeadershipInsightsPanels'
 import { icons, AIInsightsCard } from '../DashboardPage'
 
@@ -316,6 +317,8 @@ export default function AdminDashboard() {
           )}
         </div>
       )}
+
+      <GuideProgressPanel />
     </div>
   )
 }
