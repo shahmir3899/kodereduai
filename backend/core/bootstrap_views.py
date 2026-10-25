@@ -169,6 +169,14 @@ class AdminDashboardBootstrapView(APIView):
         if not school_id:
             return Response({'detail': 'No school selected.'}, status=400)
 
+        # The weekly calendar summary has no scheduler: it is generated on a background thread the first
+        # time an admin opens the dashboard after it falls due (see academic_sessions.calendar_digest).
+        try:
+            from academic_sessions.calendar_digest import maybe_send_weekly_digest
+            maybe_send_weekly_digest(school_id)
+        except Exception:  # noqa: BLE001 - never let the digest hook break the dashboard
+            pass
+
         # Parse params
         date_param = request.query_params.get('date')
         date_obj = parse_date(date_param) if date_param else date.today()

@@ -739,7 +739,7 @@ class RunNotificationJobView(ModuleAccessMixin, APIView):
 
     JOBS = (
         'fee_pending', 'daily_report', 'attendance_reminder',
-        'fee_overdue', 'assignment_due', 'library_due',
+        'fee_overdue', 'assignment_due', 'library_due', 'calendar_digest',
     )
 
     def post(self, request):
@@ -768,6 +768,11 @@ class RunNotificationJobView(ModuleAccessMixin, APIView):
         if job == 'daily_report':
             from .triggers import trigger_daily_school_report
             sent = trigger_daily_school_report(school, today)
+            return Response({'job': job, 'sent': sent, 'date': str(today)})
+
+        if job == 'calendar_digest':
+            from academic_sessions.calendar_digest import send_weekly_calendar_digest
+            sent = send_weekly_calendar_digest(school, force=True)
             return Response({'job': job, 'sent': sent, 'date': str(today)})
 
         if job == 'fee_overdue':

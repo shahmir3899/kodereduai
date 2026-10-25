@@ -607,6 +607,7 @@ function RunJobsPanel() {
         fee_pending: 'Fee reminders',
         daily_report: 'Daily report',
         attendance_reminder: 'Attendance reminders',
+        calendar_digest: 'Weekly calendar summary',
       }
       showSuccess(`${labels[variables.job] || 'Job'} sent (${sent ?? 0}).`)
     },
@@ -663,6 +664,13 @@ function RunJobsPanel() {
           className="px-3 py-1.5 bg-white border border-gray-300 rounded-lg hover:bg-gray-100 text-xs font-medium disabled:opacity-50"
         >
           {runningJob === 'attendance_reminder' ? 'Sending...' : 'Remind Teachers to Mark Attendance'}
+        </button>
+        <button
+          onClick={() => runMutation.mutate({ job: 'calendar_digest' })}
+          disabled={runMutation.isPending}
+          className="px-3 py-1.5 bg-white border border-gray-300 rounded-lg hover:bg-gray-100 text-xs font-medium disabled:opacity-50"
+        >
+          {runningJob === 'calendar_digest' ? 'Sending...' : 'Send Weekly Calendar Summary Now'}
         </button>
       </div>
     </div>
