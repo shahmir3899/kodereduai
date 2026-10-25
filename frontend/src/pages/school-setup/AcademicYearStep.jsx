@@ -113,7 +113,7 @@ export default function AcademicYearStep({ onNext, refetchCompletion }) {
                   <button
                     type="button"
                     onClick={() => setYearForm(p => ({ ...p, name: suggestYearName() }))}
-                    className="text-xs text-sky-600 hover:text-sky-700 whitespace-nowrap"
+                    className="text-xs text-primary-600 hover:text-primary-700 whitespace-nowrap"
                   >
                     Suggest
                   </button>
@@ -177,7 +177,7 @@ export default function AcademicYearStep({ onNext, refetchCompletion }) {
       ) : (
         <button
           onClick={() => setShowYearForm(true)}
-          className="text-sm text-sky-600 hover:text-sky-700 mb-4"
+          className="text-sm text-primary-600 hover:text-primary-700 mb-4"
         >
           + Add another academic year
         </button>

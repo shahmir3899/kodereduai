@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import Field from '../../components/ui/Field'
+import Stepper from '../../components/academic/Stepper'
 import { TONE } from '../../components/ui/statusTones'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { sessionsApi } from '../../services/api'
@@ -135,18 +136,8 @@ export default function SessionSetupWizard({ onClose }) {
         </div>
 
         {/* Step indicators */}
-        <div className="flex items-center gap-2 px-5 py-3 bg-gray-50 border-b">
-          {[1, 2, 3].map(s => (
-            <div key={s} className={`flex items-center gap-1.5 text-xs font-medium ${
-              s === step ? 'text-sky-700' : s < step ? 'text-green-600' : 'text-gray-400'
-            }`}>
-              <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
-                s === step ? TONE.sky : s < step ? TONE.success : 'bg-gray-100'
-              }`}>{s < step ? '\u2713' : s}</div>
-              <span>{s === 1 ? 'Configure' : s === 2 ? 'Review' : 'Done'}</span>
-              {s < 3 && <div className="w-8 h-px bg-gray-300 ml-1" />}
-            </div>
-          ))}
+        <div className="px-5 py-3 bg-gray-50 border-b">
+          <Stepper steps={['Configure', 'Review', 'Done']} current={step} />
         </div>
 
         <div className="p-5">
@@ -212,13 +203,13 @@ export default function SessionSetupWizard({ onClose }) {
             <div className="space-y-5">
               {/* Sync mode banner */}
               {isSync && (
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 flex items-start gap-2">
-                  <svg className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div className="bg-primary-50 border border-primary-200 rounded-lg p-3 flex items-start gap-2">
+                  <svg className="w-5 h-5 text-primary-600 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                   </svg>
                   <div>
-                    <p className="text-sm font-semibold text-blue-800">Sync Mode</p>
-                    <p className="text-xs text-blue-700 mt-0.5">
+                    <p className="text-sm font-semibold text-primary-800">Sync Mode</p>
+                    <p className="text-xs text-primary-700 mt-0.5">
                       An academic year named &ldquo;{preview.new_year?.name}&rdquo; already exists.
                       The wizard will update existing records and create only what&apos;s missing.
                     </p>
@@ -228,10 +219,10 @@ export default function SessionSetupWizard({ onClose }) {
 
               {/* AI Suggestions */}
               {preview.ai_suggestions?.length > 0 && (
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                  <p className="text-xs font-semibold text-blue-800 mb-1">Setup Notes</p>
+                <div className="bg-primary-50 border border-primary-200 rounded-lg p-3">
+                  <p className="text-xs font-semibold text-primary-800 mb-1">Setup Notes</p>
                   {preview.ai_suggestions.map((s, i) => (
-                    <p key={i} className="text-xs text-blue-700 mt-0.5">- {s}</p>
+                    <p key={i} className="text-xs text-primary-700 mt-0.5">- {s}</p>
                   ))}
                 </div>
               )}
@@ -324,7 +315,7 @@ function SummaryCard({ label, value, color }) {
   const colors = {
     sky: 'bg-sky-50 text-sky-800',
     purple: 'bg-purple-50 text-purple-800',
-    orange: 'bg-orange-50 text-orange-800',
+    orange: 'bg-teal-50 text-teal-800',
   }
   return (
     <div className={`rounded-lg p-3 ${colors[color] || colors.sky}`}>
@@ -338,7 +329,7 @@ function SyncSummaryCard({ label, stats, color }) {
   const colors = {
     sky: 'bg-sky-50 text-sky-800',
     purple: 'bg-purple-50 text-purple-800',
-    orange: 'bg-orange-50 text-orange-800',
+    orange: 'bg-teal-50 text-teal-800',
   }
   const total = (stats?.create || 0) + (stats?.update || 0) + (stats?.skip || 0)
   return (

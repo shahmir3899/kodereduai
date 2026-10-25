@@ -1,9 +1,22 @@
 import { useRef } from 'react'
 import { addDays, formatDay } from '../../pages/sessions/termDefaults'
+import { TERM_COLOURS, TODAY_MARKER } from '../academic/academicTones'
 import { dayNumber, findGaps, findOverlaps, positionPercent, spanStyle, todayIso } from './timelineMath'
 
-// Written out in full so Tailwind's scanner sees every class.
-const TERM_COLOURS = ['bg-primary-500', 'bg-teal-500', 'bg-amber-500', 'bg-purple-500', 'bg-pink-500', 'bg-sky-500']
+// One entry per calendar month the year touches, clipped to the year, for the faint month boxes.
+function monthSpans(from, to) {
+  const spans = []
+  let [y, m] = from.split('-').map(Number)
+  const [endY, endM] = to.split('-').map(Number)
+  while (y < endY || (y === endY && m <= endM)) {
+    const first = `${y}-${String(m).padStart(2, '0')}-01`
+    const last = `${y}-${String(m).padStart(2, '0')}-${String(new Date(Date.UTC(y, m, 0)).getUTCDate()).padStart(2, '0')}`
+    spans.push({ key: first, start: first < from ? from : first, end: last > to ? to : last })
+    m += 1
+    if (m > 12) { m = 1; y += 1 }
+  }
+  return spans
+}
 
 // Diagonal hatching marks uncovered days without needing another colour.
 const HATCH = {
@@ -79,6 +92,23 @@ export default function YearTimeline({ year, terms = [], onTermClick, selectedId
           )
         })}
 
+        {/* Faint month boxes, numbered with the calendar month (April = 4). They use the same inset and corner
+            radius as the term bars so the two layers read as one, and ignore the pointer so terms and handles
+            stay clickable. */}
+        {monthSpans(from, to).map((mo) => {
+          const style = spanStyle(mo.start, mo.end, from, to)
+          return style && (
+            <div
+              key={mo.key}
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-y-0.5 rounded bg-white/10 ring-1 ring-inset ring-white/40 dark:bg-white/5 dark:ring-white/10"
+              style={{ left: `${style.left}%`, width: `${style.width}%` }}
+            >
+              <span className={`absolute bottom-0.5 right-1 font-medium leading-none text-white/80 [text-shadow:0_0_2px_rgba(0,0,0,0.5)] ${compact ? 'text-[8px]' : 'text-[9px]'}`}>{Number(mo.key.slice(5, 7))}</span>
+            </div>
+          )
+        })}
+
         {selected && ['start', 'end'].map(edge => {
           const style = spanStyle(selected.start_date, selected.end_date, from, to)
           const value = edge === 'start' ? selected.start_date : selected.end_date
@@ -141,7 +171,7 @@ export default function YearTimeline({ year, terms = [], onTermClick, selectedId
         {showToday && (
           <div
             title={`Today: ${formatDay(today)}`}
-            className="pointer-events-none absolute inset-y-0 w-0.5 bg-red-600"
+            className={`pointer-events-none absolute inset-y-0 w-0.5 ${TODAY_MARKER}`}
             style={{ left: `${positionPercent(today, from, to)}%` }}
           />
         )}

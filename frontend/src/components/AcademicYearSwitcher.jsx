@@ -1,5 +1,8 @@
 import { useState, useRef, useEffect } from 'react'
 import { useAcademicYear } from '../contexts/AcademicYearContext'
+import Badge from './ui/Badge'
+import { formatDay } from '../pages/sessions/termDefaults'
+import { yearBadges } from './academic/academicTones'
 
 export default function AcademicYearSwitcher({ disabled = false, align = 'right' }) {
   const { academicYears, activeAcademicYear, currentTerm, switchAcademicYear, loading } = useAcademicYear()
@@ -34,7 +37,7 @@ export default function AcademicYearSwitcher({ disabled = false, align = 'right'
         className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border transition-colors text-xs font-medium ${
           disabled
             ? 'border-gray-100 text-gray-300 bg-gray-50 cursor-default'
-            : 'border-gray-200 text-gray-600 bg-white hover:bg-gray-50 cursor-pointer'
+            : 'border-gray-200 text-gray-600 bg-white hover:bg-gray-50 cursor-pointer dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700'
         }`}
         title={disabled ? 'Session filter is not applicable on this page' : undefined}
       >
@@ -43,7 +46,7 @@ export default function AcademicYearSwitcher({ disabled = false, align = 'right'
         </svg>
         <span>{activeAcademicYear?.name || 'Select Year'}</span>
         {currentTerm && (
-          <span className={disabled ? 'text-gray-200' : 'text-gray-400'}>| {currentTerm.name}</span>
+          <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${disabled ? 'bg-gray-100 text-gray-300' : 'bg-primary-50 text-primary-700 dark:bg-primary-900/40 dark:text-primary-300'}`}>{currentTerm.name}</span>
         )}
         {!disabled && (
           <svg className={`w-3.5 h-3.5 text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -53,9 +56,9 @@ export default function AcademicYearSwitcher({ disabled = false, align = 'right'
       </button>
 
       {open && (
-        <div className={`absolute top-full ${align === 'left' ? 'left-0' : 'right-0'} mt-1 w-72 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50 max-h-80 overflow-y-auto`}>
-          <div className="px-3 py-2 border-b border-gray-100">
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Academic Session</p>
+        <div className={`absolute top-full ${align === 'left' ? 'left-0' : 'right-0'} mt-1 w-72 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50 dark:bg-gray-800 dark:border-gray-700 max-h-80 overflow-y-auto`}>
+          <div className="px-3 py-2 border-b border-gray-100 dark:border-gray-700">
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider dark:text-gray-400">Academic Session</p>
           </div>
           {academicYears.map((year) => (
             <button
@@ -64,20 +67,19 @@ export default function AcademicYearSwitcher({ disabled = false, align = 'right'
                 switchAcademicYear(year.id)
                 setOpen(false)
               }}
-              className={`w-full text-left px-3 py-2.5 text-sm hover:bg-gray-50 flex items-center justify-between ${
-                year.id === activeAcademicYear?.id ? 'bg-sky-50 text-sky-700' : 'text-gray-700'
+              className={`w-full text-left px-3 py-2.5 text-sm hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center justify-between ${
+                year.id === activeAcademicYear?.id ? 'bg-primary-50 text-primary-700 dark:bg-primary-900/20 dark:text-primary-300' : 'text-gray-700 dark:text-gray-200'
               }`}
             >
               <div className="flex items-center gap-2">
                 <span className="font-medium">{year.name}</span>
-                {year.is_current && (
-                  <span className="px-1.5 py-0.5 text-[10px] font-semibold bg-green-100 text-green-700 rounded">
-                    CURRENT
-                  </span>
-                )}
+                {yearBadges(year, null).map(b => (
+                  <Badge key={b.key} tone={b.tone} className="!px-1.5 !py-0 !text-[10px]">{b.label}</Badge>
+                ))}
               </div>
-              <span className="text-xs text-gray-400">
-                {year.start_date?.slice(0, 7)} - {year.end_date?.slice(0, 7)}
+              <span className="text-right text-xs text-gray-400 dark:text-gray-500">
+                {formatDay(year.start_date)} - {formatDay(year.end_date)}
+                {year.terms_count !== undefined && <span className="block">{year.terms_count} term{year.terms_count === 1 ? '' : 's'}</span>}
               </span>
             </button>
           ))}

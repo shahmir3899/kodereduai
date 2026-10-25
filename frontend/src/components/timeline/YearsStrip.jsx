@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { formatDay } from '../../pages/sessions/termDefaults'
+import { TODAY_MARKER } from '../academic/academicTones'
 import { dayNumber, findOverlaps, pickYearWindow, positionPercent, spanStyle, todayIso } from './timelineMath'
 
 const VISIBLE_ROWS = 3
@@ -27,11 +28,11 @@ export default function YearsStrip({ years = [] }) {
   const showToday = dayNumber(today) >= dayNumber(from) && dayNumber(today) <= dayNumber(to)
 
   return (
-    <div className="card mb-4 p-3 sm:p-4">
+    <div className="card mb-4 p-3 sm:p-4 dark:bg-gray-800 dark:border-gray-700">
       <div className="mb-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
         <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-100">Academic years</h3>
         {sorted.length > VISIBLE_ROWS && (
-          <button type="button" onClick={() => setShowAll(v => !v)} className="text-xs text-primary-600 hover:underline">
+          <button type="button" onClick={() => setShowAll(v => !v)} className="text-xs text-primary-600 hover:underline dark:text-primary-400">
             {showAll ? 'Show fewer' : `Show all (${sorted.length})`}
           </button>
         )}
@@ -60,7 +61,7 @@ export default function YearsStrip({ years = [] }) {
         {showToday && (
           <div
             title={`Today: ${formatDay(today)}`}
-            className="pointer-events-none absolute inset-y-0 w-0.5 bg-red-600"
+            className={`pointer-events-none absolute inset-y-0 w-0.5 ${TODAY_MARKER}`}
             style={{ left: `${positionPercent(today, from, to)}%` }}
           />
         )}

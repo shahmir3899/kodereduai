@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import Spinner from '../../components/ui/Spinner'
+import Button from '../../components/ui/Button'
 import { sessionsApi } from '../../services/api'
 import { useToast } from '../../components/Toast'
 import { useConfirmModal } from '../../components/ConfirmModal'
 import YearTimeline from '../../components/timeline/YearTimeline'
+import { TERM_COLOURS } from '../../components/academic/academicTones'
 import { findOverlaps, spansOverlap } from '../../components/timeline/timelineMath'
 import { addDays, formatDay, nextTermDefaults } from './termDefaults'
 
@@ -187,10 +189,13 @@ export default function TermsManager({ year, onImport, onChanged }) {
             {terms.length} term{terms.length === 1 ? '' : 's'}
           </h4>
           <div className="flex gap-2">
-            {onImport && <button type="button" onClick={onImport} className="btn-secondary px-3 py-1.5 text-sm">Import from another year</button>}
-            <button type="button" onClick={addTerm} className="btn-primary px-3 py-1.5 text-sm">+ Add Term</button>
+            {onImport && <Button type="button" variant="secondary" size="sm" onClick={onImport}>Import from another year</Button>}
+            <Button type="button" size="sm" onClick={addTerm}>+ Add Term</Button>
           </div>
         </div>
+        <p className="mb-2 text-xs text-gray-500 dark:text-gray-400">
+          Terms cannot overlap. Hatched stretches on the bar are days that no term covers.
+        </p>
 
         {isLoading ? (
           <div className="py-8 text-center"><Spinner size="md" className="mx-auto" /></div>
@@ -200,9 +205,11 @@ export default function TermsManager({ year, onImport, onChanged }) {
           </p>
         ) : (
           <ul className="divide-y divide-gray-100 rounded-lg border border-gray-200 dark:divide-gray-700 dark:border-gray-700">
-            {drawn.map(t => (
-              <li key={t.id} className={`flex flex-wrap items-center justify-between gap-2 px-3 py-2 ${t.id === selectedId ? 'bg-primary-50 dark:bg-primary-900/20' : ''}`}>
-                <button type="button" onClick={() => select(t)} className="min-w-0 flex-1 text-left">
+            {drawn.map((t, i) => (
+              <li key={t.id} className={`flex flex-wrap items-center justify-between gap-2 border-l-4 px-3 py-2 ${t.id === selectedId ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20' : 'border-transparent'}`}>
+                <button type="button" onClick={() => select(t)} aria-pressed={t.id === selectedId} className="flex min-w-0 flex-1 items-center gap-2 text-left">
+                  <span className={`h-8 w-1.5 shrink-0 rounded ${TERM_COLOURS[i % TERM_COLOURS.length]}`} />
+                  <span className="min-w-0">
                   <p className="truncate text-sm font-medium text-gray-900 dark:text-gray-100">
                     {t.name}
                     {(timelineOverlaps.has(t.id) || (t.id === selectedId && clashes.length > 0)) && <span className="ml-2 text-xs font-medium text-red-600">Overlaps</span>}
@@ -210,8 +217,9 @@ export default function TermsManager({ year, onImport, onChanged }) {
                   <p className="text-xs text-gray-500 dark:text-gray-400">
                     {formatDay(t.start_date)} - {formatDay(t.end_date)} · {t.term_type.toLowerCase()} · order {t.order}
                   </p>
+                  </span>
                 </button>
-                <button type="button" onClick={() => removeTerm(t)} className="text-xs text-red-600 hover:underline">Delete</button>
+                <button type="button" onClick={() => removeTerm(t)} className="text-xs text-red-600 hover:underline dark:text-red-400">Delete</button>
               </li>
             ))}
           </ul>
@@ -233,10 +241,12 @@ export default function TermsManager({ year, onImport, onChanged }) {
                 <option value="SEMESTER">Semester</option>
                 <option value="QUARTER">Quarter</option>
               </select>
+              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">A label only; it does not change how dates work.</p>
             </div>
             <div>
               <label className="label" htmlFor="term-order">Order</label>
               <input id="term-order" type="number" min="1" className="input w-full" value={form.order} onChange={e => set({ order: e.target.value })} />
+              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">1 is first in the year.</p>
               {errors.order && <p className="mt-1 text-xs text-red-600">{firstMessage(errors.order)}</p>}
             </div>
           </div>

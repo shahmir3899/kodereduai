@@ -83,7 +83,7 @@ export default function SessionHealthWidget() {
         <MiniStat
           label="Retention"
           value={report.enrollment?.retention_rate ?? 0}
-          color="bg-blue-50 text-blue-800"
+          color="bg-primary-50 text-primary-800"
         />
         <MiniStat
           label="Attendance"
@@ -93,7 +93,7 @@ export default function SessionHealthWidget() {
         <MiniStat
           label="Fee Collection"
           value={report.fee_collection?.collection_rate ?? 0}
-          color="bg-orange-50 text-orange-800"
+          color="bg-teal-50 text-teal-800"
         />
         <MiniStat
           label="Pass Rate"
@@ -139,7 +139,7 @@ export default function SessionHealthWidget() {
               <ul className="space-y-1">
                 {summary.action_items.map((item, i) => (
                   <li key={i} className="flex items-start gap-2 text-sm text-gray-700">
-                    <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0" />
+                    <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-primary-500 shrink-0" />
                     {item}
                   </li>
                 ))}
