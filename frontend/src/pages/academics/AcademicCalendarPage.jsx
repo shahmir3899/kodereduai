@@ -1,72 +1,47 @@
 import { useMemo, useRef, useState } from 'react'
-import Modal from '../../components/ui/Modal'
+import { Link } from 'react-router-dom'
 import PageHeader from '../../components/ui/PageHeader'
 import LoadingState from '../../components/ui/LoadingState'
+import EmptyState from '../../components/ui/EmptyState'
+import Button from '../../components/ui/Button'
+import { useConfirmModal } from '../../components/ConfirmModal'
+import { ENTRY_DOT } from '../../components/academic/academicTones'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { classesApi, sessionsApi, examinationsApi } from '../../services/api'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
 import { useAuth } from '../../contexts/AuthContext'
 import { useToast } from '../../components/Toast'
 import { useSessionClasses } from '../../hooks/useSessionClasses'
+import { useMediaQuery } from '../../hooks/useMediaQuery'
 import { getClassSelectorScope, getResolvedMasterClassId } from '../../utils/classScope'
-import { useEscapeKey } from '../../hooks/useEscapeKey'
+import CalendarHeader from './calendar/CalendarHeader'
+import MonthGrid from './calendar/MonthGrid'
+import AgendaView from './calendar/AgendaView'
+import SidePanel from './calendar/SidePanel'
+import DayDetailsModal from './calendar/DayDetailsModal'
+import EntryFormModal from './calendar/EntryFormModal'
+import HolidaySuggestionsModal from './calendar/HolidaySuggestionsModal'
+import { EMPTY_FORM, getMonthMeta, isoDate } from './calendar/calendarUtils'
 
-const MONTH_NAMES = [
-  'January', 'February', 'March', 'April', 'May', 'June',
-  'July', 'August', 'September', 'October', 'November', 'December',
-]
-
-const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
-
-const OFF_DAY_TYPES = [
-  { value: 'SUMMER_VACATION', label: 'Summer Vacation' },
-  { value: 'WINTER_VACATION', label: 'Winter Vacation' },
-  { value: 'RELIGIOUS_HOLIDAY', label: 'Religious Holiday' },
-  { value: 'NATIONAL_HOLIDAY', label: 'National Holiday' },
-  { value: 'EXAM_BREAK', label: 'Exam Break' },
-  { value: 'OTHER', label: 'Other' },
-]
-
-const EMPTY_FORM = {
-  name: '',
-  description: '',
-  entry_kind: 'EVENT',
-  off_day_type: 'OTHER',
-  scope: 'SCHOOL',
-  start_date: '',
-  end_date: '',
-  color: '#f97316',
-  class_ids: [],
-  affects_students: true,
-  affects_staff: true,
-}
-
-function isoDate(year, month, day) {
-  const mm = String(month).padStart(2, '0')
-  const dd = String(day).padStart(2, '0')
-  return `${year}-${mm}-${dd}`
-}
-
-function getMonthMeta(year, month) {
-  const firstDay = new Date(year, month - 1, 1)
-  const daysInMonth = new Date(year, month, 0).getDate()
-  const startOffset = (firstDay.getDay() + 6) % 7
-  return { daysInMonth, startOffset }
-}
+const VIEW_STORAGE_KEY = 'academicCalendarView'
 
 export default function AcademicCalendarPage() {
   const queryClient = useQueryClient()
-  const { activeAcademicYear, terms } = useAcademicYear()
+  const { activeAcademicYear, terms, loading: yearLoading } = useAcademicYear()
   const { activeSchool, isSchoolAdmin } = useAuth()
   const { showSuccess, showError } = useToast()
+  const { confirm, ConfirmModalRoot } = useConfirmModal()
   const { sessionClasses } = useSessionClasses(activeAcademicYear?.id, activeSchool?.id)
   const classSelectorScope = getClassSelectorScope(activeAcademicYear?.id)
+  const isPhone = useMediaQuery('(max-width: 639px)')
 
   const today = new Date()
+  const todayKey = isoDate(today.getFullYear(), today.getMonth() + 1, today.getDate())
   const [year, setYear] = useState(today.getFullYear())
   const [month, setMonth] = useState(today.getMonth() + 1)
   const [selectedClassId, setSelectedClassId] = useState('')
   const [showModal, setShowModal] = useState(false)
+  const [showHolidays, setShowHolidays] = useState(false)
   const [selectedDateKey, setSelectedDateKey] = useState('')
   const [form, setForm] = useState(EMPTY_FORM)
   const [formErrors, setFormErrors] = useState({})
@@ -75,6 +50,25 @@ export default function AcademicCalendarPage() {
   const [rangeAnchorDate, setRangeAnchorDate] = useState('')
   const [rangeHoverDate, setRangeHoverDate] = useState('')
   const dragRangeRef = useRef({ active: false, startDate: '', moved: false })
+  // A remembered choice wins; otherwise phones start on the agenda, where entry names are readable.
+  const [view, setViewState] = useState(() => {
+    try {
+      const saved = localStorage.getItem(VIEW_STORAGE_KEY)
+      if (saved === 'month' || saved === 'agenda') return saved
+    } catch {
+      // storage blocked (private browsing): fall back to the screen-size default
+    }
+    return null
+  })
+  const effectiveView = view || (isPhone ? 'agenda' : 'month')
+  const setView = (next) => {
+    setViewState(next)
+    try {
+      localStorage.setItem(VIEW_STORAGE_KEY, next)
+    } catch {
+      // not persisted; the choice still applies for this visit
+    }
+  }
 
   const { daysInMonth, startOffset } = useMemo(
     () => getMonthMeta(year, month),
@@ -126,6 +120,27 @@ export default function AcademicCalendarPage() {
     enabled: !!activeAcademicYear?.id,
   })
 
+  // Whether attendance was recorded on each working day; the year-wide streak rides along.
+  const { data: coverageRes } = useQuery({
+    queryKey: ['calendarCoverage', activeAcademicYear?.id, year, month],
+    queryFn: () => sessionsApi.getCalendarCoverage({ academic_year: activeAcademicYear?.id, year, month }),
+    enabled: !!activeAcademicYear?.id,
+    staleTime: 60_000,
+  })
+  const coverage = coverageRes?.data || null
+  const coverageByDate = useMemo(() => {
+    const map = {}
+    ;(coverage?.days || []).forEach((d) => { map[d.date] = d })
+    return map
+  }, [coverage])
+
+  const { data: planningRes } = useQuery({
+    queryKey: ['calendarPlanning', activeAcademicYear?.id],
+    queryFn: () => sessionsApi.getCalendarPlanning({ academic_year: activeAcademicYear?.id }),
+    enabled: !!activeAcademicYear?.id,
+    staleTime: 60_000,
+  })
+
   const monthDays = monthViewRes?.data?.days || []
   const monthDaysByDate = useMemo(() => {
     const map = {}
@@ -136,20 +151,6 @@ export default function AcademicCalendarPage() {
   }, [monthDays])
 
   const selectedDateInfo = selectedDateKey ? monthDaysByDate[selectedDateKey] : null
-  const selectedDateEntries = selectedDateInfo?.entries || []
-
-  const completeness = useMemo(() => {
-    const totalDays = monthDays.length || daysInMonth
-    const customConfiguredDays = monthDays.filter((d) => (d.entries || []).length > 0).length
-    const offDays = monthDays.filter((d) => d.is_off_day).length
-    const score = totalDays > 0 ? Math.round((customConfiguredDays / totalDays) * 100) : 0
-    return {
-      totalDays,
-      customConfiguredDays,
-      offDays,
-      score,
-    }
-  }, [monthDays, daysInMonth])
 
   const visibleEntries = entriesRes?.data?.results || entriesRes?.data || []
 
@@ -182,11 +183,29 @@ export default function AcademicCalendarPage() {
     return g.end_date >= monthStart && g.start_date <= monthEnd
   })
 
+  // Terms keep their position in the year's order so a term has the same colour here as on the timelines.
+  const orderedTerms = useMemo(
+    () => [...(terms || [])].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)),
+    [terms],
+  )
+  const termAt = (dateKey) => {
+    const index = orderedTerms.findIndex((t) => t.start_date && t.end_date && t.start_date <= dateKey && dateKey <= t.end_date)
+    return index < 0 ? null : { term: orderedTerms[index], index }
+  }
+  const termsThisMonth = orderedTerms
+    .map((term, index) => ({ term, index }))
+    .filter(({ term }) => term.start_date && term.end_date && term.end_date >= monthStart && term.start_date <= monthEnd)
+
+  const invalidateCalendar = () => {
+    queryClient.invalidateQueries({ queryKey: ['calendarMonthView'] })
+    queryClient.invalidateQueries({ queryKey: ['calendarEntries'] })
+    queryClient.invalidateQueries({ queryKey: ['calendarPlanning'] })
+  }
+
   const createEntryMut = useMutation({
     mutationFn: (payload) => sessionsApi.createCalendarEntry(payload),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['calendarMonthView'] })
-      queryClient.invalidateQueries({ queryKey: ['calendarEntries'] })
+      invalidateCalendar()
       showSuccess('Calendar entry saved')
       closeModal()
     },
@@ -200,8 +219,7 @@ export default function AcademicCalendarPage() {
   const updateEntryMut = useMutation({
     mutationFn: ({ id, payload }) => sessionsApi.updateCalendarEntry(id, payload),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['calendarMonthView'] })
-      queryClient.invalidateQueries({ queryKey: ['calendarEntries'] })
+      invalidateCalendar()
       showSuccess('Calendar entry updated')
       closeModal()
     },
@@ -215,12 +233,16 @@ export default function AcademicCalendarPage() {
   const deleteEntryMut = useMutation({
     mutationFn: (id) => sessionsApi.deleteCalendarEntry(id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['calendarMonthView'] })
-      queryClient.invalidateQueries({ queryKey: ['calendarEntries'] })
+      invalidateCalendar()
       showSuccess('Calendar entry deleted')
     },
     onError: (err) => showError(err.response?.data?.detail || 'Failed to delete entry'),
   })
+
+  const removeEntry = async (entry) => {
+    const ok = await confirm({ title: 'Delete entry', message: `Delete "${entry.name}"? This cannot be undone.` })
+    if (ok) deleteEntryMut.mutate(entry.id)
+  }
 
   const prevMonth = () => {
     if (month === 1) {
@@ -240,6 +262,16 @@ export default function AcademicCalendarPage() {
     setMonth((cur) => cur + 1)
   }
 
+  const goToday = () => {
+    setYear(today.getFullYear())
+    setMonth(today.getMonth() + 1)
+  }
+
+  const jumpTo = (y, m) => {
+    setYear(y)
+    setMonth(m)
+  }
+
   const openAddModalForDates = (startDate, endDate = startDate) => {
     setEditingEntryId(null)
     setForm({
@@ -247,6 +279,15 @@ export default function AcademicCalendarPage() {
       start_date: startDate,
       end_date: endDate,
     })
+    setFormErrors({})
+    setShowModal(true)
+  }
+
+  // From the planning checklist: open the form already set to the missing kind of entry.
+  const openAddEntryPreset = ({ off_day_type: offDayType, name }) => {
+    closeDayDetailsModal()
+    setEditingEntryId(null)
+    setForm({ ...EMPTY_FORM, entry_kind: 'OFF_DAY', off_day_type: offDayType, name: name || '' })
     setFormErrors({})
     setShowModal(true)
   }
@@ -266,7 +307,7 @@ export default function AcademicCalendarPage() {
       scope: entry.scope || 'SCHOOL',
       start_date: entry.start_date || '',
       end_date: entry.end_date || '',
-      color: entry.color || '#f97316',
+      color: entry.color || EMPTY_FORM.color,
       class_ids: (entry.class_ids || []).map((id) => String(id)),
       affects_students: entry.affects_students !== false,
       affects_staff: entry.affects_staff !== false,
@@ -290,9 +331,6 @@ export default function AcademicCalendarPage() {
     setFormErrors({})
     setEditingEntryId(null)
   }
-
-  useEscapeKey(closeDayDetailsModal, !!selectedDateKey && !!selectedDateInfo)
-  useEscapeKey(closeModal, showModal)
 
   const toggleRangeSelecting = () => {
     setIsRangeSelecting((cur) => !cur)
@@ -420,510 +458,172 @@ export default function AcademicCalendarPage() {
     createEntryMut.mutate(payload)
   }
 
-  const dayCells = []
   const previewStart = isRangeSelecting && rangeAnchorDate
     ? (rangeHoverDate && rangeHoverDate < rangeAnchorDate ? rangeHoverDate : rangeAnchorDate)
     : ''
   const previewEnd = isRangeSelecting && rangeAnchorDate
     ? (rangeHoverDate && rangeHoverDate > rangeAnchorDate ? rangeHoverDate : rangeAnchorDate)
     : ''
-  for (let i = 0; i < startOffset; i += 1) {
-    dayCells.push(<div key={`blank-${i}`} className="rounded-xl border border-gray-100 bg-gray-50 min-h-[120px]" />)
-  }
-  for (let day = 1; day <= daysInMonth; day += 1) {
-    const dateKey = isoDate(year, month, day)
-    const dayInfo = monthDaysByDate[dateKey]
-    const isOff = !!dayInfo?.is_off_day
-    const events = dayInfo?.events || []
-    const eventsCount = events.length
-    const offDayEntries = (dayInfo?.entries || []).filter((entry) => entry.entry_kind === 'OFF_DAY')
-    const offDayTitles = [...new Set(offDayEntries.map((entry) => entry.name).filter(Boolean))]
-    const hasSundayOnlyOff = isOff && offDayTitles.length === 0 && (dayInfo?.is_sunday || false)
-    // Determine OFF day audience for badge display
-    const allOffStaff = offDayEntries.every((e) => e.affects_staff !== false)
-    const anyOffStudents = offDayEntries.some((e) => e.affects_students !== false)
-    const isStudentsOnlyOff = isOff && !hasSundayOnlyOff && anyOffStudents && !allOffStaff
-    const examNames = examGroupsByDate[dateKey] || []
-    const isAnchor = isRangeSelecting && rangeAnchorDate === dateKey
-    const isWithinPendingRange = !!previewStart && dateKey >= previewStart && dateKey <= previewEnd
 
-    dayCells.push(
-      <div
-        key={dateKey}
-        className={`rounded-xl border min-h-[120px] p-2 sm:p-3 cursor-pointer hover:border-orange-300 transition select-none ${isOff ? 'border-rose-200 bg-rose-50' : 'border-gray-200 bg-white'} ${isWithinPendingRange ? 'ring-2 ring-orange-200' : ''} ${isAnchor ? 'ring-2 ring-orange-400' : ''}`}
-        onPointerDown={(e) => handleDayPointerDown(e, dateKey)}
-        onPointerEnter={(e) => handleDayPointerEnter(e, dateKey)}
-        onPointerUp={(e) => handleDayPointerUp(e, dateKey)}
-        role="button"
-        tabIndex={0}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault()
-            handleCalendarDateSelect(dateKey)
-          }
-        }}
-      >
-        <div className="flex items-center justify-between">
-          <p className="text-sm font-semibold text-gray-900">{day}</p>
-          {isOff && !isStudentsOnlyOff && <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-rose-100 text-rose-700">OFF</span>}
-          {isStudentsOnlyOff && <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">OFF (Students)</span>}
+  if (yearLoading) return <LoadingState label="Loading calendar..." />
+
+  if (!activeAcademicYear?.id) {
+    return (
+      <div className="space-y-6">
+        <PageHeader title="Academic Calendar" subtitle="Terms, off-days, exam periods and school events in one calendar." />
+        <div className="card dark:bg-gray-800 dark:border-gray-700">
+          <EmptyState
+            title="No academic year selected"
+            description="The calendar is built on an academic year and its terms. Create one first, then come back here to add events and off days."
+            action={<Link to="/academics/sessions"><Button>Set up an academic year</Button></Link>}
+          />
         </div>
-        {(offDayTitles.length > 0 || hasSundayOnlyOff) && (
-          <div className="mt-2">
-            <span
-              className="text-[10px] font-medium px-1.5 py-0.5 rounded block truncate text-white"
-              style={{ backgroundColor: offDayEntries[0]?.color || '#e11d48' }}
-            >{offDayTitles[0] || 'Sunday'}</span>
-            {offDayTitles.length > 1 && (
-              <p className="mt-0.5 text-[10px]" style={{ color: offDayEntries[0]?.color || '#e11d48' }}>+{offDayTitles.length - 1} more</p>
-            )}
-          </div>
-        )}
-        {eventsCount > 0 && (
-          <div className="mt-2">
-            <span
-              className="text-[10px] font-medium px-1.5 py-0.5 rounded block truncate text-white"
-              style={{ backgroundColor: events[0]?.color || '#3b82f6' }}
-              title={events[0]?.name || ''}
-            >
-              {events[0]?.name || 'Event'}
-            </span>
-            {eventsCount > 1 && (
-              <p className="mt-1 text-[10px]" style={{ color: events[0]?.color || '#3b82f6' }}>+{eventsCount - 1} more</p>
-            )}
-          </div>
-        )}
-        {examNames.map((name) => (
-          <span key={name} className="mt-1 text-[10px] font-medium px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-700 block truncate" title={name}>
-            {name}
-          </span>
-        ))}
-      </div>,
+      </div>
     )
   }
 
-  const currentTerms = (terms || []).filter((term) => {
-    if (!term.start_date || !term.end_date) return false
-    return term.end_date >= monthStart && term.start_date <= monthEnd
-  })
-
   return (
     <div className="space-y-6">
-      <PageHeader title="Academic Calendar" subtitle="Large calendar view for sessions, terms, off-days and school events." actions={<>
+      <PageHeader title="Academic Calendar" subtitle="Terms, off-days, exam periods and school events in one calendar." actions={<>
 {isSchoolAdmin && (
         <div className="flex flex-wrap items-center gap-2">
-          <button className="btn-primary px-4 py-2 text-sm" onClick={openAddModal}>+ Add Event / Off Day</button>
-          <button
-            className={`px-4 py-2 text-sm rounded-lg border ${isRangeSelecting ? 'bg-orange-50 border-orange-300 text-orange-700' : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'}`}
+          <Button onClick={openAddModal}>+ Add Event / Off Day</Button>
+          <Button variant="secondary" onClick={() => setShowHolidays(true)}>Suggested holidays</Button>
+          <Button
+            variant="secondary"
+            className={isRangeSelecting ? '!bg-primary-50 !border-primary-300 !text-primary-700' : ''}
             onClick={toggleRangeSelecting}
           >
             {!isRangeSelecting ? 'Select Date Range' : (!rangeAnchorDate ? 'Pick Start Date' : 'Pick End Date')}
-          </button>
+          </Button>
         </div>
         )}
 </>} />
 
-      <div className="card p-4 sm:p-5">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-          <div>
-            <label className="text-xs font-medium text-gray-600">Academic Year</label>
-            <div className="mt-1 px-3 py-2 rounded-lg border border-gray-200 bg-gray-50 text-sm text-gray-700">
-              {activeAcademicYear?.name || 'No active academic year'}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start">
+        <div className="card space-y-4 p-3 sm:p-5 dark:bg-gray-800 dark:border-gray-700">
+          <CalendarHeader
+            academicYear={activeAcademicYear}
+            year={year}
+            month={month}
+            onPrev={prevMonth}
+            onNext={nextMonth}
+            onToday={goToday}
+            onJump={jumpTo}
+            view={effectiveView}
+            onViewChange={setView}
+            classes={displayClasses}
+            selectedClassId={selectedClassId}
+            onClassChange={setSelectedClassId}
+            termsThisMonth={termsThisMonth}
+            coverage={coverage}
+            planning={planningRes?.data || null}
+            isSchoolAdmin={isSchoolAdmin}
+            onAddEntry={openAddEntryPreset}
+          />
+
+          {effectiveView === 'month' && (
+            <div className="flex flex-wrap items-center gap-3 text-xs text-gray-600 dark:text-gray-300">
+              <span className="inline-flex items-center gap-1.5"><span className={`h-3 w-3 rounded ${ENTRY_DOT.off}`} /> OFF day (all)</span>
+              <span className="inline-flex items-center gap-1.5"><span className={`h-3 w-3 rounded ${ENTRY_DOT.offStudents}`} /> OFF (students only)</span>
+              <span className="inline-flex items-center gap-1.5"><span className={`h-3 w-3 rounded ${ENTRY_DOT.event}`} /> Event</span>
+              <span className="inline-flex items-center gap-1.5"><span className={`h-3 w-3 rounded ${ENTRY_DOT.exam}`} /> Exam period</span>
+              <span className="inline-flex items-center gap-1.5"><span className={`h-3 w-3 rounded ${ENTRY_DOT.sunday}`} /> Sunday auto OFF</span>
+              <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-amber-400" /> Attendance not recorded</span>
             </div>
-          </div>
-          <div>
-            <label className="text-xs font-medium text-gray-600">Class Filter</label>
-            <select
-              value={selectedClassId}
-              onChange={(e) => setSelectedClassId(e.target.value)}
-              className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
-            >
-              <option value="">Whole School</option>
-              {displayClasses.map((cls) => (
-                <option key={cls.id} value={cls.id}>{cls.display_name || (cls.section ? `${cls.name} - ${cls.section}` : cls.name)}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="text-xs font-medium text-gray-600">Year</label>
-            <input
-              type="number"
-              value={year}
-              onChange={(e) => setYear(Number(e.target.value || today.getFullYear()))}
-              className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
+          )}
+
+          {effectiveView === 'month' && (
+            <p className="text-xs text-gray-600 dark:text-gray-300">
+              {isRangeSelecting && rangeAnchorDate
+                ? `Range start selected: ${rangeAnchorDate}. Tap/click another date to set end.`
+                : isRangeSelecting
+                  ? 'Range mode active. Tap/click a start date.'
+                  : 'Tip: tap/click any date to add a single-day event, use "Select Date Range" for duration events, or drag across dates on desktop.'}
+            </p>
+          )}
+
+          {monthLoading ? (
+            <LoadingState label="Loading calendar..." />
+          ) : effectiveView === 'month' ? (
+            <MonthGrid
+              year={year}
+              month={month}
+              daysInMonth={daysInMonth}
+              startOffset={startOffset}
+              monthDaysByDate={monthDaysByDate}
+              examGroupsByDate={examGroupsByDate}
+              termAt={termAt}
+              todayKey={todayKey}
+              coverageByDate={coverageByDate}
+              isRangeSelecting={isRangeSelecting}
+              rangeAnchorDate={rangeAnchorDate}
+              previewStart={previewStart}
+              previewEnd={previewEnd}
+              onPointerDown={handleDayPointerDown}
+              onPointerEnter={handleDayPointerEnter}
+              onPointerUp={handleDayPointerUp}
+              onActivate={handleCalendarDateSelect}
             />
-          </div>
-          <div>
-            <label className="text-xs font-medium text-gray-600">Month</label>
-            <select
-              value={month}
-              onChange={(e) => setMonth(Number(e.target.value))}
-              className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
-            >
-              {MONTH_NAMES.map((name, idx) => (
-                <option key={name} value={idx + 1}>{name}</option>
-              ))}
-            </select>
-          </div>
-        </div>
-      </div>
-
-      <div className="card p-4 sm:p-5">
-        <div className="flex items-center justify-between mb-4">
-          <button onClick={prevMonth} className="btn-secondary px-3 py-1.5 text-sm">Previous</button>
-          <h2 className="text-lg sm:text-xl font-semibold text-gray-900">{MONTH_NAMES[month - 1]} {year}</h2>
-          <button onClick={nextMonth} className="btn-secondary px-3 py-1.5 text-sm">Next</button>
+          ) : (
+            <AgendaView
+              monthDays={monthDays}
+              examGroupsByDate={examGroupsByDate}
+              todayKey={todayKey}
+              onSelectDate={openDayDetailsModal}
+            />
+          )}
         </div>
 
-        <div className="mb-4 inline-flex items-center gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2">
-          <div>
-            <p className="text-[11px] uppercase tracking-wide text-emerald-700 font-semibold">Calendar Completeness</p>
-            <p className="text-lg font-bold text-emerald-800 leading-tight">{completeness.score}%</p>
-          </div>
-          <div className="h-10 w-px bg-emerald-200" />
-          <div className="text-xs text-emerald-800">
-            <p>Configured: <span className="font-semibold">{completeness.customConfiguredDays}/{completeness.totalDays}</span> days</p>
-            <p>OFF days: <span className="font-semibold">{completeness.offDays}</span></p>
-          </div>
-        </div>
-
-        <div className="mb-3 flex flex-wrap items-center gap-3 text-xs text-gray-600">
-          <span className="inline-flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-rose-300" /> OFF day (all)</span>
-          <span className="inline-flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-amber-300" /> OFF (students only)</span>
-          <span className="inline-flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-blue-300" /> Event</span>
-          <span className="inline-flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-indigo-300" /> Exam period</span>
-          <span className="inline-flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-gray-200" /> Sunday auto OFF</span>
-        </div>
-
-        <div className="mb-3 text-xs text-gray-600">
-          {isRangeSelecting && rangeAnchorDate
-            ? `Range start selected: ${rangeAnchorDate}. Tap/click another date to set end.`
-            : isRangeSelecting
-              ? 'Range mode active. Tap/click a start date.'
-              : 'Tip: Tap/click any date to add a single-day event, use "Select Date Range" for duration events, or drag across dates on desktop.'}
-        </div>
-
-        {monthLoading ? (
-          <LoadingState label="Loading calendar..." />
-        ) : (
-          <>
-            <div className="grid grid-cols-7 gap-2 mb-2">
-              {DAY_LABELS.map((dayLabel) => (
-                <div key={dayLabel} className="text-center text-xs font-semibold text-gray-500 py-2">{dayLabel}</div>
-              ))}
-            </div>
-            <div className="grid grid-cols-7 gap-2">{dayCells}</div>
-          </>
-        )}
+        <SidePanel
+          terms={termsThisMonth}
+          entries={visibleEntries}
+          entriesLoading={entriesLoading}
+          examGroups={currentExamGroups}
+          isSchoolAdmin={isSchoolAdmin}
+          onEdit={openEditModal}
+          onDelete={removeEntry}
+        />
       </div>
 
       {selectedDateKey && selectedDateInfo && (
-        <Modal open onClose={closeDayDetailsModal} size="2xl">
-            <div className="flex items-start justify-between gap-3 mb-4">
-              <div>
-                <h3 className="text-lg font-semibold text-gray-900">{selectedDateKey}</h3>
-                <p className="text-sm text-gray-600">{selectedDateInfo.is_off_day ? 'Marked OFF' : 'No OFF-day flag'}</p>
-              </div>
-              <button onClick={closeDayDetailsModal} className="p-1 rounded hover:bg-gray-100" aria-label="Close">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-
-            <div className="space-y-3">
-              {selectedDateEntries.length === 0 ? (
-                <p className="text-sm text-gray-500">No events or off-days are configured for this date.</p>
-              ) : (
-                selectedDateEntries.map((entry) => (
-                  <div key={entry.id} className="rounded-lg border border-gray-200 p-3">
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="text-sm font-medium text-gray-900">{entry.name}</p>
-                        <p className="text-xs text-gray-600 mt-0.5">
-                          {entry.entry_kind === 'OFF_DAY' ? 'OFF Day' : 'Event'}
-                          {entry.off_day_type ? ` · ${entry.off_day_type.replace(/_/g, ' ')}` : ''}
-                        </p>
-                        <p className="text-xs text-gray-600 mt-0.5">{entry.start_date} to {entry.end_date}</p>
-                        <p className="text-xs text-gray-600 mt-0.5">{entry.scope === 'CLASS' ? 'Specific Classes' : 'Whole School'}</p>
-                      </div>
-                      {isSchoolAdmin && (
-                      <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => openEditModal(entry)}
-                          className="text-xs text-blue-600 hover:text-blue-700"
-                        >
-                          Edit
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => deleteEntryMut.mutate(entry.id)}
-                          className="text-xs text-red-600 hover:text-red-700"
-                        >
-                          Delete
-                        </button>
-                      </div>
-                      )}
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-
-            {isSchoolAdmin && (
-            <div className="flex justify-end gap-2 pt-4">
-              <button
-                type="button"
-                onClick={() => {
-                  closeDayDetailsModal()
-                  openAddModalForDates(selectedDateKey, selectedDateKey)
-                }}
-                className="btn-primary px-4 py-2 text-sm"
-              >
-                Add Event / Off Day
-              </button>
-            </div>
-            )}
-          </Modal>
+        <DayDetailsModal
+          dateKey={selectedDateKey}
+          info={selectedDateInfo}
+          examNames={examGroupsByDate[selectedDateKey] || []}
+          coverage={coverageByDate[selectedDateKey]}
+          isSchoolAdmin={isSchoolAdmin}
+          onClose={closeDayDetailsModal}
+          onAdd={() => {
+            closeDayDetailsModal()
+            openAddModalForDates(selectedDateKey, selectedDateKey)
+          }}
+          onEdit={openEditModal}
+          onDelete={removeEntry}
+        />
       )}
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <div className="card p-4 sm:p-5">
-          <h3 className="text-sm font-semibold text-gray-900 mb-3">Terms Touching This Month</h3>
-          {currentTerms.length === 0 ? (
-            <p className="text-sm text-gray-500">No term dates overlap this month.</p>
-          ) : (
-            <div className="space-y-2">
-              {currentTerms.map((term) => (
-                <div key={term.id} className="rounded-lg border border-indigo-200 bg-indigo-50 p-3">
-                  <p className="text-sm font-medium text-indigo-900">{term.name}</p>
-                  <p className="text-xs text-indigo-700">{term.start_date} to {term.end_date}</p>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        <div className="card p-4 sm:p-5">
-          <h3 className="text-sm font-semibold text-gray-900 mb-3">Entries In This Month</h3>
-          {entriesLoading ? (
-            <LoadingState label="Loading entries..." compact />
-          ) : visibleEntries.length === 0 ? (
-            <p className="text-sm text-gray-500">No custom events or off days in selected month.</p>
-          ) : (
-            <div className="space-y-2 max-h-[360px] overflow-auto">
-              {visibleEntries.map((entry) => (
-                <div key={entry.id} className="rounded-lg border border-gray-200 p-3">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-medium text-gray-900">{entry.name}</p>
-                      <p className="text-xs text-gray-600 mt-0.5">{entry.start_date} to {entry.end_date}</p>
-                      <p className="text-xs text-gray-600 mt-0.5">{entry.scope === 'CLASS' ? 'Class Specific' : 'Whole School'}</p>
-                    </div>
-                    {isSchoolAdmin && (<>
-                    <button
-                      onClick={() => openEditModal(entry)}
-                      className="text-xs text-blue-600 hover:text-blue-700 mr-3"
-                    >
-                      Edit
-                    </button>
-                    <button
-                      onClick={() => deleteEntryMut.mutate(entry.id)}
-                      className="text-xs text-red-600 hover:text-red-700"
-                    >
-                      Delete
-                    </button>
-                    </>)}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-
-      <div className="card p-4 sm:p-5">
-        <h3 className="text-sm font-semibold text-gray-900 mb-3">Exam Groups This Month</h3>
-        {currentExamGroups.length === 0 ? (
-          <p className="text-sm text-gray-500">No exam groups scheduled this month.</p>
-        ) : (
-          <div className="space-y-2">
-            {currentExamGroups.map((g) => (
-              <div key={g.id} className="rounded-lg border border-indigo-200 bg-indigo-50 p-3">
-                <p className="text-sm font-medium text-indigo-900">{g.name}</p>
-                <p className="text-xs text-indigo-700">{g.start_date} to {g.end_date}</p>
-                {g.exam_type && <p className="text-xs text-indigo-600 mt-0.5">{g.exam_type_name || g.exam_type?.name || ''}</p>}
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
 
       {isSchoolAdmin && showModal && (
-        <Modal open onClose={closeModal} size="2xl">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">
-              {editingEntryId ? 'Edit Event / Off Day' : 'Add Event / Off Day'}
-            </h3>
-            <form className="space-y-4" onSubmit={submitEntry}>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="sm:col-span-2">
-                  <label className="text-xs font-medium text-gray-600">Title</label>
-                  <input
-                    required
-                    value={form.name}
-                    onChange={(e) => setForm((cur) => ({ ...cur, name: e.target.value }))}
-                    className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
-                    placeholder="Independence Day / Eid Holiday / Orange Color Day"
-                  />
-                  {formErrors.name && <p className="text-xs text-red-600 mt-1">{String(formErrors.name)}</p>}
-                </div>
-
-                <div>
-                  <label className="text-xs font-medium text-gray-600">Type</label>
-                  <select
-                    value={form.entry_kind}
-                    onChange={(e) => setForm((cur) => ({ ...cur, entry_kind: e.target.value }))}
-                    className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
-                  >
-                    <option value="EVENT">Event</option>
-                    <option value="OFF_DAY">OFF Day</option>
-                  </select>
-                </div>
-
-                {/* Right of Type: checkboxes when OFF_DAY, empty otherwise */}
-                {form.entry_kind === 'OFF_DAY' ? (
-                  <div>
-                    <label className="text-xs font-medium text-gray-600">Applies To</label>
-                    <div className="mt-2 flex flex-col gap-2">
-                      <label className="inline-flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={form.affects_students}
-                          onChange={(e) => setForm((cur) => ({ ...cur, affects_students: e.target.checked }))}
-                          className="rounded"
-                        />
-                        <span>Students <span className="text-xs text-gray-500">(attendance N/A)</span></span>
-                      </label>
-                      <label className="inline-flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={form.affects_staff}
-                          onChange={(e) => setForm((cur) => ({ ...cur, affects_staff: e.target.checked }))}
-                          className="rounded"
-                        />
-                        <span>Staff <span className="text-xs text-gray-500">(auto ON_LEAVE)</span></span>
-                      </label>
-                      {!form.affects_students && !form.affects_staff && (
-                        <p className="mt-0.5 text-xs text-amber-600">Select at least one.</p>
-                      )}
-                    </div>
-                  </div>
-                ) : (
-                  <div />
-                )}
-
-                <div>
-                  <label className="text-xs font-medium text-gray-600">Scope</label>
-                  <select
-                    value={form.scope}
-                    onChange={(e) => setForm((cur) => ({ ...cur, scope: e.target.value, class_ids: [] }))}
-                    className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
-                  >
-                    <option value="SCHOOL">Whole School</option>
-                    <option value="CLASS">Specific Classes</option>
-                  </select>
-                  {formErrors.class_ids && <p className="text-xs text-red-600 mt-1">{String(formErrors.class_ids)}</p>}
-                </div>
-
-                {form.entry_kind === 'OFF_DAY' && (
-                  <div>
-                    <label className="text-xs font-medium text-gray-600">OFF Day Category</label>
-                    <select
-                      value={form.off_day_type}
-                      onChange={(e) => setForm((cur) => ({ ...cur, off_day_type: e.target.value }))}
-                      className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
-                    >
-                      {OFF_DAY_TYPES.map((opt) => (
-                        <option key={opt.value} value={opt.value}>{opt.label}</option>
-                      ))}
-                    </select>
-                  </div>
-                )}
-
-                <div>
-                  <label className="text-xs font-medium text-gray-600">Start Date</label>
-                  <input
-                    required
-                    type="date"
-                    value={form.start_date}
-                    onChange={(e) => setForm((cur) => ({ ...cur, start_date: e.target.value }))}
-                    className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
-                  />
-                </div>
-
-                <div>
-                  <label className="text-xs font-medium text-gray-600">End Date</label>
-                  <input
-                    required
-                    type="date"
-                    value={form.end_date}
-                    onChange={(e) => setForm((cur) => ({ ...cur, end_date: e.target.value }))}
-                    className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
-                  />
-                  {formErrors.end_date && <p className="text-xs text-red-600 mt-1">{String(formErrors.end_date)}</p>}
-                </div>
-
-                <div>
-                  <label className="text-xs font-medium text-gray-600">Color Tag</label>
-                  <input
-                    type="color"
-                    value={form.color || '#f97316'}
-                    onChange={(e) => setForm((cur) => ({ ...cur, color: e.target.value }))}
-                    className="mt-1 h-10 w-full rounded-lg border border-gray-200 px-2"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="text-xs font-medium text-gray-600">Description</label>
-                <textarea
-                  rows={3}
-                  value={form.description}
-                  onChange={(e) => setForm((cur) => ({ ...cur, description: e.target.value }))}
-                  className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
-                  placeholder="Optional details for teachers and attendance teams"
-                />
-              </div>
-
-              {form.scope === 'CLASS' && (
-                <div>
-                  <label className="text-xs font-medium text-gray-600">Select Classes</label>
-                  <div className="mt-2 grid grid-cols-2 sm:grid-cols-3 gap-2 border border-gray-200 rounded-lg p-3 max-h-44 overflow-auto">
-                    {displayClasses.length === 0 && <p className="text-xs text-gray-500">No classes available</p>}
-                    {displayClasses.map((cls) => {
-                      const id = String(cls.id)
-                      const checked = form.class_ids.includes(id)
-                      return (
-                        <label key={cls.id} className="inline-flex items-center gap-2 text-xs text-gray-700">
-                          <input type="checkbox" checked={checked} onChange={() => toggleClassId(id)} />
-                          <span>{cls.display_name || (cls.section ? `${cls.name} - ${cls.section}` : cls.name)}</span>
-                        </label>
-                      )
-                    })}
-                  </div>
-                </div>
-              )}
-
-              <div className="flex justify-end gap-2 pt-2">
-                <button type="button" onClick={closeModal} className="btn-secondary px-4 py-2 text-sm">Cancel</button>
-                <button type="submit" className="btn-primary px-4 py-2 text-sm" disabled={createEntryMut.isPending}>
-                  {(createEntryMut.isPending || updateEntryMut.isPending) ? 'Saving...' : (editingEntryId ? 'Update' : 'Save')}
-                </button>
-              </div>
-            </form>
-          </Modal>
+        <EntryFormModal
+          editing={!!editingEntryId}
+          form={form}
+          setForm={setForm}
+          formErrors={formErrors}
+          displayClasses={displayClasses}
+          onToggleClass={toggleClassId}
+          onSubmit={submitEntry}
+          onClose={closeModal}
+          saving={createEntryMut.isPending || updateEntryMut.isPending}
+        />
       )}
+      {isSchoolAdmin && showHolidays && (
+        <HolidaySuggestionsModal
+          academicYear={activeAcademicYear}
+          onClose={() => setShowHolidays(false)}
+          onAdded={invalidateCalendar}
+        />
+      )}
+      <ConfirmModalRoot />
     </div>
   )
 }

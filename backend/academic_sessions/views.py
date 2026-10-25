@@ -421,6 +421,81 @@ class SchoolCalendarEntryViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
             'days': day_map,
         })
 
+    @action(
+        detail=False, methods=['get'], url_path='holiday-suggestions',
+        permission_classes=[IsAuthenticated, IsSchoolAdmin, HasSchoolAccess],
+    )
+    def holiday_suggestions(self, request):
+        """Public holidays for the academic year from Google's Holidays in Pakistan calendar. Read-only:
+        the admin adds the ones they want through the normal create endpoint."""
+        from .holiday_suggestions_service import holiday_suggestions
+
+        year_id = request.query_params.get('academic_year')
+        if not year_id:
+            return Response({'detail': 'academic_year is required.'}, status=status.HTTP_400_BAD_REQUEST)
+        school_id = _resolve_school_id(request)
+        academic_year = AcademicYear.objects.filter(school_id=school_id, id=year_id).first()
+        if not academic_year:
+            return Response({'detail': 'Academic year not found.'}, status=status.HTTP_404_NOT_FOUND)
+        return Response(holiday_suggestions(school_id, academic_year))
+
+    @action(detail=False, methods=['get'], url_path='planning')
+    def planning(self, request):
+        """The advance-setup checklist for one academic year (terms, summer vacation, exam periods)."""
+        from .planning_service import planning_checklist
+
+        year_id = request.query_params.get('academic_year')
+        if not year_id:
+            return Response({'detail': 'academic_year is required.'}, status=status.HTTP_400_BAD_REQUEST)
+        school_id = _resolve_school_id(request)
+        academic_year = AcademicYear.objects.filter(school_id=school_id, id=year_id).first()
+        if not academic_year:
+            return Response({'detail': 'Academic year not found.'}, status=status.HTTP_404_NOT_FOUND)
+        return Response(planning_checklist(school_id, academic_year))
+
+    @action(detail=False, methods=['get'], url_path='coverage')
+    def coverage(self, request):
+        """Was attendance recorded on each working day? Whole year by default; ?year=&month= narrows
+        the days and the summary to one month. The streak always spans the year."""
+        from .coverage_service import attendance_coverage, summarize
+
+        year_id = request.query_params.get('academic_year')
+        if not year_id:
+            return Response({'detail': 'academic_year is required.'}, status=status.HTTP_400_BAD_REQUEST)
+        school_id = _resolve_school_id(request)
+        academic_year = AcademicYear.objects.filter(school_id=school_id, id=year_id).first()
+        if not academic_year:
+            return Response({'detail': 'Academic year not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        result = attendance_coverage(school_id, academic_year)
+        days = result['days']
+
+        month_raw = request.query_params.get('month')
+        year_raw = request.query_params.get('year')
+        if month_raw and year_raw:
+            try:
+                wanted = (int(year_raw), int(month_raw))
+            except (TypeError, ValueError):
+                return Response({'detail': 'Invalid year or month.'}, status=status.HTTP_400_BAD_REQUEST)
+            days = [d for d in days if (d['date'].year, d['date'].month) == wanted]
+
+        return Response({
+            'academic_year': academic_year.id,
+            'tracking_started': result['tracking_started'],
+            'summary': summarize(days),
+            'year_summary': summarize(result['days']),
+            'streak': result['streak'],
+            'days': [
+                {
+                    'date': d['date'].isoformat(),
+                    'state': d['state'],
+                    'classes_marked': d['classes_marked'],
+                    'classes_expected': d['classes_expected'],
+                }
+                for d in days
+            ],
+        })
+
     @action(detail=False, methods=['get'], url_path='day-status')
     def day_status(self, request):
         date_from_raw = request.query_params.get('date_from')

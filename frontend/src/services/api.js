@@ -750,6 +750,9 @@ export const sessionsApi = {
   deleteCalendarEntry: (id) => api.delete(`/api/sessions/calendar-entries/${id}/`),
   getCalendarMonthView: (params) => api.get('/api/sessions/calendar-entries/month-view/', { params }),
   getCalendarDayStatus: (params) => api.get('/api/sessions/calendar-entries/day-status/', { params }),
+  getHolidaySuggestions: (params) => api.get('/api/sessions/calendar-entries/holiday-suggestions/', { params }),
+  getCalendarPlanning: (params) => api.get('/api/sessions/calendar-entries/planning/', { params }),
+  getCalendarCoverage: (params) => api.get('/api/sessions/calendar-entries/coverage/', { params }),
 }
 
 // Examinations API

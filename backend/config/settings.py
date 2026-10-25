@@ -558,6 +558,10 @@ GROQ_MODEL = os.getenv('EDU_GROQ_MODEL', 'openai/gpt-oss-120b')
 # See: backend/attendance/_deprecated_ocr/README.md
 OCR_ENABLED = os.getenv('OCR_ENABLED', 'False').lower() in ('true', '1', 'yes')
 
+# Calendar "Suggested holidays" reads Google's public Holidays in Pakistan feed (no key needed).
+# Set to false to switch the feature off without a deploy.
+HOLIDAY_SUGGESTIONS_ENABLED = os.getenv('HOLIDAY_SUGGESTIONS_ENABLED', 'True').lower() in ('true', '1', 'yes')
+
 # Vision Pipeline: Use vision AI instead of OCR for handwritten registers
 # Set to False to use legacy Tesseract OCR pipeline
 # NOTE: Unused while OCR_ENABLED=False. Kept for future re-activation.
