@@ -6,6 +6,10 @@ import { filterGuideChapters, buildAvailability, isVisibleFor } from '../utils/g
 import { useDebounce } from '../hooks/useDebounce'
 import { useToast } from '../components/Toast'
 import GuideVideoModal from '../components/guide/GuideVideoModal'
+import GuideVideosTab from '../components/guide/GuideVideosTab'
+import ProgressSummary from '../components/guide/ProgressSummary'
+import useGuideProgress, { summarizeProgress } from '../hooks/useGuideProgress'
+import { nextInGroup } from '../utils/guideVideoGroups'
 import guideData from '../data/userGuide.json'
 import videoData from '../data/guideVideos.json'
 
@@ -347,32 +351,34 @@ function ChapterBlock({ chapter, isExpanded, onToggle, searchHighlight, expanded
 // --- "Start here": the short ordered path a new user follows first ---
 const plainTitle = (title) => title.replace(/^Step \d+:\s*/, '')
 
-function StartHere({ sectionIds, chapters, onRead, onWatch }) {
-  const byId = useMemo(() => {
-    const map = {}
-    chapters.forEach((chapter) => chapter.sections.forEach((section) => { map[section.id] = { section, chapterId: chapter.id } }))
-    return map
-  }, [chapters])
-  const steps = sectionIds.map((id) => byId[id]).filter(Boolean)
+function StartHere({ steps, watched, done, onRead, onWatch, onToggleDone }) {
   if (steps.length < 2) return null
 
   return (
     <section aria-labelledby="start-here" className="rounded-xl border border-primary-200 bg-primary-50/50 p-4 sm:p-5">
       <h2 id="start-here" className="text-lg font-bold text-gray-900">New here? Start with these</h2>
-      <p className="mb-3 text-sm text-gray-600">Do them in this order. Each one takes a few minutes.</p>
+      <p className="mb-3 text-sm text-gray-600">Do them in this order. Each one takes a few minutes. A step is ticked off when you watch its video, or you can tick it yourself.</p>
       <ol className="space-y-2">
-        {steps.map(({ section, chapterId }, index) => {
-          const video = section.video && VIDEOS_BY_ID[section.video]?.status === 'ready' ? VIDEOS_BY_ID[section.video] : null
+        {steps.map((step, index) => {
+          const finished = done.has(step.sectionId) || (step.videoId && watched.has(step.videoId))
           return (
-            <li key={section.id} className="flex items-center gap-3 rounded-lg bg-white px-3 py-2 shadow-sm">
-              <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-primary-600 text-sm font-bold text-white">{index + 1}</span>
-              <span className="min-w-0 flex-1 text-sm font-medium text-gray-900">{plainTitle(section.title)}</span>
-              {video && (
-                <button type="button" onClick={() => onWatch(video.id)} className="flex-shrink-0 rounded-md bg-primary-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-primary-700">
+            <li key={step.sectionId} className="flex items-center gap-3 rounded-lg bg-white px-3 py-2 shadow-sm">
+              <button
+                type="button"
+                onClick={() => onToggleDone(step.sectionId)}
+                aria-pressed={finished}
+                aria-label={finished ? `Step ${index + 1} done. Click to undo.` : `Mark step ${index + 1} as done`}
+                className={`flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full text-sm font-bold ${finished ? 'bg-green-600 text-white' : 'bg-primary-600 text-white hover:bg-primary-700'}`}
+              >
+                {finished ? <span aria-hidden="true">&#10003;</span> : index + 1}
+              </button>
+              <span className={`min-w-0 flex-1 text-sm font-medium ${finished ? 'text-gray-500' : 'text-gray-900'}`}>{step.title}</span>
+              {step.videoId && (
+                <button type="button" onClick={() => onWatch(step.videoId)} className="flex-shrink-0 rounded-md bg-primary-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-primary-700">
                   &#9654; Watch
                 </button>
               )}
-              <button type="button" onClick={() => onRead(chapterId, section.id)} className="flex-shrink-0 rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50">
+              <button type="button" onClick={() => onRead(step.chapterId, step.sectionId)} className="flex-shrink-0 rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50">
                 Read
               </button>
             </li>
@@ -410,41 +416,11 @@ function formatSeconds(total) {
   return `${m}:${sec}`
 }
 
-function VideosTab({ videos, onSelect }) {
-  return (
-    <div className="space-y-4">
-      {videos.length === 0 && (
-        <div className="text-center py-12 text-gray-500 bg-white rounded-lg border border-gray-200">
-          <p className="text-lg">No videos for your role yet</p>
-          <p className="text-sm mt-1">Switch to &quot;Show all&quot; to see every tutorial.</p>
-        </div>
-      )}
-
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {videos.map((video) => (
-          <button
-            key={video.id}
-            type="button"
-            onClick={() => onSelect(video.id)}
-            className="text-left bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden hover:border-primary-300 transition-colors"
-          >
-            <img src={`/videos/${video.id}.en.poster.jpg`} alt="" className="w-full aspect-video object-cover bg-gray-100" loading="lazy" />
-            <div className="p-3">
-              <p className="text-sm font-semibold text-gray-900">{video.title.en}</p>
-              <p className="text-sm text-gray-500 mt-0.5" dir="rtl">{video.title.ur}</p>
-              <p className="text-xs text-gray-400 mt-1">{formatSeconds(video.seconds.en)} &middot; Chapter {video.chapter}</p>
-            </div>
-          </button>
-        ))}
-      </div>
-    </div>
-  )
-}
-
 // --- Main Page Component ---
 export default function UserGuidePage() {
   const [searchParams, setSearchParams] = useSearchParams()
-  const { effectiveRole, isSuperAdmin, isParent, isStudent, isStaffLevel, isManager, isModuleEnabled } = useAuth()
+  const { user, effectiveRole, isSuperAdmin, isParent, isStudent, isStaffLevel, isManager, isModuleEnabled } = useAuth()
+  const progress = useGuideProgress(user?.id)
 
   // Default view follows the user's role and the school's enabled modules;
   // ?view=all shows the whole guide. A deep link to a hidden chapter switches to "all".
@@ -494,6 +470,28 @@ export default function UserGuidePage() {
   // The player is a dialog over whatever the reader is looking at, so only the ?video= part changes.
   const openVideo = (id) => updateParams({ video: id })
   const closeVideo = () => updateParams({ video: null })
+  // The "Start here" path for this person: the sections, in order, with each one's recorded video if it has one.
+  const startSteps = useMemo(() => {
+    const byId = {}
+    chapters.forEach((chapter) => chapter.sections.forEach((section) => { byId[section.id] = { section, chapterId: chapter.id } }))
+    return (START_HERE[isSuperAdmin ? 'SCHOOL_ADMIN' : effectiveRole] || [])
+      .map((id) => byId[id])
+      .filter(Boolean)
+      .map(({ section, chapterId }) => ({
+        sectionId: section.id,
+        chapterId,
+        title: plainTitle(section.title),
+        videoId: section.video && VIDEOS_BY_ID[section.video]?.status === 'ready' ? section.video : null,
+      }))
+  }, [chapters, effectiveRole, isSuperAdmin])
+  const startVideos = useMemo(
+    () => startSteps.map((step) => visibleVideos.find((v) => v.id === step.videoId)).filter(Boolean),
+    [startSteps, visibleVideos],
+  )
+  const progressSummary = useMemo(
+    () => summarizeProgress({ steps: startSteps, videos: visibleVideos, watched: progress.watched, done: progress.done }),
+    [startSteps, visibleVideos, progress.watched, progress.done],
+  )
   const playingVideo = selectedVideoId ? videoData.videos.find((v) => v.id === selectedVideoId && v.status !== 'planned') : null
   const [searchQuery, setSearchQuery] = useState('')
   const debouncedSearch = useDebounce(searchQuery, 300)
@@ -664,6 +662,8 @@ export default function UserGuidePage() {
         </p>
       )}
 
+      {!isSearchMode && <ProgressSummary {...progressSummary} />}
+
       {/* Search results count */}
       {isSearchMode && (
         <div className="text-sm text-gray-600 bg-yellow-50 border border-yellow-200 rounded-lg px-4 py-2">
@@ -672,7 +672,14 @@ export default function UserGuidePage() {
       )}
 
       {tab === 'videos' ? (
-        <VideosTab videos={visibleVideos} onSelect={openVideo} />
+        <GuideVideosTab
+          videos={visibleVideos}
+          startVideos={startVideos}
+          lang={videoLang}
+          onLang={(code) => updateParams({ lang: code === 'ur' ? 'ur' : null })}
+          onSelect={openVideo}
+          watched={progress.watched}
+        />
       ) : isSearchMode ? (
         <div className="space-y-4">
           {Object.keys(searchResults.grouped).length === 0 ? (
@@ -701,10 +708,12 @@ export default function UserGuidePage() {
       ) : (
         <div className="space-y-6" ref={contentRef}>
           <StartHere
-            sectionIds={START_HERE[isSuperAdmin ? 'SCHOOL_ADMIN' : effectiveRole] || []}
-            chapters={chapters}
+            steps={startSteps}
+            watched={progress.watched}
+            done={progress.done}
             onRead={navigateTo}
             onWatch={openVideo}
+            onToggleDone={progress.toggleDone}
           />
           <div className="space-y-2">
             <h2 className="text-sm font-semibold uppercase tracking-wider text-gray-500">Browse by topic</h2>
@@ -729,6 +738,9 @@ export default function UserGuidePage() {
           lang={videoLang}
           onLang={(code) => updateParams({ lang: code === 'ur' ? 'ur' : null })}
           onClose={closeVideo}
+          nextVideo={nextInGroup(visibleVideos, playingVideo.id)}
+          onNext={openVideo}
+          onWatched={progress.markWatched}
         />
       )}
     </div>

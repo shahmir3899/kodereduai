@@ -51,7 +51,7 @@ const btn = 'flex h-10 min-w-10 items-center justify-center rounded-md px-2 text
  * `src`, `captionsSrc` and `poster` belong to one language; switching language remounts the video, and
  * `startAt` lets the caller carry the position across so the viewer does not lose their place.
  */
-export default function GuideVideoPlayer({ src, captionsSrc, captionsLang, captionsLabel, poster, startAt = 0, onTime }) {
+export default function GuideVideoPlayer({ src, captionsSrc, captionsLang, captionsLabel, poster, startAt = 0, onTime, onEnded }) {
   const videoRef = useRef(null)
   const boxRef = useRef(null)
   const [prefs, setPrefs] = useState(loadPrefs)
@@ -152,12 +152,12 @@ export default function GuideVideoPlayer({ src, captionsSrc, captionsLang, capti
         onClick={toggle}
         onPlay={() => setPlaying(true)}
         onPause={() => setPlaying(false)}
-        onEnded={() => setPlaying(false)}
+        onEnded={() => { setPlaying(false); onEnded?.() }}
         onLoadedMetadata={(e) => {
           setDuration(e.currentTarget.duration)
           if (startAt > 0 && startAt < e.currentTarget.duration) e.currentTarget.currentTime = startAt
         }}
-        onTimeUpdate={(e) => { setTime(e.currentTarget.currentTime); onTime?.(e.currentTarget.currentTime) }}
+        onTimeUpdate={(e) => { setTime(e.currentTarget.currentTime); onTime?.(e.currentTarget.currentTime, e.currentTarget.duration) }}
       >
         <source src={src} type="video/mp4" />
         {captionsSrc && <track kind="captions" src={captionsSrc} srcLang={captionsLang} label={captionsLabel} default />}
