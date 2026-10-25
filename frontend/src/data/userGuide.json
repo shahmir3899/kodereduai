@@ -3,7 +3,7 @@
     "title": "Education AI",
     "subtitle": "School Administration Guide",
     "version": "3.4 - Manual Attendance & Updated Navigation",
-    "generatedAt": "2026-10-25T09:42:35.010852+00:00",
+    "generatedAt": "2026-10-25T09:45:10.069332+00:00",
     "totalChapters": 22,
     "modules": [
       "Dashboard | Classes & Students | Attendance (Manual Entry)",
@@ -2319,7 +2319,7 @@
           "content": [
             {
               "type": "body_text",
-              "text": "The Admissions CRM manages the complete student enrollment pipeline from initial enquiry to final enrollment. It tracks leads, followups, and conversion rates."
+              "text": "Follow every admission from first enquiry to enrolled student."
             }
           ]
         },
@@ -2330,7 +2330,7 @@
           "content": [
             {
               "type": "body_text",
-              "text": "Admissions uses the school's academic years (set up in Management > Sessions). When converting enquiries to students, you select the target academic year and class. The system creates the student record and enrolls them in that session."
+              "text": "An enquiry is New, then Confirmed once the family agrees, then Converted when it becomes a student in the academic year and class you choose. Cancelled enquiries stay on record."
             }
           ]
         },
@@ -2347,27 +2347,17 @@
             {
               "type": "step",
               "number": 1,
-              "text": "Click 'New Enquiry'."
+              "text": "Click 'New Enquiry'. Enter the student's name, the father's name, the mobile number and the grade applied for."
             },
             {
               "type": "step",
               "number": 2,
-              "text": "Fill in: Student Name, Father Name, Mobile and Grade Applied For."
+              "text": "Choose how the family found you (Walk-in, Phone Call, Website, WhatsApp, Referral, Social Media, Ad Campaign or Other) and add a note."
             },
             {
               "type": "step",
               "number": 3,
-              "text": "Set Source: Walk-in, Phone Call, Website, WhatsApp, Referral, Social Media, Ad Campaign or Other."
-            },
-            {
-              "type": "step",
-              "number": 4,
-              "text": "Optionally set the Next Follow-up Date and add notes."
-            },
-            {
-              "type": "step",
-              "number": 5,
-              "text": "Click 'Create Enquiry'. The enquiry appears in the list with status New."
+              "text": "Click 'Create Enquiry'. It appears in the list with status New."
             }
           ],
           "video": "ch9-creating-enquiries"
@@ -2378,31 +2368,27 @@
           "slug": "admission-pipeline-stages",
           "content": [
             {
-              "type": "body_text",
-              "text": "Each enquiry progresses through these stages:"
-            },
-            {
               "type": "table",
               "headers": [
                 "Stage",
-                "Description"
+                "Meaning"
               ],
               "rows": [
                 [
-                  "NEW",
-                  "Initial enquiry received - lead captured"
+                  "New",
+                  "Enquiry received"
                 ],
                 [
-                  "CONFIRMED",
-                  "Admission confirmed - ready for conversion to student"
+                  "Confirmed",
+                  "Admission agreed, ready to convert"
                 ],
                 [
-                  "CONVERTED",
-                  "Converted to a student record with enrollment"
+                  "Converted",
+                  "Now a student with an enrollment"
                 ],
                 [
-                  "CANCELLED",
-                  "Enquiry cancelled or withdrawn"
+                  "Cancelled",
+                  "Withdrawn"
                 ]
               ]
             }
@@ -2416,27 +2402,17 @@
             {
               "type": "step",
               "number": 1,
-              "text": "View all enquiries in a searchable table or card view. Search by child name or phone number."
+              "text": "The funnel at the top counts enquiries in each stage. Click a stage to filter the list, or search by the child's name or phone number."
             },
             {
               "type": "step",
               "number": 2,
-              "text": "Filter by Grade and Source. Click a stage in the Admission funnel to filter by status."
+              "text": "When the family agrees, click 'Confirm'. The enquiry moves out of New."
             },
             {
               "type": "step",
               "number": 3,
-              "text": "The Admission funnel at the top shows the count for each stage (New, Confirmed, Converted, Cancelled) and the conversion rate."
-            },
-            {
-              "type": "step",
-              "number": 4,
-              "text": "Use 'Edit' to update enquiry details, 'Cancel' to mark an enquiry as cancelled, or 'Delete' to remove one that is not yet converted."
-            },
-            {
-              "type": "step",
-              "number": 5,
-              "text": "Click 'Confirm' on a New enquiry when the admission is approved."
+              "text": "If a family withdraws, search for them and click 'Cancel'. Use 'Edit' to change details."
             }
           ],
           "video": "ch9-managing-enquiries"
@@ -2449,17 +2425,12 @@
             {
               "type": "step",
               "number": 1,
-              "text": "Click 'Edit' on the enquiry."
+              "text": "Click 'Edit' on the enquiry, pick the next follow-up date and write what was discussed."
             },
             {
               "type": "step",
               "number": 2,
-              "text": "Set the Next Follow-up Date and write what was discussed in Notes, then click 'Update Enquiry'."
-            },
-            {
-              "type": "step",
-              "number": 3,
-              "text": "The date shows in the Follow-up column of the Enquiries list, in red once it is overdue."
+              "text": "Click 'Update Enquiry'. The date shows in the Follow-up column, in red once it is overdue."
             }
           ],
           "video": "ch9-followup-management"
@@ -2470,43 +2441,24 @@
           "slug": "converting-enquiries-to-students",
           "content": [
             {
-              "type": "body_text",
-              "text": "Confirmed enquiries can be batch-converted into student records. Each converted student gets a Student record and a StudentEnrollment record linking them to the chosen academic year."
-            },
-            {
               "type": "step",
               "number": 1,
-              "text": "Select one or more enquiries with 'Confirmed' status using the checkboxes."
+              "text": "Tick the Confirmed enquiries you want to convert. A bar appears with 'Convert to students'."
             },
             {
               "type": "step",
               "number": 2,
-              "text": "Click the 'Convert to students' button in the bar that appears."
+              "text": "Choose the academic year, then the class and section. You can also tick 'Auto-generate fee records'."
             },
             {
               "type": "step",
               "number": 3,
-              "text": "In the modal, select the target Academic Year and Class & Section. Optionally tick 'Auto-generate fee records' and choose the fee types."
-            },
-            {
-              "type": "step",
-              "number": 4,
-              "text": "Click 'Convert N Enquiries'. Roll numbers are auto-assigned sequentially within that session and class."
-            },
-            {
-              "type": "step",
-              "number": 5,
-              "text": "Converted enquiries change status to 'Converted' and link to the created student."
+              "text": "Click 'Convert N Enquiries'. The student record and enrollment are created, and roll numbers are assigned in order."
             },
             {
               "type": "info_box",
-              "title": "Session-Scoped Admissions",
-              "text": "You can admit students into any academic year, including a future session. Roll numbers start from 1 for each session-class combination, independent of other sessions. This means admissions work even before running promotion for the current year."
-            },
-            {
-              "type": "info_box",
-              "title": "Admissions and Promotion Relationship",
-              "text": "Admissions create enrollment in the selected academic year directly. Promotion manages existing enrolled students between years. If you admit future-year students before promotion, that is valid and expected because roll numbers are scoped per academic year and class/session class."
+              "title": "Future years",
+              "text": "You can admit students into next year before promotion is run. Roll numbers are separate for each year and class, so nothing clashes."
             }
           ],
           "video": "ch9-converting-enquiries-to-students"
@@ -2518,19 +2470,7 @@
           "content": [
             {
               "type": "body_text",
-              "text": "The enquiries page provides at-a-glance analytics:"
-            },
-            {
-              "type": "bullet",
-              "text": "Admission funnel - Count of enquiries in each stage (New, Confirmed, Converted, Cancelled)"
-            },
-            {
-              "type": "bullet",
-              "text": "Conversion Rate - Percentage of enquiries that become students"
-            },
-            {
-              "type": "bullet",
-              "text": "Source Tracking - Which channels (Walk-in, Referral, etc.) bring the most enquiries"
+              "text": "The funnel on the Enquiries page also shows the conversion rate, and which sources (Walk-in, Referral and so on) bring the most enquiries."
             }
           ]
         }
@@ -2553,7 +2493,7 @@
           "content": [
             {
               "type": "body_text",
-              "text": "The Transport module manages school buses, routes, student-bus assignments, and daily transport attendance."
+              "text": "Routes, buses, which students ride where, and daily boarding attendance."
             }
           ]
         },
@@ -2570,32 +2510,17 @@
             {
               "type": "step",
               "number": 1,
-              "text": "Click 'Add Route'."
+              "text": "Click 'Add Route'. Enter the route name, where it starts, where it ends and the estimated minutes. Click 'Create Route'."
             },
             {
               "type": "step",
               "number": 2,
-              "text": "Enter: Route Name, Start Location, End Location and Estimated Duration (minutes) - these four are required. Description and Distance (km) are optional. You can also click the maps to mark the start and end points."
+              "text": "Click 'Stops' on the route, then '+ Add Stop'. Enter the stop name, its order, and the pickup and drop times."
             },
             {
               "type": "step",
               "number": 3,
-              "text": "Click 'Create Route'. The route appears in the list."
-            },
-            {
-              "type": "step",
-              "number": 4,
-              "text": "Click 'Stops' on the route, then '+ Add Stop'."
-            },
-            {
-              "type": "step",
-              "number": 5,
-              "text": "For each stop, enter: Stop Name, Order, Pickup Time and Drop Time (all required). Address and a map location are optional."
-            },
-            {
-              "type": "step",
-              "number": 6,
-              "text": "Click 'Add Stop'. Stops are listed in order. Use Edit or Delete on a stop to change it, and Duplicate on a route to copy it with all its stops."
+              "text": "Click 'Add Stop'. The stop shows in the route with its order and times. 'Duplicate' copies a route with all its stops."
             }
           ],
           "video": "ch10-setting-up-routes"
@@ -2613,27 +2538,17 @@
             {
               "type": "step",
               "number": 1,
-              "text": "Click 'Add Vehicle'."
+              "text": "Click 'Add Vehicle'. Enter the number plate, the type (Bus, Van or Car), the seats and the make."
             },
             {
               "type": "step",
               "number": 2,
-              "text": "Enter: Vehicle Number, Vehicle Type (Bus, Van or Car) and Capacity. Make / Model is optional."
+              "text": "Enter the driver's name and phone, and choose the route the vehicle serves."
             },
             {
               "type": "step",
               "number": 3,
-              "text": "Under Driver Information enter the Driver Name and Driver Phone (required). The Driver License Number is optional."
-            },
-            {
-              "type": "step",
-              "number": 4,
-              "text": "Choose the Assigned Route this vehicle serves (optional)."
-            },
-            {
-              "type": "step",
-              "number": 5,
-              "text": "Click 'Add Vehicle'. The vehicle appears in the list, linked to the route."
+              "text": "Click 'Add Vehicle'. It appears in the list with its driver and route."
             }
           ],
           "video": "ch10-adding-vehicles"
@@ -2651,27 +2566,17 @@
             {
               "type": "step",
               "number": 1,
-              "text": "Click 'New Assignment'."
+              "text": "Click 'New Assignment'. Search for each student and click the name; you can add several at once."
             },
             {
               "type": "step",
               "number": 2,
-              "text": "Search for a student by name or roll number and click the name. Repeat to add several students at once; they appear as chips above the list."
+              "text": "Choose the route, then the stop. The vehicle is optional. Choose Pickup Only, Drop Only or Both."
             },
             {
               "type": "step",
               "number": 3,
-              "text": "Choose the Route, then the Stop (both required). Choosing a Vehicle is optional; only vehicles on that route are listed. Set the Transport Type: Pickup Only, Drop Only or Both."
-            },
-            {
-              "type": "step",
-              "number": 4,
-              "text": "Click 'Assign'. A student can have one assignment per academic year; students who already have one are skipped."
-            },
-            {
-              "type": "step",
-              "number": 5,
-              "text": "Use the filters to find assignments by route, class or type, and 'Remove' to delete one."
+              "text": "Click 'Assign'. A student has one assignment per year, and students who already have one are skipped."
             }
           ],
           "video": "ch10-assigning-students-to-routes"
@@ -2689,17 +2594,17 @@
             {
               "type": "step",
               "number": 1,
-              "text": "Select the date (today by default) and the route. The students assigned to it are listed."
+              "text": "Choose the date (today by default) and the route. Its students are listed, all starting as Boarded."
             },
             {
               "type": "step",
               "number": 2,
-              "text": "Everyone starts as Boarded. Click 'Not Boarded' or 'Absent' for the students who did not ride."
+              "text": "Click 'Not Boarded' for a student who missed the bus, and 'Absent' for one who stayed home."
             },
             {
               "type": "step",
               "number": 3,
-              "text": "Click 'Save All'. One record is saved per student, per route, per day; saving again for the same day updates it."
+              "text": "Click 'Save All'. One record is saved for every student on the route for that day; saving again updates it."
             }
           ],
           "video": "ch10-transport-attendance"
@@ -2716,27 +2621,7 @@
             },
             {
               "type": "body_text",
-              "text": "The Transport Dashboard shows:"
-            },
-            {
-              "type": "bullet",
-              "text": "Total Routes - Number of active routes"
-            },
-            {
-              "type": "bullet",
-              "text": "Total Vehicles - Number of active vehicles"
-            },
-            {
-              "type": "bullet",
-              "text": "Students Assigned - Students with an active transport assignment"
-            },
-            {
-              "type": "bullet",
-              "text": "Today's Attendance - Students whose transport attendance was recorded today"
-            },
-            {
-              "type": "body_text",
-              "text": "Only School Admins and Principals can add or change Transport data; other roles can view it."
+              "text": "Totals for routes, vehicles, assigned students and today's attendance. Only Admins and Principals can change transport data; other roles can view it."
             }
           ]
         }
@@ -2763,7 +2648,7 @@
           "content": [
             {
               "type": "body_text",
-              "text": "The Library module provides a complete book management system including cataloging, issuing/returning books, and tracking overdue items. Only School Admins and Principals can change anything here; other staff roles can browse the catalog and see which books are out."
+              "text": "Catalog, lending and overdue books. Only Admins and Principals can change anything here; other staff can browse the catalog and see which books are out."
             }
           ]
         },
@@ -2780,22 +2665,16 @@
             {
               "type": "step",
               "number": 1,
-              "text": "On the Book Catalog page, click 'Manage Categories'."
+              "text": "Click 'Manage Categories'. Type a name (for example Fiction or Science) and a short description, then click 'Add Category'."
             },
             {
               "type": "step",
               "number": 2,
-              "text": "Type a Category Name (for example Fiction, Science, Mathematics, History, Reference), add an optional description and click 'Add Category'."
+              "text": "Click 'Edit' next to a category to rename it, then 'Save Changes'; click 'Done' when finished. Categories appear in the catalog filter and the Add Book form."
             },
             {
-              "type": "step",
-              "number": 3,
-              "text": "Use Edit to rename a category, or Delete to remove it. Its books stay in the catalog without a category."
-            },
-            {
-              "type": "step",
-              "number": 4,
-              "text": "Category names must be unique. Categories help organize and filter the book catalog."
+              "type": "body_text",
+              "text": "Deleting a category keeps its books, which stay in the catalog without a category."
             }
           ],
           "video": "ch11-setting-up-book-categories"
@@ -2813,32 +2692,22 @@
             {
               "type": "step",
               "number": 1,
-              "text": "Click 'Add Book'."
+              "text": "Click 'Add Book'. Enter the title and the author (both required), then the ISBN and the publisher."
             },
             {
               "type": "step",
               "number": 2,
-              "text": "Enter Title and Author (both required), then ISBN, Publisher, Category, Total Copies and Shelf Location."
+              "text": "Choose the category, set how many copies the library owns and note the shelf location, then click 'Add Book'. All copies show as available."
             },
             {
               "type": "step",
               "number": 3,
-              "text": "Click 'Add Book'. The book appears in the catalog with all copies available."
+              "text": "Search by title, author or ISBN, or pick a category to browse one section."
             },
             {
-              "type": "step",
-              "number": 4,
-              "text": "Use the search bar to find books by title, author, or ISBN, and the Category filter to browse one section."
-            },
-            {
-              "type": "step",
-              "number": 5,
-              "text": "Edit changes a book. Total Copies cannot go below the copies currently issued."
-            },
-            {
-              "type": "step",
-              "number": 6,
-              "text": "A book that has ever been issued cannot be deleted because its history is kept. Edit it and untick Active to take it off the shelf instead."
+              "type": "info_box",
+              "title": "Editing and removing",
+              "text": "Total copies cannot go below the copies currently issued. A book that has ever been issued cannot be deleted; edit it and untick 'Active' to take it off the shelf."
             }
           ],
           "video": "ch11-adding-books-to-the-catalog"
@@ -2856,32 +2725,22 @@
             {
               "type": "step",
               "number": 1,
-              "text": "On the 'Issue Book' tab, choose Student or Staff as the Borrower Type."
+              "text": "On the 'Issue Book' tab, choose Student or Staff, type at least two letters of the name and pick the person."
             },
             {
               "type": "step",
               "number": 2,
-              "text": "Type at least two letters of the borrower's name and pick them from the list."
+              "text": "Type part of the title and pick the book. Only books with copies available are listed."
             },
             {
               "type": "step",
               "number": 3,
-              "text": "Type at least two letters of the book title and pick the book (only books with copies available are listed)."
+              "text": "The due date is already set from the loan period (14 days by default). Change it only if this loan is different, then click 'Issue Book'."
             },
             {
-              "type": "step",
-              "number": 4,
-              "text": "Check the Due Date. It starts at today plus the loan period set in Library Settings (14 days by default)."
-            },
-            {
-              "type": "step",
-              "number": 5,
-              "text": "Add optional notes and click 'Issue Book'. The book's available copies drop by 1."
-            },
-            {
-              "type": "step",
-              "number": 6,
-              "text": "A borrower cannot go over the limit set in Library Settings (3 books for a student, 5 for staff by default) or take a second copy of the same book. You can also start from the catalog: click 'Issue' next to a book."
+              "type": "info_box",
+              "title": "Limits",
+              "text": "A borrower cannot go over the limit in Library Settings (3 books for a student and 5 for staff by default) or take a second copy of the same book."
             }
           ],
           "video": "ch11-issuing-books"
@@ -2899,22 +2758,17 @@
             {
               "type": "step",
               "number": 1,
-              "text": "Open the 'Return Book' tab and search by student name, staff name or book title."
+              "text": "Open the 'Return Book' tab and search by the borrower or the book title."
             },
             {
               "type": "step",
               "number": 2,
-              "text": "Click 'Process Return' next to the entry."
+              "text": "Click 'Process Return' and check the summary. For a late book it shows the days overdue and the fine, which is worked out for you."
             },
             {
               "type": "step",
               "number": 3,
-              "text": "Check the summary. For a late book it shows the days overdue and the fine (days overdue x the daily fine in Library Settings)."
-            },
-            {
-              "type": "step",
-              "number": 4,
-              "text": "Click 'Confirm Return'. The book's available copies increase by 1 and the fine is recorded on the issue."
+              "text": "Click 'Confirm Return'. The copy goes back on the shelf and the fine is recorded on the loan."
             }
           ],
           "video": "ch11-returning-books"
@@ -2932,22 +2786,12 @@
             {
               "type": "step",
               "number": 1,
-              "text": "The page lists every book past its due date that has not come back, oldest first, with the borrower, days overdue and the fine so far."
+              "text": "The tiles show how many books are overdue, the fines so far and the fine per day."
             },
             {
               "type": "step",
               "number": 2,
-              "text": "The summary shows the number of overdue books, the total estimated fines and the fine per day."
-            },
-            {
-              "type": "step",
-              "number": 3,
-              "text": "Click 'Return' on a row to take the book back and record its fine."
-            },
-            {
-              "type": "step",
-              "number": 4,
-              "text": "Due-date reminders to borrowers and parents are sent by the Notifications module's on-demand job, not from this page."
+              "text": "Each row shows the borrower, due date, days overdue and fine, oldest first. Click 'Return' on a row and confirm to take the book back."
             }
           ],
           "video": "ch11-tracking-overdue-books"
@@ -2964,35 +2808,7 @@
             },
             {
               "type": "body_text",
-              "text": "The Library Dashboard displays:"
-            },
-            {
-              "type": "bullet",
-              "text": "Book Titles - Number of active titles in the catalog"
-            },
-            {
-              "type": "bullet",
-              "text": "Total Copies - Sum of all copies of active titles"
-            },
-            {
-              "type": "bullet",
-              "text": "Currently Issued - Books checked out and not yet returned"
-            },
-            {
-              "type": "bullet",
-              "text": "Overdue Books - Issued books past their due date"
-            },
-            {
-              "type": "bullet",
-              "text": "Categories - Number of book categories"
-            },
-            {
-              "type": "bullet",
-              "text": "Most Issued Books - The five most borrowed titles"
-            },
-            {
-              "type": "body_text",
-              "text": "School Admins and Principals also get a 'Library Settings' button for the loan period, the borrowing limits for students and staff, and the fine per overdue day."
+              "text": "Counts of titles, copies, books out and overdue, plus the most borrowed titles. Admins and Principals also get 'Library Settings' for the loan period, borrowing limits and the daily fine."
             }
           ]
         }
@@ -3015,7 +2831,7 @@
           "content": [
             {
               "type": "body_text",
-              "text": "The LMS module provides curriculum management (books, chapters, topics), lesson planning, assignments, and student submissions. It integrates with the Academics module and supports multiple languages including Urdu, Arabic, Sindhi, Pashto, and Punjabi with RTL text display."
+              "text": "Organise textbooks, plan lessons, set assignments and mark what students hand in. Works in English, Urdu and other right-to-left languages."
             }
           ]
         },
@@ -3031,63 +2847,31 @@
             },
             {
               "type": "body_text",
-              "text": "The Curriculum page lets you organize textbooks into a Book > Chapter > Topic hierarchy for each class and subject. This structure powers syllabus progress tracking and lesson plan topic selection."
+              "text": "Each class and subject has Books, each book has Chapters, and each chapter has Topics. Lesson plans and syllabus progress use this structure."
             },
             {
               "type": "step",
               "number": 1,
-              "text": "Select a Class and Subject from the filter dropdowns."
+              "text": "Choose the class and subject; its books are listed. Click 'Add Book', enter the title and edition, and click 'Add Book' again."
             },
             {
               "type": "step",
               "number": 2,
-              "text": "Click 'Add Book'. Choose the Class and Subject, enter the Title, and optionally the Author, Publisher, Edition, Language and Description, then click 'Add Book'. The toast 'Book created' confirms it."
+              "text": "Click the book to see its chapters. Click 'Add Chapter', enter the title and save."
             },
             {
               "type": "step",
               "number": 3,
-              "text": "Click the book to view its chapters and topics in the tree view."
+              "text": "Open the chapter and click 'Add Topic'. Enter the title and save."
             },
             {
               "type": "step",
               "number": 4,
-              "text": "Click 'Add Chapter' (Title, Chapter Number, Description) and, inside a chapter, 'Add Topic' (Title, Topic Number, Estimated Periods, Description). Or use 'Import Table of Contents' for bulk import."
-            },
-            {
-              "type": "sub_section",
-              "title": "Importing Table of Contents"
+              "text": "For a whole book at once, click 'Import Table of Contents'. On 'Manual Entry' type or paste the chapters and topics, or upload a photo of the contents page to read it automatically; review, then apply."
             },
             {
               "type": "body_text",
-              "text": "The Import Table of Contents window has two tabs:"
-            },
-            {
-              "type": "step",
-              "number": 5,
-              "text": "Manual Entry: type or paste the table of contents text with indentation for chapter/topic structure, then click 'Next: Review'."
-            },
-            {
-              "type": "step",
-              "number": 6,
-              "text": "Upload Photo: upload a photo of the book's printed contents page. The system extracts the text with OCR so you can review it."
-            },
-            {
-              "type": "step",
-              "number": 7,
-              "text": "Review and edit the chapters and topics, then apply them to create the structure."
-            },
-            {
-              "type": "info_box",
-              "title": "Multi-Language Support",
-              "text": "The OCR feature supports all configured languages. For non-English books, the system uses the book's language setting to optimize text recognition. The editor displays RTL direction automatically for supported languages."
-            },
-            {
-              "type": "sub_section",
-              "title": "Syllabus Progress"
-            },
-            {
-              "type": "body_text",
-              "text": "A progress bar shows how many topics have been covered by published lesson plans. Topics are automatically marked as covered when a teacher publishes a lesson plan referencing them."
+              "text": "A progress bar shows how many topics are covered. A topic counts as covered when a teacher publishes a lesson plan that uses it."
             }
           ],
           "video": "ch12-managing-curriculum-books-chapters-topics"
@@ -3103,33 +2887,28 @@
               "href": "/academics/lesson-plans"
             },
             {
-              "type": "body_text",
-              "text": "This page is not available to the Manager role."
-            },
-            {
               "type": "step",
               "number": 1,
-              "text": "Click 'Add Lesson Plan'. This opens the bulk wizard; click 'Create single lesson plan' for one plan."
+              "text": "Click 'Add Lesson Plan', then 'Create single lesson plan'. Choose 'Standard' for the full details."
             },
             {
               "type": "step",
               "number": 2,
-              "text": "Choose Minimal (Class, Subject, chapters/topics, Lesson Date, Teacher; saved as a Draft with an automatic title) or Standard (full details)."
+              "text": "Enter the title, class, subject and teacher. Click 'Select chapter / topic', tick a topic from the book and click 'Apply'."
             },
             {
               "type": "step",
               "number": 3,
-              "text": "In Standard mode enter Title, Description and Objectives, then set Duration (minutes), Materials Needed and Teaching Methods."
+              "text": "Set the lesson date and write an objective. Leave the status as Draft and click 'Create Lesson Plan'."
             },
             {
               "type": "step",
               "number": 4,
-              "text": "Standard mode also has a Status of Draft or Published. Click 'Create Lesson Plan'; the toast 'Lesson plan created successfully!' confirms it."
+              "text": "Click 'Publish' on the plan to share it."
             },
             {
-              "type": "step",
-              "number": 5,
-              "text": "A Draft can be published later with the 'Publish' button on its row."
+              "type": "body_text",
+              "text": "'Minimal' saves a draft from just the class, subject, topics and date. This page is not available to Managers."
             }
           ],
           "video": "ch12-creating-lesson-plans"
@@ -3147,32 +2926,22 @@
             {
               "type": "step",
               "number": 1,
-              "text": "Click 'Create Assignment'."
+              "text": "Click 'Create Assignment'. Enter the title, then choose the class, subject and teacher."
             },
             {
               "type": "step",
               "number": 2,
-              "text": "Enter the Title, then select Class, Subject and Teacher."
+              "text": "Choose the type (Homework, Project, Classwork or Lab), then set the due date and total marks. Diary entries use 'Create Daily Diary'."
             },
             {
               "type": "step",
               "number": 3,
-              "text": "Choose the Assignment Type: Homework, Project, Classwork or Lab. Diary entries use 'Create Daily Diary' instead."
+              "text": "Write the description (required) and the instructions for students, then click 'Create Assignment'. It starts as a Draft."
             },
             {
               "type": "step",
               "number": 4,
-              "text": "Set the Due Date (required when 'Require student submission' is on) and Total Marks; turn 'Allow file attachments' on or off."
-            },
-            {
-              "type": "step",
-              "number": 5,
-              "text": "Enter the Description (required) and Instructions."
-            },
-            {
-              "type": "step",
-              "number": 6,
-              "text": "Click 'Create Assignment'. New assignments start as Draft; click 'Publish' on the row to make them appear in student portals."
+              "text": "Click 'Publish' so students can see it in their portal."
             }
           ],
           "video": "ch12-creating-assignments"
@@ -3190,22 +2959,17 @@
             {
               "type": "step",
               "number": 1,
-              "text": "Click the number in the Submissions column of an assignment (or the 'Submissions' button in card view)."
+              "text": "Click the number in the Submissions column of an assignment. The cards at the top count submitted, graded and late work."
             },
             {
               "type": "step",
               "number": 2,
-              "text": "For each submission you can view the submitted text or attached file, enter Marks and Feedback, and click 'Grade' then 'Save'."
+              "text": "Open a submission, click 'Grade', enter the marks and some feedback, and click 'Save'."
             },
             {
               "type": "step",
               "number": 3,
-              "text": "Graded submissions can be re-graded or sent back to the student with 'Return'."
-            },
-            {
-              "type": "step",
-              "number": 4,
-              "text": "The cards at the top count Total, Submitted, Graded, Returned, Pending and Late submissions."
+              "text": "A graded submission can be sent back to the student with 'Return'."
             }
           ],
           "video": "ch12-reviewing-submissions"
@@ -3231,7 +2995,7 @@
           "content": [
             {
               "type": "body_text",
-              "text": "The Notifications module enables school-wide communication with students, parents, and staff. Admins can create templates, send bulk notifications, and track delivery."
+              "text": "Everyone can read their notifications. Admins can also send messages to groups, save templates and control the automatic ones."
             }
           ]
         },
@@ -3248,27 +3012,22 @@
             {
               "type": "step",
               "number": 1,
-              "text": "Click the Notification Bell icon in the top bar for a quick dropdown (shows 8 most recent). The bell bounces when new notifications arrive."
+              "text": "Click the bell in the top bar for the latest few, or open 'Notifications' in the sidebar for the full list. New ones are grouped under Today."
             },
             {
               "type": "step",
               "number": 2,
-              "text": "Or navigate to 'Notifications' in the sidebar for the full Inbox tab with pagination."
+              "text": "Click a notification to read it; it also opens the related page. Unread ones stand out."
             },
             {
               "type": "step",
               "number": 3,
-              "text": "Unread notifications stand out with a bold white card; click a notification to mark it as read (it also opens the related page, such as Fee Collection). Older ones are grouped under Today, Yesterday and Earlier."
+              "text": "Use the 'All Types' list to see one kind, such as Fee Due, and tick 'Unread only' to hide what you have read."
             },
             {
               "type": "step",
               "number": 4,
-              "text": "Use 'Mark all read' (with confirmation) to clear all unread notifications at once."
-            },
-            {
-              "type": "step",
-              "number": 5,
-              "text": "Filter with the 'All Types' dropdown (Absence, Fee Due, Exam Result, Transport Update, etc.) or tick 'Unread only'."
+              "text": "Click 'Mark all read' and confirm to clear everything at once."
             }
           ],
           "video": "ch13-viewing-notifications-all-users"
@@ -3286,22 +3045,16 @@
             {
               "type": "step",
               "number": 1,
-              "text": "Switch to the 'Templates' tab."
+              "text": "On the 'Templates' tab, click 'New Template'. Type a name, choose the event and the channel, and write the message. Placeholders use double braces, such as {{student_name}}."
             },
             {
               "type": "step",
               "number": 2,
-              "text": "Click 'New Template'."
+              "text": "Click 'Save'. Search for it later and click 'Preview' to see the message with sample values."
             },
             {
-              "type": "step",
-              "number": 3,
-              "text": "Enter a Template Name, pick the Event Type and Channel, add an optional Subject, and write the Message body (placeholders use double braces, like {{student_name}})."
-            },
-            {
-              "type": "step",
-              "number": 4,
-              "text": "Click 'Save'. Use Edit, Duplicate, Preview or Delete on any row later; untick 'Active' to hide a template from the Send tab. Templates marked 'Shared' belong to every school and cannot be changed."
+              "type": "body_text",
+              "text": "Templates marked 'Shared' belong to every school and cannot be changed. Untick 'Active' to hide a template from the Send tab."
             }
           ],
           "roles": [
@@ -3323,37 +3076,27 @@
             {
               "type": "step",
               "number": 1,
-              "text": "Switch to the 'Send' tab."
+              "text": "On the 'Send' tab, 'Broadcast to Group' is selected. Choose a template to fill in the title and message, or write your own. (Choose 'Single Recipient' to message one person.)"
             },
             {
               "type": "step",
               "number": 2,
-              "text": "Choose the mode: 'Broadcast to Group' for everyone in a role, or 'Single Recipient' for one person (phone, email or user ID)."
+              "text": "Choose the group, such as All Teachers, and the channel (In-App, which also reaches phones, or Email)."
             },
             {
               "type": "step",
               "number": 3,
-              "text": "In Broadcast mode, select a group: All Parents, All Teachers, All Staff, All Admins, Principals, Managers, Accountants, or All Students. Optionally narrow parents or students to one session class."
-            },
-            {
-              "type": "step",
-              "number": 4,
-              "text": "Optionally pick an existing template to pre-fill the message, or compose a custom message."
-            },
-            {
-              "type": "step",
-              "number": 5,
-              "text": "Choose the channel: In-App (also delivered as a mobile push notification) or Email."
-            },
-            {
-              "type": "step",
-              "number": 6,
-              "text": "Click 'Review & Send Broadcast', check the estimated recipients, then 'Confirm Send' (Single mode: 'Send Notification'). If the text still contains {{placeholders}} a warning appears first; manual sends do not fill them in. A message shows how many were sent, skipped or failed. 'Test Send to Me' sends a copy to your own inbox."
+              "text": "Click 'Review & Send Broadcast', check the number of recipients and click 'Confirm Send'. A message shows how many were sent, skipped or failed."
             },
             {
               "type": "info_box",
-              "title": "Run Now buttons",
-              "text": "At the top of the Send tab, 'Send Fee Reminders Now', 'Generate Daily Report Now' and 'Remind Teachers to Mark Attendance' fire this school's automatic notifications on demand."
+              "title": "Placeholders",
+              "text": "Manual sends do not fill in {{placeholders}}. If the text still has any, a warning appears first. 'Test Send to Me' sends a copy to your own inbox."
+            },
+            {
+              "type": "info_box",
+              "title": "Run now",
+              "text": "'Send Fee Reminders Now', 'Generate Daily Report Now' and 'Remind Teachers to Mark Attendance' at the top of the Send tab send this school's automatic notifications on demand."
             }
           ],
           "roles": [
@@ -3374,19 +3117,7 @@
             },
             {
               "type": "body_text",
-              "text": "Track notification effectiveness with configurable date ranges (7 days, 30 days, 90 days, or all time):"
-            },
-            {
-              "type": "bullet",
-              "text": "Delivery Rate - How many notifications were successfully delivered"
-            },
-            {
-              "type": "bullet",
-              "text": "Read Rate - Percentage of notifications opened/read"
-            },
-            {
-              "type": "bullet",
-              "text": "Breakdown by channel (In-App, Email, Push) and event type"
+              "text": "Choose 7 days, 30 days, 90 days or all time to see how many notifications were delivered and read, by channel and by kind."
             }
           ],
           "roles": [
@@ -3406,61 +3137,7 @@
             },
             {
               "type": "body_text",
-              "text": "Configure notification channels, smart scheduling (AI-optimized send times), and automated notification controls from the Settings tab. Each automation type can be toggled ON/OFF per school. Toggles are module-aware: if a module (e.g., Transport, Finance) is disabled for the school, its related toggles are automatically hidden."
-            },
-            {
-              "type": "table",
-              "headers": [
-                "Automation",
-                "Default",
-                "Trigger"
-              ],
-              "rows": [
-                [
-                  "Absence Alerts",
-                  "ON",
-                  "Sent when attendance is marked"
-                ],
-                [
-                  "Fee Reminders",
-                  "ON",
-                  "Monthly on configured day"
-                ],
-                [
-                  "Fee Overdue Alerts",
-                  "ON",
-                  "Weekly on Mondays"
-                ],
-                [
-                  "Exam Results Published",
-                  "ON",
-                  "When admin publishes results"
-                ],
-                [
-                  "Daily Absence Summary",
-                  "OFF",
-                  "Sent daily at configured time"
-                ],
-                [
-                  "Transport Notifications",
-                  "ON",
-                  "Bus departed, arriving at stop, journey completed"
-                ],
-                [
-                  "Smart Scheduling",
-                  "OFF",
-                  "AI learns optimal send times over 2-4 weeks"
-                ]
-              ]
-            },
-            {
-              "type": "body_text",
-              "text": "The Settings tab also warns you about unsaved changes before navigating away. Channel toggles cover In-App and Email; push notifications are delivered together with In-App."
-            },
-            {
-              "type": "info_box",
-              "title": "Background Tasks",
-              "text": "Scheduled notifications such as absence summaries, fee reminders and attendance reminders run automatically. No manual action required."
+              "text": "Switch each automatic notification on or off for your school: absence alerts, fee reminders, fee overdue alerts, exam results published, the daily absence summary and transport notifications. Options for a module your school has turned off are hidden. Scheduled ones run by themselves; you do not need to do anything."
             }
           ],
           "roles": [
@@ -3483,7 +3160,7 @@
           "content": [
             {
               "type": "body_text",
-              "text": "The Messaging module provides a unified, threaded conversation system for all school roles. Admins, Teachers, Staff, Parents, and Students can exchange messages with role-based access controls determining who can contact whom."
+              "text": "Private conversations between school staff, teachers, parents and students. What you can do depends on your role."
             }
           ]
         },
@@ -3495,40 +3172,25 @@
             {
               "type": "table",
               "headers": [
-                "Sender Role",
-                "Can Message",
-                "Student Context"
+                "Sender",
+                "Can message"
               ],
               "rows": [
                 [
                   "School Admin / Principal",
-                  "Any staff member in the school",
-                  "Not required"
+                  "Any staff member"
                 ],
                 [
                   "Teacher",
-                  "Parents of students in their classes",
-                  "Required (auto-set)"
+                  "Parents and students of their classes, and Admins and Principals"
                 ],
                 [
-                  "Teacher",
-                  "Students with accounts in their classes",
-                  "Required (auto-set)"
-                ],
-                [
-                  "Teacher",
-                  "Admins and Principal",
-                  "Not required"
-                ],
-                [
-                  "Other Staff",
-                  "Admins and Principal",
-                  "Not required"
+                  "Other staff",
+                  "Admins and Principals"
                 ],
                 [
                   "Parent",
-                  "Teachers of their children's classes",
-                  "Required (auto-set)"
+                  "Teachers of their children's classes"
                 ]
               ]
             }
@@ -3546,7 +3208,7 @@
             },
             {
               "type": "body_text",
-              "text": "All roles access the same Messages page from the sidebar. The page shows a split-panel layout: thread list on the left, conversation view on the right. On mobile devices, the view switches between list and conversation."
+              "text": "Conversations are listed on the left and the open one is on the right. On a phone, you move between the list and the conversation."
             }
           ]
         },
@@ -3562,32 +3224,22 @@
             {
               "type": "step",
               "number": 1,
-              "text": "Click the 'New Message' button (top of the thread list)."
+              "text": "Click 'New Message' in the sidebar of the Messages page."
             },
             {
               "type": "step",
               "number": 2,
-              "text": "Pick who to write to using the Staff, Parent or Student tabs, then search for the name in the 'To' box."
+              "text": "Open the 'To' box, search for a name and pick the person. For a parent or student, the child is filled in for you."
             },
             {
               "type": "step",
               "number": 3,
-              "text": "For teacher-parent/student conversations, the student context is automatically set based on the recipient."
-            },
-            {
-              "type": "step",
-              "number": 4,
-              "text": "Optionally enter a subject line for the conversation."
-            },
-            {
-              "type": "step",
-              "number": 5,
-              "text": "Type your message and click 'Send Message'."
+              "text": "Add a subject if you like, type your message and click 'Send Message'. The conversation opens on the right."
             },
             {
               "type": "info_box",
-              "title": "Thread Reuse",
-              "text": "If you already have an active conversation with the same person (and same student context), your new message will be added to the existing thread instead of creating a duplicate."
+              "title": "No duplicates",
+              "text": "If you already have a conversation with the same person about the same student, your message is added to it."
             }
           ],
           "video": "ch14-starting-a-new-conversation"
@@ -3600,27 +3252,12 @@
             {
               "type": "step",
               "number": 1,
-              "text": "Click on any thread in the thread list to open the conversation."
+              "text": "Open a conversation. Conversations with unread messages show a number."
             },
             {
               "type": "step",
               "number": 2,
-              "text": "All messages in the thread are displayed chronologically (oldest first)."
-            },
-            {
-              "type": "step",
-              "number": 3,
-              "text": "Your messages appear on the right side, the other person's on the left."
-            },
-            {
-              "type": "step",
-              "number": 4,
-              "text": "Type your reply in the box at the bottom, then press Enter or click the paper-plane button (Shift+Enter starts a new line)."
-            },
-            {
-              "type": "step",
-              "number": 5,
-              "text": "The thread is automatically marked as read when you open it."
+              "text": "Type your reply in the box at the bottom and press Enter, or the arrow button, to send. Shift+Enter starts a new line. Your messages appear on the right."
             }
           ],
           "video": "ch14-replying-to-messages"
@@ -3632,7 +3269,7 @@
           "content": [
             {
               "type": "body_text",
-              "text": "Unread threads are highlighted in the thread list with a blue badge showing the unread message count. The Messages navigation item in the sidebar also shows a total unread count badge. The badge updates automatically every 15 seconds."
+              "text": "Unread conversations show a number badge, and Messages in the sidebar shows the total. Opening a conversation marks it as read."
             }
           ]
         },
@@ -3644,12 +3281,7 @@
             {
               "type": "step",
               "number": 1,
-              "text": "Use the search box at the top of the thread list to filter conversations."
-            },
-            {
-              "type": "step",
-              "number": 2,
-              "text": "Search matches against participant names and the latest message preview."
+              "text": "Type in the search box above the list. It matches people's names and the latest message."
             }
           ]
         }
@@ -3667,7 +3299,7 @@
           "content": [
             {
               "type": "body_text",
-              "text": "Parents have a dedicated portal to monitor their children's school activities. Parents can view attendance, fees, timetable, exam results, and communicate with the school."
+              "text": "See your children's attendance, fees, timetable and results, apply for leave and message teachers."
             }
           ]
         },
@@ -3683,19 +3315,7 @@
             },
             {
               "type": "body_text",
-              "text": "After logging in, parents see their dashboard with:"
-            },
-            {
-              "type": "bullet",
-              "text": "List of linked children (if multiple children attend the school)"
-            },
-            {
-              "type": "bullet",
-              "text": "Quick action cards for common tasks (Apply Leave, Messages)"
-            },
-            {
-              "type": "bullet",
-              "text": "Recent notifications from the school"
+              "text": "After you sign in, the dashboard shows a card for each of your children, shortcuts for Apply Leave and Messages, and recent notifications from the school."
             }
           ]
         },
@@ -3707,167 +3327,27 @@
             {
               "type": "step",
               "number": 1,
-              "text": "On the dashboard, click 'Overview' on a child's card to open their overview page."
+              "text": "On the dashboard, click 'Overview' on your child's card."
             },
             {
               "type": "step",
               "number": 2,
-              "text": "The header shows the child's photo, name, class and roll number."
+              "text": "The top shows the photo, class and roll number. The cards below show attendance, fees due, the last exam and days present."
             },
             {
               "type": "step",
               "number": 3,
-              "text": "Four cards summarise: Attendance Rate, Fees (amount due, or 'Nothing due'), Last Exam and Days Present."
-            },
-            {
-              "type": "step",
-              "number": 4,
-              "text": "Under 'Details', choose Attendance Calendar, Fee Details, Timetable, Exam Schedule or Exam Results for the full pages."
-            },
-            {
-              "type": "sub_section",
-              "title": "Attendance"
-            },
-            {
-              "type": "nav_path",
-              "path": "Parent Portal > Child > Attendance"
-            },
-            {
-              "type": "step",
-              "number": 5,
-              "text": "Click 'Attendance' to view the child's attendance records."
-            },
-            {
-              "type": "step",
-              "number": 6,
-              "text": "See monthly and daily breakdowns with Present/Absent/Late counts."
-            },
-            {
-              "type": "step",
-              "number": 7,
-              "text": "View attendance percentage and trends."
-            },
-            {
-              "type": "sub_section",
-              "title": "Fees & Online Payments"
-            },
-            {
-              "type": "nav_path",
-              "path": "Parent Portal > Child > Fees"
-            },
-            {
-              "type": "step",
-              "number": 8,
-              "text": "View fee balance, payment history, and outstanding amounts."
-            },
-            {
-              "type": "step",
-              "number": 9,
-              "text": "See due amounts and upcoming fee deadlines."
-            },
-            {
-              "type": "step",
-              "number": 10,
-              "text": "Download fee receipts for past payments."
-            },
-            {
-              "type": "sub_section",
-              "title": "Paying Fees Online (when enabled)"
+              "text": "Under 'Details', choose a page for the full picture: Attendance Calendar, Fee Details, Timetable, Exam Schedule or Exam Results."
             },
             {
               "type": "info_box",
-              "title": "Not enabled yet",
+              "title": "Fees",
               "text": "Online payment is not available yet. Pay at the school office until your school announces it."
             },
             {
-              "type": "nav_path",
-              "path": "Parent Portal > Child > Fees > Pay Now"
-            },
-            {
-              "type": "step",
-              "number": 11,
-              "text": "If the school has configured online payment gateways, a 'Pay Now' button appears next to each unpaid fee."
-            },
-            {
-              "type": "step",
-              "number": 12,
-              "text": "Click 'Pay Now' on the fee you wish to pay."
-            },
-            {
-              "type": "step",
-              "number": 13,
-              "text": "A modal appears showing available payment methods (e.g., JazzCash, Easypaisa, Manual Transfer)."
-            },
-            {
-              "type": "step",
-              "number": 14,
-              "text": "Select your preferred payment method and click 'Proceed to Pay'."
-            },
-            {
-              "type": "step",
-              "number": 15,
-              "text": "For JazzCash/Easypaisa: You will be redirected to the gateway's checkout page to complete payment."
-            },
-            {
-              "type": "step",
-              "number": 16,
-              "text": "For Manual Transfer: Bank account details are displayed. Make the transfer and inform the school office."
-            },
-            {
-              "type": "step",
-              "number": 17,
-              "text": "After payment, you are redirected to a Payment Result page showing the transaction status."
-            },
-            {
-              "type": "step",
-              "number": 18,
-              "text": "Payment statuses: Successful (green), Pending (yellow - being verified), Failed (red - try again)."
-            },
-            {
-              "type": "step",
-              "number": 19,
-              "text": "Pending payments are automatically verified within a few minutes. The page auto-refreshes."
-            },
-            {
               "type": "info_box",
-              "title": "Online Payment Availability",
-              "text": "Online payments are only available if your school's administration has switched online payment on. If you don't see the Pay Now button, pay at the school office."
-            },
-            {
-              "type": "sub_section",
-              "title": "Timetable"
-            },
-            {
-              "type": "nav_path",
-              "path": "Parent Portal > Child > Timetable"
-            },
-            {
-              "type": "step",
-              "number": 20,
-              "text": "View the child's class timetable."
-            },
-            {
-              "type": "step",
-              "number": 21,
-              "text": "See subjects, teachers, and period timings for each day."
-            },
-            {
-              "type": "sub_section",
-              "title": "Exam Results"
-            },
-            {
-              "type": "nav_path",
-              "path": "Parent Portal > Child > Exam Results"
-            },
-            {
-              "type": "step",
-              "number": 22,
-              "text": "View exam marks and grades (once published by the school)."
-            },
-            {
-              "type": "step",
-              "number": 23,
-              "text": "See subject-wise marks, percentage and grade for each exam."
+              "title": "Exam results",
+              "text": "Results appear after the school announces them."
             }
           ],
           "video": "ch15-viewing-childs-information"
@@ -3879,33 +3359,27 @@
           "content": [
             {
               "type": "nav_path",
-              "path": "Parent Portal > Leave Application",
-              "href": "/parent/leave"
+              "path": "Sidebar > Leave Requests"
             },
             {
               "type": "step",
               "number": 1,
-              "text": "Click 'Leave Requests' in the sidebar. The 'Apply for Leave' tab opens first."
+              "text": "Click 'Leave Requests' in the sidebar. The 'Apply for Leave' tab opens first. Choose the child, then enter the start date and the end date."
             },
             {
               "type": "step",
               "number": 2,
-              "text": "Select the child, then enter Start Date, End Date and Reason. A supporting document link is optional."
+              "text": "Write the reason. A link to a supporting document is optional."
             },
             {
               "type": "step",
               "number": 3,
-              "text": "Click 'Submit Leave Request'. The message 'Leave request submitted successfully.' appears."
+              "text": "Click 'Submit Leave Request'. A green message confirms it was sent to the school."
             },
             {
               "type": "step",
               "number": 4,
-              "text": "Open the 'My Requests' tab to track the status (Pending, Approved, Rejected or Cancelled) and read the school's remarks."
-            },
-            {
-              "type": "step",
-              "number": 5,
-              "text": "A request that is still Pending can be cancelled with 'Cancel'."
+              "text": "Open 'My Requests'. The new request is Pending, and earlier ones show the school's decision and remarks. A pending request can be cancelled with 'Cancel'."
             }
           ],
           "video": "ch15-applying-for-leave"
@@ -3922,7 +3396,7 @@
             },
             {
               "type": "body_text",
-              "text": "Parents can send and receive threaded messages with their children's teachers. See the Messaging chapter for full details on how conversations work."
+              "text": "Message your children's teachers. See the Messaging chapter for how conversations work."
             }
           ]
         }
@@ -3943,7 +3417,7 @@
           "content": [
             {
               "type": "body_text",
-              "text": "Students have their own portal to view attendance, timetable, assignments, fees, exam results, and manage their profile."
+              "text": "Your attendance, timetable, assignments, fees and results in one place, plus an AI study helper."
             }
           ]
         },
@@ -3959,31 +3433,7 @@
             },
             {
               "type": "body_text",
-              "text": "The Student Dashboard displays:"
-            },
-            {
-              "type": "bullet",
-              "text": "Welcome card with student name and class"
-            },
-            {
-              "type": "bullet",
-              "text": "Attendance rate (percentage)"
-            },
-            {
-              "type": "bullet",
-              "text": "Assignment stats (pending, submitted, graded)"
-            },
-            {
-              "type": "bullet",
-              "text": "Fee balance summary"
-            },
-            {
-              "type": "bullet",
-              "text": "Today's timetable"
-            },
-            {
-              "type": "bullet",
-              "text": "Upcoming assignment deadlines"
+              "text": "Your attendance rate, assignments waiting for you, your fee balance, today's timetable and upcoming deadlines."
             }
           ]
         },
@@ -4000,12 +3450,7 @@
             {
               "type": "step",
               "number": 1,
-              "text": "View your attendance history with monthly/daily breakdown."
-            },
-            {
-              "type": "step",
-              "number": 2,
-              "text": "See attendance percentage and trend over time."
+              "text": "Open 'Attendance' to see each month and day, and your attendance percentage."
             }
           ]
         },
@@ -4022,12 +3467,7 @@
             {
               "type": "step",
               "number": 1,
-              "text": "View your class timetable for each day of the week."
-            },
-            {
-              "type": "step",
-              "number": 2,
-              "text": "See subject names, teacher names, and period timings."
+              "text": "Open 'Timetable' to see each day's subjects, teachers and period times."
             }
           ]
         },
@@ -4044,27 +3484,22 @@
             {
               "type": "step",
               "number": 1,
-              "text": "The page lists every assignment from your teachers with its subject, type, due date and status."
+              "text": "Click 'Assignments' in the sidebar to see work from all your teachers. Each card shows the subject, type, due date and status. Graded work shows your marks and the teacher's feedback."
             },
             {
               "type": "step",
               "number": 2,
-              "text": "Diary entries are for reading only; they have no Submit button."
+              "text": "A Diary Entry is for reading only, so it has no Submit button. For an open assignment, click 'Submit'."
             },
             {
               "type": "step",
               "number": 3,
-              "text": "Click 'Submit' on an open assignment, type your answer in Submission Text (required), and optionally add a link to your file and a file name."
+              "text": "Type your answer. Submission Text is required, and a link to your file is optional."
             },
             {
               "type": "step",
               "number": 4,
-              "text": "Click 'Submit Assignment'. The message 'Assignment submitted successfully!' appears. Late work is marked Late."
-            },
-            {
-              "type": "step",
-              "number": 5,
-              "text": "After the teacher grades it, the card shows your marks and feedback. Closed assignments can no longer be submitted."
+              "text": "Click 'Submit Assignment'. A green message confirms it and the card now shows Submitted."
             }
           ],
           "video": "ch16-my-assignments"
@@ -4082,12 +3517,7 @@
             {
               "type": "step",
               "number": 1,
-              "text": "View your fee balance and payment history."
-            },
-            {
-              "type": "step",
-              "number": 2,
-              "text": "See upcoming due dates."
+              "text": "Open 'Fees' to see your balance, payment history and due dates."
             }
           ]
         },
@@ -4104,12 +3534,12 @@
             {
               "type": "step",
               "number": 1,
-              "text": "Each published exam appears as a card with your total, percentage and grade. Click its title to open or close the subject table."
+              "text": "Open 'Results'. Each published exam is a card with your total, percentage and grade."
             },
             {
               "type": "step",
               "number": 2,
-              "text": "The table lists marks, total marks, percentage and a Pass or Fail badge for each subject; an absent paper shows 'Absent'."
+              "text": "Under each exam you see marks, percentage and a Pass or Fail badge for every subject. Click an exam title to show only that exam. A paper you missed shows as Absent."
             }
           ],
           "video": "ch16-my-results"
@@ -4127,12 +3557,7 @@
             {
               "type": "step",
               "number": 1,
-              "text": "View and update your profile information."
-            },
-            {
-              "type": "step",
-              "number": 2,
-              "text": "See contact details and class information."
+              "text": "Open 'My Profile' to see your details and class."
             }
           ]
         },
@@ -4148,51 +3573,27 @@
             },
             {
               "type": "body_text",
-              "text": "The AI Study Helper is an intelligent chatbot that assists students with their studies. It is aware of the student's class, subjects, lesson plans, and assignments, allowing it to provide personalized, curriculum-aligned academic support."
+              "text": "A tutor that knows your class and subjects. It only answers study questions."
             },
             {
               "type": "step",
               "number": 1,
-              "text": "Navigate to 'AI Study Helper' in the student sidebar."
+              "text": "Click 'AI Study Helper' in the sidebar. Click one of the suggestions to ask it right away."
             },
             {
               "type": "step",
               "number": 2,
-              "text": "Type your study question in the message box at the bottom of the screen."
+              "text": "Or type your own question and press Enter. Shift+Enter starts a new line."
             },
             {
               "type": "step",
               "number": 3,
-              "text": "Click Send or press Enter to submit your question."
-            },
-            {
-              "type": "step",
-              "number": 4,
-              "text": "The AI will respond with explanations, examples, and study tips tailored to your curriculum."
-            },
-            {
-              "type": "step",
-              "number": 5,
-              "text": "Your conversation history is saved and can be reviewed later."
-            },
-            {
-              "type": "step",
-              "number": 6,
-              "text": "Use the suggestion chips (e.g., 'Help me understand fractions', 'Explain photosynthesis') for quick prompts."
-            },
-            {
-              "type": "step",
-              "number": 7,
-              "text": "Click 'Clear Chat' to start a fresh conversation."
+              "text": "Your chat is saved, so you can come back to it. Click 'Clear Chat' to start again."
             },
             {
               "type": "info_box",
-              "title": "Daily Limit",
-              "text": "Students can send up to 30 messages per day to the AI Study Helper. The counter resets every 24 hours. This ensures fair usage for all students."
-            },
-            {
-              "type": "warning_box",
-              "text": "The AI Study Helper is designed for academic topics only. Questions about personal information, violence, or other inappropriate content will be blocked by the safety system."
+              "title": "Daily limit",
+              "text": "You can send up to 30 messages a day."
             }
           ],
           "video": "ch16-ai-study-helper"
@@ -4214,7 +3615,7 @@
           "content": [
             {
               "type": "body_text",
-              "text": "The Hostel Management module helps schools manage their boarding facilities. It covers hostel buildings, rooms, student allocations, and gate passes for students leaving and returning to the hostel. Hostel pages are available to School Admin and Principal roles only, because they list students and the reasons for their leave."
+              "text": "Hostel buildings and rooms, who sleeps where, and gate passes. Only Admins and Principals can see these pages, because they list students and their reasons for leaving."
             }
           ]
         },
@@ -4230,31 +3631,7 @@
             },
             {
               "type": "body_text",
-              "text": "The Hostel Dashboard provides a quick overview of all hostel operations:"
-            },
-            {
-              "type": "bullet",
-              "text": "Total hostels and rooms, total capacity and current occupancy"
-            },
-            {
-              "type": "bullet",
-              "text": "Occupancy rate (percentage of available beds filled) and available beds"
-            },
-            {
-              "type": "bullet",
-              "text": "Pending gate pass requests"
-            },
-            {
-              "type": "bullet",
-              "text": "Students currently out on gate passes"
-            },
-            {
-              "type": "bullet",
-              "text": "Number of boys' and girls' hostels"
-            },
-            {
-              "type": "bullet",
-              "text": "Quick action links to manage rooms, allocations, and gate passes"
+              "text": "Occupancy and available beds, pending gate-pass requests, students currently out, and shortcuts to rooms, allocations and gate passes."
             }
           ]
         },
@@ -4269,66 +3646,24 @@
               "href": "/hostel/rooms"
             },
             {
-              "type": "sub_section",
-              "title": "Creating a Hostel"
-            },
-            {
               "type": "step",
               "number": 1,
-              "text": "Navigate to Hostel > Rooms in the sidebar. The 'Hostels' tab is open."
+              "text": "Click 'Add Hostel'. Enter the name, choose Boys, Girls or Mixed, and set the capacity and a warden. Click 'Add Hostel' again to save."
             },
             {
               "type": "step",
               "number": 2,
-              "text": "Click 'Add Hostel'."
+              "text": "Open the 'Rooms' tab and choose the hostel."
             },
             {
               "type": "step",
               "number": 3,
-              "text": "Enter the Hostel Name, choose the Hostel Type (Boys / Girls / Mixed) and enter the Capacity."
-            },
-            {
-              "type": "step",
-              "number": 4,
-              "text": "Optionally enter the Address and Contact Number, and choose a Warden from your active staff."
-            },
-            {
-              "type": "step",
-              "number": 5,
-              "text": "Click 'Add Hostel'. The hostel appears in the list with its occupancy."
-            },
-            {
-              "type": "sub_section",
-              "title": "Creating Rooms"
-            },
-            {
-              "type": "step",
-              "number": 6,
-              "text": "Open the 'Rooms' tab and choose a hostel in 'Select Hostel'."
-            },
-            {
-              "type": "step",
-              "number": 7,
-              "text": "Click 'Add Room'."
-            },
-            {
-              "type": "step",
-              "number": 8,
-              "text": "Enter the Room Number, Floor and Capacity, and choose the Room Type (Single / Double / Dormitory)."
-            },
-            {
-              "type": "step",
-              "number": 9,
-              "text": "Click 'Add Room'. The room shows its occupancy and whether it is Available, Full or Unavailable."
+              "text": "Click 'Add Room'. Enter the room number, floor and capacity, choose the room type, and click 'Add Room' again. It shows its capacity and how many beds are taken."
             },
             {
               "type": "info_box",
-              "title": "Room status",
-              "text": "A room shows Full when every bed is taken. Untick 'Available for allocation' when you take a room out of use; it is then shown as Unavailable and cannot be chosen for new allocations. A room's capacity cannot be lowered below the number of students in it."
-            },
-            {
-              "type": "warning_box",
-              "text": "A hostel or room that has student allocation records cannot be deleted, so the history is kept. Mark a hostel Inactive, or a room Unavailable, instead."
+              "title": "Taking things out of use",
+              "text": "A hostel or room that has allocation records cannot be deleted, so the history stays. Mark the hostel Inactive, or untick 'Available for allocation' on the room. A room's capacity cannot go below the students in it."
             }
           ],
           "video": "ch17-managing-hostels-rooms"
@@ -4344,55 +3679,24 @@
               "href": "/hostel/allocations"
             },
             {
-              "type": "body_text",
-              "text": "Allocations assign students to specific hostel rooms for an academic year. The list can be filtered by hostel, by status (Active or Vacated) and searched by student name."
-            },
-            {
-              "type": "sub_section",
-              "title": "Allocating a Student"
-            },
-            {
               "type": "step",
               "number": 1,
-              "text": "Navigate to Hostel > Allocations and click 'Allocate Student'."
+              "text": "Click 'Allocate Student'. Choose the student, the hostel and a room that has a free bed, then click 'Allocate'. The student appears in the list with the room."
             },
             {
               "type": "step",
               "number": 2,
-              "text": "The Academic Year is the current one. Search for and choose the Student; students who already hold a bed this year are not listed."
+              "text": "To free a bed, click 'Vacate' on the student and confirm."
             },
             {
               "type": "step",
               "number": 3,
-              "text": "Choose the Hostel, then a Room. Only rooms with a free bed are listed."
+              "text": "Choose 'Vacated' in the status filter to see students who left, with the date."
             },
             {
-              "type": "step",
-              "number": 4,
-              "text": "Click 'Allocate'. The student appears in the list with the room."
-            },
-            {
-              "type": "sub_section",
-              "title": "Vacating a Student"
-            },
-            {
-              "type": "step",
-              "number": 5,
-              "text": "Find the active allocation in the list and click 'Vacate'."
-            },
-            {
-              "type": "step",
-              "number": 6,
-              "text": "Confirm. The allocation is marked Vacated with today's date and the room's occupancy decreases."
-            },
-            {
-              "type": "step",
-              "number": 7,
-              "text": "Choose 'Vacated' in the status filter to see students who have left."
-            },
-            {
-              "type": "warning_box",
-              "text": "Each student can only hold one active hostel bed per academic year. Vacate the current allocation before placing the student in another room; a vacated student can be allocated again in the same year."
+              "type": "info_box",
+              "title": "One bed per year",
+              "text": "A student can hold one active bed in a year. Vacate the current one before choosing another room."
             }
           ],
           "video": "ch17-student-allocations"
@@ -4409,99 +3713,27 @@
             },
             {
               "type": "body_text",
-              "text": "Gate passes track students leaving and returning to the hostel. They follow a workflow: Request > Approve/Reject > Check Out > Return."
-            },
-            {
-              "type": "sub_section",
-              "title": "Creating a Gate Pass"
+              "text": "A pass moves through: Pending Approval, Approved (or Rejected), Checked Out, Returned."
             },
             {
               "type": "step",
               "number": 1,
-              "text": "Click 'New Gate Pass'."
+              "text": "Click 'New Gate Pass'. Choose the student and the pass type, then enter the reason and where the student is going."
             },
             {
               "type": "step",
               "number": 2,
-              "text": "Choose the Student (only students who currently hold a hostel bed are listed) and the Pass Type (Day Pass / Overnight / Weekend / Vacation Leave)."
+              "text": "The leaving time and expected return are filled in; change them if the student leaves at a different time. Click 'Create Gate Pass'. It starts as Pending Approval."
             },
             {
               "type": "step",
               "number": 3,
-              "text": "Enter the Reason and where the student is Going To, and optionally a contact number at the destination."
+              "text": "Click 'Approve', add a remark if you like and confirm (or click 'Reject')."
             },
             {
               "type": "step",
               "number": 4,
-              "text": "The Departure Date and Expected Return are filled in (the next full hour, and eight hours later); change them if needed, then click 'Create Gate Pass'. The pass starts as Pending Approval."
-            },
-            {
-              "type": "sub_section",
-              "title": "Approving / Rejecting Gate Passes"
-            },
-            {
-              "type": "step",
-              "number": 5,
-              "text": "Review pending gate passes in the list."
-            },
-            {
-              "type": "step",
-              "number": 6,
-              "text": "Click 'Approve' to authorize the student's departure, or 'Reject' to deny the request."
-            },
-            {
-              "type": "step",
-              "number": 7,
-              "text": "Add optional remarks in the box and confirm."
-            },
-            {
-              "type": "sub_section",
-              "title": "Check Out & Return"
-            },
-            {
-              "type": "step",
-              "number": 8,
-              "text": "When the student leaves the gate, click 'Check Out' on the approved pass."
-            },
-            {
-              "type": "step",
-              "number": 9,
-              "text": "When the student is back, click 'Mark Returned'. The actual return time is recorded."
-            },
-            {
-              "type": "table",
-              "headers": [
-                "Status",
-                "Meaning",
-                "Next Action"
-              ],
-              "rows": [
-                [
-                  "Pending Approval",
-                  "Pass requested, awaiting approval",
-                  "Approve or Reject"
-                ],
-                [
-                  "Approved",
-                  "Pass approved, student may leave",
-                  "Check Out when departing"
-                ],
-                [
-                  "Rejected",
-                  "Pass denied",
-                  "No further action"
-                ],
-                [
-                  "Checked Out",
-                  "Student has left the hostel",
-                  "Mark Returned when student comes back"
-                ],
-                [
-                  "Returned",
-                  "Student has returned to hostel",
-                  "Complete - no action needed"
-                ]
-              ]
+              "text": "When the student leaves the gate, click 'Check Out'. When the student is back, click 'Mark Returned'. The pass is complete."
             }
           ],
           "video": "ch17-gate-passes"
@@ -4525,7 +3757,7 @@
           "content": [
             {
               "type": "body_text",
-              "text": "The Settings page has two tabs: Profile (your own account and school preferences such as Examination Settings) and Users (School Admins and Principals manage user accounts there)."
+              "text": "Settings has two tabs: 'School Profile' for school preferences such as Examination Settings, and 'Users', where Admins and Principals manage accounts."
             }
           ]
         },
@@ -4541,7 +3773,7 @@
             },
             {
               "type": "body_text",
-              "text": "Toggle between Simple Average and Weighted Average for report card calculations. When Weighted Average is enabled, each exam type's contribution is scaled by its weight (configured in Exam Types). See Chapter 6 (Examinations) for details."
+              "text": "Switch between Simple Average and Weighted Average for report cards. See Chapter 6 (Weighted Average Configuration)."
             }
           ]
         },
@@ -4552,7 +3784,7 @@
           "content": [
             {
               "type": "body_text",
-              "text": "See Chapter 7 (Finance Module) > Setting Up Finance Accounts for detailed instructions."
+              "text": "See Chapter 7, Setting Up Finance Accounts."
             }
           ]
         },
@@ -4563,8 +3795,8 @@
           "content": [
             {
               "type": "info_box",
-              "title": "Not enabled yet",
-              "text": "Online payment gateways are not configured for schools yet, so there is nothing to set up here. Record fee payments under Finance > Collect Payments. This section will be updated when online payments are switched on."
+              "title": "Not switched on yet",
+              "text": "Online payment is not available for schools yet, so there is nothing to set up. Record payments under Finance > Collect Payments."
             }
           ]
         }
@@ -4586,7 +3818,7 @@
           "content": [
             {
               "type": "body_text",
-              "text": "Education AI uses a hierarchical role system for user management. School Admins and Principals can create and manage users within their schools."
+              "text": "School Admins and Principals create and manage the people who can log in to their school."
             }
           ]
         },
@@ -4596,73 +3828,33 @@
           "slug": "user-roles-hierarchy",
           "content": [
             {
-              "type": "body_text",
-              "text": "The system has the following roles, listed from highest to lowest privilege:"
-            },
-            {
               "type": "table",
               "headers": [
                 "Role",
-                "Can Create",
-                "Typical Sidebar"
+                "Can create"
               ],
               "rows": [
                 [
-                  "Super Admin",
-                  "All roles, including Super Admin",
-                  "Everything, across schools"
-                ],
-                [
                   "School Admin",
-                  "Principal, Manager, Accountant, Teacher, Staff, Driver",
-                  "Everything in the school"
+                  "Principal, Manager, Accountant, Teacher, Staff, Driver"
                 ],
                 [
                   "Principal",
+                  "Manager, Accountant, Teacher, Staff, Driver"
+                ],
+                [
                   "Manager, Accountant, Teacher, Staff, Driver",
-                  "Everything in the school"
+                  "Nobody"
                 ],
                 [
-                  "Manager",
-                  "- (no user creation)",
-                  "Dashboard, Academics, Content Creation, Management"
-                ],
-                [
-                  "Accountant",
-                  "- (no user creation)",
-                  "Finance"
-                ],
-                [
-                  "Teacher",
-                  "- (no user creation)",
-                  "Own classes: Attendance, Academics, Content Creation, Planning"
-                ],
-                [
-                  "Staff",
-                  "- (no user creation)",
-                  "Limited menu: notifications and messages"
-                ],
-                [
-                  "Driver",
-                  "- (no user creation)",
-                  "Transport"
-                ],
-                [
-                  "Parent",
-                  "- (self-registered via invite)",
-                  "Parent portal: own child's data only"
-                ],
-                [
-                  "Student",
-                  "- (self-registered via invite)",
-                  "Student portal: own data only"
+                  "Parent, Student",
+                  "Nobody (they get accounts through the school)"
                 ]
               ]
             },
             {
-              "type": "info_box",
-              "title": "What you see",
-              "text": "The sidebar also depends on which modules your school has enabled. If you cannot see a page, your role or your school's modules do not include it."
+              "type": "body_text",
+              "text": "What each person sees also depends on the modules your school has turned on."
             }
           ]
         },
@@ -4677,58 +3869,39 @@
               "href": "/settings"
             },
             {
-              "type": "body_text",
-              "text": "School Admins and Principals can create, edit, and deactivate user accounts for their school from the Users tab in Settings."
-            },
-            {
               "type": "step",
               "number": 1,
-              "text": "Navigate to Settings and click the 'Users' tab."
+              "text": "Open Settings and click the 'Users' tab. It lists every user of your school; search by name, username or email, or filter by role."
             },
             {
               "type": "step",
               "number": 2,
-              "text": "Click 'Add User' to open the user creation form."
+              "text": "Click 'Add User'. Enter the name, a username, an email and a password, then choose the role. The list only offers roles you are allowed to create."
             },
             {
               "type": "step",
               "number": 3,
-              "text": "Fill in First name, Last name, Username (required), Email, Password, Confirm password, select a Role from the dropdown, and add a Phone number if you want."
+              "text": "Click 'Create User'. A green message confirms it, and the user can log in straight away."
             },
             {
               "type": "step",
               "number": 4,
-              "text": "The role dropdown only shows roles you are allowed to create based on your role."
+              "text": "Click 'Edit' to change the name, email, role or phone. The username cannot be changed."
             },
             {
               "type": "step",
               "number": 5,
-              "text": "Click 'Create User' to save. A school membership is automatically created."
+              "text": "If someone forgets their password, click 'Reset Password'. Set a new one now, or email them a reset link when they have an email address."
             },
             {
               "type": "step",
               "number": 6,
-              "text": "To edit a user, click 'Edit' in the actions column. You can change name, email, role, and phone."
-            },
-            {
-              "type": "step",
-              "number": 7,
-              "text": "To reset a forgotten password, click 'Reset Password' on the user's row. Choose 'Set a new password now' and type the New Password (at least 8 characters) twice, or choose 'Email a reset link' (only available when the user has an email address), then press 'Reset Password' or 'Send Email'."
-            },
-            {
-              "type": "step",
-              "number": 8,
-              "text": "To deactivate a user, click 'Deactivate'. The user will no longer be able to log in."
-            },
-            {
-              "type": "step",
-              "number": 9,
-              "text": "To reactivate, click 'Activate' on an inactive user."
+              "text": "Click 'Deactivate' and the user can no longer log in. Click 'Activate' to give the access back."
             },
             {
               "type": "info_box",
-              "title": "Role Restrictions",
-              "text": "You can only edit or deactivate users whose role you are allowed to create. For example, a Principal cannot deactivate a School Admin."
+              "title": "Who you can change",
+              "text": "You can only edit or deactivate users whose role you could create. A Principal cannot deactivate a School Admin."
             }
           ],
           "video": "ch19-managing-users-school-admin-principal"
@@ -4744,38 +3917,19 @@
               "href": "/students"
             },
             {
-              "type": "body_text",
-              "text": "When adding a new student, you can optionally create a user account so the student can access the Student Portal."
-            },
-            {
               "type": "step",
               "number": 1,
-              "text": "Open the Add Student modal and fill in the student details (Class, Name, Roll Number)."
+              "text": "In the Add Student form, choose the class and enter the student's name and the parent details."
             },
             {
               "type": "step",
               "number": 2,
-              "text": "Check the 'Create User Account (Student Portal)' checkbox at the bottom of the form."
+              "text": "At the bottom, tick 'Create User Account'. The username is suggested from the name."
             },
             {
               "type": "step",
               "number": 3,
-              "text": "Additional fields will appear: Username (auto-suggested from student name), Email, Password, and Confirm Password."
-            },
-            {
-              "type": "step",
-              "number": 4,
-              "text": "Fill in the login credentials. Password must be at least 8 characters."
-            },
-            {
-              "type": "step",
-              "number": 5,
-              "text": "Click 'Add Student'. Both the student record and user account will be created together."
-            },
-            {
-              "type": "step",
-              "number": 6,
-              "text": "The student can now log in to the Student Portal using these credentials."
+              "text": "Enter a password of at least eight characters and confirm it. Click 'Add Student'. The student and the login are created together."
             }
           ],
           "video": "ch19-creating-student-user-accounts"
@@ -4792,7 +3946,7 @@
             },
             {
               "type": "body_text",
-              "text": "Students without accounts show 'No Account' in the Account column. Individual: Click 'Create Account' next to any student, fill in credentials, and save. Bulk: Select multiple students using checkboxes, click 'Create Accounts' in the floating bar, set a default password, and confirm. Usernames are auto-generated (e.g., 'Ahmed Khan' becomes 'ahmed_khan')."
+              "text": "Students without a login show 'No Account'. Click 'Create Account' beside one, or tick several and use 'Create Accounts' in the bar that appears. Usernames are made from the name, such as ahmed_khan."
             }
           ]
         },
@@ -4808,7 +3962,7 @@
             },
             {
               "type": "body_text",
-              "text": "When adding a new staff member (full form or Quick Add), check 'Create User Account' to set up login credentials alongside the staff record. Select a User Role (Teacher, Staff, Manager, Accountant, Driver) to determine system access level."
+              "text": "When you add a staff member, tick 'Create User Account' and choose their role (Teacher, Staff, Manager, Accountant or Driver) to give them a login at the same time."
             }
           ]
         },
@@ -4819,7 +3973,7 @@
           "content": [
             {
               "type": "body_text",
-              "text": "Staff without accounts show 'No Account' in the Account column. Individual: Click 'Create Account', set role and credentials. Bulk: Select multiple staff, click 'Create Accounts', choose default role and password. Usernames are auto-generated (e.g., 'Jane Doe' becomes 'jane_doe')."
+              "text": "Staff without a login show 'No Account'. Click 'Create Account' beside one, or tick several and use 'Create Accounts', then choose the role and a starting password."
             }
           ]
         },
@@ -4830,11 +3984,11 @@
           "content": [
             {
               "type": "body_text",
-              "text": "If a user account already exists separately (e.g., created before the staff record), you can link them from the Staff Directory. Click 'Link Account' on the staff row, search for the user, and select them. To unlink, click the 'Unlink' button. See Chapter 8 (HR & Staff > Linking & Unlinking User Accounts) for full details."
+              "text": "If the login already exists, click 'Link Account' on the staff row instead and pick the user. See Chapter 8, Linking & Unlinking User Accounts."
             },
             {
               "type": "warning_box",
-              "text": "Passwords cannot be recovered. If a user forgets their password, a School Admin must reset it from the Users tab."
+              "text": "Passwords cannot be looked up. If someone forgets theirs, an Admin or Principal resets it from the Users tab."
             }
           ]
         }
@@ -4856,7 +4010,7 @@
           "content": [
             {
               "type": "body_text",
-              "text": "Education AI includes AI-assisted features that help with everyday work: dashboard insights, timetable generation, report card comments and letter drafting. Always review AI output before sharing it."
+              "text": "AI helps with everyday work: dashboard insights, timetables, report card comments, letters and early warnings. Always read AI output before you share it."
             }
           ]
         },
@@ -4867,7 +4021,7 @@
           "content": [
             {
               "type": "body_text",
-              "text": "The admin dashboard surfaces AI-generated actionable insights across all modules: Alerts (red) for urgent issues, Warnings (amber) for important items, and Info (blue) for setup reminders. Each insight links directly to the relevant page. Insights are role-specific (teachers see attendance only, accountants see finance only)."
+              "text": "The dashboard lists what needs attention: red for urgent, amber for important, blue for reminders. Each one links to the page where you can act. Each role sees only its own area, so teachers see attendance and accountants see finance."
             }
           ],
           "roles": [
@@ -4889,7 +4043,7 @@
             },
             {
               "type": "body_text",
-              "text": "Timetable auto-generation supports two algorithms: 'Quick (Greedy)' for near-instant drafts, and 'Optimal (OR-Tools)' for higher quality schedules (up to 30 seconds). OR-Tools enforces hard constraints (no double-booking) and optimizes subject distribution across days."
+              "text": "'Auto-Generate' fills a timetable for you. 'Quick (Greedy)' gives a draft almost at once. 'Optimal (OR-Tools)' takes up to 30 seconds and spreads subjects better across days without double-booking anyone. Review it, then click 'Save Timetable'."
             }
           ]
         },
@@ -4905,12 +4059,7 @@
             },
             {
               "type": "body_text",
-              "text": "Generate personalized comments for each student's exam performance based on marks, grades, and attendance. Click 'Generate Comments' on an exam's results page. Comments appear on report cards automatically. Teachers should review before sharing with parents."
-            },
-            {
-              "type": "info_box",
-              "title": "Fallback",
-              "text": "Without a Groq API key, the system generates rule-based comments automatically."
+              "text": "On an exam's results page, click 'Generate Comments' to draft a comment for every student from their marks, grades and attendance. They appear on report cards. Read them before parents do."
             }
           ],
           "roles": [
@@ -4931,12 +4080,7 @@
             },
             {
               "type": "body_text",
-              "text": "The Letter Composer includes an AI assistant that drafts professional letters from natural language descriptions. Enter a prompt like 'Write a warning letter for late attendance' or 'Draft an experience certificate for Rajesh who joined 3 years ago as a Math teacher' and the AI generates a complete subject and body. The AI uses template context (if a template type is selected) and employee details (if an employee is selected) for more accurate drafts. Quick suggestion chips are provided for common letter types."
-            },
-            {
-              "type": "info_box",
-              "title": "Fallback",
-              "text": "Without a Groq API key, the system matches keywords in your prompt to built-in templates and returns the closest matching template. You can always edit the content manually."
+              "text": "Describe the letter in plain words, for example 'Write a warning letter for late attendance'. The draft uses the chosen template and employee details. Edit it before you generate the PDF."
             }
           ]
         },
@@ -4952,7 +4096,7 @@
             },
             {
               "type": "body_text",
-              "text": "Students flagged by the attendance risk predictor, showing current attendance, predicted attendance in 4 weeks and a trend (Declining, Stable, Improving). Filter by severity (High, Medium, Low) and class. School Admin and Principal only."
+              "text": "Students whose attendance is falling, with their rate now, the predicted rate in 4 weeks and the trend. Filter by severity and class. School Admin and Principal only."
             }
           ]
         },
@@ -4968,7 +4112,7 @@
             },
             {
               "type": "body_text",
-              "text": "A combined risk score that blends attendance, fee default likelihood and academic performance. Filter by severity and class. School Admin and Principal only."
+              "text": "One score that combines attendance, likelihood of unpaid fees and academic results. Filter by severity and class. School Admin and Principal only."
             }
           ]
         },
@@ -4984,7 +4128,7 @@
             },
             {
               "type": "body_text",
-              "text": "Students trending toward failing grades, showing their average and predicted next exam with a trend. Filter by severity and class. School Admin and Principal only."
+              "text": "Students heading towards failing grades, with their average, the predicted next exam and the trend. School Admin and Principal only."
             }
           ]
         },
@@ -5000,11 +4144,11 @@
             },
             {
               "type": "body_text",
-              "text": "Staff flagged for rising leave frequency or declining attendance, showing leave days (last 90 days), absence rate and trend. Filter by severity and department. School Admin and Principal only."
+              "text": "Staff with rising leave or falling attendance. School Admin and Principal only."
             },
             {
               "type": "warning_box",
-              "text": "Risk scores are AI estimates meant to start a conversation, not a final judgment about a person. Select an academic year first for the student pages."
+              "text": "Risk scores are estimates to start a conversation, not a judgment about a person. For the student pages, choose an academic year first."
             }
           ]
         }
@@ -5026,7 +4170,7 @@
           "content": [
             {
               "type": "body_text",
-              "text": "The Inventory module tracks store items, stock movements and items assigned to staff. It is available to School Admins and Principals."
+              "text": "Store items, stock movements and who holds what. Available to School Admins, Principals and Accountants; only Admins and Principals can change things."
             }
           ]
         },
@@ -5042,7 +4186,7 @@
             },
             {
               "type": "body_text",
-              "text": "Shows Total Items, Total Stock Value, Active Assignments, Low Stock Alerts and Recent Transactions, with quick links to the other pages."
+              "text": "Total items, stock value, active assignments, low-stock alerts and recent transactions, with links to the other pages."
             }
           ]
         },
@@ -5059,22 +4203,22 @@
             {
               "type": "step",
               "number": 1,
-              "text": "Click the 'Categories' and 'Vendors' buttons at the top first and add the categories and vendors you use."
+              "text": "Open 'Categories' and add one. Vendors work the same way."
             },
             {
               "type": "step",
               "number": 2,
-              "text": "Add an item: Name, Category, Unit (Pieces, Packets, Boxes, Kilograms, Litres, Sets, Reams, Dozens, Metres), Current Stock, Minimum Stock, Unit Price and Storage Location."
+              "text": "Click 'Add Item'. Enter the name, choose the category and unit, and set the current stock, the minimum stock and the price. Click 'Create'."
             },
             {
               "type": "step",
               "number": 3,
-              "text": "Filter the list by category and stock status: In Stock, Low Stock or Out of Stock."
+              "text": "Use 'Stock Status' to see only Low Stock or Out of Stock items, so you know what to reorder."
             },
             {
               "type": "step",
               "number": 4,
-              "text": "Use 'AI Suggest' to get suggested items for the kind of school you describe, select the ones you want and add them."
+              "text": "'AI Suggest' lists items for the kind of school you choose, such as Science Lab. Tick the ones you want and add them in one go."
             }
           ],
           "video": "ch21-items-stock"
@@ -5090,38 +4234,29 @@
               "href": "/inventory/transactions"
             },
             {
-              "type": "body_text",
-              "text": "School Admins and Principals record stock movements here; other roles with inventory access can only view the history. Issues and Returns are not entered by hand: they are created automatically when you assign an item or mark it returned (see Item Assignments)."
-            },
-            {
               "type": "step",
               "number": 1,
-              "text": "Press '+ Record Transaction'."
+              "text": "Every stock movement is listed with its date, type and quantity. Click 'Record Transaction'."
             },
             {
               "type": "step",
               "number": 2,
-              "text": "Choose the type: Purchase (new stock from a vendor), Adjustment (correct a stock count) or Disposal (damaged or expired items)."
+              "text": "Choose 'Purchase', then the item. The unit price is filled in. Enter the quantity, choose the vendor and add the invoice number, then click 'Record Transaction'. The item's stock goes up."
             },
             {
               "type": "step",
               "number": 3,
-              "text": "Select the Item. Its current stock is shown in the list and its unit price is filled in for you."
+              "text": "For damaged or expired items choose 'Disposal' and enter a positive quantity; the stock goes down by that amount. An 'Adjustment' corrects a count and takes a negative number to reduce stock."
             },
             {
               "type": "step",
               "number": 4,
-              "text": "Enter the Quantity. For a Disposal enter a positive number; the stock is reduced for you. For an Adjustment use a negative number to reduce stock. Stock can never go below zero."
+              "text": "Use 'Type' and the From and To dates to narrow the history."
             },
             {
-              "type": "step",
-              "number": 5,
-              "text": "Choose the Vendor (Purchase only), set the Date, add a Reference number such as an invoice or PO, and any Remarks, then press 'Record Transaction'. A 'Transaction recorded' message appears and the item's stock updates."
-            },
-            {
-              "type": "step",
-              "number": 6,
-              "text": "Filter the history by Type and by From and To dates. Issue and Return rows created by assignments appear here too."
+              "type": "info_box",
+              "title": "Issues and returns",
+              "text": "These are not typed in by hand. They are created automatically when you assign an item or mark it returned."
             }
           ],
           "video": "ch21-stock-transactions"
@@ -5137,28 +4272,28 @@
               "href": "/inventory/assignments"
             },
             {
-              "type": "body_text",
-              "text": "School Admins and Principals assign items and mark them returned. Accountants, Teachers and Staff can only view assignments (Teachers and Staff see just the items assigned to them)."
-            },
-            {
               "type": "step",
               "number": 1,
-              "text": "Press '+ Assign Item'."
+              "text": "It shows who currently holds which item. Click 'Assign Item', choose the item, the person and the quantity, and add a note such as a serial number or the purpose."
             },
             {
               "type": "step",
               "number": 2,
-              "text": "Choose the Item (only items in stock are listed) and the person under 'Assign To' (active staff accounts), set the Quantity, pick the item's Condition (New, Good, Fair or Poor) and add notes such as a serial number, then press 'Assign'. The assignment is dated today, the stock is reduced and an Issue transaction is recorded."
+              "text": "Click 'Assign'. The item is dated today and its stock goes down."
             },
             {
               "type": "step",
               "number": 3,
-              "text": "Switch between the 'Active' and 'Returned' tabs, and search by person or item name."
+              "text": "When an item comes back, click 'Return' on its row, choose its condition and confirm. The stock is restored."
             },
             {
               "type": "step",
               "number": 4,
-              "text": "When the item comes back, press 'Return' on its row, choose its condition and press 'Confirm Return'. The stock is restored and a Return transaction is recorded."
+              "text": "Open the 'Returned' tab to see items that came back, with the date and condition. Search by person or item."
+            },
+            {
+              "type": "body_text",
+              "text": "Accountants, Teachers and Staff can only view assignments; Teachers and Staff see just the items assigned to them."
             }
           ],
           "roles": [
@@ -5182,7 +4317,7 @@
             },
             {
               "type": "body_text",
-              "text": "Items flagged by the AI as low on stock or projected to run out, with severity (High, Medium, Low), current stock, projected stockout time and trend."
+              "text": "Items the AI expects to run low or out, with severity, current stock and the projected stock-out time."
             }
           ]
         }
@@ -5206,31 +4341,19 @@
           "content": [
             {
               "type": "bullet",
-              "text": "Class dropdowns are session-scoped: always select the correct academic year first to see the right class list"
+              "text": "Choose the right academic year first; class lists depend on it."
             },
             {
               "type": "bullet",
-              "text": "Use bulk import (Excel) for students when starting with a large number of records"
+              "text": "Import students from Excel when you start with many."
             },
             {
               "type": "bullet",
-              "text": "Use search and filter features to quickly find records in any list"
+              "text": "Search and filter any list to find records fast."
             },
             {
               "type": "bullet",
-              "text": "Export data regularly as backups (Excel, PDF)"
-            },
-            {
-              "type": "bullet",
-              "text": "Use strong, unique passwords; log out when leaving the computer unattended"
-            },
-            {
-              "type": "bullet",
-              "text": "Regularly review user access and deactivate unused accounts"
-            },
-            {
-              "type": "bullet",
-              "text": "The User Guide covers pages for all roles; if you cannot see a page, your role or school modules do not include it"
+              "text": "Use strong passwords, log out on shared computers, and deactivate accounts nobody uses."
             }
           ]
         },
@@ -5241,23 +4364,15 @@
           "content": [
             {
               "type": "bullet",
-              "text": "Manual: Press Mark All Present, then change only the exceptions; save before leaving the page"
+              "text": "Manual: press 'Mark All Present', change only the exceptions, and save before you leave the page."
             },
             {
               "type": "bullet",
-              "text": "Face: Enroll all students first; use clear portraits (quality > 70%); good lighting for group photos"
+              "text": "Face: enroll every student first, with clear, well-lit portraits (quality above 70%), and review the yellow matches."
             },
             {
               "type": "bullet",
-              "text": "Face: Avoid backlighting; review yellow-flagged matches; re-enroll after major appearance changes"
-            },
-            {
-              "type": "bullet",
-              "text": "If attendance was already marked, reopen the same class and date: saving updates the records and never duplicates them"
-            },
-            {
-              "type": "bullet",
-              "text": "Attendance cannot be saved on OFF days"
+              "text": "To correct a day, reopen the same class and date and save again. Nothing is duplicated."
             }
           ]
         },
@@ -5268,23 +4383,15 @@
           "content": [
             {
               "type": "bullet",
-              "text": "Set up accounts before the academic year; close months regularly"
+              "text": "Set up accounts and fee amounts before the year starts, and close each month when it is done."
             },
             {
               "type": "bullet",
-              "text": "Use discounts/scholarships feature instead of manual fee adjustments"
+              "text": "Use discounts and scholarships rather than editing fees by hand."
             },
             {
               "type": "bullet",
-              "text": "Use 'Pay Full' bulk action for quick month-end collection"
-            },
-            {
-              "type": "bullet",
-              "text": "Download PDF reports monthly from the Finance Dashboard for record-keeping"
-            },
-            {
-              "type": "bullet",
-              "text": "Online payment is not enabled yet: record every payment under Collect Payments"
+              "text": "Use 'Pay Full' for quick month-end collection, and download the monthly PDF from the Finance Dashboard."
             }
           ]
         },
@@ -5294,31 +4401,27 @@
           "slug": "operations-checklist",
           "content": [
             {
-              "type": "body_text",
-              "text": "Recommended routine tasks by frequency:"
-            },
-            {
               "type": "table",
               "headers": [
-                "Frequency",
-                "Tasks"
+                "How often",
+                "What to do"
               ],
               "rows": [
                 [
                   "Daily",
-                  "Mark attendance (Manual Entry or Face), record fee payments, mark staff & transport attendance, issue/return books, check dashboard alerts and notifications"
+                  "Mark attendance, record payments, check notifications and dashboard alerts"
                 ],
                 [
                   "Weekly",
-                  "Review attendance analytics, check overdue books, process leave applications, update admission pipeline"
+                  "Check overdue books, answer leave requests, follow up admission enquiries"
                 ],
                 [
                   "Monthly",
-                  "Process payroll, close financial month, review Finance Dashboard, generate fee reminders"
+                  "Run payroll, send fee reminders, review the Finance Dashboard, close the month"
                 ],
                 [
-                  "Term",
-                  "Create exams, enter marks, publish results, generate report cards, conduct promotions, set up new academic year"
+                  "Each term",
+                  "Create exams, enter marks, announce results, print report cards, then promote students and set up the new year"
                 ]
               ]
             }

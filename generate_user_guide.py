@@ -901,891 +901,492 @@ def build_guide():
     # =========================================================================
     pdf.chapter_title("Admissions CRM Module")
 
-    pdf.body_text(
-        "The Admissions CRM manages the complete student enrollment pipeline from initial enquiry "
-        "to final enrollment. It tracks leads, followups, and conversion rates."
-    )
+    pdf.body_text("Follow every admission from first enquiry to enrolled student.")
 
     pdf.section_title("Admission Workflow Overview")
-    pdf.body_text(
-        "Admissions uses the school's academic years (set up in Management > Sessions). "
-        "When converting enquiries to students, you select the target academic year and class. "
-        "The system creates the student record and enrolls them in that session."
-    )
+    pdf.body_text("An enquiry is New, then Confirmed once the family agrees, then Converted when it becomes a student in the academic year and class you choose. Cancelled enquiries stay on record.")
 
     pdf.section_title("Creating Enquiries")
     pdf.nav_path("Sidebar > Admissions > Enquiries")
-    pdf.step("Click 'New Enquiry'.")
-    pdf.step("Fill in: Student Name, Father Name, Mobile and Grade Applied For.")
-    pdf.step("Set Source: Walk-in, Phone Call, Website, WhatsApp, Referral, Social Media, Ad Campaign or Other.")
-    pdf.step("Optionally set the Next Follow-up Date and add notes.")
-    pdf.step("Click 'Create Enquiry'. The enquiry appears in the list with status New.")
+    pdf.step("Click 'New Enquiry'. Enter the student's name, the father's name, the mobile number and the grade applied for.")
+    pdf.step("Choose how the family found you (Walk-in, Phone Call, Website, WhatsApp, Referral, Social Media, Ad Campaign or Other) and add a note.")
+    pdf.step("Click 'Create Enquiry'. It appears in the list with status New.")
 
     pdf.section_title("Admission Pipeline Stages")
-    pdf.body_text("Each enquiry progresses through these stages:")
     pdf.simple_table(
-        ["Stage", "Description"],
+        ["Stage", "Meaning"],
         [
-            ["NEW", "Initial enquiry received - lead captured"],
-            ["CONFIRMED", "Admission confirmed - ready for conversion to student"],
-            ["CONVERTED", "Converted to a student record with enrollment"],
-            ["CANCELLED", "Enquiry cancelled or withdrawn"],
+            ["New", "Enquiry received"],
+            ["Confirmed", "Admission agreed, ready to convert"],
+            ["Converted", "Now a student with an enrollment"],
+            ["Cancelled", "Withdrawn"],
         ],
         [50, 140]
     )
 
     pdf.section_title("Managing Enquiries")
-    pdf.step("View all enquiries in a searchable table or card view. Search by child name or phone number.")
-    pdf.step("Filter by Grade and Source. Click a stage in the Admission funnel to filter by status.")
-    pdf.step("The Admission funnel at the top shows the count for each stage (New, Confirmed, Converted, Cancelled) and the conversion rate.")
-    pdf.step("Use 'Edit' to update enquiry details, 'Cancel' to mark an enquiry as cancelled, or 'Delete' to remove one that is not yet converted.")
-    pdf.step("Click 'Confirm' on a New enquiry when the admission is approved.")
+    pdf.step("The funnel at the top counts enquiries in each stage. Click a stage to filter the list, or search by the child's name or phone number.")
+    pdf.step("When the family agrees, click 'Confirm'. The enquiry moves out of New.")
+    pdf.step("If a family withdraws, search for them and click 'Cancel'. Use 'Edit' to change details.")
 
     pdf.section_title("Followup Management")
-    pdf.step("Click 'Edit' on the enquiry.")
-    pdf.step("Set the Next Follow-up Date and write what was discussed in Notes, then click 'Update Enquiry'.")
-    pdf.step("The date shows in the Follow-up column of the Enquiries list, in red once it is overdue.")
+    pdf.step("Click 'Edit' on the enquiry, pick the next follow-up date and write what was discussed.")
+    pdf.step("Click 'Update Enquiry'. The date shows in the Follow-up column, in red once it is overdue.")
 
     pdf.section_title("Converting Enquiries to Students")
-    pdf.body_text(
-        "Confirmed enquiries can be batch-converted into student records. Each converted student "
-        "gets a Student record and a StudentEnrollment record linking them to the chosen academic year."
-    )
-    pdf.step("Select one or more enquiries with 'Confirmed' status using the checkboxes.")
-    pdf.step("Click the 'Convert to students' button in the bar that appears.")
-    pdf.step("In the modal, select the target Academic Year and Class & Section. Optionally tick 'Auto-generate fee records' and choose the fee types.")
-    pdf.step("Click 'Convert N Enquiries'. Roll numbers are auto-assigned sequentially within that session and class.")
-    pdf.step("Converted enquiries change status to 'Converted' and link to the created student.")
-    pdf.info_box("Session-Scoped Admissions",
-                 "You can admit students into any academic year, including a future session. "
-                 "Roll numbers start from 1 for each session-class combination, independent "
-                 "of other sessions. This means admissions work even before running promotion "
-                 "for the current year.")
-    pdf.info_box("Admissions and Promotion Relationship",
-                 "Admissions create enrollment in the selected academic year directly. Promotion manages "
-                 "existing enrolled students between years. If you admit future-year students before promotion, "
-                 "that is valid and expected because roll numbers are scoped per academic year and class/session class.")
+    pdf.step("Tick the Confirmed enquiries you want to convert. A bar appears with 'Convert to students'.")
+    pdf.step("Choose the academic year, then the class and section. You can also tick 'Auto-generate fee records'.")
+    pdf.step("Click 'Convert N Enquiries'. The student record and enrollment are created, and roll numbers are assigned in order.")
+    pdf.info_box("Future years", "You can admit students into next year before promotion is run. Roll numbers are separate for each year and class, so nothing clashes.")
 
     pdf.section_title("Admission Analytics")
-    pdf.body_text("The enquiries page provides at-a-glance analytics:")
-    pdf.bullet("Admission funnel - Count of enquiries in each stage (New, Confirmed, Converted, Cancelled)")
-    pdf.bullet("Conversion Rate - Percentage of enquiries that become students")
-    pdf.bullet("Source Tracking - Which channels (Walk-in, Referral, etc.) bring the most enquiries")
+    pdf.body_text("The funnel on the Enquiries page also shows the conversion rate, and which sources (Walk-in, Referral and so on) bring the most enquiries.")
 
     # =========================================================================
     # CHAPTER 9: TRANSPORT MODULE
     # =========================================================================
     pdf.chapter_title("Transport Module")
 
-    pdf.body_text(
-        "The Transport module manages school buses, routes, student-bus assignments, "
-        "and daily transport attendance."
-    )
+    pdf.body_text("Routes, buses, which students ride where, and daily boarding attendance.")
 
     pdf.section_title("Setting Up Routes")
     pdf.nav_path("Sidebar > Transport > Routes")
-    pdf.step("Click 'Add Route'.")
-    pdf.step("Enter: Route Name, Start Location, End Location and Estimated Duration (minutes) - "
-             "these four are required. Description and Distance (km) are optional. "
-             "You can also click the maps to mark the start and end points.")
-    pdf.step("Click 'Create Route'. The route appears in the list.")
-    pdf.step("Click 'Stops' on the route, then '+ Add Stop'.")
-    pdf.step("For each stop, enter: Stop Name, Order, Pickup Time and Drop Time (all required). "
-             "Address and a map location are optional.")
-    pdf.step("Click 'Add Stop'. Stops are listed in order. Use Edit or Delete on a stop to change it, "
-             "and Duplicate on a route to copy it with all its stops.")
+    pdf.step("Click 'Add Route'. Enter the route name, where it starts, where it ends and the estimated minutes. Click 'Create Route'.")
+    pdf.step("Click 'Stops' on the route, then '+ Add Stop'. Enter the stop name, its order, and the pickup and drop times.")
+    pdf.step("Click 'Add Stop'. The stop shows in the route with its order and times. 'Duplicate' copies a route with all its stops.")
 
     pdf.section_title("Adding Vehicles")
     pdf.nav_path("Sidebar > Transport > Vehicles")
-    pdf.step("Click 'Add Vehicle'.")
-    pdf.step("Enter: Vehicle Number, Vehicle Type (Bus, Van or Car) and Capacity. "
-             "Make / Model is optional.")
-    pdf.step("Under Driver Information enter the Driver Name and Driver Phone (required). "
-             "The Driver License Number is optional.")
-    pdf.step("Choose the Assigned Route this vehicle serves (optional).")
-    pdf.step("Click 'Add Vehicle'. The vehicle appears in the list, linked to the route.")
+    pdf.step("Click 'Add Vehicle'. Enter the number plate, the type (Bus, Van or Car), the seats and the make.")
+    pdf.step("Enter the driver's name and phone, and choose the route the vehicle serves.")
+    pdf.step("Click 'Add Vehicle'. It appears in the list with its driver and route.")
 
     pdf.section_title("Assigning Students to Routes")
     pdf.nav_path("Sidebar > Transport > Assignments")
-    pdf.step("Click 'New Assignment'.")
-    pdf.step("Search for a student by name or roll number and click the name. "
-             "Repeat to add several students at once; they appear as chips above the list.")
-    pdf.step("Choose the Route, then the Stop (both required). Choosing a Vehicle is optional; "
-             "only vehicles on that route are listed. Set the Transport Type: Pickup Only, Drop Only or Both.")
-    pdf.step("Click 'Assign'. A student can have one assignment per academic year; students "
-             "who already have one are skipped.")
-    pdf.step("Use the filters to find assignments by route, class or type, and 'Remove' to delete one.")
+    pdf.step("Click 'New Assignment'. Search for each student and click the name; you can add several at once.")
+    pdf.step("Choose the route, then the stop. The vehicle is optional. Choose Pickup Only, Drop Only or Both.")
+    pdf.step("Click 'Assign'. A student has one assignment per year, and students who already have one are skipped.")
 
     pdf.section_title("Transport Attendance")
     pdf.nav_path("Sidebar > Transport > Attendance")
-    pdf.step("Select the date (today by default) and the route. The students assigned to it are listed.")
-    pdf.step("Everyone starts as Boarded. Click 'Not Boarded' or 'Absent' for the students who did not ride.")
-    pdf.step("Click 'Save All'. One record is saved per student, per route, per day; "
-             "saving again for the same day updates it.")
+    pdf.step("Choose the date (today by default) and the route. Its students are listed, all starting as Boarded.")
+    pdf.step("Click 'Not Boarded' for a student who missed the bus, and 'Absent' for one who stayed home.")
+    pdf.step("Click 'Save All'. One record is saved for every student on the route for that day; saving again updates it.")
 
     pdf.section_title("Transport Dashboard")
     pdf.nav_path("Sidebar > Transport > Dashboard")
-    pdf.body_text("The Transport Dashboard shows:")
-    pdf.bullet("Total Routes - Number of active routes")
-    pdf.bullet("Total Vehicles - Number of active vehicles")
-    pdf.bullet("Students Assigned - Students with an active transport assignment")
-    pdf.bullet("Today's Attendance - Students whose transport attendance was recorded today")
-    pdf.body_text("Only School Admins and Principals can add or change Transport data; "
-                  "other roles can view it.")
+    pdf.body_text("Totals for routes, vehicles, assigned students and today's attendance. Only Admins and Principals can change transport data; other roles can view it.")
 
     # =========================================================================
     # CHAPTER 10: LIBRARY MODULE
     # =========================================================================
     pdf.chapter_title("Library Module")
 
-    pdf.body_text(
-        "The Library module provides a complete book management system including cataloging, "
-        "issuing/returning books, and tracking overdue items. Only School Admins and Principals can "
-        "change anything here; other staff roles can browse the catalog and see which books are out."
-    )
+    pdf.body_text("Catalog, lending and overdue books. Only Admins and Principals can change anything here; other staff can browse the catalog and see which books are out.")
 
     pdf.section_title("Setting Up Book Categories")
     pdf.nav_path("Sidebar > Library > Catalog")
-    pdf.step("On the Book Catalog page, click 'Manage Categories'.")
-    pdf.step("Type a Category Name (for example Fiction, Science, Mathematics, History, Reference), add an optional description and click 'Add Category'.")
-    pdf.step("Use Edit to rename a category, or Delete to remove it. Its books stay in the catalog without a category.")
-    pdf.step("Category names must be unique. Categories help organize and filter the book catalog.")
+    pdf.step("Click 'Manage Categories'. Type a name (for example Fiction or Science) and a short description, then click 'Add Category'.")
+    pdf.step("Click 'Edit' next to a category to rename it, then 'Save Changes'; click 'Done' when finished. Categories appear in the catalog filter and the Add Book form.")
+    pdf.body_text("Deleting a category keeps its books, which stay in the catalog without a category.")
 
     pdf.section_title("Adding Books to the Catalog")
     pdf.nav_path("Sidebar > Library > Catalog")
-    pdf.step("Click 'Add Book'.")
-    pdf.step("Enter Title and Author (both required), then ISBN, Publisher, Category, Total Copies and Shelf Location.")
-    pdf.step("Click 'Add Book'. The book appears in the catalog with all copies available.")
-    pdf.step("Use the search bar to find books by title, author, or ISBN, and the Category filter to browse one section.")
-    pdf.step("Edit changes a book. Total Copies cannot go below the copies currently issued.")
-    pdf.step("A book that has ever been issued cannot be deleted because its history is kept. Edit it and untick Active to take it off the shelf instead.")
+    pdf.step("Click 'Add Book'. Enter the title and the author (both required), then the ISBN and the publisher.")
+    pdf.step("Choose the category, set how many copies the library owns and note the shelf location, then click 'Add Book'. All copies show as available.")
+    pdf.step("Search by title, author or ISBN, or pick a category to browse one section.")
+    pdf.info_box("Editing and removing", "Total copies cannot go below the copies currently issued. A book that has ever been issued cannot be deleted; edit it and untick 'Active' to take it off the shelf.")
 
     pdf.section_title("Issuing Books")
     pdf.nav_path("Sidebar > Library > Issue / Return")
-    pdf.step("On the 'Issue Book' tab, choose Student or Staff as the Borrower Type.")
-    pdf.step("Type at least two letters of the borrower's name and pick them from the list.")
-    pdf.step("Type at least two letters of the book title and pick the book (only books with copies available are listed).")
-    pdf.step("Check the Due Date. It starts at today plus the loan period set in Library Settings (14 days by default).")
-    pdf.step("Add optional notes and click 'Issue Book'. The book's available copies drop by 1.")
-    pdf.step("A borrower cannot go over the limit set in Library Settings (3 books for a student, 5 for staff by default) or take a second copy of the same book. You can also start from the catalog: click 'Issue' next to a book.")
+    pdf.step("On the 'Issue Book' tab, choose Student or Staff, type at least two letters of the name and pick the person.")
+    pdf.step("Type part of the title and pick the book. Only books with copies available are listed.")
+    pdf.step("The due date is already set from the loan period (14 days by default). Change it only if this loan is different, then click 'Issue Book'.")
+    pdf.info_box("Limits", "A borrower cannot go over the limit in Library Settings (3 books for a student and 5 for staff by default) or take a second copy of the same book.")
 
     pdf.section_title("Returning Books")
     pdf.nav_path("Sidebar > Library > Issue / Return")
-    pdf.step("Open the 'Return Book' tab and search by student name, staff name or book title.")
-    pdf.step("Click 'Process Return' next to the entry.")
-    pdf.step("Check the summary. For a late book it shows the days overdue and the fine (days overdue x the daily fine in Library Settings).")
-    pdf.step("Click 'Confirm Return'. The book's available copies increase by 1 and the fine is recorded on the issue.")
+    pdf.step("Open the 'Return Book' tab and search by the borrower or the book title.")
+    pdf.step("Click 'Process Return' and check the summary. For a late book it shows the days overdue and the fine, which is worked out for you.")
+    pdf.step("Click 'Confirm Return'. The copy goes back on the shelf and the fine is recorded on the loan.")
 
     pdf.section_title("Tracking Overdue Books")
     pdf.nav_path("Sidebar > Library > Overdue")
-    pdf.step("The page lists every book past its due date that has not come back, oldest first, with the borrower, days overdue and the fine so far.")
-    pdf.step("The summary shows the number of overdue books, the total estimated fines and the fine per day.")
-    pdf.step("Click 'Return' on a row to take the book back and record its fine.")
-    pdf.step("Due-date reminders to borrowers and parents are sent by the Notifications module's on-demand job, not from this page.")
+    pdf.step("The tiles show how many books are overdue, the fines so far and the fine per day.")
+    pdf.step("Each row shows the borrower, due date, days overdue and fine, oldest first. Click 'Return' on a row and confirm to take the book back.")
 
     pdf.section_title("Library Dashboard")
     pdf.nav_path("Sidebar > Library > Dashboard")
-    pdf.body_text("The Library Dashboard displays:")
-    pdf.bullet("Book Titles - Number of active titles in the catalog")
-    pdf.bullet("Total Copies - Sum of all copies of active titles")
-    pdf.bullet("Currently Issued - Books checked out and not yet returned")
-    pdf.bullet("Overdue Books - Issued books past their due date")
-    pdf.bullet("Categories - Number of book categories")
-    pdf.bullet("Most Issued Books - The five most borrowed titles")
-    pdf.body_text(
-        "School Admins and Principals also get a 'Library Settings' button for the loan period, the borrowing "
-        "limits for students and staff, and the fine per overdue day."
-    )
+    pdf.body_text("Counts of titles, copies, books out and overdue, plus the most borrowed titles. Admins and Principals also get 'Library Settings' for the loan period, borrowing limits and the daily fine.")
 
     # =========================================================================
     # CHAPTER 11: LMS (LEARNING MANAGEMENT)
     # =========================================================================
     pdf.chapter_title("LMS - Learning Management System")
 
-    pdf.body_text(
-        "The LMS module provides curriculum management (books, chapters, topics), lesson planning, "
-        "assignments, and student submissions. It integrates with the Academics module and supports "
-        "multiple languages including Urdu, Arabic, Sindhi, Pashto, and Punjabi with RTL text display."
-    )
+    pdf.body_text("Organise textbooks, plan lessons, set assignments and mark what students hand in. Works in English, Urdu and other right-to-left languages.")
 
     pdf.section_title("Managing Curriculum (Books, Chapters, Topics)")
     pdf.nav_path("Sidebar > Content Creation > Curriculum")
-    pdf.body_text(
-        "The Curriculum page lets you organize textbooks into a Book > Chapter > Topic hierarchy "
-        "for each class and subject. This structure powers syllabus progress tracking and lesson plan topic selection."
-    )
-    pdf.step("Select a Class and Subject from the filter dropdowns.")
-    pdf.step("Click 'Add Book'. Choose the Class and Subject, enter the Title, and optionally the Author, Publisher, Edition, Language and Description, then click 'Add Book'. The toast 'Book created' confirms it.")
-    pdf.step("Click the book to view its chapters and topics in the tree view.")
-    pdf.step("Click 'Add Chapter' (Title, Chapter Number, Description) and, inside a chapter, 'Add Topic' (Title, Topic Number, Estimated Periods, Description). Or use 'Import Table of Contents' for bulk import.")
-
-    pdf.sub_section("Importing Table of Contents")
-    pdf.body_text("The Import Table of Contents window has two tabs:")
-    pdf.step("Manual Entry: type or paste the table of contents text with indentation for chapter/topic structure, then click 'Next: Review'.")
-    pdf.step(
-        "Upload Photo: upload a photo of the book's printed contents page. "
-        "The system extracts the text with OCR so you can review it."
-    )
-    pdf.step("Review and edit the chapters and topics, then apply them to create the structure.")
-    pdf.info_box("Multi-Language Support",
-        "The OCR feature supports all configured languages. For non-English books, the system uses the book's "
-        "language setting to optimize text recognition. The editor displays RTL direction automatically for supported languages."
-    )
-
-    pdf.sub_section("Syllabus Progress")
-    pdf.body_text(
-        "A progress bar shows how many topics have been covered by published lesson plans. "
-        "Topics are automatically marked as covered when a teacher publishes a lesson plan referencing them."
-    )
+    pdf.body_text("Each class and subject has Books, each book has Chapters, and each chapter has Topics. Lesson plans and syllabus progress use this structure.")
+    pdf.step("Choose the class and subject; its books are listed. Click 'Add Book', enter the title and edition, and click 'Add Book' again.")
+    pdf.step("Click the book to see its chapters. Click 'Add Chapter', enter the title and save.")
+    pdf.step("Open the chapter and click 'Add Topic'. Enter the title and save.")
+    pdf.step("For a whole book at once, click 'Import Table of Contents'. On 'Manual Entry' type or paste the chapters and topics, or upload a photo of the contents page to read it automatically; review, then apply.")
+    pdf.body_text("A progress bar shows how many topics are covered. A topic counts as covered when a teacher publishes a lesson plan that uses it.")
 
     pdf.section_title("Creating Lesson Plans")
     pdf.nav_path("Sidebar > Planning & Delivery > Lesson Plans")
-    pdf.body_text("This page is not available to the Manager role.")
-    pdf.step("Click 'Add Lesson Plan'. This opens the bulk wizard; click 'Create single lesson plan' for one plan.")
-    pdf.step("Choose Minimal (Class, Subject, chapters/topics, Lesson Date, Teacher; saved as a Draft with an automatic title) or Standard (full details).")
-    pdf.step("In Standard mode enter Title, Description and Objectives, then set Duration (minutes), Materials Needed and Teaching Methods.")
-    pdf.step("Standard mode also has a Status of Draft or Published. Click 'Create Lesson Plan'; the toast 'Lesson plan created successfully!' confirms it.")
-    pdf.step("A Draft can be published later with the 'Publish' button on its row.")
+    pdf.step("Click 'Add Lesson Plan', then 'Create single lesson plan'. Choose 'Standard' for the full details.")
+    pdf.step("Enter the title, class, subject and teacher. Click 'Select chapter / topic', tick a topic from the book and click 'Apply'.")
+    pdf.step("Set the lesson date and write an objective. Leave the status as Draft and click 'Create Lesson Plan'.")
+    pdf.step("Click 'Publish' on the plan to share it.")
+    pdf.body_text("'Minimal' saves a draft from just the class, subject, topics and date. This page is not available to Managers.")
 
     pdf.section_title("Creating Assignments")
     pdf.nav_path("Sidebar > Academics > Assignments")
-    pdf.step("Click 'Create Assignment'.")
-    pdf.step("Enter the Title, then select Class, Subject and Teacher.")
-    pdf.step("Choose the Assignment Type: Homework, Project, Classwork or Lab. Diary entries use 'Create Daily Diary' instead.")
-    pdf.step("Set the Due Date (required when 'Require student submission' is on) and Total Marks; turn 'Allow file attachments' on or off.")
-    pdf.step("Enter the Description (required) and Instructions.")
-    pdf.step("Click 'Create Assignment'. New assignments start as Draft; click 'Publish' on the row to make them appear in student portals.")
+    pdf.step("Click 'Create Assignment'. Enter the title, then choose the class, subject and teacher.")
+    pdf.step("Choose the type (Homework, Project, Classwork or Lab), then set the due date and total marks. Diary entries use 'Create Daily Diary'.")
+    pdf.step("Write the description (required) and the instructions for students, then click 'Create Assignment'. It starts as a Draft.")
+    pdf.step("Click 'Publish' so students can see it in their portal.")
 
     pdf.section_title("Reviewing Submissions")
     pdf.nav_path("Sidebar > Academics > Assignments > Submissions")
-    pdf.step("Click the number in the Submissions column of an assignment (or the 'Submissions' button in card view).")
-    pdf.step("For each submission you can view the submitted text or attached file, enter Marks and Feedback, and click 'Grade' then 'Save'.")
-    pdf.step("Graded submissions can be re-graded or sent back to the student with 'Return'.")
-    pdf.step("The cards at the top count Total, Submitted, Graded, Returned, Pending and Late submissions.")
+    pdf.step("Click the number in the Submissions column of an assignment. The cards at the top count submitted, graded and late work.")
+    pdf.step("Open a submission, click 'Grade', enter the marks and some feedback, and click 'Save'.")
+    pdf.step("A graded submission can be sent back to the student with 'Return'.")
 
     # =========================================================================
     # CHAPTER 12: NOTIFICATIONS
     # =========================================================================
     pdf.chapter_title("Notifications Module")
 
-    pdf.body_text(
-        "The Notifications module enables school-wide communication with students, parents, and staff. "
-        "Admins can create templates, send bulk notifications, and track delivery."
-    )
+    pdf.body_text("Everyone can read their notifications. Admins can also send messages to groups, save templates and control the automatic ones.")
 
     pdf.section_title("Viewing Notifications (All Users)")
     pdf.nav_path("Sidebar > Notifications")
-    pdf.step("Click the Notification Bell icon in the top bar for a quick dropdown (shows 8 most recent). The bell bounces when new notifications arrive.")
-    pdf.step("Or navigate to 'Notifications' in the sidebar for the full Inbox tab with pagination.")
-    pdf.step("Unread notifications stand out with a bold white card; click a notification to mark it as read (it also opens the related page, such as Fee Collection). Older ones are grouped under Today, Yesterday and Earlier.")
-    pdf.step("Use 'Mark all read' (with confirmation) to clear all unread notifications at once.")
-    pdf.step("Filter with the 'All Types' dropdown (Absence, Fee Due, Exam Result, Transport Update, etc.) or tick 'Unread only'.")
+    pdf.step("Click the bell in the top bar for the latest few, or open 'Notifications' in the sidebar for the full list. New ones are grouped under Today.")
+    pdf.step("Click a notification to read it; it also opens the related page. Unread ones stand out.")
+    pdf.step("Use the 'All Types' list to see one kind, such as Fee Due, and tick 'Unread only' to hide what you have read.")
+    pdf.step("Click 'Mark all read' and confirm to clear everything at once.")
 
     pdf.section_title("Creating Notification Templates (Admin)")
     pdf.nav_path("Sidebar > Notifications > Templates Tab")
-    pdf.step("Switch to the 'Templates' tab.")
-    pdf.step("Click 'New Template'.")
-    pdf.step("Enter a Template Name, pick the Event Type and Channel, add an optional Subject, and write the Message body (placeholders use double braces, like {{student_name}}).")
-    pdf.step("Click 'Save'. Use Edit, Duplicate, Preview or Delete on any row later; untick 'Active' to hide a template from the Send tab. Templates marked 'Shared' belong to every school and cannot be changed.")
+    pdf.step("On the 'Templates' tab, click 'New Template'. Type a name, choose the event and the channel, and write the message. Placeholders use double braces, such as {{student_name}}.")
+    pdf.step("Click 'Save'. Search for it later and click 'Preview' to see the message with sample values.")
+    pdf.body_text("Templates marked 'Shared' belong to every school and cannot be changed. Untick 'Active' to hide a template from the Send tab.")
 
     pdf.section_title("Sending Notifications (Admin)")
     pdf.nav_path("Sidebar > Notifications > Send Tab")
-    pdf.step("Switch to the 'Send' tab.")
-    pdf.step("Choose the mode: 'Broadcast to Group' for everyone in a role, or 'Single Recipient' for one person (phone, email or user ID).")
-    pdf.step("In Broadcast mode, select a group: All Parents, All Teachers, All Staff, All Admins, Principals, Managers, Accountants, or All Students. Optionally narrow parents or students to one session class.")
-    pdf.step("Optionally pick an existing template to pre-fill the message, or compose a custom message.")
-    pdf.step("Choose the channel: In-App (also delivered as a mobile push notification) or Email.")
-    pdf.step("Click 'Review & Send Broadcast', check the estimated recipients, then 'Confirm Send' (Single mode: 'Send Notification'). If the text still contains {{placeholders}} a warning appears first; manual sends do not fill them in. A message shows how many were sent, skipped or failed. 'Test Send to Me' sends a copy to your own inbox.")
-    pdf.info_box("Run Now buttons", "At the top of the Send tab, 'Send Fee Reminders Now', 'Generate Daily Report Now' and "
-                 "'Remind Teachers to Mark Attendance' fire this school's automatic notifications on demand.")
+    pdf.step("On the 'Send' tab, 'Broadcast to Group' is selected. Choose a template to fill in the title and message, or write your own. (Choose 'Single Recipient' to message one person.)")
+    pdf.step("Choose the group, such as All Teachers, and the channel (In-App, which also reaches phones, or Email).")
+    pdf.step("Click 'Review & Send Broadcast', check the number of recipients and click 'Confirm Send'. A message shows how many were sent, skipped or failed.")
+    pdf.info_box("Placeholders", "Manual sends do not fill in {{placeholders}}. If the text still has any, a warning appears first. 'Test Send to Me' sends a copy to your own inbox.")
+    pdf.info_box("Run now", "'Send Fee Reminders Now', 'Generate Daily Report Now' and 'Remind Teachers to Mark Attendance' at the top of the Send tab send this school's automatic notifications on demand.")
 
     pdf.section_title("Notification Analytics (Admin)")
     pdf.nav_path("Sidebar > Notifications > Analytics Tab")
-    pdf.body_text("Track notification effectiveness with configurable date ranges (7 days, 30 days, 90 days, or all time):")
-    pdf.bullet("Delivery Rate - How many notifications were successfully delivered")
-    pdf.bullet("Read Rate - Percentage of notifications opened/read")
-    pdf.bullet("Breakdown by channel (In-App, Email, Push) and event type")
+    pdf.body_text("Choose 7 days, 30 days, 90 days or all time to see how many notifications were delivered and read, by channel and by kind.")
 
     pdf.section_title("Automation Settings")
     pdf.nav_path("Sidebar > Notifications > Settings")
     pdf.body_text(
-        "Configure notification channels, smart scheduling (AI-optimized send times), and "
-        "automated notification controls from the Settings tab. Each automation type can be "
-        "toggled ON/OFF per school. Toggles are module-aware: if a module (e.g., Transport, "
-        "Finance) is disabled for the school, its related toggles are automatically hidden."
+        "Switch each automatic notification on or off for your school: absence alerts, fee reminders, fee overdue alerts, "
+        "exam results published, the daily absence summary and transport notifications. Options for a module your school "
+        "has turned off are hidden. Scheduled ones run by themselves; you do not need to do anything."
     )
-    pdf.simple_table(
-        ["Automation", "Default", "Trigger"],
-        [
-            ["Absence Alerts", "ON", "Sent when attendance is marked"],
-            ["Fee Reminders", "ON", "Monthly on configured day"],
-            ["Fee Overdue Alerts", "ON", "Weekly on Mondays"],
-            ["Exam Results Published", "ON", "When admin publishes results"],
-            ["Daily Absence Summary", "OFF", "Sent daily at configured time"],
-            ["Transport Notifications", "ON", "Bus departed, arriving at stop, journey completed"],
-            ["Smart Scheduling", "OFF", "AI learns optimal send times over 2-4 weeks"],
-        ],
-        [50, 25, 115]
-    )
-    pdf.body_text(
-        "The Settings tab also warns you about unsaved changes before navigating away. "
-        "Channel toggles cover In-App and Email; push notifications are delivered together with In-App."
-    )
-    pdf.info_box("Background Tasks", "Scheduled notifications such as absence summaries, fee reminders and "
-                 "attendance reminders run automatically. No manual action required.")
 
     # =========================================================================
     # CHAPTER 13: MESSAGING
     # =========================================================================
     pdf.chapter_title("Messaging")
 
-    pdf.body_text(
-        "The Messaging module provides a unified, threaded conversation system for all school roles. "
-        "Admins, Teachers, Staff, Parents, and Students can exchange messages with role-based "
-        "access controls determining who can contact whom."
-    )
+    pdf.body_text("Private conversations between school staff, teachers, parents and students. What you can do depends on your role.")
 
     pdf.section_title("Who Can Message Whom")
     pdf.simple_table(
-        ["Sender Role", "Can Message", "Student Context"],
+        ["Sender", "Can message"],
         [
-            ["School Admin / Principal", "Any staff member in the school", "Not required"],
-            ["Teacher", "Parents of students in their classes", "Required (auto-set)"],
-            ["Teacher", "Students with accounts in their classes", "Required (auto-set)"],
-            ["Teacher", "Admins and Principal", "Not required"],
-            ["Other Staff", "Admins and Principal", "Not required"],
-            ["Parent", "Teachers of their children's classes", "Required (auto-set)"],
+            ["School Admin / Principal", "Any staff member"],
+            ["Teacher", "Parents and students of their classes, and Admins and Principals"],
+            ["Other staff", "Admins and Principals"],
+            ["Parent", "Teachers of their children's classes"],
         ],
-        [45, 65, 80]
+        [60, 130]
     )
 
     pdf.section_title("Accessing Messages")
     pdf.nav_path("Sidebar > Messages")
-    pdf.body_text(
-        "All roles access the same Messages page from the sidebar. The page shows a split-panel "
-        "layout: thread list on the left, conversation view on the right. On mobile devices, "
-        "the view switches between list and conversation."
-    )
+    pdf.body_text("Conversations are listed on the left and the open one is on the right. On a phone, you move between the list and the conversation.")
 
     pdf.section_title("Starting a New Conversation")
     pdf.nav_path("Messages > New Message button")
-    pdf.step("Click the 'New Message' button (top of the thread list).")
-    pdf.step("Pick who to write to using the Staff, Parent or Student tabs, then search for the name in the 'To' box.")
-    pdf.step("For teacher-parent/student conversations, the student context is automatically set based on the recipient.")
-    pdf.step("Optionally enter a subject line for the conversation.")
-    pdf.step("Type your message and click 'Send Message'.")
-    pdf.info_box("Thread Reuse", "If you already have an active conversation with the same person "
-                 "(and same student context), your new message will be added to the existing thread "
-                 "instead of creating a duplicate.")
+    pdf.step("Click 'New Message' in the sidebar of the Messages page.")
+    pdf.step("Open the 'To' box, search for a name and pick the person. For a parent or student, the child is filled in for you.")
+    pdf.step("Add a subject if you like, type your message and click 'Send Message'. The conversation opens on the right.")
+    pdf.info_box("No duplicates", "If you already have a conversation with the same person about the same student, your message is added to it.")
 
     pdf.section_title("Replying to Messages")
-    pdf.step("Click on any thread in the thread list to open the conversation.")
-    pdf.step("All messages in the thread are displayed chronologically (oldest first).")
-    pdf.step("Your messages appear on the right side, the other person's on the left.")
-    pdf.step("Type your reply in the box at the bottom, then press Enter or click the paper-plane button (Shift+Enter starts a new line).")
-    pdf.step("The thread is automatically marked as read when you open it.")
+    pdf.step("Open a conversation. Conversations with unread messages show a number.")
+    pdf.step("Type your reply in the box at the bottom and press Enter, or the arrow button, to send. Shift+Enter starts a new line. Your messages appear on the right.")
 
     pdf.section_title("Unread Message Indicators")
-    pdf.body_text(
-        "Unread threads are highlighted in the thread list with a blue badge showing the unread "
-        "message count. The Messages navigation item in the sidebar also shows a total unread "
-        "count badge. The badge updates automatically every 15 seconds."
-    )
+    pdf.body_text("Unread conversations show a number badge, and Messages in the sidebar shows the total. Opening a conversation marks it as read.")
 
     pdf.section_title("Searching Conversations")
-    pdf.step("Use the search box at the top of the thread list to filter conversations.")
-    pdf.step("Search matches against participant names and the latest message preview.")
+    pdf.step("Type in the search box above the list. It matches people's names and the latest message.")
 
     # =========================================================================
     # CHAPTER 14: PARENT PORTAL
     # =========================================================================
     pdf.chapter_title("Parent Portal")
 
-    pdf.body_text(
-        "Parents have a dedicated portal to monitor their children's school activities. "
-        "Parents can view attendance, fees, timetable, exam results, and communicate with the school."
-    )
+    pdf.body_text("See your children's attendance, fees, timetable and results, apply for leave and message teachers.")
 
     pdf.section_title("Parent Dashboard")
     pdf.nav_path("Login as Parent > Dashboard")
-    pdf.body_text("After logging in, parents see their dashboard with:")
-    pdf.bullet("List of linked children (if multiple children attend the school)")
-    pdf.bullet("Quick action cards for common tasks (Apply Leave, Messages)")
-    pdf.bullet("Recent notifications from the school")
+    pdf.body_text("After you sign in, the dashboard shows a card for each of your children, shortcuts for Apply Leave and Messages, and recent notifications from the school.")
 
     pdf.section_title("Viewing Child's Information")
-    pdf.step("On the dashboard, click 'Overview' on a child's card to open their overview page.")
-    pdf.step("The header shows the child's photo, name, class and roll number.")
-    pdf.step("Four cards summarise: Attendance Rate, Fees (amount due, or 'Nothing due'), Last Exam and Days Present.")
-    pdf.step("Under 'Details', choose Attendance Calendar, Fee Details, Timetable, Exam Schedule or Exam Results for the full pages.")
-
-    pdf.sub_section("Attendance")
-    pdf.nav_path("Parent Portal > Child > Attendance")
-    pdf.step("Click 'Attendance' to view the child's attendance records.")
-    pdf.step("See monthly and daily breakdowns with Present/Absent/Late counts.")
-    pdf.step("View attendance percentage and trends.")
-
-    pdf.sub_section("Fees & Online Payments")
-    pdf.nav_path("Parent Portal > Child > Fees")
-    pdf.step("View fee balance, payment history, and outstanding amounts.")
-    pdf.step("See due amounts and upcoming fee deadlines.")
-    pdf.step("Download fee receipts for past payments.")
-
-    pdf.sub_section("Paying Fees Online (when enabled)")
-    pdf.info_box("Not enabled yet", "Online payment is not available yet. Pay at the school office until your school announces it.")
-    pdf.nav_path("Parent Portal > Child > Fees > Pay Now")
-    pdf.step("If the school has configured online payment gateways, a 'Pay Now' button appears next to each unpaid fee.")
-    pdf.step("Click 'Pay Now' on the fee you wish to pay.")
-    pdf.step("A modal appears showing available payment methods (e.g., JazzCash, Easypaisa, Manual Transfer).")
-    pdf.step("Select your preferred payment method and click 'Proceed to Pay'.")
-    pdf.step("For JazzCash/Easypaisa: You will be redirected to the gateway's checkout page to complete payment.")
-    pdf.step("For Manual Transfer: Bank account details are displayed. Make the transfer and inform the school office.")
-    pdf.step("After payment, you are redirected to a Payment Result page showing the transaction status.")
-    pdf.step("Payment statuses: Successful (green), Pending (yellow - being verified), Failed (red - try again).")
-    pdf.step("Pending payments are automatically verified within a few minutes. The page auto-refreshes.")
-
-    pdf.info_box("Online Payment Availability", "Online payments are only available if your school's administration "
-                 "has switched online payment on. If you don't see the Pay Now button, pay at the school office.")
-
-    pdf.sub_section("Timetable")
-    pdf.nav_path("Parent Portal > Child > Timetable")
-    pdf.step("View the child's class timetable.")
-    pdf.step("See subjects, teachers, and period timings for each day.")
-
-    pdf.sub_section("Exam Results")
-    pdf.nav_path("Parent Portal > Child > Exam Results")
-    pdf.step("View exam marks and grades (once published by the school).")
-    pdf.step("See subject-wise marks, percentage and grade for each exam.")
+    pdf.step("On the dashboard, click 'Overview' on your child's card.")
+    pdf.step("The top shows the photo, class and roll number. The cards below show attendance, fees due, the last exam and days present.")
+    pdf.step("Under 'Details', choose a page for the full picture: Attendance Calendar, Fee Details, Timetable, Exam Schedule or Exam Results.")
+    pdf.info_box("Fees", "Online payment is not available yet. Pay at the school office until your school announces it.")
+    pdf.info_box("Exam results", "Results appear after the school announces them.")
 
     pdf.section_title("Applying for Leave")
-    pdf.nav_path("Parent Portal > Leave Application")
-    pdf.step("Click 'Leave Requests' in the sidebar. The 'Apply for Leave' tab opens first.")
-    pdf.step("Select the child, then enter Start Date, End Date and Reason. A supporting document link is optional.")
-    pdf.step("Click 'Submit Leave Request'. The message 'Leave request submitted successfully.' appears.")
-    pdf.step("Open the 'My Requests' tab to track the status (Pending, Approved, Rejected or Cancelled) and read the school's remarks.")
-    pdf.step("A request that is still Pending can be cancelled with 'Cancel'.")
+    pdf.nav_path("Sidebar > Leave Requests")
+    pdf.step("Click 'Leave Requests' in the sidebar. The 'Apply for Leave' tab opens first. Choose the child, then enter the start date and the end date.")
+    pdf.step("Write the reason. A link to a supporting document is optional.")
+    pdf.step("Click 'Submit Leave Request'. A green message confirms it was sent to the school.")
+    pdf.step("Open 'My Requests'. The new request is Pending, and earlier ones show the school's decision and remarks. A pending request can be cancelled with 'Cancel'.")
 
     pdf.section_title("Messages")
     pdf.nav_path("Sidebar > Messages")
-    pdf.body_text(
-        "Parents can send and receive threaded messages with their children's teachers. "
-        "See the Messaging chapter for full details on how conversations work."
-    )
+    pdf.body_text("Message your children's teachers. See the Messaging chapter for how conversations work.")
 
     # =========================================================================
     # CHAPTER 14: STUDENT PORTAL
     # =========================================================================
     pdf.chapter_title("Student Portal")
 
-    pdf.body_text(
-        "Students have their own portal to view attendance, timetable, assignments, "
-        "fees, exam results, and manage their profile."
-    )
+    pdf.body_text("Your attendance, timetable, assignments, fees and results in one place, plus an AI study helper.")
 
     pdf.section_title("Student Dashboard")
     pdf.nav_path("Login as Student > Dashboard")
-    pdf.body_text("The Student Dashboard displays:")
-    pdf.bullet("Welcome card with student name and class")
-    pdf.bullet("Attendance rate (percentage)")
-    pdf.bullet("Assignment stats (pending, submitted, graded)")
-    pdf.bullet("Fee balance summary")
-    pdf.bullet("Today's timetable")
-    pdf.bullet("Upcoming assignment deadlines")
+    pdf.body_text("Your attendance rate, assignments waiting for you, your fee balance, today's timetable and upcoming deadlines.")
 
     pdf.section_title("My Attendance")
     pdf.nav_path("Student Portal > Attendance")
-    pdf.step("View your attendance history with monthly/daily breakdown.")
-    pdf.step("See attendance percentage and trend over time.")
+    pdf.step("Open 'Attendance' to see each month and day, and your attendance percentage.")
 
     pdf.section_title("My Timetable")
     pdf.nav_path("Student Portal > Timetable")
-    pdf.step("View your class timetable for each day of the week.")
-    pdf.step("See subject names, teacher names, and period timings.")
+    pdf.step("Open 'Timetable' to see each day's subjects, teachers and period times.")
 
     pdf.section_title("My Assignments")
     pdf.nav_path("Student Portal > Assignments")
-    pdf.step("The page lists every assignment from your teachers with its subject, type, due date and status.")
-    pdf.step("Diary entries are for reading only; they have no Submit button.")
-    pdf.step("Click 'Submit' on an open assignment, type your answer in Submission Text (required), and optionally add a link to your file and a file name.")
-    pdf.step("Click 'Submit Assignment'. The message 'Assignment submitted successfully!' appears. Late work is marked Late.")
-    pdf.step("After the teacher grades it, the card shows your marks and feedback. Closed assignments can no longer be submitted.")
+    pdf.step("Click 'Assignments' in the sidebar to see work from all your teachers. Each card shows the subject, type, due date and status. Graded work shows your marks and the teacher's feedback.")
+    pdf.step("A Diary Entry is for reading only, so it has no Submit button. For an open assignment, click 'Submit'.")
+    pdf.step("Type your answer. Submission Text is required, and a link to your file is optional.")
+    pdf.step("Click 'Submit Assignment'. A green message confirms it and the card now shows Submitted.")
 
     pdf.section_title("My Fees")
     pdf.nav_path("Student Portal > Fees")
-    pdf.step("View your fee balance and payment history.")
-    pdf.step("See upcoming due dates.")
+    pdf.step("Open 'Fees' to see your balance, payment history and due dates.")
 
     pdf.section_title("My Results")
     pdf.nav_path("Student Portal > Results")
-    pdf.step("Each published exam appears as a card with your total, percentage and grade. Click its title to open or close the subject table.")
-    pdf.step("The table lists marks, total marks, percentage and a Pass or Fail badge for each subject; an absent paper shows 'Absent'.")
+    pdf.step("Open 'Results'. Each published exam is a card with your total, percentage and grade.")
+    pdf.step("Under each exam you see marks, percentage and a Pass or Fail badge for every subject. Click an exam title to show only that exam. A paper you missed shows as Absent.")
 
     pdf.section_title("My Profile")
     pdf.nav_path("Student Portal > My Profile")
-    pdf.step("View and update your profile information.")
-    pdf.step("See contact details and class information.")
+    pdf.step("Open 'My Profile' to see your details and class.")
 
     pdf.section_title("AI Study Helper")
     pdf.nav_path("Student Portal > AI Study Helper")
-    pdf.body_text(
-        "The AI Study Helper is an intelligent chatbot that assists students with their studies. "
-        "It is aware of the student's class, subjects, lesson plans, and assignments, allowing it "
-        "to provide personalized, curriculum-aligned academic support."
-    )
-    pdf.step("Navigate to 'AI Study Helper' in the student sidebar.")
-    pdf.step("Type your study question in the message box at the bottom of the screen.")
-    pdf.step("Click Send or press Enter to submit your question.")
-    pdf.step("The AI will respond with explanations, examples, and study tips tailored to your curriculum.")
-    pdf.step("Your conversation history is saved and can be reviewed later.")
-    pdf.step("Use the suggestion chips (e.g., 'Help me understand fractions', 'Explain photosynthesis') for quick prompts.")
-    pdf.step("Click 'Clear Chat' to start a fresh conversation.")
-    pdf.info_box("Daily Limit", "Students can send up to 30 messages per day to the AI Study Helper. "
-                 "The counter resets every 24 hours. This ensures fair usage for all students.")
-    pdf.warning_box("The AI Study Helper is designed for academic topics only. Questions about personal information, "
-                    "violence, or other inappropriate content will be blocked by the safety system.")
+    pdf.body_text("A tutor that knows your class and subjects. It only answers study questions.")
+    pdf.step("Click 'AI Study Helper' in the sidebar. Click one of the suggestions to ask it right away.")
+    pdf.step("Or type your own question and press Enter. Shift+Enter starts a new line.")
+    pdf.step("Your chat is saved, so you can come back to it. Click 'Clear Chat' to start again.")
+    pdf.info_box("Daily limit", "You can send up to 30 messages a day.")
 
     # =========================================================================
     # CHAPTER 15: HOSTEL MANAGEMENT
     # =========================================================================
     pdf.chapter_title("Hostel Management")
 
-    pdf.body_text(
-        "The Hostel Management module helps schools manage their boarding facilities. "
-        "It covers hostel buildings, rooms, student allocations, and gate passes for "
-        "students leaving and returning to the hostel. Hostel pages are available to "
-        "School Admin and Principal roles only, because they list students and the reasons "
-        "for their leave."
-    )
+    pdf.body_text("Hostel buildings and rooms, who sleeps where, and gate passes. Only Admins and Principals can see these pages, because they list students and their reasons for leaving.")
 
     pdf.section_title("Hostel Dashboard")
     pdf.nav_path("Sidebar > Hostel > Dashboard")
-    pdf.body_text("The Hostel Dashboard provides a quick overview of all hostel operations:")
-    pdf.bullet("Total hostels and rooms, total capacity and current occupancy")
-    pdf.bullet("Occupancy rate (percentage of available beds filled) and available beds")
-    pdf.bullet("Pending gate pass requests")
-    pdf.bullet("Students currently out on gate passes")
-    pdf.bullet("Number of boys' and girls' hostels")
-    pdf.bullet("Quick action links to manage rooms, allocations, and gate passes")
+    pdf.body_text("Occupancy and available beds, pending gate-pass requests, students currently out, and shortcuts to rooms, allocations and gate passes.")
 
     pdf.section_title("Managing Hostels & Rooms")
     pdf.nav_path("Sidebar > Hostel > Rooms")
-    pdf.sub_section("Creating a Hostel")
-    pdf.step("Navigate to Hostel > Rooms in the sidebar. The 'Hostels' tab is open.")
-    pdf.step("Click 'Add Hostel'.")
-    pdf.step("Enter the Hostel Name, choose the Hostel Type (Boys / Girls / Mixed) and enter the Capacity.")
-    pdf.step("Optionally enter the Address and Contact Number, and choose a Warden from your active staff.")
-    pdf.step("Click 'Add Hostel'. The hostel appears in the list with its occupancy.")
-
-    pdf.sub_section("Creating Rooms")
-    pdf.step("Open the 'Rooms' tab and choose a hostel in 'Select Hostel'.")
-    pdf.step("Click 'Add Room'.")
-    pdf.step("Enter the Room Number, Floor and Capacity, and choose the Room Type (Single / Double / Dormitory).")
-    pdf.step("Click 'Add Room'. The room shows its occupancy and whether it is Available, Full or Unavailable.")
-    pdf.info_box("Room status", "A room shows Full when every bed is taken. Untick 'Available for allocation' "
-                 "when you take a room out of use; it is then shown as Unavailable and cannot be chosen for new allocations. "
-                 "A room's capacity cannot be lowered below the number of students in it.")
-    pdf.warning_box("A hostel or room that has student allocation records cannot be deleted, so the history is kept. "
-                    "Mark a hostel Inactive, or a room Unavailable, instead.")
+    pdf.step("Click 'Add Hostel'. Enter the name, choose Boys, Girls or Mixed, and set the capacity and a warden. Click 'Add Hostel' again to save.")
+    pdf.step("Open the 'Rooms' tab and choose the hostel.")
+    pdf.step("Click 'Add Room'. Enter the room number, floor and capacity, choose the room type, and click 'Add Room' again. It shows its capacity and how many beds are taken.")
+    pdf.info_box("Taking things out of use", "A hostel or room that has allocation records cannot be deleted, so the history stays. Mark the hostel Inactive, or untick 'Available for allocation' on the room. A room's capacity cannot go below the students in it.")
 
     pdf.section_title("Student Allocations")
     pdf.nav_path("Sidebar > Hostel > Allocations")
-    pdf.body_text(
-        "Allocations assign students to specific hostel rooms for an academic year. "
-        "The list can be filtered by hostel, by status (Active or Vacated) and searched by student name."
-    )
-    pdf.sub_section("Allocating a Student")
-    pdf.step("Navigate to Hostel > Allocations and click 'Allocate Student'.")
-    pdf.step("The Academic Year is the current one. Search for and choose the Student; students who already hold a bed this year are not listed.")
-    pdf.step("Choose the Hostel, then a Room. Only rooms with a free bed are listed.")
-    pdf.step("Click 'Allocate'. The student appears in the list with the room.")
-    pdf.sub_section("Vacating a Student")
-    pdf.step("Find the active allocation in the list and click 'Vacate'.")
-    pdf.step("Confirm. The allocation is marked Vacated with today's date and the room's occupancy decreases.")
-    pdf.step("Choose 'Vacated' in the status filter to see students who have left.")
-    pdf.warning_box("Each student can only hold one active hostel bed per academic year. "
-                    "Vacate the current allocation before placing the student in another room; "
-                    "a vacated student can be allocated again in the same year.")
+    pdf.step("Click 'Allocate Student'. Choose the student, the hostel and a room that has a free bed, then click 'Allocate'. The student appears in the list with the room.")
+    pdf.step("To free a bed, click 'Vacate' on the student and confirm.")
+    pdf.step("Choose 'Vacated' in the status filter to see students who left, with the date.")
+    pdf.info_box("One bed per year", "A student can hold one active bed in a year. Vacate the current one before choosing another room.")
 
     pdf.section_title("Gate Passes")
     pdf.nav_path("Sidebar > Hostel > Gate Passes")
-    pdf.body_text(
-        "Gate passes track students leaving and returning to the hostel. "
-        "They follow a workflow: Request > Approve/Reject > Check Out > Return."
-    )
-    pdf.sub_section("Creating a Gate Pass")
-    pdf.step("Click 'New Gate Pass'.")
-    pdf.step("Choose the Student (only students who currently hold a hostel bed are listed) and the Pass Type (Day Pass / Overnight / Weekend / Vacation Leave).")
-    pdf.step("Enter the Reason and where the student is Going To, and optionally a contact number at the destination.")
-    pdf.step("The Departure Date and Expected Return are filled in (the next full hour, and eight hours later); change them if needed, then click 'Create Gate Pass'. The pass starts as Pending Approval.")
-    pdf.sub_section("Approving / Rejecting Gate Passes")
-    pdf.step("Review pending gate passes in the list.")
-    pdf.step("Click 'Approve' to authorize the student's departure, or 'Reject' to deny the request.")
-    pdf.step("Add optional remarks in the box and confirm.")
-    pdf.sub_section("Check Out & Return")
-    pdf.step("When the student leaves the gate, click 'Check Out' on the approved pass.")
-    pdf.step("When the student is back, click 'Mark Returned'. The actual return time is recorded.")
-    pdf.simple_table(
-        ["Status", "Meaning", "Next Action"],
-        [
-            ["Pending Approval", "Pass requested, awaiting approval", "Approve or Reject"],
-            ["Approved", "Pass approved, student may leave", "Check Out when departing"],
-            ["Rejected", "Pass denied", "No further action"],
-            ["Checked Out", "Student has left the hostel", "Mark Returned when student comes back"],
-            ["Returned", "Student has returned to hostel", "Complete - no action needed"],
-        ],
-        [35, 75, 80]
-    )
+    pdf.body_text("A pass moves through: Pending Approval, Approved (or Rejected), Checked Out, Returned.")
+    pdf.step("Click 'New Gate Pass'. Choose the student and the pass type, then enter the reason and where the student is going.")
+    pdf.step("The leaving time and expected return are filled in; change them if the student leaves at a different time. Click 'Create Gate Pass'. It starts as Pending Approval.")
+    pdf.step("Click 'Approve', add a remark if you like and confirm (or click 'Reject').")
+    pdf.step("When the student leaves the gate, click 'Check Out'. When the student is back, click 'Mark Returned'. The pass is complete.")
 
     # =========================================================================
     # CHAPTER 16: SETTINGS & CONFIGURATION
     # =========================================================================
     pdf.chapter_title("Settings & Configuration")
 
-    pdf.body_text(
-        "The Settings page has two tabs: Profile (your own account and school preferences such as "
-        "Examination Settings) and Users (School Admins and Principals manage user accounts there)."
-    )
+    pdf.body_text("Settings has two tabs: 'School Profile' for school preferences such as Examination Settings, and 'Users', where Admins and Principals manage accounts.")
 
     pdf.section_title("Examination Settings")
     pdf.nav_path("Sidebar > Settings > School Profile > Examination Settings")
-    pdf.body_text(
-        "Toggle between Simple Average and Weighted Average for report card calculations. "
-        "When Weighted Average is enabled, each exam type's contribution is scaled by its weight "
-        "(configured in Exam Types). See Chapter 6 (Examinations) for details."
-    )
+    pdf.body_text("Switch between Simple Average and Weighted Average for report cards. See Chapter 6 (Weighted Average Configuration).")
 
     pdf.section_title("Finance Accounts Management")
-    pdf.body_text("See Chapter 7 (Finance Module) > Setting Up Finance Accounts for detailed instructions.")
+    pdf.body_text("See Chapter 7, Setting Up Finance Accounts.")
 
     pdf.section_title("Online Payments")
-    pdf.info_box("Not enabled yet",
-                 "Online payment gateways are not configured for schools yet, so there is nothing to set up "
-                 "here. Record fee payments under Finance > Collect Payments. This section will be "
-                 "updated when online payments are switched on.")
+    pdf.info_box("Not switched on yet", "Online payment is not available for schools yet, so there is nothing to set up. Record payments under Finance > Collect Payments.")
 
     # =========================================================================
     # CHAPTER 17: USER MANAGEMENT
     # =========================================================================
     pdf.chapter_title("User Management")
 
-    pdf.body_text(
-        "Education AI uses a hierarchical role system for user management. "
-        "School Admins and Principals can create and manage users within their schools."
-    )
+    pdf.body_text("School Admins and Principals create and manage the people who can log in to their school.")
 
     pdf.section_title("User Roles & Hierarchy")
-    pdf.body_text("The system has the following roles, listed from highest to lowest privilege:")
     pdf.simple_table(
-        ["Role", "Can Create", "Typical Sidebar"],
+        ["Role", "Can create"],
         [
-            ["Super Admin", "All roles, including Super Admin", "Everything, across schools"],
-            ["School Admin", "Principal, Manager, Accountant, Teacher, Staff, Driver", "Everything in the school"],
-            ["Principal", "Manager, Accountant, Teacher, Staff, Driver", "Everything in the school"],
-            ["Manager", "- (no user creation)", "Dashboard, Academics, Content Creation, Management"],
-            ["Accountant", "- (no user creation)", "Finance"],
-            ["Teacher", "- (no user creation)", "Own classes: Attendance, Academics, Content Creation, Planning"],
-            ["Staff", "- (no user creation)", "Limited menu: notifications and messages"],
-            ["Driver", "- (no user creation)", "Transport"],
-            ["Parent", "- (self-registered via invite)", "Parent portal: own child's data only"],
-            ["Student", "- (self-registered via invite)", "Student portal: own data only"],
+            ["School Admin", "Principal, Manager, Accountant, Teacher, Staff, Driver"],
+            ["Principal", "Manager, Accountant, Teacher, Staff, Driver"],
+            ["Manager, Accountant, Teacher, Staff, Driver", "Nobody"],
+            ["Parent, Student", "Nobody (they get accounts through the school)"],
         ],
-        [35, 75, 80],
+        [70, 120],
     )
-    pdf.info_box("What you see",
-                 "The sidebar also depends on which modules your school has enabled. If you cannot see a "
-                 "page, your role or your school's modules do not include it.")
+    pdf.body_text("What each person sees also depends on the modules your school has turned on.")
 
     pdf.section_title("Managing Users (School Admin & Principal)")
     pdf.nav_path("Sidebar > Settings > Users Tab")
-    pdf.body_text(
-        "School Admins and Principals can create, edit, and deactivate user accounts "
-        "for their school from the Users tab in Settings."
-    )
-    pdf.step("Navigate to Settings and click the 'Users' tab.")
-    pdf.step("Click 'Add User' to open the user creation form.")
-    pdf.step("Fill in First name, Last name, Username (required), Email, Password, Confirm password, select a Role from the dropdown, and add a Phone number if you want.")
-    pdf.step("The role dropdown only shows roles you are allowed to create based on your role.")
-    pdf.step("Click 'Create User' to save. A school membership is automatically created.")
-    pdf.step("To edit a user, click 'Edit' in the actions column. You can change name, email, role, and phone.")
-    pdf.step("To reset a forgotten password, click 'Reset Password' on the user's row. Choose 'Set a new password now' and type the New Password (at least 8 characters) twice, or choose 'Email a reset link' (only available when the user has an email address), then press 'Reset Password' or 'Send Email'.")
-    pdf.step("To deactivate a user, click 'Deactivate'. The user will no longer be able to log in.")
-    pdf.step("To reactivate, click 'Activate' on an inactive user.")
-
-    pdf.info_box("Role Restrictions",
-                 "You can only edit or deactivate users whose role you are allowed to create. "
-                 "For example, a Principal cannot deactivate a School Admin.")
+    pdf.step("Open Settings and click the 'Users' tab. It lists every user of your school; search by name, username or email, or filter by role.")
+    pdf.step("Click 'Add User'. Enter the name, a username, an email and a password, then choose the role. The list only offers roles you are allowed to create.")
+    pdf.step("Click 'Create User'. A green message confirms it, and the user can log in straight away.")
+    pdf.step("Click 'Edit' to change the name, email, role or phone. The username cannot be changed.")
+    pdf.step("If someone forgets their password, click 'Reset Password'. Set a new one now, or email them a reset link when they have an email address.")
+    pdf.step("Click 'Deactivate' and the user can no longer log in. Click 'Activate' to give the access back.")
+    pdf.info_box("Who you can change", "You can only edit or deactivate users whose role you could create. A Principal cannot deactivate a School Admin.")
 
     pdf.section_title("Creating Student User Accounts")
     pdf.nav_path("Sidebar > Management > Students > Add Student")
-    pdf.body_text(
-        "When adding a new student, you can optionally create a user account so the student "
-        "can access the Student Portal."
-    )
-    pdf.step("Open the Add Student modal and fill in the student details (Class, Name, Roll Number).")
-    pdf.step("Check the 'Create User Account (Student Portal)' checkbox at the bottom of the form.")
-    pdf.step("Additional fields will appear: Username (auto-suggested from student name), Email, Password, and Confirm Password.")
-    pdf.step("Fill in the login credentials. Password must be at least 8 characters.")
-    pdf.step("Click 'Add Student'. Both the student record and user account will be created together.")
-    pdf.step("The student can now log in to the Student Portal using these credentials.")
+    pdf.step("In the Add Student form, choose the class and enter the student's name and the parent details.")
+    pdf.step("At the bottom, tick 'Create User Account'. The username is suggested from the name.")
+    pdf.step("Enter a password of at least eight characters and confirm it. Click 'Add Student'. The student and the login are created together.")
 
     pdf.section_title("Converting Existing Students to Users")
     pdf.nav_path("Sidebar > Management > Students")
-    pdf.body_text(
-        "Students without accounts show 'No Account' in the Account column. "
-        "Individual: Click 'Create Account' next to any student, fill in credentials, and save. "
-        "Bulk: Select multiple students using checkboxes, click 'Create Accounts' in the floating bar, "
-        "set a default password, and confirm. Usernames are auto-generated (e.g., 'Ahmed Khan' becomes 'ahmed_khan')."
-    )
+    pdf.body_text("Students without a login show 'No Account'. Click 'Create Account' beside one, or tick several and use 'Create Accounts' in the bar that appears. Usernames are made from the name, such as ahmed_khan.")
 
     pdf.section_title("Creating Staff User Accounts")
     pdf.nav_path("Sidebar > HR & Staff > Staff Directory")
-    pdf.body_text(
-        "When adding a new staff member (full form or Quick Add), check 'Create User Account' "
-        "to set up login credentials alongside the staff record. Select a User Role (Teacher, Staff, "
-        "Manager, Accountant, Driver) to determine system access level."
-    )
+    pdf.body_text("When you add a staff member, tick 'Create User Account' and choose their role (Teacher, Staff, Manager, Accountant or Driver) to give them a login at the same time.")
 
     pdf.section_title("Converting Existing Staff to Users")
-    pdf.body_text(
-        "Staff without accounts show 'No Account' in the Account column. "
-        "Individual: Click 'Create Account', set role and credentials. "
-        "Bulk: Select multiple staff, click 'Create Accounts', choose default role and password. "
-        "Usernames are auto-generated (e.g., 'Jane Doe' becomes 'jane_doe')."
-    )
+    pdf.body_text("Staff without a login show 'No Account'. Click 'Create Account' beside one, or tick several and use 'Create Accounts', then choose the role and a starting password.")
 
     pdf.section_title("Linking Existing User Accounts to Staff")
-    pdf.body_text(
-        "If a user account already exists separately (e.g., created before the staff record), "
-        "you can link them from the Staff Directory. Click 'Link Account' on the staff row, "
-        "search for the user, and select them. To unlink, click the 'Unlink' button. "
-        "See Chapter 8 (HR & Staff > Linking & Unlinking User Accounts) for full details."
-    )
+    pdf.body_text("If the login already exists, click 'Link Account' on the staff row instead and pick the user. See Chapter 8, Linking & Unlinking User Accounts.")
 
-    pdf.warning_box("Passwords cannot be recovered. If a user forgets their password, "
-                    "a School Admin must reset it from the Users tab.")
-
+    pdf.warning_box("Passwords cannot be looked up. If someone forgets theirs, an Admin or Principal resets it from the Users tab.")
 
     # =========================================================================
     # CHAPTER: AI INTELLIGENCE FEATURES
     # =========================================================================
     pdf.chapter_title("AI Features")
 
-    pdf.body_text(
-        "Education AI includes AI-assisted features that help with everyday work: dashboard insights, "
-        "timetable generation, report card comments and letter drafting. Always review AI output "
-        "before sharing it."
-    )
+    pdf.body_text("AI helps with everyday work: dashboard insights, timetables, report card comments, letters and early warnings. Always read AI output before you share it.")
 
     pdf.section_title("AI Dashboard Insights")
-    pdf.body_text(
-        "The admin dashboard surfaces AI-generated actionable insights across all modules: "
-        "Alerts (red) for urgent issues, Warnings (amber) for important items, and Info (blue) "
-        "for setup reminders. Each insight links directly to the relevant page. "
-        "Insights are role-specific (teachers see attendance only, accountants see finance only)."
-    )
+    pdf.body_text("The dashboard lists what needs attention: red for urgent, amber for important, blue for reminders. Each one links to the page where you can act. Each role sees only its own area, so teachers see attendance and accountants see finance.")
 
     pdf.section_title("OR-Tools Timetable Optimization")
     pdf.nav_path("Sidebar > Academics > Timetable > Auto-Generate")
-    pdf.body_text(
-        "Timetable auto-generation supports two algorithms: 'Quick (Greedy)' for near-instant drafts, "
-        "and 'Optimal (OR-Tools)' for higher quality schedules (up to 30 seconds). OR-Tools enforces "
-        "hard constraints (no double-booking) and optimizes subject distribution across days."
-    )
+    pdf.body_text("'Auto-Generate' fills a timetable for you. 'Quick (Greedy)' gives a draft almost at once. 'Optimal (OR-Tools)' takes up to 30 seconds and spreads subjects better across days without double-booking anyone. Review it, then click 'Save Timetable'.")
 
     pdf.section_title("AI Report Card Comments")
     pdf.nav_path("Sidebar > Academics > Results")
-    pdf.body_text(
-        "Generate personalized comments for each student's exam performance based on marks, grades, "
-        "and attendance. Click 'Generate Comments' on an exam's results page. Comments appear "
-        "on report cards automatically. Teachers should review before sharing with parents."
-    )
-    pdf.info_box("Fallback", "Without a Groq API key, the system generates rule-based comments automatically.")
+    pdf.body_text("On an exam's results page, click 'Generate Comments' to draft a comment for every student from their marks, grades and attendance. They appear on report cards. Read them before parents do.")
 
     pdf.section_title("AI Letter Drafting")
     pdf.nav_path("Sidebar > HR & Staff > Letter Composer > Draft with AI")
-    pdf.body_text(
-        "The Letter Composer includes an AI assistant that drafts professional letters from natural "
-        "language descriptions. Enter a prompt like 'Write a warning letter for late attendance' or "
-        "'Draft an experience certificate for Rajesh who joined 3 years ago as a Math teacher' and "
-        "the AI generates a complete subject and body. The AI uses template context (if a template "
-        "type is selected) and employee details (if an employee is selected) for more accurate drafts. "
-        "Quick suggestion chips are provided for common letter types."
-    )
-    pdf.info_box(
-        "Fallback",
-        "Without a Groq API key, the system matches keywords in your prompt to built-in templates "
-        "and returns the closest matching template. You can always edit the content manually."
-    )
+    pdf.body_text("Describe the letter in plain words, for example 'Write a warning letter for late attendance'. The draft uses the chosen template and employee details. Edit it before you generate the PDF.")
 
     pdf.section_title("At-Risk Students (Attendance)")
     pdf.nav_path("Dashboard > AI Insights > At-Risk Students")
-    pdf.body_text(
-        "Students flagged by the attendance risk predictor, showing current attendance, predicted attendance in 4 weeks "
-        "and a trend (Declining, Stable, Improving). Filter by severity (High, Medium, Low) and class. School Admin and Principal only."
-    )
+    pdf.body_text("Students whose attendance is falling, with their rate now, the predicted rate in 4 weeks and the trend. Filter by severity and class. School Admin and Principal only.")
     pdf.section_title("Student Risk Score")
     pdf.nav_path("Sidebar > Management > Student Risk Score")
-    pdf.body_text(
-        "A combined risk score that blends attendance, fee default likelihood and academic performance. "
-        "Filter by severity and class. School Admin and Principal only."
-    )
+    pdf.body_text("One score that combines attendance, likelihood of unpaid fees and academic results. Filter by severity and class. School Admin and Principal only.")
     pdf.section_title("Academic Risk")
     pdf.nav_path("Sidebar > Academic Risk")
-    pdf.body_text(
-        "Students trending toward failing grades, showing their average and predicted next exam with a trend. "
-        "Filter by severity and class. School Admin and Principal only."
-    )
+    pdf.body_text("Students heading towards failing grades, with their average, the predicted next exam and the trend. School Admin and Principal only.")
     pdf.section_title("Staff Risk")
     pdf.nav_path("Sidebar > HR & Staff > Staff Risk")
-    pdf.body_text(
-        "Staff flagged for rising leave frequency or declining attendance, showing leave days (last 90 days), "
-        "absence rate and trend. Filter by severity and department. School Admin and Principal only."
-    )
-    pdf.warning_box("Risk scores are AI estimates meant to start a conversation, not a final judgment about a person. "
-                    "Select an academic year first for the student pages.")
+    pdf.body_text("Staff with rising leave or falling attendance. School Admin and Principal only.")
+    pdf.warning_box("Risk scores are estimates to start a conversation, not a judgment about a person. For the student pages, choose an academic year first.")
 
     # =========================================================================
     # CHAPTER: INVENTORY & STORE
     # =========================================================================
     pdf.chapter_title("Inventory & Store")
 
-    pdf.body_text(
-        "The Inventory module tracks store items, stock movements and items assigned to staff. "
-        "It is available to School Admins and Principals."
-    )
+    pdf.body_text("Store items, stock movements and who holds what. Available to School Admins, Principals and Accountants; only Admins and Principals can change things.")
 
     pdf.section_title("Inventory Dashboard")
     pdf.nav_path("Sidebar > Inventory > Dashboard")
-    pdf.body_text("Shows Total Items, Total Stock Value, Active Assignments, Low Stock Alerts and Recent Transactions, with quick links to the other pages.")
+    pdf.body_text("Total items, stock value, active assignments, low-stock alerts and recent transactions, with links to the other pages.")
 
     pdf.section_title("Items & Stock")
     pdf.nav_path("Sidebar > Inventory > Items")
-    pdf.step("Click the 'Categories' and 'Vendors' buttons at the top first and add the categories and vendors you use.")
-    pdf.step("Add an item: Name, Category, Unit (Pieces, Packets, Boxes, Kilograms, Litres, Sets, Reams, Dozens, Metres), Current Stock, Minimum Stock, Unit Price and Storage Location.")
-    pdf.step("Filter the list by category and stock status: In Stock, Low Stock or Out of Stock.")
-    pdf.step("Use 'AI Suggest' to get suggested items for the kind of school you describe, select the ones you want and add them.")
+    pdf.step("Open 'Categories' and add one. Vendors work the same way.")
+    pdf.step("Click 'Add Item'. Enter the name, choose the category and unit, and set the current stock, the minimum stock and the price. Click 'Create'.")
+    pdf.step("Use 'Stock Status' to see only Low Stock or Out of Stock items, so you know what to reorder.")
+    pdf.step("'AI Suggest' lists items for the kind of school you choose, such as Science Lab. Tick the ones you want and add them in one go.")
 
     pdf.section_title("Stock Transactions")
     pdf.nav_path("Sidebar > Inventory > Transactions")
-    pdf.body_text("School Admins and Principals record stock movements here; other roles with inventory access can only view the history. Issues and Returns are not entered by hand: they are created automatically when you assign an item or mark it returned (see Item Assignments).")
-    pdf.step("Press '+ Record Transaction'.")
-    pdf.step("Choose the type: Purchase (new stock from a vendor), Adjustment (correct a stock count) or Disposal (damaged or expired items).")
-    pdf.step("Select the Item. Its current stock is shown in the list and its unit price is filled in for you.")
-    pdf.step("Enter the Quantity. For a Disposal enter a positive number; the stock is reduced for you. For an Adjustment use a negative number to reduce stock. Stock can never go below zero.")
-    pdf.step("Choose the Vendor (Purchase only), set the Date, add a Reference number such as an invoice or PO, and any Remarks, then press 'Record Transaction'. A 'Transaction recorded' message appears and the item's stock updates.")
-    pdf.step("Filter the history by Type and by From and To dates. Issue and Return rows created by assignments appear here too.")
+    pdf.step("Every stock movement is listed with its date, type and quantity. Click 'Record Transaction'.")
+    pdf.step("Choose 'Purchase', then the item. The unit price is filled in. Enter the quantity, choose the vendor and add the invoice number, then click 'Record Transaction'. The item's stock goes up.")
+    pdf.step("For damaged or expired items choose 'Disposal' and enter a positive quantity; the stock goes down by that amount. An 'Adjustment' corrects a count and takes a negative number to reduce stock.")
+    pdf.step("Use 'Type' and the From and To dates to narrow the history.")
+    pdf.info_box("Issues and returns", "These are not typed in by hand. They are created automatically when you assign an item or mark it returned.")
 
     pdf.section_title("Item Assignments")
     pdf.nav_path("Sidebar > Inventory > Assignments")
-    pdf.body_text("School Admins and Principals assign items and mark them returned. Accountants, Teachers and Staff can only view assignments (Teachers and Staff see just the items assigned to them).")
-    pdf.step("Press '+ Assign Item'.")
-    pdf.step("Choose the Item (only items in stock are listed) and the person under 'Assign To' (active staff accounts), set the Quantity, pick the item's Condition (New, Good, Fair or Poor) and add notes such as a serial number, then press 'Assign'. The assignment is dated today, the stock is reduced and an Issue transaction is recorded.")
-    pdf.step("Switch between the 'Active' and 'Returned' tabs, and search by person or item name.")
-    pdf.step("When the item comes back, press 'Return' on its row, choose its condition and press 'Confirm Return'. The stock is restored and a Return transaction is recorded.")
+    pdf.step("It shows who currently holds which item. Click 'Assign Item', choose the item, the person and the quantity, and add a note such as a serial number or the purpose.")
+    pdf.step("Click 'Assign'. The item is dated today and its stock goes down.")
+    pdf.step("When an item comes back, click 'Return' on its row, choose its condition and confirm. The stock is restored.")
+    pdf.step("Open the 'Returned' tab to see items that came back, with the date and condition. Search by person or item.")
+    pdf.body_text("Accountants, Teachers and Staff can only view assignments; Teachers and Staff see just the items assigned to them.")
 
     pdf.section_title("Reorder Prediction")
     pdf.nav_path("Sidebar > Inventory > Reorder Prediction")
-    pdf.body_text("Items flagged by the AI as low on stock or projected to run out, with severity (High, Medium, Low), current stock, projected stockout time and trend.")
+    pdf.body_text("Items the AI expects to run low or out, with severity, current stock and the projected stock-out time.")
 
     # =========================================================================
     # APPENDIX: TIPS, BEST PRACTICES & OPERATIONS CHECKLIST
@@ -1793,41 +1394,29 @@ def build_guide():
     pdf.chapter_title("Tips, Best Practices & Operations Checklist")
 
     pdf.section_title("General Tips")
-    pdf.bullet("Class dropdowns are session-scoped: always select the correct academic year first to see the right class list")
-    pdf.bullet("Use bulk import (Excel) for students when starting with a large number of records")
-    pdf.bullet("Use search and filter features to quickly find records in any list")
-    pdf.bullet("Export data regularly as backups (Excel, PDF)")
-    pdf.bullet("Use strong, unique passwords; log out when leaving the computer unattended")
-    pdf.bullet("Regularly review user access and deactivate unused accounts")
-    pdf.bullet("The User Guide covers pages for all roles; if you cannot see a page, your role or school modules do not include it")
+    pdf.bullet("Choose the right academic year first; class lists depend on it.")
+    pdf.bullet("Import students from Excel when you start with many.")
+    pdf.bullet("Search and filter any list to find records fast.")
+    pdf.bullet("Use strong passwords, log out on shared computers, and deactivate accounts nobody uses.")
 
     pdf.section_title("Attendance Tips")
-    pdf.bullet("Manual: Press Mark All Present, then change only the exceptions; save before leaving the page")
-    pdf.bullet("Face: Enroll all students first; use clear portraits (quality > 70%); good lighting for group photos")
-    pdf.bullet("Face: Avoid backlighting; review yellow-flagged matches; re-enroll after major appearance changes")
-    pdf.bullet("If attendance was already marked, reopen the same class and date: saving updates the records and never duplicates them")
-    pdf.bullet("Attendance cannot be saved on OFF days")
+    pdf.bullet("Manual: press 'Mark All Present', change only the exceptions, and save before you leave the page.")
+    pdf.bullet("Face: enroll every student first, with clear, well-lit portraits (quality above 70%), and review the yellow matches.")
+    pdf.bullet("To correct a day, reopen the same class and date and save again. Nothing is duplicated.")
 
     pdf.section_title("Finance Tips")
-    pdf.bullet("Set up accounts before the academic year; close months regularly")
-    pdf.bullet("Use discounts/scholarships feature instead of manual fee adjustments")
-    pdf.bullet("Use 'Pay Full' bulk action for quick month-end collection")
-    pdf.bullet("Download PDF reports monthly from the Finance Dashboard for record-keeping")
-    pdf.bullet("Online payment is not enabled yet: record every payment under Collect Payments")
+    pdf.bullet("Set up accounts and fee amounts before the year starts, and close each month when it is done.")
+    pdf.bullet("Use discounts and scholarships rather than editing fees by hand.")
+    pdf.bullet("Use 'Pay Full' for quick month-end collection, and download the monthly PDF from the Finance Dashboard.")
 
     pdf.section_title("Operations Checklist")
-    pdf.body_text("Recommended routine tasks by frequency:")
     pdf.simple_table(
-        ["Frequency", "Tasks"],
+        ["How often", "What to do"],
         [
-            ["Daily", "Mark attendance (Manual Entry or Face), record fee payments, "
-                      "mark staff & transport attendance, issue/return books, check dashboard alerts and notifications"],
-            ["Weekly", "Review attendance analytics, check overdue books, process leave applications, "
-                       "update admission pipeline"],
-            ["Monthly", "Process payroll, close financial month, review Finance Dashboard, "
-                        "generate fee reminders"],
-            ["Term", "Create exams, enter marks, publish results, generate report cards, "
-                     "conduct promotions, set up new academic year"],
+            ["Daily", "Mark attendance, record payments, check notifications and dashboard alerts"],
+            ["Weekly", "Check overdue books, answer leave requests, follow up admission enquiries"],
+            ["Monthly", "Run payroll, send fee reminders, review the Finance Dashboard, close the month"],
+            ["Each term", "Create exams, enter marks, announce results, print report cards, then promote students and set up the new year"],
         ],
         [30, 160]
     )
