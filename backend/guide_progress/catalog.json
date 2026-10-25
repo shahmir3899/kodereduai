@@ -1,0 +1,826 @@
+{
+  "startHere": {
+    "SCHOOL_ADMIN": [
+      "1.3",
+      "2.7",
+      "2.1",
+      "2.2",
+      "2.3",
+      "2.4",
+      "2.5",
+      "3.1"
+    ],
+    "PRINCIPAL": [
+      "1.3",
+      "2.7",
+      "2.1",
+      "2.2",
+      "2.3",
+      "2.4",
+      "2.5",
+      "3.1"
+    ],
+    "TEACHER": [
+      "1.3",
+      "3.1",
+      "3.2",
+      "3.3",
+      "6.4",
+      "12.2"
+    ],
+    "MANAGER": [
+      "1.3",
+      "5.1",
+      "5.5"
+    ],
+    "ACCOUNTANT": [
+      "1.3",
+      "7.1",
+      "7.3",
+      "7.6",
+      "7.9"
+    ],
+    "STAFF": [
+      "1.3",
+      "13.1"
+    ],
+    "DRIVER": [
+      "1.3",
+      "10.4"
+    ],
+    "PARENT": [
+      "1.3",
+      "15.2",
+      "15.3"
+    ],
+    "STUDENT": [
+      "1.3",
+      "16.4",
+      "16.6",
+      "16.8"
+    ]
+  },
+  "videos": [
+    {
+      "id": "mark-attendance",
+      "section": "3.1",
+      "module": "attendance",
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL",
+        "TEACHER"
+      ]
+    },
+    {
+      "id": "attendance-already-marked",
+      "section": "3.2",
+      "module": "attendance",
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL",
+        "TEACHER"
+      ]
+    },
+    {
+      "id": "ch2-step-1-academic-year-terms",
+      "section": "2.1",
+      "module": null,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL"
+      ]
+    },
+    {
+      "id": "ch2-step-2-create-classes",
+      "section": "2.2",
+      "module": null,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL"
+      ]
+    },
+    {
+      "id": "ch2-step-3-add-students",
+      "section": "2.3",
+      "module": null,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL"
+      ]
+    },
+    {
+      "id": "ch6-step-3-create-an-exam",
+      "section": "6.3",
+      "module": "examinations",
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL",
+        "MANAGER",
+        "TEACHER"
+      ]
+    },
+    {
+      "id": "ch6-step-4-enter-marks",
+      "section": "6.4",
+      "module": "examinations",
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL",
+        "MANAGER",
+        "TEACHER"
+      ]
+    },
+    {
+      "id": "ch6-step-6-generate-report-cards",
+      "section": "6.6",
+      "module": "examinations",
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL",
+        "MANAGER",
+        "TEACHER"
+      ]
+    },
+    {
+      "id": "ch7-recording-payments",
+      "section": "7.6",
+      "module": "finance",
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL",
+        "ACCOUNTANT",
+        "TEACHER"
+      ]
+    },
+    {
+      "id": "ch7-recording-expenses",
+      "section": "7.9",
+      "module": "finance",
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL",
+        "ACCOUNTANT"
+      ]
+    },
+    {
+      "id": "ch8-leave-management",
+      "section": "8.6",
+      "module": "hr",
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL"
+      ]
+    },
+    {
+      "id": "ch1-logging-in",
+      "section": "1.3",
+      "module": null,
+      "roles": []
+    },
+    {
+      "id": "ch2-step-4-add-subjects",
+      "section": "2.4",
+      "module": null,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL"
+      ]
+    },
+    {
+      "id": "ch2-step-5-create-timetable",
+      "section": "2.5",
+      "module": null,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL"
+      ]
+    },
+    {
+      "id": "ch2-school-setup-wizard",
+      "section": "2.8",
+      "module": null,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL"
+      ]
+    },
+    {
+      "id": "ch5-managing-subjects",
+      "section": "5.1",
+      "module": "academics",
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL",
+        "MANAGER",
+        "TEACHER"
+      ]
+    },
+    {
+      "id": "ch3-viewing-the-attendance-register",
+      "section": "3.3",
+      "module": "attendance",
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL",
+        "TEACHER"
+      ]
+    },
+    {
+      "id": "ch5-academic-sessions-years-terms",
+      "section": "5.2",
+      "module": "academics",
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL",
+        "MANAGER",
+        "TEACHER"
+      ]
+    },
+    {
+      "id": "ch5-academic-calendar",
+      "section": "5.5",
+      "module": "academics",
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL",
+        "MANAGER"
+      ]
+    },
+    {
+      "id": "ch5-student-promotion",
+      "section": "5.3",
+      "module": "academics",
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL"
+      ]
+    },
+    {
+      "id": "ch6-step-1-define-grade-scale",
+      "section": "6.1",
+      "module": "examinations",
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL"
+      ]
+    },
+    {
+      "id": "ch6-step-2-create-exam-types",
+      "section": "6.2",
+      "module": "examinations",
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL",
+        "MANAGER",
+        "TEACHER"
+      ]
+    },
+    {
+      "id": "ch6-step-5-view-publish-results",
+      "section": "6.5",
+      "module": "examinations",
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL",
+        "MANAGER",
+        "TEACHER"
+      ]
+    },
+    {
+      "id": "ch6-weighted-average-configuration",
+      "section": "6.7",
+      "module": "examinations",
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL"
+      ]
+    },
+    {
+      "id": "ch6-step-7-monthly-skill-behaviour-assessments",
+      "section": "6.8",
+      "module": "examinations",
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL",
+        "MANAGER",
+        "TEACHER"
+      ]
+    },
+    {
+      "id": "ch6-question-bank",
+      "section": "6.9",
+      "module": "examinations",
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL",
+        "MANAGER",
+        "TEACHER"
+      ]
+    },
+    {
+      "id": "ch6-question-paper-builder-and-question-papers",
+      "section": "6.10",
+      "module": "examinations",
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL",
+        "MANAGER",
+        "TEACHER"
+      ]
+    },
+    {
+      "id": "ch6-curriculum-coverage",
+      "section": "6.12",
+      "module": "examinations",
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL",
+        "TEACHER"
+      ]
+    },
+    {
+      "id": "ch7-setting-up-finance-accounts",
+      "section": "7.1",
+      "module": "finance",
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL",
+        "ACCOUNTANT"
+      ]
+    },
+    {
+      "id": "ch7-fee-setup-page",
+      "section": "7.3",
+      "module": "finance",
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL",
+        "ACCOUNTANT"
+      ]
+    },
+    {
+      "id": "ch7-creating-individual-fee-records",
+      "section": "7.4",
+      "module": "finance",
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL",
+        "ACCOUNTANT"
+      ]
+    },
+    {
+      "id": "ch7-bulk-operations",
+      "section": "7.7",
+      "module": "finance",
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL",
+        "ACCOUNTANT"
+      ]
+    },
+    {
+      "id": "ch7-managing-discounts-scholarships",
+      "section": "7.8",
+      "module": "finance",
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL",
+        "ACCOUNTANT"
+      ]
+    },
+    {
+      "id": "ch7-interaccount-transfers",
+      "section": "7.11",
+      "module": "finance",
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL",
+        "ACCOUNTANT"
+      ]
+    },
+    {
+      "id": "ch7-month-closing",
+      "section": "7.12",
+      "module": "finance",
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL",
+        "ACCOUNTANT"
+      ]
+    },
+    {
+      "id": "ch7-fee-overview",
+      "section": "7.13",
+      "module": "finance",
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL",
+        "ACCOUNTANT"
+      ]
+    },
+    {
+      "id": "ch7-other-income",
+      "section": "7.14",
+      "module": "finance",
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL",
+        "ACCOUNTANT"
+      ]
+    },
+    {
+      "id": "ch8-setting-up-departments",
+      "section": "8.1",
+      "module": "hr",
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL"
+      ]
+    },
+    {
+      "id": "ch8-adding-staff-members",
+      "section": "8.2",
+      "module": "hr",
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL"
+      ]
+    },
+    {
+      "id": "ch8-salary-management",
+      "section": "8.4",
+      "module": "hr",
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL"
+      ]
+    },
+    {
+      "id": "ch8-payroll-processing",
+      "section": "8.5",
+      "module": "hr",
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL"
+      ]
+    },
+    {
+      "id": "ch8-staff-attendance",
+      "section": "8.7",
+      "module": "hr",
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL"
+      ]
+    },
+    {
+      "id": "ch8-performance-appraisals",
+      "section": "8.8",
+      "module": "hr",
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL"
+      ]
+    },
+    {
+      "id": "ch8-staff-documents",
+      "section": "8.9",
+      "module": "hr",
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL"
+      ]
+    },
+    {
+      "id": "ch8-linking-unlinking-user-accounts",
+      "section": "8.10",
+      "module": "hr",
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL"
+      ]
+    },
+    {
+      "id": "ch8-letter-composer",
+      "section": "8.11",
+      "module": "hr",
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL"
+      ]
+    },
+    {
+      "id": "ch9-creating-enquiries",
+      "section": "9.2",
+      "module": "admissions",
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL"
+      ]
+    },
+    {
+      "id": "ch9-managing-enquiries",
+      "section": "9.4",
+      "module": "admissions",
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL"
+      ]
+    },
+    {
+      "id": "ch9-followup-management",
+      "section": "9.5",
+      "module": "admissions",
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL"
+      ]
+    },
+    {
+      "id": "ch9-converting-enquiries-to-students",
+      "section": "9.6",
+      "module": "admissions",
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL"
+      ]
+    },
+    {
+      "id": "ch10-setting-up-routes",
+      "section": "10.1",
+      "module": "transport",
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL"
+      ]
+    },
+    {
+      "id": "ch10-adding-vehicles",
+      "section": "10.2",
+      "module": "transport",
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL"
+      ]
+    },
+    {
+      "id": "ch10-assigning-students-to-routes",
+      "section": "10.3",
+      "module": "transport",
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL"
+      ]
+    },
+    {
+      "id": "ch10-transport-attendance",
+      "section": "10.4",
+      "module": "transport",
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL"
+      ]
+    },
+    {
+      "id": "ch12-managing-curriculum-books-chapters-topics",
+      "section": "12.1",
+      "module": "lms",
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL",
+        "MANAGER",
+        "TEACHER"
+      ]
+    },
+    {
+      "id": "ch12-creating-lesson-plans",
+      "section": "12.2",
+      "module": "lms",
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL",
+        "TEACHER"
+      ]
+    },
+    {
+      "id": "ch12-creating-assignments",
+      "section": "12.3",
+      "module": "lms",
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL",
+        "MANAGER",
+        "TEACHER"
+      ]
+    },
+    {
+      "id": "ch12-reviewing-submissions",
+      "section": "12.4",
+      "module": "lms",
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL",
+        "MANAGER",
+        "TEACHER"
+      ]
+    },
+    {
+      "id": "ch13-viewing-notifications-all-users",
+      "section": "13.1",
+      "module": "notifications",
+      "roles": []
+    },
+    {
+      "id": "ch13-creating-notification-templates-admin",
+      "section": "13.2",
+      "module": "notifications",
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL"
+      ]
+    },
+    {
+      "id": "ch13-sending-notifications-admin",
+      "section": "13.3",
+      "module": "notifications",
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL"
+      ]
+    },
+    {
+      "id": "ch14-starting-a-new-conversation",
+      "section": "14.3",
+      "module": null,
+      "roles": []
+    },
+    {
+      "id": "ch14-replying-to-messages",
+      "section": "14.4",
+      "module": null,
+      "roles": []
+    },
+    {
+      "id": "ch15-viewing-childs-information",
+      "section": "15.2",
+      "module": null,
+      "roles": [
+        "PARENT"
+      ]
+    },
+    {
+      "id": "ch15-applying-for-leave",
+      "section": "15.3",
+      "module": null,
+      "roles": [
+        "PARENT"
+      ]
+    },
+    {
+      "id": "ch16-my-assignments",
+      "section": "16.4",
+      "module": null,
+      "roles": [
+        "STUDENT"
+      ]
+    },
+    {
+      "id": "ch16-my-results",
+      "section": "16.6",
+      "module": null,
+      "roles": [
+        "STUDENT"
+      ]
+    },
+    {
+      "id": "ch16-ai-study-helper",
+      "section": "16.8",
+      "module": null,
+      "roles": [
+        "STUDENT"
+      ]
+    },
+    {
+      "id": "ch19-managing-users-school-admin-principal",
+      "section": "19.2",
+      "module": null,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL"
+      ]
+    },
+    {
+      "id": "ch21-items-stock",
+      "section": "21.2",
+      "module": "inventory",
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL",
+        "ACCOUNTANT"
+      ]
+    },
+    {
+      "id": "ch19-creating-student-user-accounts",
+      "section": "19.3",
+      "module": null,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL"
+      ]
+    },
+    {
+      "id": "ch17-managing-hostels-rooms",
+      "section": "17.2",
+      "module": "hostel",
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL"
+      ]
+    },
+    {
+      "id": "ch17-student-allocations",
+      "section": "17.3",
+      "module": "hostel",
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL"
+      ]
+    },
+    {
+      "id": "ch17-gate-passes",
+      "section": "17.4",
+      "module": "hostel",
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL"
+      ]
+    },
+    {
+      "id": "ch21-stock-transactions",
+      "section": "21.3",
+      "module": "inventory",
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL",
+        "ACCOUNTANT"
+      ]
+    },
+    {
+      "id": "ch21-item-assignments",
+      "section": "21.4",
+      "module": "inventory",
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL",
+        "ACCOUNTANT",
+        "TEACHER",
+        "STAFF"
+      ]
+    },
+    {
+      "id": "ch11-setting-up-book-categories",
+      "section": "11.1",
+      "module": "library",
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL"
+      ]
+    },
+    {
+      "id": "ch11-adding-books-to-the-catalog",
+      "section": "11.2",
+      "module": "library",
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL"
+      ]
+    },
+    {
+      "id": "ch11-issuing-books",
+      "section": "11.3",
+      "module": "library",
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL"
+      ]
+    },
+    {
+      "id": "ch11-returning-books",
+      "section": "11.4",
+      "module": "library",
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL"
+      ]
+    },
+    {
+      "id": "ch11-tracking-overdue-books",
+      "section": "11.5",
+      "module": "library",
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL"
+      ]
+    }
+  ]
+}

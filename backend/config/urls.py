@@ -209,6 +209,7 @@ urlpatterns = [
 
     # Library
     path('api/library/', include('library.urls')),
+    path('api/guide/', include('guide_progress.urls')),
 
     # Hostel Management
     path('api/hostel/', include('hostel.urls')),

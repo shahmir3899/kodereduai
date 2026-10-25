@@ -1466,6 +1466,21 @@ def build_guide():
     videos_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "frontend", "src", "data", "guideVideos.json")
     sync_video_catalog(json_data["chapters"], videos_path)
 
+    # The backend counts guide progress against this list, so it must come from the same source as the guide.
+    with open(videos_path, encoding='utf-8') as f:
+        ready_videos = [v for v in json.load(f)["videos"] if v.get("status") == "ready" and v.get("section")]
+    catalog_path = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), "backend", "guide_progress", "catalog.json"
+    )
+    with open(catalog_path, 'w', encoding='utf-8') as f:
+        json.dump({
+            "startHere": START_HERE,
+            "videos": [
+                {"id": v["id"], "section": v["section"], "module": v.get("module"), "roles": v.get("roles", [])}
+                for v in ready_videos
+            ],
+        }, f, indent=2, ensure_ascii=False)
+
     json_output_path = os.path.join(
         os.path.dirname(os.path.abspath(__file__)),
         "frontend", "src", "data", "userGuide.json"

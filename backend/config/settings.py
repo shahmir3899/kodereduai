@@ -93,6 +93,7 @@ INSTALLED_APPS = [
     'lms',
     'transport',
     'library',
+    'guide_progress',
     'hostel',
     'student_exits',
     'inventory',
