@@ -5,12 +5,13 @@ import { useAuth } from '../contexts/AuthContext'
 import { filterGuideChapters, buildAvailability, isVisibleFor } from '../utils/guideAccess'
 import { useDebounce } from '../hooks/useDebounce'
 import { useToast } from '../components/Toast'
+import GuideVideoModal from '../components/guide/GuideVideoModal'
 import guideData from '../data/userGuide.json'
 import videoData from '../data/guideVideos.json'
 
 // Tells nav_path blocks whether the current user can open a linked page.
 const GuideAccessContext = createContext(() => true)
-// Lets a section open its tutorial video in the Videos tab.
+// Lets a section open its tutorial video in the player dialog.
 const GuideVideoContext = createContext(null)
 
 // --- Utility ---
@@ -215,8 +216,6 @@ const VIDEOS_BY_ID = Object.fromEntries(videoData.videos.map((v) => [v.id, v]))
 function VideoSlot({ videoId }) {
   const { effectiveRole, isSuperAdmin } = useAuth()
   const openVideo = useContext(GuideVideoContext)
-  const [open, setOpen] = useState(false)
-  const [lang, setLang] = useState('en')
   const video = VIDEOS_BY_ID[videoId]
   if (!video) return null
 
@@ -234,67 +233,22 @@ function VideoSlot({ videoId }) {
     )
   }
 
-  const base = `/videos/${video.id}.${lang}`
   return (
-    <div className="rounded-lg border border-primary-200 bg-primary-50/40">
-      {!open ? (
-        <button
-          type="button"
-          onClick={() => setOpen(true)}
-          className="flex w-full items-center gap-3 px-3 py-2 text-left"
-        >
-          <img src={`/videos/${video.id}.en.poster.jpg`} alt="" className="h-12 w-20 rounded object-cover bg-gray-100" loading="lazy" />
-          <span className="flex-1">
-            <span className="block text-sm font-semibold text-primary-800">Watch: {video.title.en}</span>
-            <span className="block text-xs text-gray-500">{formatSeconds(video.seconds.en)} &middot; English voice-over, English or اردو captions</span>
-          </span>
-          <span aria-hidden="true" className="flex h-8 w-8 items-center justify-center rounded-full bg-primary-600 text-white">&#9654;</span>
-        </button>
-      ) : (
-        <div className="space-y-2 p-3">
-          <div className="flex items-center justify-between gap-2 flex-wrap">
-            <p className="text-sm font-semibold text-primary-800" dir={lang === 'ur' ? 'rtl' : 'ltr'}>{video.title[lang] || video.title.en}</p>
-            <div className="flex items-center gap-2">
-              <div className="inline-flex rounded-md border border-gray-300 overflow-hidden" role="group" aria-label="Video language">
-                {[['en', 'English'], ['ur', 'اردو']].map(([code, label]) => (
-                  <button
-                    key={code}
-                    type="button"
-                    onClick={() => setLang(code)}
-                    aria-pressed={lang === code}
-                    className={`px-2 py-1 text-xs ${lang === code ? 'bg-primary-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-              <button type="button" onClick={() => setOpen(false)} className="text-xs text-gray-500 hover:text-gray-700">Close</button>
-            </div>
-          </div>
-          <video
-            key={`${video.id}-${lang}`}
-            className="w-full rounded-lg bg-black"
-            controls
-            autoPlay
-            preload="metadata"
-            poster={`${base}.poster.jpg`}
-          >
-            <source src={`${base}.mp4`} type="video/mp4" />
-            <track kind="captions" src={`${base}.vtt`} srcLang={lang} label={lang === 'ur' ? 'اردو' : 'English'} default />
-            Your browser cannot play this video.
-          </video>
-          {openVideo && (
-            <button type="button" onClick={() => openVideo(video.id)} className="text-xs text-primary-700 hover:underline">
-              Open in the Videos tab
-            </button>
-          )}
-        </div>
-      )}
-    </div>
+    <button
+      type="button"
+      onClick={() => openVideo?.(video.id)}
+      className="flex w-full items-center gap-3 rounded-lg border border-primary-200 bg-primary-50/40 px-3 py-2 text-left hover:bg-primary-50"
+    >
+      <img src={`/videos/${video.id}.en.poster.jpg`} alt="" className="h-12 w-20 rounded object-cover bg-gray-100" loading="lazy" />
+      <span className="flex-1">
+        <span className="block text-sm font-semibold text-primary-800">Watch: {video.title.en}</span>
+        <span className="block text-xs text-gray-500">{formatSeconds(video.seconds.en)} &middot; English or اردو</span>
+      </span>
+      <span aria-hidden="true" className="flex h-8 w-8 items-center justify-center rounded-full bg-primary-600 text-white">&#9654;</span>
+    </button>
   )
 }
 
-// --- Section Renderer ---
 function SectionBlock({ section, chapterId, searchHighlight, showCopyLink }) {
   const { showSuccess } = useToast()
 
@@ -393,9 +347,7 @@ function formatSeconds(total) {
   return `${m}:${sec}`
 }
 
-function VideosTab({ videos, selectedId, lang, onSelect, onLang }) {
-  const selected = videos.find((v) => v.id === selectedId) || null
-  const base = `/videos/${selected?.id}.${lang}`
+function VideosTab({ videos, onSelect }) {
   return (
     <div className="space-y-4">
       {videos.length === 0 && (
@@ -405,49 +357,13 @@ function VideosTab({ videos, selectedId, lang, onSelect, onLang }) {
         </div>
       )}
 
-      {selected && (
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 space-y-3">
-          <div className="flex items-center justify-between gap-3 flex-wrap">
-            <h2 className="text-lg font-bold text-gray-900" dir={lang === 'ur' ? 'rtl' : 'ltr'}>
-              {selected.title[lang] || selected.title.en}
-            </h2>
-            <div className="inline-flex rounded-lg border border-gray-300 overflow-hidden" role="group" aria-label="Video language">
-              {[['en', 'English'], ['ur', 'اردو']].map(([code, label]) => (
-                <button
-                  key={code}
-                  type="button"
-                  onClick={() => onLang(code)}
-                  aria-pressed={lang === code}
-                  className={`px-3 py-1.5 text-sm ${lang === code ? 'bg-primary-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'} ${code === 'ur' ? 'border-l border-gray-300' : ''}`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-          </div>
-          <video
-            key={`${selected.id}-${lang}`}
-            className="w-full rounded-lg bg-black"
-            controls
-            preload="metadata"
-            poster={`${base}.poster.jpg`}
-          >
-            <source src={`${base}.mp4`} type="video/mp4" />
-            <track kind="captions" src={`${base}.vtt`} srcLang={lang} label={lang === 'ur' ? 'اردو' : 'English'} default />
-            Your browser cannot play this video.
-          </video>
-          <p className="text-sm text-gray-600">{selected.summary}</p>
-          <p className="text-xs text-gray-400">Voice-over is in English. Captions follow the language you pick.</p>
-        </div>
-      )}
-
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {videos.map((video) => (
           <button
             key={video.id}
             type="button"
             onClick={() => onSelect(video.id)}
-            className={`text-left bg-white rounded-lg shadow-sm border overflow-hidden hover:border-primary-300 transition-colors ${selected?.id === video.id ? 'border-primary-500' : 'border-gray-200'}`}
+            className="text-left bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden hover:border-primary-300 transition-colors"
           >
             <img src={`/videos/${video.id}.en.poster.jpg`} alt="" className="w-full aspect-video object-cover bg-gray-100" loading="lazy" />
             <div className="p-3">
@@ -512,7 +428,10 @@ export default function UserGuidePage() {
     setSearchParams(next, { replace: true })
   }
   const setTab = (name) => updateParams({ tab: name === 'videos' ? 'videos' : null, video: null, chapter: null, section: null })
-  const openVideo = (id) => updateParams({ tab: 'videos', video: id, chapter: null, section: null })
+  // The player is a dialog over whatever the reader is looking at, so only the ?video= part changes.
+  const openVideo = (id) => updateParams({ video: id })
+  const closeVideo = () => updateParams({ video: null })
+  const playingVideo = selectedVideoId ? videoData.videos.find((v) => v.id === selectedVideoId && v.status !== 'planned') : null
   const [searchQuery, setSearchQuery] = useState('')
   const debouncedSearch = useDebounce(searchQuery, 300)
   const [mobileTocOpen, setMobileTocOpen] = useState(false)
@@ -713,13 +632,7 @@ export default function UserGuidePage() {
 
       {/* Main layout */}
       {tab === 'videos' ? (
-        <VideosTab
-          videos={visibleVideos}
-          selectedId={selectedVideoId}
-          lang={videoLang}
-          onSelect={(id) => updateParams({ video: id })}
-          onLang={(code) => updateParams({ lang: code === 'ur' ? 'ur' : null })}
-        />
+        <VideosTab videos={visibleVideos} onSelect={openVideo} />
       ) : (
       <div className="flex flex-col lg:flex-row gap-6">
         {/* TOC Sidebar */}
@@ -791,6 +704,14 @@ export default function UserGuidePage() {
           )}
         </main>
       </div>
+      )}
+      {playingVideo && (
+        <GuideVideoModal
+          video={playingVideo}
+          lang={videoLang}
+          onLang={(code) => updateParams({ lang: code === 'ur' ? 'ur' : null })}
+          onClose={closeVideo}
+        />
       )}
     </div>
     </GuideVideoContext.Provider>
