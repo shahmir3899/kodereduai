@@ -11,6 +11,7 @@ import {
 import GuideVideoModal from '../components/guide/GuideVideoModal'
 import GuideVideosTab from '../components/guide/GuideVideosTab'
 import ProgressSummary from '../components/guide/ProgressSummary'
+import { guideProgressApi } from '../services/api'
 import useGuideProgress, { summarizeProgress } from '../hooks/useGuideProgress'
 import { nextInGroup } from '../utils/guideVideoGroups'
 import guideData from '../data/userGuide.json'
@@ -136,8 +137,8 @@ function SearchResultItem({ result, onNavigate }) {
 // --- Videos tab ---
 export default function UserGuidePage() {
   const [searchParams, setSearchParams] = useSearchParams()
-  const { user, effectiveRole, isSuperAdmin, isParent, isStudent, isStaffLevel, isManager, isModuleEnabled } = useAuth()
-  const progress = useGuideProgress(user?.id)
+  const { user, activeSchool, effectiveRole, isSuperAdmin, isParent, isStudent, isStaffLevel, isManager, isModuleEnabled } = useAuth()
+  const progress = useGuideProgress(user?.id, { api: guideProgressApi, schoolId: activeSchool?.id })
 
   // Default view follows the user's role and the school's enabled modules;
   // ?view=all shows the whole guide. A deep link to a hidden chapter switches to "all".

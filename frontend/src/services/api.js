@@ -131,6 +131,14 @@ api.interceptors.response.use(
 
 export default api
 
+// User guide progress (own progress; the admin overview is read by the admin dashboard)
+export const guideProgressApi = {
+  mine: () => api.get('/api/guide/progress/mine/'),
+  video: (body) => api.post('/api/guide/progress/video/', body),
+  step: (body) => api.post('/api/guide/progress/step/', body),
+  sync: (body) => api.post('/api/guide/progress/sync/', body),
+}
+
 // Attendance API
 export const attendanceApi = {
   // Upload image to storage and get URL

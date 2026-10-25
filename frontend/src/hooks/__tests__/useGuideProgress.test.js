@@ -71,3 +71,52 @@ describe('summarizeProgress', () => {
     expect(out).toEqual({ stepsDone: 2, stepsTotal: 3, videosWatched: 1, videosTotal: 3 })
   })
 })
+
+describe('useGuideProgress with the server', () => {
+  const fakeApi = (mine = { videos: {}, steps: {} }) => ({
+    mine: vi.fn().mockResolvedValue({ data: mine }),
+    video: vi.fn().mockResolvedValue({}),
+    step: vi.fn().mockResolvedValue({}),
+    sync: vi.fn().mockResolvedValue({}),
+  })
+
+  it('uploads what the browser already held, once, and brings in the server copy', async () => {
+    localStorage.setItem('guideProgress:v1:1', JSON.stringify({ watched: { 'mark-attendance': '2026-10-01T00:00:00Z' }, done: {} }))
+    const api = fakeApi({ videos: { other: { ranges: [[0, 90]], duration: 100, position: 90, completedAt: '2026-10-02T00:00:00Z' } }, steps: {} })
+    const { result } = renderHook(() => useGuideProgress(1, { api, schoolId: 5 }))
+    await act(async () => {})
+    expect(result.current.watched.has('other')).toBe(true)
+    expect(result.current.watched.has('mark-attendance')).toBe(true)
+    expect(api.sync).toHaveBeenCalledTimes(1)
+    const sent = api.sync.mock.calls[0][0].videos['mark-attendance']
+    expect(sent.ranges[0][0]).toBe(0)
+    expect(sent.ranges[0][1]).toBeGreaterThan(0)   // an old "watched" tick goes up as fully played
+
+    renderHook(() => useGuideProgress(1, { api, schoolId: 5 }))
+    await act(async () => {})
+    expect(api.sync).toHaveBeenCalledTimes(1)
+  })
+
+  it('saves what was played, and retries when the server was unreachable', async () => {
+    const api = fakeApi()
+    api.video.mockRejectedValueOnce(new Error('offline'))
+    const { result } = renderHook(() => useGuideProgress(1, { api, schoolId: 5 }))
+    await act(async () => {})
+    await act(async () => { result.current.recordVideo('v1', { ranges: [[0, 50]], duration: 100, position: 50, flush: true }) })
+    expect(api.video).toHaveBeenCalledTimes(1)
+    await act(async () => { result.current.recordVideo('v1', { ranges: [[50, 60]], duration: 100, position: 60, flush: true }) })
+    // inside the 10 s window nothing more is sent yet; the offline failure is kept for the next push
+    expect(api.video).toHaveBeenCalledTimes(1)
+  })
+
+  it('sends a ticked step and keeps working if the server is unreachable', async () => {
+    const api = fakeApi()
+    api.mine.mockRejectedValue(new Error('offline'))
+    const { result, unmount } = renderHook(() => useGuideProgress(1, { api, schoolId: 5 }))
+    await act(async () => {})
+    act(() => result.current.toggleDone('2.1'))
+    expect(result.current.done.has('2.1')).toBe(true)
+    await act(async () => { unmount() })
+    expect(api.step).toHaveBeenCalledWith({ id: '2.1', done: true })
+  })
+})
