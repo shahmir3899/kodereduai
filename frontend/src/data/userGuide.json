@@ -3,7 +3,7 @@
     "title": "Education AI",
     "subtitle": "School Administration Guide",
     "version": "3.4 - Manual Attendance & Updated Navigation",
-    "generatedAt": "2026-10-25T09:31:16.402461+00:00",
+    "generatedAt": "2026-10-25T09:39:37.156173+00:00",
     "totalChapters": 22,
     "modules": [
       "Dashboard | Classes & Students | Attendance (Manual Entry)",
@@ -16,7 +16,7 @@
     "startHere": {
       "SCHOOL_ADMIN": [
         "1.3",
-        "2.8",
+        "2.7",
         "2.1",
         "2.2",
         "2.3",
@@ -26,7 +26,7 @@
       ],
       "PRINCIPAL": [
         "1.3",
-        "2.8",
+        "2.7",
         "2.1",
         "2.2",
         "2.3",
@@ -88,7 +88,7 @@
           "content": [
             {
               "type": "body_text",
-              "text": "Education AI is a comprehensive School Management System that covers every aspect of school administration - from student enrollment and attendance tracking to finance, HR, academics, examinations, transport, library, and more. The system supports multiple user roles and provides dedicated portals for administrators, teachers, parents, and students."
+              "text": "Education AI runs your whole school in one place: students and attendance, fees, staff, exams and more. Parents and students get their own portals."
             }
           ]
         },
@@ -99,66 +99,56 @@
           "content": [
             {
               "type": "body_text",
-              "text": "The system supports the following roles, each with different access levels:"
+              "text": "Each person sees only what their role needs."
             },
             {
               "type": "table",
               "headers": [
                 "Role",
-                "Access Level",
-                "Description"
+                "What they do"
               ],
               "rows": [
                 [
                   "School Admin",
-                  "Full School",
-                  "Full access; can create users within their school"
+                  "Everything in the school; creates other users"
                 ],
                 [
                   "Principal",
-                  "School-wide",
-                  "School operations; can create staff-level users"
+                  "School operations; creates staff users"
                 ],
                 [
                   "Teacher",
-                  "Assigned Classes",
-                  "Attendance, marks entry, lesson plans"
+                  "Attendance, marks and lesson plans for their classes"
                 ],
                 [
                   "Manager",
-                  "Academics & Management",
-                  "Academics, content creation, classes and students"
-                ],
-                [
-                  "Driver",
-                  "Transport",
-                  "Transport attendance and routes"
+                  "Academics, content, classes and students"
                 ],
                 [
                   "Accountant",
-                  "Finance Module",
-                  "Fee management, expenses, reports"
+                  "Fees, expenses and reports"
+                ],
+                [
+                  "Driver",
+                  "Transport attendance and routes"
                 ],
                 [
                   "Staff",
-                  "Limited",
-                  "Basic access, notifications"
+                  "Basic access and notifications"
                 ],
                 [
                   "Parent",
-                  "Parent Portal",
-                  "View child's attendance, fees, results"
+                  "Their child's attendance, fees and results"
                 ],
                 [
                   "Student",
-                  "Student Portal",
-                  "View own attendance, timetable, assignments"
+                  "Own attendance, timetable and assignments"
                 ]
               ]
             },
             {
               "type": "body_text",
-              "text": "User Management: School Admins can create Principal, Manager, Accountant, Teacher, Staff and Driver users. Principals can create Manager, Accountant, Teacher, Staff and Driver users. See the User Management chapter for full details."
+              "text": "Admins and Principals create users in Settings > Users. See the User Management chapter."
             }
           ]
         },
@@ -170,27 +160,22 @@
             {
               "type": "step",
               "number": 1,
-              "text": "Open the application URL in your web browser."
+              "text": "Open the Education AI address in your browser."
             },
             {
               "type": "step",
               "number": 2,
-              "text": "Enter your username/email and password on the Login page."
+              "text": "Type your username and password, then click 'Sign In'. You land on your dashboard."
             },
             {
               "type": "step",
               "number": 3,
-              "text": "Click 'Sign In' to access your dashboard."
-            },
-            {
-              "type": "step",
-              "number": 4,
-              "text": "If you manage multiple schools, use the School Switcher (top bar) to select the active school."
+              "text": "If you manage several schools, pick the school from the top bar."
             },
             {
               "type": "info_box",
-              "title": "First-Time Setup",
-              "text": "Your School Admin account is pre-configured for you. Once you receive your credentials, log in and follow the Initial Setup steps in Chapter 2. You can then create other users from Settings > Users tab."
+              "title": "First time?",
+              "text": "Your School Admin account is ready. After you log in, follow Chapter 2 to set up your school."
             }
           ],
           "video": "ch1-logging-in"
@@ -202,116 +187,36 @@
           "content": [
             {
               "type": "body_text",
-              "text": "The application uses a sidebar on the left side of the screen. Groups expand to show their pages. What you see depends on your role and on which modules your school has enabled. On mobile devices, the sidebar collapses into a menu button."
+              "text": "Use the menu on the left to open any page. You only see the pages your role can use and the modules your school has turned on. On a phone, open the menu with the button at the top."
             },
             {
               "type": "sub_section",
-              "title": "Top Bar Features"
+              "title": "The top bar"
             },
             {
               "type": "bullet",
-              "text": "School name and School Switcher - Switch between schools if you have access to several schools"
+              "text": "School name - switch schools here if you have more than one"
             },
             {
               "type": "bullet",
-              "text": "Academic Year switcher - Change the active academic year/session"
+              "text": "Academic year - choose which year you are looking at"
             },
             {
               "type": "bullet",
-              "text": "Light/Dark mode toggle"
+              "text": "Moon icon - light or dark mode"
             },
             {
               "type": "bullet",
-              "text": "Notification Bell - View unread notifications"
+              "text": "Bell - your unread notifications"
             },
             {
               "type": "bullet",
-              "text": "Your name and user menu - Profile settings, logout"
-            },
-            {
-              "type": "sub_section",
-              "title": "Sidebar - School Admin / Principal"
-            },
-            {
-              "type": "bullet",
-              "text": "Dashboard - Main overview page"
-            },
-            {
-              "type": "bullet",
-              "text": "Attendance - 1. Manual Entry, 2. Face Attendance, Attendance Record"
-            },
-            {
-              "type": "bullet",
-              "text": "Finance - Dashboard, Accounts, Fee Overview, Collect Payments, Fee Setup, Other Income, Expenses, Discounts"
-            },
-            {
-              "type": "bullet",
-              "text": "Academics - Subjects, Timetable, then under Assessment: Exam Types, Exams, Assessments, Marks Entry, Grade Scale, Results, Report Cards, Assignments"
-            },
-            {
-              "type": "bullet",
-              "text": "Content Creation - Question Bank, Paper Builder, Question Papers, Worksheets, Curriculum"
-            },
-            {
-              "type": "bullet",
-              "text": "Planning & Delivery - Curriculum Coverage, Lesson Plans"
-            },
-            {
-              "type": "bullet",
-              "text": "AI Analytics and Academic Risk"
-            },
-            {
-              "type": "bullet",
-              "text": "HR & Staff - Dashboard, Staff Directory, Departments, Salary, Payroll, Leave, Attendance, Performance, Documents, Letter Composer, Staff Risk"
-            },
-            {
-              "type": "bullet",
-              "text": "Management - Classes, Students, Student Risk Score, Recently Deleted, Academic Calendar, Sessions, Promotion"
-            },
-            {
-              "type": "bullet",
-              "text": "Notifications and Messages"
-            },
-            {
-              "type": "bullet",
-              "text": "Admissions - Enquiries, Conversion Likelihood"
-            },
-            {
-              "type": "bullet",
-              "text": "Transport, Library, Hostel, Inventory"
-            },
-            {
-              "type": "bullet",
-              "text": "User Guide, School Setup, Settings"
-            },
-            {
-              "type": "sub_section",
-              "title": "Sidebar - Teacher"
-            },
-            {
-              "type": "body_text",
-              "text": "Teachers see a shorter menu: Dashboard, Attendance for their own classes, Academics (Timetable, Exam Schedule, Assessments, Marks Entry, Results, Report Cards, Assignments), Content Creation, Planning & Delivery, My Leave, My Attendance, Notifications and Messages."
-            },
-            {
-              "type": "sub_section",
-              "title": "Sidebar - Parent"
-            },
-            {
-              "type": "body_text",
-              "text": "Dashboard, Leave Requests, Messages and User Guide."
-            },
-            {
-              "type": "sub_section",
-              "title": "Sidebar - Student"
-            },
-            {
-              "type": "body_text",
-              "text": "Dashboard, Attendance, Fees, Timetable, Exam Schedule, Results, Assignments, Library, Transport, AI Study Helper, My Profile and User Guide."
+              "text": "Logout is at the bottom of the menu"
             },
             {
               "type": "info_box",
-              "title": "Missing a menu item?",
-              "text": "If you cannot see a page, your role may not have access to it, or the module is not enabled for your school. Ask your School Admin."
+              "title": "Cannot see a page?",
+              "text": "Your role may not include it, or your school has not turned that module on. Ask your School Admin."
             }
           ]
         }
@@ -329,11 +234,7 @@
           "content": [
             {
               "type": "body_text",
-              "text": "Before using the system, you must set up foundational data in the correct order. Each step depends on the previous one being completed. Follow this sequence carefully."
-            },
-            {
-              "type": "warning_box",
-              "text": "The setup order matters! For example, you cannot add students before creating classes, and you cannot create exams before setting up academic years and subjects. Follow the order below to avoid errors."
+              "text": "Set up in this order, because each step needs the one before it. For a new school, the School Setup wizard (last topic in this chapter) can walk you through everything."
             }
           ]
         },
@@ -350,47 +251,32 @@
             {
               "type": "step",
               "number": 1,
-              "text": "Log in with your School Admin credentials."
+              "text": "Click '+ Add Academic Year'. Enter a name (for example 2026-27), the start date and the end date, then save."
             },
             {
               "type": "step",
               "number": 2,
-              "text": "Navigate to Management > Sessions in the sidebar."
+              "text": "On the year's card, click 'Set Current' to make it the active year."
             },
             {
               "type": "step",
               "number": 3,
-              "text": "In the 'Years' tab, click 'Add Academic Year'."
+              "text": "On the same card, click 'Manage terms', then '+ Add Term'. The first term is created for you."
             },
             {
               "type": "step",
               "number": 4,
-              "text": "Enter: Name (e.g., '2025-2026'), Start Date, End Date."
+              "text": "Drag the handles on the timeline bar, or type the dates, to set the term. Changes save by themselves."
             },
             {
               "type": "step",
               "number": 5,
-              "text": "Click 'Set as Current' to make it the active year."
-            },
-            {
-              "type": "step",
-              "number": 6,
-              "text": "Switch to the 'Terms' tab and click 'Add Term'."
-            },
-            {
-              "type": "step",
-              "number": 7,
-              "text": "Enter: Name (e.g., 'Term 1'), Term Type (Term/Semester/Quarter), Start Date, End Date, Order."
-            },
-            {
-              "type": "step",
-              "number": 8,
-              "text": "Add all terms for the academic year."
+              "text": "Add the other terms the same way. Each one starts the day after the previous one ends."
             },
             {
               "type": "info_box",
-              "title": "Why This Matters",
-              "text": "Academic years and terms are required for exams, report cards, fee structures, and student promotions. Set this up first."
+              "title": "Overlapping terms",
+              "text": "If two terms overlap, you get a warning and the change is not saved until you click 'Save anyway'."
             }
           ],
           "video": "ch2-step-1-academic-year-terms"
@@ -408,37 +294,22 @@
             {
               "type": "step",
               "number": 1,
-              "text": "Navigate to 'Classes' in the sidebar under Management."
+              "text": "Open 'Classes' and switch to 'Master'."
             },
             {
               "type": "step",
               "number": 2,
-              "text": "Keep master classes simple: create one section-free class per grade, such as Playgroup, Nursery, Prep, Class 1, and Class 2."
+              "text": "Click 'Add Class', choose the grade level, confirm the name and save without sections. Repeat once per grade."
             },
             {
               "type": "step",
               "number": 3,
-              "text": "Click 'Add Class', choose the Grade Level, confirm the Class Name, and save without adding sections."
-            },
-            {
-              "type": "step",
-              "number": 4,
-              "text": "Repeat once per grade level. The master class list is the shared class catalog used across academic years."
-            },
-            {
-              "type": "step",
-              "number": 5,
-              "text": "After master classes are ready, switch to Session Classes for the active academic year and create sections such as A, B, and C there."
-            },
-            {
-              "type": "step",
-              "number": 6,
-              "text": "Classes are displayed grouped by grade level. Use the 'Grid' toggle for an alternate view."
+              "text": "Switch to 'Session Classes' for the active year and create sections such as A and B there."
             },
             {
               "type": "info_box",
-              "title": "Tip",
-              "text": "Create sections in Session Classes, not in the master catalog. Example: keep master 'Class 5' once, then create session sections 'Class 5 - A' and 'Class 5 - B' inside the selected academic year."
+              "title": "Why two lists?",
+              "text": "Master classes are the shared catalog and stay the same every year. Sections belong to one academic year."
             }
           ],
           "video": "ch2-step-2-create-classes"
@@ -456,36 +327,22 @@
             {
               "type": "step",
               "number": 1,
-              "text": "Navigate to 'Students' in the sidebar under Management."
+              "text": "Click 'Add Student'. Choose the class and enter the student's name; the roll number is suggested for you."
             },
             {
               "type": "step",
               "number": 2,
-              "text": "To add one student: Click 'Add Student' and fill in Name, Roll Number, Class, Parent Name, Parent Phone, Admission Number."
+              "text": "Add the parent's name and phone number, then save. The student appears in the list."
             },
             {
               "type": "step",
               "number": 3,
-              "text": "To bulk import: Click 'Import from Excel', download the template, fill it in, and upload."
-            },
-            {
-              "type": "step",
-              "number": 4,
-              "text": "Students will appear in the list. Use the class filter to view students by class."
-            },
-            {
-              "type": "step",
-              "number": 5,
-              "text": "You can export the student list as PDF, PNG, or Excel using the export buttons."
-            },
-            {
-              "type": "warning_box",
-              "text": "Students must be assigned to a class. Make sure classes are created (Step 2) before adding students."
+              "text": "To add many students at once, click 'Download Excel' for the template, fill it in, then click 'Upload Excel'."
             },
             {
               "type": "info_box",
-              "title": "Session Enrollment",
-              "text": "When you add a student (individually or via Excel upload), the system automatically creates an enrollment record for the school's current academic year. This links the student to the correct session. Roll numbers are unique per session and class, so different academic years can have different students with the same roll number in the same class."
+              "title": "Add classes first",
+              "text": "A student must belong to a class, so finish Step 2 before adding students."
             }
           ],
           "video": "ch2-step-3-add-students"
@@ -503,32 +360,17 @@
             {
               "type": "step",
               "number": 1,
-              "text": "Navigate to Academics > Subjects in the sidebar."
+              "text": "In the 'Subjects' tab, click '+ Add Subject'."
             },
             {
               "type": "step",
               "number": 2,
-              "text": "In the 'Subjects' tab, click 'Add Subject'."
+              "text": "Enter the subject name. The code is filled in for you and you can change it. Click 'Create'."
             },
             {
               "type": "step",
               "number": 3,
-              "text": "Enter: Subject Name, Subject Code, Description, and whether it is an Elective."
-            },
-            {
-              "type": "step",
-              "number": 4,
-              "text": "Save. Repeat for all subjects taught in the school."
-            },
-            {
-              "type": "step",
-              "number": 5,
-              "text": "Switch to the 'Assignments' tab to assign subjects to classes."
-            },
-            {
-              "type": "step",
-              "number": 6,
-              "text": "Select a class, pick a subject, choose the teacher, set periods per week, then save."
+              "text": "Repeat for every subject, then open 'Class Assignments' to give each class its subjects and teachers."
             }
           ],
           "video": "ch2-step-4-add-subjects"
@@ -546,79 +388,77 @@
             {
               "type": "step",
               "number": 1,
-              "text": "Navigate to Academics > Timetable."
+              "text": "Select the class. If its rows are empty, click 'Time Slots' and add the periods first."
             },
             {
               "type": "step",
               "number": 2,
-              "text": "Select a class to create its timetable."
+              "text": "Click a cell, choose the subject for that period and click 'Set'. The teacher assigned to the subject is filled in."
             },
             {
               "type": "step",
               "number": 3,
-              "text": "Define time slots (period start time, end time)."
-            },
-            {
-              "type": "step",
-              "number": 4,
-              "text": "Assign subjects and teachers to each period for each day of the week."
-            },
-            {
-              "type": "step",
-              "number": 5,
-              "text": "Save the timetable. Students and parents can now view it in their portals."
+              "text": "Click 'Save Timetable'. Students and parents can now see it."
             },
             {
               "type": "info_box",
-              "title": "Prerequisite",
-              "text": "Subjects must be assigned to classes (Step 4) before creating timetables."
+              "title": "Needs Step 4",
+              "text": "A class needs its subjects assigned before you can fill its timetable."
             }
           ],
           "video": "ch2-step-5-create-timetable"
         },
         {
           "id": "2.6",
-          "title": "Setup Checklist Summary",
-          "slug": "setup-checklist-summary",
+          "title": "Module Dependency Reference",
+          "slug": "module-dependency-reference",
           "content": [
+            {
+              "type": "body_text",
+              "text": "What must exist before each feature works:"
+            },
             {
               "type": "table",
               "headers": [
-                "Step",
-                "What to Do",
-                "Prerequisite",
-                "Who Does It"
+                "Feature",
+                "Needs"
               ],
               "rows": [
                 [
-                  "1",
-                  "Set up Academic Year & Terms",
-                  "Logged into school",
-                  "School Admin"
+                  "Attendance",
+                  "Classes, students"
                 ],
                 [
-                  "2",
-                  "Create Classes",
-                  "None",
-                  "School Admin"
+                  "Face attendance",
+                  "Classes, students, enrolled faces"
                 ],
                 [
-                  "3",
-                  "Add Students",
-                  "Classes exist",
-                  "School Admin"
+                  "Timetable, LMS",
+                  "Subjects assigned to classes"
                 ],
                 [
-                  "4",
-                  "Add Subjects & Assign to Classes",
-                  "Classes exist",
-                  "School Admin"
+                  "Exams and report cards",
+                  "Academic year, terms, classes, subjects"
                 ],
                 [
-                  "5",
-                  "Create Timetable",
-                  "Subjects assigned",
-                  "School Admin"
+                  "Fee collection",
+                  "Fee structures, finance accounts"
+                ],
+                [
+                  "Payroll",
+                  "Staff, salary structures"
+                ],
+                [
+                  "Transport",
+                  "Routes, vehicles, students"
+                ],
+                [
+                  "Library",
+                  "Books in the catalog"
+                ],
+                [
+                  "Hostel",
+                  "Hostels, rooms, students"
                 ]
               ]
             }
@@ -626,70 +466,6 @@
         },
         {
           "id": "2.7",
-          "title": "Module Dependency Reference",
-          "slug": "module-dependency-reference",
-          "content": [
-            {
-              "type": "body_text",
-              "text": "Use this table to understand what must be set up before each feature works:"
-            },
-            {
-              "type": "table",
-              "headers": [
-                "Module / Feature",
-                "Depends On"
-              ],
-              "rows": [
-                [
-                  "Attendance",
-                  "Classes, Students"
-                ],
-                [
-                  "Face Attendance",
-                  "Classes, Students, Enrolled Faces"
-                ],
-                [
-                  "Timetable",
-                  "Subjects assigned to classes"
-                ],
-                [
-                  "Exams & Marks",
-                  "Academic Year, Terms, Classes, Subjects"
-                ],
-                [
-                  "Report Cards",
-                  "Published exam results"
-                ],
-                [
-                  "Fee Collection",
-                  "Fee Structures, Finance Accounts"
-                ],
-                [
-                  "Payroll",
-                  "Staff, Salary Structures"
-                ],
-                [
-                  "Transport",
-                  "Routes, Vehicles, Students"
-                ],
-                [
-                  "Library Issues",
-                  "Books in Catalog, Students/Staff"
-                ],
-                [
-                  "Hostel",
-                  "Hostels, Rooms, Students"
-                ],
-                [
-                  "LMS",
-                  "Subjects assigned to classes"
-                ]
-              ]
-            }
-          ]
-        },
-        {
-          "id": "2.8",
           "title": "School Setup Wizard",
           "slug": "school-setup-wizard",
           "content": [
@@ -700,7 +476,7 @@
             },
             {
               "type": "body_text",
-              "text": "School Admins and Principals can use the School Setup wizard instead of visiting each page. It walks through the setup in order: School Profile, Academic Year, Session Classes, Classes & Grades, Students, Staff & HR, Subjects, Finance, and Review & Finish. Steps for modules your school does not use are skipped."
+              "text": "For a new school, the wizard does Steps 1-5 and more in order: school profile, academic year, classes, students, staff, subjects and finance. Steps for modules you do not use are skipped."
             },
             {
               "type": "step",
@@ -710,22 +486,17 @@
             {
               "type": "step",
               "number": 2,
-              "text": "Complete each step, then press 'Next Step'. Press 'Skip' to leave a step for later."
+              "text": "Finish each step and click 'Next Step', or click 'Skip' to leave it for later."
             },
             {
               "type": "step",
               "number": 3,
-              "text": "Press 'Exit Setup' at any time to leave; you can return later."
+              "text": "Click 'Exit Setup' at any time. You can come back later."
             },
             {
               "type": "step",
               "number": 4,
-              "text": "On the last step, review your setup and press 'Go to Dashboard'."
-            },
-            {
-              "type": "info_box",
-              "title": "When to use it",
-              "text": "Use the wizard for a new school. For later changes, use the individual pages described in Steps 1-5 above."
+              "text": "On the last step, review everything and click 'Go to Dashboard'."
             }
           ],
           "video": "ch2-school-setup-wizard"
@@ -748,12 +519,7 @@
           "content": [
             {
               "type": "body_text",
-              "text": "Teachers and admins mark daily attendance class by class with Manual Entry, or by camera with Face Attendance (Chapter 4). The Attendance Record page shows the monthly register."
-            },
-            {
-              "type": "info_box",
-              "title": "Teacher Access",
-              "text": "Teachers see only the classes assigned to them by the school. Admins and Principals see all classes."
+              "text": "Mark attendance one class at a time with Manual Entry, or by camera with Face Attendance (Chapter 4). Teachers see only the classes assigned to them; Admins and Principals see all classes."
             }
           ]
         },
@@ -770,51 +536,26 @@
             {
               "type": "step",
               "number": 1,
-              "text": "Open 'Attendance' in the sidebar and choose '1. Manual Entry'."
+              "text": "Pick the class. The date is today; change it only to mark a past day."
             },
             {
               "type": "step",
               "number": 2,
-              "text": "Pick the Class (sections appear as 'Class 1 - A' for the active academic year)."
+              "text": "Press 'Mark All Present' to start, then tap only the students who are absent or on leave. Each tap cycles Present, Absent, Leave."
             },
             {
               "type": "step",
               "number": 3,
-              "text": "The Date is today by default. Change it if you are marking a past day."
+              "text": "The counts above the list update as you go. Press 'Save Attendance'."
             },
             {
               "type": "step",
               "number": 4,
-              "text": "The student list appears with roll number, name and a status button. At first every status shows 'Not Set'."
-            },
-            {
-              "type": "step",
-              "number": 5,
-              "text": "To start quickly, press 'Mark All Present'. You can also use 'Mark All Absent', 'Mark All Leave' or 'Reset All'."
-            },
-            {
-              "type": "step",
-              "number": 6,
-              "text": "Tap a student's status to change it. Each tap cycles Not Set, Present, Absent, Leave."
-            },
-            {
-              "type": "step",
-              "number": 7,
-              "text": "The counts above the list (Present, Absent, Leave, Total) update as you go."
-            },
-            {
-              "type": "step",
-              "number": 8,
-              "text": "Press 'Save Attendance'. The button shows how many students will be saved."
-            },
-            {
-              "type": "step",
-              "number": 9,
-              "text": "A green message confirms the result, for example 'Saved! 4 created, 0 updated.'"
+              "text": "A green message shows how many records were saved, for example 'Saved! 4 created, 0 updated.'"
             },
             {
               "type": "warning_box",
-              "text": "On OFF days (days the school marked as non-working, such as holidays) attendance is not applicable and the Save button is disabled."
+              "text": "On off days (holidays marked in the Academic Calendar) attendance does not apply and Save is disabled."
             }
           ],
           "video": "mark-attendance"
@@ -827,22 +568,12 @@
             {
               "type": "step",
               "number": 1,
-              "text": "Open Manual Entry and choose the same Class and Date."
+              "text": "Open Manual Entry and choose the same class and date. A blue notice says records already exist, and the saved statuses load."
             },
             {
               "type": "step",
               "number": 2,
-              "text": "A blue notice says 'Attendance records already exist for this date. Saving will update them.' The saved statuses are loaded."
-            },
-            {
-              "type": "step",
-              "number": 3,
-              "text": "Tap a student's status to correct it."
-            },
-            {
-              "type": "step",
-              "number": 4,
-              "text": "Press 'Save Attendance'. The message shows records updated, for example 'Saved! 0 created, 4 updated.' Nothing is duplicated."
+              "text": "Tap a student's status to correct it, then press 'Save Attendance'. The message shows records updated, and nothing is duplicated."
             }
           ],
           "video": "attendance-already-marked"
@@ -860,32 +591,17 @@
             {
               "type": "step",
               "number": 1,
-              "text": "Choose 'Attendance Record' under Attendance."
+              "text": "Select a class, then use the month arrows to move between months."
             },
             {
               "type": "step",
               "number": 2,
-              "text": "Select a Class."
+              "text": "Students are in rows and days in columns. Students who joined or left mid-month, and approved leave, look different from normal absences."
             },
             {
               "type": "step",
               "number": 3,
-              "text": "Use the month arrows to move between months."
-            },
-            {
-              "type": "step",
-              "number": 4,
-              "text": "The register is a grid: students in rows, days of the month in columns, with each student's mark in the cell."
-            },
-            {
-              "type": "step",
-              "number": 5,
-              "text": "Students who joined or left mid-month, and approved away periods, are shown differently from normal absences."
-            },
-            {
-              "type": "step",
-              "number": 6,
-              "text": "Use the download button to save the register as a PDF."
+              "text": "Press the download button to save the register as a PDF."
             }
           ],
           "video": "ch3-viewing-the-attendance-register"
@@ -942,16 +658,7 @@
           "content": [
             {
               "type": "body_text",
-              "text": "The Face Attendance module uses AI-powered face recognition to take attendance from a single group photo of the class. Instead of marking each student by hand, a teacher or admin takes a photo of the class, and the system automatically detects faces, matches them to enrolled students, and marks attendance. This is faster and works well for classes where camera-based attendance is preferred."
-            },
-            {
-              "type": "info_box",
-              "title": "How It Works",
-              "text": "1. Enroll each student by uploading a clear portrait photo (one-time setup). 2. Take a group photo of the class. 3. The AI detects all faces, matches them to enrolled students, and flags uncertain matches. 4. Review the results and confirm attendance."
-            },
-            {
-              "type": "warning_box",
-              "text": "Face Enrollment is required before using face attendance. Students without an enrolled face photo cannot be matched automatically. Enroll all students in a class before capturing attendance."
+              "text": "Take one photo of the whole class and the system finds each student's face and marks them present. You check the result, fix any mistakes, and confirm."
             }
           ]
         },
@@ -961,20 +668,12 @@
           "slug": "prerequisites",
           "content": [
             {
-              "type": "body_text",
-              "text": "Before using Face Attendance, ensure:"
+              "type": "bullet",
+              "text": "The class and its students exist (Chapter 2)."
             },
             {
               "type": "bullet",
-              "text": "Classes are created with students enrolled (see Chapter 2)"
-            },
-            {
-              "type": "bullet",
-              "text": "The face recognition library is installed on the server (dlib + face_recognition)"
-            },
-            {
-              "type": "bullet",
-              "text": "Supabase storage bucket is configured for image uploads"
+              "text": "Every student has an enrolled face photo (Step 1). A student without one cannot be matched automatically."
             }
           ]
         },
@@ -990,47 +689,27 @@
             },
             {
               "type": "body_text",
-              "text": "Enrollment is a one-time setup where you upload a clear portrait photo of each student. The system extracts a facial fingerprint (embedding) that is used for matching during attendance."
+              "text": "This is a one-time job per student: upload a clear portrait photo for the system to remember."
             },
             {
               "type": "step",
               "number": 1,
-              "text": "Navigate to Face Attendance and click 'Manage Enrollments' (top-right button)."
+              "text": "On Face Attendance, click 'Manage Enrollments' (top right). Choose the class, then the student."
             },
             {
               "type": "step",
               "number": 2,
-              "text": "Select a Class from the dropdown on the left panel."
+              "text": "Upload or capture a portrait with exactly one face, then click 'Enroll Face'."
             },
             {
               "type": "step",
               "number": 3,
-              "text": "Select a Student from the student dropdown (shows all students in the class)."
-            },
-            {
-              "type": "step",
-              "number": 4,
-              "text": "Upload or capture a clear portrait photo of the student. The photo must show exactly one face."
-            },
-            {
-              "type": "step",
-              "number": 5,
-              "text": "Click 'Enroll Face'. The system uploads the photo, detects the face, and stores the facial embedding."
-            },
-            {
-              "type": "step",
-              "number": 6,
-              "text": "The enrolled student appears in the right panel with a quality score percentage."
-            },
-            {
-              "type": "step",
-              "number": 7,
-              "text": "Repeat for all students in the class."
+              "text": "The student appears on the right with a quality score. Repeat for every student in the class."
             },
             {
               "type": "info_box",
-              "title": "Photo Tips",
-              "text": "Use a clear, well-lit portrait photo with the student facing the camera. Avoid group photos, sunglasses, or heavy shadows. Quality score above 70% is recommended. The right panel shows all enrolled students with quality scores. To remove an enrollment, click 'Remove' next to the student and confirm."
+              "title": "Photo tips",
+              "text": "Use a well-lit photo, facing the camera, without sunglasses or heavy shadows. A quality score above 70% works best. To undo an enrollment, click 'Remove' next to the student."
             }
           ],
           "video": "ch4-step-1-enroll-student-faces"
@@ -1046,47 +725,23 @@
               "href": "/face-attendance"
             },
             {
-              "type": "body_text",
-              "text": "Once students are enrolled, you can take attendance by capturing a group photo of the class."
-            },
-            {
               "type": "step",
               "number": 1,
-              "text": "Navigate to Face Attendance. You will see the Group Photo tab (default)."
-            },
-            {
-              "type": "body_text",
-              "text": "The page also has a Mobile Capture tab (live camera capture) and a Sessions tab (past sessions)."
+              "text": "On the 'Group Photo' tab, choose the class and the date (today by default)."
             },
             {
               "type": "step",
               "number": 2,
-              "text": "Select the Class from the dropdown."
+              "text": "Click 'Select or Capture Photo' to use the camera or upload an image. Click 'Clear' to retake."
             },
             {
               "type": "step",
               "number": 3,
-              "text": "Select the Date (defaults to today)."
+              "text": "Click 'Process Attendance'. You are taken to the Review page automatically."
             },
             {
-              "type": "step",
-              "number": 4,
-              "text": "Click 'Select or Capture Photo' to take a photo using the device camera or upload an existing image."
-            },
-            {
-              "type": "step",
-              "number": 5,
-              "text": "A preview of the photo appears. Click 'Clear' to retake if needed."
-            },
-            {
-              "type": "step",
-              "number": 6,
-              "text": "Click 'Process Attendance'. The photo is uploaded and the AI begins processing."
-            },
-            {
-              "type": "step",
-              "number": 7,
-              "text": "You are automatically navigated to the Review page."
+              "type": "body_text",
+              "text": "The 'Mobile Capture' tab takes the photo with a live camera, and the 'Sessions' tab lists past sessions."
             }
           ],
           "video": "ch4-step-2-capture-class-photo"
@@ -1103,34 +758,29 @@
             },
             {
               "type": "body_text",
-              "text": "After processing (10-30 seconds), the Review page shows three sections: the captured photo, a grid of detected face thumbnails with match info, and the Class Roll with present/absent toggles. The page auto-refreshes while processing."
+              "text": "After 10-30 seconds the page shows the photo, the faces found, and the class list with Present or Absent toggles."
             },
             {
               "type": "table",
               "headers": [
                 "Badge",
-                "Color",
                 "Meaning"
               ],
               "rows": [
                 [
-                  "Auto",
-                  "Green",
-                  "High-confidence match (auto-accepted)"
+                  "Auto (green)",
+                  "Confident match, accepted for you"
                 ],
                 [
-                  "Review",
-                  "Yellow",
-                  "Medium-confidence (needs your review)"
+                  "Review (yellow)",
+                  "Not sure: please check this one"
                 ],
                 [
-                  "Manual",
-                  "Blue",
-                  "Manually matched by you"
+                  "Manual (blue)",
+                  "You matched it yourself"
                 ],
                 [
-                  "Ignored",
-                  "Gray",
+                  "Ignored (gray)",
                   "No match found"
                 ]
               ]
@@ -1138,12 +788,12 @@
             {
               "type": "step",
               "number": 1,
-              "text": "Review the detected faces grid. Remove incorrect detections with the red X button."
+              "text": "Remove a wrong detection with its red X."
             },
             {
               "type": "step",
               "number": 2,
-              "text": "In the Class Roll, click any student to toggle Present/Absent. AI-matched students are auto-marked Present; unmatched are marked Absent."
+              "text": "In the class list, click a student to switch between Present and Absent. Matched students start as Present, the rest as Absent."
             }
           ]
         },
@@ -1155,30 +805,19 @@
             {
               "type": "step",
               "number": 1,
-              "text": "After reviewing and adjusting the present/absent selections, click 'Confirm Attendance'."
+              "text": "Click 'Confirm Attendance'. Everyone in the class is saved as Present or Absent and the session shows 'Confirmed'."
             },
             {
               "type": "step",
               "number": 2,
-              "text": "The system saves attendance records for all students in the class (Present or Absent)."
-            },
-            {
-              "type": "step",
-              "number": 3,
-              "text": "A success message appears and the session status changes to 'Confirmed' (green badge)."
-            },
-            {
-              "type": "step",
-              "number": 4,
-              "text": "Confirmed attendance records appear in the Attendance Record register alongside manually entered records."
+              "text": "The records appear in the Attendance Record register next to manual ones."
             },
             {
               "type": "info_box",
-              "title": "Reprocessing",
-              "text": "If you are unsatisfied with the AI results, click 'Reprocess' to re-run face detection and matching on the same photo. This clears existing detections and starts fresh."
+              "title": "Not happy with the result?",
+              "text": "Click 'Reprocess' to run the same photo again from scratch."
             }
-          ],
-          "video": "ch4-step-4-confirm-attendance"
+          ]
         },
         {
           "id": "4.6",
@@ -1193,24 +832,14 @@
             {
               "type": "step",
               "number": 1,
-              "text": "Click the 'Sessions' tab on the Face Attendance page."
+              "text": "Open the 'Sessions' tab to see past sessions with their class, date, number of faces and status."
             },
             {
               "type": "step",
               "number": 2,
-              "text": "View all past sessions with class name, date, face count, and status badge."
-            },
-            {
-              "type": "step",
-              "number": 3,
-              "text": "Click any session to open the Review page (view confirmed results or review pending ones)."
-            },
-            {
-              "type": "body_text",
-              "text": "Session statuses: Processing (blue), Needs Review (yellow), Confirmed (green), Failed (red)."
+              "text": "Click a session to open its Review page and see the confirmed result, or finish a pending one."
             }
-          ],
-          "video": "ch4-viewing-past-sessions"
+          ]
         },
         {
           "id": "4.7",
@@ -1219,32 +848,7 @@
           "content": [
             {
               "type": "body_text",
-              "text": "The AI uses distance-based matching to compare detected faces against enrolled student photos. Matches are classified into three categories based on confidence:"
-            },
-            {
-              "type": "table",
-              "headers": [
-                "Category",
-                "Threshold",
-                "Action"
-              ],
-              "rows": [
-                [
-                  "Auto-Matched",
-                  "Distance < 0.40 (high confidence)",
-                  "Automatically accepted"
-                ],
-                [
-                  "Flagged",
-                  "Distance 0.40-0.55 (medium)",
-                  "Flagged for manual review"
-                ],
-                [
-                  "Ignored",
-                  "Distance >= 0.55 (low)",
-                  "No match, ignored"
-                ]
-              ]
+              "text": "The system compares each face with the enrolled photos. A close match is accepted automatically, a medium match is flagged for you to check, and a weak match is ignored."
             }
           ]
         }
@@ -1284,7 +888,7 @@
             {
               "type": "step",
               "number": 3,
-              "text": "Check 'Is Elective' if the subject is optional for students."
+              "text": "Check 'Elective subject' if the subject is optional for students."
             },
             {
               "type": "step",
@@ -1335,84 +939,74 @@
             },
             {
               "type": "body_text",
-              "text": "Academic sessions define the school calendar and are critical for exams, promotions, and reports. All student data - attendance, fees, exams, roll numbers - is scoped to the active academic session. Use the Academic Year Switcher in the header to view data for any session."
+              "text": "An academic year is the school year; terms split it into parts. Attendance, fees, exams and roll numbers all belong to one year, and the year switcher in the top bar changes which one you are looking at."
             },
             {
               "type": "sub_section",
-              "title": "Managing Academic Years"
+              "title": "Academic years"
             },
             {
               "type": "step",
               "number": 1,
-              "text": "In the 'Years' tab, view all academic years."
+              "text": "Each year has a card with a timeline bar. Click '+ Add Academic Year' to make a new one (name, start and end date)."
             },
             {
               "type": "step",
               "number": 2,
-              "text": "Click 'Add Academic Year' to create a new one (Name, Start Date, End Date)."
+              "text": "Click 'Set Current' on the year the school is working in now."
             },
             {
               "type": "step",
               "number": 3,
-              "text": "Click 'Set as Current' on the year you want to make active."
+              "text": "The strip at the top shows your years side by side, so an overlap between two years stands out in red."
+            },
+            {
+              "type": "info_box",
+              "title": "Dates that look wrong",
+              "text": "If a year overlaps another, or is very short or very long, you get a warning and the button changes to 'Save anyway'. A year that has ended or not started will ask you to confirm before it becomes current."
+            },
+            {
+              "type": "sub_section",
+              "title": "Terms"
             },
             {
               "type": "step",
               "number": 4,
-              "text": "The year summary shows: number of terms, exams created, students enrolled."
-            },
-            {
-              "type": "info_box",
-              "title": "Session-Scoped Data",
-              "text": "When you switch the academic year in the header, all pages update to show data for that session: Students, Attendance, Fees, Exams, and more. Roll numbers are assigned per session, so the same class can have different students with roll number 1 in different academic years."
-            },
-            {
-              "type": "sub_section",
-              "title": "Managing Terms"
+              "text": "On the year's card, click 'Manage terms'. A window opens with that year's timeline."
             },
             {
               "type": "step",
               "number": 5,
-              "text": "Switch to the 'Terms' tab."
+              "text": "Click '+ Add Term'. The next term is created for you, starting the day after the last one."
             },
             {
               "type": "step",
               "number": 6,
-              "text": "Filter by Academic Year if needed."
+              "text": "Click a term on the bar, then drag its handles, or use the arrow keys, or type the dates below. It saves by itself."
             },
             {
               "type": "step",
               "number": 7,
-              "text": "Click 'Add Term' and fill in: Name, Type (Term/Semester/Quarter), Order, Dates."
+              "text": "Terms that overlap show a warning and are not saved until you click 'Save anyway'."
+            },
+            {
+              "type": "sub_section",
+              "title": "Copy terms from another year"
             },
             {
               "type": "step",
               "number": 8,
-              "text": "Terms define when exams happen and how report cards are structured."
-            },
-            {
-              "type": "sub_section",
-              "title": "Importing Terms from Previous Session"
+              "text": "In 'Manage terms', click 'Import from another year'."
             },
             {
               "type": "step",
               "number": 9,
-              "text": "In the 'Terms' tab, click 'Import Terms'."
+              "text": "Pick the source and target years and what to do with terms that already exist, then click 'Preview Import'."
             },
             {
               "type": "step",
               "number": 10,
-              "text": "Select Source Academic Year and Target Academic Year, then choose Conflict Mode: Skip Existing or Update Existing."
-            },
-            {
-              "type": "step",
-              "number": 11,
-              "text": "Click 'Preview Import' to review what will be created, updated, or skipped with adjusted dates."
-            },
-            {
-              "type": "step",
-              "number": 12,
-              "text": "Click 'Import Terms' to apply the import. Use this at the start of a new session to save setup time and keep term structure consistent."
+              "text": "Check the preview, then click 'Import Terms'. Use this at the start of a new year."
             }
           ],
           "video": "ch5-academic-sessions-years-terms"
@@ -1854,7 +1448,7 @@
             {
               "type": "step",
               "number": 4,
-              "text": "Click 'Generate AI Comments' to create personalized per-subject comments for all students."
+              "text": "Click 'Generate Comments' to create personalized per-subject comments for all students."
             },
             {
               "type": "step",
@@ -2474,14 +2068,6 @@
             {
               "type": "body_text",
               "text": "Four KPI cards show month-wide totals: Total Payable, Received, Balance, and Collection Rate."
-            },
-            {
-              "type": "sub_section",
-              "title": "Analytics"
-            },
-            {
-              "type": "body_text",
-              "text": "Click 'Show Analytics' to reveal class-wise bar charts, payment status donut, and pending student breakdown."
             },
             {
               "type": "sub_section",
@@ -5930,7 +5516,7 @@
             },
             {
               "type": "body_text",
-              "text": "Generate personalized comments for each student's exam performance based on marks, grades, and attendance. Click 'Generate AI Comments' on an exam's results page. Comments appear on report cards automatically. Teachers should review before sharing with parents."
+              "text": "Generate personalized comments for each student's exam performance based on marks, grades, and attendance. Click 'Generate Comments' on an exam's results page. Comments appear on report cards automatically. Teachers should review before sharing with parents."
             },
             {
               "type": "info_box",

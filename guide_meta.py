@@ -46,8 +46,8 @@ CHAPTER_TAGS = {
 # The short "Start here" path each role sees first on the guide page: section ids in the order a new
 # user should do them. Sections the user cannot see (role or disabled module) are skipped by the page.
 START_HERE = {
-    'SCHOOL_ADMIN': ['1.3', '2.8', '2.1', '2.2', '2.3', '2.4', '2.5', '3.1'],
-    'PRINCIPAL': ['1.3', '2.8', '2.1', '2.2', '2.3', '2.4', '2.5', '3.1'],
+    'SCHOOL_ADMIN': ['1.3', '2.7', '2.1', '2.2', '2.3', '2.4', '2.5', '3.1'],
+    'PRINCIPAL': ['1.3', '2.7', '2.1', '2.2', '2.3', '2.4', '2.5', '3.1'],
     'TEACHER': ['1.3', '3.1', '3.2', '3.3', '6.4', '12.2'],
     'MANAGER': ['1.3', '5.1', '5.5'],
     'ACCOUNTANT': ['1.3', '7.1', '7.3', '7.6', '7.9'],
