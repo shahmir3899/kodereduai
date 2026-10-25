@@ -3,7 +3,7 @@
     "title": "Education AI",
     "subtitle": "School Administration Guide",
     "version": "3.4 - Manual Attendance & Updated Navigation",
-    "generatedAt": "2026-10-25T09:41:08.818747+00:00",
+    "generatedAt": "2026-10-25T09:42:35.010852+00:00",
     "totalChapters": 22,
     "modules": [
       "Dashboard | Classes & Students | Attendance (Manual Entry)",
@@ -1501,7 +1501,7 @@
           "content": [
             {
               "type": "body_text",
-              "text": "The Finance module manages all monetary aspects of the school including fee collection, expenses, account management, discounts, and financial reporting."
+              "text": "Fee collection, expenses, other income and your money accounts, all in one place."
             }
           ]
         },
@@ -1518,37 +1518,22 @@
             {
               "type": "step",
               "number": 1,
-              "text": "Navigate to Finance > Accounts in the sidebar."
+              "text": "Open 'Manage Accounts' and click 'Add Account'."
             },
             {
               "type": "step",
               "number": 2,
-              "text": "Click 'Add Account' to create finance accounts."
+              "text": "Enter the account name, choose its type (Cash, Bank or Person) and enter the opening balance."
             },
             {
               "type": "step",
               "number": 3,
-              "text": "Account types: CASH (physical cash), BANK (bank accounts), PERSON (individual accounts)."
+              "text": "Keep 'Visible to Staff' ticked if staff should see this account. Click 'Save'."
             },
             {
-              "type": "step",
-              "number": 4,
-              "text": "Enter: Account Name, Type, Opening Balance."
-            },
-            {
-              "type": "step",
-              "number": 5,
-              "text": "Leave 'Visible to Staff' ticked if staff members should see this account."
-            },
-            {
-              "type": "step",
-              "number": 6,
-              "text": "Click 'Save'. The new account appears in the Manage Accounts list."
-            },
-            {
-              "type": "step",
-              "number": 7,
-              "text": "Create at least one CASH and one BANK account before collecting fees."
+              "type": "info_box",
+              "title": "Before you collect fees",
+              "text": "Create at least one Cash account and one Bank account."
             }
           ],
           "video": "ch7-setting-up-finance-accounts"
@@ -1565,16 +1550,7 @@
             },
             {
               "type": "body_text",
-              "text": "The Finance Dashboard is the central hub for all financial data. Use the period selector (This Month, Last Month, This Quarter, This Year, Custom) to filter data. Key metrics at a glance: Account Balance, Total Income, Total Expenses, Net Balance, and Fee Collection Rate."
-            },
-            {
-              "type": "body_text",
-              "text": "Dashboard cards include: Fee Collection Summary, Account Balances, Expense Breakdown (donut chart), Recent Transfers, Monthly Trend (6-month chart), Recent Entries, and Quick Actions."
-            },
-            {
-              "type": "info_box",
-              "title": "PDF Reports",
-              "text": "Click the 'PDF' button on the dashboard header to download a comprehensive finance report with summary, account balances, monthly trends, and expense breakdown."
+              "text": "Your money at a glance: account balances, income, expenses, fee collection and a monthly trend. Change the period at the top, and click 'PDF' to download a finance report."
             }
           ]
         },
@@ -1590,125 +1566,58 @@
             },
             {
               "type": "body_text",
-              "text": "The Fee Setup page is a dedicated configuration page with four tabs: Monthly Structure, Annual Charges, Generate Records, and Student Discounts."
+              "text": "Set what each class pays before you collect anything. The page has four tabs: Monthly Structure, Annual Charges, Generate Records and Student Discounts."
             },
             {
               "type": "sub_section",
-              "title": "Tab 1: Monthly Structure"
-            },
-            {
-              "type": "body_text",
-              "text": "Set the monthly fee of each class, or override it for individual students."
+              "title": "Monthly Structure"
             },
             {
               "type": "step",
               "number": 1,
-              "text": "Use the 'By Class' / 'By Student' toggle at the top to switch modes."
+              "text": "Choose 'By Class' and click 'Edit' on the class you want to change (or '+ Set Up' if it has no fee yet)."
             },
             {
               "type": "step",
               "number": 2,
-              "text": "By Class: each class has its own card. Click 'Edit' (or '+ Set Up' for a class with no fee yet), choose the fee category and enter the amount. Use '+ Add Charge' for more categories."
+              "text": "Change the amount for the fee category. Use '+ Add Charge' for more categories."
             },
             {
               "type": "step",
               "number": 3,
-              "text": "By Student: select a class, then click 'Edit' to override individual student fees. Overrides are highlighted in blue. Students without an override use the class default."
+              "text": "Click 'Review & Save' to check the new total, then 'Confirm & Save'. Fee records you generate later use this amount."
+            },
+            {
+              "type": "body_text",
+              "text": "'By Student' lets you override one student's fee; their override beats the class fee. 'Annual Charges' works the same way for yearly fees such as admission and books."
+            },
+            {
+              "type": "sub_section",
+              "title": "Generate Records"
             },
             {
               "type": "step",
               "number": 4,
-              "text": "Set the 'Effective From' date (when this fee amount takes effect)."
+              "text": "Choose the fee type. For monthly fees, choose the month and year."
             },
             {
               "type": "step",
               "number": 5,
-              "text": "Click 'Review & Save' to see a confirmation summary with the new total."
+              "text": "Check the preview, then click 'Generate' and confirm. Students with no fee set, or who already have a record, are skipped."
+            },
+            {
+              "type": "sub_section",
+              "title": "Student Discounts"
             },
             {
               "type": "step",
               "number": 6,
-              "text": "Click 'Confirm & Save'. A success message appears. Fee structures are used to auto-calculate amounts when generating fee records."
-            },
-            {
-              "type": "info_box",
-              "title": "Fee Priority",
-              "text": "Student-level fee overrides take precedence over class-level defaults. You can set a per-student override from the By Student mode."
-            },
-            {
-              "type": "body_text",
-              "text": "The Annual Charges tab works the same way for yearly fees such as admission, books and fines."
-            },
-            {
-              "type": "sub_section",
-              "title": "Tab 3: Generate Records"
+              "text": "Choose a class to see each student's base fee, discount and effective fee. Click 'Assign' on a row to give a discount or scholarship, or 'Remove' to take it off."
             },
             {
               "type": "step",
               "number": 7,
-              "text": "Use the fee type tabs to select which type of fee to generate."
-            },
-            {
-              "type": "step",
-              "number": 8,
-              "text": "For Monthly fees: select the month and year. The system shows a preview of how many records will be created, how many already exist (will be skipped), and the total amount."
-            },
-            {
-              "type": "step",
-              "number": 9,
-              "text": "For non-monthly fees (Annual, Admission, Books, Fine): select the class to preview. The system shows per-student amounts resolved from fee structures."
-            },
-            {
-              "type": "step",
-              "number": 10,
-              "text": "Review the preview, then click 'Generate' and confirm. Fee records are created for all eligible students. Students without a fee structure or with existing records are skipped."
-            },
-            {
-              "type": "warning_box",
-              "text": "Fee generation requires fee structures to be set first. Students without a matching fee structure will be listed as 'no fee structure' in the preview and will not receive a record."
-            },
-            {
-              "type": "sub_section",
-              "title": "Tab 4: Student Discounts"
-            },
-            {
-              "type": "body_text",
-              "text": "Assign discounts or scholarships to individual students directly from the Fee Setup page. This tab shows each student's base monthly fee, the applied discount/scholarship, and the calculated effective fee - all in one view."
-            },
-            {
-              "type": "step",
-              "number": 11,
-              "text": "Select a class from the dropdown. The student table loads with columns: Roll, Student Name, Base Fee, Discount/Scholarship, Effective Fee, and Action."
-            },
-            {
-              "type": "step",
-              "number": 12,
-              "text": "Students with an assigned discount show a colored badge (blue for discounts, purple for scholarships) and their row is highlighted green."
-            },
-            {
-              "type": "step",
-              "number": 13,
-              "text": "Click 'Assign' on a student row to open the assignment modal."
-            },
-            {
-              "type": "step",
-              "number": 14,
-              "text": "In the modal, toggle between 'Discount' and 'Scholarship', select from the dropdown (shows name, type, and value), add optional notes, then click 'Assign'."
-            },
-            {
-              "type": "step",
-              "number": 15,
-              "text": "To remove a discount, click 'Remove' on the student row and confirm."
-            },
-            {
-              "type": "step",
-              "number": 16,
-              "text": "Use the 'Bulk Assign' button to assign one discount or scholarship to all students in the selected class at once. The system shows how many were created and how many were skipped (already assigned)."
-            },
-            {
-              "type": "info_box",
-              "title": "Effective Fee Calculation",
-              "text": "Percentage discounts: Effective = Base Fee - (Base Fee x Percentage / 100). Fixed discounts: Effective = Base Fee - Fixed Amount. Full scholarships: Effective = 0. The effective fee column updates instantly when a discount is assigned or removed."
+              "text": "Click 'Bulk Assign' to give the whole class one discount or scholarship at once."
             }
           ],
           "video": "ch7-fee-setup-page"
@@ -1726,32 +1635,17 @@
             {
               "type": "step",
               "number": 1,
-              "text": "Click 'Generate Single Fee Record' to open the single fee creation window."
+              "text": "Click 'Generate Single Fee Record'. Choose the class, then search for the student."
             },
             {
               "type": "step",
               "number": 2,
-              "text": "Select a class, then search for a student using the searchable dropdown."
+              "text": "Choose the fee category. The amount fills in from the fee structure."
             },
             {
               "type": "step",
               "number": 3,
-              "text": "The fee amount auto-fills from the student's fee structure (class default or student override)."
-            },
-            {
-              "type": "step",
-              "number": 4,
-              "text": "If the student has already paid, enter the paid amount. Payment fields (Account, Method, Date) appear automatically when a paid amount is entered."
-            },
-            {
-              "type": "step",
-              "number": 5,
-              "text": "The system warns if a duplicate fee record already exists for the same student/type/period."
-            },
-            {
-              "type": "step",
-              "number": 6,
-              "text": "Click 'Create' to save the fee record. A success message appears, the window closes by itself and the record shows in the fee table."
+              "text": "If the student has already paid, enter the amount paid. Click 'Create'. A warning appears if the same fee already exists."
             }
           ],
           "video": "ch7-creating-individual-fee-records"
@@ -1768,23 +1662,7 @@
             },
             {
               "type": "body_text",
-              "text": "The fee collection page loads all fee records for the selected month/year in a single request. Switching class or status filters is instant (no loading delay) because filtering happens on your browser."
-            },
-            {
-              "type": "sub_section",
-              "title": "Summary Cards"
-            },
-            {
-              "type": "body_text",
-              "text": "Four KPI cards show month-wide totals: Total Payable, Received, Balance, and Collection Rate."
-            },
-            {
-              "type": "sub_section",
-              "title": "Filters"
-            },
-            {
-              "type": "body_text",
-              "text": "Use the Fee Type, Month, Year, Class, and Status dropdowns to narrow the table view. Class and Status filters apply instantly without re-fetching data."
+              "text": "Every fee record for the chosen month, with totals (Total Payable, Received, Balance, Collection Rate) at the top. Narrow the table with the fee type, month, year, class and status filters."
             }
           ],
           "roles": [
@@ -1807,17 +1685,17 @@
             {
               "type": "step",
               "number": 1,
-              "text": "In the fee table, click the row's payment area or use the inline edit feature."
+              "text": "Tick the student's row in the fee table."
             },
             {
               "type": "step",
               "number": 2,
-              "text": "Enter: Amount Paid, select the receiving Account, Payment Method, and Date."
+              "text": "In the bar that appears, enter the amount paid and choose the account and payment method."
             },
             {
               "type": "step",
               "number": 3,
-              "text": "Click 'Save'. The student's status updates automatically (PAID, PARTIAL, UNPAID, ADVANCE)."
+              "text": "Click 'Update' and confirm with 'Yes', or click 'Pay Full' to take the whole balance. The status updates by itself (Paid, Partial, Unpaid or Advance)."
             }
           ],
           "roles": [
@@ -1834,31 +1712,24 @@
           "slug": "bulk-operations",
           "content": [
             {
+              "type": "nav_path",
+              "path": "Sidebar > Finance > Collect Payments",
+              "href": "/finance/fees/collect"
+            },
+            {
               "type": "step",
               "number": 1,
-              "text": "Select multiple students using the checkboxes in the fee table."
+              "text": "Tick the box in the table header to select every student, or tick students one by one."
             },
             {
               "type": "step",
               "number": 2,
-              "text": "The bulk action bar appears at the bottom with options to:"
-            },
-            {
-              "type": "bullet",
-              "text": "Set paid amount, account, and payment method for all selected records at once"
-            },
-            {
-              "type": "bullet",
-              "text": "Pay Full - One click to mark all selected students as fully paid (amount paid = total payable). Select an account, then click the green 'Pay Full' button. Each student's paid amount is set to their individual total (amount due + previous balance), saving time during month-end collection."
-            },
-            {
-              "type": "bullet",
-              "text": "Delete all selected records (with confirmation)"
+              "text": "In the bar at the bottom, choose the account that receives the money."
             },
             {
               "type": "step",
               "number": 3,
-              "text": "Confirm the bulk action. All selected records update simultaneously."
+              "text": "Click 'Pay Full'. Every selected student is marked fully paid at once. The same bar can delete the selected records."
             }
           ],
           "video": "ch7-bulk-operations"
@@ -1874,69 +1745,24 @@
               "href": "/finance/discounts"
             },
             {
-              "type": "body_text",
-              "text": "The Discounts page has three tabs for managing discount rules, scholarship programs, and viewing all student assignments across the school."
-            },
-            {
-              "type": "sub_section",
-              "title": "Creating Discount Rules"
-            },
-            {
               "type": "step",
               "number": 1,
-              "text": "Go to the 'Discounts' tab and click 'Add Discount'. The 'Create Discount' window opens."
+              "text": "On the 'Discounts' tab, click 'Add Discount'. Enter the name, choose Percentage or Fixed Amount and enter the value."
             },
             {
               "type": "step",
               "number": 2,
-              "text": "Enter the Discount Name, choose the Type (Percentage or Fixed Amount) and enter the Value."
+              "text": "In 'Applies To', choose all students, a grade level, a class or siblings. You can also set dates and make it stackable. Click 'Create Discount'."
             },
             {
               "type": "step",
               "number": 3,
-              "text": "Set 'Applies To': All Students, All classes at a grade level, Specific Class, or Siblings."
+              "text": "Scholarships work the same way on the 'Scholarships' tab (Merit, Need, Sports, Staff Child or Other) with 'Add Scholarship'."
             },
             {
               "type": "step",
               "number": 4,
-              "text": "Optionally set start/end dates and whether the discount is stackable."
-            },
-            {
-              "type": "step",
-              "number": 5,
-              "text": "Press 'Create Discount'. The new discount appears in the list."
-            },
-            {
-              "type": "sub_section",
-              "title": "Creating Scholarships"
-            },
-            {
-              "type": "step",
-              "number": 6,
-              "text": "Go to the 'Scholarships' tab and click 'Add Scholarship'."
-            },
-            {
-              "type": "step",
-              "number": 7,
-              "text": "Define: Name, Type (Merit, Need-Based, Sports, Staff Child, Other)."
-            },
-            {
-              "type": "step",
-              "number": 8,
-              "text": "Set coverage: Full (100%), Percentage, or Fixed Amount, then press 'Create Scholarship'."
-            },
-            {
-              "type": "sub_section",
-              "title": "Assigning to Students"
-            },
-            {
-              "type": "body_text",
-              "text": "Student assignments can be managed from two places: the Discounts page (Student Assignments tab) or the Fee Setup page (Student Discounts tab). The Fee Setup page is recommended because it shows base fees and effective fees alongside the discount assignments."
-            },
-            {
-              "type": "info_box",
-              "title": "Tip",
-              "text": "Navigate to Finance > Fee Setup > Student Discounts tab for the most efficient workflow. Select a class to see all students with their base fee, assigned discount, and effective fee in one view."
+              "text": "Give them to students from Fee Setup > Student Discounts, which shows the effect on each student's fee."
             }
           ],
           "video": "ch7-managing-discounts-scholarships"
@@ -1954,27 +1780,17 @@
             {
               "type": "step",
               "number": 1,
-              "text": "Click 'Add Expense'."
+              "text": "Click 'Add Expense'. Enter the amount, category, the account that pays and a description. The date is today by default."
             },
             {
               "type": "step",
               "number": 2,
-              "text": "Enter: Description, Category, Amount, Date, Account (which account pays)."
+              "text": "Save. The expense is recorded and the account balance goes down."
             },
             {
               "type": "step",
               "number": 3,
-              "text": "Save. The expense is recorded and the account balance is updated."
-            },
-            {
-              "type": "step",
-              "number": 4,
-              "text": "Use category filters to view expenses by type."
-            },
-            {
-              "type": "step",
-              "number": 5,
-              "text": "Edit or delete expenses as needed."
+              "text": "Use the category filter to review expenses by type."
             }
           ],
           "video": "ch7-recording-expenses"
@@ -1986,37 +1802,17 @@
           "content": [
             {
               "type": "info_box",
-              "title": "Not enabled yet",
-              "text": "Online fee payment is not configured for schools yet. Until it is switched on, record every payment yourself under Collect Payments (see Recording Payments)."
+              "title": "Not switched on yet",
+              "text": "Online fee payment is not available for schools yet. Until it is, record every payment yourself under Collect Payments."
             },
             {
               "type": "body_text",
-              "text": "When online payment is enabled for your school, parents can pay fees directly from their portal."
-            },
-            {
-              "type": "step",
-              "number": 1,
-              "text": "Parents will see a 'Pay Now' button on unpaid fees in their portal."
-            },
-            {
-              "type": "step",
-              "number": 2,
-              "text": "When a parent pays online, the system automatically records the payment and updates the fee balance."
-            },
-            {
-              "type": "step",
-              "number": 3,
-              "text": "Payment status is tracked: Initiated, Pending, Successful, or Failed."
+              "text": "When it is enabled, parents see a 'Pay Now' button on unpaid fees, and paid fees are recorded for you."
             },
             {
               "type": "info_box",
-              "title": "Payment Security",
-              "text": "All payment transactions use cryptographic signatures (HMAC-SHA256 for JazzCash, SHA-256 for Easypaisa) to prevent tampering. Callback URLs are verified before updating payment status."
-            },
-            {
-              "type": "info_box",
-              "title": "Financial Record Safety",
-              "text": "When a student is deleted, all their financial records (fee payments, online payments, fee structures, discounts) are preserved with 'Deleted Student' label. Best practice: mark students as inactive instead of deleting them."
+              "title": "Deleting students",
+              "text": "If you delete a student, their payment history is kept under 'Deleted Student'. It is better to mark a student inactive instead."
             }
           ]
         },
@@ -2033,17 +1829,17 @@
             {
               "type": "step",
               "number": 1,
-              "text": "Open the Transfers tab and click 'Record Transfer'."
+              "text": "On the 'Transfers' tab, click 'Record Transfer'. Choose the account the money leaves and the account that receives it."
             },
             {
               "type": "step",
               "number": 2,
-              "text": "Choose the From Account and To Account. Enter the Amount, the Date and an optional Description."
+              "text": "Enter the amount and a short description, then click 'Review Transfer'."
             },
             {
               "type": "step",
               "number": 3,
-              "text": "Click 'Review Transfer', check the details, then click 'Confirm Transfer'. Both account balances update and the transfer appears in the list."
+              "text": "Check the details and click 'Confirm Transfer'. Both balances update and the transfer is listed."
             }
           ],
           "video": "ch7-interaccount-transfers"
@@ -2061,27 +1857,16 @@
             {
               "type": "step",
               "number": 1,
-              "text": "At the end of each month, click 'Close Month' at the top of Finance > Accounts (admins only)."
+              "text": "At the end of the month, click 'Close Month' at the top of Accounts (admins only). Choose the month and year."
             },
             {
               "type": "step",
               "number": 2,
-              "text": "Choose the month and year. The window warns that the period will be locked."
+              "text": "Tick the box that confirms you understand, and click 'Close Month' again. The page now shows the last closed month."
             },
             {
-              "type": "step",
-              "number": 3,
-              "text": "Tick 'I understand, close this period' and click 'Close Month'."
-            },
-            {
-              "type": "step",
-              "number": 4,
-              "text": "Closing saves a Balance Brought Forward (BBF) snapshot of every account. No transactions can be added or edited in that month afterwards."
-            },
-            {
-              "type": "step",
-              "number": 5,
-              "text": "A month needs at least one transaction (payment, expense or other income) before it can be closed."
+              "type": "warning_box",
+              "text": "Closing locks the month: no payments, expenses or income can be added or changed in it afterwards. A month needs at least one transaction before it can be closed."
             }
           ],
           "video": "ch7-month-closing"
@@ -2099,22 +1884,17 @@
             {
               "type": "step",
               "number": 1,
-              "text": "Choose Monthly or Annual view, then the month and year."
+              "text": "Choose Monthly or Annual, then the month and year."
             },
             {
               "type": "step",
               "number": 2,
-              "text": "Read Category-wise Collection and the Collection Progress bar."
+              "text": "'Category-wise Collection' shows how much of each fee is collected, and the progress bar shows how much of the total is paid."
             },
             {
               "type": "step",
               "number": 3,
-              "text": "Use 'Generate Fee Records', 'View Summary & Collect', 'Collect Payments' or 'Fee Setup' from this page."
-            },
-            {
-              "type": "info_box",
-              "title": "Tip",
-              "text": "Fee records must be generated in Fee Setup before they appear here."
+              "text": "Use 'Collect Payments' to record payments, or 'Fee Setup' to change amounts. Generate the fee records first, or nothing shows here."
             }
           ],
           "video": "ch7-fee-overview"
@@ -2131,27 +1911,17 @@
             },
             {
               "type": "body_text",
-              "text": "Track non-fee income such as sales and donations."
+              "text": "For money that is not fees, such as sales and donations."
             },
             {
               "type": "step",
               "number": 1,
-              "text": "Press 'Add Income'."
+              "text": "Click 'Add Income'. Enter the amount, choose the category and the account that receives it, and add a short description. The date is today by default."
             },
             {
               "type": "step",
               "number": 2,
-              "text": "Enter Date, Category, Description, Account and Amount, then save."
-            },
-            {
-              "type": "step",
-              "number": 3,
-              "text": "Filter by Month and Year. The total other income is shown at the top and each entry shows who recorded it."
-            },
-            {
-              "type": "step",
-              "number": 4,
-              "text": "To remove an entry, press Delete and confirm."
+              "text": "Click 'Add Income' again to save. It appears in the list and the total at the top goes up."
             }
           ],
           "video": "ch7-other-income"
@@ -2176,7 +1946,7 @@
           "content": [
             {
               "type": "body_text",
-              "text": "The HR module manages the complete employee lifecycle from hiring to payroll. It includes staff directory, departments, salary structures, payroll processing, leave management, attendance tracking, performance appraisals, and document management."
+              "text": "Staff records, salaries and payslips, leave, attendance, appraisals, documents and official letters."
             }
           ]
         },
@@ -2193,22 +1963,16 @@
             {
               "type": "step",
               "number": 1,
-              "text": "Click 'Add Department'. (The 'Quick Add Common Departments' chips add a department in one click.)"
+              "text": "Click 'Add Department'. Type the name (for example Science or Administration) and an optional description."
             },
             {
               "type": "step",
               "number": 2,
-              "text": "Enter the Department Name (e.g., 'Science', 'Administration', 'Sports') and an optional description."
+              "text": "Click 'Add Department' again to save. The department is now offered when you add staff."
             },
             {
-              "type": "step",
-              "number": 3,
-              "text": "Click 'Add Department' to save. A success message appears and the department is used when adding staff members."
-            },
-            {
-              "type": "step",
-              "number": 4,
-              "text": "Designations are managed in the Designations section below the departments on the same page. Click 'Add Designation', enter a name (e.g., 'Senior Teacher') and optionally link it to a department."
+              "type": "body_text",
+              "text": "The 'Quick Add Common Departments' chips add the usual ones in one click. Designations, such as Senior Teacher, are added in the section below with 'Add Designation'."
             }
           ],
           "video": "ch8-setting-up-departments"
@@ -2220,33 +1984,23 @@
           "content": [
             {
               "type": "nav_path",
-              "path": "Sidebar > HR & Staff > Staff Directory > Full Form",
+              "path": "Sidebar > HR & Staff > Staff Directory",
               "href": "/hr/staff"
             },
             {
               "type": "step",
               "number": 1,
-              "text": "Click 'Full Form'. (Use 'Quick Add' instead to enter only a name, phone, department and designation and finish the details later.)"
+              "text": "Click 'Full Form'. (Use 'Quick Add' to enter only a name, phone, department and designation now and the rest later.)"
             },
             {
               "type": "step",
               "number": 2,
-              "text": "Fill in Personal Information: First Name, Last Name, Email, Phone, Gender, Date of Birth."
+              "text": "Enter the first and last name, email and phone. Choose the department and designation; both are optional but make reports and payroll easier."
             },
             {
               "type": "step",
               "number": 3,
-              "text": "Fill in Employment Details: Department, Designation, Employee ID (generated automatically if left blank), Employment Type (Full-time/Part-time/Contract), Date of Joining."
-            },
-            {
-              "type": "step",
-              "number": 4,
-              "text": "Add Address and Emergency Contact information."
-            },
-            {
-              "type": "step",
-              "number": 5,
-              "text": "Click 'Add Staff Member'. A login account is optional and can be created now or later. The staff member appears in the directory."
+              "text": "Click 'Add Staff Member'. A login account is optional and can be added later. The new staff member appears in the directory."
             }
           ],
           "video": "ch8-adding-staff-members"
@@ -2263,23 +2017,7 @@
             },
             {
               "type": "body_text",
-              "text": "The Staff Directory is the central hub for managing all staff information:"
-            },
-            {
-              "type": "bullet",
-              "text": "Search by name, email, or employee ID"
-            },
-            {
-              "type": "bullet",
-              "text": "Filter by department or employment status (Active, On Leave, Terminated)"
-            },
-            {
-              "type": "bullet",
-              "text": "Click on a staff member to view/edit their complete profile"
-            },
-            {
-              "type": "bullet",
-              "text": "Export directory as Excel or PDF"
+              "text": "Everyone who works at the school. Search by name, email or employee ID, filter by department or status, click a person to open their profile, and export the list to Excel or PDF."
             }
           ]
         },
@@ -2301,17 +2039,17 @@
             {
               "type": "step",
               "number": 2,
-              "text": "Enter the Basic Salary, then add any Allowances (e.g., house rent) and Deductions (e.g., tax) as name and amount pairs with '+ Add'. The summary shows the net salary."
+              "text": "Enter the basic salary. Add allowances (such as house rent) and deductions (such as tax) with '+ Add'. The summary shows the net salary."
             },
             {
               "type": "step",
               "number": 3,
-              "text": "Set 'Effective From' (and optionally 'Effective To'), then click 'Create'."
+              "text": "Set the date it starts from and click 'Create'. The person now appears in the salary list."
             },
             {
-              "type": "step",
-              "number": 4,
-              "text": "Salary structures feed directly into payroll generation. A staff member needs one before a payslip can be generated."
+              "type": "info_box",
+              "title": "Needed for payroll",
+              "text": "A staff member needs a salary structure before a payslip can be generated for them."
             }
           ],
           "video": "ch8-salary-management"
@@ -2329,37 +2067,27 @@
             {
               "type": "step",
               "number": 1,
-              "text": "Select the month and year for payroll."
+              "text": "Choose the month. Click 'Generate Payslips' and confirm. A payslip is made for every active staff member with a salary structure."
             },
             {
               "type": "step",
               "number": 2,
-              "text": "Click 'Generate Payslips', then 'Generate' to confirm. Payslips are created for active staff who have a salary structure; existing payslips for the month are skipped."
+              "text": "Each payslip starts as a draft. Click 'Approve' to check and confirm it."
             },
             {
               "type": "step",
               "number": 3,
-              "text": "Review generated payslips. Check amounts, deductions, and net pay."
+              "text": "After you pay the salary, click 'Mark Paid'. Click 'View' to see the full breakdown."
             },
             {
               "type": "step",
               "number": 4,
-              "text": "Approve payslips individually or in bulk."
-            },
-            {
-              "type": "step",
-              "number": 5,
-              "text": "Mark approved payslips as 'Paid' once payment is disbursed."
-            },
-            {
-              "type": "step",
-              "number": 6,
-              "text": "Click the 'Download PDF' button on any payslip (or the 'PDF' button on its row) to download a printable payslip document, saved as payslip_<Name>_<month>_<year>.pdf. The PDF includes the school logo (if configured in school settings), school name, address, contact details, employee information, earnings breakdown, deductions breakdown, net salary, and signature lines."
+              "text": "Click 'Download PDF' (or 'PDF' on the row) for a printable payslip named with the staff name, month and year."
             },
             {
               "type": "info_box",
-              "title": "School Logo on Payslips",
-              "text": "The payslip PDF automatically includes your school's logo at the top if one is configured. To set or update the logo, go to Settings > School Profile and enter the logo URL. If no logo is set, the payslip generates without it."
+              "title": "School logo",
+              "text": "The payslip shows your school logo if one is set in Settings > School Profile."
             }
           ],
           "video": "ch8-payroll-processing"
@@ -2375,33 +2103,18 @@
               "href": "/hr/leave"
             },
             {
-              "type": "body_text",
-              "text": "The leave system handles leave applications, approvals, and balance tracking:"
-            },
-            {
               "type": "step",
               "number": 1,
-              "text": "Staff submit leave requests specifying: Leave Type, From Date, To Date, Reason."
+              "text": "Find the pending request. It shows the leave type, the dates and the reason."
             },
             {
               "type": "step",
               "number": 2,
-              "text": "A School Admin or Principal reviews the request."
+              "text": "Approve or reject it, and add remarks if you like. When a request is approved, the leave balance updates automatically."
             },
             {
-              "type": "step",
-              "number": 3,
-              "text": "Approve or reject the leave application with optional remarks."
-            },
-            {
-              "type": "step",
-              "number": 4,
-              "text": "Leave balances update automatically upon approval."
-            },
-            {
-              "type": "step",
-              "number": 5,
-              "text": "View leave history and balances for any staff member."
+              "type": "body_text",
+              "text": "Staff send their own requests from Self Service (see the last topic of this chapter)."
             }
           ],
           "video": "ch8-leave-management"
@@ -2419,17 +2132,17 @@
             {
               "type": "step",
               "number": 1,
-              "text": "Select the date to mark attendance."
+              "text": "The page opens on today with every staff member unmarked. Click 'Mark All Present' to start from a full day."
             },
             {
               "type": "step",
               "number": 2,
-              "text": "Mark each staff member as Present, Absent, or On Leave."
+              "text": "Change anyone who was absent, late or on leave. Check-in and check-out times are optional."
             },
             {
               "type": "step",
               "number": 3,
-              "text": "Save. Staff attendance records feed into payroll calculations."
+              "text": "Click 'Save All'. Open the 'Summary' tab to see each person's month: present, absent, late and attendance rate."
             }
           ],
           "video": "ch8-staff-attendance"
@@ -2447,22 +2160,17 @@
             {
               "type": "step",
               "number": 1,
-              "text": "Click 'Create Appraisal' and select the staff member."
+              "text": "Click 'New Appraisal' and choose the staff member. Set the start and end dates of the review period."
             },
             {
               "type": "step",
               "number": 2,
-              "text": "Fill in performance criteria, ratings, and comments."
+              "text": "Click the stars to give a rating, and write the strengths and the goals for the next period."
             },
             {
               "type": "step",
               "number": 3,
-              "text": "Submit the appraisal for review."
-            },
-            {
-              "type": "step",
-              "number": 4,
-              "text": "Appraisal history is maintained per staff member."
+              "text": "Click 'Create'. The review appears in the list with its rating, and every review for a person is kept."
             }
           ],
           "video": "ch8-performance-appraisals"
@@ -2480,17 +2188,12 @@
             {
               "type": "step",
               "number": 1,
-              "text": "Select a staff member."
+              "text": "'Qualifications' tab: click 'Add Qualification', choose the staff member, the type, the qualification name, the institution and the year, then 'Create'."
             },
             {
               "type": "step",
               "number": 2,
-              "text": "Upload documents: ID proofs, certificates, contracts, etc."
-            },
-            {
-              "type": "step",
-              "number": 3,
-              "text": "Documents are stored securely and accessible from the staff profile."
+              "text": "'Documents' tab: click 'Add Document', choose the staff member and the type, give it a title and attach the file (required). A yellow badge warns when a document is about to expire."
             }
           ],
           "video": "ch8-staff-documents"
@@ -2507,36 +2210,26 @@
             },
             {
               "type": "body_text",
-              "text": "Staff members can be linked to existing user accounts so the same person's HR record and login credentials are connected. This is useful when a user account was created separately from the staff record."
+              "text": "Connect a person's HR record to the login they already have."
             },
             {
               "type": "step",
               "number": 1,
-              "text": "Find the staff member in the directory. If they have no linked account, you will see a 'Link Account' button."
+              "text": "In the directory, find a staff member with no login and click 'Link Account'."
             },
             {
               "type": "step",
               "number": 2,
-              "text": "Click 'Link Account' to open the search modal."
+              "text": "Search for the user by name or username and click the right one. Their username now shows on the staff row."
             },
             {
               "type": "step",
               "number": 3,
-              "text": "Search for the user by name or username. Click on the correct user to link them."
-            },
-            {
-              "type": "step",
-              "number": 4,
-              "text": "Once linked, the staff member's account column shows the linked username and role."
-            },
-            {
-              "type": "step",
-              "number": 5,
-              "text": "To unlink, click the 'Unlink' button next to the linked username. This removes the association but does not delete either the staff record or the user account."
+              "text": "To remove the link, click 'Unlink' and confirm. Neither the staff record nor the user account is deleted."
             },
             {
               "type": "warning_box",
-              "text": "A user can only be linked to one staff member at a time. If the user is already linked to another staff record, you must unlink them first."
+              "text": "A user can be linked to only one staff member. If they are already linked to someone else, unlink them first."
             }
           ],
           "video": "ch8-linking-unlinking-user-accounts"
@@ -2552,48 +2245,34 @@
               "href": "/hr/letters"
             },
             {
-              "type": "body_text",
-              "text": "The Letter Composer allows you to create official letters on your school's letterhead. It supports 7 built-in templates (Experience Certificate, Termination, Warning, Appreciation, Leave Approval, Salary Increment, Transfer) and fully custom letters."
-            },
-            {
               "type": "step",
               "number": 1,
-              "text": "Select a Quick Draft Template to start with a pre-built letter structure, or choose 'Custom Letter'."
+              "text": "Under 'To', click 'Employee' and pick the staff member. Their name and ID fill in for you."
             },
             {
               "type": "step",
               "number": 2,
-              "text": "Pick a recipient: select from School, Employee, or type a custom address. Selecting an employee auto-fills placeholders like name, department, and designation."
+              "text": "Choose a 'Quick Draft Template', such as Warning Letter, or write a custom letter. The subject and body are written for you."
             },
             {
               "type": "step",
               "number": 3,
-              "text": "Edit the Subject and Body. Use the formatting toolbar: *bold*, _italic_, ~strikethrough~, bullet lists, and numbered lists."
+              "text": "Read the preview on the right and edit the text. Replace the REASON placeholder with the real reason."
             },
             {
               "type": "step",
               "number": 4,
-              "text": "Preview your letter in the right panel (live preview updates as you type)."
-            },
-            {
-              "type": "step",
-              "number": 5,
-              "text": "Click 'Generate PDF' to download the letter as a PDF with your school's letterhead as background."
-            },
-            {
-              "type": "step",
-              "number": 6,
-              "text": "Letters are automatically saved to history. Load, edit, or delete past letters from the history table."
+              "text": "Click 'Generate PDF'. The letter downloads on your school letterhead and is saved in the history below."
             },
             {
               "type": "info_box",
-              "title": "AI Letter Drafting",
-              "text": "Click 'Draft with AI' to open the AI assistant panel. Describe the letter you need in plain language (e.g., 'Write a warning letter for late attendance') and the AI will generate a complete subject and body. Quick suggestion chips are provided for common letter types. If an employee is selected, their details are automatically included for context. Review and edit the AI-generated content before generating the PDF."
+              "title": "Draft with AI",
+              "text": "Click 'Draft with AI', describe the letter in plain words, and review the draft before you generate the PDF."
             },
             {
               "type": "info_box",
-              "title": "School Letterhead",
-              "text": "Letters are generated with your school's letterhead as the PDF background. To configure the letterhead, go to Settings > School Profile and set the Letterhead URL (uploaded to Supabase Storage). If no letterhead is set, letters generate on a white background."
+              "title": "Letterhead",
+              "text": "Set the letterhead in Settings > School Profile. Without one, letters print on a white background."
             }
           ],
           "video": "ch8-letter-composer"
@@ -2610,7 +2289,7 @@
             },
             {
               "type": "body_text",
-              "text": "Staff accounts have a Self Service page with two tabs: Leave (your own leave requests) and Attendance (your own staff attendance). Teachers see the same pages as 'My Leave' and 'My Attendance' in the sidebar."
+              "text": "Staff see two tabs: 'Leave' for their own leave requests and 'Attendance' for their own attendance. Teachers see these as 'My Leave' and 'My Attendance' in the sidebar."
             }
           ],
           "roles": [

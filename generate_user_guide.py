@@ -716,369 +716,185 @@ def build_guide():
     # =========================================================================
     pdf.chapter_title("Finance Module")
 
-    pdf.body_text(
-        "The Finance module manages all monetary aspects of the school including fee collection, "
-        "expenses, account management, discounts, and financial reporting."
-    )
+    pdf.body_text("Fee collection, expenses, other income and your money accounts, all in one place.")
 
     pdf.section_title("Setting Up Finance Accounts")
     pdf.nav_path("Sidebar > Finance > Accounts")
-    pdf.step("Navigate to Finance > Accounts in the sidebar.")
-    pdf.step("Click 'Add Account' to create finance accounts.")
-    pdf.step("Account types: CASH (physical cash), BANK (bank accounts), PERSON (individual accounts).")
-    pdf.step("Enter: Account Name, Type, Opening Balance.")
-    pdf.step("Leave 'Visible to Staff' ticked if staff members should see this account.")
-    pdf.step("Click 'Save'. The new account appears in the Manage Accounts list.")
-    pdf.step("Create at least one CASH and one BANK account before collecting fees.")
+    pdf.step("Open 'Manage Accounts' and click 'Add Account'.")
+    pdf.step("Enter the account name, choose its type (Cash, Bank or Person) and enter the opening balance.")
+    pdf.step("Keep 'Visible to Staff' ticked if staff should see this account. Click 'Save'.")
+    pdf.info_box("Before you collect fees", "Create at least one Cash account and one Bank account.")
 
     pdf.section_title("Finance Dashboard")
     pdf.nav_path("Sidebar > Finance > Dashboard")
     pdf.body_text(
-        "The Finance Dashboard is the central hub for all financial data. Use the period selector "
-        "(This Month, Last Month, This Quarter, This Year, Custom) to filter data. "
-        "Key metrics at a glance: Account Balance, Total Income, Total Expenses, Net Balance, "
-        "and Fee Collection Rate."
+        "Your money at a glance: account balances, income, expenses, fee collection and a monthly trend. "
+        "Change the period at the top, and click 'PDF' to download a finance report."
     )
-    pdf.body_text(
-        "Dashboard cards include: Fee Collection Summary, Account Balances, Expense Breakdown (donut chart), "
-        "Recent Transfers, Monthly Trend (6-month chart), Recent Entries, and Quick Actions."
-    )
-    pdf.info_box("PDF Reports", "Click the 'PDF' button on the dashboard header to download a comprehensive "
-                 "finance report with summary, account balances, monthly trends, and expense breakdown.")
 
     pdf.section_title("Fee Setup Page")
     pdf.nav_path("Sidebar > Finance > Fee Setup")
-    pdf.body_text(
-        "The Fee Setup page is a dedicated configuration page with four tabs: "
-        "Monthly Structure, Annual Charges, Generate Records, and Student Discounts."
-    )
-
-    pdf.sub_section("Tab 1: Monthly Structure")
-    pdf.body_text("Set the monthly fee of each class, or override it for individual students.")
-    pdf.step("Use the 'By Class' / 'By Student' toggle at the top to switch modes.")
-    pdf.step("By Class: each class has its own card. Click 'Edit' (or '+ Set Up' for a class with no fee yet), "
-             "choose the fee category and enter the amount. Use '+ Add Charge' for more categories.")
-    pdf.step("By Student: select a class, then click 'Edit' to override individual student fees. "
-             "Overrides are highlighted in blue. Students without an override use the class default.")
-    pdf.step("Set the 'Effective From' date (when this fee amount takes effect).")
-    pdf.step("Click 'Review & Save' to see a confirmation summary with the new total.")
-    pdf.step("Click 'Confirm & Save'. A success message appears. Fee structures are used to auto-calculate "
-             "amounts when generating fee records.")
-    pdf.info_box("Fee Priority",
-                 "Student-level fee overrides take precedence over class-level defaults. "
-                 "You can set a per-student override from the By Student mode.")
-    pdf.body_text("The Annual Charges tab works the same way for yearly fees such as admission, books and fines.")
-
-    pdf.sub_section("Tab 3: Generate Records")
-    pdf.step("Use the fee type tabs to select which type of fee to generate.")
-    pdf.step("For Monthly fees: select the month and year. The system shows a preview of how many "
-             "records will be created, how many already exist (will be skipped), and the total amount.")
-    pdf.step("For non-monthly fees (Annual, Admission, Books, Fine): select the class to preview. "
-             "The system shows per-student amounts resolved from fee structures.")
-    pdf.step("Review the preview, then click 'Generate' and confirm. Fee records are created for all "
-             "eligible students. Students without a fee structure or with existing records are skipped.")
-    pdf.warning_box("Fee generation requires fee structures to be set first. Students without a matching "
-                    "fee structure will be listed as 'no fee structure' in the preview and will not receive a record.")
-
-    pdf.sub_section("Tab 4: Student Discounts")
-    pdf.body_text(
-        "Assign discounts or scholarships to individual students directly from the Fee Setup page. "
-        "This tab shows each student's base monthly fee, the applied discount/scholarship, "
-        "and the calculated effective fee - all in one view."
-    )
-    pdf.step("Select a class from the dropdown. The student table loads with columns: "
-             "Roll, Student Name, Base Fee, Discount/Scholarship, Effective Fee, and Action.")
-    pdf.step("Students with an assigned discount show a colored badge (blue for discounts, "
-             "purple for scholarships) and their row is highlighted green.")
-    pdf.step("Click 'Assign' on a student row to open the assignment modal.")
-    pdf.step("In the modal, toggle between 'Discount' and 'Scholarship', select from the dropdown "
-             "(shows name, type, and value), add optional notes, then click 'Assign'.")
-    pdf.step("To remove a discount, click 'Remove' on the student row and confirm.")
-    pdf.step("Use the 'Bulk Assign' button to assign one discount or scholarship to all students "
-             "in the selected class at once. The system shows how many were created and how many "
-             "were skipped (already assigned).")
-    pdf.info_box("Effective Fee Calculation",
-                 "Percentage discounts: Effective = Base Fee - (Base Fee x Percentage / 100). "
-                 "Fixed discounts: Effective = Base Fee - Fixed Amount. "
-                 "Full scholarships: Effective = 0. "
-                 "The effective fee column updates instantly when a discount is assigned or removed.")
+    pdf.body_text("Set what each class pays before you collect anything. The page has four tabs: Monthly Structure, Annual Charges, Generate Records and Student Discounts.")
+    pdf.sub_section("Monthly Structure")
+    pdf.step("Choose 'By Class' and click 'Edit' on the class you want to change (or '+ Set Up' if it has no fee yet).")
+    pdf.step("Change the amount for the fee category. Use '+ Add Charge' for more categories.")
+    pdf.step("Click 'Review & Save' to check the new total, then 'Confirm & Save'. Fee records you generate later use this amount.")
+    pdf.body_text("'By Student' lets you override one student's fee; their override beats the class fee. 'Annual Charges' works the same way for yearly fees such as admission and books.")
+    pdf.sub_section("Generate Records")
+    pdf.step("Choose the fee type. For monthly fees, choose the month and year.")
+    pdf.step("Check the preview, then click 'Generate' and confirm. Students with no fee set, or who already have a record, are skipped.")
+    pdf.sub_section("Student Discounts")
+    pdf.step("Choose a class to see each student's base fee, discount and effective fee. Click 'Assign' on a row to give a discount or scholarship, or 'Remove' to take it off.")
+    pdf.step("Click 'Bulk Assign' to give the whole class one discount or scholarship at once.")
 
     pdf.section_title("Creating Individual Fee Records")
     pdf.nav_path("Sidebar > Finance > Collect Payments > Generate Single Fee Record")
-    pdf.step("Click 'Generate Single Fee Record' to open the single fee creation window.")
-    pdf.step("Select a class, then search for a student using the searchable dropdown.")
-    pdf.step("The fee amount auto-fills from the student's fee structure (class default or student override).")
-    pdf.step("If the student has already paid, enter the paid amount. Payment fields (Account, Method, Date) "
-             "appear automatically when a paid amount is entered.")
-    pdf.step("The system warns if a duplicate fee record already exists for the same student/type/period.")
-    pdf.step("Click 'Create' to save the fee record. A success message appears, the window closes by itself "
-             "and the record shows in the fee table.")
+    pdf.step("Click 'Generate Single Fee Record'. Choose the class, then search for the student.")
+    pdf.step("Choose the fee category. The amount fills in from the fee structure.")
+    pdf.step("If the student has already paid, enter the amount paid. Click 'Create'. A warning appears if the same fee already exists.")
 
     pdf.section_title("Fee Collection Page")
     pdf.nav_path("Sidebar > Finance > Collect Payments")
     pdf.body_text(
-        "The fee collection page loads all fee records for the selected month/year in a single request. "
-        "Switching class or status filters is instant (no loading delay) because filtering happens on your browser."
+        "Every fee record for the chosen month, with totals (Total Payable, Received, Balance, Collection Rate) at the top. "
+        "Narrow the table with the fee type, month, year, class and status filters."
     )
-    pdf.sub_section("Summary Cards")
-    pdf.body_text("Four KPI cards show month-wide totals: Total Payable, Received, Balance, and Collection Rate.")
-    pdf.sub_section("Filters")
-    pdf.body_text("Use the Fee Type, Month, Year, Class, and Status dropdowns to narrow the table view. "
-                  "Class and Status filters apply instantly without re-fetching data.")
 
     pdf.section_title("Recording Payments")
     pdf.nav_path("Sidebar > Finance > Collect Payments")
-    pdf.step("In the fee table, click the row's payment area or use the inline edit feature.")
-    pdf.step("Enter: Amount Paid, select the receiving Account, Payment Method, and Date.")
-    pdf.step("Click 'Save'. The student's status updates automatically (PAID, PARTIAL, UNPAID, ADVANCE).")
+    pdf.step("Tick the student's row in the fee table.")
+    pdf.step("In the bar that appears, enter the amount paid and choose the account and payment method.")
+    pdf.step("Click 'Update' and confirm with 'Yes', or click 'Pay Full' to take the whole balance. The status updates by itself (Paid, Partial, Unpaid or Advance).")
 
     pdf.section_title("Bulk Operations")
-    pdf.step("Select multiple students using the checkboxes in the fee table.")
-    pdf.step("The bulk action bar appears at the bottom with options to:")
-    pdf.bullet("Set paid amount, account, and payment method for all selected records at once")
-    pdf.bullet("Pay Full - One click to mark all selected students as fully paid (amount paid = total payable). "
-               "Select an account, then click the green 'Pay Full' button. Each student's paid amount is set to "
-               "their individual total (amount due + previous balance), saving time during month-end collection.")
-    pdf.bullet("Delete all selected records (with confirmation)")
-    pdf.step("Confirm the bulk action. All selected records update simultaneously.")
+    pdf.nav_path("Sidebar > Finance > Collect Payments")
+    pdf.step("Tick the box in the table header to select every student, or tick students one by one.")
+    pdf.step("In the bar at the bottom, choose the account that receives the money.")
+    pdf.step("Click 'Pay Full'. Every selected student is marked fully paid at once. The same bar can delete the selected records.")
 
     pdf.section_title("Managing Discounts & Scholarships")
     pdf.nav_path("Sidebar > Finance > Discounts")
-    pdf.body_text(
-        "The Discounts page has three tabs for managing discount rules, scholarship programs, "
-        "and viewing all student assignments across the school."
-    )
-    pdf.sub_section("Creating Discount Rules")
-    pdf.step("Go to the 'Discounts' tab and click 'Add Discount'. The 'Create Discount' window opens.")
-    pdf.step("Enter the Discount Name, choose the Type (Percentage or Fixed Amount) and enter the Value.")
-    pdf.step("Set 'Applies To': All Students, All classes at a grade level, Specific Class, or Siblings.")
-    pdf.step("Optionally set start/end dates and whether the discount is stackable.")
-    pdf.step("Press 'Create Discount'. The new discount appears in the list.")
-    pdf.sub_section("Creating Scholarships")
-    pdf.step("Go to the 'Scholarships' tab and click 'Add Scholarship'.")
-    pdf.step("Define: Name, Type (Merit, Need-Based, Sports, Staff Child, Other).")
-    pdf.step("Set coverage: Full (100%), Percentage, or Fixed Amount, then press 'Create Scholarship'.")
-    pdf.sub_section("Assigning to Students")
-    pdf.body_text(
-        "Student assignments can be managed from two places: the Discounts page (Student Assignments tab) "
-        "or the Fee Setup page (Student Discounts tab). The Fee Setup page is recommended because it shows "
-        "base fees and effective fees alongside the discount assignments."
-    )
-    pdf.info_box("Tip", "Navigate to Finance > Fee Setup > Student Discounts tab for the most efficient workflow. "
-                 "Select a class to see all students with their base fee, assigned discount, and effective fee in one view.")
+    pdf.step("On the 'Discounts' tab, click 'Add Discount'. Enter the name, choose Percentage or Fixed Amount and enter the value.")
+    pdf.step("In 'Applies To', choose all students, a grade level, a class or siblings. You can also set dates and make it stackable. Click 'Create Discount'.")
+    pdf.step("Scholarships work the same way on the 'Scholarships' tab (Merit, Need, Sports, Staff Child or Other) with 'Add Scholarship'.")
+    pdf.step("Give them to students from Fee Setup > Student Discounts, which shows the effect on each student's fee.")
 
     pdf.section_title("Recording Expenses")
     pdf.nav_path("Sidebar > Finance > Expenses")
-    pdf.step("Click 'Add Expense'.")
-    pdf.step("Enter: Description, Category, Amount, Date, Account (which account pays).")
-    pdf.step("Save. The expense is recorded and the account balance is updated.")
-    pdf.step("Use category filters to view expenses by type.")
-    pdf.step("Edit or delete expenses as needed.")
+    pdf.step("Click 'Add Expense'. Enter the amount, category, the account that pays and a description. The date is today by default.")
+    pdf.step("Save. The expense is recorded and the account balance goes down.")
+    pdf.step("Use the category filter to review expenses by type.")
 
     pdf.section_title("Online Payment Collection (when enabled)")
-    pdf.info_box("Not enabled yet",
-                 "Online fee payment is not configured for schools yet. Until it is switched on, record "
-                 "every payment yourself under Collect Payments (see Recording Payments).")
-    pdf.body_text(
-        "When online payment is enabled for your school, parents can pay fees directly from their portal."
-    )
-    pdf.step("Parents will see a 'Pay Now' button on unpaid fees in their portal.")
-    pdf.step("When a parent pays online, the system automatically records the payment and updates the fee balance.")
-    pdf.step("Payment status is tracked: Initiated, Pending, Successful, or Failed.")
-
-    pdf.info_box("Payment Security", "All payment transactions use cryptographic signatures "
-                 "(HMAC-SHA256 for JazzCash, SHA-256 for Easypaisa) to prevent tampering. "
-                 "Callback URLs are verified before updating payment status.")
-
-    pdf.info_box("Financial Record Safety",
-                 "When a student is deleted, all their financial records (fee payments, online payments, "
-                 "fee structures, discounts) are preserved with 'Deleted Student' label. "
-                 "Best practice: mark students as inactive instead of deleting them.")
+    pdf.info_box("Not switched on yet", "Online fee payment is not available for schools yet. Until it is, record every payment yourself under Collect Payments.")
+    pdf.body_text("When it is enabled, parents see a 'Pay Now' button on unpaid fees, and paid fees are recorded for you.")
+    pdf.info_box("Deleting students", "If you delete a student, their payment history is kept under 'Deleted Student'. It is better to mark a student inactive instead.")
 
     pdf.section_title("Inter-Account Transfers")
     pdf.nav_path("Sidebar > Finance > Accounts > Transfers tab")
-    pdf.step("Open the Transfers tab and click 'Record Transfer'.")
-    pdf.step("Choose the From Account and To Account. Enter the Amount, the Date and an optional Description.")
-    pdf.step("Click 'Review Transfer', check the details, then click 'Confirm Transfer'. Both account balances update and the transfer appears in the list.")
+    pdf.step("On the 'Transfers' tab, click 'Record Transfer'. Choose the account the money leaves and the account that receives it.")
+    pdf.step("Enter the amount and a short description, then click 'Review Transfer'.")
+    pdf.step("Check the details and click 'Confirm Transfer'. Both balances update and the transfer is listed.")
 
     pdf.section_title("Month Closing")
     pdf.nav_path("Sidebar > Finance > Accounts > Close Month")
-    pdf.step("At the end of each month, click 'Close Month' at the top of Finance > Accounts (admins only).")
-    pdf.step("Choose the month and year. The window warns that the period will be locked.")
-    pdf.step("Tick 'I understand, close this period' and click 'Close Month'.")
-    pdf.step("Closing saves a Balance Brought Forward (BBF) snapshot of every account. No transactions can be added or edited in that month afterwards.")
-    pdf.step("A month needs at least one transaction (payment, expense or other income) before it can be closed.")
+    pdf.step("At the end of the month, click 'Close Month' at the top of Accounts (admins only). Choose the month and year.")
+    pdf.step("Tick the box that confirms you understand, and click 'Close Month' again. The page now shows the last closed month.")
+    pdf.warning_box("Closing locks the month: no payments, expenses or income can be added or changed in it afterwards. A month needs at least one transaction before it can be closed.")
 
     pdf.section_title("Fee Overview")
     pdf.nav_path("Sidebar > Finance > Fee Overview")
-    pdf.step("Choose Monthly or Annual view, then the month and year.")
-    pdf.step("Read Category-wise Collection and the Collection Progress bar.")
-    pdf.step("Use 'Generate Fee Records', 'View Summary & Collect', 'Collect Payments' or 'Fee Setup' from this page.")
-    pdf.info_box("Tip", "Fee records must be generated in Fee Setup before they appear here.")
+    pdf.step("Choose Monthly or Annual, then the month and year.")
+    pdf.step("'Category-wise Collection' shows how much of each fee is collected, and the progress bar shows how much of the total is paid.")
+    pdf.step("Use 'Collect Payments' to record payments, or 'Fee Setup' to change amounts. Generate the fee records first, or nothing shows here.")
 
     pdf.section_title("Other Income")
     pdf.nav_path("Sidebar > Finance > Other Income")
-    pdf.body_text("Track non-fee income such as sales and donations.")
-    pdf.step("Press 'Add Income'.")
-    pdf.step("Enter Date, Category, Description, Account and Amount, then save.")
-    pdf.step("Filter by Month and Year. The total other income is shown at the top and each entry shows who recorded it.")
-    pdf.step("To remove an entry, press Delete and confirm.")
+    pdf.body_text("For money that is not fees, such as sales and donations.")
+    pdf.step("Click 'Add Income'. Enter the amount, choose the category and the account that receives it, and add a short description. The date is today by default.")
+    pdf.step("Click 'Add Income' again to save. It appears in the list and the total at the top goes up.")
 
     # =========================================================================
     # CHAPTER 7: HR & STAFF MODULE
     # =========================================================================
     pdf.chapter_title("HR & Staff Management Module")
 
-    pdf.body_text(
-        "The HR module manages the complete employee lifecycle from hiring to payroll. "
-        "It includes staff directory, departments, salary structures, payroll processing, "
-        "leave management, attendance tracking, performance appraisals, and document management."
-    )
+    pdf.body_text("Staff records, salaries and payslips, leave, attendance, appraisals, documents and official letters.")
 
     pdf.section_title("Setting Up Departments")
     pdf.nav_path("Sidebar > HR & Staff > Departments")
-    pdf.step("Click 'Add Department'. (The 'Quick Add Common Departments' chips add a department in one click.)")
-    pdf.step("Enter the Department Name (e.g., 'Science', 'Administration', 'Sports') and an optional description.")
-    pdf.step("Click 'Add Department' to save. A success message appears and the department is used when adding staff members.")
-    pdf.step("Designations are managed in the Designations section below the departments on the same page. "
-             "Click 'Add Designation', enter a name (e.g., 'Senior Teacher') and optionally link it to a department.")
+    pdf.step("Click 'Add Department'. Type the name (for example Science or Administration) and an optional description.")
+    pdf.step("Click 'Add Department' again to save. The department is now offered when you add staff.")
+    pdf.body_text("The 'Quick Add Common Departments' chips add the usual ones in one click. Designations, such as Senior Teacher, are added in the section below with 'Add Designation'.")
 
     pdf.section_title("Adding Staff Members")
-    pdf.nav_path("Sidebar > HR & Staff > Staff Directory > Full Form")
-    pdf.step("Click 'Full Form'. (Use 'Quick Add' instead to enter only a name, phone, department and designation and "
-             "finish the details later.)")
-    pdf.step("Fill in Personal Information: First Name, Last Name, Email, Phone, Gender, Date of Birth.")
-    pdf.step("Fill in Employment Details: Department, Designation, Employee ID (generated automatically if left blank), Employment Type "
-             "(Full-time/Part-time/Contract), Date of Joining.")
-    pdf.step("Add Address and Emergency Contact information.")
-    pdf.step("Click 'Add Staff Member'. A login account is optional and can be created now or later. "
-             "The staff member appears in the directory.")
+    pdf.nav_path("Sidebar > HR & Staff > Staff Directory")
+    pdf.step("Click 'Full Form'. (Use 'Quick Add' to enter only a name, phone, department and designation now and the rest later.)")
+    pdf.step("Enter the first and last name, email and phone. Choose the department and designation; both are optional but make reports and payroll easier.")
+    pdf.step("Click 'Add Staff Member'. A login account is optional and can be added later. The new staff member appears in the directory.")
 
     pdf.section_title("Staff Directory")
     pdf.nav_path("Sidebar > HR & Staff > Staff Directory")
-    pdf.body_text("The Staff Directory is the central hub for managing all staff information:")
-    pdf.bullet("Search by name, email, or employee ID")
-    pdf.bullet("Filter by department or employment status (Active, On Leave, Terminated)")
-    pdf.bullet("Click on a staff member to view/edit their complete profile")
-    pdf.bullet("Export directory as Excel or PDF")
+    pdf.body_text("Everyone who works at the school. Search by name, email or employee ID, filter by department or status, click a person to open their profile, and export the list to Excel or PDF.")
 
     pdf.section_title("Salary Management")
     pdf.nav_path("Sidebar > HR & Staff > Salary")
     pdf.step("Click 'Add Salary Structure' and choose the staff member.")
-    pdf.step("Enter the Basic Salary, then add any Allowances (e.g., house rent) and Deductions (e.g., tax) as name "
-             "and amount pairs with '+ Add'. The summary shows the net salary.")
-    pdf.step("Set 'Effective From' (and optionally 'Effective To'), then click 'Create'.")
-    pdf.step("Salary structures feed directly into payroll generation. A staff member needs one before a payslip "
-             "can be generated.")
+    pdf.step("Enter the basic salary. Add allowances (such as house rent) and deductions (such as tax) with '+ Add'. The summary shows the net salary.")
+    pdf.step("Set the date it starts from and click 'Create'. The person now appears in the salary list.")
+    pdf.info_box("Needed for payroll", "A staff member needs a salary structure before a payslip can be generated for them.")
 
     pdf.section_title("Payroll Processing")
     pdf.nav_path("Sidebar > HR & Staff > Payroll")
-    pdf.step("Select the month and year for payroll.")
-    pdf.step("Click 'Generate Payslips', then 'Generate' to confirm. Payslips are created for active staff who have a "
-             "salary structure; existing payslips for the month are skipped.")
-    pdf.step("Review generated payslips. Check amounts, deductions, and net pay.")
-    pdf.step("Approve payslips individually or in bulk.")
-    pdf.step("Mark approved payslips as 'Paid' once payment is disbursed.")
-    pdf.step(
-        "Click the 'Download PDF' button on any payslip (or the 'PDF' button on its row) to download a printable "
-        "payslip document, saved as payslip_<Name>_<month>_<year>.pdf. "
-        "The PDF includes the school logo (if configured in school settings), school name, address, "
-        "contact details, employee information, earnings breakdown, deductions breakdown, net salary, "
-        "and signature lines."
-    )
-
-    pdf.info_box(
-        "School Logo on Payslips",
-        "The payslip PDF automatically includes your school's logo at the top if one is configured. "
-        "To set or update the logo, go to Settings > School Profile and enter the logo URL. "
-        "If no logo is set, the payslip generates without it."
-    )
+    pdf.step("Choose the month. Click 'Generate Payslips' and confirm. A payslip is made for every active staff member with a salary structure.")
+    pdf.step("Each payslip starts as a draft. Click 'Approve' to check and confirm it.")
+    pdf.step("After you pay the salary, click 'Mark Paid'. Click 'View' to see the full breakdown.")
+    pdf.step("Click 'Download PDF' (or 'PDF' on the row) for a printable payslip named with the staff name, month and year.")
+    pdf.info_box("School logo", "The payslip shows your school logo if one is set in Settings > School Profile.")
 
     pdf.section_title("Leave Management")
     pdf.nav_path("Sidebar > HR & Staff > Leave")
-    pdf.body_text("The leave system handles leave applications, approvals, and balance tracking:")
-    pdf.step("Staff submit leave requests specifying: Leave Type, From Date, To Date, Reason.")
-    pdf.step("A School Admin or Principal reviews the request.")
-    pdf.step("Approve or reject the leave application with optional remarks.")
-    pdf.step("Leave balances update automatically upon approval.")
-    pdf.step("View leave history and balances for any staff member.")
+    pdf.step("Find the pending request. It shows the leave type, the dates and the reason.")
+    pdf.step("Approve or reject it, and add remarks if you like. When a request is approved, the leave balance updates automatically.")
+    pdf.body_text("Staff send their own requests from Self Service (see the last topic of this chapter).")
 
     pdf.section_title("Staff Attendance")
     pdf.nav_path("Sidebar > HR & Staff > Attendance")
-    pdf.step("Select the date to mark attendance.")
-    pdf.step("Mark each staff member as Present, Absent, or On Leave.")
-    pdf.step("Save. Staff attendance records feed into payroll calculations.")
+    pdf.step("The page opens on today with every staff member unmarked. Click 'Mark All Present' to start from a full day.")
+    pdf.step("Change anyone who was absent, late or on leave. Check-in and check-out times are optional.")
+    pdf.step("Click 'Save All'. Open the 'Summary' tab to see each person's month: present, absent, late and attendance rate.")
 
     pdf.section_title("Performance Appraisals")
     pdf.nav_path("Sidebar > HR & Staff > Performance")
-    pdf.step("Click 'Create Appraisal' and select the staff member.")
-    pdf.step("Fill in performance criteria, ratings, and comments.")
-    pdf.step("Submit the appraisal for review.")
-    pdf.step("Appraisal history is maintained per staff member.")
+    pdf.step("Click 'New Appraisal' and choose the staff member. Set the start and end dates of the review period.")
+    pdf.step("Click the stars to give a rating, and write the strengths and the goals for the next period.")
+    pdf.step("Click 'Create'. The review appears in the list with its rating, and every review for a person is kept.")
 
     pdf.section_title("Staff Documents")
     pdf.nav_path("Sidebar > HR & Staff > Documents")
-    pdf.step("Select a staff member.")
-    pdf.step("Upload documents: ID proofs, certificates, contracts, etc.")
-    pdf.step("Documents are stored securely and accessible from the staff profile.")
+    pdf.step("'Qualifications' tab: click 'Add Qualification', choose the staff member, the type, the qualification name, the institution and the year, then 'Create'.")
+    pdf.step("'Documents' tab: click 'Add Document', choose the staff member and the type, give it a title and attach the file (required). A yellow badge warns when a document is about to expire.")
 
     pdf.section_title("Linking & Unlinking User Accounts")
     pdf.nav_path("Sidebar > HR & Staff > Staff Directory")
-    pdf.body_text(
-        "Staff members can be linked to existing user accounts so the same person's HR record "
-        "and login credentials are connected. This is useful when a user account was created "
-        "separately from the staff record."
-    )
-    pdf.step("Find the staff member in the directory. If they have no linked account, "
-             "you will see a 'Link Account' button.")
-    pdf.step("Click 'Link Account' to open the search modal.")
-    pdf.step("Search for the user by name or username. Click on the correct user to link them.")
-    pdf.step("Once linked, the staff member's account column shows the linked username and role.")
-    pdf.step("To unlink, click the 'Unlink' button next to the linked username. "
-             "This removes the association but does not delete either the staff record or the user account.")
-    pdf.warning_box(
-        "A user can only be linked to one staff member at a time. "
-        "If the user is already linked to another staff record, you must unlink them first."
-    )
+    pdf.body_text("Connect a person's HR record to the login they already have.")
+    pdf.step("In the directory, find a staff member with no login and click 'Link Account'.")
+    pdf.step("Search for the user by name or username and click the right one. Their username now shows on the staff row.")
+    pdf.step("To remove the link, click 'Unlink' and confirm. Neither the staff record nor the user account is deleted.")
+    pdf.warning_box("A user can be linked to only one staff member. If they are already linked to someone else, unlink them first.")
 
     pdf.section_title("Letter Composer")
     pdf.nav_path("Sidebar > HR & Staff > Letter Composer")
-    pdf.body_text(
-        "The Letter Composer allows you to create official letters on your school's letterhead. "
-        "It supports 7 built-in templates (Experience Certificate, Termination, Warning, "
-        "Appreciation, Leave Approval, Salary Increment, Transfer) and fully custom letters."
-    )
-    pdf.step("Select a Quick Draft Template to start with a pre-built letter structure, or choose 'Custom Letter'.")
-    pdf.step("Pick a recipient: select from School, Employee, or type a custom address. "
-             "Selecting an employee auto-fills placeholders like name, department, and designation.")
-    pdf.step("Edit the Subject and Body. Use the formatting toolbar: *bold*, _italic_, ~strikethrough~, "
-             "bullet lists, and numbered lists.")
-    pdf.step("Preview your letter in the right panel (live preview updates as you type).")
-    pdf.step("Click 'Generate PDF' to download the letter as a PDF with your school's letterhead as background.")
-    pdf.step("Letters are automatically saved to history. Load, edit, or delete past letters from the history table.")
-
-    pdf.info_box(
-        "AI Letter Drafting",
-        "Click 'Draft with AI' to open the AI assistant panel. Describe the letter you need "
-        "in plain language (e.g., 'Write a warning letter for late attendance') and the AI will "
-        "generate a complete subject and body. Quick suggestion chips are provided for common letter types. "
-        "If an employee is selected, their details are automatically included for context. "
-        "Review and edit the AI-generated content before generating the PDF."
-    )
-
-    pdf.info_box(
-        "School Letterhead",
-        "Letters are generated with your school's letterhead as the PDF background. "
-        "To configure the letterhead, go to Settings > School Profile and set the Letterhead URL "
-        "(uploaded to Supabase Storage). If no letterhead is set, letters generate on a white background."
-    )
+    pdf.step("Under 'To', click 'Employee' and pick the staff member. Their name and ID fill in for you.")
+    pdf.step("Choose a 'Quick Draft Template', such as Warning Letter, or write a custom letter. The subject and body are written for you.")
+    pdf.step("Read the preview on the right and edit the text. Replace the REASON placeholder with the real reason.")
+    pdf.step("Click 'Generate PDF'. The letter downloads on your school letterhead and is saved in the history below.")
+    pdf.info_box("Draft with AI", "Click 'Draft with AI', describe the letter in plain words, and review the draft before you generate the PDF.")
+    pdf.info_box("Letterhead", "Set the letterhead in Settings > School Profile. Without one, letters print on a white background.")
 
     pdf.section_title("Self Service")
     pdf.nav_path("Sidebar > Self Service")
-    pdf.body_text(
-        "Staff accounts have a Self Service page with two tabs: Leave (your own leave requests) and "
-        "Attendance (your own staff attendance). Teachers see the same pages as 'My Leave' and 'My Attendance' in the sidebar."
-    )
+    pdf.body_text("Staff see two tabs: 'Leave' for their own leave requests and 'Attendance' for their own attendance. Teachers see these as 'My Leave' and 'My Attendance' in the sidebar.")
 
     # =========================================================================
     # CHAPTER 8: ADMISSIONS CRM
