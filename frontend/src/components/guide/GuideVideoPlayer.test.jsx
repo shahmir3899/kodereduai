@@ -103,3 +103,52 @@ describe('GuideVideoPlayer', () => {
     expect(video.currentTime).toBe(42)
   })
 })
+
+describe('GuideVideoPlayer played seconds', () => {
+  const play = (video, from, to, step = 0.5) => {
+    video._paused = false
+    video.currentTime = from; fireEvent.timeUpdate(video)
+    for (let t = from + step; t <= to + 1e-9; t += step) { video.currentTime = t; fireEvent.timeUpdate(video) }
+  }
+
+  it('reports only the seconds really played, merged', () => {
+    const onPlayed = vi.fn()
+    const { video } = setup({ onPlayed })
+    play(video, 0, 10)
+    fireEvent.pause(video)
+    expect(onPlayed.mock.calls.at(-1)[0]).toMatchObject({ ranges: [[0, 10]], flush: true })
+  })
+
+  it('earns nothing for dragging the bar to the end', () => {
+    const onPlayed = vi.fn()
+    const { video } = setup({ onPlayed })
+    video._paused = false
+    video.currentTime = 1; fireEvent.timeUpdate(video)
+    video.currentTime = 99; fireEvent.timeUpdate(video)   // a jump, not playback
+    video.currentTime = 100; fireEvent.timeUpdate(video)
+    fireEvent.pause(video)
+    expect(onPlayed.mock.calls.at(-1)[0].ranges).toEqual([[99, 100]]) // only the last real second, never the gap
+  })
+
+  it('ignores time while the page is hidden and above 2x speed', () => {
+    const onPlayed = vi.fn()
+    const { video } = setup({ onPlayed })
+    Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true })
+    play(video, 0, 5)
+    Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true })
+    video.playbackRate = 3
+    play(video, 10, 15)
+    video.playbackRate = 1
+    fireEvent.pause(video)
+    expect(onPlayed.mock.calls.at(-1)?.[0].ranges ?? []).toEqual([])
+  })
+
+  it('does not count a pause, and allows 2x', () => {
+    const onPlayed = vi.fn()
+    const { video } = setup({ onPlayed })
+    video.playbackRate = 2
+    play(video, 20, 30, 1)
+    fireEvent.pause(video)
+    expect(onPlayed.mock.calls.at(-1)[0].ranges).toEqual([[20, 30]])
+  })
+})

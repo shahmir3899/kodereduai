@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { countsAsViewing, mergeRanges } from '../../utils/guideProgressRules'
 
 const SPEEDS = [0.75, 1, 1.25, 1.5, 2]
 const SKIP_SECONDS = 10
@@ -51,7 +52,7 @@ const btn = 'flex h-10 min-w-10 items-center justify-center rounded-md px-2 text
  * `src`, `captionsSrc` and `poster` belong to one language; switching language remounts the video, and
  * `startAt` lets the caller carry the position across so the viewer does not lose their place.
  */
-export default function GuideVideoPlayer({ src, captionsSrc, captionsLang, captionsLabel, poster, startAt = 0, onTime, onEnded }) {
+export default function GuideVideoPlayer({ src, captionsSrc, captionsLang, captionsLabel, poster, startAt = 0, restartKey = 0, onTime, onEnded, onPlayed }) {
   const videoRef = useRef(null)
   const boxRef = useRef(null)
   const [prefs, setPrefs] = useState(loadPrefs)
@@ -59,6 +60,33 @@ export default function GuideVideoPlayer({ src, captionsSrc, captionsLang, capti
   const [time, setTime] = useState(0)
   const [duration, setDuration] = useState(0)
   const [fullscreen, setFullscreen] = useState(false)
+
+  // What was really played in this viewing: the seconds between two timeupdates count only when the video
+  // is playing, the page is visible and the speed is 2x or less. Jumps and pauses add nothing.
+  const lastTimeRef = useRef(null)
+  const playedRef = useRef([])
+  const lastEmitRef = useRef(0)
+  const onPlayedRef = useRef(onPlayed)
+  onPlayedRef.current = onPlayed
+  const emit = useCallback((flush = false) => {
+    const v = videoRef.current
+    if (!playedRef.current.length && !flush) return
+    onPlayedRef.current?.({ ranges: playedRef.current, duration: v && Number.isFinite(v.duration) ? v.duration : 0, position: v ? v.currentTime : 0, flush })
+    lastEmitRef.current = Date.now()
+  }, [])
+  // A new video (language switch) or closing the player: hand over what was played, then start clean.
+  useEffect(() => () => {
+    if (playedRef.current.length) emit(true)
+    playedRef.current = []
+    lastTimeRef.current = null
+  }, [src, emit])
+  useEffect(() => {
+    if (restartKey > 0 && videoRef.current) {
+      videoRef.current.currentTime = 0
+      lastTimeRef.current = 0
+      videoRef.current.play?.()?.catch?.(() => {})
+    }
+  }, [restartKey])
 
   const updatePrefs = useCallback((patch) => {
     setPrefs((current) => {
@@ -151,13 +179,28 @@ export default function GuideVideoPlayer({ src, captionsSrc, captionsLang, capti
         poster={poster}
         onClick={toggle}
         onPlay={() => setPlaying(true)}
-        onPause={() => setPlaying(false)}
-        onEnded={() => { setPlaying(false); onEnded?.() }}
+        onPause={() => { setPlaying(false); emit(true) }}
+        onSeeking={(e) => { lastTimeRef.current = e.currentTarget.currentTime }}
+        onSeeked={(e) => { lastTimeRef.current = e.currentTarget.currentTime }}
+        onEnded={() => { setPlaying(false); emit(true); onEnded?.() }}
         onLoadedMetadata={(e) => {
           setDuration(e.currentTarget.duration)
           if (startAt > 0 && startAt < e.currentTarget.duration) e.currentTarget.currentTime = startAt
         }}
-        onTimeUpdate={(e) => { setTime(e.currentTarget.currentTime); onTime?.(e.currentTarget.currentTime, e.currentTarget.duration) }}
+        onTimeUpdate={(e) => {
+          const v = e.currentTarget
+          const now = v.currentTime
+          setTime(now)
+          onTime?.(now, v.duration)
+          const viewing = countsAsViewing({
+            prev: lastTimeRef.current, now, paused: v.paused, seeking: v.seeking, rate: v.playbackRate, visible: document.visibilityState === 'visible',
+          })
+          if (viewing) {
+            playedRef.current = mergeRanges([...playedRef.current, [lastTimeRef.current, now]])
+            if (Date.now() - lastEmitRef.current > 1500) emit()
+          }
+          lastTimeRef.current = now
+        }}
       >
         <source src={src} type="video/mp4" />
         {captionsSrc && <track kind="captions" src={captionsSrc} srcLang={captionsLang} label={captionsLabel} default />}

@@ -15,6 +15,12 @@ import videoData from '../data/guideVideos.json'
 
 const START_HERE = guideData.meta.startHere || {}
 
+// Where to pick a video up again: only if the person stopped partway, not at the very start, and had not finished it.
+function resumePosition(state) {
+  if (!state || state.completedAt || !state.duration) return 0
+  return state.position > 5 && state.position < state.duration * 0.95 ? state.position : 0
+}
+
 // Tells nav_path blocks whether the current user can open a linked page.
 const GuideAccessContext = createContext(() => true)
 // Lets a section open its tutorial video in the player dialog.
@@ -357,21 +363,30 @@ function StartHere({ steps, watched, done, onRead, onWatch, onToggleDone }) {
   return (
     <section aria-labelledby="start-here" className="rounded-xl border border-primary-200 bg-primary-50/50 p-4 sm:p-5">
       <h2 id="start-here" className="text-lg font-bold text-gray-900">New here? Start with these</h2>
-      <p className="mb-3 text-sm text-gray-600">Do them in this order. Each one takes a few minutes. A step is ticked off when you watch its video, or you can tick it yourself.</p>
+      <p className="mb-3 text-sm text-gray-600">Do them in this order. Each one takes a few minutes. A step is ticked off when you have watched its video; a step without a video you tick yourself.</p>
       <ol className="space-y-2">
         {steps.map((step, index) => {
-          const finished = done.has(step.sectionId) || (step.videoId && watched.has(step.videoId))
+          const finished = step.videoId ? watched.has(step.videoId) : done.has(step.sectionId)
           return (
             <li key={step.sectionId} className="flex items-center gap-3 rounded-lg bg-white px-3 py-2 shadow-sm">
-              <button
-                type="button"
-                onClick={() => onToggleDone(step.sectionId)}
-                aria-pressed={finished}
-                aria-label={finished ? `Step ${index + 1} done. Click to undo.` : `Mark step ${index + 1} as done`}
-                className={`flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full text-sm font-bold ${finished ? 'bg-green-600 text-white' : 'bg-primary-600 text-white hover:bg-primary-700'}`}
-              >
-                {finished ? <span aria-hidden="true">&#10003;</span> : index + 1}
-              </button>
+              {step.videoId ? (
+                <span
+                  title={finished ? 'You watched this video' : 'Watch the video to complete this step'}
+                  className={`flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full text-sm font-bold text-white ${finished ? 'bg-green-600' : 'bg-primary-600'}`}
+                >
+                  {finished ? <span aria-label={`Step ${index + 1} done`}>&#10003;</span> : index + 1}
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => onToggleDone(step.sectionId)}
+                  aria-pressed={finished}
+                  aria-label={finished ? `Step ${index + 1} done. Click to undo.` : `Mark step ${index + 1} as done`}
+                  className={`flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full text-sm font-bold text-white ${finished ? 'bg-green-600' : 'bg-primary-600 hover:bg-primary-700'}`}
+                >
+                  {finished ? <span aria-hidden="true">&#10003;</span> : index + 1}
+                </button>
+              )}
               <span className={`min-w-0 flex-1 text-sm font-medium ${finished ? 'text-gray-500' : 'text-gray-900'}`}>{step.title}</span>
               {step.videoId && (
                 <button type="button" onClick={() => onWatch(step.videoId)} className="flex-shrink-0 rounded-md bg-primary-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-primary-700">
@@ -740,7 +755,8 @@ export default function UserGuidePage() {
           onClose={closeVideo}
           nextVideo={nextInGroup(visibleVideos, playingVideo.id)}
           onNext={openVideo}
-          onWatched={progress.markWatched}
+          onPlayed={progress.recordVideo}
+          resumeAt={resumePosition(progress.videoState(playingVideo.id))}
         />
       )}
     </div>

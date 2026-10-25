@@ -3,34 +3,28 @@ import Modal from '../ui/Modal'
 import GuideVideoPlayer from './GuideVideoPlayer'
 
 const LANGS = [['en', 'English'], ['ur', 'اردو']]
-// A video counts as watched once most of it has played, so skipping the closing slide still counts.
-const WATCHED_AT = 0.9
 
 /**
  * A tutorial video in a dialog over the page, so the reader keeps their place. The language switch
  * continues from the same moment, because the English and Urdu videos follow the same steps. When a
  * video ends it offers the next one from the same group.
  */
-export default function GuideVideoModal({ video, lang, onLang, onClose, nextVideo = null, onNext, onWatched }) {
+export default function GuideVideoModal({ video, lang, onLang, onClose, nextVideo = null, onNext, onPlayed, resumeAt = 0 }) {
   const timeRef = useRef(0)
   const startAtRef = useRef(0)
-  const countedRef = useRef(false)
   const [ended, setEnded] = useState(false)
+  const [restartKey, setRestartKey] = useState(0)
+  const [resumed, setResumed] = useState(resumeAt > 0)
   const base = `/videos/${video.id}.${lang}`
 
-  // A different video starts clean: not counted yet, not ended, from the beginning.
+  // A different video starts clean: not ended, and from where this person stopped last time, if they did.
   useEffect(() => {
-    countedRef.current = false
     timeRef.current = 0
-    startAtRef.current = 0
+    startAtRef.current = resumeAt > 0 ? resumeAt : 0
     setEnded(false)
+    setResumed(resumeAt > 0)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [video.id])
-
-  const count = () => {
-    if (countedRef.current) return
-    countedRef.current = true
-    onWatched?.(video.id)
-  }
 
   const switchLang = (code) => {
     if (code === lang) return
@@ -74,12 +68,18 @@ export default function GuideVideoModal({ video, lang, onLang, onClose, nextVide
         captionsLabel={lang === 'ur' ? 'اردو' : 'English'}
         poster={`${base}.poster.jpg`}
         startAt={startAtRef.current}
-        onTime={(t, duration) => {
-          timeRef.current = t
-          if (duration > 0 && t / duration >= WATCHED_AT) count()
-        }}
-        onEnded={() => { count(); setEnded(true) }}
+        restartKey={restartKey}
+        onTime={(t) => { timeRef.current = t }}
+        onPlayed={(played) => onPlayed?.(video.id, { ...played, language: lang })}
+        onEnded={() => setEnded(true)}
       />
+
+      {resumed && !ended && (
+        <p className="mt-2 text-xs text-gray-500">
+          Continuing where you left off.{' '}
+          <button type="button" onClick={() => { setResumed(false); setRestartKey((k) => k + 1) }} className="text-primary-600 hover:underline">Start over</button>
+        </p>
+      )}
 
       {ended && (
         <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-green-200 bg-green-50 px-4 py-3" role="status">

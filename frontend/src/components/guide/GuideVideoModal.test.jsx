@@ -6,12 +6,13 @@ const video = { id: 'one', chapter: 2, title: { en: 'First', ur: 'پہلا' }, s
 const next = { id: 'two', chapter: 2, title: { en: 'Second', ur: 'دوسرا' } }
 
 beforeEach(() => {
+  Object.defineProperty(window.HTMLMediaElement.prototype, 'paused', { get() { return this._paused !== false }, configurable: true })
   window.HTMLMediaElement.prototype.play = vi.fn(() => Promise.resolve())
   window.HTMLMediaElement.prototype.pause = vi.fn()
 })
 
 function setup(props = {}) {
-  const handlers = { onLang: vi.fn(), onClose: vi.fn(), onNext: vi.fn(), onWatched: vi.fn() }
+  const handlers = { onLang: vi.fn(), onClose: vi.fn(), onNext: vi.fn(), onPlayed: vi.fn() }
   const utils = render(<GuideVideoModal video={video} lang="en" nextVideo={next} {...handlers} {...props} />)
   const el = utils.container.ownerDocument.querySelector('video')
   Object.defineProperty(el, 'duration', { value: 100, configurable: true })
@@ -19,20 +20,26 @@ function setup(props = {}) {
 }
 
 describe('GuideVideoModal', () => {
-  it('marks the video watched once 90% has played, and only once', () => {
-    const { el, onWatched } = setup()
-    el.currentTime = 50; fireEvent.timeUpdate(el)
-    expect(onWatched).not.toHaveBeenCalled()
-    el.currentTime = 92; fireEvent.timeUpdate(el)
-    el.currentTime = 95; fireEvent.timeUpdate(el)
-    expect(onWatched).toHaveBeenCalledTimes(1)
-    expect(onWatched).toHaveBeenCalledWith('one')
+  it('hands over what was played, with the language, so progress can be recorded', () => {
+    const { el, onPlayed } = setup()
+    el.currentTime = 10; fireEvent.timeUpdate(el)
+    el._paused = false
+    el.currentTime = 10.5; fireEvent.timeUpdate(el)
+    fireEvent.pause(el)
+    expect(onPlayed).toHaveBeenCalledWith('one', expect.objectContaining({ language: 'en', flush: true, duration: 100 }))
+    expect(onPlayed.mock.calls.at(-1)[1].ranges).toEqual([[10, 10.5]])
+  })
+
+  it('offers to continue where the person left off, and can start over', () => {
+    setup({ resumeAt: 42 })
+    expect(screen.getByText(/Continuing where you left off/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Start over' }))
+    expect(screen.queryByText(/Continuing where you left off/)).not.toBeInTheDocument()
   })
 
   it('offers the next video when this one ends, and plays it', () => {
-    const { el, onNext, onWatched } = setup()
+    const { el, onNext } = setup()
     fireEvent.ended(el)
-    expect(onWatched).toHaveBeenCalledWith('one')
     expect(screen.getByRole('status')).toHaveTextContent('Up next: Second')
     fireEvent.click(screen.getByRole('button', { name: 'Play next' }))
     expect(onNext).toHaveBeenCalledWith('two')

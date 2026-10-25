@@ -19,7 +19,10 @@ function renderPage(url = '/guide') {
   return render(<MemoryRouter initialEntries={[url]}><UserGuidePage /></MemoryRouter>)
 }
 
-beforeEach(() => localStorage.clear())
+beforeEach(() => {
+  localStorage.clear()
+  Object.defineProperty(window.HTMLMediaElement.prototype, 'paused', { get() { return this._paused !== false }, configurable: true })
+})
 
 describe('UserGuidePage', () => {
   it('opens on a Start here path and quiet chapter rows, with nothing expanded', () => {
@@ -31,21 +34,26 @@ describe('UserGuidePage', () => {
     expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '0')
   })
 
-  it('ticks a step by hand and moves the progress bar', () => {
+  it('gives a step with a video no manual tick, so progress cannot be self-awarded', () => {
     renderPage()
-    fireEvent.click(screen.getByRole('button', { name: 'Mark step 1 as done' }))
-    expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '1')
-    expect(screen.getByText('1 of 8')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Mark step 1 as done/ })).not.toBeInTheDocument()
+    expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '0')
   })
 
-  it('opens a video in the dialog from a Start here step, and counts it watched at 90%', () => {
+  it('opens a video in the dialog from Start here and completes the step only after enough is played', () => {
     renderPage()
     fireEvent.click(screen.getAllByRole('button', { name: /Watch/ })[0])
     expect(screen.getByRole('dialog')).toBeInTheDocument()
     const video = document.querySelector('video')
     Object.defineProperty(video, 'duration', { value: 100, configurable: true })
-    video.currentTime = 95
-    fireEvent.timeUpdate(video)
+    video._paused = false
+    // play 0 -> 50 in half-second steps: 50% is not enough
+    for (let t = 0.5; t <= 50; t += 0.5) { video.currentTime = t; fireEvent.timeUpdate(video) }
+    fireEvent.pause(video)
+    expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '0')
+    video._paused = false
+    for (let t = 50.5; t <= 90; t += 0.5) { video.currentTime = t; fireEvent.timeUpdate(video) }
+    fireEvent.pause(video)
     expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '1')
   })
 
