@@ -169,3 +169,16 @@ def test_detail_lists_steps(world):
     post_video(client(world['teacher'], world['a']), [[0, 90]])
     r = client(world['admin'], world['a']).get(f"/api/guide/progress/user/{world['teacher'].id}/")
     assert r.status_code == 200 and r.data['steps']
+
+
+def test_last_seen_is_the_later_of_login_and_guide_use(world):
+    from datetime import timedelta
+    from django.utils import timezone
+    login = timezone.now() - timedelta(days=3)
+    User.objects.filter(pk=world['teacher'].pk).update(last_login=login)
+    c = client(world['admin'], world['a'])
+    row = next(r for r in c.get('/api/guide/progress/overview/').data['results'] if r['username'] == 'gp_teacher')
+    assert row['last_activity'] is None and abs((row['last_seen'] - login).total_seconds()) < 1
+    post_video(client(world['teacher'], world['a']), [[0, 10]])
+    row = next(r for r in c.get('/api/guide/progress/overview/').data['results'] if r['username'] == 'gp_teacher')
+    assert row['last_seen'] > login

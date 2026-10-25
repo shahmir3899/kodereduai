@@ -24,7 +24,7 @@ const ROLE_LABEL = {
 
 const SORTS = [
   ['name', 'Name'], ['-percent', 'Most progress'], ['percent', 'Least progress'],
-  ['-last_activity', 'Latest activity'], ['last_activity', 'Oldest activity'],
+  ['-last_seen', 'Seen most recently'], ['last_seen', 'Seen longest ago'],
 ]
 
 const SECTION_TITLE = Object.fromEntries(guideData.chapters.flatMap((c) => c.sections.map((s) => [s.id, s.title.replace(/^Step \d+:\s*/, '')])))
@@ -226,7 +226,7 @@ export default function GuideProgressPanel() {
                   <th className="px-3 py-2">Class / department</th>
                   <th className="px-3 py-2">Progress</th>
                   <th className="px-3 py-2">Videos</th>
-                  <th className="px-3 py-2">Last active</th>
+                  <th className="px-3 py-2">Last seen</th>
                   <th className="px-3 py-2">Status</th>
                 </tr>
               </thead>
@@ -245,7 +245,7 @@ export default function GuideProgressPanel() {
                       <span className="text-xs text-gray-400">{row.steps_done} of {row.steps_total} steps</span>
                     </td>
                     <td className="px-3 py-2 text-gray-700">{row.videos_watched}</td>
-                    <td className="px-3 py-2 text-gray-700">{formatWhen(row.last_activity)}</td>
+                    <td className="px-3 py-2 text-gray-700">{formatWhen(row.last_seen)}</td>
                     <td className="px-3 py-2"><Badge tone={STATUS[row.status]?.tone}>{STATUS[row.status]?.label || row.status}</Badge></td>
                   </tr>
                 ))}

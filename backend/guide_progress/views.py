@@ -180,11 +180,11 @@ class GuideProgressViewSet(viewsets.GenericViewSet):
         response['Content-Disposition'] = 'attachment; filename="guide-progress.csv"'
         writer = csv.writer(response)
         writer.writerow(['Name', 'Username', 'Role', 'Class / department', 'Steps done', 'Steps total',
-                         'Videos watched', 'Percent', 'Status', 'Last activity'])
+                         'Videos watched', 'Percent', 'Status', 'Last seen'])
         for r in rows:
             writer.writerow([_safe_cell(r['name']), _safe_cell(r['username']), r['role'], _safe_cell(r['group']),
                              r['steps_done'], r['steps_total'], r['videos_watched'], r['percent'],
-                             r['status'], r['last_activity'] or ''])
+                             r['status'], r['last_seen'] or ''])
         return response
 
     @action(detail=False, methods=['get'], url_path=r'user/(?P<user_id>\d+)')
@@ -264,6 +264,8 @@ class GuideProgressViewSet(viewsets.GenericViewSet):
                     done += 1
             watched = sum(1 for (kind, _), (completed, _) in mine.items() if kind == 'video' and completed)
             last = max((v[1] for v in mine.values()), default=None)
+            # One "last seen" for the admin: the later of signing in and using the guide.
+            seen = max((t for t in (last, m.user.last_login) if t), default=None)
             total = len(reqs)
             if not mine:
                 state = 'not_started'
@@ -283,6 +285,7 @@ class GuideProgressViewSet(viewsets.GenericViewSet):
                 'percent': round(done / total * 100) if total else 0,
                 'status': state,
                 'last_activity': last,
+                'last_seen': seen,
             })
 
         summary = {
@@ -320,11 +323,11 @@ class GuideProgressViewSet(viewsets.GenericViewSet):
         sort = params.get('sort') or 'name'
         reverse = sort.startswith('-')
         field = sort.lstrip('-')
-        if field not in ('name', 'role', 'group', 'percent', 'videos_watched', 'last_activity', 'status'):
+        if field not in ('name', 'role', 'group', 'percent', 'videos_watched', 'last_seen', 'status'):
             field, reverse = 'name', False
         # people who never opened the guide sort as the oldest activity
         epoch = timezone.make_aware(timezone.datetime(1970, 1, 1))
-        key = (lambda r: r['last_activity'] or epoch) if field == 'last_activity' else (lambda r: str(r[field]).lower() if isinstance(r[field], str) else r[field])
+        key = (lambda r: r['last_seen'] or epoch) if field == 'last_seen' else (lambda r: str(r[field]).lower() if isinstance(r[field], str) else r[field])
         return sorted(rows, key=key, reverse=reverse)
 
 
