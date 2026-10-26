@@ -31,9 +31,10 @@ export const siteConfig = {
 /* ─── Typed content for the landing page ──────────── */
 export const landingContent = {
   /* SEO */
-  title: 'Education AI for Schools',
+  // Titles over ~60 characters and descriptions over ~160 are cut off in Google results.
+  title: 'School Management Software in Pakistan | Education AI',
   description:
-    'Modern school operations platform with AI-assisted attendance, fees, academics, communication, and analytics in one connected experience.',
+    'Cloud school management software for Pakistan: attendance, fees, exams, timetable, HR and parent portal in one place. Book a free demo.',
 
   /* ── Hero ─────────────────────────────────────────── */
   hero: {
@@ -43,7 +44,7 @@ export const landingContent = {
       'Admissions, attendance, finance, academics, HR, transport, inventory — one cloud platform with AI-assisted workflows for every role.',
     primaryCta: { label: 'Book a Demo', href: '#contact' },
     secondaryCta: { label: 'See it in action', href: '#walkthrough' },
-    dashboardImage: '/dashboard_overview.jpg',
+    dashboardImage: '/screens/dashboard-desktop.webp',
     dashboardAlt: 'Education AI school dashboard overview',
     /* Fallback metrics shown when live fetch is unavailable */
     metrics: {
@@ -105,7 +106,8 @@ export const landingContent = {
           'Fee collection vs target chart',
           'Upcoming events + quick actions panel',
         ],
-        image: '/dashboard.jpg',
+        image: '/screens/dashboard-desktop.webp',
+        imageMobile: '/screens/dashboard-mobile.webp',
         color: 'sky',
       },
       {
@@ -119,7 +121,8 @@ export const landingContent = {
           'Single-day and date-range event marking',
           'Automatic Sunday and off-day handling',
         ],
-        image: '/academiccalendar.jpg',
+        image: '/screens/calendar-desktop.webp',
+        imageMobile: '/screens/calendar-mobile.webp',
         color: 'indigo',
       },
       {
@@ -133,7 +136,8 @@ export const landingContent = {
           'AI-assisted lesson plan generation',
           'Curriculum coverage progress bar',
         ],
-        image: '/timetable.jpg',
+        image: '/screens/timetable-desktop.webp',
+        imageMobile: '/screens/timetable-mobile.webp',
         color: 'emerald',
       },
       {
@@ -147,7 +151,8 @@ export const landingContent = {
           'Automated due-date alerts via SMS / app',
           'Class-wise collection summary dashboard',
         ],
-        image: '/fee.jpg',
+        image: '/screens/fees-desktop.webp',
+        imageMobile: '/screens/fees-mobile.webp',
         color: 'violet',
       },
       {
@@ -161,7 +166,8 @@ export const landingContent = {
           'Payroll generation with deductions',
           'Leave calendar with approval workflow',
         ],
-        image: '/hrstaff.jpg',
+        image: '/screens/hr-desktop.webp',
+        imageMobile: '/screens/hr-mobile.webp',
         color: 'rose',
       },
       {
@@ -175,7 +181,8 @@ export const landingContent = {
           'Per-student report card generation',
           'Class-wise result analytics with pass/fail breakdown',
         ],
-        image: '/exams.jpg',
+        image: '/screens/exams-desktop.webp',
+        imageMobile: '/screens/exams-mobile.webp',
         color: 'amber',
       },
       {
@@ -189,7 +196,8 @@ export const landingContent = {
           'In-app notification history and status',
           'Fee, event, and attendance reminder alerts',
         ],
-        image: '/messages.jpg',
+        image: '/screens/notifications-desktop.webp',
+        imageMobile: '/screens/notifications-mobile.webp',
         color: 'teal',
       },
       {
@@ -203,7 +211,8 @@ export const landingContent = {
           'Track curriculum coverage progress by subject',
           'Share plans with academic leadership for review',
         ],
-        image: '/lessonplan.jpg',
+        image: '/screens/lessonplans-desktop.webp',
+        imageMobile: '/screens/lessonplans-mobile.webp',
         color: 'fuchsia',
       },
       {
@@ -217,7 +226,8 @@ export const landingContent = {
           'Per-school module enable/disable toggle',
           'Academic year and term configuration',
         ],
-        image: '/settings.jpg',
+        image: '/screens/settings-desktop.webp',
+        imageMobile: '/screens/settings-mobile.webp',
         color: 'slate',
       },
     ],
@@ -333,13 +343,15 @@ export const landingContent = {
     tagline:
       'A complete school operating system for admissions, academics, attendance, finance, HR, transport, and inventory.',
     productLinks: [
-      { label: 'Platform Overview', href: '#overview' },
-      { label: 'Feature Walkthrough', href: '#walkthrough' },
-      { label: 'Pricing', href: '#pricing' },
+      // Rooted with "/" so the anchors also work from /about, /guide and the other inner pages.
+      { label: 'Platform Overview', href: '/#overview' },
+      { label: 'Feature Walkthrough', href: '/#walkthrough' },
+      { label: 'Pricing', href: '/#pricing' },
+      { label: 'User Guide & Videos', href: '/guide' },
       { label: 'Live Demo', href: 'https://demo.educationai.pk', external: true },
     ],
     companyLinks: [
-      { label: 'Contact', href: '#contact' },
+      { label: 'Contact', href: '/#contact' },
       { label: 'Careers', href: '/careers' },
       { label: 'About', href: '/about' },
     ],

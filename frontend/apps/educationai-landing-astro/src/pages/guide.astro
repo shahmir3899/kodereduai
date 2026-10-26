@@ -4,22 +4,43 @@ import Footer from '../components/sections/Footer.astro';
 import PublicGuide from '../components/islands/PublicGuide.jsx';
 import { siteConfig } from '../content/landing';
 
+import videoData from '../../../../src/data/guideVideos.json';
+
 const siteUrl = Astro.site?.toString().replace(/\/$/, '') ?? siteConfig.siteUrl.replace(/\/$/, '');
+
+// The player below is JavaScript-only, so search engines would see an empty page. This plain list of the
+// ready videos gives them (and visitors without scripts) real text and links to each tutorial.
+const readyVideos = videoData.videos.filter((v) => v.status === 'ready');
+const videoList = {
+  '@context': 'https://schema.org',
+  '@type': 'ItemList',
+  name: 'Education AI video tutorials',
+  numberOfItems: readyVideos.length,
+  itemListElement: readyVideos.map((v, i) => ({
+    '@type': 'ListItem',
+    position: i + 1,
+    name: v.title.en,
+    url: `${siteUrl}/guide?video=${v.id}`,
+  })),
+};
 ---
 
 <BaseLayout
-  title="User Guide and Video Tutorials | Education AI"
+  title="School Software User Guide and Video Tutorials | Education AI"
   description="Free step-by-step guide and short video tutorials, in English and Urdu, for running a school on Education AI: attendance, fees, exams, staff and more."
   canonical="/guide"
   robots="index,follow"
-  ogImage="/dashboard.jpg"
-  jsonLd={{
-    '@context': 'https://schema.org',
-    '@type': 'CollectionPage',
-    name: 'Education AI user guide',
-    url: `${siteUrl}/guide`,
-    isPartOf: { '@type': 'WebSite', url: siteUrl, name: 'Education AI' },
-  }}
+  ogImage="/og-home.jpg"
+  jsonLd={[
+    {
+      '@context': 'https://schema.org',
+      '@type': 'CollectionPage',
+      name: 'Education AI user guide',
+      url: `${siteUrl}/guide`,
+      isPartOf: { '@type': 'WebSite', url: siteUrl, name: 'Education AI' },
+    },
+    videoList,
+  ]}
 >
   <header class="bg-brand-light/85 border-b border-gray-200/60">
     <div class="flex items-center justify-between h-16 px-6 max-w-6xl mx-auto">
@@ -38,6 +59,15 @@ const siteUrl = Astro.site?.toString().replace(/\/$/, '') ?? siteConfig.siteUrl.
         Short videos in English and Urdu, and the full written guide. Free to watch, no sign-in.
       </p>
       <PublicGuide client:load videoBase={siteConfig.guideVideoBase} />
+
+      <section class="mt-12" aria-labelledby="topics-heading">
+        <h2 id="topics-heading" class="font-display text-xl font-bold text-brand-dark mb-3">All video tutorials</h2>
+        <ul class="grid gap-x-8 gap-y-1.5 sm:grid-cols-2 text-sm text-brand-gray">
+          {readyVideos.map((v) => (
+            <li><a href={`/guide?video=${v.id}`} class="hover:text-primary">{v.title.en}</a> <span class="text-gray-400">&mdash; {v.summary}</span></li>
+          ))}
+        </ul>
+      </section>
     </div>
   </main>
   <Footer />

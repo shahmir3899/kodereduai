@@ -20,6 +20,7 @@ const siteUrl = Astro.site?.toString().replace(/\/$/, '') ?? siteConfig.siteUrl.
 const organizationSchema = {
   '@context': 'https://schema.org',
   '@type': 'Organization',
+  '@id': `${siteUrl}/#organization`,
   name: siteConfig.brandName,
   alternateName: siteConfig.productName,
   url: siteUrl,
@@ -44,21 +45,27 @@ const organizationSchema = {
   },
 };
 
+const websiteSchema = {
+  '@context': 'https://schema.org',
+  '@type': 'WebSite',
+  '@id': `${siteUrl}/#website`,
+  url: siteUrl,
+  name: siteConfig.brandName,
+  inLanguage: 'en',
+  publisher: { '@id': `${siteUrl}/#organization` },
+};
+
+// No "offers" block on purpose: pricing is by quote, and a made-up price of 0 would show as "Free" in results.
 const softwareSchema = {
   '@context': 'https://schema.org',
   '@type': 'SoftwareApplication',
   name: siteConfig.productName,
   operatingSystem: 'Web, iOS, Android',
   applicationCategory: 'EducationApplication',
-  offers: {
-    '@type': 'Offer',
-    price: '0',
-    priceCurrency: 'USD',
-    description: 'Contact sales for pricing — multiple tiers available.',
-  },
   description: landingContent.description,
   url: siteUrl,
-  screenshot: `${siteUrl}/dashboard_overview.jpg`,
+  publisher: { '@id': `${siteUrl}/#organization` },
+  screenshot: `${siteUrl}/screens/dashboard-desktop.webp`,
   featureList: [
     'AI-powered attendance from handwritten registers',
     'Admissions management',
@@ -93,22 +100,16 @@ const faqSchema = {
   title={landingContent.title}
   description={landingContent.description}
   canonical="/"
-  ogImage="/dashboard_overview.jpg"
-  jsonLd={[organizationSchema, softwareSchema, faqSchema]}
+  ogImage="/og-home.jpg"
+  jsonLd={[organizationSchema, websiteSchema, softwareSchema, faqSchema]}
 >
   <!-- Preload LCP image (hero dashboard screenshot) -->
   <link
     slot="head"
     rel="preload"
     as="image"
-    href="/dashboard_overview.jpg"
+    href="/screens/dashboard-desktop.webp"
     fetchpriority="high"
-  />
-  <link
-    slot="head"
-    rel="preload"
-    as="image"
-    href="/dashboard.jpg"
   />
 
   <!-- Subtle noise texture overlay -->

@@ -137,18 +137,20 @@ export default function WalkthroughCarousel() {
                     <span className="ml-2 text-sm text-brand-gray">{slide.label}</span>
                   </div>
                   <div className="feature-image-shell">
-                    <img
-                      key={slide.image}
-                      src={slide.image}
-                      alt={slide.title}
-                      className="w-full rounded-xl slideshow-img"
-                      loading={shouldPrioritizeImage ? 'eager' : 'lazy'}
-                      decoding={shouldPrioritizeImage ? 'sync' : 'async'}
-                      fetchPriority={shouldPrioritizeImage ? 'high' : 'auto'}
-                      width={1200}
-                      height={750}
-                      sizes="(max-width: 768px) 100vw, (max-width: 1280px) 60vw, 800px"
-                    />
+                    {/* Phones get the real mobile layout of the screen instead of a shrunken desktop one. */}
+                    <picture key={slide.image}>
+                      <source media="(max-width: 640px)" srcSet={slide.imageMobile} width={780} height={1688} />
+                      <img
+                        src={slide.image}
+                        alt={`${slide.label}: ${slide.title}`}
+                        className="w-full rounded-xl slideshow-img"
+                        loading={shouldPrioritizeImage ? 'eager' : 'lazy'}
+                        decoding={shouldPrioritizeImage ? 'sync' : 'async'}
+                        fetchPriority={shouldPrioritizeImage ? 'high' : 'auto'}
+                        width={1600}
+                        height={1000}
+                      />
+                    </picture>
                   </div>
                 </div>
               </div>

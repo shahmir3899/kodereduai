@@ -14,7 +14,7 @@ const {
   description,
   canonical,
   robots = 'index,follow',
-  ogImage = '/hero_illustration.jpg',
+  ogImage = '/og-home.jpg',
   ogType = 'website',
   jsonLd,
 } = Astro.props as Props;
@@ -44,7 +44,7 @@ const schemas: object[] = jsonLd
 <meta property="og:image" content={ogImageUrl} />
 <meta property="og:image:width" content="1200" />
 <meta property="og:image:height" content="630" />
-<meta property="og:image:alt" content="Education AI for schools" />
+<meta property="og:image:alt" content="Education AI school dashboard" />
 {canonicalUrl && <meta property="og:url" content={canonicalUrl} />}
 
 <!-- Twitter / X -->
