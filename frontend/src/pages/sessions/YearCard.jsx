@@ -59,7 +59,7 @@ function OverflowMenu({ items }) {
  * One academic year: name and status, dates, its terms on a timeline, a few counts, and one primary
  * action (Manage terms). Edit, Set current and Delete live in the overflow menu.
  */
-export default function YearCard({ year, activeYearId, terms, classesCount, onManageTerms, onEdit, onSetCurrent, onDelete }) {
+export default function YearCard({ year, activeYearId, terms, classesCount, onManageTerms, onEdit, onSetCurrent, onDelete, readOnly = false }) {
   const isViewing = year.id === activeYearId
   const menu = [
     ...(year.is_current ? [] : [{ label: 'Set as current year', onClick: onSetCurrent }]),
@@ -74,7 +74,7 @@ export default function YearCard({ year, activeYearId, terms, classesCount, onMa
           <h3 className="truncate font-semibold text-gray-900 dark:text-gray-100">{year.name}</h3>
           <p className="mt-0.5 text-sm text-gray-600 dark:text-gray-300">{formatDay(year.start_date)} - {formatDay(year.end_date)}</p>
         </div>
-        <OverflowMenu items={menu} />
+        {!readOnly && <OverflowMenu items={menu} />}
       </div>
 
       <div className="mt-2 flex flex-wrap gap-1">
@@ -84,7 +84,7 @@ export default function YearCard({ year, activeYearId, terms, classesCount, onMa
       </div>
 
       <div className="mt-3">
-        <YearTimeline year={year} terms={terms} onTermClick={onManageTerms} />
+        <YearTimeline year={year} terms={terms} onTermClick={readOnly ? undefined : onManageTerms} />
       </div>
 
       <div className={`mt-3 grid gap-2 ${classesCount !== undefined ? 'grid-cols-3' : 'grid-cols-2'}`}>
@@ -93,9 +93,11 @@ export default function YearCard({ year, activeYearId, terms, classesCount, onMa
         <Stat label="Terms" value={year.terms_count ?? terms.length} />
       </div>
 
-      <Button className="mt-3 w-full" variant={terms.length === 0 ? 'primary' : 'secondary'} onClick={onManageTerms}>
-        {terms.length === 0 ? 'Add terms' : 'Manage terms'}
-      </Button>
+      {!readOnly && (
+        <Button className="mt-3 w-full" variant={terms.length === 0 ? 'primary' : 'secondary'} onClick={onManageTerms}>
+          {terms.length === 0 ? 'Add terms' : 'Manage terms'}
+        </Button>
+      )}
     </div>
   )
 }

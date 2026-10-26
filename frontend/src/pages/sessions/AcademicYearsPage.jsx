@@ -6,6 +6,7 @@ import PageHeader from '../../components/ui/PageHeader'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { sessionsApi } from '../../services/api'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
+import { useAuth } from '../../contexts/AuthContext'
 import { useToast } from '../../components/Toast'
 import { useConfirmModal } from '../../components/ConfirmModal'
 import SessionSetupWizard from './SessionSetupWizard'
@@ -32,6 +33,7 @@ const EMPTY_TERM_IMPORT = {
 export default function AcademicYearsPage() {
   const queryClient = useQueryClient()
   const { refresh: refreshAcademicYear, activeAcademicYear } = useAcademicYear()
+  const { isSchoolAdmin } = useAuth()
   const { showSuccess, showError } = useToast()
   const { confirm, ConfirmModalRoot } = useConfirmModal()
   const [termsYearId, setTermsYearId] = useState(null) // year whose terms modal is open
@@ -77,25 +79,26 @@ export default function AcademicYearsPage() {
   // Year mutations
   const createYearMut = useMutation({
     mutationFn: (data) => sessionsApi.createAcademicYear(data),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['academicYears'] }); closeYearModal() },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['academicYears'] }); closeYearModal(); showSuccess('Academic year added') },
     onError: (err) => setYearErrors(err.response?.data || { detail: 'Failed to create' }),
   })
 
   const updateYearMut = useMutation({
     mutationFn: ({ id, data }) => sessionsApi.updateAcademicYear(id, data),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['academicYears'] }); closeYearModal() },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['academicYears'] }); closeYearModal(); showSuccess('Academic year updated') },
     onError: (err) => setYearErrors(err.response?.data || { detail: 'Failed to update' }),
   })
 
   const deleteYearMut = useMutation({
     mutationFn: (id) => sessionsApi.deleteAcademicYear(id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['academicYears'] }),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['academicYears'] }); showSuccess('Academic year deleted') },
+    onError: (err) => showError(err.response?.data?.detail || 'Could not delete the year'),
   })
 
   const setCurrentMut = useMutation({
     // The dialog the admin just accepted is the confirmation the server asks for on a past or future year.
     mutationFn: (id) => sessionsApi.setCurrentYear(id, { confirm_warnings: true }),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['academicYears'] }); refreshAcademicYear() },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['academicYears'] }); refreshAcademicYear(); showSuccess('Current academic year changed') },
     onError: (err) => showError(err.response?.data?.detail || 'Could not set the current year'),
   })
 
@@ -194,7 +197,7 @@ export default function AcademicYearsPage() {
 
       {/* ─── Academic Years ─── */}
       <>
-          <div className="flex justify-end gap-2 mb-4">
+          {isSchoolAdmin && <div className="flex justify-end gap-2 mb-4">
             {years.length > 0 && (
               <Button variant="secondary" onClick={() => setShowSetupWizard(true)} className="flex items-center gap-1.5">
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -204,7 +207,7 @@ export default function AcademicYearsPage() {
               </Button>
             )}
             <Button onClick={openCreateYear}>+ Add Academic Year</Button>
-          </div>
+          </div>}
 
           {yearsLoading ? (
             <div className="text-center py-12">
@@ -213,12 +216,12 @@ export default function AcademicYearsPage() {
           ) : years.length === 0 ? (
             <div className="card p-4 sm:p-6 dark:bg-gray-800 dark:border-gray-700">
               <Stepper steps={['Create Academic Year', 'Add Terms', 'Activate Year']} current={1} />
-              <p className="text-sm text-gray-500 mt-3 dark:text-gray-400">No academic years yet. Click "+ Add Academic Year" to create your first one.</p>
-              <div className="bg-primary-50 border border-primary-200 rounded-lg p-3 mt-3 dark:bg-primary-900/20 dark:border-primary-900/60">
+              <p className="text-sm text-gray-500 mt-3 dark:text-gray-400">{isSchoolAdmin ? 'No academic years yet. Click "+ Add Academic Year" to create your first one.' : 'No academic years yet. A school admin or principal sets them up.'}</p>
+              {isSchoolAdmin && <div className="bg-primary-50 border border-primary-200 rounded-lg p-3 mt-3 dark:bg-primary-900/20 dark:border-primary-900/60">
                 <p className="text-xs text-primary-700 dark:text-primary-300">
                   <span className="font-semibold">Tip:</span> Use the AI Setup Wizard to auto-generate years and terms.
                 </p>
-              </div>
+              </div>}
             </div>
           ) : (
             <>
@@ -228,6 +231,7 @@ export default function AcademicYearsPage() {
                 <YearCard
                   key={y.id}
                   year={y}
+                  readOnly={!isSchoolAdmin}
                   activeYearId={activeAcademicYear?.id}
                   terms={allTerms.filter(t => t.academic_year === y.id)}
                   classesCount={y.id === activeAcademicYear?.id && summary ? (summary.classes_count || 0) : undefined}

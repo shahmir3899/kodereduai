@@ -256,7 +256,7 @@
             {
               "type": "step",
               "number": 2,
-              "text": "On the year's card, click 'Set Current' to make it the active year."
+              "text": "On the year's card, open the menu (the three dots), choose 'Set as current year' and confirm."
             },
             {
               "type": "step",
@@ -895,6 +895,10 @@
               "text": "The 'AI Insights' tab shows workload balance across subjects."
             }
           ],
+          "roles": [
+            "SCHOOL_ADMIN",
+            "PRINCIPAL"
+          ],
           "video": "ch5-managing-subjects"
         },
         {
@@ -923,7 +927,7 @@
             {
               "type": "step",
               "number": 2,
-              "text": "Click 'Set Current' on the year the school is working in now."
+              "text": "On the card of the year the school is working in now, open the menu (the three dots), choose 'Set as current year' and confirm."
             },
             {
               "type": "step",
@@ -978,6 +982,10 @@
               "number": 10,
               "text": "Check the preview, then click 'Import Terms'. Use this at the start of a new year."
             }
+          ],
+          "roles": [
+            "SCHOOL_ADMIN",
+            "PRINCIPAL"
           ],
           "video": "ch5-academic-sessions-years-terms"
         },
@@ -1080,8 +1088,7 @@
           ],
           "roles": [
             "SCHOOL_ADMIN",
-            "PRINCIPAL",
-            "MANAGER"
+            "PRINCIPAL"
           ],
           "video": "ch5-academic-calendar"
         }

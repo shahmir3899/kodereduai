@@ -190,7 +190,7 @@ export default function SchoolSetupPage() {
   return (
     <div className="min-h-[calc(100vh-4rem)]">
       {/* Header */}
-      <div className="bg-white border-b px-6 py-4 flex items-center justify-between">
+      <div className="bg-white border-b px-6 py-4 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold text-gray-900">School Setup</h1>
           <p className="text-sm text-gray-500 mt-0.5">
@@ -218,7 +218,7 @@ export default function SchoolSetupPage() {
         </div>
       </div>
 
-      <div className="flex">
+      <div className="flex flex-col lg:flex-row">
         {/* Vertical Stepper Sidebar */}
         <div className="hidden lg:block w-64 bg-white border-r min-h-[calc(100vh-8rem)] p-4 shrink-0">
           <nav className="space-y-1">
@@ -280,7 +280,7 @@ export default function SchoolSetupPage() {
         </div>
 
         {/* Main Content */}
-        <div className="flex-1 p-6 max-w-4xl">
+        <div className="flex-1 min-w-0 p-6 max-w-4xl">
           {renderStep()}
 
           {/* Navigation */}

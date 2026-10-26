@@ -474,7 +474,7 @@ export default function SubjectsPage() {
       <PageHeader title="Subjects" subtitle="Manage subjects, subject teachers, and class teachers" className="mb-6" />
 
       {/* Tabs */}
-      <div className="flex gap-1 mb-6 bg-gray-100 p-1 rounded-lg w-fit">
+      <div className="flex gap-1 mb-6 bg-gray-100 p-1 rounded-lg w-fit max-w-full overflow-x-auto">
         <button
           onClick={() => setTab('subjects')}
           className={`px-4 py-2 text-sm rounded-md transition-colors ${tab === 'subjects' ? 'bg-white shadow text-primary-700 font-medium' : 'text-gray-600 hover:text-gray-800'}`}

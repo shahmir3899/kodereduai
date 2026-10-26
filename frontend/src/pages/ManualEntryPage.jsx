@@ -337,6 +337,10 @@ export default function ManualEntryPage() {
 
           {/* Mobile card view */}
           <div className="md:hidden space-y-2">
+            {/* The phone card shows one letter per status; without this key P/A/L/— are guesswork. */}
+            <p className="text-xs text-gray-500" data-testid="status-legend">
+              Tap to change: P Present · A Absent · L Leave · — Not set
+            </p>
             {attendanceData.map((item, idx) => (
               <div key={item.student_id} className="card py-3 flex items-center justify-between">
                 <div>

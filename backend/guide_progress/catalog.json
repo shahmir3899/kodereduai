@@ -209,9 +209,7 @@
       "module": "academics",
       "roles": [
         "SCHOOL_ADMIN",
-        "PRINCIPAL",
-        "MANAGER",
-        "TEACHER"
+        "PRINCIPAL"
       ]
     },
     {
@@ -230,9 +228,7 @@
       "module": "academics",
       "roles": [
         "SCHOOL_ADMIN",
-        "PRINCIPAL",
-        "MANAGER",
-        "TEACHER"
+        "PRINCIPAL"
       ]
     },
     {
@@ -241,8 +237,7 @@
       "module": "academics",
       "roles": [
         "SCHOOL_ADMIN",
-        "PRINCIPAL",
-        "MANAGER"
+        "PRINCIPAL"
       ]
     },
     {

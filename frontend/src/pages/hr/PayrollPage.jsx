@@ -159,6 +159,8 @@ export default function PayrollPage() {
       link.click()
       link.remove()
       window.URL.revokeObjectURL(url)
+      // The browser's own download bar is not visible on every device, so say it here.
+      showSuccess('Payslip PDF downloaded')
     } catch {
       showError('Failed to download payslip PDF')
     }

@@ -19,7 +19,11 @@
         "ur": 65
       },
       "status": "ready",
-      "section": "3.1"
+      "section": "3.1",
+      "mobile": {
+        "en": 84,
+        "ur": 84
+      }
     },
     {
       "id": "attendance-already-marked",
@@ -40,7 +44,11 @@
         "ur": 60
       },
       "status": "ready",
-      "section": "3.2"
+      "section": "3.2",
+      "mobile": {
+        "en": 88,
+        "ur": 88
+      }
     },
     {
       "id": "ch2-step-1-academic-year-terms",
@@ -58,6 +66,10 @@
       "seconds": {
         "en": 71,
         "ur": 69
+      },
+      "mobile": {
+        "en": 127,
+        "ur": 127
       }
     },
     {
@@ -264,6 +276,10 @@
       "seconds": {
         "en": 47,
         "ur": 47
+      },
+      "mobile": {
+        "en": 87,
+        "ur": 87
       }
     },
     {
@@ -282,6 +298,10 @@
       "seconds": {
         "en": 41,
         "ur": 42
+      },
+      "mobile": {
+        "en": 80,
+        "ur": 80
       }
     },
     {
@@ -300,6 +320,10 @@
       "seconds": {
         "en": 43,
         "ur": 45
+      },
+      "mobile": {
+        "en": 76,
+        "ur": 76
       }
     },
     {
@@ -313,14 +337,16 @@
       "chapter": 5,
       "roles": [
         "SCHOOL_ADMIN",
-        "PRINCIPAL",
-        "MANAGER",
-        "TEACHER"
+        "PRINCIPAL"
       ],
       "module": "academics",
       "seconds": {
         "en": 47,
         "ur": 47
+      },
+      "mobile": {
+        "en": 87,
+        "ur": 87
       }
     },
     {
@@ -358,14 +384,16 @@
       "chapter": 5,
       "roles": [
         "SCHOOL_ADMIN",
-        "PRINCIPAL",
-        "MANAGER",
-        "TEACHER"
+        "PRINCIPAL"
       ],
       "module": "academics",
       "seconds": {
         "en": 71,
         "ur": 69
+      },
+      "mobile": {
+        "en": 127,
+        "ur": 127
       }
     },
     {
@@ -379,13 +407,16 @@
       "chapter": 5,
       "roles": [
         "SCHOOL_ADMIN",
-        "PRINCIPAL",
-        "MANAGER"
+        "PRINCIPAL"
       ],
       "module": "academics",
       "seconds": {
         "en": 60,
         "ur": 62
+      },
+      "mobile": {
+        "en": 92,
+        "ur": 92
       }
     },
     {
@@ -405,6 +436,10 @@
       "seconds": {
         "en": 64,
         "ur": 64
+      },
+      "mobile": {
+        "en": 94,
+        "ur": 94
       }
     },
     {
@@ -803,6 +838,10 @@
       "seconds": {
         "en": 49,
         "ur": 50
+      },
+      "mobile": {
+        "en": 71,
+        "ur": 71
       }
     },
     {
@@ -822,6 +861,10 @@
       "seconds": {
         "en": 69,
         "ur": 68
+      },
+      "mobile": {
+        "en": 88,
+        "ur": 88
       }
     },
     {
@@ -860,6 +903,10 @@
       "seconds": {
         "en": 63,
         "ur": 63
+      },
+      "mobile": {
+        "en": 91,
+        "ur": 91
       }
     },
     {
@@ -917,6 +964,10 @@
       "seconds": {
         "en": 84,
         "ur": 84
+      },
+      "mobile": {
+        "en": 112,
+        "ur": 112
       }
     },
     {
@@ -936,6 +987,10 @@
       "seconds": {
         "en": 59,
         "ur": 63
+      },
+      "mobile": {
+        "en": 81,
+        "ur": 81
       }
     },
     {
