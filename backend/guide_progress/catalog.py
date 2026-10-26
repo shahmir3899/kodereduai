@@ -33,6 +33,17 @@ def video_for_section(section_id):
     return None
 
 
+def videos_for_role(role, enabled_modules):
+    """Ids of every video meant for a role, minus modules the school turned off.
+
+    The total is derived from catalog.json so new videos count automatically.
+    """
+    return {
+        v['id'] for v in load()['videos']
+        if role in v.get('roles', []) and enabled_modules.get(v.get('module')) is not False
+    }
+
+
 def step_requirements(role, enabled_modules):
     """[(section_id, video_id or None)] for a role; hides steps whose module the school turned off."""
     out = []

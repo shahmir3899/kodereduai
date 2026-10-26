@@ -97,10 +97,14 @@ export default function SettingsPage() {
   const [commentDraft, setCommentDraft] = useState(null)
   const examConfigMutation = useMutation({
     mutationFn: (data) => schoolsApi.updateExamConfig(data),
-    onSuccess: () => {
+    onSuccess: (_res, vars) => {
       queryClient.invalidateQueries({ queryKey: ['currentSchool'] })
       setCommentDraft(null)
+      if ('weighted_average_enabled' in vars) {
+        showSuccess(vars.weighted_average_enabled ? 'Weighted average turned on' : 'Weighted average turned off')
+      }
     },
+    onError: (err) => showError(err.response?.data?.error || 'Could not save the exam setting'),
   })
   const commentSettings = {
     comment_tone: commentDraft?.comment_tone ?? school?.exam_config?.comment_tone ?? 'warm',

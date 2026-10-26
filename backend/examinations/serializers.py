@@ -399,7 +399,8 @@ class GradeScaleCreateSerializer(serializers.ModelSerializer):
     def validate_grade_label(self, value):
         school_id = self.context.get('school_id')
         if school_id:
-            qs = GradeScale.objects.filter(school_id=school_id, grade_label=value)
+            # Deleted grades are only deactivated; create() revives them, so they must not block the label.
+            qs = GradeScale.objects.filter(school_id=school_id, grade_label=value, is_active=True)
             if self.instance:
                 qs = qs.exclude(pk=self.instance.pk)
             if qs.exists():

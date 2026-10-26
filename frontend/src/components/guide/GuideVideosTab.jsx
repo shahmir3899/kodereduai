@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
-import { videoUrl } from '../../utils/guideAssets'
+import useMobileVideo from '../../hooks/useMobileVideo'
+import { videoSeconds, videoUrl } from '../../utils/guideAssets'
 import { groupVideos } from '../../utils/guideVideoGroups'
 
 const PER_GROUP = 4
@@ -15,7 +16,7 @@ const minutes = (videos, lang) => Math.max(1, Math.round(videos.reduce((n, v) =>
 
 function VideoCard({ video, lang, watched, onSelect, step }) {
   const title = video.title?.[lang] || video.title?.en
-  const seconds = video.seconds?.[lang] || video.seconds?.en || 0
+  const seconds = videoSeconds(video, lang, useMobileVideo())
   return (
     <button
       type="button"

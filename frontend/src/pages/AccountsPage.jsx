@@ -169,6 +169,9 @@ export default function AccountsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['transfers'] })
       queryClient.invalidateQueries({ queryKey: ['accountBalances'] })
+      // Balances shown on the Manage Accounts cards come from ['accounts'], not accountBalances.
+      queryClient.invalidateQueries({ queryKey: ['accounts'] })
+      toast.showSuccess('Transfer recorded')
       closeTransferModal()
     },
   })
@@ -196,6 +199,7 @@ export default function AccountsPage() {
       queryClient.invalidateQueries({ queryKey: ['monthlyClosings'] })
       queryClient.invalidateQueries({ queryKey: ['accountBalances'] })
       queryClient.invalidateQueries({ queryKey: ['accountBalancesAll'] })
+      toast.showSuccess('Month closed')
       setShowCloseMonthModal(false)
     },
   })

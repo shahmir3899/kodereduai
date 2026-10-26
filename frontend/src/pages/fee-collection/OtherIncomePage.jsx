@@ -11,7 +11,7 @@ import LoadingState from '../../components/ui/LoadingState'
 
 export default function OtherIncomePage() {
   const { user, isStaffMember } = useAuth()
-  const { showWarning } = useToast()
+  const { showWarning, showSuccess } = useToast()
   const canWrite = !isStaffMember
   const now = new Date()
 
@@ -42,6 +42,7 @@ export default function OtherIncomePage() {
       category: parseInt(incomeForm.category),
     }, {
       onSuccess: () => {
+        showSuccess('Income recorded')
         setShowIncomeModal(false)
         setIncomeForm({ category: '', amount: '', date: new Date().toISOString().split('T')[0], description: '', account: '' })
       },

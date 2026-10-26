@@ -2633,6 +2633,20 @@ class GradeScaleViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
         # Small, slow-changing reference list; invalidated by examinations/signals.py.
         return super().list(request, *args, **kwargs)
 
+    def perform_create(self, serializer):
+        # (school, grade_label) is unique and delete only deactivates, so re-adding a deleted
+        # grade revives that row instead of failing with an IntegrityError.
+        school_id = _resolve_school_id(self.request)
+        label = serializer.validated_data.get('grade_label')
+        old = GradeScale.objects.filter(school_id=school_id, grade_label=label, is_active=False).first()
+        if old is None:
+            return super().perform_create(serializer)
+        for field, value in serializer.validated_data.items():
+            setattr(old, field, value)
+        old.is_active = True
+        old.save()
+        serializer.instance = old
+
     def perform_destroy(self, instance):
         instance.is_active = False
         instance.save()

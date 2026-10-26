@@ -10,7 +10,7 @@ import FeeSummaryCards, { ClassBreakdown, PendingStudents } from './FeeSummaryCa
 import FeeCharts from './FeeCharts'
 
 export default function FeeOverviewPage() {
-  const { isStaffMember } = useAuth()
+  const { isStaffMember, isAccountant } = useAuth()
   const { activeAcademicYear } = useAcademicYear()
   const [searchParams, setSearchParams] = useSearchParams()
   const canWrite = !isStaffMember
@@ -113,7 +113,8 @@ export default function FeeOverviewPage() {
           >
             Collect Payments
           </Link>
-          {canWrite && (
+          {/* Fee Setup route is admin/principal only; an accountant would be redirected. */}
+          {canWrite && !isAccountant && (
             <Link
               to="/finance/fees/setup"
               className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 text-sm"

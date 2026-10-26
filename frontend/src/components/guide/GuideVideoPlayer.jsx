@@ -53,7 +53,7 @@ const btn = 'flex h-10 min-w-10 items-center justify-center rounded-md px-2 text
  * `src`, `captionsSrc` and `poster` belong to one language; switching language remounts the video, and
  * `startAt` lets the caller carry the position across so the viewer does not lose their place.
  */
-export default function GuideVideoPlayer({ src, captionsSrc, captionsLang, captionsLabel, poster, startAt = 0, restartKey = 0, onTime, onEnded, onPlayed }) {
+export default function GuideVideoPlayer({ src, captionsSrc, captionsLang, captionsLabel, poster, portrait = false, startAt = 0, restartKey = 0, onTime, onEnded, onPlayed }) {
   const videoRef = useRef(null)
   const boxRef = useRef(null)
   const [prefs, setPrefs] = useState(loadPrefs)
@@ -173,7 +173,7 @@ export default function GuideVideoPlayer({ src, captionsSrc, captionsLang, capti
       <video
         key={src}
         ref={videoRef}
-        className={`w-full bg-black ${fullscreen ? 'max-h-screen' : ''}`}
+        className={`w-full bg-black ${fullscreen ? 'max-h-screen' : portrait ? 'max-h-[72vh]' : ''}`}
         autoPlay
         playsInline
         preload="metadata"

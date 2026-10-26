@@ -23,7 +23,7 @@ const ROLE_LABEL = {
 }
 
 const SORTS = [
-  ['name', 'Name'], ['-percent', 'Most progress'], ['percent', 'Least progress'],
+  ['name', 'Name'], ['-videos_percent', 'Most videos watched'], ['videos_percent', 'Fewest videos watched'],
   ['-last_seen', 'Seen most recently'], ['last_seen', 'Seen longest ago'],
 ]
 
@@ -52,15 +52,21 @@ function Tile({ label, value, active, onClick }) {
   )
 }
 
-function ProgressBar({ percent }) {
+function ProgressBar({ percent, label }) {
   return (
     <div className="flex items-center gap-2">
       <div className="h-2 w-20 overflow-hidden rounded-full bg-gray-100" role="progressbar" aria-valuenow={percent} aria-valuemin={0} aria-valuemax={100}>
         <div className={`h-full ${percent >= 100 ? 'bg-green-500' : 'bg-sky-500'}`} style={{ width: `${percent}%` }} />
       </div>
-      <span className="w-9 text-xs text-gray-600">{percent}%</span>
+      <span className="whitespace-nowrap text-xs text-gray-600">{label}</span>
     </div>
   )
+}
+
+function StartCourse({ row }) {
+  const done = row.steps_total > 0 && row.steps_done >= row.steps_total
+  if (done) return <span className="mt-1 inline-block rounded bg-green-50 px-1.5 py-0.5 text-xs font-medium text-green-700">Starting course completed ✓</span>
+  return <span className="block text-xs text-gray-400">Starting course: {row.steps_done} of {row.steps_total} steps</span>
 }
 
 function DetailModal({ person, onClose }) {
@@ -73,6 +79,11 @@ function DetailModal({ person, onClose }) {
       {isLoading && <p className="text-sm text-gray-500">Loading…</p>}
       {isError && <p className="text-sm text-red-600">Could not load this person's progress.</p>}
       {data && (
+        <>
+        <div className="mb-3 flex items-center gap-3">
+          <ProgressBar percent={person.videos_percent} label={`${person.videos_watched} / ${person.videos_total} videos`} />
+          <StartCourse row={person} />
+        </div>
         <ol className="space-y-2">
           {data.steps.map((step, i) => (
             <li key={step.section} className="flex items-center gap-3 rounded-lg border border-gray-100 px-3 py-2">
@@ -91,6 +102,7 @@ function DetailModal({ person, onClose }) {
           ))}
           {data.steps.length === 0 && <p className="text-sm text-gray-500">No guide steps apply to this role.</p>}
         </ol>
+        </>
       )}
     </Modal>
   )
@@ -225,13 +237,12 @@ export default function GuideProgressPanel() {
                   <th className="px-3 py-2">Role</th>
                   <th className="px-3 py-2">Class / department</th>
                   <th className="px-3 py-2">Progress</th>
-                  <th className="px-3 py-2">Videos</th>
                   <th className="px-3 py-2">Last seen</th>
                   <th className="px-3 py-2">Status</th>
                 </tr>
               </thead>
               <tbody>
-                {isLoading && <tr><td colSpan={7} className="px-3 py-8 text-center text-gray-500">Loading…</td></tr>}
+                {isLoading && <tr><td colSpan={6} className="px-3 py-8 text-center text-gray-500">Loading…</td></tr>}
                 {data?.results.map((row) => (
                   <tr key={row.user_id} className="cursor-pointer border-t border-gray-100 hover:bg-gray-50" onClick={() => setSelected(row)}>
                     <td className="px-3 py-2">
@@ -241,16 +252,15 @@ export default function GuideProgressPanel() {
                     <td className="px-3 py-2 text-gray-700">{ROLE_LABEL[row.role] || row.role}</td>
                     <td className="px-3 py-2 text-gray-700">{row.group || '—'}</td>
                     <td className="px-3 py-2">
-                      <ProgressBar percent={row.percent} />
-                      <span className="text-xs text-gray-400">{row.steps_done} of {row.steps_total} steps</span>
+                      <ProgressBar percent={row.videos_percent} label={`${row.videos_watched} / ${row.videos_total} videos`} />
+                      <StartCourse row={row} />
                     </td>
-                    <td className="px-3 py-2 text-gray-700">{row.videos_watched}</td>
                     <td className="px-3 py-2 text-gray-700">{formatWhen(row.last_seen)}</td>
                     <td className="px-3 py-2"><Badge tone={STATUS[row.status]?.tone}>{STATUS[row.status]?.label || row.status}</Badge></td>
                   </tr>
                 ))}
                 {data && data.results.length === 0 && (
-                  <tr><td colSpan={7} className="px-3 py-8 text-center text-gray-500">{filtered ? 'No one matches these filters.' : 'No one to show yet.'}</td></tr>
+                  <tr><td colSpan={6} className="px-3 py-8 text-center text-gray-500">{filtered ? 'No one matches these filters.' : 'No one to show yet.'}</td></tr>
                 )}
               </tbody>
             </table>

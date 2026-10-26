@@ -76,6 +76,10 @@
       "seconds": {
         "en": 57,
         "ur": 59
+      },
+      "mobile": {
+        "en": 78,
+        "ur": 78
       }
     },
     {
@@ -94,6 +98,10 @@
       "seconds": {
         "en": 51,
         "ur": 54
+      },
+      "mobile": {
+        "en": 88,
+        "ur": 88
       }
     },
     {
@@ -191,13 +199,16 @@
       "chapter": 7,
       "roles": [
         "SCHOOL_ADMIN",
-        "PRINCIPAL",
-        "ACCOUNTANT"
+        "PRINCIPAL"
       ],
       "module": "finance",
       "seconds": {
         "en": 49,
         "ur": 49
+      },
+      "mobile": {
+        "en": 85,
+        "ur": 85
       }
     },
     {
@@ -231,6 +242,10 @@
       "seconds": {
         "en": 30,
         "ur": 31
+      },
+      "mobile": {
+        "en": 61,
+        "ur": 61
       }
     },
     {
@@ -326,6 +341,10 @@
       "seconds": {
         "en": 46,
         "ur": 47
+      },
+      "mobile": {
+        "en": 82,
+        "ur": 82
       }
     },
     {
@@ -405,6 +424,10 @@
       "seconds": {
         "en": 61,
         "ur": 62
+      },
+      "mobile": {
+        "en": 84,
+        "ur": 84
       }
     },
     {
@@ -418,14 +441,16 @@
       "chapter": 6,
       "roles": [
         "SCHOOL_ADMIN",
-        "PRINCIPAL",
-        "MANAGER",
-        "TEACHER"
+        "PRINCIPAL"
       ],
       "module": "examinations",
       "seconds": {
         "en": 47,
         "ur": 48
+      },
+      "mobile": {
+        "en": 76,
+        "ur": 76
       }
     },
     {
@@ -466,6 +491,10 @@
       "seconds": {
         "en": 41,
         "ur": 44
+      },
+      "mobile": {
+        "en": 70,
+        "ur": 70
       }
     },
     {
@@ -569,6 +598,10 @@
       "seconds": {
         "en": 49,
         "ur": 51
+      },
+      "mobile": {
+        "en": 75,
+        "ur": 75
       }
     },
     {
@@ -582,13 +615,16 @@
       "chapter": 7,
       "roles": [
         "SCHOOL_ADMIN",
-        "PRINCIPAL",
-        "ACCOUNTANT"
+        "PRINCIPAL"
       ],
       "module": "finance",
       "seconds": {
         "en": 47,
         "ur": 50
+      },
+      "mobile": {
+        "en": 80,
+        "ur": 80
       }
     },
     {
@@ -602,13 +638,16 @@
       "chapter": 7,
       "roles": [
         "SCHOOL_ADMIN",
-        "PRINCIPAL",
-        "ACCOUNTANT"
+        "PRINCIPAL"
       ],
       "module": "finance",
       "seconds": {
         "en": 53,
         "ur": 56
+      },
+      "mobile": {
+        "en": 86,
+        "ur": 86
       }
     },
     {
@@ -642,13 +681,16 @@
       "chapter": 7,
       "roles": [
         "SCHOOL_ADMIN",
-        "PRINCIPAL",
-        "ACCOUNTANT"
+        "PRINCIPAL"
       ],
       "module": "finance",
       "seconds": {
         "en": 68,
         "ur": 65
+      },
+      "mobile": {
+        "en": 78,
+        "ur": 78
       }
     },
     {
@@ -662,13 +704,16 @@
       "chapter": 7,
       "roles": [
         "SCHOOL_ADMIN",
-        "PRINCIPAL",
-        "ACCOUNTANT"
+        "PRINCIPAL"
       ],
       "module": "finance",
       "seconds": {
         "en": 57,
         "ur": 59
+      },
+      "mobile": {
+        "en": 81,
+        "ur": 81
       }
     },
     {
@@ -682,13 +727,16 @@
       "chapter": 7,
       "roles": [
         "SCHOOL_ADMIN",
-        "PRINCIPAL",
-        "ACCOUNTANT"
+        "PRINCIPAL"
       ],
       "module": "finance",
       "seconds": {
         "en": 44,
         "ur": 45
+      },
+      "mobile": {
+        "en": 59,
+        "ur": 59
       }
     },
     {
@@ -709,6 +757,10 @@
       "seconds": {
         "en": 45,
         "ur": 45
+      },
+      "mobile": {
+        "en": 64,
+        "ur": 64
       }
     },
     {
@@ -722,13 +774,16 @@
       "chapter": 7,
       "roles": [
         "SCHOOL_ADMIN",
-        "PRINCIPAL",
-        "ACCOUNTANT"
+        "PRINCIPAL"
       ],
       "module": "finance",
       "seconds": {
         "en": 49,
         "ur": 50
+      },
+      "mobile": {
+        "en": 66,
+        "ur": 66
       }
     },
     {

@@ -8,11 +8,13 @@ import Spinner from '../../components/ui/Spinner'
 import Badge from '../../components/ui/Badge'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
 import { useAuth } from '../../contexts/AuthContext'
+import { useToast } from '../../components/Toast'
 
 const EMPTY_FORM = { name: '', weight: '100.00', is_final: false }
 
 export default function ExamTypesPage() {
   const queryClient = useQueryClient()
+  const toast = useToast()
   const { isSchoolAdmin } = useAuth()
   const { confirm, ConfirmModalRoot } = useConfirmModal()
   const [showModal, setShowModal] = useState(false)
@@ -29,13 +31,13 @@ export default function ExamTypesPage() {
 
   const createMut = useMutation({
     mutationFn: (data) => examinationsApi.createExamType(data),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['examTypes'] }); closeModal() },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['examTypes'] }); toast.showSuccess('Exam type added'); closeModal() },
     onError: (err) => setErrors(err.response?.data || { detail: 'Failed' }),
   })
 
   const updateMut = useMutation({
     mutationFn: ({ id, data }) => examinationsApi.updateExamType(id, data),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['examTypes'] }); closeModal() },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['examTypes'] }); toast.showSuccess('Exam type updated'); closeModal() },
     onError: (err) => setErrors(err.response?.data || { detail: 'Failed' }),
   })
 

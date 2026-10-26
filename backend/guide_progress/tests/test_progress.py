@@ -182,3 +182,14 @@ def test_last_seen_is_the_later_of_login_and_guide_use(world):
     post_video(client(world['teacher'], world['a']), [[0, 10]])
     row = next(r for r in c.get('/api/guide/progress/overview/').data['results'] if r['username'] == 'gp_teacher')
     assert row['last_seen'] > login
+
+
+def test_videos_total_is_role_based_and_follows_the_catalog(world):
+    post_video(client(world['teacher'], world['a']), [[0, 90]])
+    c = client(world['admin'], world['a'])
+    rows = {r['username']: r for r in c.get('/api/guide/progress/overview/').data['results']}
+    expected = len(catalog.videos_for_role('TEACHER', world['a'].enabled_modules or {}))
+    assert rows['gp_teacher']['videos_total'] == expected > 0
+    assert rows['gp_parent']['videos_total'] == len(catalog.videos_for_role('PARENT', world['a'].enabled_modules or {}))
+    assert rows['gp_teacher']['videos_watched'] <= rows['gp_teacher']['videos_total']
+    assert rows['gp_teacher']['videos_percent'] == round(rows['gp_teacher']['videos_watched'] / expected * 100)

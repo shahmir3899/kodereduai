@@ -180,10 +180,10 @@ class GuideProgressViewSet(viewsets.GenericViewSet):
         response['Content-Disposition'] = 'attachment; filename="guide-progress.csv"'
         writer = csv.writer(response)
         writer.writerow(['Name', 'Username', 'Role', 'Class / department', 'Steps done', 'Steps total',
-                         'Videos watched', 'Percent', 'Status', 'Last seen'])
+                         'Videos watched', 'Videos total', 'Percent', 'Status', 'Last seen'])
         for r in rows:
             writer.writerow([_safe_cell(r['name']), _safe_cell(r['username']), r['role'], _safe_cell(r['group']),
-                             r['steps_done'], r['steps_total'], r['videos_watched'], r['percent'],
+                             r['steps_done'], r['steps_total'], r['videos_watched'], r['videos_total'], r['percent'],
                              r['status'], r['last_seen'] or ''])
         return response
 
@@ -262,7 +262,9 @@ class GuideProgressViewSet(viewsets.GenericViewSet):
                 key = ('video', video_id) if video_id else ('step', section_id)
                 if mine.get(key, (None, None))[0]:
                     done += 1
-            watched = sum(1 for (kind, _), (completed, _) in mine.items() if kind == 'video' and completed)
+            role_videos = catalog.videos_for_role(m.role, enabled)
+            # Only videos meant for this role count, so "x / total" can never exceed 100%.
+            watched = sum(1 for (kind, key), (completed, _) in mine.items() if kind == 'video' and completed and key in role_videos)
             last = max((v[1] for v in mine.values()), default=None)
             # One "last seen" for the admin: the later of signing in and using the guide.
             seen = max((t for t in (last, m.user.last_login) if t), default=None)
@@ -281,7 +283,8 @@ class GuideProgressViewSet(viewsets.GenericViewSet):
                 'username': m.user.username,
                 'role': m.role,
                 'group': classes.get(m.user_id) or departments.get(m.user_id) or '',
-                'steps_done': done, 'steps_total': total, 'videos_watched': watched,
+                'steps_done': done, 'steps_total': total, 'videos_watched': watched, 'videos_total': len(role_videos),
+                'videos_percent': round(watched / len(role_videos) * 100) if role_videos else 0,
                 'percent': round(done / total * 100) if total else 0,
                 'status': state,
                 'last_activity': last,
@@ -323,7 +326,7 @@ class GuideProgressViewSet(viewsets.GenericViewSet):
         sort = params.get('sort') or 'name'
         reverse = sort.startswith('-')
         field = sort.lstrip('-')
-        if field not in ('name', 'role', 'group', 'percent', 'videos_watched', 'last_seen', 'status'):
+        if field not in ('name', 'role', 'group', 'percent', 'videos_percent', 'videos_watched', 'last_seen', 'status'):
             field, reverse = 'name', False
         # people who never opened the guide sort as the oldest activity
         epoch = timezone.make_aware(timezone.datetime(1970, 1, 1))

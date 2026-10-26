@@ -1132,7 +1132,7 @@
             },
             {
               "type": "body_text",
-              "text": "Grades and GPA on results and report cards are worked out from this scale."
+              "text": "Grades and GPA on results and report cards are worked out from this scale. A new grade can only be added once the range of the grade next to it has been lowered so the two do not overlap."
             }
           ],
           "roles": [
@@ -1518,7 +1518,7 @@
             {
               "type": "step",
               "number": 1,
-              "text": "Open 'Manage Accounts' and click 'Add Account'."
+              "text": "Open 'Manage Accounts' (principals see this as the 'Accounts' tab) and click 'Add Account'."
             },
             {
               "type": "step",

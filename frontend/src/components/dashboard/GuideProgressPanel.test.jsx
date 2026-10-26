@@ -11,8 +11,8 @@ import { guideProgressApi } from '../../services/api'
 import GuideProgressPanel from './GuideProgressPanel'
 
 const rows = [
-  { user_id: 1, name: 'Ayesha Khan', username: 'ayesha', role: 'TEACHER', group: 'Science', steps_done: 6, steps_total: 6, videos_watched: 5, percent: 100, status: 'completed', last_activity: new Date().toISOString() },
-  { user_id: 2, name: 'Bilal Ahmed', username: 'bilal', role: 'STUDENT', group: 'Class 5-A', steps_done: 0, steps_total: 4, videos_watched: 0, percent: 0, status: 'not_started', last_activity: null },
+  { user_id: 1, name: 'Ayesha Khan', username: 'ayesha', role: 'TEACHER', group: 'Science', steps_done: 6, steps_total: 6, videos_watched: 5, videos_total: 40, videos_percent: 13, percent: 100, status: 'completed', last_activity: new Date().toISOString() },
+  { user_id: 2, name: 'Bilal Ahmed', username: 'bilal', role: 'STUDENT', group: 'Class 5-A', steps_done: 0, steps_total: 4, videos_watched: 0, videos_total: 9, videos_percent: 0, percent: 0, status: 'not_started', last_activity: null },
 ]
 const response = (results, count = results.length) => ({ data: {
   summary: { tracked: 2, completed: 1, in_progress: 0, not_started: 1, inactive: 0 },
@@ -38,6 +38,16 @@ describe('GuideProgressPanel', () => {
     expect(screen.getByText('Bilal Ahmed')).toBeInTheDocument()
     expect(screen.getByText(/3 students and 1 staff member/)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /People tracked/ })).toHaveTextContent('2')
+  })
+
+  it('shows videos watched out of the role total and flags a finished starting course', async () => {
+    renderPanel()
+    await userEvent.click(screen.getByRole('button', { name: /user guide progress/i }))
+    await screen.findByText('Ayesha Khan')
+    expect(screen.getByText('5 / 40 videos')).toBeInTheDocument()
+    expect(screen.getByText('0 / 9 videos')).toBeInTheDocument()
+    expect(screen.getByText(/Starting course completed/)).toBeInTheDocument()
+    expect(screen.getByText(/Starting course: 0 of 4 steps/)).toBeInTheDocument()
   })
 
   it('sends the chosen filters to the server and starts again from page 1', async () => {

@@ -7,11 +7,13 @@ import { examinationsApi } from '../../services/api'
 import { useConfirmModal } from '../../components/ConfirmModal'
 import Spinner from '../../components/ui/Spinner'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
+import { useToast } from '../../components/Toast'
 
 const EMPTY_FORM = { grade_label: '', min_percentage: '', max_percentage: '', gpa_points: '', order: '' }
 
 export default function GradeScalePage() {
   const queryClient = useQueryClient()
+  const toast = useToast()
   const { confirm, ConfirmModalRoot } = useConfirmModal()
   const [showModal, setShowModal] = useState(false)
   const [editId, setEditId] = useState(null)
@@ -27,7 +29,7 @@ export default function GradeScalePage() {
 
   const createMut = useMutation({
     mutationFn: (data) => examinationsApi.createGradeScale(data),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['gradeScales'] }); closeModal() },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['gradeScales'] }); toast.showSuccess('Grade added'); closeModal() },
     onError: (err) => {
       console.error('Grade scale create error', err.response?.data || err)
       setErrors(err.response?.data || { detail: 'Failed to create grade scale.' })
@@ -36,7 +38,7 @@ export default function GradeScalePage() {
 
   const updateMut = useMutation({
     mutationFn: ({ id, data }) => examinationsApi.updateGradeScale(id, data),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['gradeScales'] }); closeModal() },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['gradeScales'] }); toast.showSuccess('Grade updated'); closeModal() },
     onError: (err) => {
       console.error('Grade scale update error', err.response?.data || err)
       setErrors(err.response?.data || { detail: 'Failed to update grade scale.' })

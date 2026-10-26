@@ -51,7 +51,7 @@ export default function ExpensesPage() {
   const canWrite = !isStaffMember
   const queryClient = useQueryClient()
   const { confirm, ConfirmModalRoot } = useConfirmModal()
-  const { showError } = useToast()
+  const { showError, showSuccess } = useToast()
   const [searchParams, setSearchParams] = useSearchParams()
 
   const initialTab = searchParams.get('tab') === 'transfers' ? 'transfers' : 'expenses'
@@ -212,6 +212,7 @@ export default function ExpensesPage() {
       queryClient.invalidateQueries({ queryKey: ['expenseCategorySummary'] })
       // Expense posts against an account — refresh the balance shown alongside it.
       queryClient.invalidateQueries({ queryKey: ['accounts'] })
+      showSuccess('Expense recorded')
       closeModal()
     },
   })
