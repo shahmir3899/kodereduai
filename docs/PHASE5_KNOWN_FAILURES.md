@@ -105,6 +105,7 @@ Already fixed along the way: two annual-fee tests in `tests/test_fee_types.py` (
 - **Manual attendance entry lists withdrawn students** (`ManualEntryPage.jsx` → `/api/sessions/enrollments/`, no active/left-date filter). Found 2026-09-25: Rayyan Abbas (Focus Branch 1, withdrew 1 Sep 2026) is offered for marking on 25 Sep. The register only includes him through September, the month he left.
 - **Exam results vs marks entry disagree for students who left mid-month.** The results roster uses month-precision cutoffs, so Rayyan (left 1 Sep) is in the results for "1st Term Exam 2026-27 - Class 1" (started 14 Sep), with 6 blank or absent marks. The Marks Entry list (`is_active=true`) excludes him. Decide whether exam rosters should drop students whose `left_date` falls before the exam start date.
 - **Marks Entry page ignores sections**: it lists students with `class_id` (master class) + year, so a section-only exam's grid shows every section's students.
+- **Web "Record Payment" modal can set the wrong total on a part-paid fee** (`FeeCollectPage.jsx` `handleRecordPayment` / `handleOpenPayment`). Found 2026-10-28 while building the mobile screen. The modal pre-fills "Amount" with the balance (`amount_due - amount_paid`) and sends it as `amount_paid`, but the API stores `amount_paid` as the running TOTAL received (`FeePaymentViewSet.perform_update`, `FeePaymentUpdateSerializer`). For an unpaid fee the two are the same. For a part-paid one (due 1000, paid 300, balance 700) it saves 700 as the new total instead of 1000. Needs a decision (treat the field as an instalment and add it to `amount_paid`, as the mobile app does). Not fixed in the web app. Verify against real data before changing.
 
 ## Full-suite baseline 2026-10-10: one line per failing test
 
@@ -363,3 +364,9 @@ Notes: the `test_*.py` scripts in the backend root (`test_phase1.py`, `test_audi
 ### `tests/test_student_snapshot_guard.py` (1)
 - `test_no_new_student_snapshot_reads`: AssertionError: New reads of the Student.class_obj/roll_number snapshot. Use the enrollment (academic_sessions.roster) instead:
 
+
+## Found while building the mobile Parent app (2026-10-28, not fixed)
+- **Web parent Messages compose is wrong.** `ParentMessages.jsx` sends `recipient_id` as free text, but `ParentMessageViewSet.send_message` needs `recipient_user` and `student`. It also reads `/api/parents/messages`, a different store from `/api/messaging`, which teachers and admins use (and whose parent recipients are the child's teachers). Mobile parents use `/api/messaging`. Decide whether to retire the old parent messages endpoints or point the web at `/api/messaging`.
+- **Attendance rate differs by endpoint.** `parents/overview.attendance_summary` computes present / total; the student portal summary and the mobile month view count leave as attended ((present + leave) / total).
+- **Push deep links are unused.** The mobile tap handler reads `data.screen`, but no backend notification sets a `screen` field.
+- **Push token is unregistered after logout clears the session**, so the call is likely unauthenticated (mobile `NotificationContext`). Check in release hardening.

@@ -128,7 +128,7 @@ export default function CurriculumCoveragePage() {
       </div>
 
       {classId && subjectId && (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-3 gap-2 md:gap-4">
           <div className="bg-white border border-gray-200 rounded-lg p-4">
             <p className="text-sm text-gray-500">Total Topics</p>
             <p className="text-2xl font-bold text-gray-900">{topics.length}</p>

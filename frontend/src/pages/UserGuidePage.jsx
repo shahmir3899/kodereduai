@@ -226,8 +226,8 @@ export default function UserGuidePage() {
     [startSteps, visibleVideos],
   )
   const progressSummary = useMemo(
-    () => summarizeProgress({ steps: startSteps, videos: visibleVideos, watched: progress.watched, done: progress.done }),
-    [startSteps, visibleVideos, progress.watched, progress.done],
+    () => summarizeProgress({ steps: startSteps, videos: visibleVideos, watched: progress.watched, done: progress.done, counts: progress.counts }),
+    [startSteps, visibleVideos, progress.watched, progress.done, progress.counts],
   )
   const playingVideo = selectedVideoId ? videoData.videos.find((v) => v.id === selectedVideoId && v.status !== 'planned') : null
   const [searchQuery, setSearchQuery] = useState('')

@@ -26,11 +26,13 @@ import useResetStaleClassFilter from '../../hooks/useResetStaleClassFilter'
 import { useDebounce } from '../../hooks/useDebounce'
 
 export default function FeeCollectPage() {
-  const { user, activeSchool, effectiveRole, isSchoolAdmin, isAccountant, isPrincipal, isSuperAdmin } = useAuth()
+  const { user, activeSchool, effectiveRole, isSchoolAdmin, isPrincipal, isSuperAdmin } = useAuth()
   const { activeAcademicYear } = useAcademicYear()
   const { showWarning } = useToast()
-  const canWrite = isSuperAdmin || isSchoolAdmin || isPrincipal || isAccountant || effectiveRole === 'TEACHER'
-  const canManageFeeRecords = isSuperAdmin || isSchoolAdmin || isPrincipal || isAccountant
+  // Accountant is read-only in finance and a teacher may only update a single record
+  // (FinanceRoleAccessPermission): bulk update/delete and delete are admin/principal only.
+  const canManageFeeRecords = isSuperAdmin || isSchoolAdmin || isPrincipal
+  const canWrite = canManageFeeRecords || effectiveRole === 'TEACHER'
   const isTeacher = effectiveRole === 'TEACHER'
   const now = new Date()
   const [searchParams] = useSearchParams()
@@ -313,13 +315,13 @@ export default function FeeCollectPage() {
         month={month} year={year}
         feeTypeFilter={feeTypeFilter}
         selectedIds={selectedIds}
-        onToggleSelect={canWrite ? handleToggleSelect : undefined}
-        onToggleSelectAll={canWrite ? handleToggleSelectAll : undefined}
+        onToggleSelect={canManageFeeRecords ? handleToggleSelect : undefined}
+        onToggleSelectAll={canManageFeeRecords ? handleToggleSelectAll : undefined}
         editingCell={editingCell} setEditingCell={canWrite ? setEditingCell : () => {}}
         editValue={editValue} setEditValue={setEditValue}
         onInlineUpdate={canWrite ? handleInlineUpdate : undefined}
         onRecordPayment={canWrite ? handleOpenPayment : undefined}
-        onDelete={canWrite ? handleDeleteSingle : undefined}
+        onDelete={canManageFeeRecords ? handleDeleteSingle : undefined}
         canWrite={canWrite}
       />
 

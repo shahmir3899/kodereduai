@@ -13,6 +13,7 @@ import { useEscapeKey } from '../../hooks/useEscapeKey'
 import { SkeletonTable } from '../../components/ui/Skeleton'
 import { RecordCard, CardGrid, ViewToggle } from '../../components/cards'
 import { useViewPreference } from '../../hooks/useViewPreference'
+import { useAuth } from '../../contexts/AuthContext'
 
 function formatCurrency(val) {
   return `Rs ${Number(val || 0).toLocaleString()}`
@@ -43,6 +44,9 @@ export default function InventoryItemsPage() {
   const queryClient = useQueryClient()
   const { showSuccess, showWarning } = useToast()
   const { confirm, ConfirmModalRoot } = useConfirmModal()
+  const { effectiveRole } = useAuth()
+  // Accountant and Driver can read inventory; every write returns 403 for them.
+  const canManage = ['SUPER_ADMIN', 'SCHOOL_ADMIN', 'PRINCIPAL'].includes(effectiveRole)
 
   // Filters
   const [view, setView] = useViewPreference('inventory-items')
@@ -332,6 +336,7 @@ export default function InventoryItemsPage() {
           >
             Vendors
           </button>
+{canManage && <>
           <button
             onClick={openAISuggestModal}
             className="px-4 py-2 text-sm font-medium text-white bg-purple-600 rounded-lg hover:bg-purple-700 transition-colors flex items-center gap-1.5"
@@ -347,6 +352,7 @@ export default function InventoryItemsPage() {
           >
             + Add Item
           </button>
+</>}
 </>} />
 
       {/* Categories / Vendors Panel */}
@@ -356,12 +362,12 @@ export default function InventoryItemsPage() {
             <h2 className="text-lg font-semibold text-gray-900">
               {manageTab === 'categories' ? 'Categories' : 'Vendors'}
             </h2>
-            <button
+            {canManage && <button
               onClick={() => manageTab === 'categories' ? openCategoryModal() : openVendorModal()}
               className="px-3 py-1.5 text-sm font-medium text-blue-600 border border-blue-300 rounded-lg hover:bg-blue-50"
             >
               + Add {manageTab === 'categories' ? 'Category' : 'Vendor'}
-            </button>
+            </button>}
           </div>
           <div className="p-5">
             {manageTab === 'categories' && (
@@ -375,13 +381,13 @@ export default function InventoryItemsPage() {
                         <p className="font-medium text-sm text-gray-900">{cat.name}</p>
                         {cat.description && <p className="text-xs text-gray-500">{cat.description}</p>}
                       </div>
-                      <div className="flex gap-2">
+                      {canManage && <div className="flex gap-2">
                         <button onClick={() => openCategoryModal(cat)} className="text-xs text-blue-600 hover:text-blue-800">Edit</button>
                         <button
                           onClick={async () => { const ok = await confirm({ title: 'Delete Category', message: 'Delete this category? This cannot be undone.' }); if (ok) deleteCategoryMutation.mutate(cat.id) }}
                           className="text-xs text-red-600 hover:text-red-800"
                         >Delete</button>
-                      </div>
+                      </div>}
                     </div>
                   ))}
                 </div>
@@ -398,13 +404,13 @@ export default function InventoryItemsPage() {
                         <p className="font-medium text-sm text-gray-900">{v.name}</p>
                         <p className="text-xs text-gray-500">{[v.contact_person, v.phone].filter(Boolean).join(' | ') || 'No contact info'}</p>
                       </div>
-                      <div className="flex gap-2">
+                      {canManage && <div className="flex gap-2">
                         <button onClick={() => openVendorModal(v)} className="text-xs text-blue-600 hover:text-blue-800">Edit</button>
                         <button
                           onClick={async () => { const ok = await confirm({ title: 'Delete Vendor', message: 'Delete this vendor? This cannot be undone.' }); if (ok) deleteVendorMutation.mutate(v.id) }}
                           className="text-xs text-red-600 hover:text-red-800"
                         >Delete</button>
-                      </div>
+                      </div>}
                     </div>
                   ))}
                 </div>
@@ -509,7 +515,7 @@ export default function InventoryItemsPage() {
                       { label: 'Price · Value', value: `${formatCurrency(item.unit_price)} · ${formatCurrency(item.current_stock * item.unit_price)}` },
                       ...(item.location ? [{ label: 'Location', value: item.location }] : []),
                     ]}
-                    actions={[
+                    actions={!canManage ? [] : [
                       { label: 'Edit', tone: 'info', onClick: () => openItemModal(item) },
                       {
                         label: 'Delete',
@@ -536,7 +542,7 @@ export default function InventoryItemsPage() {
                     <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Unit Price</th>
                     <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Value</th>
                     <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Status</th>
-                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
+                    {canManage && <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -561,13 +567,13 @@ export default function InventoryItemsPage() {
                             {badge.label}
                           </span>
                         </td>
-                        <td className="px-4 py-3 text-right">
+                        {canManage && <td className="px-4 py-3 text-right">
                           <button onClick={() => openItemModal(item)} className="text-sm text-blue-600 hover:text-blue-800 font-medium mr-3">Edit</button>
                           <button
                             onClick={async () => { const ok = await confirm({ title: 'Delete Item', message: `Delete "${item.name}"? This cannot be undone.` }); if (ok) deleteItemMutation.mutate(item.id) }}
                             className="text-sm text-red-600 hover:text-red-800 font-medium"
                           >Delete</button>
-                        </td>
+                        </td>}
                       </tr>
                     )
                   })}

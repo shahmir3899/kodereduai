@@ -765,7 +765,8 @@ export default function Layout() {
         </header>
 
         {/* Page content */}
-        <main className="p-4 lg:p-6">
+        {/* pb-24 on phones keeps the last button clear of the floating chat button */}
+        <main className="p-4 pb-24 lg:p-6 lg:pb-6">
           <Outlet />
         </main>
       </div>

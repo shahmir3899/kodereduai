@@ -19,7 +19,7 @@ export default function BulkActionsBar({ selectedCount, onBulkUpdate, onPayFull,
   const selectedMethodLabel = BULK_PAYMENT_METHODS.find(m => m.value === bulkMethod)?.label || bulkMethod
 
   return (
-    <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 bg-white rounded-xl shadow-2xl border border-gray-200 px-4 sm:px-6 py-3 flex flex-wrap items-center justify-center gap-3 max-w-3xl">
+    <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 w-[calc(100%-1.5rem)] sm:w-auto bg-white rounded-xl shadow-2xl border border-gray-200 px-4 sm:px-6 py-3 flex flex-wrap items-center justify-center gap-3 max-w-3xl">
       <span className="text-sm font-medium text-gray-700">{selectedCount} selected</span>
 
       <div className="w-px h-8 bg-gray-200 hidden sm:block" />

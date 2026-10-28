@@ -72,6 +72,14 @@ describe('summarizeProgress', () => {
   })
 })
 
+describe('summarizeProgress with server counts', () => {
+  it('uses the server numbers so it matches the admin overview', () => {
+    const counts = { steps_done: 2, steps_total: 8, videos_watched: 3, videos_total: 75 }
+    const out = summarizeProgress({ steps: [], videos: [{ id: 'a' }], watched: new Set(['a']), done: new Set(), counts })
+    expect(out).toEqual({ stepsDone: 2, stepsTotal: 8, videosWatched: 3, videosTotal: 75 })
+  })
+})
+
 describe('useGuideProgress with the server', () => {
   const fakeApi = (mine = { videos: {}, steps: {} }) => ({
     mine: vi.fn().mockResolvedValue({ data: mine }),

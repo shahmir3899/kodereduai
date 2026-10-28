@@ -745,6 +745,22 @@ class StudentMarkEntryRBACTests(TestCase):
         self.assertEqual(response.status_code, 200, response.data)
         self.assertTrue(StudentMark.objects.filter(exam_subject=self.exam_subject, student=self.student).exists())
 
+    def test_bulk_entry_rejects_marks_outside_zero_to_total(self):
+        self.client.force_authenticate(self.principal_user)
+        payload = self._bulk_entry_payload()
+        payload['marks'][0]['marks_obtained'] = 150
+        response = self.client.post(
+            '/api/examinations/marks/bulk_entry/', payload, format='json', **self.school_header,
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(len(response.data['errors']), 1)
+        self.assertFalse(StudentMark.objects.filter(exam_subject=self.exam_subject, student=self.student).exists())
+        payload['marks'][0]['marks_obtained'] = -1
+        response = self.client.post(
+            '/api/examinations/marks/bulk_entry/', payload, format='json', **self.school_header,
+        )
+        self.assertEqual(len(response.data['errors']), 1)
+
     def test_unassigned_teacher_cannot_bulk_enter_marks(self):
         self.client.force_authenticate(self.teacher_user)
         response = self.client.post(

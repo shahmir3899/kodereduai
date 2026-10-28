@@ -72,6 +72,8 @@ function mergeServer(local, remote) {
  */
 export default function useGuideProgress(userId, { api = null, schoolId = null } = {}) {
   const [state, setState] = useState(() => load(userId))
+  // The server's own count of this person's steps and videos: the same numbers the admin overview shows.
+  const [counts, setCounts] = useState(null)
   const live = useRef(state)          // always the newest data; state is committed from it at a calm pace
   const timer = useRef(null)
   const dirty = useRef({ videos: new Set(), steps: new Map() })
@@ -94,13 +96,17 @@ export default function useGuideProgress(userId, { api = null, schoolId = null }
       for (; index < videos.length; index += 1) {
         const id = videos[index]
         const v = live.current.videos[id]
-        // eslint-disable-next-line no-await-in-loop
-        if (v) await api.video({ id, ...toPayload(id, v) })
+        if (v) {
+          // eslint-disable-next-line no-await-in-loop
+          const res = await api.video({ id, ...toPayload(id, v) })
+          if (res?.data?.counts) setCounts(res.data.counts)
+        }
       }
       phase = 'steps'
       for (index = 0; index < steps.length; index += 1) {
         // eslint-disable-next-line no-await-in-loop
-        await api.step({ id: steps[index][0], done: steps[index][1] })
+        const res = await api.step({ id: steps[index][0], done: steps[index][1] })
+        if (res?.data?.counts) setCounts(res.data.counts)
       }
     } catch (err) {
       if (retryable(err)) {
@@ -138,12 +144,14 @@ export default function useGuideProgress(userId, { api = null, schoolId = null }
         if (cancelled) return
         live.current = mergeServer(live.current, data)
         setState({ ...live.current })
+        if (data.counts) setCounts(data.counts)
         try { localStorage.setItem(keyFor(userId), JSON.stringify(live.current)) } catch { /* see commit */ }
         let uploaded = false
         try { uploaded = localStorage.getItem(syncedKey(userId, schoolId)) === '1' } catch { /* treat as not uploaded */ }
         if (!uploaded) {
           const videos = Object.fromEntries(Object.entries(live.current.videos).map(([id, v]) => [id, toPayload(id, v)]))
-          await api.sync({ videos, steps: live.current.steps })
+          const synced = await api.sync({ videos, steps: live.current.steps })
+          if (synced?.data?.counts) setCounts(synced.data.counts)
           try { localStorage.setItem(syncedKey(userId, schoolId), '1') } catch { /* will upload again next time, which is harmless */ }
         }
       } catch { /* offline or signed out: progress stays on this device and is sent with the next save */ }
@@ -206,14 +214,19 @@ export default function useGuideProgress(userId, { api = null, schoolId = null }
   const done = useMemo(() => new Set(Object.keys(state.steps)), [state.steps])
   const videoState = useCallback((id) => state.videos[id] || null, [state.videos])
 
-  return { watched, done, videoState, recordVideo, toggleDone }
+  return { watched, done, counts, videoState, recordVideo, toggleDone }
 }
 
 /**
  * Progress for the "Start here" path: a step with a video is done when that video is watched; a step without
  * one is done when ticked. `steps` is [{ sectionId, videoId }]; `videos` is the list this person can see.
+ * `counts` (from the server) replaces the local count when present.
  */
-export function summarizeProgress({ steps, videos, watched, done }) {
+export function summarizeProgress({ steps, videos, watched, done, counts = null }) {
+  // The server's numbers win once it has answered, so this page and the admin overview always agree.
+  if (counts) {
+    return { stepsDone: counts.steps_done, stepsTotal: counts.steps_total, videosWatched: counts.videos_watched, videosTotal: counts.videos_total }
+  }
   const stepsDone = steps.filter((s) => (s.videoId ? watched.has(s.videoId) : done.has(s.sectionId))).length
   const videosWatched = videos.filter((v) => watched.has(v.id)).length
   return { stepsDone, stepsTotal: steps.length, videosWatched, videosTotal: videos.length }

@@ -87,6 +87,17 @@ export default function EnquiriesPage() {
   const funnelTotal = statusCounts.NEW + statusCounts.CONFIRMED + statusCounts.CONVERTED + statusCounts.CANCELLED
   const conversionRate = funnelTotal ? Math.round((statusCounts.CONVERTED / funnelTotal) * 100) : 0
 
+  // Cancel has no undo in the UI (no reopen action, the edit form has no status),
+  // and on a phone it sits right next to Confirm, so it asks first.
+  const cancelEnquiry = async (enquiry) => {
+    const ok = await confirm({
+      title: 'Cancel Enquiry',
+      message: `Mark the enquiry for ${enquiry.name} as cancelled? It stays in the list but cannot be reopened from this page.`,
+      confirmLabel: 'Cancel enquiry',
+    })
+    if (ok) statusMut.mutate({ id: enquiry.id, status: 'CANCELLED' })
+  }
+
   // Quick status update
   const statusMut = useMutation({
     mutationFn: ({ id, status, note }) => admissionsApi.updateStatus(id, { status, note }),
@@ -347,7 +358,7 @@ export default function EnquiriesPage() {
                 actions={[
                   { label: 'Edit', tone: 'info', to: `/admissions/${enquiry.id}/edit` },
                   ...(enquiry.status === 'NEW' ? [{ label: 'Confirm', tone: 'success', onClick: () => statusMut.mutate({ id: enquiry.id, status: 'CONFIRMED' }) }] : []),
-                  ...((enquiry.status === 'NEW' || enquiry.status === 'CONFIRMED') ? [{ label: 'Cancel', tone: 'danger', onClick: () => statusMut.mutate({ id: enquiry.id, status: 'CANCELLED' }) }] : []),
+                  ...((enquiry.status === 'NEW' || enquiry.status === 'CONFIRMED') ? [{ label: 'Cancel', tone: 'danger', onClick: () => cancelEnquiry(enquiry) }] : []),
                   ...(enquiry.status !== 'CONVERTED' && enquiry.status !== 'CANCELLED' ? [{
                     label: 'Delete',
                     tone: 'muted',
@@ -449,7 +460,7 @@ export default function EnquiriesPage() {
                         )}
                         {(enquiry.status === 'NEW' || enquiry.status === 'CONFIRMED') && (
                           <button
-                            onClick={() => statusMut.mutate({ id: enquiry.id, status: 'CANCELLED' })}
+                            onClick={() => cancelEnquiry(enquiry)}
                             className="text-xs text-red-600 hover:text-red-800 font-medium ml-2"
                           >
                             Cancel

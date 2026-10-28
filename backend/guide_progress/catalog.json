@@ -36,17 +36,14 @@
     "ACCOUNTANT": [
       "1.3",
       "7.1",
-      "7.3",
-      "7.6",
-      "7.9"
+      "7.13"
     ],
     "STAFF": [
       "1.3",
       "13.1"
     ],
     "DRIVER": [
-      "1.3",
-      "10.4"
+      "1.3"
     ],
     "PARENT": [
       "1.3",
@@ -114,9 +111,7 @@
       "module": "examinations",
       "roles": [
         "SCHOOL_ADMIN",
-        "PRINCIPAL",
-        "MANAGER",
-        "TEACHER"
+        "PRINCIPAL"
       ]
     },
     {
@@ -126,7 +121,6 @@
       "roles": [
         "SCHOOL_ADMIN",
         "PRINCIPAL",
-        "MANAGER",
         "TEACHER"
       ]
     },
@@ -137,7 +131,6 @@
       "roles": [
         "SCHOOL_ADMIN",
         "PRINCIPAL",
-        "MANAGER",
         "TEACHER"
       ]
     },
@@ -147,9 +140,7 @@
       "module": "finance",
       "roles": [
         "SCHOOL_ADMIN",
-        "PRINCIPAL",
-        "ACCOUNTANT",
-        "TEACHER"
+        "PRINCIPAL"
       ]
     },
     {
@@ -196,17 +187,8 @@
     },
     {
       "id": "ch2-school-setup-wizard",
-      "section": "2.8",
+      "section": "2.7",
       "module": null,
-      "roles": [
-        "SCHOOL_ADMIN",
-        "PRINCIPAL"
-      ]
-    },
-    {
-      "id": "ch5-managing-subjects",
-      "section": "5.1",
-      "module": "academics",
       "roles": [
         "SCHOOL_ADMIN",
         "PRINCIPAL"
@@ -220,15 +202,6 @@
         "SCHOOL_ADMIN",
         "PRINCIPAL",
         "TEACHER"
-      ]
-    },
-    {
-      "id": "ch5-academic-sessions-years-terms",
-      "section": "5.2",
-      "module": "academics",
-      "roles": [
-        "SCHOOL_ADMIN",
-        "PRINCIPAL"
       ]
     },
     {
@@ -273,9 +246,7 @@
       "module": "examinations",
       "roles": [
         "SCHOOL_ADMIN",
-        "PRINCIPAL",
-        "MANAGER",
-        "TEACHER"
+        "PRINCIPAL"
       ]
     },
     {
@@ -294,7 +265,6 @@
       "roles": [
         "SCHOOL_ADMIN",
         "PRINCIPAL",
-        "MANAGER",
         "TEACHER"
       ]
     },
@@ -364,8 +334,7 @@
       "module": "finance",
       "roles": [
         "SCHOOL_ADMIN",
-        "PRINCIPAL",
-        "ACCOUNTANT"
+        "PRINCIPAL"
       ]
     },
     {
@@ -701,8 +670,7 @@
       "module": "inventory",
       "roles": [
         "SCHOOL_ADMIN",
-        "PRINCIPAL",
-        "ACCOUNTANT"
+        "PRINCIPAL"
       ]
     },
     {
@@ -747,8 +715,7 @@
       "module": "inventory",
       "roles": [
         "SCHOOL_ADMIN",
-        "PRINCIPAL",
-        "ACCOUNTANT"
+        "PRINCIPAL"
       ]
     },
     {
@@ -757,10 +724,7 @@
       "module": "inventory",
       "roles": [
         "SCHOOL_ADMIN",
-        "PRINCIPAL",
-        "ACCOUNTANT",
-        "TEACHER",
-        "STAFF"
+        "PRINCIPAL"
       ]
     },
     {

@@ -127,14 +127,16 @@
       "chapter": 6,
       "roles": [
         "SCHOOL_ADMIN",
-        "PRINCIPAL",
-        "MANAGER",
-        "TEACHER"
+        "PRINCIPAL"
       ],
       "module": "examinations",
       "seconds": {
         "en": 66,
         "ur": 69
+      },
+      "mobile": {
+        "en": 112,
+        "ur": 112
       }
     },
     {
@@ -149,13 +151,16 @@
       "roles": [
         "SCHOOL_ADMIN",
         "PRINCIPAL",
-        "MANAGER",
         "TEACHER"
       ],
       "module": "examinations",
       "seconds": {
         "en": 54,
         "ur": 56
+      },
+      "mobile": {
+        "en": 86,
+        "ur": 86
       }
     },
     {
@@ -170,13 +175,16 @@
       "roles": [
         "SCHOOL_ADMIN",
         "PRINCIPAL",
-        "MANAGER",
         "TEACHER"
       ],
       "module": "examinations",
       "seconds": {
         "en": 48,
         "ur": 50
+      },
+      "mobile": {
+        "en": 88,
+        "ur": 88
       }
     },
     {
@@ -190,14 +198,16 @@
       "chapter": 7,
       "roles": [
         "SCHOOL_ADMIN",
-        "PRINCIPAL",
-        "ACCOUNTANT",
-        "TEACHER"
+        "PRINCIPAL"
       ],
       "module": "finance",
       "seconds": {
         "en": 39,
         "ur": 40
+      },
+      "mobile": {
+        "en": 78,
+        "ur": 78
       }
     },
     {
@@ -240,6 +250,10 @@
       "seconds": {
         "en": 47,
         "ur": 48
+      },
+      "mobile": {
+        "en": 71,
+        "ur": 71
       }
     },
     {
@@ -311,7 +325,7 @@
         "en": "School Setup Wizard",
         "ur": "اسکول سیٹ اپ وزرڈ"
       },
-      "section": "2.8",
+      "section": "2.7",
       "chapter": 2,
       "roles": [
         "SCHOOL_ADMIN",
@@ -324,29 +338,6 @@
       "mobile": {
         "en": 76,
         "ur": 76
-      }
-    },
-    {
-      "id": "ch5-managing-subjects",
-      "status": "ready",
-      "title": {
-        "en": "Managing Subjects",
-        "ur": "مضامین کا انتظام"
-      },
-      "section": "5.1",
-      "chapter": 5,
-      "roles": [
-        "SCHOOL_ADMIN",
-        "PRINCIPAL"
-      ],
-      "module": "academics",
-      "seconds": {
-        "en": 47,
-        "ur": 47
-      },
-      "mobile": {
-        "en": 87,
-        "ur": 87
       }
     },
     {
@@ -371,29 +362,6 @@
       "mobile": {
         "en": 82,
         "ur": 82
-      }
-    },
-    {
-      "id": "ch5-academic-sessions-years-terms",
-      "status": "ready",
-      "title": {
-        "en": "Academic Sessions (Years & Terms)",
-        "ur": "تعلیمی سیشنز (سال اور ٹرمز)"
-      },
-      "section": "5.2",
-      "chapter": 5,
-      "roles": [
-        "SCHOOL_ADMIN",
-        "PRINCIPAL"
-      ],
-      "module": "academics",
-      "seconds": {
-        "en": 71,
-        "ur": 69
-      },
-      "mobile": {
-        "en": 127,
-        "ur": 127
       }
     },
     {
@@ -492,21 +460,23 @@
       "id": "ch6-step-5-view-publish-results",
       "status": "ready",
       "title": {
-        "en": "View & Publish Results",
+        "en": "View & Announce Results",
         "ur": "نتائج دیکھنا اور اعلان کرنا"
       },
       "section": "6.5",
       "chapter": 6,
       "roles": [
         "SCHOOL_ADMIN",
-        "PRINCIPAL",
-        "MANAGER",
-        "TEACHER"
+        "PRINCIPAL"
       ],
       "module": "examinations",
       "seconds": {
         "en": 55,
         "ur": 55
+      },
+      "mobile": {
+        "en": 73,
+        "ur": 73
       }
     },
     {
@@ -544,13 +514,16 @@
       "roles": [
         "SCHOOL_ADMIN",
         "PRINCIPAL",
-        "MANAGER",
         "TEACHER"
       ],
       "module": "examinations",
       "seconds": {
         "en": 50,
         "ur": 53
+      },
+      "mobile": {
+        "en": 96,
+        "ur": 96
       }
     },
     {
@@ -572,6 +545,10 @@
       "seconds": {
         "en": 72,
         "ur": 73
+      },
+      "mobile": {
+        "en": 93,
+        "ur": 93
       }
     },
     {
@@ -593,6 +570,10 @@
       "seconds": {
         "en": 75,
         "ur": 77
+      },
+      "mobile": {
+        "en": 93,
+        "ur": 93
       }
     },
     {
@@ -613,6 +594,10 @@
       "seconds": {
         "en": 42,
         "ur": 44
+      },
+      "mobile": {
+        "en": 72,
+        "ur": 72
       }
     },
     {
@@ -696,13 +681,16 @@
       "chapter": 7,
       "roles": [
         "SCHOOL_ADMIN",
-        "PRINCIPAL",
-        "ACCOUNTANT"
+        "PRINCIPAL"
       ],
       "module": "finance",
       "seconds": {
         "en": 44,
         "ur": 46
+      },
+      "mobile": {
+        "en": 84,
+        "ur": 84
       }
     },
     {
@@ -884,6 +872,10 @@
       "seconds": {
         "en": 71,
         "ur": 74
+      },
+      "mobile": {
+        "en": 106,
+        "ur": 106
       }
     },
     {
@@ -926,6 +918,10 @@
       "seconds": {
         "en": 54,
         "ur": 59
+      },
+      "mobile": {
+        "en": 105,
+        "ur": 105
       }
     },
     {
@@ -945,6 +941,10 @@
       "seconds": {
         "en": 75,
         "ur": 78
+      },
+      "mobile": {
+        "en": 145,
+        "ur": 145
       }
     },
     {
@@ -1010,6 +1010,10 @@
       "seconds": {
         "en": 62,
         "ur": 61
+      },
+      "mobile": {
+        "en": 113,
+        "ur": 113
       }
     },
     {
@@ -1029,6 +1033,10 @@
       "seconds": {
         "en": 64,
         "ur": 67
+      },
+      "mobile": {
+        "en": 105,
+        "ur": 105
       }
     },
     {
@@ -1048,6 +1056,10 @@
       "seconds": {
         "en": 59,
         "ur": 61
+      },
+      "mobile": {
+        "en": 104,
+        "ur": 104
       }
     },
     {
@@ -1067,6 +1079,10 @@
       "seconds": {
         "en": 55,
         "ur": 57
+      },
+      "mobile": {
+        "en": 89,
+        "ur": 89
       }
     },
     {
@@ -1086,6 +1102,10 @@
       "seconds": {
         "en": 52,
         "ur": 54
+      },
+      "mobile": {
+        "en": 90,
+        "ur": 90
       }
     },
     {
@@ -1105,6 +1125,10 @@
       "seconds": {
         "en": 94,
         "ur": 93
+      },
+      "mobile": {
+        "en": 139,
+        "ur": 139
       }
     },
     {
@@ -1124,6 +1148,10 @@
       "seconds": {
         "en": 61,
         "ur": 64
+      },
+      "mobile": {
+        "en": 93,
+        "ur": 93
       }
     },
     {
@@ -1143,6 +1171,10 @@
       "seconds": {
         "en": 63,
         "ur": 65
+      },
+      "mobile": {
+        "en": 91,
+        "ur": 91
       }
     },
     {
@@ -1162,6 +1194,10 @@
       "seconds": {
         "en": 45,
         "ur": 48
+      },
+      "mobile": {
+        "en": 106,
+        "ur": 106
       }
     },
     {
@@ -1183,6 +1219,10 @@
       "seconds": {
         "en": 104,
         "ur": 107
+      },
+      "mobile": {
+        "en": 124,
+        "ur": 124
       }
     },
     {
@@ -1203,6 +1243,10 @@
       "seconds": {
         "en": 111,
         "ur": 114
+      },
+      "mobile": {
+        "en": 134,
+        "ur": 134
       }
     },
     {
@@ -1224,6 +1268,10 @@
       "seconds": {
         "en": 89,
         "ur": 92
+      },
+      "mobile": {
+        "en": 113,
+        "ur": 113
       }
     },
     {
@@ -1245,6 +1293,10 @@
       "seconds": {
         "en": 50,
         "ur": 53
+      },
+      "mobile": {
+        "en": 91,
+        "ur": 91
       }
     },
     {
@@ -1377,6 +1429,10 @@
       "seconds": {
         "en": 66,
         "ur": 68
+      },
+      "mobile": {
+        "en": 110,
+        "ur": 110
       }
     },
     {
@@ -1394,6 +1450,10 @@
       "seconds": {
         "en": 39,
         "ur": 39
+      },
+      "mobile": {
+        "en": 59,
+        "ur": 59
       }
     },
     {
@@ -1442,13 +1502,16 @@
       "chapter": 21,
       "roles": [
         "SCHOOL_ADMIN",
-        "PRINCIPAL",
-        "ACCOUNTANT"
+        "PRINCIPAL"
       ],
       "module": "inventory",
       "seconds": {
         "en": 99,
         "ur": 102
+      },
+      "mobile": {
+        "en": 161,
+        "ur": 161
       }
     },
     {
@@ -1537,13 +1600,16 @@
       "chapter": 21,
       "roles": [
         "SCHOOL_ADMIN",
-        "PRINCIPAL",
-        "ACCOUNTANT"
+        "PRINCIPAL"
       ],
       "module": "inventory",
       "seconds": {
         "en": 89,
         "ur": 93
+      },
+      "mobile": {
+        "en": 142,
+        "ur": 142
       }
     },
     {
@@ -1557,15 +1623,16 @@
       "chapter": 21,
       "roles": [
         "SCHOOL_ADMIN",
-        "PRINCIPAL",
-        "ACCOUNTANT",
-        "TEACHER",
-        "STAFF"
+        "PRINCIPAL"
       ],
       "module": "inventory",
       "seconds": {
         "en": 84,
         "ur": 90
+      },
+      "mobile": {
+        "en": 137,
+        "ur": 137
       }
     },
     {
@@ -1585,6 +1652,10 @@
       "seconds": {
         "en": 74,
         "ur": 75
+      },
+      "mobile": {
+        "en": 88,
+        "ur": 88
       }
     },
     {
@@ -1604,6 +1675,10 @@
       "seconds": {
         "en": 86,
         "ur": 89
+      },
+      "mobile": {
+        "en": 131,
+        "ur": 131
       }
     },
     {
@@ -1623,6 +1698,10 @@
       "seconds": {
         "en": 59,
         "ur": 62
+      },
+      "mobile": {
+        "en": 81,
+        "ur": 81
       }
     },
     {
@@ -1642,6 +1721,10 @@
       "seconds": {
         "en": 72,
         "ur": 75
+      },
+      "mobile": {
+        "en": 98,
+        "ur": 98
       }
     },
     {
@@ -1661,6 +1744,10 @@
       "seconds": {
         "en": 49,
         "ur": 55
+      },
+      "mobile": {
+        "en": 87,
+        "ur": 87
       }
     },
     {

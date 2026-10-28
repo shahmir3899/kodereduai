@@ -330,7 +330,10 @@ export default function AssessmentsPage() {
 
   const activeRow = selectedRowId ? roster.find((row) => String(row.student) === String(selectedRowId)) : null
 
-  const RemarkField = ({ row, form, field, label, disabled, placeholder }) => {
+  // A plain function, not a component: declared in the render body, a component
+  // is a new type every render, so the textarea remounted on each keystroke and
+  // lost focus after one character.
+  const renderRemarkField = ({ row, form, field, label, disabled, placeholder }) => {
     const key = `${row.student}-${field}`
     const isSuggesting = aiLoadingKey === key
     return (
@@ -536,15 +539,8 @@ export default function AssessmentsPage() {
                       </td>
                       <td className="px-4 py-4 align-top">
                         <div className="space-y-3">
-                          <RemarkField row={row} form={form} field="teacher_remark" label="Teacher remark" placeholder="Teacher observation" />
-                          <RemarkField
-                            row={row}
-                            form={form}
-                            field="principal_remark"
-                            label="Principal remark"
-                            disabled={!canEditPrincipalRemark}
-                            placeholder={canEditPrincipalRemark ? 'Principal observation' : 'Principal remark locked'}
-                          />
+                          {renderRemarkField({ row, form, field: 'teacher_remark', label: 'Teacher remark', placeholder: 'Teacher observation' })}
+                          {renderRemarkField({ row, form, field: 'principal_remark', label: 'Principal remark', disabled: !canEditPrincipalRemark, placeholder: canEditPrincipalRemark ? 'Principal observation' : 'Principal remark locked' })}
                         </div>
                       </td>
                       <td className="px-4 py-4 align-top text-right text-xs text-gray-500">
@@ -633,15 +629,8 @@ export default function AssessmentsPage() {
                   </div>
 
                   <div className="space-y-3">
-                    <RemarkField row={row} form={form} field="teacher_remark" label="Teacher remark" placeholder="Teacher observation" />
-                    <RemarkField
-                      row={row}
-                      form={form}
-                      field="principal_remark"
-                      label="Principal remark"
-                      disabled={!canEditPrincipalRemark}
-                      placeholder={canEditPrincipalRemark ? 'Principal observation' : 'Principal remark locked'}
-                    />
+                    {renderRemarkField({ row, form, field: 'teacher_remark', label: 'Teacher remark', placeholder: 'Teacher observation' })}
+                    {renderRemarkField({ row, form, field: 'principal_remark', label: 'Principal remark', disabled: !canEditPrincipalRemark, placeholder: canEditPrincipalRemark ? 'Principal observation' : 'Principal remark locked' })}
                   </div>
 
                   <div className="mt-3 flex justify-end">

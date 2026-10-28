@@ -165,7 +165,7 @@ export default function StudentResults() {
                                 <span className={`px-2 py-0.5 rounded text-xs font-medium ${badge.cls}`}>
                                   {badge.label}
                                 </span>
-                                <span className={`text-sm font-semibold ${gradeColor(pct)}`}>{pct}%</span>
+                                <span className={`text-sm font-semibold ${isAbsent ? 'text-gray-400' : gradeColor(pct)}`}>{isAbsent ? '-' : `${pct}%`}</span>
                               </div>
                             </div>
                             <div className="flex items-center justify-between text-xs text-gray-500 mb-2">

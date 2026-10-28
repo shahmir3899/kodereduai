@@ -2437,6 +2437,13 @@ class StudentMarkViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelV
 
             if marks_obtained is not None:
                 marks_obtained = Decimal(str(marks_obtained))
+                # bulk_create skips the serializer's range check, so enforce it here.
+                if marks_obtained < 0 or marks_obtained > exam_subject.total_marks:
+                    errors.append({
+                        'student_id': student_id,
+                        'error': f'Marks must be between 0 and {exam_subject.total_marks}.',
+                    })
+                    continue
             to_save[student_id] = {
                 'marks_obtained': None if is_absent else marks_obtained,
                 'is_absent': is_absent,

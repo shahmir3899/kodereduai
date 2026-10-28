@@ -1,0 +1,25 @@
+WEBVTT
+
+00:00:00.112 --> 00:00:05.128
+This video shows how to record and review stock transactions on a phone.
+
+00:00:06.793 --> 00:00:16.921
+Tap the menu button, open Inventory and choose Transactions. Each card is one stock movement, with the item, date, type and quantity.
+
+00:00:32.181 --> 00:00:35.829
+Tap Record Transaction at the top of the page.
+
+00:00:45.848 --> 00:00:53.264
+Tap Purchase, then choose the item. Enter the quantity, choose the vendor and type the invoice number.
+
+00:01:05.599 --> 00:01:12.655
+Tap Record Transaction. A message confirms it, and the purchase appears at the top of the list.
+
+00:01:22.647 --> 00:01:39.351
+For damaged or expired items tap Disposal, choose the item and enter a positive quantity. The stock goes down by that amount, and the list shows it as a minus number. An Adjustment corrects a count, and takes a negative number to reduce stock.
+
+00:01:54.376 --> 00:02:03.544
+Open the Type filter and choose Disposal. Only disposals remain. You can also narrow the list with the From and To dates.
+
+00:02:13.679 --> 00:02:20.735
+Every movement of stock is recorded here, and Issues and returns are added by themselves when you assign items.

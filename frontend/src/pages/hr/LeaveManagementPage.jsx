@@ -359,7 +359,7 @@ export default function LeaveManagementPage() {
                     }
                     fields={[
                       ...(a.leave_type ? [{ label: 'Type', value: a.leave_type_display || a.leave_type }] : []),
-                      { label: 'Dates', value: `${a.start_date} to ${a.end_date}` },
+                      { label: 'Dates', value: <span className="whitespace-normal">{a.start_date} to {a.end_date}</span> },
                       { label: 'Days', value: `${a.total_days} day${a.total_days !== 1 ? 's' : ''}` },
                     ]}
                     actions={[

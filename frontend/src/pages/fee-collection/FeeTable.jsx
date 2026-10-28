@@ -135,13 +135,13 @@ export default function FeeTable({
   }, [shouldGroupByStudent, sortedList])
 
   const footerLabelColSpan =
-    (canWrite ? 1 : 0) + // checkbox
+    (onToggleSelect ? 1 : 0) + // checkbox
     3 + // roll, student, class
     (isAllTypes ? 1 : 0) + // type
     ((isAnnual || isAllTypes) ? 1 : 0) + // category
     (showPrevBal ? 1 : 0) // prev balance
 
-  const footerTrailingColSpan = 4 + (canWrite ? 1 : 0)
+  const footerTrailingColSpan = 4 + (onToggleSelect ? 1 : 0)
 
   if (isLoading) {
     return <div className="card"><LoadingState /></div>
@@ -526,7 +526,7 @@ export default function FeeTable({
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
-              {canWrite && (
+              {onToggleSelectAll && (
                 <th className="px-3 py-2 text-center w-10">
                   <input
                     ref={headerCheckboxRef}
@@ -570,7 +570,7 @@ export default function FeeTable({
               return (
                 <Fragment key={payment.id}>
                   <tr className={`${isSelected ? 'bg-primary-50' : ''} ${shouldGroupByStudent && group && !group.isFirst ? 'border-t border-dashed border-gray-100' : ''}`}>
-                    {canWrite && (
+                    {onToggleSelect && (
                       <td className="px-3 py-2 text-center">
                         <input
                           type="checkbox"

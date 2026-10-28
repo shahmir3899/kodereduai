@@ -10,7 +10,7 @@ import { useLocation } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { questionPaperApi, lmsApi } from '../../services/api'
 import ClassSelector from '../../components/ClassSelector'
-import Toast from '../../components/Toast'
+import { useToast } from '../../components/Toast'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
 import { useAuth } from '../../contexts/AuthContext'
 import { useSessionClasses } from '../../hooks/useSessionClasses'
@@ -1531,7 +1531,7 @@ export default function QuestionsPage() {
   const [editQuestion, setEditQuestion] = useState(null)
   const [deleteTarget, setDeleteTarget] = useState(null)
   const [sourcePreviewBlockId, setSourcePreviewBlockId] = useState(null)
-  const [toast, setToast] = useState(null)
+  const { showSuccess, showError } = useToast()
   const [actionHint, setActionHint] = useState('')
   const [verifyingQuestionId, setVerifyingQuestionId] = useState(null)
 
@@ -1612,10 +1612,10 @@ export default function QuestionsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['questions'] })
       setDeleteTarget(null)
-      setToast({ type: 'success', message: 'Question deleted.' })
+      showSuccess('Question deleted.')
     },
     onError: () => {
-      setToast({ type: 'error', message: 'Failed to delete question.' })
+      showError('Failed to delete question.')
     },
   })
 
@@ -1647,10 +1647,10 @@ export default function QuestionsPage() {
       context?.previousQueries?.forEach(([key, queryData]) => {
         queryClient.setQueryData(key, queryData)
       })
-      setToast({ type: 'error', message: error?.response?.data?.detail || 'Failed to verify question.' })
+      showError(error?.response?.data?.detail || 'Failed to verify question.')
     },
     onSuccess: () => {
-      setToast({ type: 'success', message: 'Question marked as verified.' })
+      showSuccess('Question marked as verified.')
     },
     onSettled: () => {
       setVerifyingQuestionId(null)
@@ -1660,7 +1660,7 @@ export default function QuestionsPage() {
 
   const handleVerifyQuestion = (question) => {
     if (!user?.id) {
-      setToast({ type: 'error', message: 'Unable to verify question: user session missing.' })
+      showError('Unable to verify question: user session missing.')
       return
     }
     verifyQuestionMutation.mutate({
@@ -1697,7 +1697,6 @@ export default function QuestionsPage() {
 </>} />
       </div>
 
-      {toast && <Toast type={toast.type} message={toast.message} onClose={() => setToast(null)} />}
 
       <div className="max-w-6xl mx-auto px-6 py-6 space-y-5">
         {/* Filters */}
@@ -2087,10 +2086,7 @@ export default function QuestionsPage() {
           onSaved={() => {
             setShowCreateModal(false)
             setEditQuestion(null)
-            setToast({
-              type: 'success',
-              message: editQuestion ? 'Question updated.' : 'Question added.',
-            })
+            showSuccess(editQuestion ? 'Question updated.' : 'Question added.')
           }}
         />
       )}

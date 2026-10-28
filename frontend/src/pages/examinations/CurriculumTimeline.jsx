@@ -59,7 +59,7 @@ export default function CurriculumTimeline({ topics, academicYear }) {
   return (
     <div className="space-y-1">
       {/* Month axis */}
-      <div className="relative h-6 ml-40 border-b border-gray-200 text-[10px] text-gray-400">
+      <div className="relative h-6 md:ml-40 border-b border-gray-200 text-[10px] text-gray-400">
         {ticks.map((tick) => (
           <span
             key={tick.toISOString()}
@@ -71,7 +71,7 @@ export default function CurriculumTimeline({ topics, academicYear }) {
         ))}
       </div>
 
-      <div className="space-y-2">
+      <div className="space-y-3 md:space-y-2">
         {topics.map((topic) => {
           const plannedPos = positionOf(topic.planned_date)
           const taughtPos = positionOf(topic.taught_date)
@@ -79,11 +79,11 @@ export default function CurriculumTimeline({ topics, academicYear }) {
           const isPlannedButNotTaught = topic.planned_date && !topic.taught_date && topic.planned_date < today
 
           return (
-            <div key={topic.id} className="flex items-center gap-3">
-              <div className="w-40 flex-shrink-0 text-xs text-gray-700 truncate" title={topic.title}>
+            <div key={topic.id} className="flex flex-col gap-1 md:flex-row md:items-center md:gap-3">
+              <div className="md:w-40 flex-shrink-0 text-xs text-gray-700 truncate" title={topic.title}>
                 {topic.topic_number}. {topic.title}
               </div>
-              <div className="relative flex-1 h-6 bg-gray-50 rounded">
+              <div className="relative w-full md:w-auto md:flex-1 h-6 bg-gray-50 rounded">
                 {todayPos != null && (
                   <div
                     className="absolute top-0 bottom-0 w-px bg-red-200"
@@ -123,7 +123,7 @@ export default function CurriculumTimeline({ topics, academicYear }) {
                   </span>
                 )}
               </div>
-              <div className="w-24 flex-shrink-0 text-[10px] text-gray-400 text-right">
+              <div className="md:w-24 flex-shrink-0 text-[10px] text-gray-400 md:text-right">
                 {topic.planned_date && !topic.taught_date && `plan ${formatShort(topic.planned_date)}`}
                 {topic.taught_date && `taught ${formatShort(topic.taught_date)}`}
                 {!topic.planned_date && !topic.taught_date && '—'}
@@ -133,7 +133,7 @@ export default function CurriculumTimeline({ topics, academicYear }) {
         })}
       </div>
 
-      <div className="flex items-center gap-4 pt-2 text-[10px] text-gray-500">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 pt-2 text-[10px] text-gray-500">
         <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rotate-45 border-2 border-indigo-400 bg-white inline-block" /> Planned</span>
         <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-green-500 inline-block" /> Taught on/before plan</span>
         <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-amber-500 inline-block" /> Taught late</span>

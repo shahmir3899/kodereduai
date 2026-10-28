@@ -6,6 +6,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { examinationsApi, sessionsApi, schoolsApi } from '../../services/api'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
 import { useAuth } from '../../contexts/AuthContext'
+import { useToast } from '../../components/Toast'
 import { DEFAULT_SIGNATURE_LABELS, formatIssueDate } from './reportCardData'
 import BulkReportCardModal from './BulkReportCardModal'
 import MarksTable from './ReportCardMarksTable'
@@ -63,6 +64,7 @@ export default function ReportCardPage() {
   const { activeAcademicYear } = useAcademicYear()
   const { isSchoolAdmin, isManager, isTeacher } = useAuth()
   const queryClient = useQueryClient()
+  const { showSuccess, showError } = useToast()
   // The server is the real gate (teachers only for classes they are class teacher of); this just hides the toggle.
   const canEdit = isSchoolAdmin || isManager || isTeacher
   const [editMode, setEditMode] = useState(false)
@@ -230,8 +232,10 @@ export default function ReportCardPage() {
     try {
       const { exportReportCardPDF } = await import('./reportCardExport')
       await exportReportCardPDF({ report, schoolData, format: pdfFormat })
+      showSuccess('Report card PDF downloaded')
     } catch (err) {
       console.error('PDF export failed:', err)
+      showError('Could not generate the report card PDF. Please try again.')
     } finally {
       setDownloading(false)
     }

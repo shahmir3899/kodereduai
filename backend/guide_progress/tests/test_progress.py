@@ -10,8 +10,14 @@ pytestmark = pytest.mark.django_db
 
 VIDEO = catalog.load()['videos'][0]['id']
 OTHER_VIDEO = catalog.load()['videos'][1]['id']
-# a step the catalog completes with a tick rather than a video
-TICK_STEP = next(s for s in catalog.step_ids() if not catalog.video_for_section(s))
+# Every "Start here" step now has a video, so the tick-only path is tested with a made-up step.
+TICK_STEP = '99.9'
+
+
+@pytest.fixture(autouse=True)
+def tick_step_known(monkeypatch):
+    real = catalog.step_ids
+    monkeypatch.setattr(catalog, 'step_ids', lambda: real() | {TICK_STEP})
 
 
 @pytest.fixture
@@ -193,3 +199,60 @@ def test_videos_total_is_role_based_and_follows_the_catalog(world):
     assert rows['gp_parent']['videos_total'] == len(catalog.videos_for_role('PARENT', world['a'].enabled_modules or {}))
     assert rows['gp_teacher']['videos_watched'] <= rows['gp_teacher']['videos_total']
     assert rows['gp_teacher']['videos_percent'] == round(rows['gp_teacher']['videos_watched'] / expected * 100)
+
+
+def test_a_video_with_no_roles_is_for_everyone():
+    everyone = [v['id'] for v in catalog.load()['videos'] if not v.get('roles') and not v.get('module')]
+    assert everyone
+    for role in ('TEACHER', 'PRINCIPAL', 'PARENT', 'STUDENT'):
+        assert set(everyone) <= catalog.videos_for_role(role, {})
+
+
+def test_module_switch_matches_the_frontend():
+    assert catalog.module_enabled({'finance': True}, 'finance')
+    assert catalog.module_enabled({'finance': {'enabled': True}}, 'finance')
+    assert not catalog.module_enabled({'finance': {'enabled': False}}, 'finance')
+    assert not catalog.module_enabled({}, 'finance')       # never listed means off, as isModuleEnabled
+    assert catalog.module_enabled({}, None)
+
+
+def test_own_counts_equal_the_admin_overview(world):
+    everyone = next(v['id'] for v in catalog.load()['videos'] if not v.get('roles') and not v.get('module'))
+    t = client(world['teacher'], world['a'])
+    post_video(t, [[0, 90]], vid=everyone)
+    mine = t.get('/api/guide/progress/mine/').data['counts']
+    row = next(r for r in client(world['admin'], world['a']).get('/api/guide/progress/overview/').data['results']
+               if r['username'] == 'gp_teacher')
+    assert mine == {k: row[k] for k in ('steps_done', 'steps_total', 'videos_watched', 'videos_total')}
+    assert mine['videos_watched'] == 1
+    # every save answers with the fresh numbers too
+    assert post_video(t, [[0, 90]], vid=everyone).data['counts'] == mine
+
+
+def test_every_start_step_and_video_section_lines_up():
+    # One recording may serve two guide sections, but each catalog video belongs to exactly one section
+    # and each section has at most one video, so progress can never be counted twice for one recording.
+    videos = catalog.load()['videos']
+    assert len({v['id'] for v in videos}) == len(videos)
+    assert len({v['section'] for v in videos}) == len(videos)
+
+
+def test_old_duplicate_video_progress_is_merged(world):
+    import importlib
+    from django.apps import apps
+    from django.utils import timezone
+    mig = importlib.import_module('guide_progress.migrations.0002_merge_duplicate_video_progress')
+    now = timezone.now()
+    user, school = world['teacher'], world['a']
+    new_key, old_key = 'ch2-step-4-add-subjects', 'ch5-managing-subjects'
+    GuideProgress.objects.create(school=school, user=user, kind='video', key=old_key, seconds_played=40,
+                                 duration=47, completed_at=now, last_activity=now)
+    mig.merge_progress(apps, None)
+    rows = GuideProgress.objects.filter(user=user, kind='video')
+    assert [r.key for r in rows] == [new_key] and rows[0].completed_at
+    # watched under both ids: one row survives and keeps the completion
+    GuideProgress.objects.create(school=school, user=user, kind='video', key=old_key, seconds_played=10,
+                                 duration=47, last_activity=now)
+    mig.merge_progress(apps, None)
+    rows = GuideProgress.objects.filter(user=user, kind='video')
+    assert rows.count() == 1 and rows[0].completed_at and rows[0].seconds_played == 40

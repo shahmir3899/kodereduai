@@ -64,7 +64,7 @@ def _video_row(user, school_id, video_id, now):
     return row
 
 
-def _serialize_mine(rows):
+def _serialize_mine(rows, counts=None):
     videos, steps = {}, {}
     for r in rows:
         if r.kind == GuideProgress.Kind.VIDEO:
@@ -74,7 +74,16 @@ def _serialize_mine(rows):
             }
         else:
             steps[r.key] = r.completed_at
-    return {'videos': videos, 'steps': steps}
+    return {'videos': videos, 'steps': steps, 'counts': counts}
+
+
+def _my_counts(user, school_id, rows):
+    """The same numbers the admin overview shows for this person (None for a super admin, who is not tracked)."""
+    member = UserSchoolMembership.objects.filter(school_id=school_id, user=user, is_active=True).first()
+    if not member or user.is_super_admin:
+        return None
+    enabled = School.objects.values_list('enabled_modules', flat=True).get(pk=school_id) or {}
+    return catalog.person_counts(member.role, enabled, {(r.kind, r.key) for r in rows if r.completed_at})
 
 
 class GuideProgressViewSet(viewsets.GenericViewSet):
@@ -94,8 +103,9 @@ class GuideProgressViewSet(viewsets.GenericViewSet):
 
     @action(detail=False, methods=['get'])
     def mine(self, request):
-        rows = GuideProgress.objects.filter(school_id=_school_id(request), user=request.user)
-        return Response(_serialize_mine(rows))
+        school_id = _school_id(request)
+        rows = list(GuideProgress.objects.filter(school_id=school_id, user=request.user))
+        return Response(_serialize_mine(rows, _my_counts(request.user, school_id, rows)))
 
     @action(detail=False, methods=['post'])
     def video(self, request):
@@ -110,7 +120,8 @@ class GuideProgressViewSet(viewsets.GenericViewSet):
             request.data.get('position'), request.data.get('language'), now,
         )
         row.save()
-        return Response(_serialize_mine([row])['videos'][video_id])
+        rows = list(GuideProgress.objects.filter(school_id=school_id, user=request.user))
+        return Response({**_serialize_mine([row])['videos'][video_id], 'counts': _my_counts(request.user, school_id, rows)})
 
     @action(detail=False, methods=['post'])
     def step(self, request):
@@ -123,10 +134,10 @@ class GuideProgressViewSet(viewsets.GenericViewSet):
         lookup = dict(school_id=school_id, user=request.user, kind=GuideProgress.Kind.STEP, key=step_id)
         if request.data.get('done') is False:
             GuideProgress.objects.filter(**lookup).delete()
-            return Response({'id': step_id, 'done': False})
+            return Response({'id': step_id, 'done': False, 'counts': self._counts_now(request, school_id)})
         now = timezone.now()
         row, _ = GuideProgress.objects.get_or_create(**lookup, defaults={'last_activity': now, 'completed_at': now})
-        return Response({'id': step_id, 'done': True})
+        return Response({'id': step_id, 'done': True, 'counts': self._counts_now(request, school_id)})
 
     @action(detail=False, methods=['post'])
     def sync(self, request):
@@ -155,8 +166,13 @@ class GuideProgressViewSet(viewsets.GenericViewSet):
                     school_id=school_id, user=request.user, kind=GuideProgress.Kind.STEP, key=step_id,
                     defaults={'last_activity': now, 'completed_at': now},
                 )
-        rows = GuideProgress.objects.filter(school_id=school_id, user=request.user)
-        return Response(_serialize_mine(rows), status=http.HTTP_200_OK)
+        rows = list(GuideProgress.objects.filter(school_id=school_id, user=request.user))
+        return Response(_serialize_mine(rows, _my_counts(request.user, school_id, rows)), status=http.HTTP_200_OK)
+
+    @staticmethod
+    def _counts_now(request, school_id):
+        rows = list(GuideProgress.objects.filter(school_id=school_id, user=request.user))
+        return _my_counts(request.user, school_id, rows)
 
     # ----- admin overview -----------------------------------------------
 
@@ -255,20 +271,14 @@ class GuideProgressViewSet(viewsets.GenericViewSet):
         for m in members:
             if m.user.is_super_admin:
                 continue
-            reqs = catalog.step_requirements(m.role, enabled)
             mine = progress.get(m.user_id, {})
-            done = 0
-            for section_id, video_id in reqs:
-                key = ('video', video_id) if video_id else ('step', section_id)
-                if mine.get(key, (None, None))[0]:
-                    done += 1
-            role_videos = catalog.videos_for_role(m.role, enabled)
-            # Only videos meant for this role count, so "x / total" can never exceed 100%.
-            watched = sum(1 for (kind, key), (completed, _) in mine.items() if kind == 'video' and completed and key in role_videos)
+            counts = catalog.person_counts(m.role, enabled, {k for k, (completed, _) in mine.items() if completed})
+            done, total, watched, total_videos = (
+                counts['steps_done'], counts['steps_total'], counts['videos_watched'], counts['videos_total'],
+            )
             last = max((v[1] for v in mine.values()), default=None)
             # One "last seen" for the admin: the later of signing in and using the guide.
             seen = max((t for t in (last, m.user.last_login) if t), default=None)
-            total = len(reqs)
             if not mine:
                 state = 'not_started'
             elif total and done >= total:
@@ -283,8 +293,8 @@ class GuideProgressViewSet(viewsets.GenericViewSet):
                 'username': m.user.username,
                 'role': m.role,
                 'group': classes.get(m.user_id) or departments.get(m.user_id) or '',
-                'steps_done': done, 'steps_total': total, 'videos_watched': watched, 'videos_total': len(role_videos),
-                'videos_percent': round(watched / len(role_videos) * 100) if role_videos else 0,
+                'steps_done': done, 'steps_total': total, 'videos_watched': watched, 'videos_total': total_videos,
+                'videos_percent': round(watched / total_videos * 100) if total_videos else 0,
                 'percent': round(done / total * 100) if total else 0,
                 'status': state,
                 'last_activity': last,

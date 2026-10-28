@@ -4,6 +4,7 @@ import PageHeader from '../../components/ui/PageHeader'
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query'
 import { examinationsApi, studentsApi } from '../../services/api'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
+import { useToast } from '../../components/Toast'
 import ClassSelector from '../../components/ClassSelector'
 import TeacherScopeSummary from '../../components/teacher/TeacherScopeSummary'
 import TeacherScopeBadge, { TeacherScopeHint, useTeacherScopeLookup } from '../../components/teacher/TeacherScopeBadge'
@@ -51,6 +52,7 @@ export default function MarksEntryPage() {
   // Marks grid state
   const [marksData, setMarksData] = useState([])
   const [saveMsg, setSaveMsg] = useState('')
+  const { showSuccess, showError } = useToast()
   const [downloading, setDownloading] = useState(false)
 
   const sortByRollNumber = (rows) => {
@@ -191,13 +193,25 @@ export default function MarksEntryPage() {
   // Bulk save mutation
   const bulkSaveMut = useMutation({
     mutationFn: (data) => examinationsApi.bulkEntryMarks(data),
-    onSuccess: () => {
-      setSaveMsg('Marks saved successfully!')
+    onSuccess: (res) => {
       queryClient.invalidateQueries({ queryKey: ['marks'] })
+      // The server skips rows it rejects (e.g. above the maximum) and still answers 200.
+      const rejected = res?.data?.errors || []
+      if (rejected.length) {
+        const msg = `Error: ${rejected.length} row(s) not saved. ${rejected[0].error}`
+        setSaveMsg(msg)
+        showError(msg)
+        return
+      }
+      setSaveMsg('Marks saved successfully!')
+      // Toast too: the bottom Save button is far from the inline message at the top.
+      showSuccess('Marks saved successfully!')
       setTimeout(() => setSaveMsg(''), 3000)
     },
     onError: (err) => {
-      setSaveMsg(`Error: ${err.response?.data?.detail || 'Failed to save marks'}`)
+      const msg = `Error: ${err.response?.data?.detail || 'Failed to save marks'}`
+      setSaveMsg(msg)
+      showError(msg)
     },
   })
 
