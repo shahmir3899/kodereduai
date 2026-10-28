@@ -1,70 +1,30 @@
 import React from 'react';
-import { Tabs } from 'expo-router';
-import { Text } from 'react-native';
-import { Colors, FontSize } from '../../constants/colors';
+import PersonaTabs, { type TabSpec } from '../../components/nav/PersonaTabs';
+
+const TABS: TabSpec[] = [
+  { name: 'dashboard', title: 'Home', icon: 'home-outline' },
+  { name: 'schedule', title: 'Schedule', icon: 'calendar-outline' },
+  { name: 'assignments', title: 'Tasks', icon: 'create-outline', stack: true },
+  { name: 'results', title: 'Results', icon: 'ribbon-outline' },
+  { name: 'more', title: 'More', icon: 'menu-outline' },
+];
+
+// Opened from More or the Home screen; no tab of their own. location-sharing is a leftover
+// driver-style screen with no link to it; it stays hidden until it is confirmed unused.
+const HIDDEN = ['attendance', 'fees', 'exam-schedule', 'library', 'transport', 'ai-helper', 'profile', 'inbox', 'change-password', 'location-sharing'];
+
+const TITLES: Record<string, string> = {
+  attendance: 'Attendance',
+  fees: 'Fees',
+  'exam-schedule': 'Exam Schedule',
+  library: 'Library',
+  transport: 'Transport',
+  'ai-helper': 'AI Study Helper',
+  profile: 'My Profile',
+  inbox: 'Notifications',
+  'change-password': 'Change Password',
+};
 
 export default function StudentLayout() {
-  return (
-    <Tabs
-      screenOptions={{
-        headerStyle: { backgroundColor: Colors.surface },
-        headerTitleStyle: { fontWeight: '600', fontSize: FontSize.lg },
-        headerTintColor: Colors.text,
-        tabBarActiveTintColor: Colors.primary,
-        tabBarInactiveTintColor: Colors.textTertiary,
-        tabBarStyle: {
-          backgroundColor: Colors.surface,
-          borderTopColor: Colors.border,
-          paddingBottom: 4,
-          height: 56,
-        },
-        tabBarLabelStyle: {
-          fontSize: FontSize.xs,
-          fontWeight: '500',
-        },
-      }}
-    >
-      <Tabs.Screen
-        name="dashboard"
-        options={{
-          title: 'Home',
-          tabBarIcon: ({ color }) => <Text style={{ fontSize: 20, color }}>🏠</Text>,
-        }}
-      />
-      <Tabs.Screen
-        name="timetable"
-        options={{
-          title: 'Schedule',
-          tabBarIcon: ({ color }) => <Text style={{ fontSize: 20, color }}>📅</Text>,
-        }}
-      />
-      <Tabs.Screen
-        name="assignments"
-        options={{
-          title: 'Tasks',
-          tabBarIcon: ({ color }) => <Text style={{ fontSize: 20, color }}>📝</Text>,
-        }}
-      />
-      <Tabs.Screen
-        name="ai-helper"
-        options={{
-          title: 'AI Helper',
-          tabBarIcon: ({ color }) => <Text style={{ fontSize: 20, color }}>✨</Text>,
-        }}
-      />
-      <Tabs.Screen
-        name="profile"
-        options={{
-          title: 'Profile',
-          tabBarIcon: ({ color }) => <Text style={{ fontSize: 20, color }}>👤</Text>,
-        }}
-      />
-      {/* Hidden screens */}
-      <Tabs.Screen name="attendance" options={{ href: null }} />
-      <Tabs.Screen name="fees" options={{ href: null }} />
-      <Tabs.Screen name="results" options={{ href: null }} />
-      <Tabs.Screen name="inbox" options={{ href: null }} />
-      <Tabs.Screen name="location-sharing" options={{ href: null }} />
-    </Tabs>
-  );
+  return <PersonaTabs persona="student" tabs={TABS} hidden={HIDDEN} titles={TITLES} />;
 }

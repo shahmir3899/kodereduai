@@ -618,6 +618,10 @@ EMAIL_USE_SSL = os.getenv('EDU_EMAIL_USE_SSL', 'false').lower() in ('true', '1',
 EMAIL_TIMEOUT = int(os.getenv('EMAIL_TIMEOUT', '20'))
 DEFAULT_FROM_EMAIL = os.getenv('EDU_DEFAULT_FROM_EMAIL', EMAIL_HOST_USER or 'noreply@koderkids.pk').strip()
 
+# Base URL of the web app for links sent by email (password reset). Without this the views fell
+# back to http://localhost:3000, so reset emails sent from production pointed at localhost.
+FRONTEND_URL = os.getenv('FRONTEND_URL', 'https://www.educationai.pk').strip().rstrip('/')
+
 # =============================================================================
 # Careers Application Email Configuration
 # =============================================================================

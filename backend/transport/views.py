@@ -13,7 +13,7 @@ from rest_framework.views import APIView
 
 from core.permissions import (
     IsSchoolAdmin, IsSchoolAdminOrReadOnly, HasSchoolAccess, ModuleAccessMixin,
-    IsDriverOrAdmin, ADMIN_ROLES, get_effective_role, get_parent_children_ids,
+    IsDriverOrAdmin, IsDriver, ADMIN_ROLES, get_effective_role, get_parent_children_ids,
 )
 from core.mixins import TenantQuerySetMixin
 
@@ -31,7 +31,7 @@ from .serializers import (
     TransportVehicleReadSerializer, TransportVehicleCreateSerializer,
     TransportAssignmentReadSerializer, TransportAssignmentCreateSerializer,
     TransportAttendanceReadSerializer, TransportAttendanceCreateSerializer,
-    BulkTransportAttendanceSerializer,
+    BulkTransportAttendanceSerializer, DriverBoardingSerializer,
     RouteJourneyReadSerializer, RouteJourneyCreateSerializer,
     RouteJourneyUpdateSerializer, RouteLocationUpdateSerializer,
 )
@@ -1077,3 +1077,125 @@ class RouteJourneyHistoryView(APIView):
             queryset = queryset.filter(route_id=route_id)
 
         return Response(RouteJourneyReadSerializer(queryset[:20], many=True).data)
+
+
+# =============================================================================
+# Driver boarding (own route, today only)
+# =============================================================================
+
+class DriverBoardingView(ModuleAccessMixin, APIView):
+    """
+    GET  /api/transport/driver/boarding/ -- the students on the driver's own route, with today's
+                                            boarding status.
+    POST /api/transport/driver/boarding/ -- mark today's boarding for some of them.
+
+    Drivers cannot use the admin attendance endpoints (they are admin-write only, and the
+    assignment list shows every student in the school). This is a narrow alternative: the route
+    comes from the driver's own active vehicle, never from the request, and only today can be
+    marked, so a driver cannot edit another route or rewrite history.
+    """
+    required_module = 'transport'
+    permission_classes = [IsAuthenticated, IsDriver]
+
+    def _vehicle(self, request):
+        qs = TransportVehicle.objects.filter(driver_user=request.user, is_active=True)
+        school_id = _resolve_school_id(request)
+        if school_id:
+            qs = qs.filter(school_id=school_id)
+        return qs.select_related('assigned_route').first()
+
+    def _context(self, request):
+        """(vehicle, route, school_id, error Response|None)"""
+        vehicle = self._vehicle(request)
+        if not vehicle:
+            return None, None, None, Response(
+                {'error': 'No active vehicle assigned to your account.'}, status=status.HTTP_400_BAD_REQUEST)
+        if not vehicle.assigned_route_id:
+            return None, None, None, Response(
+                {'error': 'Your vehicle is not assigned to any route.'}, status=status.HTTP_400_BAD_REQUEST)
+        return vehicle, vehicle.assigned_route, vehicle.school_id, None
+
+    def get(self, request):
+        from django.utils import timezone
+        from academic_sessions.roster import current_placements_for, placement_label, placement_roll
+
+        _vehicle, route, school_id, error = self._context(request)
+        if error:
+            return error
+
+        today = timezone.localdate()
+        assignments = list(
+            TransportAssignment.objects.filter(
+                school_id=school_id, route=route, is_active=True, student__is_active=True,
+            ).select_related('student', 'stop').order_by('stop__stop_order', 'student__name')
+        )
+        marked = dict(
+            TransportAttendance.objects.filter(school_id=school_id, route=route, date=today)
+            .values_list('student_id', 'boarding_status')
+        )
+        placements = current_placements_for(school_id, [a.student_id for a in assignments])
+
+        students = []
+        for a in assignments:
+            placement = placements.get(a.student_id)
+            students.append({
+                'student_id': a.student_id,
+                'name': a.student.name,
+                'class_name': placement_label(placement, a.student),
+                'roll_number': placement_roll(placement, a.student),
+                'stop_name': a.stop.name if a.stop_id else None,
+                'stop_order': a.stop.stop_order if a.stop_id else None,
+                'boarding_status': marked.get(a.student_id),
+            })
+        return Response({
+            'route': {'id': route.id, 'name': route.name},
+            'date': today.isoformat(),
+            'students': students,
+        })
+
+    def post(self, request):
+        from django.utils import timezone
+
+        _vehicle, route, school_id, error = self._context(request)
+        if error:
+            return error
+
+        serializer = DriverBoardingSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        records = serializer.validated_data['records']
+
+        today = timezone.localdate()
+        given = serializer.validated_data.get('date')
+        if given and given != today:
+            return Response(
+                {'error': 'Boarding can only be marked for today.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        assigned_ids = set(
+            TransportAssignment.objects.filter(
+                school_id=school_id, route=route, is_active=True,
+            ).values_list('student_id', flat=True)
+        )
+
+        created_count = updated_count = 0
+        errors = []
+        with transaction.atomic():
+            for record in records:
+                student_id = record['student_id']
+                if student_id not in assigned_ids:
+                    errors.append({'student_id': student_id, 'error': 'Student is not on your route.'})
+                    continue
+                _row, created = TransportAttendance.objects.update_or_create(
+                    school_id=school_id, student_id=student_id, route=route, date=today,
+                    defaults={'boarding_status': record['boarding_status'], 'recorded_by': request.user},
+                )
+                if created:
+                    created_count += 1
+                else:
+                    updated_count += 1
+
+        return Response({
+            'created': created_count,
+            'updated': updated_count,
+            'errors': errors,
+            'date': today.isoformat(),
+        })

@@ -355,6 +355,18 @@ class BulkTransportAttendanceItemSerializer(serializers.Serializer):
     )
 
 
+class DriverBoardingSerializer(serializers.Serializer):
+    """A driver's boarding marks: no route (it comes from their vehicle) and, if a date is sent,
+    the view insists on today."""
+    date = serializers.DateField(required=False)
+    records = BulkTransportAttendanceItemSerializer(many=True)
+
+    def validate_records(self, value):
+        if not value:
+            raise serializers.ValidationError("At least one attendance record is required.")
+        return value
+
+
 class BulkTransportAttendanceSerializer(serializers.Serializer):
     """
     Serializer for bulk marking transport attendance.

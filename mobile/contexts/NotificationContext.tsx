@@ -4,7 +4,6 @@ import * as Notifications from 'expo-notifications';
 import { notificationsApi } from '../services/api';
 import {
   registerForPushNotifications,
-  unregisterPushToken,
   configureNotificationHandlers,
 } from '../services/notifications';
 import { useAuth } from './AuthContext';
@@ -76,12 +75,10 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   useEffect(() => {
     if (user) return;
 
-    // User logged out — unregister token
-    if (pushTokenRef.current) {
-      unregisterPushToken(pushTokenRef.current);
-      pushTokenRef.current = null;
-      setPushToken(null);
-    }
+    // The server-side unregister already happened in AuthContext before sign-out; here only
+    // local state is reset.
+    pushTokenRef.current = null;
+    setPushToken(null);
     setUnreadCount(0);
   }, [user]);
 

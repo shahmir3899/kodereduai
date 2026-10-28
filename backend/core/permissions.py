@@ -755,6 +755,16 @@ class IsDriverOrAdmin(permissions.BasePermission):
         return role in ADMIN_ROLES or role == 'DRIVER'
 
 
+class IsDriver(permissions.BasePermission):
+    """Only drivers: for endpoints scoped to the driver's own vehicle and route."""
+    message = "Only drivers can perform this action."
+
+    def has_permission(self, request, view):
+        if not request.user.is_authenticated:
+            return False
+        return get_effective_role(request) == 'DRIVER'
+
+
 class IsParent(permissions.BasePermission):
     """Permission class that only allows Parent users."""
     message = "Only parents can perform this action."

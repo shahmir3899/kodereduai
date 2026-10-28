@@ -1,319 +1,116 @@
-import React, { useEffect, useState } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  RefreshControl,
-  TouchableOpacity,
-} from 'react-native';
-import { useRouter } from 'expo-router';
+import React from 'react';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
+import { useRouter, type Href } from 'expo-router';
 import { useAuth } from '../../contexts/AuthContext';
-import { studentPortalApi } from '../../services/api';
+import { routeFor } from '../../navigation/routes';
+import { useStudentDashboard } from '../../hooks/useStudentPortal';
+import { useRefreshControl } from '../../hooks/useRefreshControl';
+import { dueLabel, rateTone } from '../../services/studentPortal';
+import { formatMoney } from '../../services/feeCollect';
+import { formatSlotTime } from '../../services/teacher';
 import Card from '../../components/ui/Card';
-import Spinner from '../../components/ui/Spinner';
-import StatCard from '../../components/StatCard';
+import Skeleton from '../../components/ui/Skeleton';
+import ErrorState from '../../components/ui/ErrorState';
+import SchoolSwitcher from '../../components/nav/SchoolSwitcher';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
 
-interface DashboardData {
-  student_name: string;
-  class_name: string;
-  roll_number: string;
-  attendance_percentage: number;
-  today_classes: Array<{
-    subject_name: string;
-    start_time: string;
-    end_time: string;
-    teacher_name?: string;
-  }>;
-  upcoming_assignments: Array<{
-    id: number;
-    title: string;
-    subject_name: string;
-    due_date: string;
-  }>;
-  fee_status: {
-    pending_amount: number;
-    status: string;
-  };
-}
+const TONE = { success: Colors.success, warning: Colors.warning, error: Colors.error } as const;
 
 export default function StudentDashboard() {
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
   const router = useRouter();
-  const [data, setData] = useState<DashboardData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
+  const query = useStudentDashboard();
+  const refreshControl = useRefreshControl(query.refetch);
+  const go = (route?: string, params?: Record<string, string | number>) =>
+    route && router.push((params ? { pathname: route, params } : route) as Href);
 
-  const fetchDashboard = async () => {
-    try {
-      const response = await studentPortalApi.getDashboard();
-      setData(response.data);
-    } catch (error) {
-      console.error('Failed to fetch dashboard:', error);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  };
+  if (query.isLoading) return <Skeleton />;
+  if (query.isError && !query.data) return <ErrorState error={query.error} onRetry={() => query.refetch()} />;
+  const d = query.data!;
+  const pending = Number(d.fees.outstanding) || 0;
+  const name = d.student?.name || [user?.first_name, user?.last_name].filter(Boolean).join(' ') || user?.username;
 
-  useEffect(() => {
-    fetchDashboard();
-  }, []);
-
-  const onRefresh = () => {
-    setRefreshing(true);
-    fetchDashboard();
-  };
-
-  if (loading) return <Spinner fullScreen message="Loading..." />;
+  const quick = [
+    { label: 'Attendance', icon: '✅', route: routeFor('student', '/student/attendance') },
+    { label: 'Fees', icon: '💰', route: routeFor('student', '/student/fees') },
+    { label: 'Exams', icon: '🗓️', route: routeFor('student', '/student/exam-schedule') },
+    { label: 'Library', icon: '📚', route: routeFor('student', '/student/library') },
+  ];
 
   return (
-    <ScrollView
-      style={styles.container}
-      contentContainerStyle={styles.content}
-      refreshControl={
-        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-      }
-    >
-      {/* Welcome */}
-      <View style={styles.welcome}>
-        <View>
-          <Text style={styles.greeting}>
-            Hi, {data?.student_name || user?.username || 'Student'}
+    <ScrollView style={styles.container} contentContainerStyle={styles.content} refreshControl={refreshControl}>
+      <Text style={styles.greeting}>Hello, {name}</Text>
+      <Text style={styles.sub}>{[d.student?.class_name, d.student?.roll_number ? `Roll #${d.student.roll_number}` : ''].filter(Boolean).join('  ·  ')}</Text>
+      <SchoolSwitcher />
+
+      <View style={styles.tiles}>
+        <TouchableOpacity style={styles.tile} onPress={() => go(routeFor('student', '/student/attendance'))}>
+          <Text style={[styles.tileValue, { color: d.attendance.total_days > 0 ? TONE[rateTone(d.attendance.rate)] : Colors.textSecondary }]}>
+            {d.attendance.total_days > 0 ? `${d.attendance.rate}%` : '–'}
           </Text>
-          <Text style={styles.classInfo}>
-            {data?.class_name || ''} {data?.roll_number ? `| Roll #${data.roll_number}` : ''}
-          </Text>
-        </View>
-        <TouchableOpacity onPress={logout}>
-          <Text style={styles.logoutText}>Logout</Text>
+          <Text style={styles.tileLabel}>Attendance</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.tile} onPress={() => go(routeFor('student', '/student/fees'))}>
+          <Text style={[styles.tileValue, { color: pending > 0 ? Colors.error : Colors.success }]}>{formatMoney(pending)}</Text>
+          <Text style={styles.tileLabel}>Fees pending</Text>
         </TouchableOpacity>
       </View>
 
-      {/* Stats */}
-      <View style={styles.statsRow}>
-        <StatCard
-          title="Attendance"
-          value={`${data?.attendance_percentage ?? 0}%`}
-          color={
-            (data?.attendance_percentage ?? 0) >= 75
-              ? Colors.success
-              : Colors.error
-          }
-        />
-        <StatCard
-          title="Pending Fees"
-          value={
-            data?.fee_status?.pending_amount
-              ? `PKR ${data.fee_status.pending_amount.toLocaleString()}`
-              : 'Clear'
-          }
-          color={data?.fee_status?.pending_amount ? Colors.error : Colors.success}
-        />
-      </View>
-
-      {/* Today's Classes */}
-      <Text style={styles.sectionTitle}>Today's Classes</Text>
-      {(!data?.today_classes || data.today_classes.length === 0) ? (
-        <Card style={styles.emptyCard}>
-          <Text style={styles.emptyText}>No classes today</Text>
+      <Text style={styles.section}>Today&apos;s classes</Text>
+      {d.today_timetable.length === 0 ? <Text style={styles.muted}>No classes today.</Text> : d.today_timetable.map((p, i) => (
+        <Card key={`${p.slot}-${i}`} style={styles.period}>
+          <Text style={styles.time}>{formatSlotTime(p.start_time)}</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.subject} numberOfLines={1}>{p.subject || p.slot}</Text>
+            <Text style={styles.sub} numberOfLines={1}>{[p.teacher, p.room ? `Room ${p.room}` : ''].filter(Boolean).join('  ·  ')}</Text>
+          </View>
         </Card>
-      ) : (
-        data.today_classes.map((cls, idx) => (
-          <Card key={idx} style={styles.classCard}>
-            <View style={styles.classRow}>
-              <View style={styles.timeBox}>
-                <Text style={styles.timeText}>
-                  {cls.start_time?.slice(0, 5)}
-                </Text>
-              </View>
-              <View style={styles.classInfo2}>
-                <Text style={styles.className}>{cls.subject_name}</Text>
-                {cls.teacher_name && (
-                  <Text style={styles.teacherName}>{cls.teacher_name}</Text>
-                )}
-              </View>
+      ))}
+
+      <Text style={styles.section}>Upcoming tasks</Text>
+      {d.upcoming_assignments.length === 0 ? <Text style={styles.muted}>Nothing due soon.</Text> : d.upcoming_assignments.map((a) => (
+        <TouchableOpacity key={a.id} onPress={() => go('/(student)/assignments/detail', { id: a.id })}>
+          <Card style={styles.period}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.subject} numberOfLines={1}>{a.title}</Text>
+              <Text style={styles.sub}>{a.subject}  ·  {dueLabel(a.due_date)}</Text>
             </View>
+            <Text style={styles.arrow}>›</Text>
           </Card>
-        ))
-      )}
+        </TouchableOpacity>
+      ))}
 
-      {/* Upcoming Assignments */}
-      <Text style={styles.sectionTitle}>Upcoming Assignments</Text>
-      {(!data?.upcoming_assignments || data.upcoming_assignments.length === 0) ? (
-        <Card style={styles.emptyCard}>
-          <Text style={styles.emptyText}>No upcoming assignments</Text>
-        </Card>
-      ) : (
-        data.upcoming_assignments.slice(0, 5).map((assignment) => (
-          <TouchableOpacity
-            key={assignment.id}
-            onPress={() => router.push('/(student)/assignments')}
-          >
-            <Card key={assignment.id} style={styles.assignmentCard}>
-              <View style={styles.assignmentRow}>
-                <View>
-                  <Text style={styles.assignmentTitle}>{assignment.title}</Text>
-                  <Text style={styles.assignmentSubject}>{assignment.subject_name}</Text>
-                </View>
-                <Text style={styles.dueDate}>Due: {assignment.due_date}</Text>
-              </View>
-            </Card>
+      <Text style={styles.section}>Quick links</Text>
+      <View style={styles.actions}>
+        {quick.map((a) => (
+          <TouchableOpacity key={a.label} style={[styles.quick, !a.route && styles.quickOff]} disabled={!a.route} onPress={() => go(a.route)}>
+            <Text style={styles.quickIcon}>{a.icon}</Text>
+            <Text style={styles.quickLabel}>{a.label}</Text>
           </TouchableOpacity>
-        ))
-      )}
-
-      {/* Quick Actions */}
-      <Text style={styles.sectionTitle}>Quick Actions</Text>
-      <View style={styles.actionsRow}>
-        <QuickAction label="Attendance" icon="📊" onPress={() => router.push('/(student)/attendance')} />
-        <QuickAction label="Timetable" icon="📅" onPress={() => router.push('/(student)/timetable')} />
-        <QuickAction label="Results" icon="📝" onPress={() => router.push('/(student)/results')} />
-        <QuickAction label="Fees" icon="💰" onPress={() => router.push('/(student)/fees')} />
+        ))}
       </View>
     </ScrollView>
   );
 }
 
-function QuickAction({ label, icon, onPress }: { label: string; icon: string; onPress: () => void }) {
-  return (
-    <TouchableOpacity style={styles.actionButton} onPress={onPress}>
-      <Text style={styles.actionIcon}>{icon}</Text>
-      <Text style={styles.actionLabel}>{label}</Text>
-    </TouchableOpacity>
-  );
-}
-
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.background,
-  },
-  content: {
-    padding: Spacing.lg,
-  },
-  welcome: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: Spacing.xxl,
-  },
-  greeting: {
-    fontSize: FontSize.xl,
-    fontWeight: '700',
-    color: Colors.text,
-  },
-  classInfo: {
-    fontSize: FontSize.sm,
-    color: Colors.textSecondary,
-    marginTop: 4,
-  },
-  logoutText: {
-    fontSize: FontSize.sm,
-    color: Colors.error,
-    fontWeight: '600',
-  },
-  statsRow: {
-    flexDirection: 'row',
-    gap: Spacing.md,
-    marginBottom: Spacing.xxl,
-  },
-  sectionTitle: {
-    fontSize: FontSize.lg,
-    fontWeight: '600',
-    color: Colors.text,
-    marginBottom: Spacing.md,
-    marginTop: Spacing.md,
-  },
-  emptyCard: {
-    alignItems: 'center',
-    paddingVertical: Spacing.xxl,
-  },
-  emptyText: {
-    fontSize: FontSize.sm,
-    color: Colors.textSecondary,
-  },
-  classCard: {
-    marginBottom: Spacing.sm,
-  },
-  classRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  timeBox: {
-    backgroundColor: Colors.primaryLight + '20',
-    borderRadius: BorderRadius.sm,
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
-    marginRight: Spacing.md,
-  },
-  timeText: {
-    fontSize: FontSize.sm,
-    fontWeight: '600',
-    color: Colors.primary,
-  },
-  classInfo2: {
-    flex: 1,
-  },
-  className: {
-    fontSize: FontSize.md,
-    fontWeight: '600',
-    color: Colors.text,
-  },
-  teacherName: {
-    fontSize: FontSize.xs,
-    color: Colors.textSecondary,
-    marginTop: 2,
-  },
-  assignmentCard: {
-    marginBottom: Spacing.sm,
-  },
-  assignmentRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  assignmentTitle: {
-    fontSize: FontSize.md,
-    fontWeight: '600',
-    color: Colors.text,
-  },
-  assignmentSubject: {
-    fontSize: FontSize.xs,
-    color: Colors.textSecondary,
-    marginTop: 2,
-  },
-  dueDate: {
-    fontSize: FontSize.xs,
-    color: Colors.warning,
-    fontWeight: '500',
-  },
-  actionsRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: Spacing.md,
-    marginBottom: Spacing.xxl,
-  },
-  actionButton: {
-    width: '47%',
-    backgroundColor: Colors.surface,
-    borderRadius: BorderRadius.lg,
-    padding: Spacing.lg,
-    alignItems: 'center',
-    shadowColor: Colors.shadow,
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06,
-    shadowRadius: 3,
-    elevation: 1,
-  },
-  actionIcon: {
-    fontSize: 28,
-    marginBottom: Spacing.sm,
-  },
-  actionLabel: {
-    fontSize: FontSize.sm,
-    fontWeight: '500',
-    color: Colors.text,
-  },
+  container: { flex: 1, backgroundColor: Colors.background },
+  content: { padding: Spacing.lg, paddingBottom: Spacing.xxxl },
+  greeting: { fontSize: FontSize.xl, fontWeight: '700', color: Colors.text },
+  sub: { fontSize: FontSize.sm, color: Colors.textSecondary },
+  tiles: { flexDirection: 'row', gap: Spacing.md, marginTop: Spacing.lg },
+  tile: { flex: 1, backgroundColor: Colors.surface, borderRadius: BorderRadius.md, padding: Spacing.md },
+  tileValue: { fontSize: FontSize.xl, fontWeight: '700' },
+  tileLabel: { fontSize: FontSize.sm, color: Colors.textSecondary, marginTop: 2 },
+  section: { fontSize: FontSize.lg, fontWeight: '600', color: Colors.text, marginTop: Spacing.xl, marginBottom: Spacing.md },
+  muted: { fontSize: FontSize.sm, color: Colors.textSecondary },
+  period: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md, padding: Spacing.md, marginBottom: Spacing.sm },
+  time: { width: 76, fontSize: FontSize.sm, fontWeight: '700', color: Colors.primary },
+  subject: { fontSize: FontSize.md, fontWeight: '600', color: Colors.text },
+  arrow: { fontSize: FontSize.xl, color: Colors.textTertiary },
+  actions: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.md },
+  quick: { width: '22%', minWidth: 72, alignItems: 'center', backgroundColor: Colors.surface, borderRadius: BorderRadius.md, paddingVertical: Spacing.md },
+  quickOff: { opacity: 0.4 },
+  quickIcon: { fontSize: 22 },
+  quickLabel: { fontSize: FontSize.xs, color: Colors.text, marginTop: 4, textAlign: 'center' },
 });

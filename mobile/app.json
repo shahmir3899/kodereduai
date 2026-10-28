@@ -77,7 +77,8 @@
         {
           "photosPermission": "Allow Education AI to access your photos."
         }
-      ]
+      ],
+      "@react-native-community/datetimepicker"
     ],
     "extra": {
       "apiUrl": "https://personal-gateway-sg.onrender.com/educationai",
