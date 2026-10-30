@@ -377,6 +377,15 @@ CELERY_BEAT_SCHEDULE = {
         'task': 'notifications.tasks.process_notification_queue',
         'schedule': crontab(minute='*/10'),
     },
+    # Kuickpay: both are no-ops until a school's KuickpaySchoolMapping is enabled (pilot gating).
+    'kuickpay-bill-sweep': {
+        'task': 'finance.tasks.kuickpay_sweep_task',
+        'schedule': crontab(minute='*/30'),
+    },
+    'kuickpay-reconciliation-alerts': {
+        'task': 'finance.tasks.kuickpay_reconciliation_task',
+        'schedule': crontab(minute='15', hour='*/6'),
+    },
     'cleanup-old-uploads': {
         'task': 'attendance.tasks.cleanup_old_uploads',
         'schedule': crontab(day_of_week='sunday', hour='2', minute='0'),

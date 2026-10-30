@@ -297,6 +297,16 @@ def generate_monthly_fees_task(
         }
         logger.info(f"{task_id} core generation took {time.monotonic() - t0:.2f}s")
 
+        # Kuickpay: issue this cycle's bills and supersede last cycle's. Non-fatal for the same
+        # reason as the notification below (generation already committed); kuickpay_sweep_task
+        # repairs anything this misses. A school with no enabled Kuickpay mapping returns at once.
+        try:
+            from finance.kuickpay.bills import activate_bills_for_scope
+
+            activate_bills_for_scope(school_id, year, month, student_ids=student_ids)
+        except Exception as e:
+            logger.error(f"Kuickpay bill activation failed for school {school_id} ({month}/{year}): {e}")
+
         # Event-driven fee-pending notifications: fire right after generation
         # instead of waiting on the old day-5/day-8 Celery Beat schedule.
         # Non-fatal — generation already succeeded, a notification hiccup
@@ -646,3 +656,32 @@ def generate_onetime_fees_task(
         logger.exception(f"One-time fee generation failed: {e}")
         mark_task_failed(task_id, str(e))
         raise
+
+
+@shared_task(bind=True, time_limit=900)
+def kuickpay_sweep_task(self):
+    """Beat: give every pilot-enabled school's students a bill for their latest cycle and re-sync
+    suspended/active state with the ledger. Does nothing until a school's mapping is enabled."""
+    from finance.kuickpay.bills import sweep_school
+    from finance.models import KuickpaySchoolMapping
+
+    summary = {}
+    for school_id in KuickpaySchoolMapping.objects.filter(
+        is_enabled=True, biller__is_enabled=True,
+    ).values_list('school_id', flat=True):
+        summary[school_id] = sweep_school(school_id)
+    return summary
+
+
+@shared_task(bind=True, time_limit=900)
+def kuickpay_reconciliation_task(self):
+    """Beat: raise an in-app alert to school admins when money or bills need attention
+    (at most one alert per admin per day; the report itself is `manage.py kuickpay_reconcile`)."""
+    from finance.kuickpay.reconciliation import send_alerts
+    from finance.models import KuickpaySchoolMapping
+    from schools.models import School
+
+    sent = {}
+    for school_id in KuickpaySchoolMapping.objects.filter(is_enabled=True).values_list('school_id', flat=True):
+        sent[school_id] = send_alerts(School.objects.get(pk=school_id))
+    return sent

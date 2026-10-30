@@ -12,8 +12,13 @@
 | A3 models + migration `0028` | **Done** — verified on SQLite and PostgreSQL 16, reversible |
 | A1 `finance/ledger.py` + `kuickpay_ledger_report` command | **Done** |
 | A2 generation improvements F-1, F-2, F-3, F-4, F-8 | **Done** — see "A2 as built" below |
-| A4 consumer-number generator, A5 bill lifecycle + parent endpoint | Not started |
+| A4 consumer-number generator | **Done** — `finance/kuickpay/consumer_numbers.py`; refuses to issue until the biller's length is confirmed (K-1); only the "no check digit" scheme exists until Kuickpay names an algorithm (K-4) |
+| A5 bill lifecycle | **Done** — `finance/kuickpay/bills.py`, `payable.py`; post-generation hook in `generate_monthly_fees_task`, `kuickpay_sweep_task` (Beat, every 30 min), `kuickpay_activate_bills` command; one-open-bill rule enforced by the database and verified under concurrency on PostgreSQL |
+| Parent endpoint | **Done** — `GET /api/parents/children/<id>/kuickpay-bill/` (`parents/kuickpay_views.py`, `finance/kuickpay/parent_summary.py`) |
+| In-app alert + reconciliation report (F-7) | **Done** — `finance/kuickpay/reconciliation.py`, `kuickpay_reconcile` command, `kuickpay_reconciliation_task` (Beat, every 6 h), `trigger_kuickpay_reconciliation_alert` (GENERAL event type, counts only, one alert per admin per day) |
 | Track B (live endpoints) | **Blocked** — official Kuickpay specification and K-0…K-22 |
+
+**Pilot gating.** Every Kuickpay path is inert until a school has an enabled `KuickpaySchoolMapping` whose biller is also enabled, and the generator will not issue numbers until `consumer_number_length` is set. Nothing is enabled by default, so deploying this changes no behaviour for any school.
 
 **A2 as built (deviations from the plan text).** (1) `delete_recreate` keeps the batched queryset delete but only for rows without a recorded payment or allocation, instead of switching to per-row `delete()`; the target period is verified open before the run starts. (2) The explicit administrator refresh is `ledger.refresh_chain` and the `kuickpay_ledger_report --refresh [--apply]` command; no new API endpoint was added. (3) `generate_single` is now one transaction with row locks. (4) `ProtectedError` is mapped to HTTP 409 in `core.views.custom_exception_handler`.
 

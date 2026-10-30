@@ -969,6 +969,43 @@ def trigger_enrollment_drift_alert(school, flagged):
     return sent
 
 
+def trigger_kuickpay_reconciliation_alert(school, lines):
+    """
+    Tell SCHOOL_ADMIN/PRINCIPAL users that Kuickpay money or bills need attention (see
+    finance.kuickpay.reconciliation). Counts only: no consumer numbers or student names go into a
+    notification. At most one alert per admin per day. Uses the GENERAL event type so no new
+    notification event type (and migration) is needed.
+    """
+    from .engine import NotificationEngine
+
+    if not lines:
+        return 0
+    today = timezone.localdate()
+    title = f"Kuickpay payments need attention at {school.name}"
+    body = (
+        ' | '.join(lines)
+        + f". Ask your administrator to run: python manage.py kuickpay_reconcile --school-id {school.id}"
+    )
+    engine = NotificationEngine(school)
+    sent = 0
+    for admin_user in _get_admin_users(school):
+        try:
+            if _daily_notification_already_sent(
+                school=school, event_type='GENERAL', channel='IN_APP',
+                recipient_user=admin_user, title=title, body=body, target_date=today,
+            ):
+                continue
+            engine.send(
+                event_type='GENERAL', channel='IN_APP', context={},
+                recipient_identifier=str(admin_user.id), recipient_type='ADMIN',
+                recipient_user=admin_user, title=title, body=body,
+            )
+            sent += 1
+        except Exception as e:
+            logger.error(f"Kuickpay reconciliation alert failed for admin {admin_user.id}: {e}")
+    return sent
+
+
 def trigger_attendance_risk_alerts(school, risk_report):
     """
     Send a single aggregated in-app alert to SCHOOL_ADMIN/PRINCIPAL users when

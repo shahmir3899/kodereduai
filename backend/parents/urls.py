@@ -5,6 +5,7 @@ URL configuration for parents app.
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 
+from .kuickpay_views import ChildKuickpayBillView
 from .views import (
     ParentRegistrationView,
     MyChildrenView,
@@ -46,6 +47,7 @@ urlpatterns = [
     path('children/<int:student_id>/attendance/', ChildAttendanceView.as_view(), name='parent-child-attendance'),
     path('children/<int:student_id>/fees/', ChildFeesView.as_view(), name='parent-child-fees'),
     path('children/<int:student_id>/pay-fee/', ParentPayFeeView.as_view(), name='parent-pay-fee'),
+    path('children/<int:student_id>/kuickpay-bill/', ChildKuickpayBillView.as_view(), name='parent-child-kuickpay-bill'),
     path('children/<int:student_id>/timetable/', ChildTimetableView.as_view(), name='parent-child-timetable'),
     path('children/<int:student_id>/library/', ChildLibraryView.as_view(), name='parent-child-library'),
     path('children/<int:student_id>/transport/', ChildTransportView.as_view(), name='parent-child-transport'),
