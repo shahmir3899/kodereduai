@@ -68,19 +68,28 @@ eas build --platform android --profile production    # Play bundle
 ## Built since: Admissions (2026-10-29)
 Admin and principal: enquiries (funnel counts as filters, search, grade and source filters, today and overdue follow-ups, paged), add, edit, confirm, cancel (deletes, as on the web), detail with notes and call log, tap to call, convert confirmed enquiries to students (year, section, optional fee records), and the conversion likelihood scores (last result kept five minutes plus a refresh button). Code: `services/admissions.ts`, `hooks/useAdmissions.ts`, `components/admissions/*`, `app/(admin)/admissions/*`. Never run on a device.
 
-## What is left (2026-10-29)
+## Built since (2026-10-30)
+
+Admin and principal: exam types and the grade scale; date sheet editing and publishing (schedule and results, per group or per class); per-student fee amounts, month closing and account transfers; users and roles (Settings); staff create and edit, departments and designations, leave policies, staff documents (photos) and qualifications, HR dashboard. Also: staff documents as PDF, photo or Word file (needs `expo-document-picker`, a native module: build a new APK); school profile (logo, letterhead, time zone, exam and attendance settings); subjects, the subjects and class teacher of each section; timetable editing a day at a time, and the periods and breaks of the school day; classes and sections (this year's sections, and the permanent master classes). Code: `services/{examSetup,examGroups,studentFees,accountsAdmin,schoolUsers,hrAdmin,schoolProfile,subjectsAdmin,timetableEdit,classesAdmin}.ts`, matching `hooks/` and `components/{exams,finance,settings,hr,academics}/`. Never run on a device.
+
+**Fixed on the way:** the old admin timetable screen compared the API's day codes (MON) with day names (Monday) and showed no timetable for any class; the old staff list read fields the API does not send. Both were replaced.
+
+**Tab bar:** a folder under a tab group needs its own `_layout.tsx` (use `components/nav/FolderStack.tsx`). Without one, expo-router hoists every file into the parent tab bar as a button; that gave the admin bar 28 extra tabs. `__tests__/routeStructure.test.ts` fails if a folder lacks a layout or an admin route is not declared in `(admin)/_layout.tsx`.
+
+## What is left (2026-10-30)
 
 **Whole areas with no mobile screens for admin and principal**
 - Transport management: routes, vehicles, assignments, transport attendance (the dashboard and the driver app exist).
 - Library: dashboard, catalog, overdue (issue and return exist).
 - Hostel: dashboard, rooms, allocations (gate passes exist).
-- Settings (school settings, users and roles, modules) and the school setup wizard (a web notice only).
-- Subjects and classes management, timetable editing and auto-generation, academic calendar editing, sessions and promotion (web notices).
-- Staff directory create and edit, departments, staff documents and qualifications, HR dashboard, leave policies.
+- Enabled modules in Settings and the school setup wizard (a web notice only).
+- Timetable auto-generation, AI suggestions, substitutes and splitting a class timetable into sections; the students-to-section allocator; subject workload and gap analysis; bulk subject assignment.
+- Academic calendar editing, sessions and promotion (web notices).
+- Staff photo upload, linking or unlinking a staff member's sign-in account, bulk account creation.
 
 **Finance and exams still on the web**
-- Per-student fee amounts, one-time fees, month closing, transfers between accounts, account and category management, payment gateway setup, AI finance chat and the fee predictor.
-- Editing an existing exam's date sheet, exam groups, publishing the date sheet and results, exam types, grade scale.
+- One-time fees (the server marks admission, books and fine fees deprecated), account and category management, payment gateway setup, AI finance chat and the fee predictor.
+- Creating or deleting an exam group on its own (the several-class wizard exists).
 
 **Content still on the web**
 - Curriculum sub-topics, content blocks and planned dates; curriculum coverage and syllabus progress pages; lesson plan revisions and attachments.
@@ -89,7 +98,7 @@ Admin and principal: enquiries (funnel counts as filters, search, grade and sour
 **Platform and release**
 - Barcode and SKU scanning for inventory (planned for the end).
 - Device testing of everything above, and the role by module matrix in `MOBILE_QA.md`.
-- Older admin screens still use their own loading and error handling; some icon-only buttons lack descriptive labels.
+- Camera and upload screens (attendance capture and review, face attendance) still use their own loading and error handling.
 - Urdu and right-to-left, dark mode, iOS, over-the-air updates (all deliberately out of v1).
 - Store assets (graphics, screenshots, listing text), the Sentry DSN, and a fresh APK for the new native modules.
 - Commits: nothing in this work is committed yet.
