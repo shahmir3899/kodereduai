@@ -17,9 +17,9 @@
       "supportsTablet": true,
       "bundleIdentifier": "pk.educationai.app",
       "infoPlist": {
-        "NSCameraUsageDescription": "This app uses the camera to capture attendance photos.",
+        "NSCameraUsageDescription": "Education AI uses the camera to take attendance and student photos.",
         "NSLocationWhenInUseUsageDescription": "This app uses your location to share your journey status with parents.",
-        "NSLocationAlwaysAndWhenInUseUsageDescription": "This app uses background location to track your journey to school."
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Education AI shares the school bus location with parents during a journey, including when the app is closed."
       }
     },
     "android": {
@@ -30,11 +30,9 @@
       "package": "pk.educationai.app",
       "permissions": [
         "android.permission.CAMERA",
-        "android.permission.RECORD_AUDIO",
         "android.permission.ACCESS_FINE_LOCATION",
         "android.permission.ACCESS_COARSE_LOCATION",
         "android.permission.ACCESS_BACKGROUND_LOCATION",
-        "android.permission.RECEIVE_BOOT_COMPLETED",
         "android.permission.FOREGROUND_SERVICE",
         "android.permission.FOREGROUND_SERVICE_LOCATION"
       ],
@@ -54,7 +52,9 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "Allow Education AI to access your camera for attendance capture."
+          "cameraPermission": "Allow Education AI to use the camera to take attendance and student photos.",
+          "microphonePermission": false,
+          "recordAudioAndroid": false
         }
       ],
       [
@@ -78,7 +78,8 @@
           "photosPermission": "Allow Education AI to access your photos."
         }
       ],
-      "@react-native-community/datetimepicker"
+      "@react-native-community/datetimepicker",
+      "expo-font"
     ],
     "extra": {
       "apiUrl": "https://personal-gateway-sg.onrender.com/educationai",

@@ -35,6 +35,11 @@ export interface NavContext {
 // a driver is refused.
 const DRIVER_GROUPS = new Set(['General', 'Transport', 'Self Service']);
 
+// Staff are HR self-service, messages, notifications and their own inventory assignments. The
+// web sidebar also lists Transport and Library for them (they are not gated on `!isStaff`), but
+// the phone sticks to the brief rather than showing screens that do not exist.
+const STAFF_GROUPS = new Set(['General', 'Self Service', 'Inventory', 'Me']);
+
 export function buildStaffNavigation(ctx: NavContext): NavGroup[] {
   const {
     persona, effectiveRole, isModuleEnabled: on, isStaffLevel, isManager, isTeacher,
@@ -171,7 +176,7 @@ export function buildStaffNavigation(ctx: NavContext): NavGroup[] {
           ? [item('Recently Deleted', '/students/deleted')]
           : []),
       ] : []),
-      ...(!isTeacher && on('academics') ? [item('Academic Calendar', '/academics/calendar')] : []),
+      ...(!isTeacher && on('academics') ? [item('Academic Calendar', '/academics/calendar'), item('Sessions', '/academics/sessions'), item('Promotion', '/academics/promotion')] : []),
     ]);
   }
 
@@ -223,14 +228,18 @@ export function buildStaffNavigation(ctx: NavContext): NavGroup[] {
         ]);
   }
 
+  // Admin and principal only, like the web; the wizard itself stays on the web.
+  if (!isStaffLevel) add('Setup', [item('School Setup', '/school-setup')]);
+
   if (persona === 'staff' && isStaff) add('Me', [item('Change Password', '/staff/change-password')]);
 
-  return isDriver ? groups.filter((g) => DRIVER_GROUPS.has(g.name)) : groups;
+  if (isDriver) return groups.filter((g) => DRIVER_GROUPS.has(g.name));
+  return persona === 'staff' && isStaff ? groups.filter((g) => STAFF_GROUPS.has(g.name)) : groups;
 }
 
 // The accountant is read-only on every finance API (FinanceRoleAccessPermission), so unlike the
 // web sidebar there is no Collect Payments entry, and the Academics, Management, Transport,
-// Library and Inventory groups the web shows by accident of `!isStaff` are left out (decided
+// Library groups the web shows by accident of `!isStaff` are left out (decided
 // 2026-10-28). Own HR self-service is allowed by the API (HR_SELF_SERVICE_ROLES) even though the
 // web sidebar omits it.
 export function buildAccountantNavigation(isModuleEnabled: (key: ModuleKey) => boolean): NavGroup[] {
@@ -245,6 +254,19 @@ export function buildAccountantNavigation(isModuleEnabled: (key: ModuleKey) => b
         item('Fee Overview', '/finance/fees'),
         item('Other Income', '/finance/income'),
         item('Expenses', '/finance/expenses'),
+      ],
+    });
+  }
+  if (isModuleEnabled('inventory')) {
+    // Read-only: the inventory API refuses every write for an accountant.
+    groups.push({
+      name: 'Inventory',
+      items: [
+        item('Dashboard', '/inventory'),
+        item('Items', '/inventory/items'),
+        item('Transactions', '/inventory/transactions'),
+        item('Assignments', '/inventory/assignments'),
+        item('Reorder Prediction', '/inventory/reorder-prediction'),
       ],
     });
   }

@@ -13,7 +13,7 @@ export default function NavGroupList({ groups }: { groups: NavGroup[] }) {
         <View key={group.name} style={styles.group}>
           <Text style={styles.groupTitle}>{group.name}</Text>
           {group.items.map((it) => (
-            <TouchableOpacity
+            <TouchableOpacity accessibilityRole="button"
               key={`${group.name}:${it.webPath}`}
               style={styles.row}
               disabled={!it.href}

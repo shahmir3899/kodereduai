@@ -72,7 +72,7 @@ export default function StudentsListScreen({ classOptions }: Props) {
       ListEmptyComponent={<EmptyState title="No students" message={term ? 'No students match your search.' : 'No students found.'} />}
       ListFooterComponent={query.isFetchingNextPage ? <ActivityIndicator color={Colors.primary} style={{ margin: Spacing.lg }} /> : null}
       renderItem={({ item: s }) => (
-        <TouchableOpacity style={styles.row} onPress={() => router.push(`${base}/students/${s.id}` as Href)}>
+        <TouchableOpacity accessibilityRole="button" style={styles.row} onPress={() => router.push(`${base}/students/${s.id}` as Href)}>
           <Avatar name={s.name} uri={s.photo_url} />
           <View style={styles.who}>
             <Text style={styles.name} numberOfLines={1}>{s.name}</Text>

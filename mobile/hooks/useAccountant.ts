@@ -1,7 +1,7 @@
 import { financeApi } from '../services/api';
 import { listOf } from '../services/academicYear';
 import {
-  normalizeFeeSummary, periodRange, type AccountBalance, type Period, type RecentEntry,
+  normalizeFeeSummary, type AccountBalance, type DateRange, type ExpenseCategory, type RecentEntry, type TrendMonth,
 } from '../services/accountant';
 import type { FeePayment } from '../services/feeCollect';
 import { useAcademicYear } from './useAcademicYear';
@@ -33,12 +33,26 @@ export function useMonthFeeSummary() {
     })).data));
 }
 
-export function useFinanceSummary(period: Period) {
-  const { from, to } = periodRange(period);
-  return useScopedQuery('finance', ['summary', from, to], async () =>
-    (await financeApi.getFinanceSummary({ date_from: from, date_to: to })).data as {
-      total_income?: number | string; total_expenses?: number | string;
-    });
+// `range` is null while a custom range is incomplete, which keeps the queries idle.
+export function useFinanceSummary(range: DateRange | null) {
+  return useScopedQuery('finance', ['summary', range?.from, range?.to], async () =>
+    (await financeApi.getFinanceSummary({ date_from: range!.from, date_to: range!.to })).data as {
+      total_income?: number | string; total_expenses?: number | string; fee_income?: number | string;
+      other_income?: number | string; balance?: number | string;
+    }, { enabled: !!range });
+}
+
+export function useMonthlyTrend(months = 6) {
+  return useScopedQuery('finance', ['trend', months], async () =>
+    ((await financeApi.getMonthlyTrend({ months })).data?.trend ?? []) as TrendMonth[]);
+}
+
+export function useExpenseCategories(range: DateRange | null) {
+  return useScopedQuery('expenses', ['categories', range?.from, range?.to], async () => {
+    const data = (await financeApi.getExpenseCategorySummary({ date_from: range!.from, date_to: range!.to })).data as
+      { categories?: ExpenseCategory[]; total?: number | string };
+    return { categories: data.categories ?? [], total: data.total ?? 0 };
+  }, { enabled: !!range });
 }
 
 export function useOverdueFees(limit = 8) {

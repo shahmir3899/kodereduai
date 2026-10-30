@@ -9,6 +9,7 @@ the shared layout plan in paper_export_layout.py in the classic school-paper for
 lines, deterministic matching-table shuffle) -- kept consistent with the PDF export.
 """
 
+from django.utils import timezone
 import io
 import logging
 import re
@@ -168,7 +169,7 @@ class ExamPaperDOCXGenerator:
                 document.add_paragraph('')
 
         footer = document.add_paragraph(
-            f"Generated on {datetime.now().strftime('%d %B %Y')} | {self.school.name}"
+            f"Generated on {timezone.localtime().strftime('%d %B %Y')} | {self.school.name}"
         )
         footer.alignment = align.CENTER
 

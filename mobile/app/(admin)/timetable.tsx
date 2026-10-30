@@ -52,7 +52,7 @@ export default function Timetable() {
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipScroll}>
         <View style={styles.chipRow}>
           {classes.map((cls) => (
-            <TouchableOpacity key={cls.id}
+            <TouchableOpacity accessibilityRole="button" key={cls.id}
               style={[styles.chip, selectedClass === cls.id && styles.chipSelected]}
               onPress={() => setSelectedClass(cls.id)}>
               <Text style={[styles.chipText, selectedClass === cls.id && styles.chipTextSelected]}>

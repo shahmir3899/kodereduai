@@ -43,7 +43,7 @@ export default function AIAssistant() {
         <Text style={styles.title}>AI Assistant</Text>
         <View style={styles.tabs}>
           {(Object.keys(TAB_CONFIG) as Tab[]).map((tab) => (
-            <TouchableOpacity
+            <TouchableOpacity accessibilityRole="button"
               key={tab}
               style={[styles.tab, activeTab === tab && styles.tabActive]}
               onPress={() => setActiveTab(tab)}

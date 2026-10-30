@@ -46,7 +46,7 @@ export default function StudentTasksScreen() {
         const state = taskState(a);
         const pill = TASK_PILL[state];
         return (
-          <TouchableOpacity style={styles.card} onPress={() => router.push({ pathname: '/(student)/assignments/detail', params: { id: a.id } } as Href)}>
+          <TouchableOpacity accessibilityRole="button" style={styles.card} onPress={() => router.push({ pathname: '/(student)/assignments/detail', params: { id: a.id } } as Href)}>
             <View style={styles.top}>
               <Text style={styles.title} numberOfLines={2}>{a.title}</Text>
               <StatusPill label={pill.label} tone={pill.tone} />

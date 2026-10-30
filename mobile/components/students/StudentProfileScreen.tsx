@@ -64,7 +64,7 @@ export default function StudentProfileScreen({ canEdit }: Props) {
           {s.status && s.status !== 'ACTIVE' ? <View style={{ marginTop: 4 }}><StatusPill label={statusLabel(s.status)} tone={statusTone(s.status)} /></View> : null}
         </View>
         {canEdit ? (
-          <TouchableOpacity onPress={() => router.push(`${base}/students/${s.id}/edit` as Href)}>
+          <TouchableOpacity accessibilityRole="button" onPress={() => router.push(`${base}/students/${s.id}/edit` as Href)}>
             <Text style={styles.edit}>Edit</Text>
           </TouchableOpacity>
         ) : null}

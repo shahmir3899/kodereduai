@@ -1,3 +1,4 @@
+import { schoolToday, schoolYMD } from '../utils/schoolTime'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../contexts/AuthContext'
 import { useAcademicYear } from '../contexts/AcademicYearContext'
@@ -26,10 +27,8 @@ export function useDashboardBootstrap() {
   // The same year id the tiles put in their query keys, so what we seed is what they read.
   const academicYearId = activeAcademicYear?.id
 
-  const now = new Date()
-  const today = now.toISOString().split('T')[0]
-  const month = now.getMonth() + 1
-  const year = now.getFullYear()
+  const today = schoolToday()
+  const { month, year } = schoolYMD()
 
   const query = useQuery({
     queryKey: ['adminDashboardBootstrap', today, schoolId, academicYearId ?? null, month, year],

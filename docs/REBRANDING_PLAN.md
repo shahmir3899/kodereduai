@@ -12,8 +12,8 @@ Status as of 2026-10-13. Merged to `main` (kodereduai `fa4f528`, parent personal
 - **Company vs product:** Koder Kids is the legal company; Education AI is its product, with separate
   domain branding. "a product of Koder Kids" appears only in the privacy policy, terms and footer copyright.
   Social handles stay the Koder Kids ones.
-- **Mobile:** bundle ID `pk.educationai.app`, not yet published. Expo `slug` stays `kodereduai`
-  because it must match the EAS project (projectId in `mobile/app.json`); rename it on expo.dev first if wanted.
+- **Mobile:** bundle ID `pk.educationai.app`, not yet published. Expo `slug` is now `educationai` (changed
+  2026-10-28); it must match the EAS project (projectId in `mobile/app.json`), so rename the project on expo.dev to match.
 - **Images:** existing logo/favicons reused.
 
 ## Phases

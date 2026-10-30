@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { View, Text, FlatList, ActivityIndicator, StyleSheet } from 'react-native';
+import { View, Text, FlatList, ActivityIndicator, StyleSheet, type RefreshControlProps } from 'react-native';
 import { financeApi } from '../../services/api';
 import { balanceOf, formatMoney, type FeePayment, type FeeStatus } from '../../services/feeCollect';
 import { useFinanceList } from '../../hooks/useAccountant';
@@ -124,7 +124,7 @@ interface ListProps<T> {
   };
   header: React.ReactElement;
   rows: T[];
-  refreshControl: React.ReactElement;
+  refreshControl: React.ReactElement<RefreshControlProps>;
   emptyTitle: string;
   keyOf: (row: T) => string;
   renderRow: (row: T) => React.ReactElement;

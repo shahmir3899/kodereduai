@@ -1,6 +1,7 @@
 // Date maths for the year/term timelines. Dates are ISO "YYYY-MM-DD" strings handled in UTC so a
 // timezone can never shift a boundary by a day (same rule as pages/sessions/termDefaults.js).
 
+import { schoolToday } from '../../utils/schoolTime'
 import { formatDay } from '../../pages/sessions/termDefaults'
 
 const DAY_MS = 86400000
@@ -16,7 +17,7 @@ export function dayNumber(iso) {
 }
 
 export function todayIso() {
-  return new Date().toISOString().slice(0, 10)
+  return schoolToday()
 }
 
 /** Position of a date inside [rangeStart, rangeEnd] as 0-100, clamped. */

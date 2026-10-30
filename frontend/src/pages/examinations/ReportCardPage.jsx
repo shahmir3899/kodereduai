@@ -1,3 +1,4 @@
+import { schoolToday } from '../../utils/schoolTime'
 import { useState, useEffect, useMemo } from 'react'
 import Button from '../../components/ui/Button'
 import PageHeader from '../../components/ui/PageHeader'
@@ -670,13 +671,13 @@ export default function ReportCardPage() {
               {editMode ? (
                 <input
                   type="date"
-                  value={report.issue_date || new Date().toISOString().slice(0, 10)}
+                  value={report.issue_date || schoolToday()}
                   onChange={e => e.target.value && metaMut.mutate({ issue_date: e.target.value })}
                   className="input text-sm"
                 />
               ) : (
                 <span className="font-medium text-gray-800">
-                  {formatIssueDate(report.issue_date || new Date().toISOString().slice(0, 10))}
+                  {formatIssueDate(report.issue_date || schoolToday())}
                 </span>
               )}
             </div>

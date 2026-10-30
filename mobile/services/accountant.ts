@@ -9,7 +9,9 @@ export interface AccountBalance {
   id: number;
   name: string;
   account_type?: string;
-  balance: number | string;
+  balance?: number | string;
+  // The balances endpoint calls it net_balance; the web reads that, so prefer it.
+  net_balance?: number | string;
 }
 
 export interface RecentEntry {
@@ -58,7 +60,7 @@ export function normalizeFeeSummary(raw: Record<string, unknown> | null | undefi
 }
 
 export const totalBalance = (accounts: AccountBalance[]): number =>
-  accounts.reduce((sum, a) => sum + num(a.balance), 0);
+  accounts.reduce((sum, a) => sum + num(a.net_balance ?? a.balance), 0);
 
 export function rateTone(rate: number | null): 'success' | 'warning' | 'error' | 'neutral' {
   if (rate == null) return 'neutral';
@@ -86,12 +88,17 @@ export function incomeVsExpense(income: number, expenses: number) {
   };
 }
 
-export type Period = 'MONTH' | 'LAST_MONTH' | 'YEAR';
+export type Period = 'MONTH' | 'LAST_MONTH' | 'QUARTER' | 'YEAR' | 'CUSTOM';
+
+export interface DateRange { from: string; to: string }
 
 // Date range for the finance summary, as YYYY-MM-DD in local time.
-export function periodRange(period: Period, now = new Date()): { from: string; to: string } {
+export function periodRange(period: Exclude<Period, 'CUSTOM'>, now = new Date()): DateRange {
   const ymd = (d: Date) =>
     `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  if (period === 'QUARTER') {
+    return { from: ymd(new Date(now.getFullYear(), Math.floor(now.getMonth() / 3) * 3, 1)), to: ymd(now) };
+  }
   if (period === 'YEAR') return { from: `${now.getFullYear()}-01-01`, to: ymd(now) };
   if (period === 'LAST_MONTH') {
     return { from: ymd(new Date(now.getFullYear(), now.getMonth() - 1, 1)), to: ymd(new Date(now.getFullYear(), now.getMonth(), 0)) };
@@ -145,3 +152,50 @@ export interface InventoryAssignment {
 export const sortAssignments = (list: InventoryAssignment[]): InventoryAssignment[] =>
   [...list].sort((a, b) =>
     Number(!!b.is_active) - Number(!!a.is_active) || String(b.assigned_date ?? '').localeCompare(String(a.assigned_date ?? '')));
+
+export const PERIOD_LABELS: Record<Period, string> = {
+  MONTH: 'This Month', LAST_MONTH: 'Last Month', QUARTER: 'This Quarter', YEAR: 'This Year', CUSTOM: 'Custom',
+};
+
+// A custom range is usable only when both ends are set and in order.
+export function validRange(from: string, to: string): boolean {
+  return /^\d{4}-\d{2}-\d{2}$/.test(from) && /^\d{4}-\d{2}-\d{2}$/.test(to) && from <= to;
+}
+
+// The range a period stands for; null until a custom range is complete.
+export function rangeFor(period: Period, custom: DateRange, now = new Date()): DateRange | null {
+  if (period === 'CUSTOM') return validRange(custom.from, custom.to) ? custom : null;
+  return periodRange(period, now);
+}
+
+export interface TrendMonth { month: number; year: number; income: number | string; expenses: number | string; balance?: number | string }
+
+const MONTH_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+// Bar heights as a share of the largest value shown, so both series use one scale.
+export function trendBars(trend: TrendMonth[]) {
+  const rows = trend.map((t) => ({
+    label: `${MONTH_SHORT[(t.month - 1 + 12) % 12]} ${String(t.year).slice(2)}`,
+    income: num(t.income),
+    expenses: num(t.expenses),
+  }));
+  const max = Math.max(0, ...rows.flatMap((r) => [r.income, r.expenses]));
+  return rows.map((r) => ({
+    ...r,
+    incomePct: max > 0 ? (r.income / max) * 100 : 0,
+    expensePct: max > 0 ? (r.expenses / max) * 100 : 0,
+  }));
+}
+
+export interface ExpenseCategory { category: number | null; category_display: string; total_amount: number | string; count: number }
+
+// Port of the web table: share of the total per category, rounded like the web.
+export function categoryShares(categories: ExpenseCategory[], total: number | string) {
+  const t = num(total);
+  return categories.map((c) => ({
+    name: c.category_display || 'Uncategorized',
+    amount: num(c.total_amount),
+    count: c.count,
+    pct: t > 0 ? Math.round((num(c.total_amount) / t) * 100) : 0,
+  }));
+}

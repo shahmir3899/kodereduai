@@ -3,7 +3,7 @@ import PageHeader from '../../components/ui/PageHeader'
 import LoadingState from '../../components/ui/LoadingState'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import Toast from '../../components/Toast'
+import { useToast } from '../../components/Toast'
 import { questionPaperApi, studentsApi } from '../../services/api'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
 
@@ -41,7 +41,7 @@ export default function StudentResponsePage() {
   const { activeAcademicYear } = useAcademicYear()
   const [selectedStudentId, setSelectedStudentId] = useState('')
   const [responsesDraft, setResponsesDraft] = useState({})
-  const [toast, setToast] = useState(null)
+  const { showSuccess, showError } = useToast()
 
   const {
     data: paperRes,
@@ -105,7 +105,9 @@ export default function StudentResponsePage() {
     enabled: !!paperId,
   })
 
-  const savedRows = normalizeResults(studentResponsesRes?.data)
+  // Memoized: while the query is loading normalizeResults() returned a fresh [] every render, which re-ran
+  // the draft-reset effect below on every render (an endless render loop).
+  const savedRows = useMemo(() => normalizeResults(studentResponsesRes?.data), [studentResponsesRes?.data])
   const savedResponseMap = useMemo(() => buildResponseMap(savedRows), [savedRows])
 
   useEffect(() => {
@@ -137,23 +139,20 @@ export default function StudentResponsePage() {
     mutationFn: (payload) => questionPaperApi.submitStudentResponses(payload),
     onSuccess: (response) => {
       const payload = response?.data || {}
-      setToast({
-        type: 'success',
-        message: `Saved responses: ${payload.created_count || 0} created, ${payload.updated_count || 0} updated.`,
-      })
+      showSuccess(`Saved responses: ${payload.created_count || 0} created, ${payload.updated_count || 0} updated.`)
       queryClient.invalidateQueries({ queryKey: ['studentResponsesByStudent', paperId, selectedStudentId] })
       queryClient.invalidateQueries({ queryKey: ['studentResponsesProgress', paperId] })
       queryClient.invalidateQueries({ queryKey: ['examPapersList'] })
     },
     onError: (error) => {
       const msg = error?.response?.data?.detail || 'Failed to save responses.'
-      setToast({ type: 'error', message: msg })
+      showError(msg)
     },
   })
 
   const handleSubmit = () => {
     if (!selectedStudentId) {
-      setToast({ type: 'error', message: 'Select a student first.' })
+      showError('Select a student first.')
       return
     }
 
@@ -186,7 +185,7 @@ export default function StudentResponsePage() {
       .filter(Boolean)
 
     if (rows.length === 0) {
-      setToast({ type: 'error', message: 'Enter at least one response before submitting.' })
+      showError('Enter at least one response before submitting.')
       return
     }
 
@@ -215,7 +214,6 @@ export default function StudentResponsePage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {toast && <Toast type={toast.type} message={toast.message} onClose={() => setToast(null)} />}
 
       <div className="bg-white border-b border-gray-200 px-6 py-5">
         <PageHeader className="max-w-6xl mx-auto" title="Student Response Entry" subtitle={<>{paper.paper_title} - {paper.subject_name}</>} actions={<>

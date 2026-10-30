@@ -1,3 +1,4 @@
+import { schoolToday } from '../../utils/schoolTime'
 import { useMemo } from 'react'
 
 // Renders a term-long axis (academic year start_date..end_date) with each
@@ -53,7 +54,7 @@ export default function CurriculumTimeline({ topics, academicYear }) {
   }
 
   const ticks = monthTicks(startDate, endDate)
-  const today = new Date().toISOString().slice(0, 10)
+  const today = schoolToday()
   const todayPos = positionOf(today)
 
   return (

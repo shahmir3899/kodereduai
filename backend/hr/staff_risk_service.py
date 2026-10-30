@@ -7,6 +7,7 @@ Scoped by a rolling window (staff leave isn't academic-year-bound) rather
 than an academic_year_id.
 """
 
+from django.utils import timezone
 import logging
 from collections import defaultdict
 from datetime import date, timedelta
@@ -50,7 +51,7 @@ class StaffRiskService:
         staff_ids = list(staff.values_list('id', flat=True))
         staff_map = {s.id: s for s in staff}
 
-        today = date.today()
+        today = timezone.localdate()
         window_start = today - timedelta(days=window_days)
 
         # Leave days (APPROVED only) in the window, expanded per day.

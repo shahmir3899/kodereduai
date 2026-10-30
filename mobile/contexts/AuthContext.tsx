@@ -1,3 +1,4 @@
+import { setSchoolTimeZone } from '../services/schoolTime';
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import api, { authApi, setLogoutCallback } from '../services/api';
 import {
@@ -199,6 +200,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const persona = personaFor(effectiveRole, !!user?.is_super_admin);
   const isParent = effectiveRole === 'PARENT';
   const isStudent = effectiveRole === 'STUDENT';
+
+  // Set while rendering, not in an effect: screens that mount right after login read "today" on first render.
+  setSchoolTimeZone(activeSchool?.timezone);
 
   const enabledModules = activeSchool?.enabled_modules || {};
   const isModuleEnabled = (moduleKey: ModuleKey): boolean => {

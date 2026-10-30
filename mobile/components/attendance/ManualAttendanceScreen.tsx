@@ -205,7 +205,7 @@ export default function ManualAttendanceScreen({ classOptions, initialClassId }:
           </View>
           <View style={styles.markAll}>
             {STATUS_KEYS.map((k) => (
-              <TouchableOpacity
+              <TouchableOpacity accessibilityRole="button"
                 key={k}
                 disabled={isOffDay}
                 style={[styles.markAllBtn, { backgroundColor: STATUS_STYLE[k].bg }, isOffDay && styles.disabled]}
@@ -247,7 +247,7 @@ export default function ManualAttendanceScreen({ classOptions, initialClassId }:
               {STATUS_KEYS.map((k) => {
                 const active = item.status === k;
                 return (
-                  <TouchableOpacity
+                  <TouchableOpacity accessibilityRole="button"
                     key={k}
                     disabled={isOffDay}
                     accessibilityLabel={`${STATUS_STYLE[k].label} for ${item.name}`}

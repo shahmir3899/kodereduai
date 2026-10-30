@@ -6,6 +6,7 @@ to identify students who are at risk of falling below the attendance threshold,
 or are predicted to fall below it within 4 weeks.
 """
 
+from django.utils import timezone
 import logging
 from collections import defaultdict
 from datetime import date, timedelta
@@ -105,7 +106,7 @@ class AttendanceRiskService:
         def placement(sid):
             return placements.get((sid, self.academic_year_id))
 
-        today = date.today()
+        today = timezone.localdate()
 
         # 2. Build an OFF-day index (Sundays + configured holidays/breaks) so
         #    stray/backfilled records on non-school days don't distort rates,

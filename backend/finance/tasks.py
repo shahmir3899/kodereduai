@@ -554,7 +554,7 @@ def generate_onetime_fees_task(
         skipped_count = 0
         no_fee_count = 0
         progress = 0
-        today_month = date.today().month
+        today_month = timezone.localdate().month
 
         to_create = []
         with transaction.atomic():

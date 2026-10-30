@@ -255,7 +255,7 @@ export default function MarksEntryScreen({ classOptions }: Props) {
                   placeholderTextColor={Colors.textTertiary}
                 />
               ) : (
-                <TouchableOpacity onPress={() => setOpenRemarks((s) => new Set(s).add(item.studentId))}>
+                <TouchableOpacity accessibilityRole="button" onPress={() => setOpenRemarks((s) => new Set(s).add(item.studentId))}>
                   <Text style={styles.addRemarks}>+ Remarks</Text>
                 </TouchableOpacity>
               )}

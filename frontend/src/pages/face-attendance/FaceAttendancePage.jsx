@@ -1,3 +1,4 @@
+import { schoolToday } from '../../utils/schoolTime'
 import { useState, useRef, useEffect } from 'react'
 import Field from '../../components/ui/Field'
 import { TONE } from '../../components/ui/statusTones'
@@ -58,7 +59,7 @@ export default function FaceAttendancePage() {
 
   const [tab, setTab] = useState(searchParams.get('tab') === 'mobile' ? 'mobile-capture' : 'group-photo')
   const [selectedClass, setSelectedClass] = useState('')
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0])
+  const [selectedDate, setSelectedDate] = useState(schoolToday())
   const [uploadStep, setUploadStep] = useState(null) // null | 'uploading' | 'creating'
   const [previewUrl, setPreviewUrl] = useState(null)
   // Client-side pre-submit check only — informational, doesn't replace or

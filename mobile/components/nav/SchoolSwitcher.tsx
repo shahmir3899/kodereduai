@@ -39,7 +39,7 @@ export default function SchoolSwitcher() {
 
   return (
     <>
-      <TouchableOpacity style={styles.button} onPress={() => setOpen(true)}>
+      <TouchableOpacity accessibilityRole="button" style={styles.button} onPress={() => setOpen(true)}>
         <Text style={styles.buttonText} numberOfLines={1}>{name}</Text>
         <Text style={styles.chevron}>▾</Text>
       </TouchableOpacity>
@@ -51,7 +51,7 @@ export default function SchoolSwitcher() {
             {schools.map((school) => {
               const active = school.id === activeSchool?.id;
               return (
-                <TouchableOpacity
+                <TouchableOpacity accessibilityRole="button"
                   key={school.id}
                   style={[styles.row, active && styles.rowActive]}
                   disabled={switchingId !== null}

@@ -299,7 +299,7 @@ def sync_enrollment_status(student, previous_status, previous_date):
         # Any route out records the start of the absence (the exit workflow does too).
         from student_exits.services import ensure_open_break
 
-        ensure_open_break(student, student.status_date or timezone.now().date())
+        ensure_open_break(student, student.status_date or timezone.localdate())
 
     if came_back:
         # However the student is reactivated, the months away are remembered and
@@ -307,7 +307,7 @@ def sync_enrollment_status(student, previous_status, previous_date):
         from student_exits.services import activate_portal_login, close_break_on_return
 
         close_break_on_return(
-            student, return_date=student.status_date or timezone.now().date(), previous_start=previous_date,
+            student, return_date=student.status_date or timezone.localdate(), previous_start=previous_date,
         )
         activate_portal_login(student)
 
@@ -327,7 +327,7 @@ def sync_enrollment_status(student, previous_status, previous_date):
         # Falls back to today when no effective date was given, so the
         # enrollment_covers_month() cutoff still lands somewhere sensible
         # (a null left_date would exclude every month, including this one).
-        enrollment.left_date = student.status_date or timezone.now().date()
+        enrollment.left_date = student.status_date or timezone.localdate()
     else:
         enrollment.is_active = True
         enrollment.status = 'ACTIVE'

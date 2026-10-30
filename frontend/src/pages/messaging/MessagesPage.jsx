@@ -1,3 +1,4 @@
+import { getSchoolTimeZone, schoolDateStr, schoolToday } from '../../utils/schoolTime'
 import { useState, useEffect, useRef, useMemo } from 'react'
 import Field from '../../components/ui/Field'
 import { TONE } from '../../components/ui/statusTones'
@@ -278,9 +279,9 @@ export default function MessagesPage() {
     if (!dateStr) return ''
     const date = new Date(dateStr)
     const now = new Date()
-    const isToday = date.toDateString() === now.toDateString()
+    const isToday = schoolDateStr(date) === schoolToday()
     if (isToday) {
-      return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
+      return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', timeZone: getSchoolTimeZone() })
     }
     const yesterday = new Date(now)
     yesterday.setDate(yesterday.getDate() - 1)
@@ -294,7 +295,7 @@ export default function MessagesPage() {
     <div className="space-y-4">
       {/* Header */}
       <PageHeader title="Messages" subtitle="Send and receive messages" actions={<>
-<Button onClick={() => setShowNewMessage(true)}>
+<Button onClick={() => setShowNewMessage(true)} aria-label="New Message">
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
           </svg>
@@ -550,6 +551,7 @@ export default function MessagesPage() {
                 <div className="px-4 py-3 border-b border-gray-200 bg-gray-50 flex items-center gap-3">
                   <button
                     onClick={() => { setMobileView('threads'); setSelectedThread(null) }}
+                    aria-label="Back to conversations"
                     className="md:hidden p-1 rounded-lg hover:bg-gray-200 text-gray-500"
                   >
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -649,6 +651,7 @@ export default function MessagesPage() {
                     <button
                       type="submit"
                       disabled={!messageText.trim() || replyMutation.isPending}
+                      aria-label="Send reply"
                       className="p-2.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex-shrink-0"
                     >
                       {replyMutation.isPending ? (

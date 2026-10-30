@@ -1,6 +1,6 @@
 import React from 'react';
-import ComingSoon from '../../components/nav/ComingSoon';
+import AccountantHome from '../../components/finance/AccountantHome';
 
 export default function Screen() {
-  return <ComingSoon title="Home" />;
+  return <AccountantHome />;
 }

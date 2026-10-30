@@ -32,7 +32,7 @@ export default function ThreadListScreen() {
         renderItem={({ item: t }) => {
           const unread = t.unread_count ?? 0;
           return (
-            <TouchableOpacity
+            <TouchableOpacity accessibilityRole="button"
               style={styles.card}
               onPress={() => router.push({ pathname: `${base}/messages/thread`, params: { id: t.id } } as Href)}
             >

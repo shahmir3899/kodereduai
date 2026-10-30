@@ -454,7 +454,7 @@ class AcademicsAnalytics:
         """Before/after attendance movement over recent windows."""
         from attendance.models import AttendanceRecord
 
-        today = date.today()
+        today = timezone.localdate()
         recent_start = today - timedelta(days=30)
         previous_start = today - timedelta(days=60)
 
@@ -509,7 +509,7 @@ class AcademicsAnalytics:
         """Monthly attendance rates per class over last N months."""
         from attendance.models import AttendanceRecord
 
-        end_date = date.today()
+        end_date = timezone.localdate()
         start_date = date(end_date.year, end_date.month, 1) - timedelta(days=30 * (months - 1))
 
         # Per section (or class) of each record's own year, not the Student

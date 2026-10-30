@@ -79,7 +79,7 @@ export default function ResetPasswordModal({ user, onClose }) {
           </div>
 
           {mode === 'set' && (
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <Field label="New Password" required>
                 <PasswordInput
                   value={form.new_password}

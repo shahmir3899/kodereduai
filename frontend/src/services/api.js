@@ -276,6 +276,7 @@ export const schoolsApi = {
   // Attendance configuration (AI risk threshold, etc.)
   getAttendanceConfig: () => api.get('/api/schools/attendance_config/'),
   updateAttendanceConfig: (data) => api.put('/api/schools/attendance_config/', data),
+  updateTimeZone: (timezone) => api.put('/api/schools/time_zone/', { timezone }),
 
   // School completion timeline
   getCompletion: () => api.get('/api/schools/completion/'),

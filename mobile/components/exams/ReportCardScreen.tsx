@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
 import { examinationsApi, sessionsApi } from '../../services/api';
 import { listOf } from '../../services/academicYear';
-import { classParams, type ClassOption } from '../../services/attendanceEntry';
+import { classParams, todayString, type ClassOption } from '../../services/attendanceEntry';
 import {
   DEFAULT_SIGNATURE_LABELS, PODIUM, adjacentEnrollment, attendanceNote, attendanceShares, examCell, examNote, examTotal,
   formatClassAvg, formatIssueDate, formatPct, normalizeExamSelection, shortExamName, sortEnrollments, sortExams, stars,
@@ -120,10 +120,10 @@ export default function ReportCardScreen({ useClassOptions, autoSelectFirst }: P
 
       {students.length > 0 && enrollmentId ? (
         <View style={styles.nav}>
-          <TouchableOpacity disabled={!prev} onPress={() => prev && setEnrollmentId(prev.id)}>
+          <TouchableOpacity accessibilityRole="button" disabled={!prev} onPress={() => prev && setEnrollmentId(prev.id)}>
             <Text style={[styles.navBtn, !prev && styles.navOff]}>‹ Previous</Text>
           </TouchableOpacity>
-          <TouchableOpacity disabled={!next} onPress={() => next && setEnrollmentId(next.id)}>
+          <TouchableOpacity accessibilityRole="button" disabled={!next} onPress={() => next && setEnrollmentId(next.id)}>
             <Text style={[styles.navBtn, !next && styles.navOff]}>Next ›</Text>
           </TouchableOpacity>
         </View>
@@ -153,7 +153,7 @@ function Card_({ report }: { report: Report }) {
   const conduct = report.conduct_assessment;
   const comments = subjects.filter((s) => s.comment);
   const subjectIds = subjects.map((s) => s.subject_id);
-  const issue = report.issue_date || new Date().toISOString().slice(0, 10);
+  const issue = report.issue_date || todayString();
   const sig = { ...DEFAULT_SIGNATURE_LABELS, ...(report.signature_labels || {}) };
 
   return (

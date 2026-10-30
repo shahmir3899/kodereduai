@@ -11,7 +11,7 @@ interface AvatarProps {
 // Photo when there is one, otherwise the person's initials.
 export default function Avatar({ name, uri, size = 40 }: AvatarProps) {
   const box = { width: size, height: size, borderRadius: size / 2 };
-  if (uri) return <Image source={{ uri }} style={box} />;
+  if (uri) return <Image source={{ uri }} style={box} resizeMethod="resize" accessibilityIgnoresInvertColors />;
   const initials = name.trim().split(/\s+/).slice(0, 2).map((p) => p[0]?.toUpperCase() ?? '').join('');
   return (
     <View style={[styles.fallback, box]}>

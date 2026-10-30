@@ -29,6 +29,16 @@ export const MONEY_QUERY_ROOTS = [
   'expenses',
   'accounts',
   'paymentStatus',
+  'payslips',
+  'payroll',
+  'salaryStructures',
+  'appraisals',
+  'letters',
+  'discounts',
+  'scholarships',
+  'studentDiscounts',
+  'feeStructures',
+  'feeCategories',
   // Admin dashboard bundles the monthly fee numbers with attendance and HR.
   'adminDashboard',
 ];

@@ -3,6 +3,7 @@ Letter PDF generator — renders custom letters on school letterhead.
 Uses reportlab canvas for precise positioning with letterhead background.
 """
 
+from django.utils import timezone
 import io
 import re
 import logging
@@ -95,7 +96,7 @@ class LetterPDFGenerator:
     def _draw_header_info(self, c):
         """Draw address and date in top-right area (below letterhead header)."""
         headers = [
-            f"Date: {datetime.now().strftime('%A, %B %d, %Y')}",
+            f"Date: {timezone.localtime().strftime('%A, %B %d, %Y')}",
         ]
         y = PAGE_HEIGHT - MARGIN
         c.setFont(self.font_regular, 10)

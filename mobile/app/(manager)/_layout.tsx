@@ -11,7 +11,7 @@ const TABS: TabSpec[] = [
 // Reached from Academics, More or the dashboard; no tab of their own.
 const HIDDEN = [
   'schedule', 'subjects', 'calendar', 'classes', 'inbox', 'leave', 'my-attendance',
-  'questions', 'papers', 'worksheets', 'paper-builder', 'exam-types', 'exams',
+  'questions', 'papers', 'worksheets', 'paper-builder', 'exam-types', 'exams', 'sessions-web', 'promotion-web',
 ];
 
 const STACKS = ['assignments', 'curriculum'];
@@ -20,7 +20,7 @@ const TITLES: Record<string, string> = {
   schedule: 'Timetable', subjects: 'Subjects', calendar: 'Academic Calendar', classes: 'Classes',
   inbox: 'Notifications', leave: 'My Leave', 'my-attendance': 'My Attendance', questions: 'Question Bank',
   papers: 'Question Papers', worksheets: 'Worksheets', 'paper-builder': 'Paper Builder',
-  'exam-types': 'Exam Types', exams: 'Exams',
+  'exam-types': 'Exam Types', exams: 'Exams', 'sessions-web': 'Academic Sessions', 'promotion-web': 'Promotion',
 };
 
 export default function ManagerLayout() {

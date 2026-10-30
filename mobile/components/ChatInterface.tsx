@@ -123,7 +123,7 @@ export default function ChatInterface({
       {/* Header with clear button */}
       {clearHistory && (
         <View style={styles.header}>
-          <TouchableOpacity onPress={handleClear}>
+          <TouchableOpacity accessibilityRole="button" onPress={handleClear}>
             <Text style={styles.clearText}>Clear Chat</Text>
           </TouchableOpacity>
         </View>
@@ -175,7 +175,7 @@ export default function ChatInterface({
           maxLength={2000}
           editable={!loading}
         />
-        <TouchableOpacity
+        <TouchableOpacity accessibilityRole="button"
           style={[styles.sendBtn, (!input.trim() || loading) && styles.sendBtnDisabled]}
           onPress={handleSend}
           disabled={!input.trim() || loading}

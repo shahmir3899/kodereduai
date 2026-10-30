@@ -55,7 +55,7 @@ export default function ManagerDashboard() {
       {tiles.length > 0 ? (
         <View style={styles.tiles}>
           {tiles.map((t) => (
-            <TouchableOpacity key={t.label} style={styles.tile} disabled={!t.route} onPress={() => go(t.route)}>
+            <TouchableOpacity accessibilityRole="button" key={t.label} style={styles.tile} disabled={!t.route} onPress={() => go(t.route)}>
               <Text style={styles.tileValue}>{t.value ?? '–'}</Text>
               <Text style={styles.tileLabel}>{t.label}</Text>
             </TouchableOpacity>
@@ -66,7 +66,7 @@ export default function ManagerDashboard() {
       <Text style={styles.section}>Quick actions</Text>
       <View style={styles.actions}>
         {quick.map((a) => (
-          <TouchableOpacity key={a.label} style={[styles.quick, !a.route && styles.quickOff]} disabled={!a.route} onPress={() => go(a.route)}>
+          <TouchableOpacity accessibilityRole="button" key={a.label} style={[styles.quick, !a.route && styles.quickOff]} disabled={!a.route} onPress={() => go(a.route)}>
             <Text style={styles.quickIcon}>{a.icon}</Text>
             <Text style={styles.quickLabel}>{a.label}</Text>
           </TouchableOpacity>
@@ -77,7 +77,7 @@ export default function ManagerDashboard() {
         <>
           <View style={styles.sectionRow}>
             <Text style={styles.section}>Notifications</Text>
-            <TouchableOpacity onPress={() => go(routeFor('manager', '/notifications'))}>
+            <TouchableOpacity accessibilityRole="button" onPress={() => go(routeFor('manager', '/notifications'))}>
               <Text style={styles.link}>See all</Text>
             </TouchableOpacity>
           </View>

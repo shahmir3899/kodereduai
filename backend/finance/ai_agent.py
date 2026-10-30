@@ -5,6 +5,7 @@ Uses Groq LLM to interpret natural language financial queries and
 translate them into database queries scoped to the user's school.
 """
 
+from django.utils import timezone
 import json
 import logging
 from datetime import date
@@ -146,7 +147,7 @@ class FinanceAIAgent:
             client = Groq(api_key=settings.GROQ_API_KEY)
 
             system = SYSTEM_PROMPT.format(
-                current_date=date.today().isoformat(),
+                current_date=timezone.localdate().isoformat(),
                 school_name=self.school.name,
             )
 
@@ -300,7 +301,7 @@ class FinanceAIAgent:
         from .models import FeePayment
         from students.models import Class
 
-        today = date.today()
+        today = timezone.localdate()
         month = month or today.month
         year = year or today.year
 
@@ -354,7 +355,7 @@ class FinanceAIAgent:
     def _get_unpaid_students(self, class_name=None, month=None, year=None):
         from .models import FeePayment
 
-        today = date.today()
+        today = timezone.localdate()
         month = month or today.month
         year = year or today.year
 
@@ -392,7 +393,7 @@ class FinanceAIAgent:
     def _get_income_summary(self, month=None, year=None):
         from .models import FeePayment, OtherIncome
 
-        today = date.today()
+        today = timezone.localdate()
         month = month or today.month
         year = year or today.year
 
@@ -625,7 +626,7 @@ class FinanceAIAgent:
     def _get_payment_method_analysis(self, month=None, year=None):
         from .models import FeePayment
 
-        today = date.today()
+        today = timezone.localdate()
         month = month or today.month
         year = year or today.year
 
@@ -735,7 +736,7 @@ class FinanceAIAgent:
             school_id=self.school_id,
         ).order_by('-year', '-month')[:12]
 
-        today = date.today()
+        today = timezone.localdate()
         closed_periods = [(c.year, c.month) for c in closings]
 
         # Check last 6 months
@@ -807,7 +808,7 @@ class FinanceAIAgent:
     def _get_collection_trend(self, months=6):
         from .models import FeePayment
 
-        today = date.today()
+        today = timezone.localdate()
         trend = []
         for i in range(int(months)):
             m = today.month - i
@@ -888,7 +889,7 @@ class FinanceAIAgent:
     def _fallback_response(self, user_message):
         """Simple keyword-based fallback when LLM is not available."""
         msg = user_message.lower()
-        today = date.today()
+        today = timezone.localdate()
 
         if any(w in msg for w in ['pending', 'unpaid', 'due']):
             data = self._get_pending_fees(month=today.month, year=today.year)

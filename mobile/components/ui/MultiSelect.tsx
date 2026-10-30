@@ -23,7 +23,7 @@ export default function MultiSelect({ label, values, options, onToggle, placehol
   return (
     <View style={styles.wrap}>
       {label ? <Text style={styles.label}>{label}</Text> : null}
-      <TouchableOpacity style={[styles.field, disabled && styles.disabled]} disabled={disabled} onPress={() => setOpen(true)}>
+      <TouchableOpacity accessibilityRole="button" style={[styles.field, disabled && styles.disabled]} disabled={disabled} onPress={() => setOpen(true)}>
         <Text style={chosen.length ? styles.value : styles.placeholder} numberOfLines={1}>
           {chosen.length ? chosen.map((o) => o.label).join(', ') : placeholder}
         </Text>
@@ -36,7 +36,7 @@ export default function MultiSelect({ label, values, options, onToggle, placehol
           {options.map((o) => {
             const on = values.includes(o.value);
             return (
-              <TouchableOpacity key={o.value} style={[styles.row, on && styles.rowOn]} onPress={() => onToggle(o.value)}>
+              <TouchableOpacity accessibilityRole="button" key={o.value} style={[styles.row, on && styles.rowOn]} onPress={() => onToggle(o.value)}>
                 <Text style={[styles.rowText, on && styles.rowTextOn]}>{o.label}</Text>
                 <Text style={styles.tick}>{on ? '☑' : '☐'}</Text>
               </TouchableOpacity>

@@ -1,3 +1,4 @@
+import { schoolNowDate, schoolToday } from '../../utils/schoolTime'
 import { useState, useEffect, useMemo } from 'react'
 import Field from '../../components/ui/Field'
 import Button from '../../components/ui/Button'
@@ -751,7 +752,7 @@ export function StudentFeeModal({ student, amount, setAmount, onSubmit, onClose,
 export function CreateSingleFeeModal({ show, onClose, onSubmit, isPending, error, isSuccess, classList, activeSchoolId: _activeSchoolId, academicYearId, accountsList = [] }) {
   const { activeSchool } = useAuth()
   const { showWarning } = useToast()
-  const now = new Date()
+  const now = schoolNowDate()
   const initialForm = {
     classId: '', student: '', fee_type: 'MONTHLY',
     annualCategoryId: '', monthlyCategoryId: '',
@@ -759,7 +760,7 @@ export function CreateSingleFeeModal({ show, onClose, onSubmit, isPending, error
     amount_due: '', amount_paid: '0', notes: '',
     conflict_strategy: 'skip',
     account: '', payment_method: 'CASH',
-    payment_date: new Date().toISOString().split('T')[0],
+    payment_date: schoolToday(),
   }
   const [form, setForm] = useState(initialForm)
   const { sessionClasses } = useSessionClasses(academicYearId, activeSchool?.id)
@@ -777,7 +778,7 @@ export function CreateSingleFeeModal({ show, onClose, onSubmit, isPending, error
 
   // Reset form every time modal opens
   useEffect(() => {
-    if (show) setForm({ ...initialForm, payment_date: new Date().toISOString().split('T')[0] })
+    if (show) setForm({ ...initialForm, payment_date: schoolToday() })
   }, [show])
 
   // Fetch students for selected class, filtered by academic year

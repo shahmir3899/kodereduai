@@ -87,15 +87,16 @@ export default function EnquiriesPage() {
   const funnelTotal = statusCounts.NEW + statusCounts.CONFIRMED + statusCounts.CONVERTED + statusCounts.CANCELLED
   const conversionRate = funnelTotal ? Math.round((statusCounts.CONVERTED / funnelTotal) * 100) : 0
 
-  // Cancel has no undo in the UI (no reopen action, the edit form has no status),
-  // and on a phone it sits right next to Confirm, so it asks first.
+  // Cancelling an enquiry deletes it for good (owner's call, 2026-10-29): a dropped-out lead
+  // is not kept as a CANCELLED row. It cannot be undone and on a phone the button sits right
+  // next to Confirm, so it asks first.
   const cancelEnquiry = async (enquiry) => {
     const ok = await confirm({
       title: 'Cancel Enquiry',
-      message: `Mark the enquiry for ${enquiry.name} as cancelled? It stays in the list but cannot be reopened from this page.`,
+      message: `Cancel the enquiry for ${enquiry.name}? It is deleted for good, with its notes.`,
       confirmLabel: 'Cancel enquiry',
     })
-    if (ok) statusMut.mutate({ id: enquiry.id, status: 'CANCELLED' })
+    if (ok) deleteMut.mutate(enquiry.id)
   }
 
   // Quick status update
@@ -359,7 +360,8 @@ export default function EnquiriesPage() {
                   { label: 'Edit', tone: 'info', to: `/admissions/${enquiry.id}/edit` },
                   ...(enquiry.status === 'NEW' ? [{ label: 'Confirm', tone: 'success', onClick: () => statusMut.mutate({ id: enquiry.id, status: 'CONFIRMED' }) }] : []),
                   ...((enquiry.status === 'NEW' || enquiry.status === 'CONFIRMED') ? [{ label: 'Cancel', tone: 'danger', onClick: () => cancelEnquiry(enquiry) }] : []),
-                  ...(enquiry.status !== 'CONVERTED' && enquiry.status !== 'CANCELLED' ? [{
+                  // Rows cancelled before cancel became a delete can still be cleaned up here.
+                  ...(enquiry.status === 'CANCELLED' ? [{
                     label: 'Delete',
                     tone: 'muted',
                     onClick: async () => {
@@ -466,7 +468,7 @@ export default function EnquiriesPage() {
                             Cancel
                           </button>
                         )}
-                        {enquiry.status !== 'CONVERTED' && enquiry.status !== 'CANCELLED' && (
+                        {enquiry.status === 'CANCELLED' && (
                           <button
                             onClick={async () => {
                               const ok = await confirm({ title: 'Delete Enquiry', message: 'Delete this enquiry?' })

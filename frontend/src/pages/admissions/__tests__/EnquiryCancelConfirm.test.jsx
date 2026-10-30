@@ -20,25 +20,25 @@ const enquiry = {
 }
 
 describe('Enquiry Cancel', () => {
-  it('asks before cancelling and only then sends the status change', async () => {
+  it('asks before cancelling and only then deletes the enquiry for good', async () => {
     const calls = []
     server.use(
       http.get('/api/admissions/enquiries/', () => HttpResponse.json({ count: 1, results: [enquiry] })),
       http.get('/api/admissions/enquiries/status-counts/', () => HttpResponse.json({ NEW: 1 })),
-      http.patch('/api/admissions/enquiries/5/update-status/', async ({ request }) => {
-        calls.push(await request.json())
-        return HttpResponse.json({ ...enquiry, status: 'CANCELLED' })
+      http.delete('/api/admissions/enquiries/5/', () => {
+        calls.push('deleted')
+        return new HttpResponse(null, { status: 204 })
       }),
     )
     const user = userEvent.setup()
     renderWithProviders(<EnquiriesPage />)
-    const [cancel] = await screen.findAllByRole('button', { name: 'Cancel' })
+    const [cancel] = await screen.findAllByRole('button', { name: 'Cancel' }, { timeout: 5000 })
     await user.click(cancel)
-    expect(await screen.findByText(/Mark the enquiry for Hamza Ali as cancelled/)).toBeInTheDocument()
+    expect(await screen.findByText(/Cancel the enquiry for Hamza Ali/)).toBeInTheDocument()
     expect(calls).toHaveLength(0)
     // the row also has a "Confirm" action: pick the one inside the modal
     const modal = screen.getByText('Cancel Enquiry').closest('div[class*="rounded"]')
     await user.click(within(modal).getByRole('button', { name: 'Cancel enquiry' }))
-    await waitFor(() => expect(calls).toEqual([{ status: 'CANCELLED' }]))
+    await waitFor(() => expect(calls).toEqual(['deleted']))
   })
 })

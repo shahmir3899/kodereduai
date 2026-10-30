@@ -103,7 +103,7 @@ export default function RecordExpense() {
           <Text style={styles.label}>Category</Text>
           <View style={styles.chipRow}>
             {EXPENSE_CATEGORIES.map((cat) => (
-              <TouchableOpacity
+              <TouchableOpacity accessibilityRole="button"
                 key={cat}
                 style={[styles.chip, category === cat && styles.chipSelected]}
                 onPress={() => setCategory(cat)}

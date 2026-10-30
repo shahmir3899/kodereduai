@@ -1,3 +1,4 @@
+import { schoolToday } from '../../utils/schoolTime'
 import { useState } from 'react'
 import { useToast } from '../../components/Toast'
 import { useAuth } from '../../contexts/AuthContext'
@@ -28,7 +29,7 @@ const TX_TYPES = [
 const emptyTxForm = {
   item: '', transaction_type: 'PURCHASE', quantity: '',
   unit_price: '', vendor: '', reference_number: '', remarks: '',
-  date: new Date().toISOString().split('T')[0],
+  date: schoolToday(),
 }
 
 export default function StockTransactionsPage() {

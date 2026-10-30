@@ -1,3 +1,4 @@
+import { schoolToday } from '../../utils/schoolTime'
 import { useState } from 'react'
 import PageHeader from '../../components/ui/PageHeader'
 import { useQuery } from '@tanstack/react-query'
@@ -34,7 +35,7 @@ export default function AdminDashboard() {
   const { activeAcademicYear, currentTerm, hasAcademicYear, loading: academicYearLoading } = useAcademicYear()
   const [insightsOpen, setInsightsOpen] = useState(false)
 
-  const today = new Date().toISOString().split('T')[0]
+  const today = schoolToday()
   // Only the student-attendance block follows this; the KPI tiles, fees and staff stay on today.
   const localToday = toLocalISODate()
   const [attendanceDate, setAttendanceDate] = useState(localToday)

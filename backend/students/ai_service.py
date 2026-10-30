@@ -8,6 +8,7 @@ Risk Score page uses, so a student has one risk level everywhere. This class add
 profile-only parts: the per-dimension detail, recommendations and the summary text.
 """
 
+from django.utils import timezone
 import hashlib
 import logging
 from collections import defaultdict
@@ -169,7 +170,7 @@ class Student360Service:
         and a transient LLM failure must not stick for the whole day."""
         facts = f"{attendance}|{academic}|{financial}|{overall_risk}|{list(earlier)}"
         digest = hashlib.sha1(facts.encode()).hexdigest()[:12]
-        key = (f"student360:summary:{self.school_id}:{self.student_id}:{date.today().isoformat()}:"
+        key = (f"student360:summary:{self.school_id}:{self.student_id}:{timezone.localdate().isoformat()}:"
                f"{'fees' if financial else 'nofees'}:{digest}")
         try:
             cached = cache.get(key)

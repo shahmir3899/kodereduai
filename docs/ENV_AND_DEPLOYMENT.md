@@ -329,3 +329,8 @@ npx expo start
 12. Verify Celery worker is running (check Render logs)
 13. Test login at frontend URL
 14. Test landing app metrics/cards if the standalone marketing site is deployed
+
+## Mobile app (Expo)
+
+Built with EAS, not Render. Build env comes from the profiles in `mobile/eas.json` (`EXPO_PUBLIC_API_URL`, `EXPO_PUBLIC_APP_ENV`, `EXPO_PUBLIC_ALLOW_INSECURE_HTTP`). Optional crash reporting: set `EXPO_PUBLIC_SENTRY_DSN` as an EAS env var for the build (never in a tracked file). No OTA updates in v1. Release steps and the Play checklist: `docs/MOBILE.md`.
+

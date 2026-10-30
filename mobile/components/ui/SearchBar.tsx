@@ -17,14 +17,15 @@ export default function SearchBar({ value, onChangeText, placeholder = 'Search..
         value={value}
         onChangeText={onChangeText}
         placeholder={placeholder}
+        accessibilityLabel={placeholder}
         placeholderTextColor={Colors.placeholder}
         autoCapitalize="none"
         autoCorrect={false}
         returnKeyType="search"
       />
       {value ? (
-        <TouchableOpacity onPress={() => onChangeText('')} hitSlop={8}>
-          <Text style={styles.clear}>✕</Text>
+        <TouchableOpacity onPress={() => onChangeText('')} hitSlop={12} accessibilityRole="button" accessibilityLabel="Clear search">
+          <Text style={styles.clear} accessible={false}>✕</Text>
         </TouchableOpacity>
       ) : null}
     </View>

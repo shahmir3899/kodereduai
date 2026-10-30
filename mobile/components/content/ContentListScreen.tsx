@@ -20,10 +20,12 @@ interface Props<Item> {
   searchPlaceholder: string;
   emptyTitle: string;
   onPressRow?: (row: ContentRow) => void;
+  // Shown above the search box, for example a "New" button.
+  headerAction?: React.ReactNode;
 }
 
 // Searchable, paged, read-only list for the Content Creation screens. Authoring is on the web.
-export default function ContentListScreen<Item>({ root, fetcher, toRow, searchPlaceholder, emptyTitle, onPressRow }: Props<Item>) {
+export default function ContentListScreen<Item>({ root, fetcher, toRow, searchPlaceholder, emptyTitle, onPressRow, headerAction }: Props<Item>) {
   const [search, setSearch] = useState('');
   const term = useDebouncedValue(search.trim(), 350);
   const query = useContentList<Item>(root, term, fetcher);
@@ -42,7 +44,7 @@ export default function ContentListScreen<Item>({ root, fetcher, toRow, searchPl
         keyboardShouldPersistTaps="handled"
         onEndReachedThreshold={0.4}
         onEndReached={() => { if (query.hasNextPage && !query.isFetchingNextPage) query.fetchNextPage(); }}
-        ListHeaderComponent={<View style={styles.search}><SearchBar value={search} onChangeText={setSearch} placeholder={searchPlaceholder} /></View>}
+        ListHeaderComponent={<View style={styles.search}>{headerAction}<SearchBar value={search} onChangeText={setSearch} placeholder={searchPlaceholder} /></View>}
         ListEmptyComponent={<EmptyState title={emptyTitle} message={term ? 'Nothing matches your search.' : undefined} />}
         ListFooterComponent={query.isFetchingNextPage ? <Spinner /> : null}
         renderItem={({ item }) => (

@@ -1,3 +1,4 @@
+import { schoolToday } from '../../utils/schoolTime'
 import { useQuery } from '@tanstack/react-query'
 import { TONE } from '../../components/ui/statusTones'
 import { Link } from 'react-router-dom'
@@ -24,7 +25,7 @@ export default function StudentDashboard() {
   const dashboard = dashboardData?.data || {}
   const student = dashboard.student || {}
   const stats = dashboard.stats || {}
-  const today = new Date().toISOString().split('T')[0]
+  const today = schoolToday()
   const studentClassId = student.class_id || student.class_obj || student.class_obj_id || null
 
   const { data: dayStatusRes } = useQuery({

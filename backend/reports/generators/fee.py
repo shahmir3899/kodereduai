@@ -2,6 +2,7 @@
 Fee report generators.
 """
 
+from django.utils import timezone
 from collections import defaultdict
 from datetime import date
 from django.db.models import Q
@@ -14,8 +15,8 @@ class FeeCollectionReportGenerator(BaseReportGenerator):
     def get_data(self):
         from finance.models import FeePayment
 
-        month = self.parameters.get('month', date.today().month)
-        year = self.parameters.get('year', date.today().year)
+        month = self.parameters.get('month', timezone.localdate().month)
+        year = self.parameters.get('year', timezone.localdate().year)
         academic_year_id = self._academic_year_id()
 
         payments = FeePayment.objects.filter(
@@ -75,8 +76,8 @@ class FeeDefaultersReportGenerator(BaseReportGenerator):
     def get_data(self):
         from finance.models import FeePayment
 
-        month = self.parameters.get('month', date.today().month)
-        year = self.parameters.get('year', date.today().year)
+        month = self.parameters.get('month', timezone.localdate().month)
+        year = self.parameters.get('year', timezone.localdate().year)
         academic_year_id = self._academic_year_id()
 
         defaulters = FeePayment.objects.filter(

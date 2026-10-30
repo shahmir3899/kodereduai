@@ -1,10 +1,15 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, RefreshControl, TextInput } from 'react-native';
+import React, { useMemo, useState } from 'react';
+import { View, Text, StyleSheet, FlatList, ActivityIndicator } from 'react-native';
 import { hrApi } from '../../../services/api';
+import { useScopedPagedQuery } from '../../../hooks/useScopedQuery';
+import { useDebouncedValue } from '../../../hooks/useDebouncedValue';
+import { useRefreshControl } from '../../../hooks/useRefreshControl';
 import StaffCard from '../../../components/StaffCard';
-import Spinner from '../../../components/ui/Spinner';
+import SearchBar from '../../../components/ui/SearchBar';
+import Skeleton from '../../../components/ui/Skeleton';
+import ErrorState from '../../../components/ui/ErrorState';
 import EmptyState from '../../../components/ui/EmptyState';
-import { Colors, FontSize, Spacing, BorderRadius } from '../../../constants/colors';
+import { Colors, FontSize, Spacing } from '../../../constants/colors';
 
 interface Staff {
   id: number;
@@ -14,41 +19,48 @@ interface Staff {
   phone?: string;
 }
 
+// Paged like the students list: the API returns 20 at a time, and the old screen showed only the
+// first page, so a school with more staff than that silently lost the rest.
 export default function StaffDirectory() {
-  const [staff, setStaff] = useState<Staff[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState('');
+  const term = useDebouncedValue(search.trim(), 400);
 
-  const fetchStaff = async () => {
-    try {
-      const params: Record<string, unknown> = {};
-      if (search.trim()) params.search = search.trim();
-      const response = await hrApi.getStaff(params);
-      setStaff(response.data.results || response.data || []);
-    } catch (error) {
-      console.error('Failed to fetch staff:', error);
-    } finally { setLoading(false); setRefreshing(false); }
-  };
+  // Not the persisted 'staff' root: this list carries phone numbers, which stay in memory only.
+  const query = useScopedPagedQuery<Staff>('staffDirectory', [term], async (page) => {
+    const params: Record<string, unknown> = { page };
+    if (term) params.search = term;
+    return (await hrApi.getStaff(params)).data;
+  });
+  const refreshControl = useRefreshControl(query.refetch);
+  const staff = useMemo(() => query.data?.pages.flatMap((p) => p.results) ?? [], [query.data]);
 
-  useEffect(() => { fetchStaff(); }, []);
-  useEffect(() => { const t = setTimeout(fetchStaff, 400); return () => clearTimeout(t); }, [search]);
-  const onRefresh = () => { setRefreshing(true); fetchStaff(); };
+  const header = (
+    <View>
+      <Text style={styles.title}>Staff Directory</Text>
+      <SearchBar value={search} onChangeText={setSearch} placeholder="Search staff..." />
+    </View>
+  );
 
-  if (loading) return <Spinner fullScreen message="Loading staff..." />;
+  if (query.isLoading) return <View style={styles.container}><View style={styles.content}>{header}</View><Skeleton /></View>;
+  if (query.isError && !query.data) return <ErrorState error={query.error} onRetry={() => query.refetch()} />;
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
-      <Text style={styles.title}>Staff Directory</Text>
-      <TextInput style={styles.search} placeholder="Search staff..." placeholderTextColor={Colors.placeholder}
-        value={search} onChangeText={setSearch} />
-      {staff.length === 0 ? (
-        <EmptyState title="No Staff" message={search ? 'No staff match your search.' : 'No staff records found.'} />
-      ) : (
-        staff.map((s) => <StaffCard key={s.id} id={s.id} name={s.name} department={s.department} designation={s.designation} phone={s.phone} />)
+    <FlatList
+      style={styles.container}
+      contentContainerStyle={styles.content}
+      data={staff}
+      keyExtractor={(s) => String(s.id)}
+      keyboardShouldPersistTaps="handled"
+      refreshControl={refreshControl}
+      ListHeaderComponent={header}
+      onEndReached={() => query.hasNextPage && !query.isFetchingNextPage && query.fetchNextPage()}
+      onEndReachedThreshold={0.5}
+      ListEmptyComponent={<EmptyState title="No Staff" message={term ? 'No staff match your search.' : 'No staff records found.'} />}
+      ListFooterComponent={query.isFetchingNextPage ? <ActivityIndicator color={Colors.primary} style={{ margin: Spacing.lg }} /> : null}
+      renderItem={({ item: s }) => (
+        <StaffCard id={s.id} name={s.name} department={s.department} designation={s.designation} phone={s.phone} />
       )}
-    </ScrollView>
+    />
   );
 }
 
@@ -56,5 +68,4 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
   content: { padding: Spacing.lg },
   title: { fontSize: FontSize.xl, fontWeight: '700', color: Colors.text, marginBottom: Spacing.lg },
-  search: { backgroundColor: Colors.surface, borderRadius: BorderRadius.lg, padding: Spacing.md, fontSize: FontSize.sm, color: Colors.text, borderWidth: 1, borderColor: Colors.border, marginBottom: Spacing.md },
 });

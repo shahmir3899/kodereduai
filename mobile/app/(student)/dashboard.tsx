@@ -44,13 +44,13 @@ export default function StudentDashboard() {
       <SchoolSwitcher />
 
       <View style={styles.tiles}>
-        <TouchableOpacity style={styles.tile} onPress={() => go(routeFor('student', '/student/attendance'))}>
+        <TouchableOpacity accessibilityRole="button" style={styles.tile} onPress={() => go(routeFor('student', '/student/attendance'))}>
           <Text style={[styles.tileValue, { color: d.attendance.total_days > 0 ? TONE[rateTone(d.attendance.rate)] : Colors.textSecondary }]}>
             {d.attendance.total_days > 0 ? `${d.attendance.rate}%` : '–'}
           </Text>
           <Text style={styles.tileLabel}>Attendance</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.tile} onPress={() => go(routeFor('student', '/student/fees'))}>
+        <TouchableOpacity accessibilityRole="button" style={styles.tile} onPress={() => go(routeFor('student', '/student/fees'))}>
           <Text style={[styles.tileValue, { color: pending > 0 ? Colors.error : Colors.success }]}>{formatMoney(pending)}</Text>
           <Text style={styles.tileLabel}>Fees pending</Text>
         </TouchableOpacity>
@@ -69,7 +69,7 @@ export default function StudentDashboard() {
 
       <Text style={styles.section}>Upcoming tasks</Text>
       {d.upcoming_assignments.length === 0 ? <Text style={styles.muted}>Nothing due soon.</Text> : d.upcoming_assignments.map((a) => (
-        <TouchableOpacity key={a.id} onPress={() => go('/(student)/assignments/detail', { id: a.id })}>
+        <TouchableOpacity accessibilityRole="button" key={a.id} onPress={() => go('/(student)/assignments/detail', { id: a.id })}>
           <Card style={styles.period}>
             <View style={{ flex: 1 }}>
               <Text style={styles.subject} numberOfLines={1}>{a.title}</Text>
@@ -83,7 +83,7 @@ export default function StudentDashboard() {
       <Text style={styles.section}>Quick links</Text>
       <View style={styles.actions}>
         {quick.map((a) => (
-          <TouchableOpacity key={a.label} style={[styles.quick, !a.route && styles.quickOff]} disabled={!a.route} onPress={() => go(a.route)}>
+          <TouchableOpacity accessibilityRole="button" key={a.label} style={[styles.quick, !a.route && styles.quickOff]} disabled={!a.route} onPress={() => go(a.route)}>
             <Text style={styles.quickIcon}>{a.icon}</Text>
             <Text style={styles.quickLabel}>{a.label}</Text>
           </TouchableOpacity>

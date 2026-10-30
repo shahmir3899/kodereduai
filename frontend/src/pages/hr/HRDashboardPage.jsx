@@ -1,3 +1,4 @@
+import { schoolToday } from '../../utils/schoolTime'
 import { useQuery } from '@tanstack/react-query'
 import PageHeader from '../../components/ui/PageHeader'
 import EmptyState from '../../components/ui/EmptyState'
@@ -22,7 +23,7 @@ const typeColors = {
 }
 
 export default function HRDashboardPage() {
-  const today = new Date().toISOString().split('T')[0]
+  const today = schoolToday()
 
   const { data: statsData, isLoading } = useQuery({
     queryKey: ['hrDashboardStats'],

@@ -1,3 +1,4 @@
+import { todayString } from '../../../services/attendanceEntry';
 import React, { useState, useRef } from 'react';
 import {
   View,
@@ -65,7 +66,7 @@ export default function CaptureAttendance() {
 
       await attendanceApi.createUpload({
         image_url: imageUrl,
-        date: new Date().toISOString().split('T')[0],
+        date: todayString(),
       });
 
       Alert.alert('Success', 'Attendance photo uploaded. AI is processing it.', [
@@ -91,7 +92,7 @@ export default function CaptureAttendance() {
           We need camera access to capture attendance photos.
         </Text>
         <Button title="Grant Permission" onPress={requestPermission} />
-        <TouchableOpacity style={styles.galleryLink} onPress={pickFromGallery}>
+        <TouchableOpacity accessibilityRole="button" style={styles.galleryLink} onPress={pickFromGallery}>
           <Text style={styles.galleryLinkText}>Or pick from gallery</Text>
         </TouchableOpacity>
       </View>
@@ -132,10 +133,10 @@ export default function CaptureAttendance() {
         </View>
       </CameraView>
       <View style={styles.controls}>
-        <TouchableOpacity style={styles.galleryBtn} onPress={pickFromGallery}>
+        <TouchableOpacity accessibilityRole="button" style={styles.galleryBtn} onPress={pickFromGallery}>
           <Text style={styles.galleryBtnText}>Gallery</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.captureBtn} onPress={takePhoto}>
+        <TouchableOpacity accessibilityRole="button" style={styles.captureBtn} onPress={takePhoto}>
           <View style={styles.captureBtnInner} />
         </TouchableOpacity>
         <View style={{ width: 60 }} />

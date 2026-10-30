@@ -28,7 +28,7 @@ export function ResultsView({ query }: { query: Q<PortalResultExam[]> }) {
         const isOpen = open === e.exam_id;
         return (
           <Card key={e.exam_id} style={styles.card}>
-            <TouchableOpacity style={styles.head} onPress={() => setOpen(isOpen ? null : e.exam_id)}>
+            <TouchableOpacity accessibilityRole="button" style={styles.head} onPress={() => setOpen(isOpen ? null : e.exam_id)}>
               <View style={{ flex: 1 }}>
                 <Text style={styles.name} numberOfLines={2}>{e.exam_name}</Text>
                 <Text style={styles.meta}>{[e.exam_type, e.exam_date].filter(Boolean).join('  ·  ')}</Text>

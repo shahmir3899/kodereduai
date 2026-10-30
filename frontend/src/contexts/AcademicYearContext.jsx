@@ -1,3 +1,4 @@
+import { schoolToday } from '../utils/schoolTime'
 import { createContext, useContext, useState, useEffect, useCallback } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useAuth } from './AuthContext'
@@ -19,7 +20,7 @@ export function AcademicYearProvider({ children }) {
       const termsRes = await sessionsApi.getTerms({ academic_year: yearId })
       const termsList = Array.isArray(termsRes.data) ? termsRes.data : termsRes.data.results || []
       setTerms(termsList)
-      const today = new Date().toISOString().split('T')[0]
+      const today = schoolToday()
       const active = termsList.find(t => t.start_date <= today && t.end_date >= today)
       setCurrentTerm(active || null)
     } catch {

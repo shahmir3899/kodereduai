@@ -99,11 +99,11 @@ export default function FeeCollectScreen({ classOptions, canRecord = true }: Pro
   const header = (
     <View>
       <View style={styles.stepper}>
-        <TouchableOpacity hitSlop={10} disabled={feeType === 'ANNUAL'} onPress={() => setYm(stepFeeMonth(ym.year, ym.month, -1, current))}>
+        <TouchableOpacity accessibilityRole="button" hitSlop={10} disabled={feeType === 'ANNUAL'} onPress={() => setYm(stepFeeMonth(ym.year, ym.month, -1, current))}>
           <Text style={[styles.step, feeType === 'ANNUAL' && styles.stepOff]}>‹</Text>
         </TouchableOpacity>
         <Text style={styles.month}>{feeType === 'ANNUAL' ? `Annual ${ym.year}` : `${MONTH_NAMES[ym.month - 1]} ${ym.year}`}</Text>
-        <TouchableOpacity hitSlop={10} disabled={feeType === 'ANNUAL' || (ym.year === current.year && ym.month === current.month)}
+        <TouchableOpacity accessibilityRole="button" hitSlop={10} disabled={feeType === 'ANNUAL' || (ym.year === current.year && ym.month === current.month)}
           onPress={() => setYm(stepFeeMonth(ym.year, ym.month, 1, current))}>
           <Text style={[styles.step, (feeType === 'ANNUAL' || (ym.year === current.year && ym.month === current.month)) && styles.stepOff]}>›</Text>
         </TouchableOpacity>
@@ -159,7 +159,7 @@ export default function FeeCollectScreen({ classOptions, canRecord = true }: Pro
               </View>
               {Number(p.previous_balance) > 0 ? <Text style={styles.carry}>Includes {formatMoney(Number(p.previous_balance))} carried forward</Text> : null}
               {canRecord && canRecordPayment(p) ? (
-                <TouchableOpacity style={styles.record} onPress={() => open(p)}>
+                <TouchableOpacity accessibilityRole="button" style={styles.record} onPress={() => open(p)}>
                   <Text style={styles.recordText}>Record payment</Text>
                 </TouchableOpacity>
               ) : null}

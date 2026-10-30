@@ -110,7 +110,7 @@ export default function ResultsScreen({ classOptions }: Props) {
         const status = resultStatus(item);
         const expanded = open === item.student_id;
         return (
-          <TouchableOpacity style={[styles.row, status === 'fail' && styles.rowFail]} onPress={() => setOpen(expanded ? null : item.student_id)}>
+          <TouchableOpacity accessibilityRole="button" style={[styles.row, status === 'fail' && styles.rowFail]} onPress={() => setOpen(expanded ? null : item.student_id)}>
             <View style={styles.main}>
               <View style={[styles.rank, { backgroundColor: item.rank != null && RANK_COLOR[item.rank] ? RANK_COLOR[item.rank] : Colors.surfaceSecondary }]}>
                 <Text style={[styles.rankText, item.rank != null && RANK_COLOR[item.rank] ? { color: Colors.textInverse } : null]}>{item.rank ?? '—'}</Text>

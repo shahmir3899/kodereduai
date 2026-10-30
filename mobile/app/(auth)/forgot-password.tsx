@@ -80,7 +80,7 @@ export default function ForgotPasswordScreen() {
               <Text style={styles.hint}>
                 No email on your account? Ask your school to reset your password for you.
               </Text>
-              <TouchableOpacity onPress={backToLogin} style={styles.backLink}>
+              <TouchableOpacity accessibilityRole="button" onPress={backToLogin} style={styles.backLink}>
                 <Text style={styles.backText}>Back to sign in</Text>
               </TouchableOpacity>
             </>

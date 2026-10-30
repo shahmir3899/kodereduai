@@ -1,3 +1,4 @@
+import { schoolNowDate } from '../../utils/schoolTime'
 import { useState } from 'react'
 import PageHeader from '../../components/ui/PageHeader'
 import { useQuery } from '@tanstack/react-query'
@@ -44,7 +45,7 @@ function getDateRange(year, month) {
 }
 
 export default function StudentAttendance() {
-  const now = new Date()
+  const now = schoolNowDate()
   const [selectedMonth, setSelectedMonth] = useState(now.getMonth() + 1)
   const [selectedYear, setSelectedYear] = useState(now.getFullYear())
 

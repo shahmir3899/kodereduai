@@ -1,3 +1,4 @@
+import { schoolToday } from '../../../utils/schoolTime'
 import { useCallback, useMemo, useState } from 'react'
 import Button from '../../../components/ui/Button'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -11,7 +12,7 @@ import { useRollSuggestion } from '../../../hooks/useRollSuggestion'
 import { getErrorMessage } from '../../../utils/errorUtils'
 import { formatDate } from './profileUtils'
 
-const today = () => new Date().toISOString().slice(0, 10)
+const today = () => schoolToday()
 
 // Brings a withdrawn/transferred student back. It is the same student record, so
 // every old attendance, mark and fee row stays; the months away stay empty. Returning

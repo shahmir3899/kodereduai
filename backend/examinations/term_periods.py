@@ -9,6 +9,7 @@ first term, from the earliest attendance record in the year leading up to it)
 through the term's end date. A term that already spans 30+ days is used as entered.
 """
 
+from django.utils import timezone
 from datetime import timedelta
 
 from django.db.models import Min
@@ -82,7 +83,7 @@ def attendance_summaries(school_id, student_ids, start, end, class_id):
 
     if not (start and end and student_ids):
         return {}
-    window_end = min(end, date.today())
+    window_end = min(end, timezone.localdate())
     off_days = build_student_off_day_set(school_id, start, window_end, class_id=class_id)
     working_days = max((window_end - start).days + 1 - len(off_days), 0) if window_end >= start else 0
 

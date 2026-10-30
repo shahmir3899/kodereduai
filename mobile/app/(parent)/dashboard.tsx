@@ -48,11 +48,11 @@ export default function ParentDashboard() {
       )}
 
       <View style={styles.actions}>
-        <TouchableOpacity style={styles.quick} onPress={() => go('/(parent)/messages')}>
+        <TouchableOpacity accessibilityRole="button" style={styles.quick} onPress={() => go('/(parent)/messages')}>
           <Text style={styles.quickIcon}>💬</Text>
           <Text style={styles.quickLabel}>{unread > 0 ? `Messages (${unread})` : 'Messages'}</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.quick} onPress={() => go('/(parent)/leave')}>
+        <TouchableOpacity accessibilityRole="button" style={styles.quick} onPress={() => go('/(parent)/leave')}>
           <Text style={styles.quickIcon}>🗓️</Text>
           <Text style={styles.quickLabel}>{pendingLeave > 0 ? `Leave (${pendingLeave} pending)` : 'Leave'}</Text>
         </TouchableOpacity>
@@ -62,7 +62,7 @@ export default function ParentDashboard() {
         <>
           <View style={styles.sectionRow}>
             <Text style={styles.section}>Notifications</Text>
-            <TouchableOpacity onPress={() => go('/(parent)/inbox')}><Text style={styles.link}>See all</Text></TouchableOpacity>
+            <TouchableOpacity accessibilityRole="button" onPress={() => go('/(parent)/inbox')}><Text style={styles.link}>See all</Text></TouchableOpacity>
           </View>
           <Card style={styles.list}>
             {(notifications.data ?? []).length === 0 ? (

@@ -12,9 +12,9 @@ interface BottomSheetProps {
 // Slide-up panel for pickers and short forms. Tapping the dim area closes it.
 export default function BottomSheet({ visible, onClose, title, children }: BottomSheetProps) {
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable style={styles.backdrop} onPress={onClose}>
-        <Pressable style={styles.sheet}>
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose} accessibilityViewIsModal>
+      <Pressable style={styles.backdrop} onPress={onClose} accessibilityRole="button" accessibilityLabel="Close">
+        <Pressable style={styles.sheet} accessible={false}>
           <View style={styles.handle} />
           {title ? <Text style={styles.title}>{title}</Text> : null}
           {children}

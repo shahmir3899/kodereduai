@@ -177,6 +177,29 @@ export const lmsApi = {
     api.get('/api/lms/books/', { params }),
   getBookTree: (id: number) =>
     api.get(`/api/lms/books/${id}/tree/`),
+  getLessonPlans: (params?: Record<string, unknown>) => api.get('/api/lms/lesson-plans/', { params }),
+  bulkCreateLessonPlans: (data: object) => api.post('/api/lms/lesson-plans/bulk_create/', data),
+  // AI draft from chosen topics (uses the school's AI quota; the person edits before saving).
+  generateLessonPlan: (data: object) => api.post('/api/lms/generate-lesson-plan/', data, { timeout: 90000 }),
+  getBooksForClassSubject: (params?: Record<string, unknown>) => api.get('/api/lms/books/for_class_subject/', { params }),
+  createLessonPlan: (data: object) => api.post('/api/lms/lesson-plans/', data),
+  updateLessonPlan: (id: number, data: object) => api.patch(`/api/lms/lesson-plans/${id}/`, data),
+  deleteLessonPlan: (id: number) => api.delete(`/api/lms/lesson-plans/${id}/`),
+  // Curriculum authoring: admin, principal, teacher and manager (CanEditCurriculum).
+  createBook: (data: object) => api.post('/api/lms/books/', data),
+  updateBook: (id: number, data: object) => api.patch(`/api/lms/books/${id}/`, data),
+  createChapter: (data: object) => api.post('/api/lms/chapters/', data),
+  updateChapter: (id: number, data: object) => api.patch(`/api/lms/chapters/${id}/`, data),
+  deleteChapter: (id: number) => api.delete(`/api/lms/chapters/${id}/`),
+  createTopic: (data: object) => api.post('/api/lms/topics/', data),
+  updateTopic: (id: number, data: object) => api.patch(`/api/lms/topics/${id}/`, data),
+  deleteTopic: (id: number) => api.delete(`/api/lms/topics/${id}/`),
+  // Table-of-contents scan: photo -> background job -> text -> parsed outline -> apply.
+  createTocJob: (bookId: number, form: FormData) =>
+    api.post(`/api/lms/books/${bookId}/ocr_toc/`, form, { headers: { 'Content-Type': 'multipart/form-data' }, params: { async: '1' }, timeout: 120000 }),
+  getTocJob: (jobId: string) => api.get(`/api/lms/toc-jobs/${jobId}/`, { timeout: 30000 }),
+  parseToc: (bookId: number, data: object) => api.post(`/api/lms/books/${bookId}/parse_toc/`, data),
+  applyToc: (bookId: number, data: object) => api.post(`/api/lms/books/${bookId}/apply_toc/`, data),
   getAssignments: (params?: Record<string, unknown>) =>
     api.get('/api/lms/assignments/', { params }),
   getAssignment: (id: number) =>
@@ -208,6 +231,8 @@ export const sessionsApi = {
     api.get('/api/sessions/session-classes/', { params }),
   getEnrollments: (params?: Record<string, unknown>) =>
     api.get('/api/sessions/enrollments/', { params }),
+  getTerms: (params?: Record<string, unknown>) =>
+    api.get('/api/sessions/terms/', { params }),
   getCalendarMonthView: (params?: Record<string, unknown>) =>
     api.get('/api/sessions/calendar-entries/month-view/', { params }),
   getCalendarDayStatus: (params?: Record<string, unknown>) =>
@@ -272,6 +297,25 @@ export const financeApi = {
     api.get('/api/finance/fee-payments/monthly_summary/', { params }),
   getStudentLedger: (params?: Record<string, unknown>) =>
     api.get('/api/finance/fee-payments/student_ledger/', { params }),
+  // Fee record generation (admin and principal): preview first, then create real fee rows.
+  previewGeneration: (params?: Record<string, unknown>) =>
+    api.get('/api/finance/fee-payments/preview_generation/', { params }),
+  generateMonthly: (data: object) => api.post('/api/finance/fee-payments/generate_monthly/', data),
+  generateAnnualFees: (data: object) => api.post('/api/finance/fee-payments/generate_annual_fees/', data),
+  generateSingleFee: (data: object) => api.post('/api/finance/fee-payments/generate_single/', data),
+  // Fee structure (admin and principal write; the server replaces a class's charge per category)
+  getFeeStructures: (params?: Record<string, unknown>) =>
+    api.get('/api/finance/fee-structures/', { params }),
+  bulkSetFeeStructures: (data: object) =>
+    api.post('/api/finance/fee-structures/bulk_set/', data),
+  getMonthlyCategories: (params?: Record<string, unknown>) =>
+    api.get('/api/finance/monthly-categories/', { params }),
+  createMonthlyCategory: (data: object) =>
+    api.post('/api/finance/monthly-categories/', data),
+  getAnnualCategories: (params?: Record<string, unknown>) =>
+    api.get('/api/finance/annual-categories/', { params }),
+  createAnnualCategory: (data: object) =>
+    api.post('/api/finance/annual-categories/', data),
   getAccountBalances: (params?: Record<string, unknown>) =>
     api.get('/api/finance/accounts/balances/', { params }),
   getRecentEntries: (params?: Record<string, unknown>) =>
@@ -298,6 +342,13 @@ export const financeApi = {
     api.get('/api/finance/reports/', { params }),
   getMonthlyTrend: (params?: Record<string, unknown>) =>
     api.get('/api/finance/reports/', { params: { ...params, type: 'monthly_trend' } }),
+  getExpenseCategorySummary: (params?: Record<string, unknown>) =>
+    api.get('/api/finance/expenses/category_summary/', { params }),
+  // Server-made files, read as bytes so they can be written to the phone and shared.
+  exportLedgerPdf: (params?: Record<string, unknown>) =>
+    api.get('/api/finance/accounts/export-ledger-pdf/', { params, responseType: 'arraybuffer' }),
+  exportLedger: (params?: Record<string, unknown>) =>
+    api.get('/api/finance/accounts/export-ledger/', { params, responseType: 'arraybuffer' }),
 
   // AI Chat
   sendChatMessage: (data: Record<string, unknown>) =>
@@ -306,6 +357,48 @@ export const financeApi = {
     api.get('/api/finance/ai-chat/'),
   clearChatHistory: () =>
     api.delete('/api/finance/ai-chat/'),
+};
+
+// ─── Reports API (server-generated PDFs, the same ones the web downloads) ─────
+
+export const lettersApi = {
+  getLetters: (params?: Record<string, unknown>) => api.get('/api/reports/custom-letters/', { params }),
+  createLetter: (data: object) => api.post('/api/reports/custom-letters/', data),
+  updateLetter: (id: number, data: object) => api.put(`/api/reports/custom-letters/${id}/`, data),
+  deleteLetter: (id: number) => api.delete(`/api/reports/custom-letters/${id}/`),
+  getTemplates: () => api.get('/api/reports/custom-letters/templates/'),
+  prefill: (data: object) => api.post('/api/reports/custom-letters/prefill/', data),
+  generatePdf: (data: object) => api.post('/api/reports/custom-letters/generate-pdf/', data, { responseType: 'arraybuffer' }),
+};
+
+// Insight cards (admin and principal): the same four risk scans the web pages use.
+export const insightsApi = {
+  studentRisk: (params?: Record<string, unknown>) => api.get('/api/sessions/student-risk-score/', { params }),
+  attendanceRisk: (params?: Record<string, unknown>) => api.get('/api/sessions/attendance-risk/', { params }),
+  academicRisk: (params?: Record<string, unknown>) => api.get('/api/examinations/academic-risk/', { params }),
+  staffRisk: (params?: Record<string, unknown>) => api.get('/api/hr/staff-risk/', { params }),
+};
+
+export const reportsApi = {
+  generateInstant: (data: object) =>
+    api.post('/api/reports/generate-instant/', data, { responseType: 'arraybuffer' }),
+};
+
+// ─── Discounts and scholarships (admin and principal only) ───────────────────
+
+export const discountApi = {
+  getDiscounts: (params?: Record<string, unknown>) => api.get('/api/finance/discounts/', { params }),
+  createDiscount: (data: object) => api.post('/api/finance/discounts/', data),
+  updateDiscount: (id: number, data: object) => api.patch(`/api/finance/discounts/${id}/`, data),
+  deleteDiscount: (id: number) => api.delete(`/api/finance/discounts/${id}/`),
+  getScholarships: (params?: Record<string, unknown>) => api.get('/api/finance/scholarships/', { params }),
+  createScholarship: (data: object) => api.post('/api/finance/scholarships/', data),
+  updateScholarship: (id: number, data: object) => api.patch(`/api/finance/scholarships/${id}/`, data),
+  deleteScholarship: (id: number) => api.delete(`/api/finance/scholarships/${id}/`),
+  getStudentDiscounts: (params?: Record<string, unknown>) => api.get('/api/finance/student-discounts/', { params }),
+  assignDiscount: (data: object) => api.post('/api/finance/student-discounts/', data),
+  bulkAssign: (data: object) => api.post('/api/finance/student-discounts/bulk_assign/', data),
+  removeStudentDiscount: (id: number) => api.delete(`/api/finance/student-discounts/${id}/`),
 };
 
 // ─── HR API ──────────────────────────────────────────────────────────────────
@@ -338,18 +431,71 @@ export const hrApi = {
   // Own payslips only: the server scopes every non-admin role to their own record.
   getPayslips: (params?: Record<string, unknown>) =>
     api.get('/api/hr/payslips/', { params }),
+  // Payroll (admin and principal): generation, approval, payment, salary structures.
+  getPayrollSummary: (params?: Record<string, unknown>) =>
+    api.get('/api/hr/payslips/payroll_summary/', { params }),
+  generatePayslips: (data: object) => api.post('/api/hr/payslips/generate_payslips/', data),
+  approvePayslip: (id: number) => api.post(`/api/hr/payslips/${id}/approve/`),
+  markPayslipPaid: (id: number, data: object) => api.post(`/api/hr/payslips/${id}/mark_paid/`, data),
+  deletePayslip: (id: number) => api.delete(`/api/hr/payslips/${id}/`),
+  downloadPayslipPdf: (id: number) => api.get(`/api/hr/payslips/${id}/download-pdf/`, { responseType: 'arraybuffer' }),
+  getAppraisals: (params?: Record<string, unknown>) => api.get('/api/hr/appraisals/', { params }),
+  createAppraisal: (data: object) => api.post('/api/hr/appraisals/', data),
+  updateAppraisal: (id: number, data: object) => api.patch(`/api/hr/appraisals/${id}/`, data),
+  deleteAppraisal: (id: number) => api.delete(`/api/hr/appraisals/${id}/`),
+  getSalaryStructures: (params?: Record<string, unknown>) => api.get('/api/hr/salary-structures/', { params }),
+  createSalaryStructure: (data: object) => api.post('/api/hr/salary-structures/', data),
+  updateSalaryStructure: (id: number, data: object) => api.patch(`/api/hr/salary-structures/${id}/`, data),
+  deleteSalaryStructure: (id: number) => api.delete(`/api/hr/salary-structures/${id}/`),
 };
 
-// ─── Inventory API (read-only; staff see only their own assignments) ─────────
+// ─── Inventory API ───────────────────────────────────────────────────────────
+// Admin and principal write; accountant reads; teacher and staff only list their own assignments.
 
 export const inventoryApi = {
-  getAssignments: (params?: Record<string, unknown>) =>
-    api.get('/api/inventory/assignments/', { params }),
+  getDashboard: () => api.get('/api/inventory/dashboard/'),
+  getCategories: (params?: Record<string, unknown>) => api.get('/api/inventory/categories/', { params }),
+  createCategory: (data: object) => api.post('/api/inventory/categories/', data),
+  getVendors: (params?: Record<string, unknown>) => api.get('/api/inventory/vendors/', { params }),
+  createVendor: (data: object) => api.post('/api/inventory/vendors/', data),
+  getItems: (params?: Record<string, unknown>) => api.get('/api/inventory/items/', { params }),
+  createItem: (data: object) => api.post('/api/inventory/items/', data),
+  updateItem: (id: number, data: object) => api.patch(`/api/inventory/items/${id}/`, data),
+  getAssignments: (params?: Record<string, unknown>) => api.get('/api/inventory/assignments/', { params }),
+  createAssignment: (data: object) => api.post('/api/inventory/assignments/', data),
+  returnItem: (id: number, data: object) => api.post(`/api/inventory/assignments/${id}/return/`, data),
+  getTransactions: (params?: Record<string, unknown>) => api.get('/api/inventory/transactions/', { params }),
+  createTransaction: (data: object) => api.post('/api/inventory/transactions/', data),
+  getReorderPrediction: (params?: Record<string, unknown>) => api.get('/api/inventory/reorder-prediction/', { params }),
+};
+
+// ─── Admissions API ──────────────────────────────────────────────────────────
+// Admin and principal only (the web route guard; the server refuses writes to anyone else).
+
+export const admissionsApi = {
+  getEnquiries: (params?: Record<string, unknown>) => api.get('/api/admissions/enquiries/', { params }),
+  getStatusCounts: () => api.get('/api/admissions/enquiries/status-counts/'),
+  getEnquiry: (id: number) => api.get(`/api/admissions/enquiries/${id}/`),
+  createEnquiry: (data: object) => api.post('/api/admissions/enquiries/', data),
+  updateEnquiry: (id: number, data: object) => api.patch(`/api/admissions/enquiries/${id}/`, data),
+  deleteEnquiry: (id: number) => api.delete(`/api/admissions/enquiries/${id}/`),
+  updateStatus: (id: number, data: { status: string; note?: string }) =>
+    api.patch(`/api/admissions/enquiries/${id}/update-status/`, data),
+  batchConvert: (data: object) => api.post('/api/admissions/enquiries/batch-convert/', data),
+  addNote: (enquiryId: number, data: object) => api.post(`/api/admissions/enquiries/${enquiryId}/notes/`, data),
+  getFollowups: (type: 'today' | 'overdue') => api.get(`/api/admissions/followups/${type}/`),
+  getConversionLikelihood: () => api.get('/api/admissions/conversion-likelihood/'),
+};
+
+export const usersApi = {
+  getUsers: (params?: Record<string, unknown>) => api.get('/api/users/', { params }),
 };
 
 // ─── Academics API ───────────────────────────────────────────────────────────
 
 export const academicsApi = {
+  getClassSubjects: (params?: Record<string, unknown>) =>
+    api.get('/api/academics/class-subjects/', { params }),
   getSubjects: (params?: Record<string, unknown>) =>
     api.get('/api/academics/subjects/', { params }),
   getMyTimetable: (params?: Record<string, unknown>) =>
@@ -384,10 +530,33 @@ export const examinationsApi = {
     api.post('/api/examinations/marks/bulk_entry/', data),
   getExams: (params?: Record<string, unknown>) =>
     api.get('/api/examinations/exams/', { params }),
+  // Exam creation (admin and principal): one exam per whole class; the date sheet wizard stays on the web.
+  // Several classes at once with their date sheet, in one transaction (409 lists classes that already have it).
+  wizardCreateExamGroup: (data: object) => api.post('/api/examinations/exam-groups/wizard-create/', data),
+  createExam: (data: object) => api.post('/api/examinations/exams/', data),
+  updateExam: (id: number, data: object) => api.patch(`/api/examinations/exams/${id}/`, data),
+  deleteExam: (id: number) => api.delete(`/api/examinations/exams/${id}/`),
+  populateExamSubjects: (id: number) => api.post(`/api/examinations/exams/${id}/populate-subjects/`),
   getQuestions: (params?: Record<string, unknown>) =>
     api.get('/api/examinations/questions/', { params }),
+  createQuestion: (data: object) => api.post('/api/examinations/questions/', data),
+  updateQuestion: (id: number, data: object) => api.patch(`/api/examinations/questions/${id}/`, data),
+  deleteQuestion: (id: number) => api.delete(`/api/examinations/questions/${id}/`),
+  // Pictures on a saved question: slot is question, option_a to option_d, or answer (JPEG/PNG/WebP, 5 MB).
+  uploadQuestionPicture: (id: number, form: FormData) =>
+    api.post(`/api/examinations/questions/${id}/diagram/`, form, { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 60000 }),
+  removeQuestionPicture: (id: number, slot: string) => api.post(`/api/examinations/questions/${id}/remove_diagram/`, { slot }),
   getExamPapers: (params?: Record<string, unknown>) =>
     api.get('/api/examinations/exam-papers/', { params }),
+  getExamPaper: (id: number) => api.get(`/api/examinations/exam-papers/${id}/`),
+  createExamPaper: (data: object) => api.post('/api/examinations/exam-papers/', data),
+  updateExamPaper: (id: number, data: object) => api.patch(`/api/examinations/exam-papers/${id}/`, data),
+  deleteExamPaper: (id: number) => api.delete(`/api/examinations/exam-papers/${id}/`),
+  // Draft flow the web uses, so sections survive: ensure-draft creates the paper, autosave stores details,
+  // structure and the questions in order (draft papers only).
+  ensurePaperDraft: (data: object) => api.post('/api/examinations/exam-papers/ensure-draft/', data),
+  autosavePaperDraft: (id: number, data: object) => api.post(`/api/examinations/exam-papers/${id}/autosave/`, data),
+  generatePaperPdf: (id: number) => api.get(`/api/examinations/exam-papers/${id}/generate-pdf/`, { responseType: 'arraybuffer' }),
   getWorksheets: (params?: Record<string, unknown>) =>
     api.get('/api/examinations/worksheets/', { params }),
   getExamResults: (id: number, params?: Record<string, unknown>) =>

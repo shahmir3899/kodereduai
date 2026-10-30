@@ -17,10 +17,12 @@ vi.mock('../../../services/api', () => ({
     getUnreadCount: (...a) => getUnreadCount(...a),
   },
 }))
+const authState = vi.hoisted(() => ({ isParent: false, isStudent: false }))
 vi.mock('../../../contexts/AuthContext', () => ({
   useAuth: () => ({
     user: { role: 'SCHOOL_ADMIN', schools: [{ id: 1 }, { id: 2 }] },
     activeSchool: { id: 1 },
+    ...authState,
   }),
 }))
 
@@ -69,6 +71,19 @@ describe('NotificationCarousel', () => {
   beforeEach(() => {
     getMyNotifications.mockReset()
     getDigest.mockReset()
+    authState.isParent = false
+    authState.isStudent = false
+  })
+
+  it.each(['isParent', 'isStudent'])('keeps the inbox link for portal accounts (%s): they open the Inbox tab too', async (flag) => {
+    authState[flag] = true
+    getMyNotifications.mockResolvedValue({ data: { count: 1, next: null, results: [mk(1)] } })
+    getDigest.mockResolvedValue({ data: { text: 'You have 1 unread notification.', source: 'rules', total: 1, stats: [] } })
+
+    renderCarousel()
+
+    await screen.findByText('You have 1 unread notification.')
+    expect(screen.getByText('View all').getAttribute('href')).toBe('/notifications')
   })
 
   it('shows digest first, bundles repeats, and ends with a see-all slide', async () => {

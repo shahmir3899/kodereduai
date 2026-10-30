@@ -40,7 +40,7 @@ export default function ClassesScreen({ allowedMasterIds, linkStudents = true }:
       ListHeaderComponent={<Text style={styles.year}>{year.current.name}</Text>}
       ListEmptyComponent={<EmptyState title="No classes" message="There are no classes to show for this year." />}
       renderItem={({ item: r }) => (
-        <TouchableOpacity style={styles.row} disabled={!linkStudents}
+        <TouchableOpacity accessibilityRole="button" style={styles.row} disabled={!linkStudents}
           onPress={() => router.push({ pathname: `${base}/students`, params: { class: r.id } } as Href)}>
           <View style={{ flex: 1 }}>
             <Text style={styles.name}>{r.label}</Text>

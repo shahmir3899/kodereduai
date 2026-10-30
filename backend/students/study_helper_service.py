@@ -170,7 +170,7 @@ class StudyHelperService:
         # Recent lesson plans (last 7 days)
         try:
             from lms.models import LessonPlan
-            week_ago = timezone.now().date() - timedelta(days=7)
+            week_ago = timezone.localdate() - timedelta(days=7)
             lessons = LessonPlan.objects.filter(
                 content_q,
                 school=self.school,
@@ -232,10 +232,10 @@ class StudyHelperService:
         # Upcoming exams (next 14 days)
         try:
             from examinations.models import Exam
-            two_weeks = timezone.now().date() + timedelta(days=14)
+            two_weeks = timezone.localdate() + timedelta(days=14)
             exams = Exam.objects.filter(
                 school=self.school,
-                start_date__gte=timezone.now().date(),
+                start_date__gte=timezone.localdate(),
                 start_date__lte=two_weeks,
             ).order_by('start_date')[:3]
             if exams:
@@ -510,7 +510,7 @@ class StudyHelperService:
     def _get_my_attendance(self, days=30):
         from . import history
 
-        cutoff = timezone.now().date() - timedelta(days=int(days))
+        cutoff = timezone.localdate() - timedelta(days=int(days))
         records = history.attendance_records(self.student).filter(date__gte=cutoff).order_by('-date')
 
         total = records.count()
@@ -538,7 +538,7 @@ class StudyHelperService:
         exams = Exam.objects.filter(
             self._class_scope()[2],
             school=self.school,
-            start_date__gte=timezone.now().date(),
+            start_date__gte=timezone.localdate(),
         ).order_by('start_date')[:5]
 
         result = []

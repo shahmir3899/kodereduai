@@ -16,6 +16,7 @@ import BottomSheet from '../ui/BottomSheet';
 import { useToast } from '../ui/Toast';
 import { confirm } from '../ui/confirm';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
+import { saveFailureMessage } from '../../services/errorKind';
 
 const blank = (student: number | null): LeaveForm => ({ student, start: todayString(), end: todayString(), reason: '', link: '' });
 
@@ -37,12 +38,12 @@ export default function LeaveScreen() {
     if (problem) { toast.error(problem); return; }
     create.mutateAsync(leaveBody(form))
       .then(() => { toast.success('Leave request sent.'); setOpen(false); })
-      .catch((e: any) => toast.error(apiErrorMessage(e?.response?.data, 'Could not send the request.')));
+      .catch((e: any) => toast.error(e?.response ? apiErrorMessage(e?.response?.data, 'Could not send the request.') : saveFailureMessage(e)));
   };
 
   const withdraw = async (id: number) => {
     const yes = await confirm({ title: 'Withdraw this request?', message: 'The school will no longer see it as pending.', confirmLabel: 'Withdraw', destructive: true });
-    if (yes) cancel.mutateAsync(id).then(() => toast.success('Request withdrawn.')).catch((e: any) => toast.error(apiErrorMessage(e?.response?.data, 'Could not withdraw the request.')));
+    if (yes) cancel.mutateAsync(id).then(() => toast.success('Request withdrawn.')).catch((e: any) => toast.error(e?.response ? apiErrorMessage(e?.response?.data, 'Could not withdraw the request.') : saveFailureMessage(e)));
   };
 
   if (query.isLoading || children.isLoading) return <Skeleton />;
@@ -70,7 +71,7 @@ export default function LeaveScreen() {
             <Text style={styles.reason}>{l.reason}</Text>
             {l.review_note ? <Text style={styles.meta}>School: {l.review_note}{l.reviewed_by_name ? ` (${l.reviewed_by_name})` : ''}</Text> : null}
             {canCancelLeave(l) ? (
-              <TouchableOpacity onPress={() => withdraw(l.id)}><Text style={styles.withdraw}>Withdraw</Text></TouchableOpacity>
+              <TouchableOpacity accessibilityRole="button" onPress={() => withdraw(l.id)}><Text style={styles.withdraw}>Withdraw</Text></TouchableOpacity>
             ) : null}
           </View>
         )}

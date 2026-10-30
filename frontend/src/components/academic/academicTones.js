@@ -1,3 +1,4 @@
+import { schoolToday } from '../../utils/schoolTime'
 import { TONE } from '../ui/statusTones'
 
 /**
@@ -42,7 +43,7 @@ export const TODAY_MARKER = 'bg-red-600'
  * school runs on, "Viewing" is the one picked in the switcher. A year can be both. A year that is
  * neither is labelled Past or Upcoming from its dates.
  */
-export function yearBadges(year, activeYearId, today = new Date().toISOString().slice(0, 10)) {
+export function yearBadges(year, activeYearId, today = schoolToday()) {
   const badges = []
   if (year.id === activeYearId) badges.push({ key: 'viewing', label: 'Viewing', tone: 'info' })
   if (year.is_current) badges.push({ key: 'current', label: 'Current year', tone: 'success' })

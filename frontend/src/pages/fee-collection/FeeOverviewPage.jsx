@@ -1,3 +1,4 @@
+import { schoolNowDate } from '../../utils/schoolTime'
 import { useState } from 'react'
 import PageHeader from '../../components/ui/PageHeader'
 import LoadingState from '../../components/ui/LoadingState'
@@ -14,7 +15,7 @@ export default function FeeOverviewPage() {
   const { activeAcademicYear } = useAcademicYear()
   const [searchParams, setSearchParams] = useSearchParams()
   const canWrite = !isStaffMember
-  const now = new Date()
+  const now = schoolNowDate()
   const initialFeeType = (searchParams.get('feeType') || 'MONTHLY').toUpperCase() === 'ANNUAL' ? 'ANNUAL' : 'MONTHLY'
   const initialAnnualCategory = searchParams.get('annualCategory') || ''
   const initialMonthlyCategory = searchParams.get('monthlyCategory') || ''

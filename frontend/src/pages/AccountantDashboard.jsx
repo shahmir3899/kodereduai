@@ -1,3 +1,4 @@
+import { schoolNowDate, schoolToday } from '../utils/schoolTime'
 import { useQuery } from '@tanstack/react-query'
 import { TONE } from '../components/ui/statusTones'
 import PageHeader from '../components/ui/PageHeader'
@@ -71,11 +72,11 @@ const ACCOUNT_TYPE_COLORS = {
 
 export default function AccountantDashboard() {
   const { user, activeSchool } = useAuth()
-  const now = new Date()
+  const now = schoolNowDate()
   const currentMonth = now.getMonth() + 1
   const currentYear = now.getFullYear()
   const dateFrom = `${currentYear}-${String(currentMonth).padStart(2, '0')}-01`
-  const dateTo = now.toISOString().split('T')[0]
+  const dateTo = schoolToday()
 
   // ─── Queries ──────────────────────────────────────────────────────────────────
 

@@ -117,22 +117,22 @@ export default function SubmissionsScreen() {
               </View>
               {s.submitted_at ? <Text style={styles.meta}>Submitted {s.submitted_at.replace('T', ' ').slice(0, 16)}</Text> : null}
               {text ? (
-                <TouchableOpacity onPress={() => setExpanded((cur) => { const n = new Set(cur); n.has(s.id) ? n.delete(s.id) : n.add(s.id); return n; })}>
+                <TouchableOpacity accessibilityRole="button" onPress={() => setExpanded((cur) => { const n = new Set(cur); n.has(s.id) ? n.delete(s.id) : n.add(s.id); return n; })}>
                   <Text style={styles.text}>{open ? text : truncate(text)}</Text>
                   {text.length > 140 ? <Text style={styles.more}>{open ? 'Show less' : 'Read more'}</Text> : null}
                 </TouchableOpacity>
               ) : null}
               {s.file_url ? (
-                <TouchableOpacity onPress={() => Linking.openURL(s.file_url as string)}>
+                <TouchableOpacity accessibilityRole="button" onPress={() => Linking.openURL(s.file_url as string)}>
                   <Text style={styles.link}>Open attachment</Text>
                 </TouchableOpacity>
               ) : null}
               {s.marks_obtained != null ? <Text style={styles.marks}>Marks: {s.marks_obtained}{total ? ` / ${total}` : ''}</Text> : null}
               {s.feedback ? <Text style={styles.feedback}>“{s.feedback}”</Text> : null}
               <View style={styles.actions}>
-                <TouchableOpacity onPress={() => startGrading(s)}><Text style={styles.action}>{gradeLabel(s)}</Text></TouchableOpacity>
+                <TouchableOpacity accessibilityRole="button" onPress={() => startGrading(s)}><Text style={styles.action}>{gradeLabel(s)}</Text></TouchableOpacity>
                 {canReturn(s) ? (
-                  <TouchableOpacity disabled={returnToStudent.isPending} onPress={() => sendBack(s)}><Text style={styles.action}>Return</Text></TouchableOpacity>
+                  <TouchableOpacity accessibilityRole="button" disabled={returnToStudent.isPending} onPress={() => sendBack(s)}><Text style={styles.action}>Return</Text></TouchableOpacity>
                 ) : null}
               </View>
             </View>

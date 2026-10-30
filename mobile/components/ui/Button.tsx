@@ -40,6 +40,9 @@ export default function Button({
     <TouchableOpacity
       onPress={onPress}
       disabled={isDisabled}
+      accessibilityRole="button"
+      accessibilityLabel={title}
+      accessibilityState={{ disabled: isDisabled, busy: loading }}
       style={[
         styles.base,
         styles[variant],
@@ -81,6 +84,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderRadius: BorderRadius.md,
     gap: Spacing.sm,
+    // Android's minimum touch target; the small size was about 36.
+    minHeight: 44,
   },
   fullWidth: {
     width: '100%',

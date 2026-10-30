@@ -53,7 +53,7 @@ export default function AccountantHome() {
 
       <View style={styles.tiles}>
         {tiles.map((t) => (
-          <TouchableOpacity key={t.label} style={styles.tile} onPress={() => go(t.route)}>
+          <TouchableOpacity accessibilityRole="button" key={t.label} style={styles.tile} onPress={() => go(t.route)}>
             <Text style={styles.tileValue} numberOfLines={1} adjustsFontSizeToFit>{t.value}</Text>
             <Text style={styles.tileLabel}>{t.label}</Text>
           </TouchableOpacity>
@@ -65,7 +65,7 @@ export default function AccountantHome() {
 
       <View style={styles.actions}>
         {quick.map((a) => (
-          <TouchableOpacity key={a.label} style={styles.quick} onPress={() => go(a.route)}>
+          <TouchableOpacity accessibilityRole="button" key={a.label} style={styles.quick} onPress={() => go(a.route)}>
             <Text style={styles.quickIcon}>{a.icon}</Text>
             <Text style={styles.quickLabel}>{a.label}</Text>
           </TouchableOpacity>

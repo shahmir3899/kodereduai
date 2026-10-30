@@ -35,7 +35,7 @@ export default function NotificationsScreen() {
         contentContainerStyle={styles.content}
         refreshControl={refreshControl}
         ListHeaderComponent={unread > 0 ? (
-          <TouchableOpacity onPress={() => markAll.mutate()} style={styles.markAll}>
+          <TouchableOpacity accessibilityRole="button" onPress={() => markAll.mutate()} style={styles.markAll}>
             <Text style={styles.markAllText}>Mark all read ({unread})</Text>
           </TouchableOpacity>
         ) : null}

@@ -2416,7 +2416,7 @@
             {
               "type": "step",
               "number": 3,
-              "text": "If a family withdraws, search for them and click 'Cancel'. Use 'Edit' to change details."
+              "text": "If a family withdraws, search for them, click 'Cancel' and confirm. Cancelling deletes the enquiry for good. Use 'Edit' to change details."
             }
           ],
           "video": "ch9-managing-enquiries"
@@ -3005,7 +3005,7 @@
         },
         {
           "id": "13.1",
-          "title": "Viewing Notifications (All Users)",
+          "title": "Viewing Notifications",
           "slug": "viewing-notifications-all-users",
           "content": [
             {
@@ -3032,7 +3032,20 @@
               "type": "step",
               "number": 4,
               "text": "Click 'Mark all read' and confirm to clear everything at once."
+            },
+            {
+              "type": "body_text",
+              "text": "On a phone, tap the menu button, then Notifications."
             }
+          ],
+          "roles": [
+            "SCHOOL_ADMIN",
+            "PRINCIPAL",
+            "MANAGER",
+            "ACCOUNTANT",
+            "TEACHER",
+            "STAFF",
+            "DRIVER"
           ],
           "video": "ch13-viewing-notifications-all-users"
         },
@@ -3049,7 +3062,7 @@
             {
               "type": "step",
               "number": 1,
-              "text": "On the 'Templates' tab, click 'New Template'. Type a name, choose the event and the channel, and write the message. Placeholders use double braces, such as {{student_name}}."
+              "text": "On the 'Templates' tab, click 'New Template'. Type a name, choose the event and the channel, and write the message. Placeholders use double braces, such as {{student_name}}. On a phone, tap the menu button, then Notifications, and open the Templates tab first."
             },
             {
               "type": "step",
@@ -3080,7 +3093,7 @@
             {
               "type": "step",
               "number": 1,
-              "text": "On the 'Send' tab, 'Broadcast to Group' is selected. Choose a template to fill in the title and message, or write your own. (Choose 'Single Recipient' to message one person.)"
+              "text": "On the 'Send' tab, 'Broadcast to Group' is selected. Choose a template to fill in the title and message, or write your own. (Choose 'Single Recipient' to message one person.) On a phone, scroll down past the 'Run Now' box to reach the form."
             },
             {
               "type": "step",
@@ -3100,7 +3113,7 @@
             {
               "type": "info_box",
               "title": "Run now",
-              "text": "'Send Fee Reminders Now', 'Generate Daily Report Now' and 'Remind Teachers to Mark Attendance' at the top of the Send tab send this school's automatic notifications on demand."
+              "text": "'Send Fee Reminders Now', 'Generate Daily Report Now' and 'Remind Teachers to Mark Attendance' and 'Send Weekly Calendar Summary Now' at the top of the Send tab send this school's automatic notifications on demand."
             }
           ],
           "roles": [
@@ -3164,7 +3177,7 @@
           "content": [
             {
               "type": "body_text",
-              "text": "Private conversations between school staff, teachers, parents and students. What you can do depends on your role."
+              "text": "Private conversations between school staff, teachers and parents. What you can do depends on your role."
             }
           ]
         },
@@ -3186,7 +3199,7 @@
                 ],
                 [
                   "Teacher",
-                  "Parents and students of their classes, and Admins and Principals"
+                  "Parents of the children in their classes, and Admins and Principals"
                 ],
                 [
                   "Other staff",
@@ -3228,12 +3241,12 @@
             {
               "type": "step",
               "number": 1,
-              "text": "Click 'New Message' in the sidebar of the Messages page."
+              "text": "Click 'New Message' at the top right of the Messages page. On a phone it is a blue plus button. Parents have the same button on their own Messages page."
             },
             {
               "type": "step",
               "number": 2,
-              "text": "Open the 'To' box, search for a name and pick the person. For a parent or student, the child is filled in for you."
+              "text": "Open the 'To' box, search for a name and pick the person. For a parent, the child is filled in for you."
             },
             {
               "type": "step",
@@ -3256,7 +3269,7 @@
             {
               "type": "step",
               "number": 1,
-              "text": "Open a conversation. Conversations with unread messages show a number."
+              "text": "Open a conversation. Conversations with unread messages show a number. On a phone, tap a conversation to open it and the back arrow to return to the list."
             },
             {
               "type": "step",
@@ -3331,7 +3344,7 @@
             {
               "type": "step",
               "number": 1,
-              "text": "On the dashboard, click 'Overview' on your child's card."
+              "text": "On the dashboard, click 'Overview' on your child's card. On a phone, the dashboard is the page that opens after you sign in; tap the menu button to reach other pages."
             },
             {
               "type": "step",
@@ -3352,6 +3365,11 @@
               "type": "info_box",
               "title": "Exam results",
               "text": "Results appear after the school announces them."
+            },
+            {
+              "type": "info_box",
+              "title": "Notifications",
+              "text": "Open 'Notifications' in the menu (on a phone, tap the menu button first) to read messages from your school. Tap one to open the related page, and use 'Mark all read' to clear them."
             }
           ],
           "video": "ch15-viewing-childs-information"
@@ -3368,7 +3386,7 @@
             {
               "type": "step",
               "number": 1,
-              "text": "Click 'Leave Requests' in the sidebar. The 'Apply for Leave' tab opens first. Choose the child, then enter the start date and the end date."
+              "text": "Click 'Leave Requests' in the sidebar (on a phone, tap the menu button first). The 'Apply for Leave' tab opens first. Choose the child, then enter the start date and the end date."
             },
             {
               "type": "step",
@@ -3383,7 +3401,7 @@
             {
               "type": "step",
               "number": 4,
-              "text": "Open 'My Requests'. The new request is Pending, and earlier ones show the school's decision and remarks. A pending request can be cancelled with 'Cancel'."
+              "text": "Open 'My Requests'. The new request is Pending, and earlier ones show the school's decision and remarks. A pending request can be cancelled with 'Cancel' (on a phone the card button reads 'Cancel Request')."
             }
           ],
           "video": "ch15-applying-for-leave"
@@ -3504,6 +3522,11 @@
               "type": "step",
               "number": 4,
               "text": "Click 'Submit Assignment'. A green message at the top of the page confirms it for a few seconds, and the card now shows Submitted."
+            },
+            {
+              "type": "info_box",
+              "title": "Notifications",
+              "text": "Open 'Notifications' in the menu (on a phone, tap the menu button first) to read messages from your school. Tap one to open the related page, and use 'Mark all read' to clear them."
             }
           ],
           "video": "ch16-my-assignments"
@@ -3582,17 +3605,17 @@
             {
               "type": "step",
               "number": 1,
-              "text": "Click 'AI Study Helper' in the sidebar. Click one of the suggestions to ask it right away."
+              "text": "Click 'AI Study Helper' in the sidebar (on a phone, tap the menu button first). Click one of the suggestions to ask it right away."
             },
             {
               "type": "step",
               "number": 2,
-              "text": "Or type your own question and press Enter. Shift+Enter starts a new line."
+              "text": "Or type your own question and press Enter. Shift+Enter starts a new line. On a phone, tap the arrow button to send."
             },
             {
               "type": "step",
               "number": 3,
-              "text": "Your chat is saved, so you can come back to it. Click 'Clear Chat' to start again."
+              "text": "Your chat is saved, so you can come back to it. Click 'Clear Chat' and confirm to start again."
             },
             {
               "type": "info_box",
@@ -3875,7 +3898,7 @@
             {
               "type": "step",
               "number": 1,
-              "text": "Open Settings and click the 'Users' tab. It lists every user of your school; search by name, username or email, or filter by role."
+              "text": "Open Settings and click the 'Users' tab. It lists every user of your school; search by name, username or email, or filter by role. On a phone each user is a card, and Edit, Reset Password and Deactivate are the links at the bottom of the card."
             },
             {
               "type": "step",
@@ -3928,7 +3951,7 @@
             {
               "type": "step",
               "number": 2,
-              "text": "At the bottom, tick 'Create User Account'. The username is suggested from the name."
+              "text": "At the bottom, tick 'Create User Account' (on a phone, scroll down inside the form). The username is suggested from the name you typed."
             },
             {
               "type": "step",
@@ -4176,6 +4199,11 @@
               "type": "body_text",
               "text": "Store items, stock movements and who holds what. Available to School Admins, Principals and Accountants; only Admins and Principals can change things."
             }
+          ],
+          "roles": [
+            "SCHOOL_ADMIN",
+            "PRINCIPAL",
+            "ACCOUNTANT"
           ]
         },
         {
@@ -4192,6 +4220,11 @@
               "type": "body_text",
               "text": "Total items, stock value, active assignments, low-stock alerts and recent transactions, with links to the other pages."
             }
+          ],
+          "roles": [
+            "SCHOOL_ADMIN",
+            "PRINCIPAL",
+            "ACCOUNTANT"
           ]
         },
         {
@@ -4305,7 +4338,7 @@
             },
             {
               "type": "body_text",
-              "text": "Accountants, Teachers and Staff can only view assignments; Teachers and Staff see just the items assigned to them."
+              "text": "This page is for School Admins and Principals. Teachers and Staff see only their own items (see 'My Assigned Items'), and Accountants can only view."
             }
           ],
           "roles": [
@@ -4328,13 +4361,40 @@
               "type": "body_text",
               "text": "Items the AI expects to run low or out, with severity, current stock and the projected stock-out time."
             }
+          ],
+          "roles": [
+            "SCHOOL_ADMIN",
+            "PRINCIPAL",
+            "ACCOUNTANT"
+          ]
+        },
+        {
+          "id": "21.6",
+          "title": "My Assigned Items",
+          "slug": "my-assigned-items",
+          "content": [
+            {
+              "type": "nav_path",
+              "path": "Sidebar > Inventory (on a phone, tap the menu button first)",
+              "href": "/inventory/assignments"
+            },
+            {
+              "type": "body_text",
+              "text": "Teachers and Staff see only the school items that have been given to them: the item, the quantity, the date it was given and its status. You cannot assign or return items yourself; when you hand an item back, tell a School Admin or Principal, who records the return."
+            }
+          ],
+          "roles": [
+            "TEACHER",
+            "STAFF"
           ]
         }
       ],
       "roles": [
         "SCHOOL_ADMIN",
         "PRINCIPAL",
-        "ACCOUNTANT"
+        "ACCOUNTANT",
+        "TEACHER",
+        "STAFF"
       ],
       "module": "inventory"
     },

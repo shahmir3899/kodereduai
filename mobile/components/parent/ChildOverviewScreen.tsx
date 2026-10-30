@@ -72,7 +72,7 @@ export default function ChildOverviewScreen() {
       <Text style={styles.section}>More about {o.student_name.split(' ')[0]}</Text>
       <View style={styles.menu}>
         {LINKS.map(([path, title, hint]) => (
-          <TouchableOpacity key={path} style={styles.row} onPress={() => router.push(`/(parent)/children/${studentId}/${path}` as Href)}>
+          <TouchableOpacity accessibilityRole="button" key={path} style={styles.row} onPress={() => router.push(`/(parent)/children/${studentId}/${path}` as Href)}>
             <View style={{ flex: 1 }}>
               <Text style={styles.rowTitle}>{title}</Text>
               <Text style={styles.small}>{hint}</Text>

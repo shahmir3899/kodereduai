@@ -34,7 +34,7 @@ export default function TeacherSchedule() {
     <ScrollView style={styles.container} contentContainerStyle={styles.content} refreshControl={refreshControl}>
       <View style={styles.days}>
         {DAY_CODES.filter((d) => days.includes(d)).map((d) => (
-          <TouchableOpacity key={d} style={[styles.day, d === day && styles.dayActive]} onPress={() => setPicked(d)}>
+          <TouchableOpacity accessibilityRole="button" key={d} style={[styles.day, d === day && styles.dayActive]} onPress={() => setPicked(d)}>
             <Text style={[styles.dayText, d === day && styles.dayTextActive]}>{DAY_LABELS[d]}</Text>
             {d === today ? <View style={[styles.dot, d === day && styles.dotActive]} /> : null}
           </TouchableOpacity>

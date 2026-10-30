@@ -1,3 +1,4 @@
+import { schoolToday } from '../utils/schoolTime'
 import { useEffect, useState } from 'react'
 import Field from './ui/Field'
 import Button from './ui/Button'
@@ -11,7 +12,7 @@ const buildInitialForm = (transfer = null) => ({
   from_account: transfer?.from_account ? String(transfer.from_account) : '',
   to_account: transfer?.to_account ? String(transfer.to_account) : '',
   amount: transfer?.amount ?? '',
-  date: transfer?.date || new Date().toISOString().split('T')[0],
+  date: transfer?.date || schoolToday(),
   description: transfer?.description || '',
 })
 

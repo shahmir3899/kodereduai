@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ScrollView, View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { FlatList, View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import BottomSheet from './BottomSheet';
 import SearchBar from './SearchBar';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
@@ -47,21 +47,34 @@ export default function Select<V extends string | number>({
         style={[styles.field, error ? styles.fieldError : null, disabled ? styles.fieldDisabled : null]}
         disabled={disabled}
         onPress={() => setOpen(true)}
+        accessibilityRole="button"
+        accessibilityLabel={`${label ?? 'Select'}: ${selected ? selected.label : placeholder}`}
+        accessibilityHint="Opens a list to choose from"
+        accessibilityState={{ disabled: !!disabled }}
       >
         <Text style={selected ? styles.value : styles.placeholder} numberOfLines={1}>
           {selected ? selected.label : placeholder}
         </Text>
-        <Text style={styles.chevron}>▾</Text>
+        <Text style={styles.chevron} accessible={false}>▾</Text>
       </TouchableOpacity>
-      {error ? <Text style={styles.error}>{error}</Text> : null}
+      {error ? <Text style={styles.error} accessibilityRole="alert">{error}</Text> : null}
 
       <BottomSheet visible={open} onClose={() => { setOpen(false); setQuery(''); }} title={label}>
         {searchable ? <View style={styles.search}><SearchBar value={query} onChangeText={setQuery} placeholder="Search..." /></View> : null}
-        <ScrollView keyboardShouldPersistTaps="handled">
-          {shown.map((o) => (
+        {/* Virtualised: a class roster can be several hundred rows. */}
+        <FlatList
+          data={shown}
+          keyExtractor={(o) => String(o.value)}
+          keyboardShouldPersistTaps="handled"
+          initialNumToRender={20}
+          windowSize={7}
+          ListEmptyComponent={<Text style={styles.empty}>No options</Text>}
+          renderItem={({ item: o }) => (
             <TouchableOpacity
-              key={String(o.value)}
               style={[styles.row, o.value === value && styles.rowActive]}
+              accessibilityRole="button"
+              accessibilityLabel={o.label}
+              accessibilityState={{ selected: o.value === value }}
               onPress={() => {
                 onChange(o.value);
                 setOpen(false);
@@ -71,9 +84,8 @@ export default function Select<V extends string | number>({
               <Text style={[styles.rowText, o.value === value && styles.rowTextActive]}>{o.label}</Text>
               {o.value === value ? <Text style={styles.tick}>✓</Text> : null}
             </TouchableOpacity>
-          ))}
-          {shown.length === 0 ? <Text style={styles.empty}>No options</Text> : null}
-        </ScrollView>
+          )}
+        />
       </BottomSheet>
     </View>
   );

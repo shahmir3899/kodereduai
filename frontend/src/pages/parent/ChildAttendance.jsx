@@ -1,3 +1,4 @@
+import { schoolNowDate } from '../../utils/schoolTime'
 import { useState } from 'react'
 import PageHeader from '../../components/ui/PageHeader'
 import { useParams, Link } from 'react-router-dom'
@@ -60,7 +61,7 @@ function StatusDot({ status }) {
 
 export default function ChildAttendance() {
   const { studentId } = useParams()
-  const now = new Date()
+  const now = schoolNowDate()
   const [selectedMonth, setSelectedMonth] = useState(now.getMonth() + 1)
   const [selectedYear, setSelectedYear] = useState(now.getFullYear())
 

@@ -196,3 +196,8 @@ export function getNotificationPath(n, role) {
   }
   return map[type] || null
 }
+
+// A broadcast to one person must not read "1 recipients".
+export function broadcastResultText({ sent, skipped, failed }) {
+  return `Sent to ${sent} ${sent === 1 ? 'recipient' : 'recipients'} (${skipped} skipped, ${failed} failed)`
+}

@@ -1,3 +1,4 @@
+import { schoolNowDate } from '../../utils/schoolTime'
 import { useState, useEffect } from 'react'
 import Modal from '../../components/ui/Modal'
 import Badge from '../../components/ui/Badge'
@@ -27,7 +28,7 @@ export default function PayrollPage() {
   const queryClient = useQueryClient()
   const { showError, showSuccess } = useToast()
 
-  const now = new Date()
+  const now = schoolNowDate()
   const [month, setMonth] = useState(now.getMonth() + 1)
   const [year, setYear] = useState(now.getFullYear())
   const [statusFilter, setStatusFilter] = useState('')

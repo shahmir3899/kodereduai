@@ -86,6 +86,7 @@ GENERATOR_MAP = {
     'ATTENDANCE_MONTHLY': 'reports.generators.attendance.MonthlyAttendanceReportGenerator',
     'FEE_COLLECTION': 'reports.generators.fee.FeeCollectionReportGenerator',
     'FEE_DEFAULTERS': 'reports.generators.fee.FeeDefaultersReportGenerator',
+    'FINANCE_SUMMARY': 'reports.generators.finance.FinanceSummaryReportGenerator',
     'CLASS_RESULT': 'reports.generators.academic.ClassResultReportGenerator',
     'STUDENT_PROGRESS': 'reports.generators.academic.StudentProgressReportGenerator',
     'STUDENT_COMPREHENSIVE': 'reports.generators.student.StudentComprehensiveReportGenerator',
@@ -118,6 +119,10 @@ class GenerateReportView(APIView):
         generator_class = _get_generator_class(data['report_type'])
         if not generator_class:
             return Response({'error': f"Unknown report type: {data['report_type']}"}, status=400)
+
+        # Needs the caller's request to apply role rules, which a background task does not have.
+        if data['report_type'] == 'FINANCE_SUMMARY':
+            return Response({'error': 'FINANCE_SUMMARY is only available through generate-instant.'}, status=400)
 
         from core.models import BackgroundTask
         from .tasks import generate_report_task
@@ -191,6 +196,8 @@ class InstantReportView(APIView):
         school = School.objects.get(id=school_id)
 
         generator = generator_class(school, data.get('parameters', {}))
+        # Generators that read live data as the caller (FINANCE_SUMMARY) apply the caller's role rules.
+        generator.request = request
         try:
             pdf_bytes = generator.generate(format='PDF')
         except Exception as e:

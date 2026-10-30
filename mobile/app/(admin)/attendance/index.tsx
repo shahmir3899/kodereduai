@@ -21,7 +21,7 @@ export default function AttendanceHub() {
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       {items.map((it) => (
-        <TouchableOpacity key={it.title} disabled={!it.route} onPress={() => it.route && router.push(it.route as Href)}>
+        <TouchableOpacity accessibilityRole="button" key={it.title} disabled={!it.route} onPress={() => it.route && router.push(it.route as Href)}>
           <Card style={styles.card}>
             <Text style={styles.title}>{it.title}</Text>
             <Text style={styles.body}>{it.body}</Text>

@@ -1,3 +1,4 @@
+import { DEFAULT_SCHOOL_TIME_ZONE, TIME_ZONE_CHOICES } from '../utils/schoolTime'
 import { useState } from 'react'
 import Field from '../components/ui/Field'
 import { TONE } from '../components/ui/statusTones'
@@ -21,7 +22,7 @@ import { useViewPreference } from '../hooks/useViewPreference'
 
 export default function SettingsPage() {
   const queryClient = useQueryClient()
-  const { isSchoolAdmin, isSuperAdmin, getAllowableRoles } = useAuth()
+  const { isSchoolAdmin, isSuperAdmin, getAllowableRoles, refreshUser } = useAuth()
   const { confirm, ConfirmModalRoot } = useConfirmModal()
   const { showError, showSuccess } = useToast()
   const { validate: validatePassword } = usePasswordPolicy()
@@ -95,6 +96,17 @@ export default function SettingsPage() {
   })
 
   const [commentDraft, setCommentDraft] = useState(null)
+  const timeZoneMutation = useMutation({
+    mutationFn: (zone) => schoolsApi.updateTimeZone(zone),
+    onSuccess: async () => {
+      // The login payload carries the zone every page reads "today" from.
+      await refreshUser?.()
+      queryClient.invalidateQueries({ queryKey: ['currentSchool'] })
+      showSuccess('Time zone updated')
+    },
+    onError: (err) => showError(err.response?.data?.error || 'Could not change the time zone'),
+  })
+
   const examConfigMutation = useMutation({
     mutationFn: (data) => schoolsApi.updateExamConfig(data),
     onSuccess: (_res, vars) => {
@@ -327,6 +339,25 @@ export default function SettingsPage() {
                   {school.address && (
                     <div className="sm:col-span-2"><span className="text-gray-500">Address:</span> <span className="font-medium">{school.address}</span></div>
                   )}
+                  <div className="sm:col-span-2 flex flex-wrap items-center gap-2">
+                    <label htmlFor="school-time-zone" className="text-gray-500">Time zone:</label>
+                    {isSchoolAdmin && !isSuperAdmin ? (
+                      <select
+                        id="school-time-zone"
+                        className="text-sm border-gray-300 rounded-lg"
+                        value={school.timezone || DEFAULT_SCHOOL_TIME_ZONE}
+                        disabled={timeZoneMutation.isPending}
+                        onChange={(e) => timeZoneMutation.mutate(e.target.value)}
+                      >
+                        {[...new Set([school.timezone || DEFAULT_SCHOOL_TIME_ZONE, ...TIME_ZONE_CHOICES])].map((zone) => (
+                          <option key={zone} value={zone}>{zone}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <span className="font-medium">{school.timezone || DEFAULT_SCHOOL_TIME_ZONE}</span>
+                    )}
+                    <span className="text-xs text-gray-400">Dates such as "today" follow this clock.</span>
+                  </div>
                 </div>
               </div>
 

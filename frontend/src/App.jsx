@@ -2,7 +2,7 @@ import { Component, lazy, Suspense, useEffect } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuth } from './contexts/AuthContext'
 import AccessRestrictedRedirect from './components/AccessRestrictedRedirect'
-import { canAccessFinanceRoute, canAccessManagementRoute, canAccessInventoryRoute } from './utils/accessPolicies'
+import { canAccessFinanceRoute, canAccessManagementRoute, canAccessInventoryRoute, canAccessPromotionRoute, canAccessLmsRoute } from './utils/accessPolicies'
 
 // Components (kept eager - needed for app shell)
 import Layout from './components/Layout'
@@ -249,6 +249,13 @@ function ParentRoute({ children }) {
   return children
 }
 
+// Guard: the notifications page is the one school route that parents and students may open too (Inbox tab only)
+function InboxRoute({ children }) {
+  const { isSuperAdmin } = useAuth()
+  if (isSuperAdmin) return <Navigate to="/admin" replace />
+  return children
+}
+
 // Guard: redirect SuperAdmin away from school-internal routes
 function SchoolRoute({ children }) {
   const { isSuperAdmin, isParent, isStudent } = useAuth()
@@ -373,6 +380,34 @@ function ManagementRoute({ teacherAllowed = false, children }) {
         message={effectiveRole === 'TEACHER'
           ? 'Teachers can only access their class and student views.'
           : 'Staff users cannot access management pages.'}
+      />
+    )
+  }
+  return children
+}
+
+function PromotionRoute({ children }) {
+  const { effectiveRole } = useAuth()
+  if (!canAccessPromotionRoute(effectiveRole)) {
+    return (
+      <AccessRestrictedRedirect
+        to={effectiveRole === 'TEACHER' ? '/classes' : '/dashboard'}
+        title="Access Restricted"
+        message="Promotion is run by School Admins, Principals and Managers."
+      />
+    )
+  }
+  return children
+}
+
+function LmsRoute({ children }) {
+  const { effectiveRole } = useAuth()
+  if (!canAccessLmsRoute(effectiveRole)) {
+    return (
+      <AccessRestrictedRedirect
+        to="/dashboard"
+        title="Access Restricted"
+        message="This page is not available for your role."
       />
     )
   }
@@ -573,7 +608,7 @@ function App() {
             <Route path="academics/academic-risk" element={<SchoolRoute><ModuleRoute module="examinations"><AdminPrincipalRoute><AcademicRiskPage /></AdminPrincipalRoute></ModuleRoute></SchoolRoute>} />
             <Route path="academics/calendar" element={<SchoolRoute><ModuleRoute module="academics"><ManagementRoute><AcademicCalendarPage /></ManagementRoute></ModuleRoute></SchoolRoute>} />
             <Route path="academics/sessions" element={<SchoolRoute><ModuleRoute module="academics"><ManagementRoute><AcademicYearsPage /></ManagementRoute></ModuleRoute></SchoolRoute>} />
-            <Route path="academics/promotion" element={<SchoolRoute><ModuleRoute module="academics"><ManagementRoute><PromotionPage /></ManagementRoute></ModuleRoute></SchoolRoute>} />
+            <Route path="academics/promotion" element={<SchoolRoute><ModuleRoute module="academics"><PromotionRoute><PromotionPage /></PromotionRoute></ModuleRoute></SchoolRoute>} />
             <Route path="assessments" element={<SchoolRoute><ModuleRoute module="examinations"><AssessmentAccessRoute><AssessmentsPage /></AssessmentAccessRoute></ModuleRoute></SchoolRoute>} />
             <Route path="academics/exam-types" element={<SchoolRoute><ModuleRoute module="examinations"><AssessmentManageRoute><ExamTypesPage /></AssessmentManageRoute></ModuleRoute></SchoolRoute>} />
             <Route path="academics/exams" element={<SchoolRoute><ModuleRoute module="examinations"><AssessmentManageRoute><ExamsPage /></AssessmentManageRoute></ModuleRoute></SchoolRoute>} />
@@ -597,7 +632,7 @@ function App() {
             <Route path="grades" element={<Navigate to="/classes" replace />} />
 
             {/* Notifications */}
-            <Route path="notifications" element={<SchoolRoute><ModuleRoute module="notifications"><NotificationsPage /></ModuleRoute></SchoolRoute>} />
+            <Route path="notifications" element={<InboxRoute><ModuleRoute module="notifications"><NotificationsPage /></ModuleRoute></InboxRoute>} />
 
             {/* Messaging */}
             <Route path="messages" element={<MessagesPage />} />
@@ -632,10 +667,10 @@ function App() {
             <Route path="parent/payment-result" element={<ParentRoute><PaymentResultPage /></ParentRoute>} />
 
             {/* LMS routes */}
-            <Route path="academics/curriculum" element={<SchoolRoute><ModuleRoute module="lms"><StaffRestrictedRoute><CurriculumPage /></StaffRestrictedRoute></ModuleRoute></SchoolRoute>} />
-            <Route path="academics/lesson-plans" element={<SchoolRoute><ModuleRoute module="lms"><ManagerRestrictedRoute><StaffRestrictedRoute><LessonPlansPage /></StaffRestrictedRoute></ManagerRestrictedRoute></ModuleRoute></SchoolRoute>} />
-            <Route path="academics/assignments" element={<SchoolRoute><ModuleRoute module="lms"><StaffRestrictedRoute><AssignmentsPage /></StaffRestrictedRoute></ModuleRoute></SchoolRoute>} />
-            <Route path="academics/assignments/:id/submissions" element={<SchoolRoute><ModuleRoute module="lms"><StaffRestrictedRoute><SubmissionReviewPage /></StaffRestrictedRoute></ModuleRoute></SchoolRoute>} />
+            <Route path="academics/curriculum" element={<SchoolRoute><ModuleRoute module="lms"><LmsRoute><CurriculumPage /></LmsRoute></ModuleRoute></SchoolRoute>} />
+            <Route path="academics/lesson-plans" element={<SchoolRoute><ModuleRoute module="lms"><ManagerRestrictedRoute><LmsRoute><LessonPlansPage /></LmsRoute></ManagerRestrictedRoute></ModuleRoute></SchoolRoute>} />
+            <Route path="academics/assignments" element={<SchoolRoute><ModuleRoute module="lms"><LmsRoute><AssignmentsPage /></LmsRoute></ModuleRoute></SchoolRoute>} />
+            <Route path="academics/assignments/:id/submissions" element={<SchoolRoute><ModuleRoute module="lms"><LmsRoute><SubmissionReviewPage /></LmsRoute></ModuleRoute></SchoolRoute>} />
 
             {/* Student Portal routes */}
             <Route path="student/dashboard" element={<StudentRoute><StudentDashboard /></StudentRoute>} />

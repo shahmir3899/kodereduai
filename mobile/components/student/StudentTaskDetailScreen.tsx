@@ -13,6 +13,7 @@ import EmptyState from '../ui/EmptyState';
 import { useToast } from '../ui/Toast';
 import { confirm } from '../ui/confirm';
 import { Colors, FontSize, Spacing } from '../../constants/colors';
+import { saveFailureMessage } from '../../services/errorKind';
 
 // One task: instructions, due date, your hand-in and the teacher's feedback. Work is handed in
 // as text and/or a link (the school has no file-upload endpoint yet).
@@ -39,7 +40,7 @@ export default function StudentTaskDetailScreen() {
     if (!yes) return;
     submit.mutateAsync({ id: a.id, body: submissionBody(text, link) })
       .then(() => { toast.success('Submitted.'); router.back(); })
-      .catch((e: any) => toast.error(e?.response?.data?.error || e?.response?.data?.detail || 'Could not submit your work.'));
+      .catch((e: any) => toast.error(e?.response ? e?.response?.data?.error || e?.response?.data?.detail || 'Could not submit your work.' : saveFailureMessage(e)));
   };
 
   return (

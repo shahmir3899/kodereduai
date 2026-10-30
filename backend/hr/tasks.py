@@ -2,6 +2,7 @@
 Background tasks for HR operations.
 """
 
+from django.utils import timezone
 import logging
 from celery import shared_task
 
@@ -24,7 +25,7 @@ def generate_payslips_task(self, school_id, user_id, month, year):
 
         User = get_user_model()
         user = User.objects.get(id=user_id)
-        today = date.today()
+        today = timezone.localdate()
 
         # 1 query: all active staff
         active_staff = list(StaffMember.objects.filter(

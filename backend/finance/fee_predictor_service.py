@@ -3,6 +3,7 @@ AI Fee Collection Predictor Service.
 Predicts which families are likely to default on upcoming fees.
 """
 
+from django.utils import timezone
 import logging
 from collections import defaultdict
 from datetime import date
@@ -63,7 +64,7 @@ class FeeCollectionPredictorService:
         from finance.models import FeePayment
         from students.models import Student
 
-        today = date.today()
+        today = timezone.localdate()
         if not target_month:
             target_month = today.month + 1 if today.month < 12 else 1
         if not target_year:

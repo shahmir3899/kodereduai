@@ -6,6 +6,7 @@ and staff modules to produce a holistic health report for an academic session.
 Optionally generates an AI-powered natural-language summary via Groq LLM.
 """
 
+from django.utils import timezone
 import json
 import logging
 from datetime import date
@@ -168,7 +169,7 @@ class SessionHealthService:
         ) if total_records > 0 else 0
 
         # Current vs previous term comparison
-        today = date.today()
+        today = timezone.localdate()
         terms = Term.objects.filter(
             school_id=self.school_id,
             academic_year=academic_year,
@@ -242,7 +243,7 @@ class SessionHealthService:
         """
         from finance.models import FeePayment, FeeType
 
-        today = date.today()
+        today = timezone.localdate()
         payments = FeePayment.objects.filter(
             school_id=self.school_id,
             academic_year=academic_year,
@@ -455,7 +456,7 @@ class SessionHealthService:
         ) if sa_total > 0 else 0
 
         # Leaves in current term
-        today = date.today()
+        today = timezone.localdate()
         current_term = Term.objects.filter(
             school_id=self.school_id,
             academic_year=academic_year,

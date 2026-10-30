@@ -158,7 +158,7 @@ export default function AssessmentsScreen({ classOptions }: Props) {
           const rated = ratedCount(form);
           const isChanged = changed.includes(item.student);
           return (
-            <TouchableOpacity style={styles.row} onPress={() => setEditing(item.student)}>
+            <TouchableOpacity accessibilityRole="button" style={styles.row} onPress={() => setEditing(item.student)}>
               <View style={styles.who}>
                 <Text style={styles.name} numberOfLines={1}>{item.student_name}</Text>
                 <Text style={styles.sub}>{item.roll_number ? `Roll ${item.roll_number}  ·  ` : ''}{rated}/{TOTAL_RATINGS} rated</Text>
@@ -206,7 +206,7 @@ function Editor({ row, form, canPrincipal, onChange, onClose }: {
           </View>
           <View style={styles.chips}>
             {[1, 2, 3, 4, 5].map((n) => (
-              <TouchableOpacity key={n} style={[styles.chip, form[key] === n && styles.chipOn]}
+              <TouchableOpacity accessibilityRole="button" key={n} style={[styles.chip, form[key] === n && styles.chipOn]}
                 accessibilityLabel={`${label} ${n}`} onPress={() => onChange(toggleRating(form, key, n))}>
                 <Text style={[styles.chipText, form[key] === n && styles.chipTextOn]}>{n}</Text>
               </TouchableOpacity>

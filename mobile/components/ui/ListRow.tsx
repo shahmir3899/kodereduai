@@ -22,7 +22,11 @@ export default function ListRow({ title, subtitle, left, right, onPress }: ListR
       {right ? <View style={styles.right}>{right}</View> : null}
     </View>
   );
-  return onPress ? <TouchableOpacity onPress={onPress}>{body}</TouchableOpacity> : body;
+  return onPress ? (
+    <TouchableOpacity onPress={onPress} accessibilityRole="button" accessibilityLabel={subtitle ? `${title}, ${subtitle}` : title}>
+      {body}
+    </TouchableOpacity>
+  ) : body;
 }
 
 const styles = StyleSheet.create({
@@ -32,6 +36,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surface,
     paddingHorizontal: Spacing.lg,
     paddingVertical: Spacing.md,
+    minHeight: 48,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Colors.border,
   },

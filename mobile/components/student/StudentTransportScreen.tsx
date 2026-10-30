@@ -49,7 +49,7 @@ export function TransportView({ query }: { query: Q<PortalTransport | null> }) {
           <View style={styles.driver}>
             <Text style={styles.meta}>Driver: {t.vehicle.driver_name}</Text>
             {t.vehicle.driver_phone ? (
-              <TouchableOpacity onPress={() => Linking.openURL(`tel:${t.vehicle.driver_phone}`)}>
+              <TouchableOpacity accessibilityRole="button" onPress={() => Linking.openURL(`tel:${t.vehicle.driver_phone}`)}>
                 <Text style={styles.call}>Call {t.vehicle.driver_phone}</Text>
               </TouchableOpacity>
             ) : null}

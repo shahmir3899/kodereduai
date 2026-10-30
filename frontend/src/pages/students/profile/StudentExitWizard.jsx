@@ -1,3 +1,4 @@
+import { schoolToday } from '../../../utils/schoolTime'
 import { useCallback, useMemo, useState } from 'react'
 import Badge from '../../../components/ui/Badge'
 import { TONE } from '../../../components/ui/statusTones'
@@ -11,7 +12,7 @@ import { LeavingConflictNotice } from './StatusUpdateModal'
 
 const STEPS = ['Details', 'Clearance', 'Review']
 const money = (value) => `PKR ${formatMoney(value)}`
-const today = () => new Date().toISOString().slice(0, 10)
+const today = () => schoolToday()
 
 const STATE_STYLES = {
   CLEAR: TONE.success,

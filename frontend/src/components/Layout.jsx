@@ -513,7 +513,9 @@ export default function Layout() {
   }, NAV_ICONS), [effectiveRole, isModuleEnabled, isStaffLevel, isManager, isTeacher, isStaff, isSchoolAdminNav, hasInventoryAssignments])
 
   // SuperAdmin only sees the Admin Panel link — no school-internal nav
-  const visibleNavGroups = isSuperAdmin ? [] : (isParent ? PARENT_NAV_GROUPS : (isStudent ? STUDENT_NAV_GROUPS : navigationGroups))
+  // Portal menus are fixed lists, so the Notifications item follows the school's module switch here (staff menus do it in buildStaffNavigation).
+  const portalNavGroups = (groups) => (isModuleEnabled('notifications') ? groups : groups.filter((g) => g.href !== '/notifications'))
+  const visibleNavGroups = isSuperAdmin ? [] : (isParent ? portalNavGroups(PARENT_NAV_GROUPS) : (isStudent ? portalNavGroups(STUDENT_NAV_GROUPS) : navigationGroups))
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
@@ -774,7 +776,7 @@ export default function Layout() {
       {/* Floating AI Chat widgets - context-specific */}
       {location.pathname.startsWith('/finance') && !isStaffLevel && <FinanceChatWidget />}
       {location.pathname.startsWith('/academics') && <AcademicsChatWidget />}
-      {location.pathname.startsWith('/notifications') && !isStaffLevel && <CommunicationChatWidget />}
+      {location.pathname.startsWith('/notifications') && !isStaffLevel && !isParent && !isStudent && <CommunicationChatWidget />}
     </div>
   )
 }

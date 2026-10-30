@@ -12,6 +12,7 @@ import ErrorState from '../ui/ErrorState';
 import EmptyState from '../ui/EmptyState';
 import { useToast } from '../ui/Toast';
 import { Colors, Spacing } from '../../constants/colors';
+import { saveFailureMessage } from '../../services/errorKind';
 
 // A new conversation. The server decides who a role may write to (Manager: admins and
 // principals); this only shows that list.
@@ -46,7 +47,7 @@ export default function NewMessageScreen() {
         if (id) router.replace({ pathname: `${base}/messages/thread`, params: { id } } as Href);
         else router.back();
       })
-      .catch((e: any) => toast.error(e?.response?.data?.detail || e?.response?.data?.error || 'Could not send the message.'));
+      .catch((e: any) => toast.error(e?.response ? e?.response?.data?.detail || e?.response?.data?.error || 'Could not send the message.' : saveFailureMessage(e)));
   };
 
   return (

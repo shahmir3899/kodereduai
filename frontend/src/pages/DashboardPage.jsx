@@ -1,3 +1,4 @@
+import { schoolToday, schoolYMD } from '../utils/schoolTime'
 import { useState } from 'react'
 import { TONE } from '../components/ui/statusTones'
 import PageHeader from '../components/ui/PageHeader'
@@ -118,9 +119,9 @@ export const icons = {
 export default function DashboardPage({ variant }) {
   const { user, activeSchool, isModuleEnabled, effectiveRole } = useAuth()
   const { activeAcademicYear, currentTerm, hasAcademicYear, loading: academicYearLoading } = useAcademicYear()
-  const today = new Date().toISOString().split('T')[0]
-  const currentMonth = new Date().getMonth() + 1
-  const currentYear = new Date().getFullYear()
+  const today = schoolToday()
+  const currentMonth = schoolYMD().month
+  const currentYear = schoolYMD().year
 
   const isPrincipal = variant === 'principal'
   // Admin/principal summary tiles wait for one combined request instead of firing one call each.

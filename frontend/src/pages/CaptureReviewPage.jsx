@@ -1,3 +1,4 @@
+import { schoolToday } from '../utils/schoolTime'
 import { useState, useCallback, useEffect } from 'react'
 import Modal from '../components/ui/Modal'
 import Field from '../components/ui/Field'
@@ -119,7 +120,7 @@ function UploadTab({ onUploadSuccess }) {
   const queryClient = useQueryClient()
 
   const [selectedClass, setSelectedClass] = useState('')
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0])
+  const [selectedDate, setSelectedDate] = useState(schoolToday())
   const [uploadedFiles, setUploadedFiles] = useState([])
   const [error, setError] = useState('')
   const [uploadStep, setUploadStep] = useState(null)
@@ -334,7 +335,7 @@ function UploadTab({ onUploadSuccess }) {
             )}
           </div>
           <Field label="Date">
-<input type="date" className="input" value={selectedDate} onChange={e => setSelectedDate(e.target.value)} max={new Date().toISOString().split('T')[0]} />
+<input type="date" className="input" value={selectedDate} onChange={e => setSelectedDate(e.target.value)} max={schoolToday()} />
 </Field>
         </div>
 

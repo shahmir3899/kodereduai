@@ -201,6 +201,7 @@ def portal_exam_results(student, segments=None):
             'subject': mark.exam_subject.subject.name,
             'marks_obtained': float(mark.marks_obtained) if mark.marks_obtained is not None else None,
             'total_marks': float(mark.exam_subject.total_marks) if mark.exam_subject.total_marks else None,
+            'passing_marks': float(mark.exam_subject.passing_marks) if mark.exam_subject.passing_marks is not None else None,
             'is_absent': mark.is_absent,
             'remarks': mark.remarks,
         })
@@ -239,6 +240,7 @@ def exam_groups(student, segments=None):
             'subject': mark.exam_subject.subject.name,
             'marks_obtained': float(mark.marks_obtained) if mark.marks_obtained is not None else None,
             'total_marks': float(mark.exam_subject.total_marks) if mark.exam_subject.total_marks else None,
+            'passing_marks': float(mark.exam_subject.passing_marks) if mark.exam_subject.passing_marks is not None else None,
             'percentage': round(pct, 1) if pct is not None else None,
             'grade': GradeScale.grade_for(pct, scales[mark.school_id]) if pct is not None else None,
             'is_absent': mark.is_absent,

@@ -104,7 +104,8 @@ Already fixed along the way: two annual-fee tests in `tests/test_fee_types.py` (
 - `attendance/services.py` (parked OCR matching, deprecated WhatsApp alerts) still reads the snapshot. Nothing live imports it.
 - **Manual attendance entry lists withdrawn students** (`ManualEntryPage.jsx` → `/api/sessions/enrollments/`, no active/left-date filter). Found 2026-09-25: Rayyan Abbas (Focus Branch 1, withdrew 1 Sep 2026) is offered for marking on 25 Sep. The register only includes him through September, the month he left.
 - **Exam results vs marks entry disagree for students who left mid-month.** The results roster uses month-precision cutoffs, so Rayyan (left 1 Sep) is in the results for "1st Term Exam 2026-27 - Class 1" (started 14 Sep), with 6 blank or absent marks. The Marks Entry list (`is_active=true`) excludes him. Decide whether exam rosters should drop students whose `left_date` falls before the exam start date.
-- **Marks Entry page ignores sections**: it lists students with `class_id` (master class) + year, so a section-only exam's grid shows every section's students.
+- **Marks Entry page ignores sections**: it lists students with `class_id` (master class) + year, so a section-only exam's grid shows every section's students.
+
 - **Web "Record Payment" modal can set the wrong total on a part-paid fee** (`FeeCollectPage.jsx` `handleRecordPayment` / `handleOpenPayment`). Found 2026-10-28 while building the mobile screen. The modal pre-fills "Amount" with the balance (`amount_due - amount_paid`) and sends it as `amount_paid`, but the API stores `amount_paid` as the running TOTAL received (`FeePaymentViewSet.perform_update`, `FeePaymentUpdateSerializer`). For an unpaid fee the two are the same. For a part-paid one (due 1000, paid 300, balance 700) it saves 700 as the new total instead of 1000. Needs a decision (treat the field as an instalment and add it to `amount_paid`, as the mobile app does). Not fixed in the web app. Verify against real data before changing.
 
 ## Full-suite baseline 2026-10-10: one line per failing test
@@ -366,7 +367,28 @@ Notes: the `test_*.py` scripts in the backend root (`test_phase1.py`, `test_audi
 
 
 ## Found while building the mobile Parent app (2026-10-28, not fixed)
-- **Web parent Messages compose is wrong.** `ParentMessages.jsx` sends `recipient_id` as free text, but `ParentMessageViewSet.send_message` needs `recipient_user` and `student`. It also reads `/api/parents/messages`, a different store from `/api/messaging`, which teachers and admins use (and whose parent recipients are the child's teachers). Mobile parents use `/api/messaging`. Decide whether to retire the old parent messages endpoints or point the web at `/api/messaging`.
-- **Attendance rate differs by endpoint.** `parents/overview.attendance_summary` computes present / total; the student portal summary and the mobile month view count leave as attended ((present + leave) / total).
+- **Web parent Messages compose is wrong. FIXED 2026-10-28:** the page now uses `/api/messaging` (recipient picker from `/messaging/recipients/`, reply, mark read), as does the dashboard unread badge. The old `/api/parents/messages` endpoints are left in place and unused; retire them when convenient.
+  (original note:) `ParentMessages.jsx` sends `recipient_id` as free text, but `ParentMessageViewSet.send_message` needs `recipient_user` and `student`. It also reads `/api/parents/messages`, a different store from `/api/messaging`, which teachers and admins use (and whose parent recipients are the child's teachers). Mobile parents use `/api/messaging`. Decide whether to retire the old parent messages endpoints or point the web at `/api/messaging`.
+- **Attendance rate differs by endpoint. FIXED 2026-10-28:** `parents/overview.attendance_summary` now counts leave as attended, like the student portal.
+  (original note:) `parents/overview.attendance_summary` computes present / total; the student portal summary and the mobile month view count leave as attended ((present + leave) / total).
 - **Push deep links are unused.** The mobile tap handler reads `data.screen`, but no backend notification sets a `screen` field.
 - **Push token is unregistered after logout clears the session**, so the call is likely unauthenticated (mobile `NotificationContext`). Check in release hardening.
+
+## Found while building the mobile Accountant/Staff apps (2026-10-28, not fixed)
+- **Web shows the accountant "Collect Payments" and the finance quick actions, but every write returns 403.** `FinanceRoleAccessPermission` allows ACCOUNTANT only `GET/HEAD/OPTIONS`. Either hide those controls on the web or allow ACCOUNTANT to write `FeePaymentViewSet` (a backend decision). Mobile shows the accountant a read-only finance suite.
+- **Web sidebar shows accountants and staff groups they cannot use.** Academics, Management, Transport and Library are gated on `!isStaff` / `!isManager`, so ACCOUNTANT sees them (and STAFF sees Transport and Library). The accountant also has no HR self-service link although `HR_SELF_SERVICE_ROLES` allows it.
+- **Web has no payslip page for staff.** Only the staff dashboard lists the last three. Mobile adds My Payslips (own record, read-only).
+
+
+## Found while checking mobile list performance (2026-10-28, not fixed)
+- **Legacy admin lists show only the first page (20 rows).** `(admin)/hostel/gate-passes`, `(admin)/transport/index` (routes), `(admin)/hr/leave-approvals` and `(admin)/inbox` fetch once with no paging, so rows past the first page never appear. Move them onto `useScopedPagedQuery` + `FlatList` like the students list. (`(admin)/hr/staff` was fixed the same way in step 5.)
+- **Phase 7 bug fixed in 9.1:** the accountant app read `balance` from `accounts/balances/`, but the endpoint sends `net_balance`, so total balance showed 0. Now reads `net_balance` first.
+- **Web finance export changed (9.1):** the Finance Dashboard PDF is now the server's FINANCE_SUMMARY report. Multi-school admins previously got a combined total with no account table; they now get the active school's report. Not run in a browser (frontend deps are not installed here); the vitest export-lazy-loading test entry for the removed file was dropped.
+
+## Found while building mobile Admissions (2026-10-29)
+- **Fixed on the server (uncommitted):** notes could be filed on another school's enquiry (URL id trusted), and `conversion-likelihood/` was readable by any staff role with the module off. See `tests/test_admissions_hardening.py`.
+- **Web has no notes or call-log UI** and no follow-up filter; the notes endpoint was never exercised from the web (the old serializer made `enquiry` a required body field).
+- **Web enquiry form cannot clear a grade or follow-up date** (it drops blank values from the PATCH). Mobile sends null to clear them.
+- **Not fixed:** `AdmissionNote.note_type` is client-writable, so a user could post `SYSTEM` or `STATUS_CHANGE` lines; the phone only sends `NOTE` or `CALL`. The followups endpoints use `date.today()` while the likelihood service uses `timezone.localdate()` (can differ around midnight).
+- **Still allowed by the server:** editing or deleting a CONVERTED enquiry (the web and the phone hide both).
+

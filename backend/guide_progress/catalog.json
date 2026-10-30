@@ -583,7 +583,15 @@
       "id": "ch13-viewing-notifications-all-users",
       "section": "13.1",
       "module": "notifications",
-      "roles": []
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL",
+        "MANAGER",
+        "ACCOUNTANT",
+        "TEACHER",
+        "STAFF",
+        "DRIVER"
+      ]
     },
     {
       "id": "ch13-creating-notification-templates-admin",
@@ -607,13 +615,29 @@
       "id": "ch14-starting-a-new-conversation",
       "section": "14.3",
       "module": null,
-      "roles": []
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL",
+        "MANAGER",
+        "ACCOUNTANT",
+        "TEACHER",
+        "STAFF",
+        "DRIVER"
+      ]
     },
     {
       "id": "ch14-replying-to-messages",
       "section": "14.4",
       "module": null,
-      "roles": []
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL",
+        "MANAGER",
+        "ACCOUNTANT",
+        "TEACHER",
+        "STAFF",
+        "DRIVER"
+      ]
     },
     {
       "id": "ch15-viewing-childs-information",

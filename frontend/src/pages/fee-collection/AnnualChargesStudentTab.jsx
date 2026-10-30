@@ -1,3 +1,4 @@
+import { schoolToday } from '../../utils/schoolTime'
 import { useState, useEffect, useMemo } from 'react'
 import Button from '../../components/ui/Button'
 import EmptyState from '../../components/ui/EmptyState'
@@ -27,7 +28,7 @@ export default function AnnualChargesStudentTab() {
   const [localEdits, setLocalEdits] = useState({})
   const [showConfirm, setShowConfirm] = useState(false)
   const [studentEditMode, setStudentEditMode] = useState(false)
-  const [effectiveFrom, setEffectiveFrom] = useState(new Date().toISOString().split('T')[0])
+  const [effectiveFrom, setEffectiveFrom] = useState(schoolToday())
 
   const { sessionClasses } = useSessionClasses(activeAcademicYear?.id, activeSchool?.id)
   const resolvedStudentClassId = resolveClassIdToMasterClassId(studentClassId, activeAcademicYear?.id, sessionClasses)

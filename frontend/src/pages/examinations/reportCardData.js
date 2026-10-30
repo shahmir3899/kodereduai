@@ -1,3 +1,4 @@
+import { schoolToday } from '../../utils/schoolTime'
 export const DEFAULT_SIGNATURE_LABELS = {
   class_teacher: 'Class Teacher',
   principal: 'Principal',
@@ -92,7 +93,7 @@ export async function buildReportData({ report, schoolData, logoCache }) {
       status: report.promotion_status || 'NOT_APPLICABLE',
     },
     // Defaults to the day the PDF is generated until someone sets a date on the page.
-    issueDate: report.issue_date || new Date().toISOString().slice(0, 10),
+    issueDate: report.issue_date || schoolToday(),
     signatureLabels: { ...DEFAULT_SIGNATURE_LABELS, ...(report.signature_labels || {}) },
   }
 }

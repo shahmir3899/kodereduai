@@ -241,7 +241,7 @@ export default function FaceEnrollment() {
             {photo ? (
               <View style={styles.photoPreview}>
                 <Image source={{ uri: photo }} style={styles.previewImage} />
-                <TouchableOpacity onPress={() => setPhoto(null)} style={styles.removePhoto}>
+                <TouchableOpacity accessibilityRole="button" onPress={() => setPhoto(null)} style={styles.removePhoto}>
                   <Text style={styles.removePhotoText}>✕</Text>
                 </TouchableOpacity>
               </View>
@@ -297,7 +297,7 @@ export default function FaceEnrollment() {
                       />
                     </View>
                   </View>
-                  <TouchableOpacity
+                  <TouchableOpacity accessibilityRole="button"
                     onPress={() => handleDelete(enr.id)}
                     style={styles.deleteBtn}
                   >

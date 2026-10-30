@@ -24,7 +24,7 @@ export default function NotificationItem({
   const timeAgo = getTimeAgo(created_at);
 
   return (
-    <TouchableOpacity
+    <TouchableOpacity accessibilityRole="button"
       style={[styles.container, !is_read && styles.unread]}
       onPress={() => onPress?.(id)}
       activeOpacity={0.7}

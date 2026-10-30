@@ -19,7 +19,7 @@ export default function MoreScreen() {
       </View>
       <NavGroupList groups={groups} />
       <View style={styles.group}>
-        <TouchableOpacity style={styles.row} onPress={auth.logout}>
+        <TouchableOpacity accessibilityRole="button" style={styles.row} onPress={auth.logout}>
           <Text style={[styles.rowText, { color: Colors.error }]}>Log out</Text>
         </TouchableOpacity>
       </View>

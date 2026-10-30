@@ -1,3 +1,4 @@
+import { schoolNowDate, schoolToday } from '../../utils/schoolTime'
 import { useState, useEffect, useMemo } from 'react'
 import PageHeader from '../../components/ui/PageHeader'
 import { useSearchParams } from 'react-router-dom'
@@ -34,7 +35,7 @@ export default function FeeCollectPage() {
   const canManageFeeRecords = isSuperAdmin || isSchoolAdmin || isPrincipal
   const canWrite = canManageFeeRecords || effectiveRole === 'TEACHER'
   const isTeacher = effectiveRole === 'TEACHER'
-  const now = new Date()
+  const now = schoolNowDate()
   const [searchParams] = useSearchParams()
 
   // Filter state — initialize from URL params if present
@@ -66,7 +67,7 @@ export default function FeeCollectPage() {
   // Form state
   const [paymentForm, setPaymentForm] = useState({
     amount_paid: '', payment_method: 'CASH', receipt_number: '', notes: '',
-    payment_date: new Date().toISOString().split('T')[0], account: ''
+    payment_date: schoolToday(), account: ''
   })
 
   // Selection state
@@ -147,7 +148,7 @@ export default function FeeCollectPage() {
     data.paymentMutation.mutate({ id: showPaymentModal.id, data: formData }, {
       onSuccess: () => {
         setShowPaymentModal(null)
-        setPaymentForm({ amount_paid: '', payment_method: 'CASH', receipt_number: '', notes: '', payment_date: new Date().toISOString().split('T')[0], account: '' })
+        setPaymentForm({ amount_paid: '', payment_method: 'CASH', receipt_number: '', notes: '', payment_date: schoolToday(), account: '' })
       },
     })
   }
@@ -176,7 +177,7 @@ export default function FeeCollectPage() {
       }
       return
     }
-    const today = new Date().toISOString().split('T')[0]
+    const today = schoolToday()
     data.paymentMutation.mutate({ id, data: { [field]: parsedValue, payment_date: payment?.payment_date || today, ...(payment?.account && { account: payment.account }) } })
     setEditingCell(null)
   }
@@ -201,7 +202,7 @@ export default function FeeCollectPage() {
   }
 
   const handleBulkUpdate = (amount, accountId, paymentMethod = 'CASH') => {
-    const today = new Date().toISOString().split('T')[0]
+    const today = schoolToday()
     const records = [...selectedIds].map(id => ({
       id, amount_paid: amount,
       payment_date: today,

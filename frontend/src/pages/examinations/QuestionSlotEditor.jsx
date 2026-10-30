@@ -1,3 +1,4 @@
+import { getSchoolTimeZone } from '../../utils/schoolTime'
 import { Fragment, useMemo, useState } from 'react'
 import Field from '../../components/ui/Field'
 import Button from '../../components/ui/Button'
@@ -86,7 +87,7 @@ export default function QuestionSlotEditor({
   const saveStateLabel = useMemo(() => {
     if (isLoading || saveState === 'saving') return 'Saving...'
     if (saveState === 'saved' && lastSavedAt) {
-      return `Saved ${new Date(lastSavedAt).toLocaleTimeString()}`
+      return `Saved ${new Date(lastSavedAt).toLocaleTimeString(undefined, { timeZone: getSchoolTimeZone() })}`
     }
     if (saveState === 'error') return 'Save failed'
     return draftReady ? 'Draft ready' : 'Draft not created yet'

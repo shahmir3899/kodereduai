@@ -1,6 +1,6 @@
 import React from 'react';
-import ComingSoon from '../../components/nav/ComingSoon';
+import StaffHome from '../../components/hr/StaffHome';
 
 export default function Screen() {
-  return <ComingSoon title="Home" />;
+  return <StaffHome />;
 }

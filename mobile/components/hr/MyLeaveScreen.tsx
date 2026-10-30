@@ -112,7 +112,7 @@ export default function MyLeaveScreen() {
             {a.reason ? <Text style={styles.reason}>{a.reason}</Text> : null}
             {a.admin_remarks ? <Text style={styles.remarks}>Admin: {a.admin_remarks}</Text> : null}
             {canCancelLeave(a) ? (
-              <TouchableOpacity onPress={() => cancel(a.id)} disabled={actions.cancel.isPending}>
+              <TouchableOpacity accessibilityRole="button" onPress={() => cancel(a.id)} disabled={actions.cancel.isPending}>
                 <Text style={styles.cancel}>Cancel</Text>
               </TouchableOpacity>
             ) : null}

@@ -103,11 +103,11 @@ export default function AttendanceRegisterScreen({ classOptions }: Props) {
         placeholder="Select a class"
       />
       <View style={styles.stepper}>
-        <TouchableOpacity hitSlop={10} onPress={() => setYm(stepMonth(ym.year, ym.month0, -1, current))}>
+        <TouchableOpacity accessibilityRole="button" hitSlop={10} onPress={() => setYm(stepMonth(ym.year, ym.month0, -1, current))}>
           <Text style={styles.step}>‹</Text>
         </TouchableOpacity>
         <Text style={styles.month}>{monthLabel(ym.year, ym.month0)}</Text>
-        <TouchableOpacity hitSlop={10} disabled={atCurrent} onPress={() => setYm(stepMonth(ym.year, ym.month0, 1, current))}>
+        <TouchableOpacity accessibilityRole="button" hitSlop={10} disabled={atCurrent} onPress={() => setYm(stepMonth(ym.year, ym.month0, 1, current))}>
           <Text style={[styles.step, atCurrent && styles.stepOff]}>›</Text>
         </TouchableOpacity>
       </View>
@@ -135,7 +135,7 @@ export default function AttendanceRegisterScreen({ classOptions }: Props) {
             : <EmptyState title="No students" message="No students are enrolled in this class for this month." />
         }
         renderItem={({ item }) => (
-          <TouchableOpacity style={styles.row} onPress={() => setOpenStudent(item)}>
+          <TouchableOpacity accessibilityRole="button" style={styles.row} onPress={() => setOpenStudent(item)}>
             <View style={styles.who}>
               <Text style={styles.name} numberOfLines={1}>{item.name}</Text>
               <Text style={styles.sub}>

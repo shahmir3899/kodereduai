@@ -269,7 +269,7 @@ export default function FaceAttendanceReview() {
             Class Roll ({presentIds.size}/{session.class_students.length} present)
           </Text>
           {session.class_students.map((student) => (
-            <TouchableOpacity
+            <TouchableOpacity accessibilityRole="button"
               key={student.id}
               style={[
                 styles.studentRow,

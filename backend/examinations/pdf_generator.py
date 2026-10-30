@@ -9,6 +9,7 @@ the shared layout plan in paper_export_layout.py in the classic school-paper for
 lines, deterministic matching-table shuffle) -- kept consistent with the DOCX export.
 """
 
+from django.utils import timezone
 import io
 import logging
 from datetime import datetime
@@ -348,7 +349,7 @@ class ExamPaperPDFGenerator:
             textColor=colors.HexColor('#9CA3AF')
         )
 
-        footer_text = f"Generated on {datetime.now().strftime('%d %B %Y')} | {self.school.name}"
+        footer_text = f"Generated on {timezone.localtime().strftime('%d %B %Y')} | {self.school.name}"
         if self.exam_paper.generated_by:
             footer_text += f" | Prepared by: {self.exam_paper.generated_by.get_full_name() or self.exam_paper.generated_by.username}"
 
@@ -884,7 +885,7 @@ class WorksheetPDFGenerator(ExamPaperPDFGenerator):
                     Paragraph, Spacer, Table, TableStyle, Image, colors, inch, show_marks=False,
                 ))
 
-        footer_text = f"Generated on {datetime.now().strftime('%d %B %Y')} | {self.school.name}"
+        footer_text = f"Generated on {timezone.localtime().strftime('%d %B %Y')} | {self.school.name}"
         elements.append(Spacer(1, 16))
         elements.append(Paragraph(footer_text, ParagraphStyle(
             'Footer', parent=styles['Normal'], fontSize=8, alignment=TA_CENTER,

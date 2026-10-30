@@ -18,7 +18,7 @@ export default function ChildCard({ child }: { child: ChildLink }) {
   const rate = o?.attendance_summary.attendance_rate;
 
   return (
-    <TouchableOpacity onPress={() => router.push(`/(parent)/children/${child.student}` as Href)}>
+    <TouchableOpacity accessibilityRole="button" onPress={() => router.push(`/(parent)/children/${child.student}` as Href)}>
       <Card style={styles.card}>
         <View style={styles.top}>
           <View style={styles.avatar}><Text style={styles.avatarText}>{(child.student_name || '?').charAt(0).toUpperCase()}</Text></View>

@@ -1,3 +1,4 @@
+import { getSchoolTimeZone } from '../../utils/schoolTime'
 import React, { useState, useEffect, useRef } from 'react'
 import { TONE } from '../../components/ui/statusTones'
 import PageHeader from '../../components/ui/PageHeader'
@@ -91,7 +92,7 @@ function CommentRow({ label, text, source, at, model, onSave, onRegenerate }) {
         )}
         {text && at && (
           <span className="text-[10px] text-gray-400">
-            {source === 'EDITED' ? 'edited' : 'generated'} {new Date(at).toLocaleString(undefined, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+            {source === 'EDITED' ? 'edited' : 'generated'} {new Date(at).toLocaleString(undefined, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: getSchoolTimeZone() })}
             {source === 'AI' && model ? ` · ${model}` : ''}
           </span>
         )}

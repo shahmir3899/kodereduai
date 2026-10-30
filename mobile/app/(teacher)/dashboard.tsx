@@ -120,7 +120,7 @@ export default function TeacherDashboard() {
         <Card style={styles.clear}><Text style={styles.clearText}>All clear. Nothing needs attention.</Text></Card>
       ) : (
         attention.map((it) => (
-          <TouchableOpacity key={it.key} disabled={!it.href} onPress={() => go(it.href)}>
+          <TouchableOpacity accessibilityRole="button" key={it.key} disabled={!it.href} onPress={() => go(it.href)}>
             <Card style={styles.attention}>
               <Text style={[styles.attCount, { color: TONE_COLOR[it.tone] }]}>{it.count}</Text>
               <Text style={styles.attLabel}>{it.label}</Text>
@@ -161,7 +161,7 @@ export default function TeacherDashboard() {
             const row = rows.find((r) => r.assignment.id === a.id);
             const pending = row ? isPending(row) : false;
             return (
-              <TouchableOpacity key={a.id} disabled={!attendanceRoute} onPress={() => go(attendanceRoute, { class: attendanceClassId(a) })}>
+              <TouchableOpacity accessibilityRole="button" key={a.id} disabled={!attendanceRoute} onPress={() => go(attendanceRoute, { class: attendanceClassId(a) })}>
                 <Card style={styles.section2}>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.subject}>{assignmentLabel(a)}</Text>
@@ -227,7 +227,7 @@ export default function TeacherDashboard() {
       <Text style={styles.section}>Quick actions</Text>
       <View style={styles.actions}>
         {quick.map((a) => (
-          <TouchableOpacity key={a.label} style={[styles.quick, !a.route && styles.quickOff]} disabled={!a.route} onPress={() => go(a.route)}>
+          <TouchableOpacity accessibilityRole="button" key={a.label} style={[styles.quick, !a.route && styles.quickOff]} disabled={!a.route} onPress={() => go(a.route)}>
             <Text style={styles.quickIcon}>{a.icon}</Text>
             <Text style={styles.quickLabel}>{a.label}</Text>
           </TouchableOpacity>
@@ -249,7 +249,7 @@ function Hero({ tone, eyebrow, title, subtitle, action }: {
       <Text style={styles.heroTitle}>{title}</Text>
       {subtitle ? <Text style={styles.heroSub}>{subtitle}</Text> : null}
       {action ? (
-        <TouchableOpacity style={[styles.heroBtn, { backgroundColor: fg }]} onPress={action.onPress}>
+        <TouchableOpacity accessibilityRole="button" style={[styles.heroBtn, { backgroundColor: fg }]} onPress={action.onPress}>
           <Text style={styles.heroBtnText}>{action.label}</Text>
         </TouchableOpacity>
       ) : null}

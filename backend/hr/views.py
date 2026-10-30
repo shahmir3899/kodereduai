@@ -2,6 +2,7 @@
 HR & Staff Management views.
 """
 
+from django.utils import timezone
 import logging
 import uuid
 from datetime import date, timedelta
@@ -475,12 +476,19 @@ class StaffMemberViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelV
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # Ensure same school
-        if user.school_id and user.school_id != staff.school_id:
+        # The user must belong to this staff member's school: an active membership there (or the
+        # legacy school field). The old check only compared user.school_id when it was set, so
+        # a user who is a member of another school but has no school field slipped through, and a
+        # link never gave the person access to the school it was meant for.
+        if user.is_super_admin or staff.school_id not in user.get_accessible_school_ids():
             return Response(
-                {'error': 'User belongs to a different school.'},
+                {'error': "This user does not belong to this staff member's school."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+
+        if not user.school_id:
+            user.school_id = staff.school_id
+            user.save(update_fields=['school'])
 
         staff.user = user
         staff.save(update_fields=['user'])
@@ -717,7 +725,7 @@ class StaffMemberViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelV
             return Response({'detail': 'No school selected.'}, status=400)
 
         staff_qs = StaffMember.objects.filter(school_id=school_id)
-        today = date.today()
+        today = timezone.localdate()
         thirty_days_ago = today - timedelta(days=30)
 
         staff_counts = staff_qs.aggregate(
@@ -874,7 +882,7 @@ class SalaryStructureViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Mo
             return Response({'detail': 'staff_member query param required.'}, status=400)
 
         school_id = _resolve_school_id(request)
-        today = date.today()
+        today = timezone.localdate()
         # Not routed through get_queryset, so the own-record rule is applied here too.
         own = SalaryStructure.objects.all()
         if is_own_only(request):
@@ -1056,7 +1064,7 @@ class PayslipViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
         except (TypeError, ValueError):
             months_back = 6
 
-        today = date.today()
+        today = timezone.localdate()
         try:
             end_month = int(request.query_params.get('month', today.month))
             end_year = int(request.query_params.get('year', today.year))
@@ -1116,7 +1124,7 @@ class PayslipViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
                 status=400,
             )
         payslip.status = 'PAID'
-        payslip.payment_date = request.data.get('payment_date', date.today())
+        payslip.payment_date = request.data.get('payment_date', timezone.localdate())
         payslip.save()
         return Response(PayslipSerializer(payslip).data)
 
@@ -1133,8 +1141,8 @@ class PayslipViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
         if not school_id:
             return Response({'detail': 'No school selected.'}, status=400)
 
-        month = request.query_params.get('month', date.today().month)
-        year = request.query_params.get('year', date.today().year)
+        month = request.query_params.get('month', timezone.localdate().month)
+        year = request.query_params.get('year', timezone.localdate().year)
 
         payslips = Payslip.objects.filter(
             school_id=school_id, month=int(month), year=int(year),
@@ -1301,7 +1309,7 @@ class PayslipViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
 
         # Footer
         pdf.set_font('Helvetica', 'I', 8)
-        pdf.cell(0, 5, f'Generated on {datetime.now().strftime("%d %B %Y at %I:%M %p")}', ln=True, align='C')
+        pdf.cell(0, 5, f'Generated on {timezone.localtime().strftime("%d %B %Y at %I:%M %p")}', ln=True, align='C')
 
         staff_name = staff.full_name.replace(' ', '_')
         filename = f"payslip_{staff_name}_{payslip.month}_{payslip.year}.pdf"
@@ -1527,7 +1535,7 @@ class LeaveApplicationViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.M
             if not owns_record:
                 return Response({'detail': 'You can only view your own leave balance.'}, status=403)
 
-        current_year = date.today().year
+        current_year = timezone.localdate().year
         policies = LeavePolicy.objects.filter(school_id=school_id, is_active=True)
 
         balances = []

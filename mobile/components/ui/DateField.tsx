@@ -34,13 +34,16 @@ export default function DateField({ label, value, onChange, placeholder = 'Selec
   return (
     <View style={styles.wrap}>
       {label ? <Text style={styles.label}>{label}</Text> : null}
-      <TouchableOpacity style={[styles.field, error ? styles.fieldError : null]} onPress={() => setOpen((o) => !o)}>
+      <TouchableOpacity style={[styles.field, error ? styles.fieldError : null]} onPress={() => setOpen((o) => !o)}
+        accessibilityRole="button"
+        accessibilityLabel={`${label ?? 'Date'}: ${value ? format(parse(value), 'dd MMMM yyyy') : placeholder}`}
+        accessibilityHint="Opens a date picker">
         <Text style={value ? styles.value : styles.placeholder}>
           {value ? format(parse(value), 'dd MMM yyyy') : placeholder}
         </Text>
-        <Text style={styles.icon}>📅</Text>
+        <Text style={styles.icon} accessible={false}>📅</Text>
       </TouchableOpacity>
-      {error ? <Text style={styles.error}>{error}</Text> : null}
+      {error ? <Text style={styles.error} accessibilityRole="alert">{error}</Text> : null}
       {open ? (
         <DateTimePicker
           value={value ? parse(value) : new Date()}

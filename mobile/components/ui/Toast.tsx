@@ -39,7 +39,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     <ToastContext.Provider value={api}>
       {children}
       {toast ? (
-        <Animated.View pointerEvents="none" style={[styles.toast, { backgroundColor: BG[toast.kind], opacity }]}>
+        <Animated.View pointerEvents="none" accessibilityRole="alert" accessibilityLiveRegion="polite" style={[styles.toast, { backgroundColor: BG[toast.kind], opacity }]}>
           <Text style={styles.text}>{toast.message}</Text>
         </Animated.View>
       ) : null}

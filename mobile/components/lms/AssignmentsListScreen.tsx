@@ -82,7 +82,7 @@ export default function AssignmentsListScreen({ classOptions, readOnly = false }
       <SearchBar value={search} onChangeText={setSearch} placeholder="Search assignments..." />
       <SegmentedTabs<StatusTab> value={status} onChange={setStatus}
         tabs={[{ value: 'ALL', label: 'All' }, ...STATUSES.map((s) => ({ value: s, label: s[0] + s.slice(1).toLowerCase() }))]} />
-      <TouchableOpacity onPress={() => setShowFilters((v) => !v)} style={styles.filterToggle}>
+      <TouchableOpacity accessibilityRole="button" onPress={() => setShowFilters((v) => !v)} style={styles.filterToggle}>
         <Text style={styles.filterToggleText}>{showFilters ? 'Hide filters' : filtersActive ? 'Filters (on)' : 'More filters'}</Text>
       </TouchableOpacity>
       {showFilters ? (
@@ -94,7 +94,7 @@ export default function AssignmentsListScreen({ classOptions, readOnly = false }
           <Select label="Type" value={type} options={ASSIGNMENT_TYPES.map((t) => ({ value: t, label: t[0] + t.slice(1).toLowerCase() }))}
             onChange={setType} placeholder="All types" />
           {filtersActive ? (
-            <TouchableOpacity onPress={() => { setClassId(null); setSubject(null); setType(null); }}>
+            <TouchableOpacity accessibilityRole="button" onPress={() => { setClassId(null); setSubject(null); setType(null); }}>
               <Text style={styles.clear}>Clear filters</Text>
             </TouchableOpacity>
           ) : null}
@@ -153,7 +153,7 @@ export default function AssignmentsListScreen({ classOptions, readOnly = false }
 
 function Action({ label, onPress, primary, danger }: { label: string; onPress: () => void; primary?: boolean; danger?: boolean }) {
   return (
-    <TouchableOpacity onPress={onPress} style={styles.action}>
+    <TouchableOpacity accessibilityRole="button" onPress={onPress} style={styles.action}>
       <Text style={[styles.actionText, primary && { color: Colors.primary }, danger && { color: Colors.error }]}>{label}</Text>
     </TouchableOpacity>
   );

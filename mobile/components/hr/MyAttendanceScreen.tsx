@@ -27,9 +27,9 @@ export default function MyAttendanceScreen() {
   const header = (
     <View>
       <View style={styles.stepper}>
-        <TouchableOpacity hitSlop={10} onPress={() => setYm(stepMonth(ym.year, ym.month0, -1, current))}><Text style={styles.step}>‹</Text></TouchableOpacity>
+        <TouchableOpacity accessibilityRole="button" hitSlop={10} onPress={() => setYm(stepMonth(ym.year, ym.month0, -1, current))}><Text style={styles.step}>‹</Text></TouchableOpacity>
         <Text style={styles.month}>{monthLabel(ym.year, ym.month0)}</Text>
-        <TouchableOpacity hitSlop={10} disabled={atCurrent} onPress={() => setYm(stepMonth(ym.year, ym.month0, 1, current))}>
+        <TouchableOpacity accessibilityRole="button" hitSlop={10} disabled={atCurrent} onPress={() => setYm(stepMonth(ym.year, ym.month0, 1, current))}>
           <Text style={[styles.step, atCurrent && styles.stepOff]}>›</Text>
         </TouchableOpacity>
       </View>

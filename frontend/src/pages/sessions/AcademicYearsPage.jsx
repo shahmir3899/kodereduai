@@ -1,3 +1,4 @@
+import { schoolToday } from '../../utils/schoolTime'
 import { useState } from 'react'
 import Modal from '../../components/ui/Modal'
 import Field from '../../components/ui/Field'
@@ -238,7 +239,7 @@ export default function AcademicYearsPage() {
                   onManageTerms={() => setTermsYearId(y.id)}
                   onEdit={() => openEditYear(y)}
                   onSetCurrent={async () => {
-                    const today = new Date().toISOString().slice(0, 10)
+                    const today = schoolToday()
                     const outside = today < y.start_date ? ' It has not started yet.' : today > y.end_date ? ' It has already ended.' : ''
                     const ok = await confirm({ title: 'Set as Current', message: `Set "${y.name}" as current academic year?${outside}`, variant: 'warning', confirmLabel: 'Set as Current' })
                     if (ok) setCurrentMut.mutate(y.id)

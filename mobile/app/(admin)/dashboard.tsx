@@ -94,11 +94,11 @@ export default function AdminDashboard() {
 
       {/* Day stepper: look at a past day's attendance */}
       <View style={styles.stepper}>
-        <TouchableOpacity onPress={() => setDate(stepDate(date, -1, today))} hitSlop={10}><Text style={styles.stepBtn}>‹</Text></TouchableOpacity>
-        <TouchableOpacity onPress={() => setDate(today)} disabled={isToday}>
+        <TouchableOpacity accessibilityRole="button" onPress={() => setDate(stepDate(date, -1, today))} hitSlop={10}><Text style={styles.stepBtn}>‹</Text></TouchableOpacity>
+        <TouchableOpacity accessibilityRole="button" onPress={() => setDate(today)} disabled={isToday}>
           <Text style={styles.stepDate}>{isToday ? 'Today' : date}</Text>
         </TouchableOpacity>
-        <TouchableOpacity onPress={() => setDate(stepDate(date, 1, today))} disabled={isToday} hitSlop={10}>
+        <TouchableOpacity accessibilityRole="button" onPress={() => setDate(stepDate(date, 1, today))} disabled={isToday} hitSlop={10}>
           <Text style={[styles.stepBtn, isToday && styles.stepDisabled]}>›</Text>
         </TouchableOpacity>
       </View>
@@ -112,7 +112,7 @@ export default function AdminDashboard() {
         <Card style={styles.clear}><Text style={styles.clearText}>All clear. Nothing needs attention.</Text></Card>
       ) : (
         attention.map((it) => (
-          <TouchableOpacity key={it.key} disabled={!it.href} onPress={() => go(it.href)}>
+          <TouchableOpacity accessibilityRole="button" key={it.key} disabled={!it.href} onPress={() => go(it.href)}>
             <Card style={styles.attention}>
               <Text style={[styles.attCount, { color: TONE_COLOR[it.tone] }]}>{it.count}</Text>
               <Text style={styles.attLabel}>{it.label}</Text>
@@ -156,7 +156,7 @@ export default function AdminDashboard() {
       <Text style={styles.section}>Quick actions</Text>
       <View style={styles.actions}>
         {quick.map((a) => (
-          <TouchableOpacity key={a.label} style={[styles.action, !a.route && styles.actionOff]} disabled={!a.route} onPress={() => go(a.route)}>
+          <TouchableOpacity accessibilityRole="button" key={a.label} style={[styles.action, !a.route && styles.actionOff]} disabled={!a.route} onPress={() => go(a.route)}>
             <Text style={styles.actionIcon}>{a.icon}</Text>
             <Text style={styles.actionLabel}>{a.label}</Text>
           </TouchableOpacity>

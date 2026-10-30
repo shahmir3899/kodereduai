@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { personaFor, homeRouteFor, type Persona } from '../navigation/personas';
-import { buildDriverNavigation, buildParentNavigation, buildStaffNavigation, buildStudentNavigation, collectWebPaths, type NavContext } from '../navigation/navConfig';
+import { buildAccountantNavigation, buildDriverNavigation, buildParentNavigation, buildStaffNavigation, buildStudentNavigation, collectWebPaths, type NavContext } from '../navigation/navConfig';
 import { routeFor } from '../navigation/routes';
 
 function ctxFor(role: string, extra: Partial<NavContext> = {}): NavContext {
@@ -134,6 +134,96 @@ describe('accountant', () => {
   });
 });
 
+describe('accountant on mobile', () => {
+  const groups = buildAccountantNavigation(() => true);
+  const items = groups.flatMap((g) => g.items);
+  const paths = items.map((i) => i.webPath);
+
+  it('is read-only finance, messages, own HR and password', () => {
+    expect(paths).toEqual(expect.arrayContaining([
+      '/dashboard', '/finance', '/finance/accounts', '/finance/fees', '/finance/income', '/finance/expenses',
+      '/messages', '/notifications', '/hr/leave', '/hr/attendance', '/hr/payslips',
+    ]));
+  });
+  it('has no write or non-finance entries (the finance API is read-only for this role)', () => {
+    for (const p of ['/finance/fees/collect', '/finance/fees/setup', '/finance/discounts', '/academics/timetable', '/students', '/attendance/manual-entry', '/transport']) {
+      expect(paths).not.toContain(p);
+    }
+  });
+  it('gets read-only inventory: dashboard, items, movements, assignments and reorder', () => {
+    expect(paths).toEqual(expect.arrayContaining(['/inventory', '/inventory/items', '/inventory/transactions', '/inventory/assignments', '/inventory/reorder-prediction']));
+    expect(buildAccountantNavigation((k) => k !== 'inventory').flatMap((g) => g.items.map((i) => i.webPath))).not.toContain('/inventory');
+  });
+  it('has a screen for every entry, inside the accountant shell', () => {
+    const appDir = path.join(__dirname, '..', 'app');
+    expect(items.filter((i) => !i.href)).toEqual([]);
+    for (const it of items) {
+      expect(it.href).toMatch(/^\/\(accountant\)\//);
+      expect(['.tsx', '/index.tsx'].some((ext) => fs.existsSync(path.join(appDir, it.href as string) + ext))).toBe(true);
+    }
+  });
+  it('drops finance and HR groups when the modules are off', () => {
+    const off = buildAccountantNavigation((k) => k !== 'finance' && k !== 'hr').flatMap((g) => g.items.map((i) => i.webPath));
+    expect(off).not.toContain('/finance');
+    expect(off).not.toContain('/hr/leave');
+  });
+});
+
+describe('staff on mobile', () => {
+  const items = buildStaffNavigation(ctxFor('STAFF')).flatMap((g) => g.items);
+  it('has a screen for every entry, inside the staff shell', () => {
+    const appDir = path.join(__dirname, '..', 'app');
+    expect(items.filter((i) => !i.href)).toEqual([]);
+    for (const it of items) {
+      expect(it.href).toMatch(/^\/\(staff\)\//);
+      expect(['.tsx', '/index.tsx'].some((ext) => fs.existsSync(path.join(appDir, it.href as string) + ext))).toBe(true);
+    }
+  });
+  it('lists inventory only when something is assigned', () => {
+    const withIt = buildStaffNavigation(ctxFor('STAFF')).flatMap((g) => g.items.map((i) => i.webPath));
+    const without = buildStaffNavigation(ctxFor('STAFF', { hasInventoryAssignments: false })).flatMap((g) => g.items.map((i) => i.webPath));
+    expect(withIt).toContain('/inventory/assignments');
+    expect(without).not.toContain('/inventory/assignments');
+  });
+  it('leaves out the transport and library groups the web sidebar lists for staff', () => {
+    const paths = items.map((i) => i.webPath);
+    expect(paths).not.toContain('/transport');
+    expect(paths).not.toContain('/library');
+  });
+  it('adds payslips and change password to the web self-service set', () => {
+    expect(items.map((i) => i.webPath)).toEqual(expect.arrayContaining(['/hr/self-service', '/hr/payslips', '/staff/change-password']));
+  });
+});
+
+describe('principal', () => {
+  // The web gives PRINCIPAL the admin sidebar and lets it through every AdminPrincipalRoute guard
+  // (face attendance, school setup, settings); the differences are all server-side.
+  const nav = navFor('PRINCIPAL', { isStaffLevel: false, isSchoolAdminNav: true });
+  it('shares the admin shell', () => {
+    expect(personaFor('PRINCIPAL')).toBe('admin');
+  });
+  it('sees face attendance, fee setup, full HR and recently deleted students', () => {
+    expect(nav).toEqual(expect.arrayContaining(['/face-attendance', '/finance/fees/setup', '/hr/payroll', '/students/deleted']));
+  });
+});
+
+describe('inventory by role', () => {
+  const FULL = ['/inventory', '/inventory/items', '/inventory/transactions', '/inventory/assignments', '/inventory/reorder-prediction'];
+  it('gives admin and principal the full inventory group, each with an admin screen', () => {
+    for (const role of ['SCHOOL_ADMIN', 'PRINCIPAL']) {
+      const groups = buildStaffNavigation(ctxFor(role, { isStaffLevel: false, isSchoolAdminNav: true, persona: 'admin' }));
+      const items = groups.flatMap((g) => g.items).filter((i) => i.webPath.startsWith('/inventory'));
+      expect(items.map((i) => i.webPath)).toEqual(FULL);
+      for (const it of items) expect(it.href).toMatch(/^\/\(admin\)\/inventory/);
+    }
+  });
+  it('gives teacher and staff only their own assignments, and the manager nothing', () => {
+    expect(navFor('TEACHER').filter((p) => p.startsWith('/inventory'))).toEqual(['/inventory/assignments']);
+    expect(navFor('STAFF').filter((p) => p.startsWith('/inventory'))).toEqual(['/inventory/assignments']);
+    expect(navFor('MANAGER').filter((p) => p.startsWith('/inventory'))).toEqual([]);
+  });
+});
+
 describe('admin', () => {
   it('sees face attendance, fee setup and the full HR group', () => {
     const nav = navFor('SCHOOL_ADMIN');
@@ -246,5 +336,26 @@ describe('driver', () => {
     expect(noTransport).not.toContain('/transport/boarding');
     const noHr = buildDriverNavigation(off('hr') as never).flatMap((g) => g.items).map((i) => i.webPath);
     expect(noHr).not.toContain('/hr/leave');
+  });
+});
+
+describe('admissions by role', () => {
+  const PATHS = ['/admissions', '/admissions/conversion-likelihood'];
+  it('gives admin and principal the enquiries and likelihood screens, each with an admin route', () => {
+    for (const role of ['SCHOOL_ADMIN', 'PRINCIPAL']) {
+      const groups = buildStaffNavigation(ctxFor(role, { isStaffLevel: false, isSchoolAdminNav: true, persona: 'admin' }));
+      const items = groups.flatMap((g) => g.items).filter((i) => i.webPath.startsWith('/admissions'));
+      expect(items.map((i) => i.webPath)).toEqual(PATHS);
+      for (const it of items) expect(it.href).toMatch(/^\/\(admin\)\/admissions/);
+    }
+  });
+  it('hides them when the admissions module is off', () => {
+    const groups = buildStaffNavigation(ctxFor('SCHOOL_ADMIN', { isModuleEnabled: (k: string) => k !== 'admissions' }));
+    expect(collectWebPaths(groups).filter((p) => p.startsWith('/admissions'))).toEqual([]);
+  });
+  it('shows nothing to any other role (the server refuses their writes and the scores)', () => {
+    for (const role of ['TEACHER', 'MANAGER', 'ACCOUNTANT', 'STAFF', 'DRIVER']) {
+      expect(navFor(role).filter((p) => p.startsWith('/admissions'))).toEqual([]);
+    }
   });
 });

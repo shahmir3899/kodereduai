@@ -16,7 +16,8 @@ export const Colors = {
   // Text
   text: '#0f172a',
   textSecondary: '#64748b',
-  textTertiary: '#94a3b8',
+  // Both used for real text (inactive tabs, placeholders); #94a3b8 was 2.6:1 on white, under the 4.5:1 minimum.
+  textTertiary: '#6b7280',
   textInverse: '#ffffff',
 
   // Status
@@ -26,6 +27,13 @@ export const Colors = {
   warningLight: '#fef3c7',
   error: '#dc2626',
   errorLight: '#fee2e2',
+  // Darker shades of the four status colours for TEXT on their Light backgrounds (pills, badges):
+  // the base colours are fine for icons and fills but only reach 2.9 to 3.9:1 as text on them.
+  successText: '#166534',
+  warningText: '#92400e',
+  errorText: '#b91c1c',
+  infoText: '#0369a1',
+  neutralText: '#475569',
   info: '#0284c7',
   infoLight: '#e0f2fe',
 
@@ -52,7 +60,7 @@ export const Colors = {
   overlay: 'rgba(0, 0, 0, 0.5)',
   shadow: '#000000',
   disabled: '#cbd5e1',
-  placeholder: '#94a3b8',
+  placeholder: '#6b7280',
 } as const;
 
 export const Spacing = {

@@ -14,6 +14,7 @@ import StatusPill from '../../components/ui/StatusPill';
 import Button from '../../components/ui/Button';
 import { useToast } from '../../components/ui/Toast';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
+import { saveFailureMessage } from '../../services/errorKind';
 
 // Who got on the bus today. Tap a student to cycle Boarded / Not boarded / Absent, then save.
 // The route is the one on the driver's own vehicle and only today can be marked.
@@ -44,7 +45,7 @@ export default function BoardingScreen() {
         if (errors.length) toast.error(`${errors.length} student${errors.length === 1 ? ' was' : 's were'} not saved.`);
         else toast.success('Boarding saved.');
       })
-      .catch((e: any) => toast.error(apiErrorMessage(e?.response?.data, 'Could not save. Your marks are kept: try again.')));
+      .catch((e: any) => toast.error(e?.response ? apiErrorMessage(e?.response?.data, 'Could not save. Your marks are kept: try again.') : saveFailureMessage(e)));
   };
 
   return (
@@ -62,7 +63,7 @@ export default function BoardingScreen() {
               {counts.BOARDED} boarded · {counts.NOT_BOARDED} not boarded · {counts.ABSENT} absent · {counts.unmarked} unmarked
             </Text>
             {counts.unmarked > 0 ? (
-              <TouchableOpacity onPress={() => setDraft(markAll(students, 'BOARDED', draft))}>
+              <TouchableOpacity accessibilityRole="button" onPress={() => setDraft(markAll(students, 'BOARDED', draft))}>
                 <Text style={styles.link}>Mark all unmarked as boarded</Text>
               </TouchableOpacity>
             ) : null}
@@ -72,7 +73,7 @@ export default function BoardingScreen() {
         renderItem={({ item: s }) => {
           const st = statusOf(s, draft);
           return (
-            <TouchableOpacity style={styles.row} onPress={() => setDraft({ ...draft, [s.student_id]: nextBoarding(st) })}>
+            <TouchableOpacity accessibilityRole="button" style={styles.row} onPress={() => setDraft({ ...draft, [s.student_id]: nextBoarding(st) })}>
               <View style={{ flex: 1 }}>
                 <Text style={styles.name} numberOfLines={1}>{s.name}</Text>
                 <Text style={styles.meta} numberOfLines={1}>{[s.class_name, s.roll_number ? `Roll #${s.roll_number}` : ''].filter(Boolean).join('  ·  ')}</Text>

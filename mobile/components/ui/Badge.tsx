@@ -11,11 +11,11 @@ interface BadgeProps {
 }
 
 const variantColors: Record<BadgeVariant, { bg: string; text: string }> = {
-  success: { bg: Colors.successLight, text: Colors.success },
-  error: { bg: Colors.errorLight, text: Colors.error },
-  warning: { bg: Colors.warningLight, text: Colors.warning },
-  info: { bg: Colors.infoLight, text: Colors.info },
-  default: { bg: Colors.surfaceSecondary, text: Colors.textSecondary },
+  success: { bg: Colors.successLight, text: Colors.successText },
+  error: { bg: Colors.errorLight, text: Colors.errorText },
+  warning: { bg: Colors.warningLight, text: Colors.warningText },
+  info: { bg: Colors.infoLight, text: Colors.infoText },
+  default: { bg: Colors.surfaceSecondary, text: Colors.neutralText },
   purple: { bg: '#f3e8ff', text: '#7c3aed' },
 };
 

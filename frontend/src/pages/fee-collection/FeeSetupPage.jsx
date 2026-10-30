@@ -1,3 +1,4 @@
+import { schoolNowDate, schoolToday } from '../../utils/schoolTime'
 import { useEffect, useState, useMemo } from 'react'
 import Modal from '../../components/ui/Modal'
 import { TONE } from '../../components/ui/statusTones'
@@ -54,7 +55,7 @@ export default function FeeSetupPage() {
   const { activeSchool } = useAuth()
   const { activeAcademicYear } = useAcademicYear()
   const queryClient = useQueryClient()
-  const now = new Date()
+  const now = schoolNowDate()
 
   // Tab state
   const [activeTab, setActiveTab] = useState('monthly')
@@ -64,7 +65,7 @@ export default function FeeSetupPage() {
     studentId: '',
     feeType: 'MONTHLY',
     amount: '',
-    effectiveFrom: new Date().toISOString().split('T')[0],
+    effectiveFrom: schoolToday(),
     annualCategoryId: '',
     monthlyCategoryId: '',
   })

@@ -1,3 +1,4 @@
+import { schoolToday } from '../../utils/schoolTime'
 import { useState, useMemo, useEffect } from 'react'
 import LoadingState from '../../components/ui/LoadingState'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
@@ -29,7 +30,7 @@ export default function AnnualChargesCardView() {
   const { addToast } = useToast()
 
   const now = new Date()
-  const [effectiveFrom, setEffectiveFrom] = useState(now.toISOString().split('T')[0])
+  const [effectiveFrom, setEffectiveFrom] = useState(schoolToday())
   const [showCategoryModal, setShowCategoryModal] = useState(false)
   
   // State per class: { [classId]: { rows, loading, error } }

@@ -366,6 +366,23 @@ class IsSchoolAdminOrReadOnly(permissions.BasePermission):
         return role in ADMIN_ROLES
 
 
+class IsSchoolAdminOrManagerOrReadOnly(permissions.BasePermission):
+    """
+    Like IsSchoolAdminOrReadOnly, but a MANAGER may write too. Used only for the
+    promotion workflow, which the school owner wants Managers to run end to end;
+    every other academic-session write stays admin/principal.
+    """
+    def has_permission(self, request, view):
+        if not request.user.is_authenticated:
+            return False
+
+        if request.method in permissions.SAFE_METHODS:
+            return True
+
+        role = get_effective_role(request)
+        return role in ADMIN_ROLES or role == 'MANAGER'
+
+
 class CanManageStudentAssessments(permissions.BasePermission):
     """Allow teachers and admin roles to access student monthly assessments."""
     message = "Only teachers, principals, school admins, or super admins can access student assessments."

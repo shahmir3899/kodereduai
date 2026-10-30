@@ -12,6 +12,19 @@ export function canAccessManagementRoute(role, { teacherAllowed = false } = {}) 
   return true
 }
 
+// Promotion moves students between classes: Admin, Principal and Manager run it; Accountant and
+// Driver have no part in it (and Teacher/Staff are already outside management pages).
+export function canAccessPromotionRoute(role) {
+  if (role === 'ACCOUNTANT' || role === 'DRIVER') return false
+  return canAccessManagementRoute(role)
+}
+
+// Curriculum, Lesson Plans and Assignments are teaching pages. Accountant and Driver have no
+// teaching role (and Staff is blocked already): their API calls would only return 403.
+export function canAccessLmsRoute(role) {
+  return role !== 'ACCOUNTANT' && role !== 'DRIVER' && role !== 'STAFF'
+}
+
 export function canAccessInventoryRoute(role, { assignmentsOnly = false } = {}) {
   // Manager removed 2026-09: same scope-down as Finance above.
   if (role === 'MANAGER') return false

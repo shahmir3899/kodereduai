@@ -9,6 +9,7 @@ import ErrorState from '../ui/ErrorState';
 import Button from '../ui/Button';
 import { useToast } from '../ui/Toast';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
+import { saveFailureMessage } from '../../services/errorKind';
 
 export default function ThreadScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -26,7 +27,7 @@ export default function ThreadScreen() {
     if (!canSend(message, null, false)) return;
     reply.mutateAsync({ id: String(id), message })
       .then(() => setText(''))
-      .catch((e: any) => toast.error(e?.response?.data?.detail || e?.response?.data?.error || 'Could not send the message.'));
+      .catch((e: any) => toast.error(e?.response ? e?.response?.data?.detail || e?.response?.data?.error || 'Could not send the message.' : saveFailureMessage(e)));
   };
 
   // Server order is oldest first; the list is inverted so the newest sits at the bottom.

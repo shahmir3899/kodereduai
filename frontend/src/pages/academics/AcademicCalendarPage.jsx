@@ -1,3 +1,4 @@
+import { schoolNowDate } from '../../utils/schoolTime'
 import { useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import PageHeader from '../../components/ui/PageHeader'
@@ -35,7 +36,7 @@ export default function AcademicCalendarPage() {
   const classSelectorScope = getClassSelectorScope(activeAcademicYear?.id)
   const isPhone = useMediaQuery('(max-width: 639px)')
 
-  const today = new Date()
+  const today = schoolNowDate()
   const todayKey = isoDate(today.getFullYear(), today.getMonth() + 1, today.getDate())
   const [year, setYear] = useState(today.getFullYear())
   const [month, setMonth] = useState(today.getMonth() + 1)

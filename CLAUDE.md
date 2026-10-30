@@ -193,6 +193,7 @@ Read on demand from `docs/` (not preloaded — these are large):
 - `docs/FRONTEND_COMPONENTS.md` — components, contexts, hooks, state management
 - `docs/ATTENDANCE_PIPELINE.md` — complete AI OCR flow with code references
 - `docs/ENV_AND_DEPLOYMENT.md` — env/deploy detail beyond this file
+- `docs/MOBILE.md` — mobile app architecture, commands, release and Play checklist (plan: `MOBILE_PLAN.md`, device script: `MOBILE_QA.md`)
 - `docs/DEMO_SHOWCASE_DATA.md` — demo/showcase seed commands and cleanup rules
 
 ## Test Accounts (Dev)

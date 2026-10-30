@@ -20,7 +20,7 @@ export function SkeletonBlock({ width = '100%', height = 16 }: { width?: Dimensi
 // Placeholder list shown while a query's first load is in flight.
 export default function Skeleton({ rows = 5 }: { rows?: number }) {
   return (
-    <View style={styles.wrap}>
+    <View style={styles.wrap} accessible accessibilityLabel="Loading" accessibilityRole="progressbar">
       {Array.from({ length: rows }, (_, i) => (
         <View key={i} style={styles.row}>
           <SkeletonBlock width="60%" height={14} />

@@ -30,9 +30,12 @@ function barBgColor(pct) {
 const markPct = (m) => (m.total_marks && m.marks_obtained != null ? Math.round((m.marks_obtained / m.total_marks) * 100) : 0)
 const isAbsentMark = (m) => m.status === 'ABSENT' || m.is_absent || m.marks_obtained == null
 
-function statusBadge(pct, isAbsent) {
+// Pass/Fail follows the exam's own passing marks for the subject; 40 % only stands in when the
+// server sent none (old payloads).
+function statusBadge(m, pct, isAbsent) {
   if (isAbsent) return { label: 'Absent', cls: TONE.neutral }
-  if (pct >= 40) return { label: 'Pass', cls: TONE.success }
+  const passed = m.passing_marks != null ? m.marks_obtained >= m.passing_marks : pct >= 40
+  if (passed) return { label: 'Pass', cls: TONE.success }
   return { label: 'Fail', cls: TONE.danger }
 }
 
@@ -154,7 +157,7 @@ export default function StudentResults() {
                       {marks.map((m, idx) => {
                         const pct = markPct(m)
                         const isAbsent = isAbsentMark(m)
-                        const badge = statusBadge(pct, isAbsent)
+                        const badge = statusBadge(m, pct, isAbsent)
                         return (
                           <div key={idx} className="px-4 py-3">
                             <div className="flex items-center justify-between mb-2">
@@ -198,7 +201,7 @@ export default function StudentResults() {
                           {marks.map((m, idx) => {
                             const pct = markPct(m)
                             const isAbsent = isAbsentMark(m)
-                            const badge = statusBadge(pct, isAbsent)
+                            const badge = statusBadge(m, pct, isAbsent)
                             return (
                               <tr key={idx} className="hover:bg-gray-50">
                                 <td className="px-4 py-3 text-sm font-medium text-gray-900">

@@ -1,3 +1,4 @@
+import { schoolToday, schoolYMD, setSchoolTimeZone } from '../utils/schoolTime'
 import { createContext, useContext, useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { useQueryClient, useIsRestoring } from '@tanstack/react-query'
 import { feeMonthSummaryKey, MONTHLY_FEE_PARAMS } from '../utils/feeMonthSummary'
@@ -59,10 +60,10 @@ function withTimeout(promise, timeoutMs) {
 
 function getTodayContext() {
   const now = new Date()
-  const today = now.toISOString().split('T')[0]
-  const currentMonth = now.getMonth() + 1
-  const currentYear = now.getFullYear()
-  const dayName = DAY_NAMES[now.getDay()]
+  const today = schoolToday()
+  // Month, year and weekday on the school's calendar, not the browser's
+  const { year: currentYear, month: currentMonth, day } = schoolYMD()
+  const dayName = DAY_NAMES[new Date(Date.UTC(currentYear, currentMonth - 1, day)).getUTCDay()]
   const monthStart = `${currentYear}-${String(currentMonth).padStart(2, '0')}-01`
   return { now, today, currentMonth, currentYear, dayName, monthStart }
 }
@@ -828,6 +829,9 @@ export function AuthProvider({ children }) {
   }
 
   // Determine role based on active school membership
+  // Set while rendering, not in an effect: pages that mount right after login read "today" on their first render.
+  setSchoolTimeZone(activeSchool?.timezone)
+
   const effectiveRole = activeSchool?.role || user?.role
   const isSchoolAdmin = user?.is_super_admin || effectiveRole === 'SCHOOL_ADMIN' || effectiveRole === 'PRINCIPAL'
   const isStaffLevel = ['STAFF', 'TEACHER', 'MANAGER', 'ACCOUNTANT', 'DRIVER'].includes(effectiveRole)

@@ -5,11 +5,11 @@ import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors'
 export type Tone = 'success' | 'warning' | 'error' | 'info' | 'neutral';
 
 const TONES: Record<Tone, { bg: string; fg: string }> = {
-  success: { bg: Colors.successLight, fg: Colors.success },
-  warning: { bg: Colors.warningLight, fg: Colors.warning },
-  error: { bg: Colors.errorLight, fg: Colors.error },
-  info: { bg: Colors.infoLight, fg: Colors.info },
-  neutral: { bg: Colors.surfaceSecondary, fg: Colors.textSecondary },
+  success: { bg: Colors.successLight, fg: Colors.successText },
+  warning: { bg: Colors.warningLight, fg: Colors.warningText },
+  error: { bg: Colors.errorLight, fg: Colors.errorText },
+  info: { bg: Colors.infoLight, fg: Colors.infoText },
+  neutral: { bg: Colors.surfaceSecondary, fg: Colors.neutralText },
 };
 
 export default function StatusPill({ label, tone = 'neutral' }: { label: string; tone?: Tone }) {

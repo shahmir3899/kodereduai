@@ -1,3 +1,4 @@
+import { schoolToday } from './schoolTime';
 import { format } from 'date-fns';
 
 // Pure logic behind the manual attendance screen; mirrors frontend/src/pages/ManualEntryPage.jsx.
@@ -153,8 +154,10 @@ export function buildSavePayload(
   return { ...params, ...(academicYearId ? { academic_year: academicYearId } : {}), date, entries };
 }
 
-export function todayString(now: Date = new Date()): string {
-  return format(now, 'yyyy-MM-dd');
+// With no argument: today on the school's calendar (School.timezone). A Date passed in is
+// formatted as-is, which is what the tests and date pickers need.
+export function todayString(now?: Date): string {
+  return now ? format(now, 'yyyy-MM-dd') : schoolToday();
 }
 
 // yyyy-MM-dd strings compare correctly as text.
