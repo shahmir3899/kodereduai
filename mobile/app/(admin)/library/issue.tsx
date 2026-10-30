@@ -1,8 +1,11 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TextInput, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TextInput } from 'react-native';
+import { useMutation } from '@tanstack/react-query';
 import { libraryApi } from '../../../services/api';
 import Card from '../../../components/ui/Card';
 import Button from '../../../components/ui/Button';
+import { useToast } from '../../../components/ui/Toast';
+import { saveFailureMessage } from '../../../services/errorKind';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../../constants/colors';
 
 interface SearchResult { id: number; name: string; class_name?: string; roll_number?: string; title?: string; isbn?: string; available_copies?: number; }
@@ -14,14 +17,14 @@ export default function LibraryIssue() {
   const [books, setBooks] = useState<SearchResult[]>([]);
   const [selectedStudent, setSelectedStudent] = useState<SearchResult | null>(null);
   const [selectedBook, setSelectedBook] = useState<SearchResult | null>(null);
-  const [issuing, setIssuing] = useState(false);
+  const toast = useToast();
 
   const searchStudents = async () => {
     if (!studentSearch.trim()) return;
     try {
       const response = await libraryApi.searchStudents({ search: studentSearch.trim() });
       setStudents(response.data.results || response.data || []);
-    } catch (error) { console.error('Failed to search students:', error); }
+    } catch (error) { toast.error(saveFailureMessage(error, 'Could not search students.')); }
   };
 
   const searchBooks = async () => {
@@ -29,25 +32,23 @@ export default function LibraryIssue() {
     try {
       const response = await libraryApi.getBooks({ search: bookSearch.trim() });
       setBooks(response.data.results || response.data || []);
-    } catch (error) { console.error('Failed to search books:', error); }
+    } catch (error) { toast.error(saveFailureMessage(error, 'Could not search books.')); }
   };
 
-  const handleIssue = async () => {
-    if (!selectedStudent || !selectedBook) {
-      Alert.alert('Required', 'Please select both a student and a book.');
-      return;
-    }
-    setIssuing(true);
-    try {
-      await libraryApi.createIssue({ student_id: selectedStudent.id, book_id: selectedBook.id });
-      Alert.alert('Success', `Book issued to ${selectedStudent.name} successfully.`);
+  const issue = useMutation({
+    mutationFn: (v: { studentId: number; bookId: number }) => libraryApi.createIssue({ student_id: v.studentId, book_id: v.bookId }),
+    onSuccess: () => {
+      toast.success(`Book issued to ${selectedStudent?.name}.`);
       setSelectedStudent(null); setSelectedBook(null);
       setStudentSearch(''); setBookSearch('');
       setStudents([]); setBooks([]);
-    } catch (error) {
-      console.error('Failed to issue book:', error);
-      Alert.alert('Error', 'Failed to issue book.');
-    } finally { setIssuing(false); }
+    },
+    onError: (e) => toast.error(saveFailureMessage(e, 'Could not issue the book.')),
+  });
+
+  const handleIssue = () => {
+    if (!selectedStudent || !selectedBook) { toast.error('Select both a student and a book.'); return; }
+    issue.mutate({ studentId: selectedStudent.id, bookId: selectedBook.id });
   };
 
   return (
@@ -101,7 +102,7 @@ export default function LibraryIssue() {
       </Card>
 
       {/* Step 3: Issue */}
-      <Button title="Issue Book" onPress={handleIssue} loading={issuing}
+      <Button title="Issue Book" onPress={handleIssue} loading={issue.isPending}
         disabled={!selectedStudent || !selectedBook} style={styles.issueBtn} />
     </ScrollView>
   );

@@ -7,12 +7,13 @@ import {
   RefreshControl,
   TextInput,
   TouchableOpacity,
-  Alert,
   Modal,
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
 import { notificationsApi } from '../../../services/api';
+import { useToast } from '../../../components/ui/Toast';
+import { saveFailureMessage } from '../../../services/errorKind';
 import Card from '../../../components/ui/Card';
 import Badge from '../../../components/ui/Badge';
 import Button from '../../../components/ui/Button';
@@ -31,6 +32,7 @@ interface Template {
 const AUDIENCE_OPTIONS = ['All Parents', 'Specific Class', 'Individual'];
 
 export default function SendFromTemplate() {
+  const toast = useToast();
   const [templates, setTemplates] = useState<Template[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -50,7 +52,7 @@ export default function SendFromTemplate() {
       setTemplates(response.data.results || response.data || []);
     } catch (error) {
       console.error('Failed to fetch templates:', error);
-      Alert.alert('Error', 'Failed to load templates.');
+      toast.error(saveFailureMessage(error, 'Could not load templates.'));
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -99,16 +101,16 @@ export default function SendFromTemplate() {
     const vars = Object.keys(variableValues);
     const missingVars = vars.filter((v) => !variableValues[v].trim());
     if (missingVars.length > 0) {
-      Alert.alert('Missing Variables', `Please fill in: ${missingVars.join(', ')}`);
+      toast.error(`Please fill in: ${missingVars.join(', ')}`);
       return;
     }
 
     if (audience === 'Specific Class' && !classId.trim()) {
-      Alert.alert('Missing Field', 'Please enter a class ID.');
+      toast.error('Please enter a class ID.');
       return;
     }
     if (audience === 'Individual' && !recipientId.trim()) {
-      Alert.alert('Missing Field', 'Please enter a recipient ID.');
+      toast.error('Please enter a recipient ID.');
       return;
     }
 
@@ -129,12 +131,12 @@ export default function SendFromTemplate() {
       }
 
       await notificationsApi.send(data);
-      Alert.alert('Success', 'Notification sent successfully.');
+      toast.success('Notification sent.');
       setModalVisible(false);
       setSelectedTemplate(null);
     } catch (error) {
       console.error('Failed to send notification:', error);
-      Alert.alert('Error', 'Failed to send notification. Please try again.');
+      toast.error(saveFailureMessage(error, 'Could not send notification. Please try again.'));
     } finally {
       setSubmitting(false);
     }

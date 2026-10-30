@@ -1,18 +1,18 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
-  RefreshControl,
   TouchableOpacity,
-  Alert,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { financeApi } from '../../../services/api';
 import Card from '../../../components/ui/Card';
 import StatCard from '../../../components/StatCard';
-import Spinner from '../../../components/ui/Spinner';
+import QueryBoundary from '../../../components/ui/QueryBoundary';
+import { useScopedQuery } from '../../../hooks/useScopedQuery';
+import { useRefreshControl } from '../../../hooks/useRefreshControl';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../../constants/colors';
 
 interface FinanceSummary {
@@ -26,31 +26,9 @@ interface FinanceSummary {
 
 export default function FinanceDashboard() {
   const router = useRouter();
-  const [summary, setSummary] = useState<FinanceSummary | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-
-  const fetchSummary = async () => {
-    try {
-      const response = await financeApi.getFinanceSummary();
-      setSummary(response.data);
-    } catch (error) {
-      console.error('Failed to fetch finance summary:', error);
-      Alert.alert('Error', 'Failed to load finance summary.');
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchSummary();
-  }, []);
-
-  const onRefresh = () => {
-    setRefreshing(true);
-    fetchSummary();
-  };
+  // 'finance' is a money root, so the balance is never served from a cache.
+  const query = useScopedQuery<FinanceSummary>('finance', ['summary'], async () => (await financeApi.getFinanceSummary()).data);
+  const refreshControl = useRefreshControl(query.refetch);
 
   const navItems = [
     {
@@ -85,20 +63,17 @@ export default function FinanceDashboard() {
     },
   ];
 
-  if (loading) return <Spinner fullScreen message="Loading finance data..." />;
-
   return (
     <ScrollView
       style={styles.container}
       contentContainerStyle={styles.content}
-      refreshControl={
-        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-      }
+      refreshControl={refreshControl}
     >
       <Text style={styles.title}>Finance Dashboard</Text>
 
       {/* Summary Cards */}
-      {summary && (
+      <QueryBoundary query={query} isEmpty={() => false}>
+        {(summary) => (
         <View style={styles.statsContainer}>
           <View style={styles.statsRow}>
             <StatCard
@@ -127,7 +102,8 @@ export default function FinanceDashboard() {
             )}
           </View>
         </View>
-      )}
+        )}
+      </QueryBoundary>
 
       {/* Navigation Items */}
       <Text style={styles.sectionTitle}>Quick Actions</Text>

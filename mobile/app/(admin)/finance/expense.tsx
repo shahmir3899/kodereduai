@@ -7,11 +7,13 @@ import {
   RefreshControl,
   TextInput,
   TouchableOpacity,
-  Alert,
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
+import { useMutation } from '@tanstack/react-query';
 import { financeApi } from '../../../services/api';
+import { useToast } from '../../../components/ui/Toast';
+import { saveFailureMessage } from '../../../services/errorKind';
 import Card from '../../../components/ui/Card';
 import Button from '../../../components/ui/Button';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../../constants/colors';
@@ -32,7 +34,7 @@ export default function RecordExpense() {
   const [amount, setAmount] = useState('');
   const [description, setDescription] = useState('');
   const [date, setDate] = useState('');
-  const [submitting, setSubmitting] = useState(false);
+  const toast = useToast();
   const [refreshing, setRefreshing] = useState(false);
 
   const resetForm = () => {
@@ -48,40 +50,36 @@ export default function RecordExpense() {
     setRefreshing(false);
   };
 
-  const handleSubmit = async () => {
+  const save = useMutation({
+    mutationFn: (data: Record<string, unknown>) => financeApi.createExpense(data),
+    onSuccess: () => { toast.success('Expense recorded.'); resetForm(); },
+    onError: (e) => toast.error(saveFailureMessage(e, 'Could not record the expense.')),
+  });
+
+  const handleSubmit = () => {
     if (!category) {
-      Alert.alert('Missing Field', 'Please select an expense category.');
+      toast.error('Please select an expense category.');
       return;
     }
     if (!amount || isNaN(parseFloat(amount)) || parseFloat(amount) <= 0) {
-      Alert.alert('Invalid Amount', 'Please enter a valid amount.');
+      toast.error('Please enter a valid amount.');
       return;
     }
     if (!description.trim()) {
-      Alert.alert('Missing Field', 'Please enter a description.');
+      toast.error('Please enter a description.');
       return;
     }
     if (!date.trim()) {
-      Alert.alert('Missing Field', 'Please enter a date.');
+      toast.error('Please enter a date.');
       return;
     }
 
-    setSubmitting(true);
-    try {
-      await financeApi.createExpense({
+    save.mutate({
         category,
         amount: parseFloat(amount),
         description: description.trim(),
         date: date.trim(),
       });
-      Alert.alert('Success', 'Expense recorded successfully.');
-      resetForm();
-    } catch (error) {
-      console.error('Failed to create expense:', error);
-      Alert.alert('Error', 'Failed to record expense. Please try again.');
-    } finally {
-      setSubmitting(false);
-    }
   };
 
   return (
@@ -157,7 +155,7 @@ export default function RecordExpense() {
           <Button
             title="Record Expense"
             onPress={handleSubmit}
-            loading={submitting}
+            loading={save.isPending}
             fullWidth
             style={styles.submitButton}
           />

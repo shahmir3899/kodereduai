@@ -7,11 +7,12 @@ import {
   RefreshControl,
   TextInput,
   TouchableOpacity,
-  Alert,
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
 import { notificationsApi } from '../../../services/api';
+import { useToast } from '../../../components/ui/Toast';
+import { saveFailureMessage } from '../../../services/errorKind';
 import Card from '../../../components/ui/Card';
 import Button from '../../../components/ui/Button';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../../constants/colors';
@@ -20,6 +21,7 @@ const AUDIENCE_OPTIONS = ['All Parents', 'Specific Class', 'Individual'];
 const CHANNEL_OPTIONS = ['PUSH', 'SMS', 'WHATSAPP'];
 
 export default function SendNotification() {
+  const toast = useToast();
   const [message, setMessage] = useState('');
   const [title, setTitle] = useState('');
   const [audience, setAudience] = useState('All Parents');
@@ -54,23 +56,23 @@ export default function SendNotification() {
 
   const handleSend = async () => {
     if (!title.trim()) {
-      Alert.alert('Missing Field', 'Please enter a notification title.');
+      toast.error('Please enter a notification title.');
       return;
     }
     if (!message.trim()) {
-      Alert.alert('Missing Field', 'Please enter a message.');
+      toast.error('Please enter a message.');
       return;
     }
     if (channels.length === 0) {
-      Alert.alert('Missing Field', 'Please select at least one channel.');
+      toast.error('Please select at least one channel.');
       return;
     }
     if (audience === 'Specific Class' && !classId.trim()) {
-      Alert.alert('Missing Field', 'Please enter a class ID.');
+      toast.error('Please enter a class ID.');
       return;
     }
     if (audience === 'Individual' && !recipientId.trim()) {
-      Alert.alert('Missing Field', 'Please enter a recipient ID.');
+      toast.error('Please enter a recipient ID.');
       return;
     }
 
@@ -91,11 +93,11 @@ export default function SendNotification() {
       }
 
       await notificationsApi.send(data);
-      Alert.alert('Success', 'Notification sent successfully.');
+      toast.success('Notification sent.');
       resetForm();
     } catch (error) {
       console.error('Failed to send notification:', error);
-      Alert.alert('Error', 'Failed to send notification. Please try again.');
+      toast.error(saveFailureMessage(error, 'Could not send notification. Please try again.'));
     } finally {
       setSubmitting(false);
     }

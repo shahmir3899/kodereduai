@@ -5,12 +5,16 @@ import {
   StyleSheet,
   ScrollView,
   TextInput,
-  Alert,
 } from 'react-native';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { studentsApi } from '../../../../services/api';
 import Button from '../../../../components/ui/Button';
-import Spinner from '../../../../components/ui/Spinner';
+import ErrorState from '../../../../components/ui/ErrorState';
+import Skeleton from '../../../../components/ui/Skeleton';
+import { useToast } from '../../../../components/ui/Toast';
+import { useScopedQuery } from '../../../../hooks/useScopedQuery';
+import { saveFailureMessage } from '../../../../services/errorKind';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../../../constants/colors';
 
 interface StudentData {
@@ -27,70 +31,59 @@ interface StudentData {
 export default function EditStudent() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+  const toast = useToast();
+  const qc = useQueryClient();
   const [form, setForm] = useState<StudentData>({
     id: 0, name: '', email: '', phone: '', guardian_name: '',
     guardian_phone: '', address: '', date_of_birth: '',
   });
 
+  // A failed load must not leave an empty form that could be saved over the real record.
+  const query = useScopedQuery('student-edit', [id], async () => (await studentsApi.getStudent(Number(id))).data);
   useEffect(() => {
-    const fetchStudent = async () => {
-      try {
-        const response = await studentsApi.getStudent(Number(id));
-        const s = response.data;
-        setForm({
-          id: s.id,
-          name: s.name || '',
-          email: s.email || '',
-          phone: s.phone || '',
-          guardian_name: s.guardian_name || '',
-          guardian_phone: s.guardian_phone || '',
-          address: s.address || '',
-          date_of_birth: s.date_of_birth || '',
-        });
-      } catch (error) {
-        console.error('Failed to fetch student:', error);
-        Alert.alert('Error', 'Failed to load student data.');
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchStudent();
-  }, [id]);
+    const s = query.data;
+    if (!s) return;
+    setForm({
+      id: s.id,
+      name: s.name || '',
+      email: s.email || '',
+      phone: s.phone || '',
+      guardian_name: s.guardian_name || '',
+      guardian_phone: s.guardian_phone || '',
+      address: s.address || '',
+      date_of_birth: s.date_of_birth || '',
+    });
+  }, [query.data]);
 
-  const handleSave = async () => {
-    if (!form.name.trim()) {
-      Alert.alert('Required', 'Student name is required.');
-      return;
-    }
-    setSaving(true);
-    try {
-      await studentsApi.updateStudent(Number(id), {
-        name: form.name.trim(),
-        email: form.email?.trim() || undefined,
-        phone: form.phone?.trim() || undefined,
-        guardian_name: form.guardian_name?.trim() || undefined,
-        guardian_phone: form.guardian_phone?.trim() || undefined,
-        address: form.address?.trim() || undefined,
-        date_of_birth: form.date_of_birth?.trim() || undefined,
-      });
-      Alert.alert('Success', 'Student profile updated.', [
-        { text: 'OK', onPress: () => router.back() },
-      ]);
-    } catch (error) {
-      console.error('Failed to update student:', error);
-      Alert.alert('Error', 'Failed to update student profile.');
-    } finally {
-      setSaving(false);
-    }
+  const save = useMutation({
+    mutationFn: () => studentsApi.updateStudent(Number(id), {
+      name: form.name.trim(),
+      email: form.email?.trim() || undefined,
+      phone: form.phone?.trim() || undefined,
+      guardian_name: form.guardian_name?.trim() || undefined,
+      guardian_phone: form.guardian_phone?.trim() || undefined,
+      address: form.address?.trim() || undefined,
+      date_of_birth: form.date_of_birth?.trim() || undefined,
+    }),
+    onSuccess: () => {
+      toast.success('Student profile updated.');
+      qc.invalidateQueries({ predicate: (q) => ['students', 'student', 'student-edit'].includes(q.queryKey[0] as string) });
+      router.back();
+    },
+    onError: (e) => toast.error(saveFailureMessage(e, 'Could not update the student profile.')),
+  });
+
+  const handleSave = () => {
+    if (!form.name.trim()) { toast.error('Student name is required.'); return; }
+    save.mutate();
   };
 
   const updateField = (field: keyof StudentData, value: string) => {
     setForm((prev) => ({ ...prev, [field]: value }));
   };
 
-  if (loading) return <Spinner fullScreen message="Loading..." />;
+  if (query.isLoading) return <Skeleton />;
+  if (query.isError) return <ErrorState error={query.error} onRetry={() => query.refetch()} />;
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -104,7 +97,7 @@ export default function EditStudent() {
       <FormField label="Address" value={form.address} onChangeText={(v) => updateField('address', v)} multiline />
       <View style={styles.actions}>
         <Button title="Cancel" variant="outline" onPress={() => router.back()} style={{ flex: 1 }} />
-        <Button title="Save Changes" onPress={handleSave} loading={saving} style={{ flex: 1 }} />
+        <Button title="Save Changes" onPress={handleSave} loading={save.isPending} style={{ flex: 1 }} />
       </View>
     </ScrollView>
   );

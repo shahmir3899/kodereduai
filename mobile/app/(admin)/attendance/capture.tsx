@@ -136,7 +136,7 @@ export default function CaptureAttendance() {
         <TouchableOpacity accessibilityRole="button" style={styles.galleryBtn} onPress={pickFromGallery}>
           <Text style={styles.galleryBtnText}>Gallery</Text>
         </TouchableOpacity>
-        <TouchableOpacity accessibilityRole="button" style={styles.captureBtn} onPress={takePhoto}>
+        <TouchableOpacity accessibilityRole="button" accessibilityLabel="Take photo" style={styles.captureBtn} onPress={takePhoto}>
           <View style={styles.captureBtnInner} />
         </TouchableOpacity>
         <View style={{ width: 60 }} />

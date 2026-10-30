@@ -1,17 +1,16 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import {
   View,
   Text,
   StyleSheet,
   FlatList,
-  RefreshControl,
-  Alert,
 } from 'react-native';
 import { notificationsApi } from '../../../services/api';
+import { useScopedQuery } from '../../../hooks/useScopedQuery';
+import { useRefreshControl } from '../../../hooks/useRefreshControl';
 import Card from '../../../components/ui/Card';
 import Badge from '../../../components/ui/Badge';
-import Spinner from '../../../components/ui/Spinner';
-import EmptyState from '../../../components/ui/EmptyState';
+import QueryBoundary from '../../../components/ui/QueryBoundary';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../../constants/colors';
 
 interface NotificationLog {
@@ -40,31 +39,11 @@ const CHANNEL_VARIANTS: Record<string, 'info' | 'success' | 'purple' | 'default'
 };
 
 export default function NotificationHistory() {
-  const [logs, setLogs] = useState<NotificationLog[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-
-  const fetchLogs = async () => {
-    try {
-      const response = await notificationsApi.getLogs();
-      setLogs(response.data.results || response.data || []);
-    } catch (error) {
-      console.error('Failed to fetch notification logs:', error);
-      Alert.alert('Error', 'Failed to load notification history.');
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchLogs();
-  }, []);
-
-  const onRefresh = () => {
-    setRefreshing(true);
-    fetchLogs();
-  };
+  const query = useScopedQuery<NotificationLog[]>('notification-logs', [], async () => {
+    const response = await notificationsApi.getLogs();
+    return response.data.results || response.data || [];
+  });
+  const refreshControl = useRefreshControl(query.refetch);
 
   const formatDate = (dateStr: string) => {
     if (!dateStr) return 'N/A';
@@ -119,30 +98,24 @@ export default function NotificationHistory() {
     </Card>
   );
 
-  if (loading) return <Spinner fullScreen message="Loading history..." />;
-
   return (
     <View style={styles.container}>
       <View style={styles.headerContainer}>
         <Text style={styles.title}>Notification History</Text>
-        <Text style={styles.subtitle}>{logs.length} notifications</Text>
+        <Text style={styles.subtitle}>{query.data?.length ?? 0} notifications</Text>
       </View>
 
-      <FlatList
-        data={logs}
-        keyExtractor={(item) => String(item.id)}
-        renderItem={renderItem}
-        contentContainerStyle={styles.listContent}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-        }
-        ListEmptyComponent={
-          <EmptyState
-            title="No Notifications"
-            message="No notification history found."
+      <QueryBoundary query={query} emptyTitle="No Notifications" emptyMessage="No notification history found.">
+        {(logs) => (
+          <FlatList
+            data={logs}
+            keyExtractor={(item) => String(item.id)}
+            renderItem={renderItem}
+            contentContainerStyle={styles.listContent}
+            refreshControl={refreshControl}
           />
-        }
-      />
+        )}
+      </QueryBoundary>
     </View>
   );
 }

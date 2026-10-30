@@ -1,69 +1,64 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity } from 'react-native';
+import React from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { notificationsApi } from '../../services/api';
+import { useScopedQuery } from '../../hooks/useScopedQuery';
+import { useRefreshControl } from '../../hooks/useRefreshControl';
 import NotificationItem from '../../components/NotificationItem';
-import Spinner from '../../components/ui/Spinner';
-import EmptyState from '../../components/ui/EmptyState';
+import QueryBoundary from '../../components/ui/QueryBoundary';
+import { useToast } from '../../components/ui/Toast';
 import { Colors, FontSize, Spacing } from '../../constants/colors';
 
 interface NotificationRecord {
   id: number; title: string; message: string; created_at: string; is_read: boolean; notification_type?: string;
 }
 
+const ROOT = 'my-notifications';
+
 export default function Inbox() {
-  const [notifications, setNotifications] = useState<NotificationRecord[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
+  const toast = useToast();
+  const qc = useQueryClient();
+  const query = useScopedQuery<NotificationRecord[]>(ROOT, [], async () => {
+    const r = await notificationsApi.getMyNotifications();
+    return r.data.results || r.data.notifications || r.data || [];
+  });
+  const refreshControl = useRefreshControl(query.refetch);
 
-  const fetchNotifications = async () => {
-    try {
-      const response = await notificationsApi.getMyNotifications();
-      setNotifications(response.data.results || response.data.notifications || response.data || []);
-    } catch (error) { console.error('Failed to fetch notifications:', error); }
-    finally { setLoading(false); setRefreshing(false); }
-  };
+  // Mark as read in the cached list straight away; a failure puts the real state back.
+  const patch = (fn: (n: NotificationRecord) => NotificationRecord) =>
+    qc.setQueriesData<NotificationRecord[]>({ predicate: (q) => q.queryKey[0] === ROOT }, (old) => old?.map(fn));
+  const refresh = () => qc.invalidateQueries({ predicate: (q) => q.queryKey[0] === ROOT });
 
-  useEffect(() => { fetchNotifications(); }, []);
-  const onRefresh = () => { setRefreshing(true); fetchNotifications(); };
+  const markRead = useMutation({
+    mutationFn: (id: number) => notificationsApi.markRead(id),
+    onMutate: (id) => patch((n) => (n.id === id ? { ...n, is_read: true } : n)),
+    onError: () => { refresh(); toast.error('Could not mark it as read.'); },
+  });
+  const markAll = useMutation({
+    mutationFn: () => notificationsApi.markAllRead(),
+    onMutate: () => patch((n) => ({ ...n, is_read: true })),
+    onError: () => { refresh(); toast.error('Could not mark all as read.'); },
+  });
 
-  const handlePress = async (id: number) => {
-    try {
-      await notificationsApi.markRead(id);
-      setNotifications((prev) => prev.map((n) => n.id === id ? { ...n, is_read: true } : n));
-    } catch (error) { console.error('Failed to mark read:', error); }
-  };
-
-  const handleMarkAllRead = async () => {
-    try {
-      await notificationsApi.markAllRead();
-      setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
-    } catch (error) { console.error('Failed to mark all read:', error); }
-  };
-
-  if (loading) return <Spinner fullScreen message="Loading..." />;
-
-  const unreadCount = notifications.filter((n) => !n.is_read).length;
+  const unreadCount = (query.data ?? []).filter((n) => !n.is_read).length;
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
+    <ScrollView style={styles.container} contentContainerStyle={styles.content} refreshControl={refreshControl}>
       <View style={styles.headerRow}>
         <Text style={styles.title}>Inbox</Text>
         {unreadCount > 0 && (
-          <TouchableOpacity accessibilityRole="button" onPress={handleMarkAllRead}>
+          <TouchableOpacity accessibilityRole="button" accessibilityLabel="Mark all notifications as read" onPress={() => markAll.mutate()}>
             <Text style={styles.markAllText}>Mark all read</Text>
           </TouchableOpacity>
         )}
       </View>
-      {notifications.length === 0 ? (
-        <EmptyState title="No Notifications" message="You're all caught up!" />
-      ) : (
-        notifications.map((n) => (
+      <QueryBoundary query={query} emptyTitle="No Notifications" emptyMessage="You're all caught up!">
+        {(items) => items.map((n) => (
           <NotificationItem key={n.id} id={n.id} title={n.title} message={n.message}
             created_at={n.created_at} is_read={n.is_read} notification_type={n.notification_type}
-            onPress={handlePress} />
-        ))
-      )}
+            onPress={(id: number) => markRead.mutate(id)} />
+        ))}
+      </QueryBoundary>
     </ScrollView>
   );
 }

@@ -1,11 +1,15 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, RefreshControl, Alert } from 'react-native';
+import React from 'react';
+import { View, Text, StyleSheet, ScrollView } from 'react-native';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { hostelApi } from '../../../services/api';
+import { useScopedQuery } from '../../../hooks/useScopedQuery';
+import { useRefreshControl } from '../../../hooks/useRefreshControl';
+import { saveFailureMessage } from '../../../services/errorKind';
 import Card from '../../../components/ui/Card';
 import Badge from '../../../components/ui/Badge';
 import Button from '../../../components/ui/Button';
-import Spinner from '../../../components/ui/Spinner';
-import EmptyState from '../../../components/ui/EmptyState';
+import QueryBoundary from '../../../components/ui/QueryBoundary';
+import { useToast } from '../../../components/ui/Toast';
 import { Colors, FontSize, Spacing } from '../../../constants/colors';
 
 interface GatePass {
@@ -18,52 +22,44 @@ interface GatePass {
   created_at: string;
 }
 
+type Action = 'approve' | 'reject' | 'checkout' | 'return';
+const ACTIONS: Record<Action, (id: number) => Promise<unknown>> = {
+  approve: (id) => hostelApi.approveGatePass(id),
+  reject: (id) => hostelApi.rejectGatePass(id),
+  checkout: (id) => hostelApi.checkoutGatePass(id),
+  return: (id) => hostelApi.returnGatePass(id),
+};
+const DONE: Record<Action, string> = { approve: 'approved', reject: 'rejected', checkout: 'checked out', return: 'marked returned' };
+
 const STATUS_VARIANTS: Record<string, 'success' | 'error' | 'warning' | 'default' | 'info'> = {
   PENDING: 'warning', APPROVED: 'success', REJECTED: 'error', CHECKED_OUT: 'info', RETURNED: 'success',
 };
 
 export default function GatePasses() {
-  const [passes, setPasses] = useState<GatePass[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [processing, setProcessing] = useState<number | null>(null);
+  const toast = useToast();
+  const qc = useQueryClient();
+  const query = useScopedQuery<GatePass[]>('hostel-gate-passes', [], async () => {
+    const r = await hostelApi.getGatePasses();
+    return r.data.results || r.data || [];
+  });
+  const refreshControl = useRefreshControl(query.refetch);
 
-  const fetchPasses = async () => {
-    try {
-      const response = await hostelApi.getGatePasses();
-      setPasses(response.data.results || response.data || []);
-    } catch (error) { console.error('Failed to fetch gate passes:', error); }
-    finally { setLoading(false); setRefreshing(false); }
-  };
-
-  useEffect(() => { fetchPasses(); }, []);
-  const onRefresh = () => { setRefreshing(true); fetchPasses(); };
-
-  const handleAction = async (id: number, action: string) => {
-    setProcessing(id);
-    try {
-      if (action === 'approve') await hostelApi.approveGatePass(id);
-      else if (action === 'reject') await hostelApi.rejectGatePass(id);
-      else if (action === 'checkout') await hostelApi.checkoutGatePass(id);
-      else if (action === 'return') await hostelApi.returnGatePass(id);
-      Alert.alert('Success', `Gate pass ${action}ed successfully.`);
-      fetchPasses();
-    } catch (error) {
-      console.error(`Failed to ${action} gate pass:`, error);
-      Alert.alert('Error', `Failed to ${action} gate pass.`);
-    } finally { setProcessing(null); }
-  };
-
-  if (loading) return <Spinner fullScreen message="Loading gate passes..." />;
+  const act = useMutation({
+    mutationFn: ({ id, action }: { id: number; action: Action }) => ACTIONS[action](id),
+    onSuccess: (_d, { action }) => {
+      toast.success(`Gate pass ${DONE[action]}.`);
+      qc.invalidateQueries({ predicate: (q) => q.queryKey[0] === 'hostel-gate-passes' });
+    },
+    onError: (e, { action }) => toast.error(saveFailureMessage(e, `Could not ${action} the gate pass.`)),
+  });
+  const busy = (id: number) => act.isPending && act.variables?.id === id;
+  const run = (id: number, action: Action) => act.mutate({ id, action });
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
+    <ScrollView style={styles.container} contentContainerStyle={styles.content} refreshControl={refreshControl}>
       <Text style={styles.title}>Gate Passes</Text>
-      {passes.length === 0 ? (
-        <EmptyState title="No Gate Passes" message="No gate pass requests found." />
-      ) : (
-        passes.map((pass) => (
+      <QueryBoundary query={query} emptyTitle="No Gate Passes" emptyMessage="No gate pass requests found.">
+        {(passes) => passes.map((pass) => (
           <Card key={pass.id} style={styles.card}>
             <View style={styles.cardHeader}>
               <Text style={styles.studentName}>{pass.student_name}</Text>
@@ -74,20 +70,20 @@ export default function GatePasses() {
             <View style={styles.actions}>
               {pass.status === 'PENDING' && (
                 <>
-                  <Button title="Reject" variant="danger" size="sm" onPress={() => handleAction(pass.id, 'reject')} loading={processing === pass.id} style={{ flex: 1 }} />
-                  <Button title="Approve" size="sm" onPress={() => handleAction(pass.id, 'approve')} loading={processing === pass.id} style={{ flex: 1 }} />
+                  <Button title="Reject" variant="danger" size="sm" onPress={() => run(pass.id, 'reject')} loading={busy(pass.id)} style={{ flex: 1 }} />
+                  <Button title="Approve" size="sm" onPress={() => run(pass.id, 'approve')} loading={busy(pass.id)} style={{ flex: 1 }} />
                 </>
               )}
               {pass.status === 'APPROVED' && (
-                <Button title="Check Out" variant="secondary" size="sm" onPress={() => handleAction(pass.id, 'checkout')} loading={processing === pass.id} style={{ flex: 1 }} />
+                <Button title="Check Out" variant="secondary" size="sm" onPress={() => run(pass.id, 'checkout')} loading={busy(pass.id)} style={{ flex: 1 }} />
               )}
               {pass.status === 'CHECKED_OUT' && (
-                <Button title="Mark Returned" size="sm" onPress={() => handleAction(pass.id, 'return')} loading={processing === pass.id} style={{ flex: 1 }} />
+                <Button title="Mark Returned" size="sm" onPress={() => run(pass.id, 'return')} loading={busy(pass.id)} style={{ flex: 1 }} />
               )}
             </View>
           </Card>
-        ))
-      )}
+        ))}
+      </QueryBoundary>
     </ScrollView>
   );
 }

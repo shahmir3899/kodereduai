@@ -2,7 +2,7 @@ import React from 'react';
 import { Tabs } from 'expo-router';
 import Icon, { type IconName } from '../ui/Icon';
 import RoleGuard from './RoleGuard';
-import { Colors, FontSize } from '../../constants/colors';
+import { useTabScreenOptions } from './tabBarStyle';
 import type { Persona } from '../../navigation/personas';
 
 export interface TabSpec {
@@ -18,23 +18,11 @@ export interface TabSpec {
 // `hidden` routes live in the group but have no tab; they open from More or from other screens.
 // `titles` names them in the header (otherwise it shows the raw route name).
 export default function PersonaTabs({ persona, tabs, hidden = [], stacks = [], titles = {} }: { persona: Persona; tabs: TabSpec[]; hidden?: string[]; stacks?: string[]; titles?: Record<string, string> }) {
+  const screenOptions = useTabScreenOptions();
   return (
     <RoleGuard persona={persona}>
       <Tabs
-        screenOptions={{
-          headerStyle: { backgroundColor: Colors.surface },
-          headerTitleStyle: { fontWeight: '600', fontSize: FontSize.lg },
-          headerTintColor: Colors.text,
-          tabBarActiveTintColor: Colors.primary,
-          tabBarInactiveTintColor: Colors.textTertiary,
-          tabBarStyle: {
-            backgroundColor: Colors.surface,
-            borderTopColor: Colors.border,
-            paddingBottom: 4,
-            height: 56,
-          },
-          tabBarLabelStyle: { fontSize: FontSize.xs, fontWeight: '500' },
-        }}
+        screenOptions={screenOptions}
       >
         {tabs.map((t) => (
           <Tabs.Screen

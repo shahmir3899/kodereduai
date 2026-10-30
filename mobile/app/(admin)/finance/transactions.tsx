@@ -1,17 +1,16 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import {
   View,
   Text,
   StyleSheet,
   FlatList,
-  RefreshControl,
-  Alert,
 } from 'react-native';
 import { financeApi } from '../../../services/api';
 import Card from '../../../components/ui/Card';
 import Badge from '../../../components/ui/Badge';
-import Spinner from '../../../components/ui/Spinner';
-import EmptyState from '../../../components/ui/EmptyState';
+import QueryBoundary from '../../../components/ui/QueryBoundary';
+import { useScopedQuery } from '../../../hooks/useScopedQuery';
+import { useRefreshControl } from '../../../hooks/useRefreshControl';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../../constants/colors';
 
 interface Transaction {
@@ -36,18 +35,13 @@ const TYPE_LABELS: Record<string, string> = {
 };
 
 export default function TransactionHistory() {
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-
-  const fetchTransactions = async () => {
-    try {
-      const [feesRes, expensesRes, incomeRes] = await Promise.all([
-        financeApi.getFeePayments(),
-        financeApi.getExpenses(),
-        financeApi.getOtherIncome(),
-      ]);
-
+  // Three money roots, so a payment or expense recorded elsewhere shows up on the next visit.
+  const query = useScopedQuery<Transaction[]>('feePayments', ['history'], async () => {
+    const [feesRes, expensesRes, incomeRes] = await Promise.all([
+      financeApi.getFeePayments(),
+      financeApi.getExpenses(),
+      financeApi.getOtherIncome(),
+    ]);
       const fees = (feesRes.data.results || feesRes.data || []).map((item: any) => ({
         id: `fee-${item.id}`,
         type: 'FEE' as const,
@@ -79,24 +73,9 @@ export default function TransactionHistory() {
         return new Date(b.date).getTime() - new Date(a.date).getTime();
       });
 
-      setTransactions(combined);
-    } catch (error) {
-      console.error('Failed to fetch transactions:', error);
-      Alert.alert('Error', 'Failed to load transactions.');
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchTransactions();
-  }, []);
-
-  const onRefresh = () => {
-    setRefreshing(true);
-    fetchTransactions();
-  };
+    return combined;
+  });
+  const refreshControl = useRefreshControl(query.refetch);
 
   const formatDate = (dateStr: string) => {
     if (!dateStr) return 'N/A';
@@ -139,30 +118,24 @@ export default function TransactionHistory() {
     );
   };
 
-  if (loading) return <Spinner fullScreen message="Loading transactions..." />;
-
   return (
     <View style={styles.container}>
       <View style={styles.headerContainer}>
         <Text style={styles.title}>Transaction History</Text>
-        <Text style={styles.subtitle}>{transactions.length} transactions</Text>
+        <Text style={styles.subtitle}>{query.data?.length ?? 0} transactions</Text>
       </View>
 
-      <FlatList
-        data={transactions}
-        keyExtractor={(item) => item.id}
-        renderItem={renderItem}
-        contentContainerStyle={styles.listContent}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-        }
-        ListEmptyComponent={
-          <EmptyState
-            title="No Transactions"
-            message="No financial transactions found."
+      <QueryBoundary query={query} emptyTitle="No Transactions" emptyMessage="No financial transactions found.">
+        {(transactions) => (
+          <FlatList
+            data={transactions}
+            keyExtractor={(item) => item.id}
+            renderItem={renderItem}
+            contentContainerStyle={styles.listContent}
+            refreshControl={refreshControl}
           />
-        }
-      />
+        )}
+      </QueryBoundary>
     </View>
   );
 }
