@@ -1,5 +1,5 @@
 import { todayString } from '../../../services/attendanceEntry';
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -12,10 +12,13 @@ import {
 import { useRouter } from 'expo-router';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
-import { Picker } from '@react-native-picker/picker';
 import { faceAttendanceApi, classesApi } from '../../../services/api';
 import Button from '../../../components/ui/Button';
 import Spinner from '../../../components/ui/Spinner';
+import Select from '../../../components/ui/Select';
+import { useToast } from '../../../components/ui/Toast';
+import { saveFailureMessage } from '../../../services/errorKind';
+import { useMasterClasses } from '../../../hooks/useAcademicYear';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../../constants/colors';
 
 export default function FaceAttendanceCapture() {
@@ -23,23 +26,17 @@ export default function FaceAttendanceCapture() {
   const [permission, requestPermission] = useCameraPermissions();
   const [photo, setPhoto] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
-  const [classes, setClasses] = useState<any[]>([]);
-  const [selectedClass, setSelectedClass] = useState<string>('');
+  const [selectedClass, setSelectedClass] = useState<number | null>(null);
   const [selectedDate] = useState(todayString());
   const cameraRef = useRef<CameraView>(null);
-
-  useEffect(() => {
-    loadClasses();
-  }, []);
-
-  const loadClasses = async () => {
-    try {
-      const res = await classesApi.getClasses({ page_size: 100 });
-      setClasses(res.data.results || res.data || []);
-    } catch (err) {
-      console.error('Failed to load classes:', err);
-    }
-  };
+  const toast = useToast();
+  // Master classes are persisted reference data, so the picker still opens offline. A failed load
+  // is shown instead of leaving an empty picker.
+  const classesQ = useMasterClasses();
+  const classOptions = (classesQ.data ?? []).map((c) => ({
+    value: Number(c.id),
+    label: `${c.name}${c.section ? ` - ${c.section}` : ''}`,
+  }));
 
   const takePhoto = async () => {
     if (cameraRef.current) {
@@ -47,7 +44,7 @@ export default function FaceAttendanceCapture() {
         const result = await cameraRef.current.takePictureAsync({ quality: 0.8 });
         if (result) setPhoto(result.uri);
       } catch (error) {
-        Alert.alert('Error', 'Failed to capture photo.');
+        toast.error('Could not capture the photo. Please try again.');
       }
     }
   };
@@ -64,7 +61,7 @@ export default function FaceAttendanceCapture() {
 
   const uploadAndProcess = async () => {
     if (!photo || !selectedClass) {
-      Alert.alert('Error', 'Please select a class and capture a photo.');
+      toast.error('Choose a class and capture a photo first.');
       return;
     }
 
@@ -84,7 +81,7 @@ export default function FaceAttendanceCapture() {
 
       // Create session
       const sessionRes = await faceAttendanceApi.createSession({
-        class_obj: parseInt(selectedClass),
+        class_obj: selectedClass,
         date: selectedDate,
         image_url: imageUrl,
       });
@@ -100,8 +97,7 @@ export default function FaceAttendanceCapture() {
         { text: 'Capture Another', onPress: () => setPhoto(null) },
       ]);
     } catch (error: any) {
-      const msg = error.response?.data?.error || error.response?.data?.detail || 'Upload failed.';
-      Alert.alert('Error', msg);
+      toast.error(error.response?.data?.error || error.response?.data?.detail || saveFailureMessage(error, 'Upload failed.'));
     } finally {
       setUploading(false);
     }
@@ -129,23 +125,10 @@ export default function FaceAttendanceCapture() {
       <View style={styles.container}>
         {/* Class selector */}
         <View style={styles.classSelector}>
-          <Text style={styles.label}>Class:</Text>
-          <View style={styles.pickerWrapper}>
-            <Picker
-              selectedValue={selectedClass}
-              onValueChange={setSelectedClass}
-              style={styles.picker}
-            >
-              <Picker.Item label="Select class..." value="" />
-              {classes.map((cls: any) => (
-                <Picker.Item
-                  key={cls.id}
-                  label={`${cls.name}${cls.section ? ` - ${cls.section}` : ''}`}
-                  value={String(cls.id)}
-                />
-              ))}
-            </Picker>
-          </View>
+          <Select label="Class" value={selectedClass} options={classOptions} onChange={setSelectedClass}
+            placeholder={classesQ.isLoading ? 'Loading classes...' : classesQ.isError ? 'Could not load classes' : 'Select class...'}
+            disabled={classesQ.isLoading || classOptions.length === 0} />
+          {classesQ.isError ? <Text style={styles.classError} onPress={() => classesQ.refetch()} accessibilityRole="button">Tap to retry</Text> : null}
         </View>
 
         <Image source={{ uri: photo }} style={styles.preview} />
@@ -203,10 +186,8 @@ const styles = StyleSheet.create({
   galleryBtnText: { color: Colors.textInverse, fontSize: FontSize.sm, fontWeight: '500' },
   preview: { flex: 1, resizeMode: 'contain' as const },
   previewActions: { flexDirection: 'row', gap: Spacing.md, padding: Spacing.lg, backgroundColor: Colors.text },
-  classSelector: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm, backgroundColor: Colors.background },
-  label: { fontSize: FontSize.sm, fontWeight: '600', color: Colors.text, marginRight: Spacing.sm },
-  pickerWrapper: { flex: 1, backgroundColor: Colors.surface, borderRadius: BorderRadius.md },
-  picker: { height: 44 },
+  classSelector: { paddingHorizontal: Spacing.md, paddingTop: Spacing.sm, backgroundColor: Colors.background },
+  classError: { color: Colors.errorText, fontSize: FontSize.sm, paddingBottom: Spacing.sm },
   permissionContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: Spacing.xxxl, backgroundColor: Colors.background },
   permissionTitle: { fontSize: FontSize.xl, fontWeight: '700', color: Colors.text, marginBottom: Spacing.md },
   permissionText: { fontSize: FontSize.sm, color: Colors.textSecondary, textAlign: 'center', marginBottom: Spacing.xxl },

@@ -108,6 +108,7 @@ export default function LoginScreen() {
           />
 
           <TouchableOpacity
+            accessibilityRole="button"
             onPress={() => router.push('/(auth)/forgot-password')}
             style={styles.forgotLink}
           >
@@ -123,6 +124,7 @@ export default function LoginScreen() {
           />
 
           <TouchableOpacity
+            accessibilityRole="button"
             onPress={() => router.push('/(auth)/register')}
             style={styles.registerLink}
           >

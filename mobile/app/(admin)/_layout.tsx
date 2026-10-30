@@ -51,6 +51,7 @@ export default function AdminLayout() {
       />
       {/* Hidden screens — accessed via "More" or deep navigation */}
       <Tabs.Screen name="inbox" options={{ href: null }} />
+      <Tabs.Screen name="my-profile" options={{ href: null, title: 'My Profile' }} />
       <Tabs.Screen name="notifications" options={{ href: null, headerShown: false }} />
       <Tabs.Screen name="hr" options={{ href: null, headerShown: false }} />
       <Tabs.Screen name="hostel" options={{ href: null, headerShown: false }} />

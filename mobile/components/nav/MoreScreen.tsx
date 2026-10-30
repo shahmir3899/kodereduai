@@ -7,6 +7,7 @@ import { useToast } from '../ui/Toast';
 import NavGroupList from './NavGroupList';
 import SchoolSwitcher from './SchoolSwitcher';
 import SchoolBadge from './SchoolBadge';
+import UserBadge from './UserBadge';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
 
 // Everything the role may open that doesn't have its own bottom tab. Entries whose mobile
@@ -24,6 +25,9 @@ export default function MoreScreen() {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+      <View style={styles.school}>
+        <UserBadge />
+      </View>
       <View style={styles.school}>
         <SchoolBadge />
         <SchoolSwitcher />

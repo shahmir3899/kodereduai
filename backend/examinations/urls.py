@@ -2,7 +2,7 @@ from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from .views import (
     ExamTypeViewSet, ExamGroupViewSet, ExamViewSet, ExamSubjectViewSet,
-    StudentMarkViewSet, StudentResponseViewSet, GradeScaleViewSet, ReportCardView, ReportCardMetaView, ReportCardBulkMetaView,
+    StudentMarkViewSet, StudentResponseViewSet, GradeScaleViewSet, ReportCardView, ReportCardPdfView, ReportCardMetaView, ReportCardBulkMetaView,
     QuestionViewSet, ExamPaperViewSet, PaperUploadViewSet, PaperFeedbackViewSet,
     StudentTermAssessmentView, StudentTermAssessmentRosterView, StudentTermAssessmentBulkSaveView,
     StudentTermAssessmentAIRemarkView, AcademicRiskView,
@@ -31,6 +31,7 @@ router.register(r'worksheet-uploads', WorksheetUploadViewSet, basename='workshee
 urlpatterns = [
     path('', include(router.urls)),
     path('report-card/', ReportCardView.as_view(), name='report-card'),
+    path('report-card/pdf/', ReportCardPdfView.as_view(), name='report-card-pdf'),
     path('report-card/meta/', ReportCardMetaView.as_view(), name='report-card-meta'),
     path('report-card/meta/bulk/', ReportCardBulkMetaView.as_view(), name='report-card-meta-bulk'),
     path('student-term-assessment/', StudentTermAssessmentView.as_view(), name='student-term-assessment'),
