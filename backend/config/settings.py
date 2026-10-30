@@ -237,6 +237,11 @@ SIMPLE_JWT = {
     'AUTH_TOKEN_CLASSES': ('rest_framework_simplejwt.tokens.AccessToken',),
 }
 
+# How long a phone stays signed in without being opened. The refresh token is renewed each time the
+# app refreshes it, so this is days of inactivity, not days since sign-in. Only sessions that sign in
+# with the mobile header get it; the web keeps SIMPLE_JWT['REFRESH_TOKEN_LIFETIME'].
+MOBILE_REFRESH_DAYS = int(os.getenv('MOBILE_REFRESH_DAYS', '30'))
+
 # =============================================================================
 # CORS Settings
 # =============================================================================

@@ -209,6 +209,14 @@ class School(models.Model):
         help_text="IANA time zone name, e.g. 'Asia/Karachi'",
     )
 
+    # Whether the school shows up in the phone app's school search. Off by default: a school that has
+    # not agreed to be listed is still reachable by typing its exact code, so nobody can list the
+    # platform's customers by installing the app.
+    listed_in_app = models.BooleanField(
+        default=False,
+        help_text="Show this school in the mobile app's school search",
+    )
+
     # WhatsApp Integration
     whatsapp_sender_id = models.CharField(
         max_length=100,

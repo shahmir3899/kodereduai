@@ -8,7 +8,7 @@ from rest_framework.decorators import action
 from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny
-from rest_framework_simplejwt.views import TokenObtainPairView
+from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from django.contrib.auth import get_user_model
 
 from core.permissions import IsSuperAdmin, IsSchoolAdmin, HasSchoolAccess, ROLE_HIERARCHY, get_effective_role
@@ -16,6 +16,7 @@ from core.mixins import TenantQuerySetMixin, ensure_tenant_school_id
 from core.audit import log_admin_action
 from .serializers import (
     CustomTokenObtainPairSerializer,
+    CustomTokenRefreshSerializer,
     UserSerializer,
     UserCreateSerializer,
     UserUpdateSerializer,
@@ -27,6 +28,11 @@ from .serializers import (
 )
 
 User = get_user_model()
+
+
+class CustomTokenRefreshView(TokenRefreshView):
+    """Token refresh that keeps a phone session's long sliding window (see users.serializers)."""
+    serializer_class = CustomTokenRefreshSerializer
 
 
 class CustomTokenObtainPairView(TokenObtainPairView):

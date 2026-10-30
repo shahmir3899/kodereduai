@@ -5,7 +5,10 @@ User serializers for authentication and user management.
 import logging
 
 from rest_framework import serializers
-from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
+from datetime import timedelta
+
+from rest_framework_simplejwt.serializers import TokenObtainPairSerializer, TokenRefreshSerializer
+from rest_framework_simplejwt.tokens import RefreshToken
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from schools.models import School
@@ -13,6 +16,31 @@ from core.models import LoginEvent
 
 User = get_user_model()
 logger = logging.getLogger(__name__)
+
+
+# The phone app sends this header on sign-in. Its refresh token then lives MOBILE_REFRESH_DAYS and is
+# renewed on every use, so a parent or teacher who opens the app now and then stays signed in. The web
+# keeps the short REFRESH_TOKEN_LIFETIME: a browser is far likelier to be shared or left open.
+MOBILE_CLIENT_HEADER = 'HTTP_X_CLIENT'
+MOBILE_CLIENT = 'mobile'
+
+
+def _mobile_refresh_lifetime():
+    return timedelta(days=settings.MOBILE_REFRESH_DAYS)
+
+
+class CustomTokenRefreshSerializer(TokenRefreshSerializer):
+    """Refresh that keeps a phone's long window: the rotated refresh token of a mobile session
+    is re-dated to MOBILE_REFRESH_DAYS from now instead of the web default."""
+
+    def validate(self, attrs):
+        data = super().validate(attrs)
+        if 'refresh' in data:
+            token = RefreshToken(data['refresh'])
+            if token.payload.get('client') == MOBILE_CLIENT:
+                token.set_exp(lifetime=_mobile_refresh_lifetime())
+                data['refresh'] = str(token)
+        return data
 
 
 def _client_ip(request):
@@ -44,6 +72,13 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         data = super().validate(attrs)
 
         user = self.user
+        request = self.context.get('request')
+        if request is not None and request.META.get(MOBILE_CLIENT_HEADER) == MOBILE_CLIENT:
+            refresh = self.get_token(user)
+            refresh['client'] = MOBILE_CLIENT
+            refresh.set_exp(lifetime=_mobile_refresh_lifetime())
+            data['refresh'] = str(refresh)
+            data['access'] = str(refresh.access_token)
         default_mem = user.get_default_membership()
 
         # Build schools list
