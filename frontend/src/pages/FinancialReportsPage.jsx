@@ -1,3 +1,4 @@
+import { schoolPeriod } from '../utils/schoolTime'
 import { useState } from 'react'
 import PageHeader from '../components/ui/PageHeader'
 import LoadingState from '../components/ui/LoadingState'
@@ -10,10 +11,10 @@ import {
 } from 'recharts'
 
 const PERIODS = [
-  { label: 'This Month', getValue: () => { const d = new Date(); return { date_from: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`, date_to: d.toISOString().split('T')[0] } } },
-  { label: 'Last Month', getValue: () => { const d = new Date(); d.setMonth(d.getMonth() - 1); const start = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`; const end = new Date(d.getFullYear(), d.getMonth() + 1, 0).toISOString().split('T')[0]; return { date_from: start, date_to: end } } },
-  { label: 'This Quarter', getValue: () => { const d = new Date(); const q = Math.floor(d.getMonth() / 3); return { date_from: `${d.getFullYear()}-${String(q * 3 + 1).padStart(2, '0')}-01`, date_to: d.toISOString().split('T')[0] } } },
-  { label: 'This Year', getValue: () => { const d = new Date(); return { date_from: `${d.getFullYear()}-01-01`, date_to: d.toISOString().split('T')[0] } } },
+  { label: 'This Month', getValue: () => schoolPeriod('month') },
+  { label: 'Last Month', getValue: () => schoolPeriod('lastMonth') },
+  { label: 'This Quarter', getValue: () => schoolPeriod('quarter') },
+  { label: 'This Year', getValue: () => schoolPeriod('year') },
 ]
 
 const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']

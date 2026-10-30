@@ -4,11 +4,15 @@ export interface School {
   role: string;
   is_default: boolean;
   enabled_modules: Record<string, boolean>;
+  // IANA zone of the school; absent on old payloads (Asia/Karachi is assumed)
+  timezone?: string;
 }
 
 export interface User {
   id: number;
   username: string;
+  first_name?: string;
+  last_name?: string;
   email: string;
   role: string;
   role_display: string;

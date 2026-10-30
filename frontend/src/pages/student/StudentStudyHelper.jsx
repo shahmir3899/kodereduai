@@ -1,8 +1,11 @@
+import { getSchoolTimeZone } from '../../utils/schoolTime'
 import { useState, useRef, useEffect } from 'react'
 import PageHeader from '../../components/ui/PageHeader'
 import LoadingState from '../../components/ui/LoadingState'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { studentPortalApi } from '../../services/api'
+import { useToast } from '../../components/Toast'
+import { useConfirmModal } from '../../components/ConfirmModal'
 
 const SUGGESTIONS = [
   'Help me understand fractions',
@@ -21,11 +24,14 @@ function formatTimestamp(dateStr) {
     hour: 'numeric',
     minute: '2-digit',
     hour12: true,
+    timeZone: getSchoolTimeZone(),
   })
 }
 
 export default function StudentStudyHelper() {
   const queryClient = useQueryClient()
+  const { showSuccess } = useToast()
+  const { confirm, ConfirmModalRoot } = useConfirmModal()
   const [messages, setMessages] = useState([])
   const [input, setInput] = useState('')
   const [errorToast, setErrorToast] = useState('')
@@ -96,11 +102,22 @@ export default function StudentStudyHelper() {
     onSuccess: () => {
       setMessages([])
       queryClient.invalidateQueries({ queryKey: ['studyHelperHistory'] })
+      showSuccess('Chat cleared')
     },
     onError: () => {
       setErrorToast('Failed to clear chat history. Please try again.')
     },
   })
+
+  // One tap deletes the whole saved history, and on a phone the button sits at the top next to the title, so it asks first.
+  const handleClear = async () => {
+    const ok = await confirm({
+      title: 'Clear Chat',
+      message: 'Delete this whole conversation? Your saved chat cannot be brought back.',
+      confirmLabel: 'Clear chat',
+    })
+    if (ok) clearMutation.mutate()
+  }
 
   const handleSend = (text) => {
     const msg = (text || input).trim()
@@ -120,11 +137,12 @@ export default function StudentStudyHelper() {
 
   return (
     <div className="flex flex-col h-[calc(100vh-10rem)] max-w-4xl mx-auto">
+      <ConfirmModalRoot />
       {/* Header */}
       <PageHeader title="AI Study Helper" subtitle="Your personal AI tutor" className="mb-4" actions={<>
 {messages.length > 0 && (
           <button
-            onClick={() => clearMutation.mutate()}
+            onClick={handleClear}
             disabled={clearMutation.isPending}
             className="px-3 py-1.5 text-sm text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
@@ -269,7 +287,7 @@ export default function StudentStudyHelper() {
           </button>
         </div>
         <div className="flex items-center justify-between mt-1.5 px-1">
-          <p className="text-xs text-gray-400">
+          <p className="hidden sm:block text-xs text-gray-400">
             Press Enter to send, Shift+Enter for new line
           </p>
           <span className={`text-xs ${input.length > 1800 ? (input.length > 1950 ? 'text-red-500 font-medium' : 'text-yellow-600') : 'text-gray-400'}`}>

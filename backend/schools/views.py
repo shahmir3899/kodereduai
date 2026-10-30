@@ -560,6 +560,38 @@ class SchoolViewSet(TenantQuerySetMixin, viewsets.ReadOnlyModelViewSet):
         })
 
     @action(detail=False, methods=['get', 'put'])
+    def time_zone(self, request):
+        """Get or change the school's own time zone (what 'today' means for it)."""
+        school = getattr(request, 'tenant_school', None) or request.user.school
+        if not school:
+            return Response(
+                {'error': 'No school associated with this user.'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        if request.method == 'GET':
+            return Response({'timezone': school.timezone, 'school_name': school.name})
+
+        from core.permissions import get_effective_role, ADMIN_ROLES
+        if get_effective_role(request) not in ADMIN_ROLES:
+            return Response(
+                {'error': 'Only school admins can change the time zone.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        from core.school_time import validate_timezone_name
+        from django.core.exceptions import ValidationError as DjangoValidationError
+        name = request.data.get('timezone')
+        try:
+            validate_timezone_name(name)
+        except DjangoValidationError as exc:
+            return Response({'error': exc.messages[0]}, status=status.HTTP_400_BAD_REQUEST)
+
+        school.timezone = name
+        school.save(update_fields=['timezone', 'updated_at'])
+        return Response({'timezone': school.timezone, 'message': 'Time zone updated.'})
+
+    @action(detail=False, methods=['get', 'put'])
     def attendance_config(self, request):
         """Get or update attendance configuration (AI risk threshold, etc.) for the current school."""
         school = getattr(request, 'tenant_school', None) or request.user.school

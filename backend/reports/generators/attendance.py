@@ -2,6 +2,7 @@
 Attendance report generators.
 """
 
+from django.utils import timezone
 from datetime import date
 from django.db.models import Count, Q
 from .base import BaseReportGenerator
@@ -14,7 +15,7 @@ class DailyAttendanceReportGenerator(BaseReportGenerator):
         from attendance.models import AttendanceRecord
         from students.models import Class
 
-        report_date = self.parameters.get('date', date.today())
+        report_date = self.parameters.get('date', timezone.localdate())
         class_id = self.parameters.get('class_id')
         academic_year_id = self._academic_year_id()
         session_class_id = self._session_class_id()
@@ -78,8 +79,8 @@ class MonthlyAttendanceReportGenerator(BaseReportGenerator):
     def get_data(self):
         from attendance.models import AttendanceRecord
 
-        month = self.parameters.get('month', date.today().month)
-        year = self.parameters.get('year', date.today().year)
+        month = self.parameters.get('month', timezone.localdate().month)
+        year = self.parameters.get('year', timezone.localdate().year)
         class_id = self.parameters.get('class_id')
         academic_year_id = self._academic_year_id()
         session_class_id = self._session_class_id()

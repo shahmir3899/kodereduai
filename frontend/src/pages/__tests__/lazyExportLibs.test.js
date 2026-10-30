@@ -9,7 +9,6 @@ const read = (rel) => readFileSync(resolve(__dirname, '..', rel), 'utf8')
 
 const PAGES = {
   'StudentsPage.jsx': ['./studentExport'],
-  'FinanceDashboardPage.jsx': ['./finance/financeReportExport'],
   'fee-collection/FeeCollectPage.jsx': ['./feeExport'],
   'lms/LessonPlansPage.jsx': ['./lessonPlansExportPdf'],
   'examinations/ReportCardPage.jsx': ['./reportCardExport'],

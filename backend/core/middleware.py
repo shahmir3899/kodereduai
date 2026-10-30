@@ -44,11 +44,38 @@ class TenantMiddleware(MiddlewareMixin):
 
         return None
 
+    def _activate_school_timezone(self, request):
+        """Run the request on the school's clock. JWT auth runs after middleware, so the school is
+        read from the header (or subdomain) without checking access: it only picks a time zone,
+        and a wrong header only changes how the caller's own times are shown."""
+        from django.utils import timezone as dj_timezone
+        from zoneinfo import ZoneInfo
+        from core.school_time import school_timezone_name
+
+        school_id = request.tenant_school_id
+        header = request.headers.get('X-School-ID')
+        if not school_id and header:
+            try:
+                school_id = int(header)
+            except (ValueError, TypeError):
+                school_id = None
+        if school_id:
+            dj_timezone.activate(ZoneInfo(school_timezone_name(school_id)))
+        else:
+            dj_timezone.deactivate()
+
+    def process_response(self, request, response):
+        # The active zone is thread-local: never let one request's school leak into the next.
+        from django.utils import timezone as dj_timezone
+        dj_timezone.deactivate()
+        return response
+
     def process_view(self, request, view_func, view_args, view_kwargs):
         """
         After authentication, set tenant_schools from memberships
         and resolve active school from X-School-ID header.
         """
+        self._activate_school_timezone(request)
         if not hasattr(request, 'user') or not request.user.is_authenticated:
             return None
 

@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { parentsApi } from '../../services/api';
+import { apiErrorMessage, registerBody, registerProblem } from '../../services/parentPortal';
 import Input from '../../components/ui/Input';
 import Button from '../../components/ui/Button';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
@@ -31,34 +32,20 @@ export default function RegisterScreen() {
   };
 
   const handleRegister = async () => {
-    if (!form.username || !form.password || !form.invite_code) {
-      Alert.alert('Error', 'Please fill in all required fields.');
-      return;
-    }
-    if (form.password !== form.confirmPassword) {
-      Alert.alert('Error', 'Passwords do not match.');
+    const problem = registerProblem(form);
+    if (problem) {
+      Alert.alert('Error', problem);
       return;
     }
 
     setLoading(true);
     try {
-      await parentsApi.register({
-        username: form.username,
-        email: form.email,
-        password: form.password,
-        phone: form.phone,
-        invite_code: form.invite_code,
-      });
+      await parentsApi.register(registerBody(form));
       Alert.alert('Success', 'Registration successful! Please sign in.', [
         { text: 'OK', onPress: () => router.replace('/(auth)/login') },
       ]);
     } catch (error: any) {
-      const message =
-        error.response?.data?.detail ||
-        error.response?.data?.error ||
-        JSON.stringify(error.response?.data) ||
-        'Registration failed. Please try again.';
-      Alert.alert('Registration Failed', message);
+      Alert.alert('Registration Failed', apiErrorMessage(error.response?.data, 'Registration failed. Please try again.'));
     } finally {
       setLoading(false);
     }
@@ -76,7 +63,7 @@ export default function RegisterScreen() {
         <View style={styles.form}>
           <Text style={styles.title}>Create Account</Text>
           <Text style={styles.subtitle}>
-            Register as a parent or student using your invite code
+            Register as a parent using the invite code from your child's school
           </Text>
 
           <Input
@@ -106,7 +93,7 @@ export default function RegisterScreen() {
           />
 
           <Input
-            label="Phone"
+            label="Phone *"
             placeholder="Phone number"
             value={form.phone}
             onChangeText={(v) => updateField('phone', v)}

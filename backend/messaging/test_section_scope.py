@@ -88,3 +88,28 @@ def test_portal_exam_scope_hides_previous_cohorts_exams(seed_data, seed_sections
     visible = Exam.objects.filter(class_obj_id=class_obj_id).filter(current_year_q(year_id))
 
     assert list(visible) == [this_year]
+
+
+def test_teacher_cannot_message_a_student(seed_data, seed_sections, section_teachers, api):
+    """The student portal has no Messages page, so students are not offered as recipients."""
+    from students.models import StudentProfile
+    from users.models import User
+
+    child = seed_sections['a_students'][0]
+    student_user = User.objects.create_user(
+        username='PYTEST_student_msg', email='pytest_student_msg@test.com', password='Abcd1234', role='STUDENT', school=seed_data['school_a'],
+    )
+    StudentProfile.objects.create(user=student_user, student=child, school=seed_data['school_a'])
+
+    token = api.login(section_teachers['teacher_a'].user.username)
+    sid = seed_data['SID_A']
+    rows = api.get('/api/messaging/recipients/', token, sid).json()
+    assert student_user.id not in {r['id'] for r in rows}
+    assert 'STUDENT' not in {r['role'] for r in rows}
+
+    response = api.post(
+        '/api/messaging/threads/',
+        {'recipient_user_id': student_user.id, 'student_id': child.id, 'message': 'Hello', 'message_type': 'TEACHER_STUDENT'},
+        token, sid,
+    )
+    assert response.status_code == 403, response.content[:200]

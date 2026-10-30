@@ -1,3 +1,4 @@
+import { schoolToday } from '../utils/schoolTime'
 import { useEffect, useState } from 'react'
 import Field from '../components/ui/Field'
 import { TONE } from '../components/ui/statusTones'
@@ -54,7 +55,7 @@ export default function AccountsPage() {
   const [showTransferModal, setShowTransferModal] = useState(false)
   const [transferConfirmStep, setTransferConfirmStep] = useState(false)
   const [transferForm, setTransferForm] = useState({
-    from_account: '', to_account: '', amount: '', date: new Date().toISOString().split('T')[0], description: ''
+    from_account: '', to_account: '', amount: '', date: schoolToday(), description: ''
   })
 
   // Transfer filters
@@ -213,7 +214,7 @@ export default function AccountsPage() {
   const closeTransferModal = () => {
     setShowTransferModal(false)
     setTransferConfirmStep(false)
-    setTransferForm({ from_account: '', to_account: '', amount: '', date: new Date().toISOString().split('T')[0], description: '' })
+    setTransferForm({ from_account: '', to_account: '', amount: '', date: schoolToday(), description: '' })
   }
 
   useEscapeKey(closeAccountModal, showAccountModal)

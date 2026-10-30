@@ -6,6 +6,7 @@ item using the same weighted-slope technique as AttendanceRiskService, and
 projects days-until-stockout to flag items to reorder soon.
 """
 
+from django.utils import timezone
 import logging
 from collections import defaultdict
 from datetime import date, timedelta
@@ -45,7 +46,7 @@ class ReorderPredictionService:
         item_ids = list(items.values_list('id', flat=True))
         item_map = {i.id: i for i in items}
 
-        today = date.today()
+        today = timezone.localdate()
         window_start = today - timedelta(days=CONSUMPTION_WINDOW_DAYS)
 
         transactions = StockTransaction.objects.filter(

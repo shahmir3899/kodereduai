@@ -11,10 +11,10 @@ vi.mock('../../../services/api', () => ({
   parentsApi: {
     getMyChildren: vi.fn(),
     getChildOverview: vi.fn(),
-    getMessageThreads: vi.fn(),
   },
+  messagingApi: { getThreads: vi.fn() },
 }))
-import { parentsApi } from '../../../services/api'
+import { parentsApi, messagingApi } from '../../../services/api'
 import ParentDashboard from '../ParentDashboard'
 
 const LINK = { id: 101, student: 7, student_name: 'Ayesha Khan', class_name: 'Grade 1 - A', student_roll_number: '12' }
@@ -46,7 +46,7 @@ describe('ParentDashboard', () => {
     vi.clearAllMocks()
     parentsApi.getMyChildren.mockResolvedValue({ data: [LINK] })
     parentsApi.getChildOverview.mockResolvedValue({ data: OVERVIEW })
-    parentsApi.getMessageThreads.mockResolvedValue({ data: [{ unread_count: 2 }, { unread_count: 1 }] })
+    messagingApi.getThreads.mockResolvedValue({ data: [{ unread_count: 2 }, { unread_count: 1 }] })
   })
 
   it('shows the child numbers from the real API shape instead of N/A', async () => {

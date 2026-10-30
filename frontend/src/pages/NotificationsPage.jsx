@@ -1,3 +1,4 @@
+import { schoolNowDate } from '../utils/schoolTime'
 import { useState, useEffect } from 'react'
 import Modal from '../components/ui/Modal'
 import EmptyState from '../components/ui/EmptyState'
@@ -12,7 +13,7 @@ import Spinner from '../components/ui/Spinner'
 import { useEscapeKey } from '../hooks/useEscapeKey'
 import Button from '../components/ui/Button'
 import NotificationCard from '../components/notifications/NotificationCard'
-import { EVENT_TYPE_OPTIONS, bundleNotifications } from '../components/notifications/notificationMeta'
+import { EVENT_TYPE_OPTIONS, bundleNotifications, broadcastResultText } from '../components/notifications/notificationMeta'
 import { useNotificationActions } from '../components/notifications/useNotificationActions'
 
 // === CONSTANTS (mirrored from backend model choices) ===
@@ -97,7 +98,7 @@ const SectionSpinner = () => (
 
 export default function NotificationsPage() {
   const [searchParams, setSearchParams] = useSearchParams()
-  const { user } = useAuth()
+  const { user, isParent, isStudent } = useAuth()
   const isAdmin = ['SUPER_ADMIN', 'SCHOOL_ADMIN', 'PRINCIPAL'].includes(user?.role)
 
   const visibleTabs = isAdmin ? TABS : ['Inbox']
@@ -117,7 +118,7 @@ export default function NotificationsPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Notifications</h1>
-        <p className="text-sm text-gray-500 mt-1">Manage notifications and communication templates</p>
+        <p className="text-sm text-gray-500 mt-1">{isParent || isStudent ? 'Messages from your school' : 'Manage notifications and communication templates'}</p>
       </div>
 
       <div className="border-b border-gray-200">
@@ -209,8 +210,8 @@ function InboxTab() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-2">
           <select
             value={schoolFilter}
             onChange={(e) => { setSchoolFilter(e.target.value); setPage(1) }}
@@ -419,13 +420,13 @@ function TemplatesTab() {
         You can use placeholders like <code>{'{{student_name}}'}</code>, <code>{'{{class_name}}'}</code>, <code>{'{{date}}'}</code>, <code>{'{{amount}}'}</code>, <code>{'{{month}}'}</code>, <code>{'{{due_date}}'}</code>, <code>{'{{exam_name}}'}</code>, <code>{'{{school_name}}'}</code>, <code>{'{{roll_number}}'}</code>, <code>{'{{section_name}}'}</code>, and <code>{'{{attendance_rate}}'}</code>.
         Any <code>{'{{key}}'}</code> works when that key is provided by trigger/manual context.
       </div>
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <input
           type="text"
           placeholder="Search templates..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="text-sm border-gray-300 rounded-lg w-64"
+          className="text-sm border-gray-300 rounded-lg w-full sm:w-64"
         />
         <Button onClick={resetForm}>
           New Template
@@ -488,9 +489,9 @@ function TemplatesTab() {
       ) : (
         <div className="bg-white rounded-xl border border-gray-200 divide-y divide-gray-200">
           {filteredTemplates.map((t) => (
-            <div key={t.id} className="px-4 py-3 flex items-center justify-between">
-              <div>
-                <div className="flex items-center gap-2">
+            <div key={t.id} className="px-4 py-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
                   <p className="text-sm font-medium text-gray-900">{t.name}</p>
                   <span className="px-1.5 py-0.5 rounded text-xs bg-gray-100 text-gray-600">
                     {EVENT_TYPE_LABEL[t.event_type] || t.event_type}
@@ -503,7 +504,7 @@ function TemplatesTab() {
                 </div>
                 <p className="text-xs text-gray-500 mt-0.5 truncate max-w-lg">{t.body_template}</p>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-3 sm:gap-2">
                 {t.school != null && <button onClick={() => openEdit(t)} className="text-xs text-primary-600 hover:text-primary-800">Edit</button>}
                 <button onClick={() => duplicateTemplate(t)} className="text-xs text-indigo-600 hover:text-indigo-800">Duplicate</button>
                 <button onClick={() => setPreviewTemplate(t)} className="text-xs text-emerald-600 hover:text-emerald-800">Preview</button>
@@ -595,7 +596,7 @@ function TemplatesTab() {
 
 function RunJobsPanel() {
   const { showError, showSuccess } = useToast()
-  const now = new Date()
+  const now = schoolNowDate()
   const [feeMonth, setFeeMonth] = useState(now.getMonth() + 1)
   const [feeYear, setFeeYear] = useState(now.getFullYear())
 
@@ -709,7 +710,7 @@ function SendTab() {
     mutationFn: (d) => notificationsApi.broadcast(d),
     onSuccess: (res) => {
       const stats = res.data
-      showSuccess(`Sent to ${stats.sent} recipients (${stats.skipped} skipped, ${stats.failed} failed)`)
+      showSuccess(broadcastResultText(stats))
       resetForm()
     },
     onError: (err) => showError(apiErrorText(err, 'Failed to send broadcast')),

@@ -13,7 +13,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from core.mixins import TenantQuerySetMixin, ensure_tenant_school_id
-from core.permissions import IsSchoolAdmin, IsSchoolAdminOrReadOnly, HasSchoolAccess
+from core.permissions import IsSchoolAdmin, IsSchoolAdminOrReadOnly, IsSchoolAdminOrManagerOrReadOnly, HasSchoolAccess
 from core.class_scope import resolve_class_scope
 
 from .models import (
@@ -99,7 +99,7 @@ class AcademicYearViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
     def set_current(self, request, pk=None):
         year = self.get_object()
         # A year that is over or has not started is usually a misclick, so the admin must confirm it.
-        today = date.today()
+        today = timezone.localdate()
         if not request.data.get('confirm_warnings') and not (year.start_date <= today <= year.end_date):
             when = 'has already ended' if year.end_date < today else 'has not started yet'
             return Response({
@@ -140,7 +140,7 @@ class AcademicYearViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
         data['terms'] = TermSerializer(terms, many=True).data
         # Find current term based on today's date
         from datetime import date
-        today = date.today()
+        today = timezone.localdate()
         current_term = terms.filter(
             start_date__lte=today, end_date__gte=today,
         ).first()
@@ -655,7 +655,10 @@ class SessionClassViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
             return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         return Response({'section': section.label, 'changed': len(changed), 'changes': plan})
 
-    @action(detail=False, methods=['post'], url_path='initialize')
+    @action(
+        detail=False, methods=['post'], url_path='initialize',
+        permission_classes=[IsAuthenticated, IsSchoolAdminOrManagerOrReadOnly, HasSchoolAccess],
+    )
     def initialize(self, request):
         serializer = SessionClassInitializeSerializer(
             data=request.data,
@@ -742,6 +745,18 @@ class SessionClassViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
 class StudentEnrollmentViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
     queryset = StudentEnrollment.objects.all()
     permission_classes = [IsAuthenticated, IsSchoolAdminOrReadOnly, HasSchoolAccess]
+
+    # The promotion page's actions: a Manager runs promotion end to end, but plain
+    # enrollment create/update/delete stays admin/principal.
+    PROMOTION_ACTIONS = frozenset({
+        'bulk_promote', 'bulk_reverse_promote', 'promotion_targets_preview',
+        'promotion_targets_apply', 'correct_single', 'correct_bulk',
+    })
+
+    def get_permissions(self):
+        if self.action in self.PROMOTION_ACTIONS:
+            return [IsAuthenticated(), IsSchoolAdminOrManagerOrReadOnly(), HasSchoolAccess()]
+        return super().get_permissions()
 
 
     def get_serializer_class(self):
@@ -2108,7 +2123,7 @@ class StudentEnrollmentViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
 
 class PromotionAdvisorView(APIView):
     """AI Smart Promotion Advisor (background task)."""
-    permission_classes = [IsAuthenticated, IsSchoolAdminOrReadOnly, HasSchoolAccess]
+    permission_classes = [IsAuthenticated, IsSchoolAdminOrManagerOrReadOnly, HasSchoolAccess]
 
     def post(self, request):
         academic_year = request.data.get('academic_year')

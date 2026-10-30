@@ -102,7 +102,7 @@ export default function RecordIncome() {
           <Text style={styles.label}>Source</Text>
           <View style={styles.chipRow}>
             {INCOME_SOURCES.map((src) => (
-              <TouchableOpacity
+              <TouchableOpacity accessibilityRole="button"
                 key={src}
                 style={[styles.chip, source === src && styles.chipSelected]}
                 onPress={() => setSource(src)}

@@ -1,223 +1,100 @@
-import React, { useEffect, useState } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  RefreshControl,
-  TouchableOpacity,
-} from 'react-native';
-import { useRouter } from 'expo-router';
+import React from 'react';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
+import { useRouter, type Href } from 'expo-router';
 import { useAuth } from '../../contexts/AuthContext';
-import { parentsApi } from '../../services/api';
+import { useChildren, useLeaveRequests } from '../../hooks/useParent';
+import { useRecentNotifications } from '../../hooks/useManager';
+import { useThreads } from '../../hooks/useMessaging';
+import { totalUnread } from '../../services/messaging';
+import { useRefreshControl } from '../../hooks/useRefreshControl';
+import ChildCard from '../../components/parent/ChildCard';
 import Card from '../../components/ui/Card';
-import Spinner from '../../components/ui/Spinner';
+import Skeleton from '../../components/ui/Skeleton';
+import ErrorState from '../../components/ui/ErrorState';
 import EmptyState from '../../components/ui/EmptyState';
-import Badge from '../../components/ui/Badge';
+import SchoolSwitcher from '../../components/nav/SchoolSwitcher';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
 
-interface Child {
-  id: number;
-  name: string;
-  class_name: string;
-  roll_number: string;
-  profile_photo_url: string | null;
-  attendance_percentage?: number;
-  fee_status?: string;
-}
-
 export default function ParentDashboard() {
-  const { user, logout } = useAuth();
-  const [children, setChildren] = useState<Child[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
+  const { user, isModuleEnabled } = useAuth();
   const router = useRouter();
+  const children = useChildren();
+  const leave = useLeaveRequests();
+  const threads = useThreads();
+  const notifications = useRecentNotifications(isModuleEnabled('notifications'), 3);
+  const refreshControl = useRefreshControl(children.refetch, leave.refetch, threads.refetch, notifications.refetch);
+  const go = (route: string) => router.push(route as Href);
 
-  const fetchChildren = async () => {
-    try {
-      const response = await parentsApi.getMyChildren();
-      setChildren(response.data.children || response.data || []);
-    } catch (error) {
-      console.error('Failed to fetch children:', error);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  };
+  if (children.isLoading) return <Skeleton />;
+  if (children.isError && !children.data) return <ErrorState error={children.error} onRetry={() => children.refetch()} />;
 
-  useEffect(() => {
-    fetchChildren();
-  }, []);
-
-  const onRefresh = () => {
-    setRefreshing(true);
-    fetchChildren();
-  };
-
-  if (loading) return <Spinner fullScreen message="Loading..." />;
+  const kids = children.data ?? [];
+  const unread = totalUnread(threads.data ?? []);
+  const pendingLeave = (leave.data ?? []).filter((l) => l.status === 'PENDING').length;
+  const name = [user?.first_name, user?.last_name].filter(Boolean).join(' ') || user?.username;
 
   return (
-    <ScrollView
-      style={styles.container}
-      contentContainerStyle={styles.content}
-      refreshControl={
-        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-      }
-    >
-      {/* Welcome */}
-      <View style={styles.welcome}>
-        <Text style={styles.greeting}>
-          Welcome back, {user?.username || 'Parent'}
-        </Text>
-        <TouchableOpacity onPress={logout}>
-          <Text style={styles.logoutText}>Logout</Text>
-        </TouchableOpacity>
-      </View>
+    <ScrollView style={styles.container} contentContainerStyle={styles.content} refreshControl={refreshControl}>
+      <Text style={styles.greeting}>Welcome, {name}</Text>
+      <SchoolSwitcher />
 
-      {/* Children Cards */}
-      <Text style={styles.sectionTitle}>My Children</Text>
-
-      {children.length === 0 ? (
-        <EmptyState
-          title="No Children Linked"
-          message="Contact your school admin to link your children to your account."
-        />
+      {kids.length === 0 ? (
+        <EmptyState title="No children linked" message="Ask the school office for an invite code to link your child, or switch school above." />
       ) : (
-        children.map((child) => (
-          <TouchableOpacity
-            key={child.id}
-            onPress={() => router.push(`/(parent)/children/${child.id}`)}
-          >
-            <Card style={styles.childCard}>
-              <View style={styles.avatar}>
-                <Text style={styles.avatarText}>
-                  {child.name.charAt(0).toUpperCase()}
-                </Text>
-              </View>
-              <View style={styles.childInfo}>
-                <Text style={styles.childName}>{child.name}</Text>
-                <Text style={styles.childClass}>
-                  {child.class_name} | Roll #{child.roll_number}
-                </Text>
-              </View>
-              <Text style={styles.chevron}>›</Text>
-            </Card>
-          </TouchableOpacity>
-        ))
+        <>
+          <Text style={styles.section}>{kids.length === 1 ? 'Your child' : 'Your children'}</Text>
+          {kids.map((c) => <ChildCard key={c.id} child={c} />)}
+        </>
       )}
 
-      {/* Quick Actions */}
-      <Text style={styles.sectionTitle}>Quick Actions</Text>
-      <View style={styles.actionsRow}>
-        <TouchableOpacity
-          style={styles.actionButton}
-          onPress={() => router.push('/(parent)/leave')}
-        >
-          <Text style={styles.actionIcon}>📋</Text>
-          <Text style={styles.actionLabel}>Leave Request</Text>
+      <View style={styles.actions}>
+        <TouchableOpacity accessibilityRole="button" style={styles.quick} onPress={() => go('/(parent)/messages')}>
+          <Text style={styles.quickIcon}>💬</Text>
+          <Text style={styles.quickLabel}>{unread > 0 ? `Messages (${unread})` : 'Messages'}</Text>
         </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.actionButton}
-          onPress={() => router.push('/(parent)/messages')}
-        >
-          <Text style={styles.actionIcon}>💬</Text>
-          <Text style={styles.actionLabel}>Messages</Text>
+        <TouchableOpacity accessibilityRole="button" style={styles.quick} onPress={() => go('/(parent)/leave')}>
+          <Text style={styles.quickIcon}>🗓️</Text>
+          <Text style={styles.quickLabel}>{pendingLeave > 0 ? `Leave (${pendingLeave} pending)` : 'Leave'}</Text>
         </TouchableOpacity>
       </View>
+
+      {isModuleEnabled('notifications') ? (
+        <>
+          <View style={styles.sectionRow}>
+            <Text style={styles.section}>Notifications</Text>
+            <TouchableOpacity accessibilityRole="button" onPress={() => go('/(parent)/inbox')}><Text style={styles.link}>See all</Text></TouchableOpacity>
+          </View>
+          <Card style={styles.list}>
+            {(notifications.data ?? []).length === 0 ? (
+              <Text style={styles.muted}>{notifications.isLoading ? 'Loading…' : 'No notifications.'}</Text>
+            ) : (notifications.data ?? []).map((n) => (
+              <View key={n.id} style={styles.note}>
+                <Text style={[styles.noteTitle, !n.is_read && styles.bold]} numberOfLines={1}>{n.title}</Text>
+                <Text style={styles.noteBody} numberOfLines={2}>{n.message}</Text>
+              </View>
+            ))}
+          </Card>
+        </>
+      ) : null}
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.background,
-  },
-  content: {
-    padding: Spacing.lg,
-  },
-  welcome: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: Spacing.xxl,
-  },
-  greeting: {
-    fontSize: FontSize.xl,
-    fontWeight: '700',
-    color: Colors.text,
-  },
-  logoutText: {
-    fontSize: FontSize.sm,
-    color: Colors.error,
-    fontWeight: '600',
-  },
-  sectionTitle: {
-    fontSize: FontSize.lg,
-    fontWeight: '600',
-    color: Colors.text,
-    marginBottom: Spacing.md,
-    marginTop: Spacing.lg,
-  },
-  childCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: Spacing.md,
-  },
-  avatar: {
-    width: 48,
-    height: 48,
-    borderRadius: BorderRadius.full,
-    backgroundColor: Colors.primaryLight,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: Spacing.md,
-  },
-  avatarText: {
-    fontSize: FontSize.lg,
-    fontWeight: '700',
-    color: Colors.textInverse,
-  },
-  childInfo: {
-    flex: 1,
-  },
-  childName: {
-    fontSize: FontSize.md,
-    fontWeight: '600',
-    color: Colors.text,
-  },
-  childClass: {
-    fontSize: FontSize.sm,
-    color: Colors.textSecondary,
-    marginTop: 2,
-  },
-  chevron: {
-    fontSize: 24,
-    color: Colors.textTertiary,
-  },
-  actionsRow: {
-    flexDirection: 'row',
-    gap: Spacing.md,
-  },
-  actionButton: {
-    flex: 1,
-    backgroundColor: Colors.surface,
-    borderRadius: BorderRadius.lg,
-    padding: Spacing.lg,
-    alignItems: 'center',
-    shadowColor: Colors.shadow,
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06,
-    shadowRadius: 3,
-    elevation: 1,
-  },
-  actionIcon: {
-    fontSize: 28,
-    marginBottom: Spacing.sm,
-  },
-  actionLabel: {
-    fontSize: FontSize.sm,
-    fontWeight: '500',
-    color: Colors.text,
-  },
+  container: { flex: 1, backgroundColor: Colors.background },
+  content: { padding: Spacing.lg, paddingBottom: Spacing.xxxl },
+  greeting: { fontSize: FontSize.xl, fontWeight: '700', color: Colors.text },
+  section: { fontSize: FontSize.lg, fontWeight: '600', color: Colors.text, marginTop: Spacing.xl, marginBottom: Spacing.md },
+  sectionRow: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between' },
+  link: { fontSize: FontSize.sm, color: Colors.primary, fontWeight: '600', marginBottom: Spacing.md },
+  actions: { flexDirection: 'row', gap: Spacing.md, marginTop: Spacing.sm },
+  quick: { flex: 1, alignItems: 'center', backgroundColor: Colors.surface, borderRadius: BorderRadius.md, paddingVertical: Spacing.md },
+  quickIcon: { fontSize: 22 },
+  quickLabel: { fontSize: FontSize.sm, color: Colors.text, marginTop: 4, textAlign: 'center' },
+  list: { padding: Spacing.md },
+  muted: { fontSize: FontSize.sm, color: Colors.textSecondary },
+  note: { paddingVertical: 6 },
+  noteTitle: { fontSize: FontSize.sm, color: Colors.text },
+  bold: { fontWeight: '700' },
+  noteBody: { fontSize: FontSize.xs, color: Colors.textSecondary },
 });

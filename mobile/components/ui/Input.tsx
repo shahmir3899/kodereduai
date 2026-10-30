@@ -41,18 +41,19 @@ export default function Input({
         {icon && <View style={styles.iconLeft}>{icon}</View>}
         <TextInput
           style={[styles.input, style]}
+          accessibilityLabel={label ?? props.placeholder}
           placeholderTextColor={Colors.placeholder}
           onFocus={() => setFocused(true)}
           onBlur={() => setFocused(false)}
           {...props}
         />
         {rightIcon && (
-          <TouchableOpacity onPress={onRightIconPress} style={styles.iconRight}>
+          <TouchableOpacity onPress={onRightIconPress} style={styles.iconRight} accessibilityRole="button" hitSlop={8}>
             {rightIcon}
           </TouchableOpacity>
         )}
       </View>
-      {error && <Text style={styles.error}>{error}</Text>}
+      {error && <Text style={styles.error} accessibilityRole="alert">{error}</Text>}
     </View>
   );
 }

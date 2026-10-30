@@ -43,6 +43,9 @@ class ClassListStudentCountQueryCountTests(TestCase):
         self.school_header = {'HTTP_X_SCHOOL_ID': str(self.school.id)}
 
     def test_class_list_query_count_does_not_scale_with_class_count(self):
+        # Warm-up: the first request for a school also looks up its time zone (cached for a minute),
+        # which is not part of what this test measures.
+        self.client.get('/api/classes/', **self.school_header)
         with CaptureQueriesContext(connection) as ctx:
             response = self.client.get('/api/classes/', **self.school_header)
         self.assertEqual(response.status_code, 200, response.data)

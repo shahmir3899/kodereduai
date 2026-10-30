@@ -1,13 +1,20 @@
+import { setSchoolTimeZone } from '../services/schoolTime';
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import api, { authApi, setLogoutCallback } from '../services/api';
 import {
   getAccessToken,
+  getActiveSchoolId,
   setTokens,
   setActiveSchoolId,
   clearTokens,
 } from '../services/auth';
 import type { User, School, LoginResponse } from '../types/models';
 import type { ModuleKey } from '../constants/modules';
+import { clearQueryCache } from '../services/queryClient';
+import { performSchoolSwitch } from '../services/schoolSwitch';
+import { refreshEndsSession } from '../services/sessionRules';
+import { unregisterCurrentPushToken } from '../services/notifications';
+import { personaFor, type Persona } from '../navigation/personas';
 
 interface AuthContextType {
   user: User | null;
@@ -28,6 +35,12 @@ interface AuthContextType {
   isParent: boolean;
   isStudent: boolean;
   isStaffLevel: boolean;
+  isStaff: boolean;
+  isSchoolAdminNav: boolean;
+  persona: Persona;
+  schoolEpoch: number;
+  // True after the server ended the session, so the login screen can say why.
+  sessionExpired: boolean;
   effectiveRole: string | undefined;
   isModuleEnabled: (moduleKey: ModuleKey) => boolean;
 }
@@ -74,9 +87,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [activeSchool, setActiveSchool] = useState<School | null>(null);
   const [loading, setLoading] = useState(true);
+  const [schoolEpoch, setSchoolEpoch] = useState(0);
+  const [sessionExpired, setSessionExpired] = useState(false);
 
-  const doLogout = useCallback(async () => {
+  const doLogout = useCallback(async (expired = false) => {
+    // An expired session has no valid login left, so the unregister call could not authenticate.
+    if (!expired) await unregisterCurrentPushToken();
     await clearTokens();
+    // The next sign-in on this phone must not see this user's cached data.
+    await clearQueryCache();
+    setSessionExpired(expired);
     setUser(null);
     setActiveSchool(null);
   }, []);
@@ -84,7 +104,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Register logout callback for API interceptor
   useEffect(() => {
     setLogoutCallback(() => {
-      doLogout();
+      doLogout(true);
     });
   }, [doLogout]);
 
@@ -97,13 +117,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           const response = await api.get('/api/auth/me/');
           const userData = normalizeUser(response.data);
           setUser(userData);
-          const school = resolveActiveSchool(userData);
+          // Without the saved id a multi-school user always came back as their default school.
+          const school = resolveActiveSchool(userData, await getActiveSchoolId());
           setActiveSchool(school);
           if (school) {
             await setActiveSchoolId(String(school.id));
           }
-        } catch {
-          await clearTokens();
+        } catch (error) {
+          // Starting the app offline must not throw away a valid session.
+          if (refreshEndsSession(error as any)) await clearTokens();
         }
       }
       setLoading(false);
@@ -124,6 +146,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const normalized = normalizeUser(userData);
     await setTokens(access, refresh);
+    setSessionExpired(false);
     setUser(normalized);
 
     const school = resolveActiveSchool(normalized);
@@ -135,29 +158,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return normalized;
   };
 
-  const logout = doLogout;
+  // Wrapped so a press handler's event argument is never read as the `expired` flag.
+  const logout = () => doLogout(false);
 
   const switchSchool = async (schoolId: number) => {
-    const response = await authApi.switchSchool(schoolId);
-    const { school_id, school_name, role } = response.data;
-    const newSchool: School = {
-      id: school_id,
-      name: school_name,
-      role,
-      is_default: false,
-      enabled_modules: {},
-    };
-    setActiveSchool(newSchool);
-    await setActiveSchoolId(String(school_id));
-    // Refresh user to get updated enabled_modules
-    await refreshUser();
+    await performSchoolSwitch(schoolId, {
+      checkAccess: authApi.switchSchool,
+      getSavedSchoolId: getActiveSchoolId,
+      saveSchoolId: setActiveSchoolId,
+      refreshUser,
+    });
+    await clearQueryCache();
+    // The root layout keys its navigator on this, so screens still mounted from the previous
+    // school (same role, so no redirect) remount and refetch instead of showing stale data.
+    setSchoolEpoch((n) => n + 1);
   };
 
   const refreshUser = async (): Promise<User> => {
     const response = await api.get('/api/auth/me/');
     const userData = normalizeUser(response.data);
     setUser(userData);
-    const school = resolveActiveSchool(userData);
+    // switchSchool stores the new id before calling this; honouring it keeps the user on the
+    // school they just picked instead of snapping back to their default.
+    const school = resolveActiveSchool(userData, await getActiveSchoolId());
     if (school) {
       setActiveSchool(school);
     }
@@ -172,9 +195,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const isStaffLevel = ['STAFF', 'TEACHER', 'MANAGER', 'ACCOUNTANT', 'DRIVER'].includes(
     effectiveRole || ''
   );
+  const isStaff = effectiveRole === 'STAFF';
   const isDriver = effectiveRole === 'DRIVER';
+  const persona = personaFor(effectiveRole, !!user?.is_super_admin);
   const isParent = effectiveRole === 'PARENT';
   const isStudent = effectiveRole === 'STUDENT';
+
+  // Set while rendering, not in an effect: screens that mount right after login read "today" on first render.
+  setSchoolTimeZone(activeSchool?.timezone);
 
   const enabledModules = activeSchool?.enabled_modules || {};
   const isModuleEnabled = (moduleKey: ModuleKey): boolean => {
@@ -201,6 +229,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     isParent,
     isStudent,
     isStaffLevel,
+    isStaff,
+    isSchoolAdminNav: persona === 'admin',
+    persona,
+    schoolEpoch,
+    sessionExpired,
     effectiveRole,
     isModuleEnabled,
   };

@@ -1,3 +1,4 @@
+import { schoolNowDate, schoolToday } from '../../utils/schoolTime'
 import { useMemo } from 'react'
 import { TONE } from '../../components/ui/statusTones'
 import PageHeader from '../../components/ui/PageHeader'
@@ -61,9 +62,9 @@ const DAY_LABELS = ['S', 'M', 'T', 'W', 'T', 'F', 'S']
 
 export default function StaffDashboard() {
   const { user, isModuleEnabled } = useAuth()
-  const now = new Date()
+  const now = schoolNowDate()
   const monthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
-  const today = now.toISOString().split('T')[0]
+  const today = schoolToday()
 
   // Resolve staff member ID for current user
   const { data: staffRes } = useQuery({

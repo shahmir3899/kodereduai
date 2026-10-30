@@ -2,6 +2,7 @@
 Inventory views for categories, vendors, items, assignments, transactions, and dashboard.
 """
 
+from django.utils import timezone
 from datetime import date
 
 from django.db import transaction as db_transaction
@@ -248,7 +249,7 @@ class ItemAssignmentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Mod
         notes = request.data.get('notes', '')
 
         assignment.is_active = False
-        assignment.returned_date = date.today()
+        assignment.returned_date = timezone.localdate()
         assignment.condition_on_return = condition
         if notes:
             assignment.notes = f"{assignment.notes}\nReturn notes: {notes}".strip()
@@ -265,7 +266,7 @@ class ItemAssignmentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Mod
             unit_price=assignment.item.unit_price,
             total_amount=assignment.quantity * assignment.item.unit_price,
             assignment=assignment,
-            date=date.today(),
+            date=timezone.localdate(),
             recorded_by=request.user,
             remarks=f'Returned by {assignment.assigned_to.username} (condition: {condition})',
         )

@@ -68,7 +68,9 @@ def attendance_summary(student, academic_year_id, today, segments=None):
         'present': present,
         'absent': absent,
         'leave': leave,
-        'attendance_rate': round(present / total * 100, 1) if total else None,
+        # Leave counts as present: the student portal, the profile and the risk assessment use the
+        # same rule, so a parent and the child see one number.
+        'attendance_rate': round((present + leave) / total * 100, 1) if total else None,
         'today': today_row['status'] if today_row else None,
         'recent': [{'date': str(r['date']), 'status': r['status']} for r in reversed(recent)],
     }

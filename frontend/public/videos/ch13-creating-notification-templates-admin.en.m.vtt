@@ -1,0 +1,19 @@
+WEBVTT
+
+00:00:00.105 --> 00:00:05.265
+This video shows how to create a reusable notification template on a phone.
+
+00:00:06.942 --> 00:00:19.254
+Tap the menu button and choose Notifications, then tap the Templates tab. Each template shows its name, event, channel and message, with Edit, Duplicate, Preview and Delete.
+
+00:00:26.481 --> 00:00:38.745
+Tap New Template. Type a name, choose the event, then write a short subject and the message. Placeholders go in double curly braces, like the student name and the due date.
+
+00:01:10.311 --> 00:01:17.127
+Tap Save. A green message says Template saved, and the new template joins the list.
+
+00:01:35.429 --> 00:01:42.989
+Search for it by name and tap Preview. The message opens with sample values in place of the placeholders.
+
+00:02:03.640 --> 00:02:09.616
+Your template is saved. Use it from the Send tab when you send a notification.

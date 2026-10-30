@@ -1,16 +1,17 @@
+import { getSchoolTimeZone, schoolDateStr, schoolToday } from '../../utils/schoolTime'
 import { useState, useEffect, useRef } from 'react'
-import Field from '../../components/ui/Field'
 import PageHeader from '../../components/ui/PageHeader'
 import { Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useAuth } from '../../contexts/AuthContext'
-import { parentsApi } from '../../services/api'
+import { messagingApi } from '../../services/api'
 import Spinner from '../../components/ui/Spinner'
 import Button from '../../components/ui/Button'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
 
+// A teacher can repeat across children, so the person and the child together identify a recipient.
+const recipientKey = (r) => `${r.id}:${r.student_id ?? ''}`
+
 export default function ParentMessages() {
-  const { user } = useAuth()
   const queryClient = useQueryClient()
   const messagesEndRef = useRef(null)
 
@@ -21,36 +22,32 @@ export default function ParentMessages() {
   const [mobileView, setMobileView] = useState('threads') // 'threads' | 'messages'
   const [messageText, setMessageText] = useState('')
 
-  // New message form
-  const [newForm, setNewForm] = useState({
-    student_id: '',
-    recipient_id: '',
-    message: '',
+  // New message form. A teacher appears once per child, so the picker value pairs the two.
+  const [newForm, setNewForm] = useState({ recipient_key: '', message: '' })
+
+  // Same store the teachers and admins read (/api/messaging). The old /api/parents/messages
+  // store had no recipient list and nobody reading it, so messages sent there went nowhere.
+  const { data: recipientsData } = useQuery({
+    queryKey: ['messagingRecipients'],
+    queryFn: () => messagingApi.getRecipients(),
+    enabled: showNewMessage,
   })
 
-  // Fetch children
-  const { data: childrenData } = useQuery({
-    queryKey: ['myChildren'],
-    queryFn: () => parentsApi.getMyChildren(),
-  })
-
-  // Fetch threads
   const { data: threadsData, isLoading: threadsLoading } = useQuery({
-    queryKey: ['parentMessageThreads'],
-    queryFn: () => parentsApi.getMessageThreads(),
+    queryKey: ['messagingThreads'],
+    queryFn: () => messagingApi.getThreads(),
   })
 
-  // Fetch messages for selected thread
   const { data: messagesData, isLoading: messagesLoading } = useQuery({
-    queryKey: ['parentThreadMessages', selectedThread],
-    queryFn: () => parentsApi.getThreadMessages(selectedThread),
+    queryKey: ['messagingThread', selectedThread],
+    queryFn: () => messagingApi.getThread(selectedThread),
     enabled: !!selectedThread,
     refetchInterval: 15000, // Auto-refresh every 15s
   })
 
-  const children = childrenData?.data?.results || childrenData?.data || []
+  const recipients = recipientsData?.data?.results || recipientsData?.data || []
   const threads = threadsData?.data?.results || threadsData?.data || []
-  const messages = messagesData?.data?.messages || messagesData?.data?.results || messagesData?.data || []
+  const messages = messagesData?.data?.messages || []
 
   // Scroll to bottom when messages change
   useEffect(() => {
@@ -59,25 +56,29 @@ export default function ParentMessages() {
     }
   }, [messages])
 
+  const refreshThreads = () => {
+    queryClient.invalidateQueries({ queryKey: ['messagingThreads'] })
+    queryClient.invalidateQueries({ queryKey: ['messagingUnreadCount'] })
+  }
+
   // Send message in existing thread
   const sendMutation = useMutation({
-    mutationFn: (data) => parentsApi.sendMessage(data),
+    mutationFn: ({ threadId, message }) => messagingApi.reply(threadId, { message }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['parentThreadMessages', selectedThread] })
-      queryClient.invalidateQueries({ queryKey: ['parentMessageThreads'] })
+      queryClient.invalidateQueries({ queryKey: ['messagingThread', selectedThread] })
+      refreshThreads()
       setMessageText('')
     },
   })
 
-  // Send new message (start new thread)
+  // Send new message (start new thread, or continue the existing one with that teacher and child)
   const newMessageMutation = useMutation({
-    mutationFn: (data) => parentsApi.sendMessage(data),
+    mutationFn: (data) => messagingApi.createThread(data),
     onSuccess: (response) => {
-      queryClient.invalidateQueries({ queryKey: ['parentMessageThreads'] })
+      refreshThreads()
       setShowNewMessage(false)
-      setNewForm({ student_id: '', recipient_id: '', message: '' })
-      // Select the newly created thread if returned
-      const threadId = response?.data?.thread_id || response?.data?.id
+      setNewForm({ recipient_key: '', message: '' })
+      const threadId = response?.data?.id
       if (threadId) {
         setSelectedThread(threadId)
         setMobileView('messages')
@@ -87,21 +88,19 @@ export default function ParentMessages() {
 
   const handleSendMessage = (e) => {
     e.preventDefault()
-    if (!messageText.trim()) return
+    if (!messageText.trim() || !selectedThread) return
 
-    sendMutation.mutate({
-      thread_id: selectedThread,
-      message: messageText.trim(),
-    })
+    sendMutation.mutate({ threadId: selectedThread, message: messageText.trim() })
   }
 
   const handleNewMessage = (e) => {
     e.preventDefault()
-    if (!newForm.message.trim()) return
+    const recipient = recipients.find((r) => recipientKey(r) === newForm.recipient_key)
+    if (!newForm.message.trim() || !recipient) return
 
     newMessageMutation.mutate({
-      student_id: newForm.student_id || undefined,
-      recipient_id: newForm.recipient_id || undefined,
+      recipient_user_id: recipient.id,
+      student_id: recipient.student_id || undefined,
       message: newForm.message.trim(),
     })
   }
@@ -113,9 +112,8 @@ export default function ParentMessages() {
     // Mark thread messages as read
     const thread = threads.find((t) => t.id === threadId)
     if (thread?.unread_count > 0) {
-      // Mark all as read via the last message or thread endpoint
-      parentsApi.markMessageRead(threadId).catch(() => {})
-      queryClient.invalidateQueries({ queryKey: ['parentMessageThreads'] })
+      messagingApi.markRead(threadId).catch(() => {})
+      refreshThreads()
     }
   }
 
@@ -127,9 +125,9 @@ export default function ParentMessages() {
     if (!dateStr) return ''
     const date = new Date(dateStr)
     const now = new Date()
-    const isToday = date.toDateString() === now.toDateString()
+    const isToday = schoolDateStr(date) === schoolToday()
     if (isToday) {
-      return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
+      return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', timeZone: getSchoolTimeZone() })
     }
     const yesterday = new Date(now)
     yesterday.setDate(yesterday.getDate() - 1)
@@ -139,9 +137,7 @@ export default function ParentMessages() {
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
   }
 
-  const isMyMessage = (msg) => {
-    return msg.sender_id === user?.id || msg.is_sender || msg.direction === 'SENT'
-  }
+  const isMyMessage = (msg) => msg.is_mine === true
 
   return (
     <div className="space-y-6">
@@ -155,7 +151,7 @@ export default function ParentMessages() {
 
       {/* Header */}
       <PageHeader title="Messages" subtitle="Communicate with teachers" actions={<>
-<Button onClick={() => setShowNewMessage(true)}>
+<Button onClick={() => setShowNewMessage(true)} aria-label="New Message">
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
           </svg>
@@ -179,31 +175,23 @@ export default function ParentMessages() {
               </button>
             </div>
             <form onSubmit={handleNewMessage} className="p-5 space-y-4">
-              <Field label="Regarding Child">
-<select
-                  value={newForm.student_id}
-                  onChange={(e) => setNewForm({ ...newForm, student_id: e.target.value })}
+              <div>
+                <label className="label">Send to</label>
+                <select
+                  value={newForm.recipient_key}
+                  onChange={(e) => setNewForm({ ...newForm, recipient_key: e.target.value })}
                   className="input"
                 >
-                  <option value="">-- Select child (optional) --</option>
-                  {children.map((child) => (
-                    <option key={child.id} value={child.id}>
-                      {child.name} ({child.class_name || 'N/A'})
+                  <option value="">-- Select a teacher --</option>
+                  {recipients.map((r) => (
+                    <option key={recipientKey(r)} value={recipientKey(r)}>
+                      {r.name}{r.student_name ? ` — ${r.student_name}` : ''}
                     </option>
                   ))}
                 </select>
-</Field>
-
-              <div>
-                <label className="label">Recipient</label>
-                <input
-                  type="text"
-                  value={newForm.recipient_id}
-                  onChange={(e) => setNewForm({ ...newForm, recipient_id: e.target.value })}
-                  placeholder="Teacher name or ID"
-                  className="input"
-                />
-                <p className="text-xs text-gray-400 mt-1">Enter the teacher name or leave blank to message the class teacher.</p>
+                {recipients.length === 0 && (
+                  <p className="text-xs text-gray-400 mt-1">No teachers are available to message yet.</p>
+                )}
               </div>
 
               <div>
@@ -227,7 +215,7 @@ export default function ParentMessages() {
                 </button>
                 <button
                   type="submit"
-                  disabled={!newForm.message.trim() || newMessageMutation.isPending}
+                  disabled={!newForm.message.trim() || !newForm.recipient_key || newMessageMutation.isPending}
                   className="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
                   {newMessageMutation.isPending ? 'Sending...' : 'Send Message'}
@@ -279,21 +267,21 @@ export default function ParentMessages() {
                     <div className="flex items-center gap-3">
                       <div className="w-9 h-9 rounded-full bg-gray-200 flex items-center justify-center flex-shrink-0">
                         <span className="text-sm font-medium text-gray-600">
-                          {(thread.recipient_name || thread.other_party || 'T').charAt(0).toUpperCase()}
+                          {(thread.other_participant_name || 'T').charAt(0).toUpperCase()}
                         </span>
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center justify-between">
                           <p className="text-sm font-medium text-gray-900 truncate">
-                            {thread.recipient_name || thread.other_party || 'Teacher'}
+                            {thread.other_participant_name || 'Teacher'}
                           </p>
                           <span className="text-xs text-gray-400 flex-shrink-0 ml-2">
-                            {formatTime(thread.last_message_at || thread.updated_at)}
+                            {formatTime(thread.latest_message_at || thread.created_at)}
                           </span>
                         </div>
                         <div className="flex items-center justify-between mt-0.5">
                           <p className="text-xs text-gray-500 truncate">
-                            {thread.last_message || thread.preview || ''}
+                            {thread.latest_message || ''}
                           </p>
                           {thread.unread_count > 0 && (
                             <span className="ml-2 flex-shrink-0 w-5 h-5 bg-primary-600 text-white text-[10px] rounded-full flex items-center justify-center font-medium">
@@ -331,6 +319,7 @@ export default function ParentMessages() {
                   {/* Mobile back button */}
                   <button
                     onClick={() => { setMobileView('threads'); setSelectedThread(null) }}
+                    aria-label="Back to conversations"
                     className="md:hidden p-1 rounded-lg hover:bg-gray-200 text-gray-500"
                   >
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -339,12 +328,12 @@ export default function ParentMessages() {
                   </button>
                   <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center flex-shrink-0">
                     <span className="text-sm font-medium text-gray-600">
-                      {(getSelectedThreadInfo()?.recipient_name || 'T').charAt(0).toUpperCase()}
+                      {(getSelectedThreadInfo()?.other_participant_name || 'T').charAt(0).toUpperCase()}
                     </span>
                   </div>
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-semibold text-gray-900 truncate">
-                      {getSelectedThreadInfo()?.recipient_name || getSelectedThreadInfo()?.other_party || 'Teacher'}
+                      {getSelectedThreadInfo()?.other_participant_name || 'Teacher'}
                     </p>
                     {getSelectedThreadInfo()?.student_name && (
                       <p className="text-xs text-gray-500">Re: {getSelectedThreadInfo()?.student_name}</p>
@@ -383,10 +372,10 @@ export default function ParentMessages() {
                               </p>
                             )}
                             <p className="text-sm whitespace-pre-wrap break-words">
-                              {msg.message || msg.body || msg.content}
+                              {msg.body}
                             </p>
                             <p className={`text-[10px] mt-1 ${isMine ? 'text-primary-200' : 'text-gray-400'}`}>
-                              {formatTime(msg.created_at || msg.sent_at)}
+                              {formatTime(msg.created_at)}
                             </p>
                           </div>
                         </div>
@@ -421,6 +410,7 @@ export default function ParentMessages() {
                     <button
                       type="submit"
                       disabled={!messageText.trim() || sendMutation.isPending}
+                      aria-label="Send reply"
                       className="p-2.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex-shrink-0"
                     >
                       {sendMutation.isPending ? (

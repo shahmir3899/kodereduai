@@ -1,3 +1,4 @@
+import { schoolToday } from '../../utils/schoolTime'
 import { useState } from 'react'
 import EmptyState from '../../components/ui/EmptyState'
 import { useNavigate, Link } from 'react-router-dom'
@@ -21,7 +22,7 @@ function matchStatusClass(event) {
 
 export default function FaceLiveEventsPage() {
   const navigate = useNavigate()
-  const [date, setDate] = useState(new Date().toISOString().split('T')[0])
+  const [date, setDate] = useState(schoolToday())
   const [view, setView] = useViewPreference('face-live-events')
   const [deviceId, setDeviceId] = useState('')
 

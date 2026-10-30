@@ -161,7 +161,7 @@ export default function SendFromTemplate() {
           />
         ) : (
           templates.map((template) => (
-            <TouchableOpacity
+            <TouchableOpacity accessibilityRole="button"
               key={template.id}
               activeOpacity={0.7}
               onPress={() => openTemplate(template)}
@@ -239,7 +239,7 @@ export default function SendFromTemplate() {
               <Text style={styles.sectionLabel}>Audience</Text>
               <View style={styles.chipRow}>
                 {AUDIENCE_OPTIONS.map((option) => (
-                  <TouchableOpacity
+                  <TouchableOpacity accessibilityRole="button"
                     key={option}
                     style={[styles.chip, audience === option && styles.chipSelected]}
                     onPress={() => setAudience(option)}

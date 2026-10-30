@@ -1,3 +1,4 @@
+import { schoolNowDate } from '../utils/schoolTime'
 import { useState, useMemo, useEffect } from 'react'
 import PageHeader from '../components/ui/PageHeader'
 import LoadingState from '../components/ui/LoadingState'
@@ -59,7 +60,7 @@ export default function AttendanceRecordsPage() {
   const { activeAcademicYear } = useAcademicYear()
   const { isPrincipal, isManager, isTeacher, isSchoolAdmin } = useAuth()
   const { showSuccess, showError } = useToast()
-  const today = new Date()
+  const today = schoolNowDate()
   const [year, setYear] = useState(today.getFullYear())
   const [month, setMonth] = useState(today.getMonth()) // 0-indexed
   const [classId, setClassId] = useState('')

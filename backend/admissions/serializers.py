@@ -14,7 +14,8 @@ class AdmissionNoteSerializer(serializers.ModelSerializer):
     class Meta:
         model = AdmissionNote
         fields = ['id', 'enquiry', 'user', 'user_name', 'note', 'note_type', 'created_at']
-        read_only_fields = ['id', 'user', 'created_at']
+        # enquiry comes from the URL; a body value would let a note be filed on any enquiry.
+        read_only_fields = ['id', 'enquiry', 'user', 'created_at']
 
 
 # ── Enquiry List ─────────────────────────────────────────────

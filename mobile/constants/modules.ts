@@ -12,6 +12,7 @@ export const MODULES = {
   TRANSPORT: 'transport',
   LIBRARY: 'library',
   HOSTEL: 'hostel',
+  INVENTORY: 'inventory',
 } as const;
 
 export type ModuleKey = (typeof MODULES)[keyof typeof MODULES];

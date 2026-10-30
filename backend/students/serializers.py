@@ -324,7 +324,7 @@ class StudentUpdateSerializer(serializers.ModelSerializer):
         new_status = attrs.get('status', student.status)
         if new_status not in DEPARTED_STATUSES:
             return None
-        leaving = attrs.get('status_date', student.status_date) or timezone.now().date()
+        leaving = attrs.get('status_date', student.status_date) or timezone.localdate()
         already_departed = student.status in DEPARTED_STATUSES
         if already_departed and leaving == student.status_date and 'status' not in attrs:
             return None

@@ -1303,15 +1303,28 @@
       "id": "ch13-viewing-notifications-all-users",
       "status": "ready",
       "title": {
-        "en": "Viewing Notifications (All Users)",
+        "en": "Viewing Notifications",
         "ur": "نوٹیفکیشنز دیکھنا"
       },
       "section": "13.1",
       "chapter": 13,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL",
+        "MANAGER",
+        "ACCOUNTANT",
+        "TEACHER",
+        "STAFF",
+        "DRIVER"
+      ],
       "module": "notifications",
       "seconds": {
         "en": 48,
         "ur": 49
+      },
+      "mobile": {
+        "en": 88,
+        "ur": 88
       }
     },
     {
@@ -1331,6 +1344,10 @@
       "seconds": {
         "en": 78,
         "ur": 81
+      },
+      "mobile": {
+        "en": 131,
+        "ur": 131
       }
     },
     {
@@ -1350,6 +1367,10 @@
       "seconds": {
         "en": 49,
         "ur": 50
+      },
+      "mobile": {
+        "en": 91,
+        "ur": 91
       }
     },
     {
@@ -1361,9 +1382,22 @@
       },
       "section": "14.3",
       "chapter": 14,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL",
+        "MANAGER",
+        "ACCOUNTANT",
+        "TEACHER",
+        "STAFF",
+        "DRIVER"
+      ],
       "seconds": {
         "en": 62,
         "ur": 63
+      },
+      "mobile": {
+        "en": 93,
+        "ur": 93
       }
     },
     {
@@ -1375,9 +1409,22 @@
       },
       "section": "14.4",
       "chapter": 14,
+      "roles": [
+        "SCHOOL_ADMIN",
+        "PRINCIPAL",
+        "MANAGER",
+        "ACCOUNTANT",
+        "TEACHER",
+        "STAFF",
+        "DRIVER"
+      ],
       "seconds": {
         "en": 45,
         "ur": 46
+      },
+      "mobile": {
+        "en": 69,
+        "ur": 69
       }
     },
     {
@@ -1395,6 +1442,10 @@
       "seconds": {
         "en": 47,
         "ur": 46
+      },
+      "mobile": {
+        "en": 82,
+        "ur": 82
       }
     },
     {
@@ -1412,6 +1463,10 @@
       "seconds": {
         "en": 66,
         "ur": 69
+      },
+      "mobile": {
+        "en": 104,
+        "ur": 104
       }
     },
     {
@@ -1471,6 +1526,10 @@
       "seconds": {
         "en": 53,
         "ur": 58
+      },
+      "mobile": {
+        "en": 105,
+        "ur": 105
       }
     },
     {
@@ -1489,6 +1548,10 @@
       "seconds": {
         "en": 118,
         "ur": 116
+      },
+      "mobile": {
+        "en": 188,
+        "ur": 188
       }
     },
     {
@@ -1530,6 +1593,10 @@
       "seconds": {
         "en": 79,
         "ur": 83
+      },
+      "mobile": {
+        "en": 102,
+        "ur": 102
       }
     },
     {

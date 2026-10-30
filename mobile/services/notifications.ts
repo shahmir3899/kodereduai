@@ -2,6 +2,8 @@ import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 import { authApi } from './api';
 
+let registeredToken: string | null = null;
+
 /**
  * Register for push notifications:
  * 1. Request permission
@@ -36,6 +38,7 @@ export async function registerForPushNotifications(): Promise<string | null> {
   } catch (error) {
     console.error('Failed to register push token with backend:', error);
   }
+  registeredToken = pushToken;
 
   // Configure Android notification channel
   if (Platform.OS === 'android') {
@@ -59,6 +62,19 @@ export async function unregisterPushToken(token: string): Promise<void> {
   } catch (error) {
     console.error('Failed to unregister push token:', error);
   }
+}
+
+// Must run BEFORE the auth tokens are cleared: the endpoint needs the user's login, so calling it
+// after sign-out (as the old context effect did) was unauthenticated and the token stayed
+// registered. Capped so a dead connection cannot make Sign out hang.
+export async function unregisterCurrentPushToken(timeoutMs = 3000): Promise<void> {
+  const token = registeredToken;
+  if (!token) return;
+  registeredToken = null;
+  await Promise.race([
+    unregisterPushToken(token),
+    new Promise<void>((resolve) => setTimeout(resolve, timeoutMs)),
+  ]);
 }
 
 /**

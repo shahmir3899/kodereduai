@@ -1,3 +1,4 @@
+import { schoolToday } from '../utils/schoolTime'
 import { useState, useEffect, useMemo } from 'react'
 import LoadingState from '../components/ui/LoadingState'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
@@ -17,7 +18,7 @@ export default function ManualEntryPage() {
   // teacher's options, useTeacherScopedClasses falls back to the first allowed class.
   const [searchParams] = useSearchParams()
   const [classId, setClassId] = useState(() => searchParams.get('class') || '')
-  const [date, setDate] = useState(new Date().toISOString().split('T')[0])
+  const [date, setDate] = useState(schoolToday())
   const [attendanceData, setAttendanceData] = useState([])
   const [saveMsg, setSaveMsg] = useState('')
 

@@ -1,3 +1,4 @@
+import { schoolToday } from '../../utils/schoolTime'
 import { useState } from 'react'
 import Badge from '../../components/ui/Badge'
 import { TONE } from '../../components/ui/statusTones'
@@ -219,7 +220,7 @@ export default function FinanceStep({ onNext, refetchCompletion }) {
               setShowForm(true)
               setFeeForm(p => ({
                 ...p,
-                effective_from: currentYear?.start_date || new Date().toISOString().split('T')[0],
+                effective_from: currentYear?.start_date || schoolToday(),
               }))
             }} className="text-xs text-sky-600 hover:text-sky-700">+ Add Fee Structure</button>
           </div>

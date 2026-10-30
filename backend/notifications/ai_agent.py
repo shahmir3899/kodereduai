@@ -325,7 +325,7 @@ class ParentCommunicationAgent:
     def _get_detailed_attendance(self, student_id, days=30):
         from students import history
 
-        cutoff = timezone.now().date() - timedelta(days=int(days))
+        cutoff = timezone.localdate() - timedelta(days=int(days))
         records = history.attendance_records(self._student(student_id)).filter(date__gte=cutoff).order_by('-date')
 
         total = records.count()

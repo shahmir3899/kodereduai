@@ -6,9 +6,10 @@ Uses StudentEnrollment for departures (WITHDRAWN, TRANSFERRED);
 updated_at is the interim effective date filter (see docs/LEADERSHIP_INSIGHTS_ENGINEERING_TICKETS.md).
 
 Date semantics: compares ORM __date lookups in the server's default timezone unless USE_TZ
-dictates otherwise — consistent with other dashboard endpoints using date.today().
+dictates otherwise — consistent with other dashboard endpoints using timezone.localdate().
 """
 
+from django.utils import timezone
 from calendar import monthrange
 from datetime import date, timedelta
 
@@ -69,7 +70,7 @@ def build_leadership_academic_insights(
     from academic_sessions.models import SessionClass, StudentEnrollment
     from students.models import Student
 
-    ref = reference_date or date.today()
+    ref = reference_date or timezone.localdate()
     enabled = enabled_modules if isinstance(enabled_modules, dict) else {}
 
     admissions = {}
@@ -329,7 +330,7 @@ class LeadershipAcademicInsightsView(APIView):
             return Response({'detail': 'No school selected.'}, status=400)
 
         ref_param = request.query_params.get('reference_date')
-        ref_date = parse_date(ref_param) if ref_param else date.today()
+        ref_date = parse_date(ref_param) if ref_param else timezone.localdate()
         if not ref_date:
             return Response({'detail': 'Invalid reference_date. Use YYYY-MM-DD.'}, status=400)
 

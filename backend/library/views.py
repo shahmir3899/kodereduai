@@ -2,6 +2,7 @@
 Library views for book categories, books, book issues, configuration, and stats.
 """
 
+from django.utils import timezone
 from datetime import date
 from decimal import Decimal
 
@@ -230,7 +231,7 @@ class BookIssueViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVie
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
-            today = date.today()
+            today = timezone.localdate()
             fine_amount = Decimal('0')
             if today > issue.due_date:
                 overdue_days = (today - issue.due_date).days
@@ -251,7 +252,7 @@ class BookIssueViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVie
     @action(detail=False, methods=['get'])
     def overdue(self, request):
         """List all overdue issues (due_date < today and the book is still out)."""
-        today = date.today()
+        today = timezone.localdate()
         queryset = self.get_queryset().filter(
             due_date__lt=today,
             status__in=OPEN_STATUSES,
@@ -293,7 +294,7 @@ class LibraryConfigViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Mode
 
 def build_stats_summary(school_id):
     """Shared by LibraryStatsView and the admin-dashboard bootstrap."""
-    today = date.today()
+    today = timezone.localdate()
 
     active_books = Book.objects.filter(school_id=school_id, is_active=True)
     total_copies = active_books.aggregate(total=Sum('total_copies'))['total'] or 0

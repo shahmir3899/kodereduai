@@ -25,7 +25,7 @@ const webPageSchema = {
       <article class="bg-white border border-gray-200 rounded-2xl p-8 sm:p-10 shadow-card">
         <span class="section-label mb-2 block">LEGAL</span>
         <h1 class="font-display text-3xl sm:text-4xl font-bold text-brand-dark mb-3">Privacy Policy</h1>
-        <p class="text-sm text-brand-gray mb-8">Effective date: April 28, 2026</p>
+        <p class="text-sm text-brand-gray mb-8">Effective date: October 28, 2026</p>
 
         <div class="space-y-7 text-brand-gray leading-relaxed">
           <section>
@@ -50,7 +50,45 @@ const webPageSchema = {
           </section>
 
           <section>
-            <h2 class="font-display text-xl font-semibold text-brand-dark mb-2">3. How We Use Data</h2>
+            <h2 class="font-display text-xl font-semibold text-brand-dark mb-2">3. Education AI Mobile App</h2>
+            <p class="mb-2">
+              The Education AI Android app is used by school staff, teachers, drivers, parents, and
+              students with accounts created or approved by their school. In addition to the data above, the app handles:
+            </p>
+            <ul class="list-disc pl-6 space-y-1.5">
+              <li>
+                <strong>Location (drivers only).</strong> When a driver starts a bus journey, the phone sends its location
+                about every 30 seconds, including while the screen is off or the app is in the background, until the driver
+                ends the journey. A notification is shown while this is active. Nothing is collected outside a journey.
+                Only the parents of students on that route, and school administrators, can see the bus location.
+              </li>
+              <li>
+                <strong>Camera and photos.</strong> Used only when you choose to take or attach a photo, for example for
+                attendance or student records. Photos are uploaded to your school's account.
+              </li>
+              <li>
+                <strong>Notification token.</strong> A push notification identifier for your phone, stored with your
+                account so we can send you school notifications. It is removed when you sign out.
+              </li>
+              <li>
+                <strong>Sign-in and saved data on your phone.</strong> Your sign-in tokens are kept in the phone's secure
+                storage. Some reference lists (such as classes and timetable) are saved on the phone so they can be shown
+                offline. Fees, marks, attendance, and student records are not saved on the phone.
+              </li>
+              <li>
+                <strong>Crash reports.</strong> If the app crashes, technical details (error, app version, device model,
+                operating system) may be sent to our error-monitoring provider to help us fix it. We configure it not to
+                send your name, contact details, or school records.
+              </li>
+            </ul>
+            <p class="mt-2">
+              We do not use the app for advertising, we do not track you across other apps or websites, and we do not
+              sell data.
+            </p>
+          </section>
+
+          <section>
+            <h2 class="font-display text-xl font-semibold text-brand-dark mb-2">4. How We Use Data</h2>
             <ul class="list-disc pl-6 space-y-1.5">
               <li>Deliver and maintain the Education AI platform.</li>
               <li>Authenticate users and enforce role-based access controls.</li>
@@ -62,7 +100,7 @@ const webPageSchema = {
           </section>
 
           <section>
-            <h2 class="font-display text-xl font-semibold text-brand-dark mb-2">4. Legal Basis and School Responsibility</h2>
+            <h2 class="font-display text-xl font-semibold text-brand-dark mb-2">5. Legal Basis and School Responsibility</h2>
             <p>
               For school platform data, schools act as the primary data controllers for their
               institutional records. Education AI generally acts as a data processor/service provider
@@ -71,7 +109,7 @@ const webPageSchema = {
           </section>
 
           <section>
-            <h2 class="font-display text-xl font-semibold text-brand-dark mb-2">5. Data Sharing</h2>
+            <h2 class="font-display text-xl font-semibold text-brand-dark mb-2">6. Data Sharing</h2>
             <p class="mb-2">We do not sell personal data. We may share data only when necessary with:</p>
             <ul class="list-disc pl-6 space-y-1.5">
               <li>Hosting, cloud, storage, and infrastructure providers.</li>
@@ -82,7 +120,7 @@ const webPageSchema = {
           </section>
 
           <section>
-            <h2 class="font-display text-xl font-semibold text-brand-dark mb-2">6. Data Security</h2>
+            <h2 class="font-display text-xl font-semibold text-brand-dark mb-2">7. Data Security</h2>
             <ul class="list-disc pl-6 space-y-1.5">
               <li>Encryption in transit (TLS) and secure storage controls.</li>
               <li>Role-based permissions and tenant-level data isolation.</li>
@@ -92,7 +130,7 @@ const webPageSchema = {
           </section>
 
           <section>
-            <h2 class="font-display text-xl font-semibold text-brand-dark mb-2">7. Data Retention</h2>
+            <h2 class="font-display text-xl font-semibold text-brand-dark mb-2">8. Data Retention</h2>
             <p>
               We retain data for as long as required to provide contracted services,
               fulfill legal obligations, resolve disputes, and enforce agreements.
@@ -101,7 +139,7 @@ const webPageSchema = {
           </section>
 
           <section>
-            <h2 class="font-display text-xl font-semibold text-brand-dark mb-2">8. International Transfers</h2>
+            <h2 class="font-display text-xl font-semibold text-brand-dark mb-2">9. International Transfers</h2>
             <p>
               Where data is processed across regions, we apply contractual and technical safeguards
               designed to protect personal data under applicable regulations.
@@ -109,7 +147,7 @@ const webPageSchema = {
           </section>
 
           <section>
-            <h2 class="font-display text-xl font-semibold text-brand-dark mb-2">9. Your Rights</h2>
+            <h2 class="font-display text-xl font-semibold text-brand-dark mb-2">10. Your Rights</h2>
             <p class="mb-2">Subject to applicable law, users may request:</p>
             <ul class="list-disc pl-6 space-y-1.5">
               <li>Access to personal data.</li>
@@ -121,10 +159,15 @@ const webPageSchema = {
             <p class="mt-2">
               Requests related to school-managed records should generally be routed through the relevant school administration first.
             </p>
+            <p class="mt-2">
+              To ask for your account or data to be deleted, contact your school administration or email
+              <a href="mailto:admin@educationai.pk" class="text-primary hover:text-primary-600">admin@educationai.pk</a> from the
+              address on your account. We will confirm with the school, because school records may have to be kept under the school's legal duties.
+            </p>
           </section>
 
           <section>
-            <h2 class="font-display text-xl font-semibold text-brand-dark mb-2">10. Children and Student Data</h2>
+            <h2 class="font-display text-xl font-semibold text-brand-dark mb-2">11. Children and Student Data</h2>
             <p>
               Education AI processes student data only as required for educational administration and
               under school authorization. Schools are responsible for obtaining any required parental
@@ -133,7 +176,7 @@ const webPageSchema = {
           </section>
 
           <section>
-            <h2 class="font-display text-xl font-semibold text-brand-dark mb-2">11. Cookies and Similar Technologies</h2>
+            <h2 class="font-display text-xl font-semibold text-brand-dark mb-2">12. Cookies and Similar Technologies</h2>
             <p>
               We may use essential cookies and similar technologies for authentication,
               session management, and platform security. Non-essential analytics use,
@@ -142,7 +185,7 @@ const webPageSchema = {
           </section>
 
           <section>
-            <h2 class="font-display text-xl font-semibold text-brand-dark mb-2">12. Changes to This Policy</h2>
+            <h2 class="font-display text-xl font-semibold text-brand-dark mb-2">13. Changes to This Policy</h2>
             <p>
               We may update this Privacy Policy periodically. Material updates will be
               communicated through website notice, platform notification, or direct communication.
@@ -150,7 +193,7 @@ const webPageSchema = {
           </section>
 
           <section>
-            <h2 class="font-display text-xl font-semibold text-brand-dark mb-2">13. Contact</h2>
+            <h2 class="font-display text-xl font-semibold text-brand-dark mb-2">14. Contact</h2>
             <p>
               For privacy questions or data requests, contact: <a href="mailto:admin@educationai.pk" class="text-primary hover:text-primary-600">admin@educationai.pk</a>,
               phone: <a href="tel:03167394390" class="text-primary hover:text-primary-600">03167394390</a>,

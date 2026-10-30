@@ -76,7 +76,7 @@ export default function FeeCard({
       </View>
 
       {showPayButton && (
-        <TouchableOpacity style={styles.payButton} onPress={() => onPayNow(id)}>
+        <TouchableOpacity accessibilityRole="button" style={styles.payButton} onPress={() => onPayNow(id)}>
           <Text style={styles.payButtonText}>Pay Now</Text>
         </TouchableOpacity>
       )}

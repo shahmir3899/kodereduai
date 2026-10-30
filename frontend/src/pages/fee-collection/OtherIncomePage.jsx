@@ -1,3 +1,4 @@
+import { getSchoolTimeZone, schoolNowDate, schoolToday } from '../../utils/schoolTime'
 import { useState } from 'react'
 import PageHeader from '../../components/ui/PageHeader'
 import { useAuth } from '../../contexts/AuthContext'
@@ -13,7 +14,7 @@ export default function OtherIncomePage() {
   const { user, isStaffMember } = useAuth()
   const { showWarning, showSuccess } = useToast()
   const canWrite = !isStaffMember
-  const now = new Date()
+  const now = schoolNowDate()
 
   const [month, setMonth] = useState(now.getMonth() + 1)
   const [year, setYear] = useState(now.getFullYear())
@@ -21,7 +22,7 @@ export default function OtherIncomePage() {
   const { confirm, ConfirmModalRoot } = useConfirmModal()
 
   const [incomeForm, setIncomeForm] = useState({
-    category: '', amount: '', date: new Date().toISOString().split('T')[0], description: '', account: ''
+    category: '', amount: '', date: schoolToday(), description: '', account: ''
   })
 
   const data = useOtherIncome({ month, year })
@@ -44,7 +45,7 @@ export default function OtherIncomePage() {
       onSuccess: () => {
         showSuccess('Income recorded')
         setShowIncomeModal(false)
-        setIncomeForm({ category: '', amount: '', date: new Date().toISOString().split('T')[0], description: '', account: '' })
+        setIncomeForm({ category: '', amount: '', date: schoolToday(), description: '', account: '' })
       },
     })
   }
@@ -151,7 +152,7 @@ export default function OtherIncomePage() {
                       <td className="px-4 py-3 text-sm text-gray-500">{item.recorded_by_name || '-'}</td>
                       <td className="px-4 py-3 text-xs text-gray-400">
                         {item.created_at ? new Date(item.created_at).toLocaleString('en-US', {
-                          month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+                          month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: getSchoolTimeZone()
                         }) : '-'}
                       </td>
                       <td className="px-4 py-3 text-sm font-medium text-green-700 text-right">{Number(item.amount).toLocaleString()}</td>

@@ -20,7 +20,7 @@ class SchoolSerializer(serializers.ModelSerializer):
         model = School
         fields = [
             'id', 'name', 'subdomain', 'logo', 'letterhead_url',
-            'address', 'contact_email', 'contact_phone',
+            'address', 'contact_email', 'contact_phone', 'timezone',
             'whatsapp_sender_id', 'enabled_modules',
             'mark_mappings', 'register_config', 'exam_config',
             'organization', 'organization_name',
@@ -109,7 +109,7 @@ class SchoolCreateSerializer(serializers.ModelSerializer):
         model = School
         fields = [
             'name', 'subdomain', 'logo', 'letterhead_url',
-            'address', 'contact_email', 'contact_phone',
+            'address', 'contact_email', 'contact_phone', 'timezone',
             'whatsapp_sender_id', 'enabled_modules', 'organization'
         ]
 

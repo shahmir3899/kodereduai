@@ -1,3 +1,4 @@
+import { getSchoolTimeZone } from '../../utils/schoolTime'
 import { Fragment, useRef, useMemo } from 'react'
 import { TONE } from '../../components/ui/statusTones'
 import { MONTHS } from './FeeFilters'
@@ -679,7 +680,7 @@ export default function FeeTable({
                     <td className="px-3 py-2 text-xs text-gray-600">{payment.collected_by_name || '-'}</td>
                     <td className="px-3 py-2 text-xs text-gray-400">
                       {payment.created_at ? new Date(payment.created_at).toLocaleString('en-US', {
-                        month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+                        month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: getSchoolTimeZone()
                       }) : '-'}
                     </td>
                     {canWrite && (

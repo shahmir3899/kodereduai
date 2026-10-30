@@ -1,3 +1,4 @@
+import { schoolNowDate } from '../utils/schoolTime'
 import { useQuery } from '@tanstack/react-query'
 import { financeApi } from '../services/api'
 import { useAuth } from '../contexts/AuthContext'
@@ -14,7 +15,7 @@ function useFeeCollectionSummary({ enabled = true, feeType = 'MONTHLY' } = {}) {
   const { activeAcademicYear } = useAcademicYear()
   const isMulti = !isStaffMember && (user?.schools?.length > 1 || !!user?.is_super_admin)
 
-  const now = new Date()
+  const now = schoolNowDate()
   const isAnnual = feeType === 'ANNUAL'
   const month = isAnnual ? 0 : now.getMonth() + 1
   const year = now.getFullYear()

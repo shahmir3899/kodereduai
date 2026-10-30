@@ -1,3 +1,4 @@
+import { schoolYMD } from '../../utils/schoolTime'
 import { useEffect, useMemo, useState } from 'react'
 import Button from '../../components/ui/Button'
 import { useQuery } from '@tanstack/react-query'
@@ -20,7 +21,7 @@ const FEE_TYPE_TABS = [
 	{ value: 'ANNUAL', label: 'Annual', caption: 'Category-based annual records' },
 ]
 
-const CURRENT_YEAR = new Date().getFullYear()
+const CURRENT_YEAR = schoolYMD().year
 const YEAR_OPTIONS = [CURRENT_YEAR - 1, CURRENT_YEAR, CURRENT_YEAR + 1, CURRENT_YEAR + 2]
 
 function formatGenerationResult(payload, options = {}) {

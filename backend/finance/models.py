@@ -416,7 +416,7 @@ def resolve_fee_amount(student, fee_type='MONTHLY', annual_category_id=None, mon
     """
     from datetime import date
     from academic_sessions.roster import class_id_for_year
-    today = date.today()
+    today = timezone.localdate()
 
     school_id = student.school_id
     class_obj_id = class_id_for_year(student, academic_year_id)

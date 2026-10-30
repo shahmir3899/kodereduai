@@ -6,6 +6,7 @@ quality scoring, workload analysis, gap analysis, substitute finding,
 and natural language queries. No Django view dependencies.
 """
 
+from django.utils import timezone
 import json
 import logging
 import random
@@ -1305,7 +1306,7 @@ class AcademicsAIAgent:
             client = Groq(api_key=settings.GROQ_API_KEY)
 
             system = ACADEMICS_SYSTEM_PROMPT.format(
-                current_date=date.today().isoformat(),
+                current_date=timezone.localdate().isoformat(),
                 school_name=self.school.name,
             )
 

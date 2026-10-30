@@ -9,7 +9,7 @@ from rest_framework.response import Response
 from core.mixins import ensure_tenant_school_id
 from core.permissions import get_effective_role, ADMIN_ROLES, STAFF_LEVEL_ROLES
 from academics.models import ClassSubject
-from students.models import Student, StudentProfile
+from students.models import Student
 from parents.models import ParentChild, ParentProfile
 from hr.models import StaffMember
 from schools.models import UserSchoolMembership
@@ -344,21 +344,8 @@ def _build_recipients(request):
                             'class_name': label_by_student.get(link.student_id),
                         })
 
-            # Students with user accounts
-            student_profiles = StudentProfile.objects.filter(
-                student__in=students,
-            ).select_related('user', 'student', 'student__class_obj')
-
-            for sp in student_profiles:
-                recipients.append({
-                    'id': sp.user_id,
-                    'name': sp.user.get_full_name() or sp.user.username,
-                    'role': 'STUDENT',
-                    'department': None,
-                    'student_id': sp.student_id,
-                    'student_name': sp.student.name,
-                    'class_name': label_by_student.get(sp.student_id),
-                })
+            # Students are deliberately not offered: the student portal has no
+            # Messages page, so a teacher's message could never be read or answered.
 
         # Teachers can also message admins
         admin_memberships = UserSchoolMembership.objects.filter(

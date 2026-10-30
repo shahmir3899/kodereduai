@@ -1,3 +1,4 @@
+import { schoolToday } from '../../../utils/schoolTime'
 import { useEffect, useState } from 'react'
 import Button from '../../../components/ui/Button'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -9,7 +10,7 @@ import { useEscapeKey } from '../../../hooks/useEscapeKey'
 import { getErrorMessage } from '../../../utils/errorUtils'
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
-const today = () => new Date().toISOString().slice(0, 10)
+const today = () => schoolToday()
 
 // Moves one student to another class (master class and section together) from a
 // chosen date: days before it stay with the old class, days from it belong to the new

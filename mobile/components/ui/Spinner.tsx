@@ -14,7 +14,7 @@ export default function Spinner({
   fullScreen = false,
 }: SpinnerProps) {
   return (
-    <View style={[styles.container, fullScreen && styles.fullScreen]}>
+    <View style={[styles.container, fullScreen && styles.fullScreen]} accessible accessibilityRole="progressbar" accessibilityLabel={message ?? 'Loading'}>
       <ActivityIndicator size={size} color={Colors.primary} />
       {message && <Text style={styles.message}>{message}</Text>}
     </View>

@@ -142,7 +142,7 @@ export default function SendNotification() {
           <Text style={styles.label}>Audience</Text>
           <View style={styles.chipRow}>
             {AUDIENCE_OPTIONS.map((option) => (
-              <TouchableOpacity
+              <TouchableOpacity accessibilityRole="button"
                 key={option}
                 style={[styles.chip, audience === option && styles.chipSelected]}
                 onPress={() => setAudience(option)}
@@ -194,7 +194,7 @@ export default function SendNotification() {
             {CHANNEL_OPTIONS.map((channel) => {
               const isSelected = channels.includes(channel);
               return (
-                <TouchableOpacity
+                <TouchableOpacity accessibilityRole="button"
                   key={channel}
                   style={[styles.chip, isSelected && styles.chipSelected]}
                   onPress={() => toggleChannel(channel)}

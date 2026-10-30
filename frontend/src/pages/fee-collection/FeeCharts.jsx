@@ -72,7 +72,6 @@ export default function FeeCharts({ summaryData }) {
                   outerRadius={80}
                   paddingAngle={3}
                   dataKey="value"
-                  label={({ name, value }) => `${name}: ${value}`}
                 >
                   {statusData.map((entry) => (
                     <Cell key={entry.name} fill={STATUS_COLORS[entry.name]} />
@@ -82,6 +81,15 @@ export default function FeeCharts({ summaryData }) {
               </PieChart>
             </ResponsiveContainer>
           </div>
+          {/* Legend below instead of labels around the ring: those ran off the edge on a 390 px screen. */}
+          <ul className="flex flex-wrap justify-center gap-x-4 gap-y-1 mt-2 text-xs text-gray-600" data-testid="status-legend">
+            {statusData.map((entry) => (
+              <li key={entry.name} className="flex items-center gap-1">
+                <span className="w-3 h-3 rounded" style={{ backgroundColor: STATUS_COLORS[entry.name] }} />
+                {entry.name}: {entry.value}
+              </li>
+            ))}
+          </ul>
           <p className="text-center text-xs text-gray-500 mt-1">{totalStudents} total students</p>
         </div>
       )}

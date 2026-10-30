@@ -1,3 +1,4 @@
+import { getSchoolTimeZone, schoolToday } from '../utils/schoolTime'
 import { useState } from 'react'
 import Field from '../components/ui/Field'
 import { TONE } from '../components/ui/statusTones'
@@ -67,7 +68,7 @@ export default function ExpensesPage() {
   const [showModal, setShowModal] = useState(false)
   const [editingExpense, setEditingExpense] = useState(null)
   const [form, setForm] = useState({
-    category: '', amount: '', date: new Date().toISOString().split('T')[0], description: '', account: '', is_sensitive: false
+    category: '', amount: '', date: schoolToday(), description: '', account: '', is_sensitive: false
   })
   const [newCategoryName, setNewCategoryName] = useState('')
   const [showCategoryModal, setShowCategoryModal] = useState(false)
@@ -249,7 +250,7 @@ export default function ExpensesPage() {
   const closeModal = () => {
     setShowModal(false)
     setEditingExpense(null)
-    setForm({ category: categories[0]?.id || '', amount: '', date: new Date().toISOString().split('T')[0], description: '', account: '', is_sensitive: false })
+    setForm({ category: categories[0]?.id || '', amount: '', date: schoolToday(), description: '', account: '', is_sensitive: false })
     setNewCategoryName('')
   }
 
@@ -482,7 +483,7 @@ export default function ExpensesPage() {
                           <td className="px-4 py-3 text-sm text-gray-500">{expense.recorded_by_name || '-'}</td>
                           <td className="px-4 py-3 text-xs text-gray-400">
                             {expense.created_at ? new Date(expense.created_at).toLocaleString('en-US', {
-                              month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+                              month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: getSchoolTimeZone()
                             }) : '-'}
                           </td>
                           {canWrite && (
@@ -595,7 +596,7 @@ export default function ExpensesPage() {
                           <td className="px-4 py-3 text-sm text-gray-500">{tfr.recorded_by_name || '-'}</td>
                           <td className="px-4 py-3 text-xs text-gray-400">
                             {tfr.created_at ? new Date(tfr.created_at).toLocaleString('en-US', {
-                              month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+                              month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: getSchoolTimeZone()
                             }) : '-'}
                           </td>
                           {canWrite && (

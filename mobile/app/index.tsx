@@ -2,9 +2,10 @@ import React, { useEffect } from 'react';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../contexts/AuthContext';
 import Spinner from '../components/ui/Spinner';
+import { homeRouteFor } from '../navigation/personas';
 
 export default function Index() {
-  const { loading, isAuthenticated, isParent, isStudent, isDriver } = useAuth();
+  const { loading, isAuthenticated, persona } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
@@ -15,17 +16,8 @@ export default function Index() {
       return;
     }
 
-    // Route to role-appropriate dashboard
-    if (isDriver) {
-      router.replace('/(driver)/dashboard');
-    } else if (isParent) {
-      router.replace('/(parent)/dashboard');
-    } else if (isStudent) {
-      router.replace('/(student)/dashboard');
-    } else {
-      router.replace('/(admin)/dashboard');
-    }
-  }, [loading, isAuthenticated, isParent, isStudent, isDriver, router]);
+    router.replace(homeRouteFor(persona) as any);
+  }, [loading, isAuthenticated, persona, router]);
 
   return <Spinner fullScreen message="Loading..." />;
 }

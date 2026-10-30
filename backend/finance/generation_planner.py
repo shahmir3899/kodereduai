@@ -4,6 +4,7 @@ This module batches fee structure and existing-payment lookups so preview
 endpoints avoid per-student database calls.
 """
 
+from django.utils import timezone
 from datetime import date
 from decimal import Decimal
 
@@ -87,7 +88,7 @@ def plan_scope_records(
     [{'student': <Student>, 'amount': <Decimal>}].
     """
     students = list(students)
-    today = date.today()
+    today = timezone.localdate()
 
     student_fees, class_fees = _build_fee_maps(
         school_id,
@@ -173,7 +174,7 @@ def build_preview_plan(
             'has_more': False,
         }
 
-    today = date.today()
+    today = timezone.localdate()
 
     enrollment_by_student = {}
     if academic_year_id:

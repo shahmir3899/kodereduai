@@ -12,6 +12,7 @@ class GeneratedReport(models.Model):
         ('FEE_COLLECTION', 'Fee Collection Summary'),
         ('FEE_DEFAULTERS', 'Fee Defaulters List'),
         ('FEE_RECEIPT', 'Fee Receipt'),
+        ('FINANCE_SUMMARY', 'Finance Summary'),
         ('STUDENT_PROGRESS', 'Student Progress Report'),
         ('CLASS_RESULT', 'Class Result Summary'),
         ('STUDENT_COMPREHENSIVE', 'Student Comprehensive Report'),

@@ -89,6 +89,16 @@ def test_attendance_is_scoped_to_the_academic_year(seed_data, child):
     assert summary['attendance_rate'] == 75.0
 
 
+def test_attendance_rate_counts_leave_as_present(seed_data, child):
+    for day, status in ((date(2025, 9, 1), 'PRESENT'), (date(2025, 9, 2), 'LEAVE'),
+                        (date(2025, 9, 3), 'ABSENT'), (date(2025, 9, 4), 'ABSENT')):
+        _record(seed_data, child, day, status)
+
+    summary = ov.attendance_summary(child, seed_data['academic_year'].id, TODAY)
+
+    assert summary['attendance_rate'] == 50.0
+
+
 def test_attendance_reports_today_and_recent_days_oldest_first(seed_data, child):
     for day, status in ((date(2025, 9, 26), 'PRESENT'), (date(2025, 9, 27), 'ABSENT'), (date(2025, 9, 29), 'LATE')):
         _record(seed_data, child, day, status)

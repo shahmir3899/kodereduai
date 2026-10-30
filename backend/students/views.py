@@ -1488,7 +1488,7 @@ class StudentDashboardView(APIView):
         try:
             from academics.timetable_scope import student_timetable
             day_map = {0: 'MON', 1: 'TUE', 2: 'WED', 3: 'THU', 4: 'FRI', 5: 'SAT', 6: 'SUN'}
-            today = day_map.get(timezone.now().weekday(), 'MON')
+            today = day_map.get(timezone.localdate().weekday(), 'MON')
             entries = student_timetable(student).filter(
                 day=today,
             ).select_related('slot', 'subject', 'teacher').order_by('slot__order')

@@ -206,7 +206,7 @@ class HostelAllocationViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.M
             )
 
         allocation.is_active = False
-        allocation.vacated_date = date.today()
+        allocation.vacated_date = timezone.localdate()
         allocation.save(update_fields=['is_active', 'vacated_date'])
 
         serializer = HostelAllocationReadSerializer(allocation)

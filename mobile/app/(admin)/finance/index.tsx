@@ -54,6 +54,12 @@ export default function FinanceDashboard() {
 
   const navItems = [
     {
+      title: 'Financial Reports',
+      subtitle: 'Income, expenses, trends and PDF export',
+      route: '/(admin)/finance/reports',
+      color: Colors.info,
+    },
+    {
       title: 'Fee Collection',
       subtitle: 'Manage student fee payments',
       route: '/(admin)/finance/fee-collection',
@@ -126,7 +132,7 @@ export default function FinanceDashboard() {
       {/* Navigation Items */}
       <Text style={styles.sectionTitle}>Quick Actions</Text>
       {navItems.map((item) => (
-        <TouchableOpacity
+        <TouchableOpacity accessibilityRole="button"
           key={item.route}
           activeOpacity={0.7}
           onPress={() => router.push(item.route as any)}

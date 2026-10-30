@@ -7,6 +7,7 @@ import {
   setAccessToken,
   clearTokens,
 } from './auth';
+import { isAuthEndpoint, refreshEndsSession } from './sessionRules';
 
 const extra = (Constants.expoConfig?.extra ?? {}) as Record<string, unknown>;
 
@@ -45,6 +46,7 @@ const processQueue = (error: unknown, token: string | null = null) => {
 
 // Logout callback — set by AuthContext
 let onLogout: (() => void) | null = null;
+// Only called when the server has ended the session (refresh token rejected or missing).
 export function setLogoutCallback(cb: () => void) {
   onLogout = cb;
 }
@@ -71,7 +73,11 @@ api.interceptors.response.use(
   async (error: AxiosError) => {
     const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
 
-    if (error.response?.status === 401 && !originalRequest._retry) {
+    if (
+      error.response?.status === 401 &&
+      !originalRequest._retry &&
+      !isAuthEndpoint(originalRequest.url)
+    ) {
       if (isRefreshing) {
         // Queue this request while refresh is in progress
         return new Promise((resolve, reject) => {
@@ -100,13 +106,20 @@ api.interceptors.response.use(
           return api(originalRequest);
         } catch (refreshError) {
           processQueue(refreshError, null);
-          await clearTokens();
-          onLogout?.();
+          if (refreshEndsSession(refreshError as AxiosError)) {
+            await clearTokens();
+            onLogout?.();
+          }
+          // Otherwise the connection failed, not the session: keep the tokens and let the
+          // caller's own error state show.
           return Promise.reject(refreshError);
         } finally {
           isRefreshing = false;
         }
       } else {
+        // Without this reset every later 401 would queue behind a refresh that never ends.
+        isRefreshing = false;
+        processQueue(error, null);
         await clearTokens();
         onLogout?.();
       }
@@ -147,6 +160,91 @@ export const attendanceApi = {
     api.delete(`/api/attendance/uploads/${id}/`),
   getAIStatus: () =>
     api.get('/api/attendance/ai-status/'),
+  // Classes the signed-in teacher may mark (master classes; admins get every class).
+  getMyClasses: () =>
+    api.get('/api/attendance/records/my_classes/'),
+  // Lightweight (student_id, date, status) rows for the register; no pagination.
+  getRegisterData: (params?: Record<string, unknown>) =>
+    api.get('/api/attendance/records/register_data/', { params }),
+  bulkEntry: (data: Record<string, unknown>) =>
+    api.post('/api/attendance/records/bulk_entry/', data),
+};
+
+// ─── LMS API ─────────────────────────────────────────────────────────────────
+
+export const lmsApi = {
+  getBooks: (params?: Record<string, unknown>) =>
+    api.get('/api/lms/books/', { params }),
+  getBookTree: (id: number) =>
+    api.get(`/api/lms/books/${id}/tree/`),
+  getLessonPlans: (params?: Record<string, unknown>) => api.get('/api/lms/lesson-plans/', { params }),
+  bulkCreateLessonPlans: (data: object) => api.post('/api/lms/lesson-plans/bulk_create/', data),
+  // AI draft from chosen topics (uses the school's AI quota; the person edits before saving).
+  generateLessonPlan: (data: object) => api.post('/api/lms/generate-lesson-plan/', data, { timeout: 90000 }),
+  getBooksForClassSubject: (params?: Record<string, unknown>) => api.get('/api/lms/books/for_class_subject/', { params }),
+  createLessonPlan: (data: object) => api.post('/api/lms/lesson-plans/', data),
+  updateLessonPlan: (id: number, data: object) => api.patch(`/api/lms/lesson-plans/${id}/`, data),
+  deleteLessonPlan: (id: number) => api.delete(`/api/lms/lesson-plans/${id}/`),
+  // Curriculum authoring: admin, principal, teacher and manager (CanEditCurriculum).
+  createBook: (data: object) => api.post('/api/lms/books/', data),
+  updateBook: (id: number, data: object) => api.patch(`/api/lms/books/${id}/`, data),
+  createChapter: (data: object) => api.post('/api/lms/chapters/', data),
+  updateChapter: (id: number, data: object) => api.patch(`/api/lms/chapters/${id}/`, data),
+  deleteChapter: (id: number) => api.delete(`/api/lms/chapters/${id}/`),
+  createTopic: (data: object) => api.post('/api/lms/topics/', data),
+  updateTopic: (id: number, data: object) => api.patch(`/api/lms/topics/${id}/`, data),
+  deleteTopic: (id: number) => api.delete(`/api/lms/topics/${id}/`),
+  // Table-of-contents scan: photo -> background job -> text -> parsed outline -> apply.
+  createTocJob: (bookId: number, form: FormData) =>
+    api.post(`/api/lms/books/${bookId}/ocr_toc/`, form, { headers: { 'Content-Type': 'multipart/form-data' }, params: { async: '1' }, timeout: 120000 }),
+  getTocJob: (jobId: string) => api.get(`/api/lms/toc-jobs/${jobId}/`, { timeout: 30000 }),
+  parseToc: (bookId: number, data: object) => api.post(`/api/lms/books/${bookId}/parse_toc/`, data),
+  applyToc: (bookId: number, data: object) => api.post(`/api/lms/books/${bookId}/apply_toc/`, data),
+  getAssignments: (params?: Record<string, unknown>) =>
+    api.get('/api/lms/assignments/', { params }),
+  getAssignment: (id: number) =>
+    api.get(`/api/lms/assignments/${id}/`),
+  createAssignment: (data: Record<string, unknown>) =>
+    api.post('/api/lms/assignments/', data),
+  updateAssignment: (id: number, data: Record<string, unknown>) =>
+    api.patch(`/api/lms/assignments/${id}/`, data),
+  deleteAssignment: (id: number) =>
+    api.delete(`/api/lms/assignments/${id}/`),
+  publishAssignment: (id: number) =>
+    api.post(`/api/lms/assignments/${id}/publish/`),
+  closeAssignment: (id: number) =>
+    api.post(`/api/lms/assignments/${id}/close/`),
+  getSubmissions: (params?: Record<string, unknown>) =>
+    api.get('/api/lms/submissions/', { params }),
+  gradeSubmission: (id: number, data: Record<string, unknown>) =>
+    api.patch(`/api/lms/submissions/${id}/grade/`, data),
+  returnSubmission: (id: number) =>
+    api.post(`/api/lms/submissions/${id}/return/`),
+};
+
+// ─── Sessions API (academic years, session classes, enrolments, calendar) ───
+
+export const sessionsApi = {
+  getAcademicYears: (params?: Record<string, unknown>) =>
+    api.get('/api/sessions/academic-years/', { params }),
+  getSessionClasses: (params?: Record<string, unknown>) =>
+    api.get('/api/sessions/session-classes/', { params }),
+  getEnrollments: (params?: Record<string, unknown>) =>
+    api.get('/api/sessions/enrollments/', { params }),
+  getTerms: (params?: Record<string, unknown>) =>
+    api.get('/api/sessions/terms/', { params }),
+  getCalendarMonthView: (params?: Record<string, unknown>) =>
+    api.get('/api/sessions/calendar-entries/month-view/', { params }),
+  getCalendarDayStatus: (params?: Record<string, unknown>) =>
+    api.get('/api/sessions/calendar-entries/day-status/', { params }),
+};
+
+// ─── Bootstrap API (one-request dashboards) ─────────────────────────────────
+
+export const bootstrapApi = {
+  // sections: comma-separated, any of attendance,hr,finance,admissions,transport,library,hostel,inventory
+  getAdminDashboard: (params?: Record<string, unknown>) =>
+    api.get('/api/bootstrap/admin-dashboard/', { params }),
 };
 
 // ─── Students API ────────────────────────────────────────────────────────────
@@ -193,10 +291,35 @@ export const financeApi = {
     api.patch(`/api/finance/fee-payments/${id}/`, data),
   createPayment: (data: Record<string, unknown>) =>
     api.post('/api/finance/fee-payments/', data),
+  getAccounts: (params?: Record<string, unknown>) =>
+    api.get('/api/finance/accounts/', { params }),
   getMonthlySummary: (params?: Record<string, unknown>) =>
     api.get('/api/finance/fee-payments/monthly_summary/', { params }),
   getStudentLedger: (params?: Record<string, unknown>) =>
     api.get('/api/finance/fee-payments/student_ledger/', { params }),
+  // Fee record generation (admin and principal): preview first, then create real fee rows.
+  previewGeneration: (params?: Record<string, unknown>) =>
+    api.get('/api/finance/fee-payments/preview_generation/', { params }),
+  generateMonthly: (data: object) => api.post('/api/finance/fee-payments/generate_monthly/', data),
+  generateAnnualFees: (data: object) => api.post('/api/finance/fee-payments/generate_annual_fees/', data),
+  generateSingleFee: (data: object) => api.post('/api/finance/fee-payments/generate_single/', data),
+  // Fee structure (admin and principal write; the server replaces a class's charge per category)
+  getFeeStructures: (params?: Record<string, unknown>) =>
+    api.get('/api/finance/fee-structures/', { params }),
+  bulkSetFeeStructures: (data: object) =>
+    api.post('/api/finance/fee-structures/bulk_set/', data),
+  getMonthlyCategories: (params?: Record<string, unknown>) =>
+    api.get('/api/finance/monthly-categories/', { params }),
+  createMonthlyCategory: (data: object) =>
+    api.post('/api/finance/monthly-categories/', data),
+  getAnnualCategories: (params?: Record<string, unknown>) =>
+    api.get('/api/finance/annual-categories/', { params }),
+  createAnnualCategory: (data: object) =>
+    api.post('/api/finance/annual-categories/', data),
+  getAccountBalances: (params?: Record<string, unknown>) =>
+    api.get('/api/finance/accounts/balances/', { params }),
+  getRecentEntries: (params?: Record<string, unknown>) =>
+    api.get('/api/finance/accounts/recent_entries/', { params }),
 
   // Expenses
   getExpenses: (params?: Record<string, unknown>) =>
@@ -219,6 +342,13 @@ export const financeApi = {
     api.get('/api/finance/reports/', { params }),
   getMonthlyTrend: (params?: Record<string, unknown>) =>
     api.get('/api/finance/reports/', { params: { ...params, type: 'monthly_trend' } }),
+  getExpenseCategorySummary: (params?: Record<string, unknown>) =>
+    api.get('/api/finance/expenses/category_summary/', { params }),
+  // Server-made files, read as bytes so they can be written to the phone and shared.
+  exportLedgerPdf: (params?: Record<string, unknown>) =>
+    api.get('/api/finance/accounts/export-ledger-pdf/', { params, responseType: 'arraybuffer' }),
+  exportLedger: (params?: Record<string, unknown>) =>
+    api.get('/api/finance/accounts/export-ledger/', { params, responseType: 'arraybuffer' }),
 
   // AI Chat
   sendChatMessage: (data: Record<string, unknown>) =>
@@ -227,6 +357,48 @@ export const financeApi = {
     api.get('/api/finance/ai-chat/'),
   clearChatHistory: () =>
     api.delete('/api/finance/ai-chat/'),
+};
+
+// ─── Reports API (server-generated PDFs, the same ones the web downloads) ─────
+
+export const lettersApi = {
+  getLetters: (params?: Record<string, unknown>) => api.get('/api/reports/custom-letters/', { params }),
+  createLetter: (data: object) => api.post('/api/reports/custom-letters/', data),
+  updateLetter: (id: number, data: object) => api.put(`/api/reports/custom-letters/${id}/`, data),
+  deleteLetter: (id: number) => api.delete(`/api/reports/custom-letters/${id}/`),
+  getTemplates: () => api.get('/api/reports/custom-letters/templates/'),
+  prefill: (data: object) => api.post('/api/reports/custom-letters/prefill/', data),
+  generatePdf: (data: object) => api.post('/api/reports/custom-letters/generate-pdf/', data, { responseType: 'arraybuffer' }),
+};
+
+// Insight cards (admin and principal): the same four risk scans the web pages use.
+export const insightsApi = {
+  studentRisk: (params?: Record<string, unknown>) => api.get('/api/sessions/student-risk-score/', { params }),
+  attendanceRisk: (params?: Record<string, unknown>) => api.get('/api/sessions/attendance-risk/', { params }),
+  academicRisk: (params?: Record<string, unknown>) => api.get('/api/examinations/academic-risk/', { params }),
+  staffRisk: (params?: Record<string, unknown>) => api.get('/api/hr/staff-risk/', { params }),
+};
+
+export const reportsApi = {
+  generateInstant: (data: object) =>
+    api.post('/api/reports/generate-instant/', data, { responseType: 'arraybuffer' }),
+};
+
+// ─── Discounts and scholarships (admin and principal only) ───────────────────
+
+export const discountApi = {
+  getDiscounts: (params?: Record<string, unknown>) => api.get('/api/finance/discounts/', { params }),
+  createDiscount: (data: object) => api.post('/api/finance/discounts/', data),
+  updateDiscount: (id: number, data: object) => api.patch(`/api/finance/discounts/${id}/`, data),
+  deleteDiscount: (id: number) => api.delete(`/api/finance/discounts/${id}/`),
+  getScholarships: (params?: Record<string, unknown>) => api.get('/api/finance/scholarships/', { params }),
+  createScholarship: (data: object) => api.post('/api/finance/scholarships/', data),
+  updateScholarship: (id: number, data: object) => api.patch(`/api/finance/scholarships/${id}/`, data),
+  deleteScholarship: (id: number) => api.delete(`/api/finance/scholarships/${id}/`),
+  getStudentDiscounts: (params?: Record<string, unknown>) => api.get('/api/finance/student-discounts/', { params }),
+  assignDiscount: (data: object) => api.post('/api/finance/student-discounts/', data),
+  bulkAssign: (data: object) => api.post('/api/finance/student-discounts/bulk_assign/', data),
+  removeStudentDiscount: (id: number) => api.delete(`/api/finance/student-discounts/${id}/`),
 };
 
 // ─── HR API ──────────────────────────────────────────────────────────────────
@@ -240,17 +412,102 @@ export const hrApi = {
     api.get(`/api/hr/staff/${id}/`),
   getLeaveApplications: (params?: Record<string, unknown>) =>
     api.get('/api/hr/leave-applications/', { params }),
+  getLeavePolicies: (params?: Record<string, unknown>) =>
+    api.get('/api/hr/leave-policies/', { params }),
+  createLeaveApplication: (data: Record<string, unknown>) =>
+    api.post('/api/hr/leave-applications/', data),
+  cancelLeave: (id: number) =>
+    api.post(`/api/hr/leave-applications/${id}/cancel/`),
+  getLeaveBalance: (staffMemberId: number) =>
+    api.get('/api/hr/leave-applications/leave_balance/', { params: { staff_member: staffMemberId } }),
+  getStaffAttendance: (params?: Record<string, unknown>) =>
+    api.get('/api/hr/attendance/', { params }),
+  getAttendanceSummary: (params?: Record<string, unknown>) =>
+    api.get('/api/hr/attendance/summary/', { params }),
   approveLeave: (id: number, data?: Record<string, unknown>) =>
     api.post(`/api/hr/leave-applications/${id}/approve/`, data),
   rejectLeave: (id: number, data?: Record<string, unknown>) =>
     api.post(`/api/hr/leave-applications/${id}/reject/`, data),
+  // Own payslips only: the server scopes every non-admin role to their own record.
+  getPayslips: (params?: Record<string, unknown>) =>
+    api.get('/api/hr/payslips/', { params }),
+  // Payroll (admin and principal): generation, approval, payment, salary structures.
+  getPayrollSummary: (params?: Record<string, unknown>) =>
+    api.get('/api/hr/payslips/payroll_summary/', { params }),
+  generatePayslips: (data: object) => api.post('/api/hr/payslips/generate_payslips/', data),
+  approvePayslip: (id: number) => api.post(`/api/hr/payslips/${id}/approve/`),
+  markPayslipPaid: (id: number, data: object) => api.post(`/api/hr/payslips/${id}/mark_paid/`, data),
+  deletePayslip: (id: number) => api.delete(`/api/hr/payslips/${id}/`),
+  downloadPayslipPdf: (id: number) => api.get(`/api/hr/payslips/${id}/download-pdf/`, { responseType: 'arraybuffer' }),
+  getAppraisals: (params?: Record<string, unknown>) => api.get('/api/hr/appraisals/', { params }),
+  createAppraisal: (data: object) => api.post('/api/hr/appraisals/', data),
+  updateAppraisal: (id: number, data: object) => api.patch(`/api/hr/appraisals/${id}/`, data),
+  deleteAppraisal: (id: number) => api.delete(`/api/hr/appraisals/${id}/`),
+  getSalaryStructures: (params?: Record<string, unknown>) => api.get('/api/hr/salary-structures/', { params }),
+  createSalaryStructure: (data: object) => api.post('/api/hr/salary-structures/', data),
+  updateSalaryStructure: (id: number, data: object) => api.patch(`/api/hr/salary-structures/${id}/`, data),
+  deleteSalaryStructure: (id: number) => api.delete(`/api/hr/salary-structures/${id}/`),
+};
+
+// ─── Inventory API ───────────────────────────────────────────────────────────
+// Admin and principal write; accountant reads; teacher and staff only list their own assignments.
+
+export const inventoryApi = {
+  getDashboard: () => api.get('/api/inventory/dashboard/'),
+  getCategories: (params?: Record<string, unknown>) => api.get('/api/inventory/categories/', { params }),
+  createCategory: (data: object) => api.post('/api/inventory/categories/', data),
+  getVendors: (params?: Record<string, unknown>) => api.get('/api/inventory/vendors/', { params }),
+  createVendor: (data: object) => api.post('/api/inventory/vendors/', data),
+  getItems: (params?: Record<string, unknown>) => api.get('/api/inventory/items/', { params }),
+  createItem: (data: object) => api.post('/api/inventory/items/', data),
+  updateItem: (id: number, data: object) => api.patch(`/api/inventory/items/${id}/`, data),
+  getAssignments: (params?: Record<string, unknown>) => api.get('/api/inventory/assignments/', { params }),
+  createAssignment: (data: object) => api.post('/api/inventory/assignments/', data),
+  returnItem: (id: number, data: object) => api.post(`/api/inventory/assignments/${id}/return/`, data),
+  getTransactions: (params?: Record<string, unknown>) => api.get('/api/inventory/transactions/', { params }),
+  createTransaction: (data: object) => api.post('/api/inventory/transactions/', data),
+  getReorderPrediction: (params?: Record<string, unknown>) => api.get('/api/inventory/reorder-prediction/', { params }),
+};
+
+// ─── Admissions API ──────────────────────────────────────────────────────────
+// Admin and principal only (the web route guard; the server refuses writes to anyone else).
+
+export const admissionsApi = {
+  getEnquiries: (params?: Record<string, unknown>) => api.get('/api/admissions/enquiries/', { params }),
+  getStatusCounts: () => api.get('/api/admissions/enquiries/status-counts/'),
+  getEnquiry: (id: number) => api.get(`/api/admissions/enquiries/${id}/`),
+  createEnquiry: (data: object) => api.post('/api/admissions/enquiries/', data),
+  updateEnquiry: (id: number, data: object) => api.patch(`/api/admissions/enquiries/${id}/`, data),
+  deleteEnquiry: (id: number) => api.delete(`/api/admissions/enquiries/${id}/`),
+  updateStatus: (id: number, data: { status: string; note?: string }) =>
+    api.patch(`/api/admissions/enquiries/${id}/update-status/`, data),
+  batchConvert: (data: object) => api.post('/api/admissions/enquiries/batch-convert/', data),
+  addNote: (enquiryId: number, data: object) => api.post(`/api/admissions/enquiries/${enquiryId}/notes/`, data),
+  getFollowups: (type: 'today' | 'overdue') => api.get(`/api/admissions/followups/${type}/`),
+  getConversionLikelihood: () => api.get('/api/admissions/conversion-likelihood/'),
+};
+
+export const usersApi = {
+  getUsers: (params?: Record<string, unknown>) => api.get('/api/users/', { params }),
 };
 
 // ─── Academics API ───────────────────────────────────────────────────────────
 
 export const academicsApi = {
-  getTimetableByClass: (classId: number) =>
-    api.get('/api/academics/timetable-entries/by_class/', { params: { class_id: classId } }),
+  getClassSubjects: (params?: Record<string, unknown>) =>
+    api.get('/api/academics/class-subjects/', { params }),
+  getSubjects: (params?: Record<string, unknown>) =>
+    api.get('/api/academics/subjects/', { params }),
+  getMyTimetable: (params?: Record<string, unknown>) =>
+    api.get('/api/academics/timetable-entries/my_timetable/', { params }),
+  getMyClassTeacherAssignments: (params?: Record<string, unknown>) =>
+    api.get('/api/academics/class-teachers/my_classes/', { params }),
+  getMyStudentsAtRisk: (params?: Record<string, unknown>) =>
+    api.get('/api/academics/class-teachers/my_students_at_risk/', { params }),
+  getTimetableByClass: (classId: number, sessionClassId?: number | null) =>
+    api.get('/api/academics/timetable-entries/by_class/', {
+      params: { class_id: classId, ...(sessionClassId ? { session_class_id: sessionClassId } : {}) },
+    }),
   sendChatMessage: (data: Record<string, unknown>) =>
     api.post('/api/academics/ai-chat/', data),
   getChatHistory: () =>
@@ -262,10 +519,52 @@ export const academicsApi = {
 // ─── Examinations API ────────────────────────────────────────────────────────
 
 export const examinationsApi = {
+  getExamTypes: (params?: Record<string, unknown>) =>
+    api.get('/api/examinations/exam-types/', { params }),
+  getExamSubjects: (params?: Record<string, unknown>) =>
+    api.get('/api/examinations/exam-subjects/', { params }),
+  getMarks: (params?: Record<string, unknown>) =>
+    api.get('/api/examinations/marks/', { params }),
+  // 200 even when it skips rows it rejects: check `errors` in the body.
+  bulkEntryMarks: (data: Record<string, unknown>) =>
+    api.post('/api/examinations/marks/bulk_entry/', data),
   getExams: (params?: Record<string, unknown>) =>
     api.get('/api/examinations/exams/', { params }),
-  getExamResults: (id: number) =>
-    api.get(`/api/examinations/exams/${id}/results/`),
+  // Exam creation (admin and principal): one exam per whole class; the date sheet wizard stays on the web.
+  // Several classes at once with their date sheet, in one transaction (409 lists classes that already have it).
+  wizardCreateExamGroup: (data: object) => api.post('/api/examinations/exam-groups/wizard-create/', data),
+  createExam: (data: object) => api.post('/api/examinations/exams/', data),
+  updateExam: (id: number, data: object) => api.patch(`/api/examinations/exams/${id}/`, data),
+  deleteExam: (id: number) => api.delete(`/api/examinations/exams/${id}/`),
+  populateExamSubjects: (id: number) => api.post(`/api/examinations/exams/${id}/populate-subjects/`),
+  getQuestions: (params?: Record<string, unknown>) =>
+    api.get('/api/examinations/questions/', { params }),
+  createQuestion: (data: object) => api.post('/api/examinations/questions/', data),
+  updateQuestion: (id: number, data: object) => api.patch(`/api/examinations/questions/${id}/`, data),
+  deleteQuestion: (id: number) => api.delete(`/api/examinations/questions/${id}/`),
+  // Pictures on a saved question: slot is question, option_a to option_d, or answer (JPEG/PNG/WebP, 5 MB).
+  uploadQuestionPicture: (id: number, form: FormData) =>
+    api.post(`/api/examinations/questions/${id}/diagram/`, form, { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 60000 }),
+  removeQuestionPicture: (id: number, slot: string) => api.post(`/api/examinations/questions/${id}/remove_diagram/`, { slot }),
+  getExamPapers: (params?: Record<string, unknown>) =>
+    api.get('/api/examinations/exam-papers/', { params }),
+  getExamPaper: (id: number) => api.get(`/api/examinations/exam-papers/${id}/`),
+  createExamPaper: (data: object) => api.post('/api/examinations/exam-papers/', data),
+  updateExamPaper: (id: number, data: object) => api.patch(`/api/examinations/exam-papers/${id}/`, data),
+  deleteExamPaper: (id: number) => api.delete(`/api/examinations/exam-papers/${id}/`),
+  // Draft flow the web uses, so sections survive: ensure-draft creates the paper, autosave stores details,
+  // structure and the questions in order (draft papers only).
+  ensurePaperDraft: (data: object) => api.post('/api/examinations/exam-papers/ensure-draft/', data),
+  autosavePaperDraft: (id: number, data: object) => api.post(`/api/examinations/exam-papers/${id}/autosave/`, data),
+  generatePaperPdf: (id: number) => api.get(`/api/examinations/exam-papers/${id}/generate-pdf/`, { responseType: 'arraybuffer' }),
+  getWorksheets: (params?: Record<string, unknown>) =>
+    api.get('/api/examinations/worksheets/', { params }),
+  getExamResults: (id: number, params?: Record<string, unknown>) =>
+    api.get(`/api/examinations/exams/${id}/results/`, { params }),
+  getStudentTermAssessmentRoster: (params?: Record<string, unknown>) =>
+    api.get('/api/examinations/student-term-assessment/roster/', { params }),
+  bulkSaveStudentTermAssessment: (data: Record<string, unknown>) =>
+    api.post('/api/examinations/student-term-assessment/bulk-save/', data),
   getClassSummary: (id: number) =>
     api.get(`/api/examinations/exams/${id}/class_summary/`),
   getReportCard: (params?: Record<string, unknown>) =>
@@ -275,6 +574,9 @@ export const examinationsApi = {
 // ─── Auth API ────────────────────────────────────────────────────────────────
 
 export const authApi = {
+  // Always answers 200, whether or not the email exists.
+  requestPasswordReset: (email: string) =>
+    api.post('/api/auth/password-reset/', { email }),
   switchSchool: (schoolId: number) =>
     api.post('/api/auth/switch-school/', { school_id: schoolId }),
   updateProfile: (data: Record<string, unknown>) =>
@@ -321,28 +623,24 @@ export const parentsApi = {
     api.get(`/api/parents/children/${studentId}/attendance/`, { params }),
   getChildFees: (studentId: number, params?: Record<string, unknown>) =>
     api.get(`/api/parents/children/${studentId}/fees/`, { params }),
-  getPaymentGateways: (studentId: number) =>
-    api.get(`/api/parents/children/${studentId}/pay-fee/`),
-  initiatePayment: (studentId: number, data: Record<string, unknown>) =>
-    api.post(`/api/parents/children/${studentId}/pay-fee/`, data),
   getChildTimetable: (studentId: number) =>
     api.get(`/api/parents/children/${studentId}/timetable/`),
+  getChildLibrary: (studentId: number) =>
+    api.get(`/api/parents/children/${studentId}/library/`),
+  getChildTransport: (studentId: number) =>
+    api.get(`/api/parents/children/${studentId}/transport/`),
+  getChildExamSchedule: (studentId: number) =>
+    api.get(`/api/parents/children/${studentId}/exam-schedule/`),
   getChildExamResults: (studentId: number, params?: Record<string, unknown>) =>
     api.get(`/api/parents/children/${studentId}/exam-results/`, { params }),
   getLeaveRequests: (params?: Record<string, unknown>) =>
     api.get('/api/parents/leave-requests/', { params }),
   createLeaveRequest: (data: Record<string, unknown>) =>
     api.post('/api/parents/leave-requests/', data),
+  // Cancel is the viewset's DELETE (it soft-cancels a pending request); there is no /cancel/ route.
+  // Parents message teachers through /api/messaging (messagingApi), not /api/parents/messages.
   cancelLeaveRequest: (id: number) =>
-    api.patch(`/api/parents/leave-requests/${id}/cancel/`),
-  getMessageThreads: () =>
-    api.get('/api/parents/messages/threads/'),
-  getThreadMessages: (threadId: number) =>
-    api.get(`/api/parents/messages/threads/${threadId}/`),
-  sendMessage: (data: Record<string, unknown>) =>
-    api.post('/api/parents/messages/', data),
-  markMessageRead: (id: number) =>
-    api.patch(`/api/parents/messages/${id}/read/`),
+    api.delete(`/api/parents/leave-requests/${id}/`),
   // Admin
   getAdminLeaveRequests: (params?: Record<string, unknown>) =>
     api.get('/api/parents/admin/leave-requests/', { params }),
@@ -371,8 +669,13 @@ export const studentPortalApi = {
     api.get('/api/students/portal/assignments/', { params }),
   getAssignment: (id: number) =>
     api.get(`/api/students/portal/assignments/${id}/`),
+  // The backend has no /<id>/submit/ route: the id goes in the body of the list URL.
   submitAssignment: (id: number, data: Record<string, unknown>) =>
-    api.post(`/api/students/portal/assignments/${id}/submit/`, data),
+    api.post('/api/students/portal/assignments/', { ...data, assignment_id: id }),
+  getLibrary: () =>
+    api.get('/api/students/portal/library/'),
+  getTransport: () =>
+    api.get('/api/students/portal/transport/'),
   getStudyHelperHistory: () =>
     api.get('/api/students/portal/study-helper/'),
   sendStudyHelperMessage: (data: Record<string, unknown>) =>
@@ -408,8 +711,9 @@ export const transportApi = {
     api.post('/api/transport/journey/end/', data),
   updateJourney: (data: { journey_id: number; latitude: number; longitude: number; accuracy: number; speed?: number | null; battery_level?: number | null }) =>
     api.post('/api/transport/journey/update/', data),
+  // Parents follow the route's bus (the legacy journey/track/ is the student's own sharing).
   trackStudent: (studentId: number) =>
-    api.get(`/api/transport/journey/track/${studentId}/`),
+    api.get(`/api/transport/route-journey/track/${studentId}/`),
   getJourneyHistory: (studentId: number) =>
     api.get(`/api/transport/journey/history/${studentId}/`),
   getActiveJourneys: () =>
@@ -423,6 +727,13 @@ export const transportApi = {
     api.post('/api/transport/route-journey/update/', data),
   getActiveRouteJourneys: () =>
     api.get('/api/transport/route-journey/active/'),
+  getRouteJourneyHistory: (params?: Record<string, unknown>) =>
+    api.get('/api/transport/route-journey/history/', { params }),
+  // Driver boarding: the route comes from the driver's own vehicle, and only today can be marked.
+  getDriverBoarding: () =>
+    api.get('/api/transport/driver/boarding/'),
+  markDriverBoarding: (records: Array<{ student_id: number; boarding_status: string }>) =>
+    api.post('/api/transport/driver/boarding/', { records }),
 };
 
 // ─── Library API ─────────────────────────────────────────────────────────────
@@ -481,4 +792,17 @@ export const faceAttendanceApi = {
     api.delete(`/api/face-attendance/enrollments/${id}/`),
   getStatus: () =>
     api.get('/api/face-attendance/status/'),
+};
+
+// ─── Messaging API (staff <-> staff/admin threads; parents use /api/parents/messages) ───
+
+export const messagingApi = {
+  getThreads: () => api.get('/api/messaging/threads/'),
+  getThread: (id: string) => api.get(`/api/messaging/threads/${id}/`),
+  createThread: (data: { recipient_user_id: number; message: string; subject?: string; student_id?: number }) =>
+    api.post('/api/messaging/threads/', data),
+  reply: (id: string, message: string) =>
+    api.post(`/api/messaging/threads/${id}/reply/`, { message }),
+  getRecipients: () => api.get('/api/messaging/recipients/'),
+  getUnreadCount: () => api.get('/api/messaging/unread-count/'),
 };

@@ -1,3 +1,4 @@
+import { schoolYMD } from '../../utils/schoolTime'
 import { useState } from 'react'
 import Modal from '../../components/ui/Modal'
 import { TONE } from '../../components/ui/statusTones'
@@ -33,7 +34,7 @@ const TREND_TONE = {
 export default function ChildFees() {
   const { studentId } = useParams()
   const navigate = useNavigate()
-  const currentYear = new Date().getFullYear()
+  const currentYear = schoolYMD().year
   const [filterYear, setFilterYear] = useState(currentYear)
   const [view, setView] = useViewPreference('child-fees')
   const [payingFeeId, setPayingFeeId] = useState(null)

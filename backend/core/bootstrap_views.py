@@ -3,6 +3,7 @@ Bootstrap endpoint — returns multiple dashboard data sections in a single requ
 Intended for SCHOOL_ADMIN / PRINCIPAL / MANAGER to minimise login-time round trips.
 """
 
+from django.utils import timezone
 from datetime import date, timedelta
 
 from django.db.models import Count, Q
@@ -39,7 +40,7 @@ def _get_hr_section(school_id):
     """Return HR dashboard stats — mirrors StaffMemberViewSet.dashboard_stats."""
     from hr.models import StaffMember, StaffDepartment, Payslip, LeaveApplication, StaffAttendance
 
-    today = date.today()
+    today = timezone.localdate()
     thirty_days_ago = today - timedelta(days=30)
 
     staff_qs = StaffMember.objects.filter(school_id=school_id)
@@ -179,11 +180,11 @@ class AdminDashboardBootstrapView(APIView):
 
         # Parse params
         date_param = request.query_params.get('date')
-        date_obj = parse_date(date_param) if date_param else date.today()
+        date_obj = parse_date(date_param) if date_param else timezone.localdate()
         if not date_obj:
             return Response({'detail': 'Invalid date format. Use YYYY-MM-DD.'}, status=400)
 
-        today = date.today()
+        today = timezone.localdate()
         month = int(request.query_params.get('month', today.month))
         year = int(request.query_params.get('year', today.year))
         academic_year_id = request.query_params.get('academic_year') or None

@@ -22,7 +22,7 @@ interface ChatMessage {
 
 interface ChatInterfaceProps {
   sendMessage: (message: string) => Promise<{ data: { response?: string; message?: string; reply?: string; history?: ChatMessage[] } }>;
-  getHistory: () => Promise<{ data: { history?: ChatMessage[]; messages?: ChatMessage[] } }>;
+  getHistory: () => Promise<{ data: ChatMessage[] | { history?: ChatMessage[]; messages?: ChatMessage[] } }>;
   clearHistory?: () => Promise<unknown>;
   placeholder?: string;
   welcomeMessage?: string;
@@ -49,7 +49,7 @@ export default function ChatInterface({
     try {
       const response = await getHistory();
       const data = response.data;
-      const history = data.history || data.messages || [];
+      const history = Array.isArray(data) ? data : (data.history || data.messages || []);
       if (history.length > 0) {
         setMessages(history);
       } else {
@@ -75,10 +75,12 @@ export default function ChatInterface({
       const data = response.data;
       const reply = data.response || data.message || data.reply || 'Sorry, I could not process your request.';
       setMessages((prev) => [...prev, { role: 'assistant', content: reply }]);
-    } catch {
+    } catch (e: any) {
+      // The study helper answers limits ("Daily limit reached") with a readable error.
+      const reason = e?.response?.data?.error;
       setMessages((prev) => [
         ...prev,
-        { role: 'assistant', content: 'Sorry, something went wrong. Please try again.' },
+        { role: 'assistant', content: typeof reason === 'string' ? reason : 'Sorry, something went wrong. Please try again.' },
       ]);
     } finally {
       setLoading(false);
@@ -121,7 +123,7 @@ export default function ChatInterface({
       {/* Header with clear button */}
       {clearHistory && (
         <View style={styles.header}>
-          <TouchableOpacity onPress={handleClear}>
+          <TouchableOpacity accessibilityRole="button" onPress={handleClear}>
             <Text style={styles.clearText}>Clear Chat</Text>
           </TouchableOpacity>
         </View>
@@ -173,7 +175,7 @@ export default function ChatInterface({
           maxLength={2000}
           editable={!loading}
         />
-        <TouchableOpacity
+        <TouchableOpacity accessibilityRole="button"
           style={[styles.sendBtn, (!input.trim() || loading) && styles.sendBtnDisabled]}
           onPress={handleSend}
           disabled={!input.trim() || loading}

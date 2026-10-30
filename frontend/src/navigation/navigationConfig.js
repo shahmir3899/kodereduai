@@ -91,7 +91,7 @@ export function buildStaffNavigation(ctx, I) {
             { name: 'Report Cards', href: '/academics/report-cards', icon: I.ReportIcon },
           ] : []),
         ] : []),
-        ...(isModuleEnabled('lms') ? [
+        ...(isModuleEnabled('lms') && effectiveRole !== 'ACCOUNTANT' ? [
           { name: 'Assignments', href: '/academics/assignments', icon: I.DocumentIcon },
         ] : []),
       ],
@@ -113,7 +113,7 @@ export function buildStaffNavigation(ctx, I) {
             { name: 'Worksheets', href: '/academics/worksheets', icon: I.DocumentIcon },
           ] : []),
         ] : []),
-        ...(isModuleEnabled('lms') ? [
+        ...(isModuleEnabled('lms') && effectiveRole !== 'ACCOUNTANT' ? [
           { name: 'Curriculum', href: '/academics/curriculum', icon: I.BookOpenIcon },
         ] : []),
       ],
@@ -128,7 +128,7 @@ export function buildStaffNavigation(ctx, I) {
         ...(isModuleEnabled('examinations') ? [
           { name: 'Curriculum Coverage', href: '/academics/curriculum-coverage', icon: I.ChartIcon },
         ] : []),
-        ...(isModuleEnabled('lms') ? [
+        ...(isModuleEnabled('lms') && effectiveRole !== 'ACCOUNTANT' ? [
           { name: 'Lesson Plans', href: '/academics/lesson-plans', icon: I.BookOpenIcon },
         ] : []),
       ],
@@ -212,7 +212,7 @@ export function buildStaffNavigation(ctx, I) {
           { type: 'divider', label: 'Academic Ops' },
           { name: 'Academic Calendar', href: '/academics/calendar', icon: I.CalendarIcon },
           { name: 'Sessions', href: '/academics/sessions', icon: I.CalendarIcon },
-          { name: 'Promotion', href: '/academics/promotion', icon: I.UsersIcon },
+          ...(effectiveRole !== 'ACCOUNTANT' && effectiveRole !== 'DRIVER' ? [{ name: 'Promotion', href: '/academics/promotion', icon: I.UsersIcon }] : []),
         ] : []),
       ],
     }] : []),
@@ -319,6 +319,7 @@ export function buildParentNavigation(I) {
   { type: 'item', name: 'Dashboard', href: '/parent/dashboard', icon: I.HomeIcon },
   { type: 'item', name: 'Leave Requests', href: '/parent/leave', icon: I.CalendarIcon },
   { type: 'item', name: 'Messages', href: '/parent/messages', icon: I.MailIcon },
+  { type: 'item', name: 'Notifications', href: '/notifications', icon: I.ChatBotIcon },
   { type: 'item', name: 'User Guide', href: '/guide', icon: I.BookOpenIcon },
 ]
 }
@@ -335,6 +336,7 @@ export function buildStudentNavigation(I) {
   { type: 'item', name: 'Library', href: '/student/library', icon: I.LibraryIcon },
   { type: 'item', name: 'Transport', href: '/student/transport', icon: I.TruckIcon },
   { type: 'item', name: 'AI Study Helper', href: '/student/study-helper', icon: I.ChatBotIcon },
+  { type: 'item', name: 'Notifications', href: '/notifications', icon: I.ChatBotIcon },
   { type: 'item', name: 'My Profile', href: '/student/profile', icon: I.UsersIcon },
   { type: 'item', name: 'User Guide', href: '/guide', icon: I.BookOpenIcon },
 ]

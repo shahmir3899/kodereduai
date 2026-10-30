@@ -1,3 +1,4 @@
+import { getSchoolTimeZone } from '../../utils/schoolTime'
 import { useState } from 'react'
 import Modal from '../../components/ui/Modal'
 import Field from '../../components/ui/Field'
@@ -19,7 +20,7 @@ function formatDateTime(dateStr) {
   if (!dateStr) return '--'
   return new Date(dateStr).toLocaleString('en-US', {
     year: 'numeric', month: 'short', day: 'numeric',
-    hour: '2-digit', minute: '2-digit',
+    hour: '2-digit', minute: '2-digit', timeZone: getSchoolTimeZone(),
   })
 }
 

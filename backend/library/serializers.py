@@ -3,6 +3,7 @@ Library serializers for book categories, books, book issues, and library configu
 Uses the two-serializer pattern: Read serializer (with nested details) + Create/Write serializer.
 """
 
+from django.utils import timezone
 from datetime import date
 from decimal import Decimal
 
@@ -178,7 +179,7 @@ class BookIssueReadSerializer(serializers.ModelSerializer):
     def get_days_overdue(self, obj):
         if obj.status not in OPEN_STATUSES:
             return 0
-        return max(0, (date.today() - obj.due_date).days)
+        return max(0, (timezone.localdate() - obj.due_date).days)
 
     def get_estimated_fine(self, obj):
         # Admin-only config is read server-side so every role sees the same figure.
@@ -216,7 +217,7 @@ class BookIssueCreateSerializer(serializers.ModelSerializer):
         })
 
         due_date = attrs.get('due_date')
-        if due_date and due_date < date.today():
+        if due_date and due_date < timezone.localdate():
             raise serializers.ValidationError({'due_date': 'Due date cannot be in the past.'})
 
         # Validate that the correct borrower is set based on borrower_type

@@ -1,3 +1,4 @@
+import { schoolNowDate, schoolPeriod } from '../utils/schoolTime'
 import { useState } from 'react'
 import { TONE } from '../components/ui/statusTones'
 import Button from '../components/ui/Button'
@@ -8,6 +9,8 @@ import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { financeApi } from '../services/api'
 import { useAuth } from '../contexts/AuthContext'
+import { useAcademicYear } from '../contexts/AcademicYearContext'
+import { downloadInstantReport } from '../utils/downloadReport'
 import TransferModal from '../components/TransferModal'
 import { useEscapeKey } from '../hooks/useEscapeKey'
 import {
@@ -28,16 +31,17 @@ const typeColors = {
 const EXPENSE_COLORS = ['#dc2626', '#ea580c', '#f59e0b', '#8b5cf6', '#06b6d4', '#6b7280']
 
 const PERIODS = [
-  { label: 'This Month', getValue: () => { const d = new Date(); return { date_from: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`, date_to: d.toISOString().split('T')[0] } } },
-  { label: 'Last Month', getValue: () => { const d = new Date(); d.setMonth(d.getMonth() - 1); const start = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`; const end = new Date(d.getFullYear(), d.getMonth() + 1, 0).toISOString().split('T')[0]; return { date_from: start, date_to: end } } },
-  { label: 'This Quarter', getValue: () => { const d = new Date(); const q = Math.floor(d.getMonth() / 3); return { date_from: `${d.getFullYear()}-${String(q * 3 + 1).padStart(2, '0')}-01`, date_to: d.toISOString().split('T')[0] } } },
-  { label: 'This Year', getValue: () => { const d = new Date(); return { date_from: `${d.getFullYear()}-01-01`, date_to: d.toISOString().split('T')[0] } } },
+  { label: 'This Month', getValue: () => schoolPeriod('month') },
+  { label: 'Last Month', getValue: () => schoolPeriod('lastMonth') },
+  { label: 'This Quarter', getValue: () => schoolPeriod('quarter') },
+  { label: 'This Year', getValue: () => schoolPeriod('year') },
 ]
 
 const MONTH_NAMES = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
 export default function FinanceDashboardPage() {
   const { user, isStaffMember, isPrincipal } = useAuth()
+  const { activeAcademicYear } = useAcademicYear()
   const canWrite = !isStaffMember
   const hasMultipleSchools = !isStaffMember && (user?.schools?.length > 1 || user?.is_super_admin)
   const isAdmin = !isPrincipal && !isStaffMember
@@ -51,7 +55,7 @@ export default function FinanceDashboardPage() {
   const [customTo, setCustomTo] = useState('')
   const [useCustom, setUseCustom] = useState(false)
 
-  const now = new Date()
+  const now = schoolNowDate()
   const currentMonth = now.getMonth() + 1
   const currentYear = now.getFullYear()
 
@@ -150,24 +154,23 @@ export default function FinanceDashboardPage() {
     Expenses: Number(t.expenses || 0),
   }))
 
+  // The PDF is made by the server (FINANCE_SUMMARY) so the web and the mobile app download the
+  // same file, with the same role rules applied as on screen.
   const handleExportPDF = async () => {
     try {
-      const { exportFinanceReport } = await import('./finance/financeReportExport')
-      exportFinanceReport({
-        schoolName: user?.school_name || '',
-        periodLabel: useCustom ? 'Custom' : PERIODS[periodIdx].label,
-        dateFrom: period.date_from,
-        dateTo: period.date_to,
-        summary: summaryData || {},
-        trendData: trendMonths,
-        categories,
-        catTotal,
-        accounts: hasMultipleSchools ? [] : balances,
-        grandTotal: hasMultipleSchools ? grandTotalAll : grandTotal,
-        feeCollectionRate: fee?.rate ?? 0,
-        feeTotalCollected: fee?.totalCollected ?? 0,
-        feeTotalPending: fee?.totalPending ?? 0,
-      })
+      const safeName = (user?.school_name || 'School').replace(/[^a-zA-Z0-9]/g, '_')
+      await downloadInstantReport(
+        {
+          report_type: 'FINANCE_SUMMARY',
+          parameters: {
+            date_from: period.date_from,
+            date_to: period.date_to,
+            period_label: useCustom ? 'Custom' : PERIODS[periodIdx].label,
+            ...(activeAcademicYear?.id && { academic_year: activeAcademicYear.id }),
+          },
+        },
+        `Finance_Report_${safeName}_${period.date_from}_to_${period.date_to}.pdf`,
+      )
     } catch (err) {
       console.error('PDF export failed:', err)
     }

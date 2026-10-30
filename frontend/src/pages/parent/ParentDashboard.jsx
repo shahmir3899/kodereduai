@@ -1,7 +1,7 @@
 import { useQuery, useQueries } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
-import { parentsApi } from '../../services/api'
+import { parentsApi, messagingApi } from '../../services/api'
 import DashboardShell from '../../components/dashboard/DashboardShell'
 import AttentionStrip from '../../components/dashboard/AttentionStrip'
 import NotificationsFeed from '../../components/dashboard/NotificationsFeed'
@@ -55,8 +55,8 @@ export default function ParentDashboard() {
   })
 
   const { data: threadsRes } = useQuery({
-    queryKey: ['parentMessageThreads'],
-    queryFn: () => parentsApi.getMessageThreads(),
+    queryKey: ['messagingThreads'],
+    queryFn: () => messagingApi.getThreads(),
     staleTime: 60 * 1000,
   })
   const threads = threadsRes?.data?.results || threadsRes?.data || []

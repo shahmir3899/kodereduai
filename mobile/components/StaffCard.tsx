@@ -21,7 +21,7 @@ export default function StaffCard({
   onPress,
 }: StaffCardProps) {
   return (
-    <TouchableOpacity onPress={() => onPress?.(id)} activeOpacity={0.7}>
+    <TouchableOpacity accessibilityRole="button" onPress={() => onPress?.(id)} activeOpacity={0.7}>
       <Card style={styles.card}>
         <View style={styles.avatar}>
           <Text style={styles.avatarText}>

@@ -1,12 +1,12 @@
 import React, { createContext, useContext, useEffect, useRef, useState, useCallback } from 'react';
-import { useRouter } from 'expo-router';
+import { useRouter, type Href } from 'expo-router';
 import * as Notifications from 'expo-notifications';
 import { notificationsApi } from '../services/api';
 import {
   registerForPushNotifications,
-  unregisterPushToken,
   configureNotificationHandlers,
 } from '../services/notifications';
+import { notificationTapRoute } from '../services/notificationRoute';
 import { useAuth } from './AuthContext';
 
 interface NotificationContextType {
@@ -22,7 +22,7 @@ const NotificationContext = createContext<NotificationContextType>({
 });
 
 export function NotificationProvider({ children }: { children: React.ReactNode }) {
-  const { user } = useAuth();
+  const { user, persona } = useAuth();
   const router = useRouter();
   const [unreadCount, setUnreadCount] = useState(0);
   const pushTokenRef = useRef<string | null>(null);
@@ -62,26 +62,23 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
       // On notification tapped
       (response: Notifications.NotificationResponse) => {
         const data = response.notification.request.content.data;
-        if (data?.screen) {
-          router.push(data.screen as string);
-        }
+        const route = notificationTapRoute(persona, data);
+        if (route) router.push(route as Href);
         refreshUnreadCount();
       },
     );
 
     return cleanup;
-  }, [user, router, refreshUnreadCount]);
+  }, [user, persona, router, refreshUnreadCount]);
 
   // Provide cleanup for logout
   useEffect(() => {
     if (user) return;
 
-    // User logged out — unregister token
-    if (pushTokenRef.current) {
-      unregisterPushToken(pushTokenRef.current);
-      pushTokenRef.current = null;
-      setPushToken(null);
-    }
+    // The server-side unregister already happened in AuthContext before sign-out; here only
+    // local state is reset.
+    pushTokenRef.current = null;
+    setPushToken(null);
     setUnreadCount(0);
   }, [user]);
 

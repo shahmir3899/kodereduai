@@ -3,11 +3,13 @@ Simplified admission views: enquiries CRUD, status updates, batch conversion,
 notes, and followups.
 """
 
+from django.utils import timezone
 from datetime import date
 
 from django.db import transaction, IntegrityError
 from django.db.models import Count, Q
 from rest_framework import viewsets, status
+from rest_framework.exceptions import NotFound
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -302,7 +304,7 @@ class AdmissionEnquiryViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.M
                                 name=enquiry.name,
                                 parent_name=enquiry.father_name,
                                 parent_phone=enquiry.mobile,
-                                admission_date=date.today(),
+                                admission_date=timezone.localdate(),
                             )
 
                             StudentEnrollment.objects.create(
@@ -329,7 +331,7 @@ class AdmissionEnquiryViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.M
                             # Generate fee records if requested
                             if generate_fees and fee_types_to_generate:
                                 from finance.models import FeePayment, resolve_fee_amount
-                                current_date = date.today()
+                                current_date = timezone.localdate()
 
                                 for ft in fee_types_to_generate:
                                     m = current_date.month if ft == 'MONTHLY' else 0
@@ -423,6 +425,13 @@ class AdmissionNoteViewSet(ModuleAccessMixin, viewsets.ModelViewSet):
         extra = {'user': self.request.user}
         enquiry_pk = self.kwargs.get('enquiry_pk')
         if enquiry_pk:
+            # The URL id used to be trusted as-is, so a note could be attached to another
+            # school's enquiry just by guessing its id.
+            school_id = _resolve_school_id(self.request)
+            if not school_id or not AdmissionEnquiry.objects.filter(
+                id=enquiry_pk, school_id=school_id,
+            ).exists():
+                raise NotFound('Enquiry not found.')
             extra['enquiry_id'] = enquiry_pk
         serializer.save(**extra)
 
@@ -448,7 +457,7 @@ class FollowupView(ModuleAccessMixin, APIView):
             status__in=['CONVERTED', 'CANCELLED'],
         )
 
-        today = date.today()
+        today = timezone.localdate()
 
         if followup_type == 'today':
             queryset = base_qs.filter(next_followup_date=today)
@@ -464,9 +473,13 @@ class FollowupView(ModuleAccessMixin, APIView):
         return Response(serializer.data)
 
 
-class ConversionLikelihoodView(APIView):
-    """AI Admissions Conversion Likelihood - scores open enquiries by likelihood to convert."""
-    permission_classes = [IsAuthenticated, HasSchoolAccess]
+class ConversionLikelihoodView(ModuleAccessMixin, APIView):
+    """AI Admissions Conversion Likelihood - scores open enquiries by likelihood to convert.
+
+    Admin/principal only, like the web route: it exposes every open enquiry's family details,
+    and it used to be readable by any staff role and with the module switched off."""
+    required_module = 'admissions'
+    permission_classes = [IsAuthenticated, IsSchoolAdmin, HasSchoolAccess]
 
     def get(self, request):
         from .conversion_likelihood_service import ConversionLikelihoodService

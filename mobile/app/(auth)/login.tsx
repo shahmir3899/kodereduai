@@ -13,6 +13,7 @@ import { useRouter } from 'expo-router';
 import { useAuth } from '../../contexts/AuthContext';
 import Input from '../../components/ui/Input';
 import Button from '../../components/ui/Button';
+import { loginErrorMessage } from '../../services/sessionRules';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
 
 export default function LoginScreen() {
@@ -20,7 +21,7 @@ export default function LoginScreen() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
-  const { login } = useAuth();
+  const { login, sessionExpired } = useAuth();
   const router = useRouter();
 
   const handleLogin = async () => {
@@ -31,23 +32,11 @@ export default function LoginScreen() {
 
     setLoading(true);
     try {
-      const userData = await login(username.trim(), password);
-
-      // Navigate based on role
-      const role = userData.schools?.[0]?.role || userData.role;
-      if (role === 'PARENT') {
-        router.replace('/(parent)/dashboard');
-      } else if (role === 'STUDENT') {
-        router.replace('/(student)/dashboard');
-      } else {
-        router.replace('/(admin)/dashboard');
-      }
+      await login(username.trim(), password);
+      // The index route picks the home screen from the active school's role.
+      router.replace('/');
     } catch (error: any) {
-      const message =
-        error.response?.data?.detail ||
-        error.response?.data?.error ||
-        'Invalid credentials. Please try again.';
-      Alert.alert('Login Failed', message);
+      Alert.alert('Login Failed', loginErrorMessage(error));
     } finally {
       setLoading(false);
     }
@@ -75,6 +64,11 @@ export default function LoginScreen() {
         <View style={styles.form}>
           <Text style={styles.title}>Welcome Back</Text>
           <Text style={styles.subtitle}>Sign in to your account</Text>
+          {sessionExpired && (
+            <Text style={styles.expiredNote} accessibilityRole="alert">
+              Your session has expired. Please sign in again.
+            </Text>
+          )}
 
           <Input
             label="Username"
@@ -102,6 +96,13 @@ export default function LoginScreen() {
             }
             onRightIconPress={() => setShowPassword(!showPassword)}
           />
+
+          <TouchableOpacity
+            onPress={() => router.push('/(auth)/forgot-password')}
+            style={styles.forgotLink}
+          >
+            <Text style={styles.forgotText}>Forgot password?</Text>
+          </TouchableOpacity>
 
           <Button
             title="Sign In"
@@ -185,7 +186,22 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
     marginBottom: Spacing.xxl,
   },
+  expiredNote: {
+    fontSize: FontSize.sm,
+    color: Colors.warning,
+    marginTop: -Spacing.lg,
+    marginBottom: Spacing.lg,
+  },
   showHide: {
+    fontSize: FontSize.sm,
+    color: Colors.primary,
+    fontWeight: '600',
+  },
+  forgotLink: {
+    alignSelf: 'flex-end',
+    marginBottom: Spacing.lg,
+  },
+  forgotText: {
     fontSize: FontSize.sm,
     color: Colors.primary,
     fontWeight: '600',

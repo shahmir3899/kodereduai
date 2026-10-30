@@ -1,3 +1,4 @@
+import { schoolToday } from '../../utils/schoolTime'
 import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { financeApi, studentsApi } from '../../services/api'
@@ -12,7 +13,7 @@ const formatGenerationPeriod = (month, year) => new Date(year, month - 1).toLoca
 export function useFeeSetup({ academicYearId, feeType, studentClassId, structureMode, month, year }) {
   const queryClient = useQueryClient()
 
-  const [bulkEffectiveFrom, setBulkEffectiveFrom] = useState(new Date().toISOString().split('T')[0])
+  const [bulkEffectiveFrom, setBulkEffectiveFrom] = useState(schoolToday())
 
   // Reference data
   const { classes: classList } = useClasses()

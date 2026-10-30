@@ -1,3 +1,4 @@
+import { todayString } from '../../../services/attendanceEntry';
 import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
@@ -24,7 +25,7 @@ export default function FaceAttendanceCapture() {
   const [uploading, setUploading] = useState(false);
   const [classes, setClasses] = useState<any[]>([]);
   const [selectedClass, setSelectedClass] = useState<string>('');
-  const [selectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [selectedDate] = useState(todayString());
   const cameraRef = useRef<CameraView>(null);
 
   useEffect(() => {
@@ -116,7 +117,7 @@ export default function FaceAttendanceCapture() {
           We need camera access to capture student group photos.
         </Text>
         <Button title="Grant Permission" onPress={requestPermission} />
-        <TouchableOpacity style={styles.galleryLink} onPress={pickFromGallery}>
+        <TouchableOpacity accessibilityRole="button" style={styles.galleryLink} onPress={pickFromGallery}>
           <Text style={styles.galleryLinkText}>Or pick from gallery</Text>
         </TouchableOpacity>
       </View>
@@ -178,10 +179,10 @@ export default function FaceAttendanceCapture() {
         </View>
       </CameraView>
       <View style={styles.controls}>
-        <TouchableOpacity style={styles.galleryBtn} onPress={pickFromGallery}>
+        <TouchableOpacity accessibilityRole="button" style={styles.galleryBtn} onPress={pickFromGallery}>
           <Text style={styles.galleryBtnText}>Gallery</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.captureBtn} onPress={takePhoto}>
+        <TouchableOpacity accessibilityRole="button" style={styles.captureBtn} onPress={takePhoto}>
           <View style={styles.captureBtnInner} />
         </TouchableOpacity>
         <View style={{ width: 60 }} />

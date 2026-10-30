@@ -3,6 +3,7 @@ Base report generator with PDF and Excel rendering capabilities.
 Uses openpyxl for Excel and reportlab for PDF.
 """
 
+from django.utils import timezone
 import io
 import logging
 from datetime import datetime
@@ -174,7 +175,7 @@ class BaseReportGenerator:
 
             # Footer
             elements.append(Spacer(1, 20))
-            footer_text = f"Generated on {datetime.now().strftime('%d %B %Y at %I:%M %p')} | Education AI"
+            footer_text = f"Generated on {timezone.localtime().strftime('%d %B %Y at %I:%M %p')} | Education AI"
             elements.append(Paragraph(footer_text, styles['Normal']))
 
             doc.build(elements)
@@ -227,7 +228,7 @@ class BaseReportGenerator:
                 lines.append('\t'.join(str(c) for c in row))
 
         lines.append('')
-        lines.append(f"Generated: {datetime.now().strftime('%d %B %Y %I:%M %p')}")
+        lines.append(f"Generated: {timezone.localtime().strftime('%d %B %Y %I:%M %p')}")
         return '\n'.join(lines).encode('utf-8')
 
     def render_excel(self, data: dict) -> bytes:

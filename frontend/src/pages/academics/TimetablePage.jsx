@@ -1,3 +1,4 @@
+import { schoolToday } from '../../utils/schoolTime'
 import { useState, useEffect, useMemo } from 'react'
 import Modal from '../../components/ui/Modal'
 import { TONE } from '../../components/ui/statusTones'
@@ -70,7 +71,7 @@ export default function TimetablePage() {
   useEscapeKey(() => setShowSlotsModal(false), showSlotsModal)
 
   const [subTeacher, setSubTeacher] = useState('')
-  const [subDate, setSubDate] = useState(new Date().toISOString().slice(0, 10))
+  const [subDate, setSubDate] = useState(schoolToday())
   const [substituteData, setSubstituteData] = useState(null)
   const [loadingSubstitute, setLoadingSubstitute] = useState(false)
 

@@ -50,7 +50,7 @@ export default function Inbox() {
       <View style={styles.headerRow}>
         <Text style={styles.title}>Inbox</Text>
         {unreadCount > 0 && (
-          <TouchableOpacity onPress={handleMarkAllRead}>
+          <TouchableOpacity accessibilityRole="button" onPress={handleMarkAllRead}>
             <Text style={styles.markAllText}>Mark all read</Text>
           </TouchableOpacity>
         )}

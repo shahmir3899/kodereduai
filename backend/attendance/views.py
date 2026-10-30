@@ -937,7 +937,7 @@ class AttendanceRecordViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.R
         if not school_id:
             return Response({'detail': 'School context required.'}, status=400)
 
-        today = timezone.now().date()
+        today = timezone.localdate()
         try:
             month = int(request.query_params.get('month', today.month))
             year = int(request.query_params.get('year', today.year))
@@ -1018,7 +1018,7 @@ class AttendanceRecordViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.R
     def daily_report(self, request):
         """Get daily attendance report."""
         date_param = request.query_params.get('date')
-        date = parse_date(date_param) if date_param else timezone.now().date()
+        date = parse_date(date_param) if date_param else timezone.localdate()
         if not date:
             return Response({'error': 'Invalid date format. Use YYYY-MM-DD.'}, status=400)
         school_id = request.query_params.get('school_id') or ensure_tenant_school_id(request) or request.user.school_id
@@ -1039,7 +1039,7 @@ class AttendanceRecordViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.R
         if not school_id:
             return Response({'error': 'school_id is required'}, status=400)
 
-        date_from = timezone.now().date() - timezone.timedelta(days=days)
+        date_from = timezone.localdate() - timezone.timedelta(days=days)
 
         students_qs = Student.objects.filter(
             school_id=school_id,
@@ -1067,7 +1067,7 @@ class AttendanceRecordViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.R
 
         # The class's own off days count for the days the student was in that class.
         from academic_sessions.placement_service import DatedPlacements
-        dated = DatedPlacements(school_id, student_map.keys(), date_from, timezone.now().date())
+        dated = DatedPlacements(school_id, student_map.keys(), date_from, timezone.localdate())
 
         for row in attendance_rows:
             student = student_map.get(row['student_id'])
@@ -1081,7 +1081,7 @@ class AttendanceRecordViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.R
                 class_off_dates_cache[class_id] = build_off_day_date_set(
                     school_id=school_id,
                     date_from=date_from,
-                    date_to=timezone.now().date(),
+                    date_to=timezone.localdate(),
                     class_id=class_id,
                 )
 
@@ -1639,7 +1639,7 @@ class AttendanceRecordViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.R
         elements.append(Paragraph(f"Date: _________________", sig_text))
 
         # Footer
-        footer_text = f"Generated on {timezone.now().strftime('%d %b %Y at %H:%M')} | Education AI"
+        footer_text = f"Generated on {timezone.localtime().strftime('%d %b %Y at %H:%M')} | Education AI"
         elements.append(Spacer(1, 0.1*inch))
         elements.append(Paragraph(footer_text, styles['Normal']))
 

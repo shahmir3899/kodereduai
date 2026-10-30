@@ -57,6 +57,7 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
                     'role': 'SUPER_ADMIN',
                     'is_default': school.id == (user.school_id or 0),
                     'subdomain': school.subdomain,
+                    'timezone': school.timezone,
                     'enabled_modules': school.get_effective_modules(),
                 })
             # Ensure at least one default
@@ -70,6 +71,7 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
                     'role': mem.role,
                     'is_default': mem.is_default,
                     'subdomain': mem.school.subdomain,
+                    'timezone': mem.school.timezone,
                     'enabled_modules': mem.school.get_effective_modules(),
                 })
             # Legacy fallback: include user.school if not already in memberships
@@ -82,6 +84,7 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
                         'role': user.role or 'STAFF',
                         'is_default': not any(s['is_default'] for s in schools),
                         'subdomain': legacy_school.subdomain,
+                        'timezone': legacy_school.timezone,
                         'enabled_modules': legacy_school.get_effective_modules(),
                     })
                 except School.DoesNotExist:
@@ -358,6 +361,7 @@ class CurrentUserSerializer(serializers.ModelSerializer):
                 'name': obj.school.name,
                 'subdomain': obj.school.subdomain,
                 'logo': obj.school.logo,
+                'timezone': obj.school.timezone,
                 'enabled_modules': obj.school.enabled_modules,
             }
         return None
@@ -374,6 +378,7 @@ class CurrentUserSerializer(serializers.ModelSerializer):
                     'subdomain': school.subdomain,
                     'address': school.address or '',
                     'logo': school.logo or None,
+                    'timezone': school.timezone,
                     'enabled_modules': school.get_effective_modules(),
                 })
             if schools and not any(s['is_default'] for s in schools):
@@ -388,6 +393,7 @@ class CurrentUserSerializer(serializers.ModelSerializer):
                 'subdomain': mem.school.subdomain,
                 'address': mem.school.address or '',
                 'logo': mem.school.logo or None,
+                'timezone': mem.school.timezone,
                 'enabled_modules': mem.school.get_effective_modules(),
             }
             for mem in obj.school_memberships.filter(
@@ -408,6 +414,7 @@ class CurrentUserSerializer(serializers.ModelSerializer):
                     'subdomain': legacy_school.subdomain,
                     'address': legacy_school.address or '',
                     'logo': legacy_school.logo or None,
+                    'timezone': legacy_school.timezone,
                     'enabled_modules': legacy_school.get_effective_modules(),
                 })
             except School.DoesNotExist:

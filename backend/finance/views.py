@@ -591,7 +591,7 @@ class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
         instance = serializer.instance
         amount_paid = serializer.validated_data.get('amount_paid', instance.amount_paid)
         if amount_paid and amount_paid > 0 and not serializer.validated_data.get('payment_date') and not instance.payment_date:
-            serializer.save(collected_by=self.request.user, payment_date=date.today())
+            serializer.save(collected_by=self.request.user, payment_date=timezone.localdate())
         else:
             serializer.save(collected_by=self.request.user)
 
@@ -814,7 +814,7 @@ class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
         )
         source = None
         if amount is not None:
-            today = date.today()
+            today = timezone.localdate()
             extra_filters = {}
             if fee_type == 'ANNUAL' and annual_category_id:
                 extra_filters['annual_category_id'] = annual_category_id
@@ -848,8 +848,8 @@ class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
         fee_type = request.query_params.get('fee_type', 'MONTHLY')
         class_id = request.query_params.get('class_id')
         session_class_id = request.query_params.get('session_class_id')
-        year_param = request.query_params.get('year', date.today().year)
-        month_param = request.query_params.get('month', date.today().month)
+        year_param = request.query_params.get('year', timezone.localdate().year)
+        month_param = request.query_params.get('month', timezone.localdate().month)
         academic_year_id = request.query_params.get('academic_year')
         annual_categories = request.query_params.get('annual_categories', '')
         monthly_categories = request.query_params.get('monthly_categories', '')
@@ -1223,7 +1223,7 @@ class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
                 payment.payment_method = payment_method
                 payment.collected_by = request.user
                 if not payment.payment_date:
-                    payment.payment_date = date.today()
+                    payment.payment_date = timezone.localdate()
                 payment.save()
                 updated_count += 1
             return Response({'updated': updated_count, 'errors': []})
@@ -1247,7 +1247,7 @@ class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
                 if 'payment_date' in item:
                     payment.payment_date = item['payment_date']
                 elif Decimal(str(item.get('amount_paid', 0))) > 0 and not payment.payment_date:
-                    payment.payment_date = date.today()
+                    payment.payment_date = timezone.localdate()
                 if 'payment_method' in item:
                     payment.payment_method = item['payment_method']
                 if 'account' in item:
@@ -1291,8 +1291,8 @@ class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
     @action(detail=False, methods=['get'])
     def monthly_summary(self, request):
         """Get aggregated summary for a month/year."""
-        month = request.query_params.get('month', date.today().month)
-        year = request.query_params.get('year', date.today().year)
+        month = request.query_params.get('month', timezone.localdate().month)
+        year = request.query_params.get('year', timezone.localdate().year)
         school_id = _resolve_school_id(request)
 
         if not school_id:
@@ -1628,8 +1628,8 @@ class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
         ``grand``), so the dashboards read one shape either way.
         """
         from schools.models import School
-        month = int(request.query_params.get('month', date.today().month))
-        year = int(request.query_params.get('year', date.today().year))
+        month = int(request.query_params.get('month', timezone.localdate().month))
+        year = int(request.query_params.get('year', timezone.localdate().year))
 
         school_ids = ensure_tenant_schools(request)
         if not school_ids:
@@ -2789,7 +2789,7 @@ class AccountViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
             wb.save(output)
             output.seek(0)
 
-            filename = f"Ledger_{account.name}_{date.today().strftime('%Y%m%d')}.xlsx"
+            filename = f"Ledger_{account.name}_{timezone.localdate().strftime('%Y%m%d')}.xlsx"
             response = FileResponse(output, content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
             response['Content-Disposition'] = f'attachment; filename="{filename}"'
             return response
@@ -2851,7 +2851,7 @@ class AccountViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
             pdf.set_font('Helvetica', 'B', 14)
             pdf.cell(0, 8, safe_text(f"Account Ledger - {account.name}"), ln=1)
             pdf.set_font('Helvetica', '', 10)
-            pdf.cell(0, 6, safe_text(f"Generated: {date.today().isoformat()}"), ln=1)
+            pdf.cell(0, 6, safe_text(f"Generated: {timezone.localdate().isoformat()}"), ln=1)
             pdf.ln(2)
 
             pdf.set_font('Helvetica', '', 10)
@@ -2937,7 +2937,7 @@ class AccountViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
             output.write(pdf.output(dest='S'))
             output.seek(0)
 
-            filename = f"Ledger_{account.name}_{date.today().strftime('%Y%m%d')}.pdf"
+            filename = f"Ledger_{account.name}_{timezone.localdate().strftime('%Y%m%d')}.pdf"
             response = FileResponse(output, content_type='application/pdf')
             response['Content-Disposition'] = f'attachment; filename="{filename}"'
             return response
@@ -3504,7 +3504,7 @@ class FinanceReportsView(ModuleAccessMixin, APIView):
         18 queries for the default 6-month trend).
         """
         months_count = int(request.query_params.get('months', 6))
-        today = date.today()
+        today = timezone.localdate()
         is_staff = _is_staff_user(request)
         visible_accounts = _get_staff_visible_accounts(school_id) if is_staff else None
 

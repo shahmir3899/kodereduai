@@ -1,6 +1,7 @@
 from django.db import models
 
 from core.module_registry import get_default_modules, ALL_MODULE_KEYS
+from core.school_time import validate_timezone_name
 
 
 class Organization(models.Model):
@@ -199,6 +200,15 @@ class School(models.Model):
     contact_email = models.EmailField(blank=True)
     contact_phone = models.CharField(max_length=20, blank=True)
 
+    # The school's own clock. Every "today", due date, "this month" and timestamp shown for the
+    # school follows it (see core/school_time.py). Existing and new schools default to Pakistan time.
+    timezone = models.CharField(
+        max_length=64,
+        default='Asia/Karachi',
+        validators=[validate_timezone_name],
+        help_text="IANA time zone name, e.g. 'Asia/Karachi'",
+    )
+
     # WhatsApp Integration
     whatsapp_sender_id = models.CharField(
         max_length=100,
@@ -350,3 +360,14 @@ class School(models.Model):
                 return status
 
         return self.mark_mappings.get("default", "ABSENT")
+
+
+from django.db.models.signals import post_save  # noqa: E402
+from django.dispatch import receiver  # noqa: E402
+
+
+@receiver(post_save, sender=School)
+def _drop_cached_school_timezone(sender, instance, **kwargs):
+    """A changed zone must apply at once, not after the one-minute cache."""
+    from core.school_time import forget_school_timezone
+    forget_school_timezone(instance.id)

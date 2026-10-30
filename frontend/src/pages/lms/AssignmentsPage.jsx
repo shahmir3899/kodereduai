@@ -1,3 +1,4 @@
+import { schoolToday } from '../../utils/schoolTime'
 import { useState, useMemo, useEffect } from 'react'
 import Modal from '../../components/ui/Modal'
 import Field from '../../components/ui/Field'
@@ -77,7 +78,7 @@ const EMPTY_BULK_DIARY_FORM = {
   diary_date: '',
 }
 
-const defaultDiaryDateString = () => new Date().toISOString().slice(0, 10)
+const defaultDiaryDateString = () => schoolToday()
 
 // DRF returns {field: ['msg']}; surface the first one instead of a generic toast.
 const firstFieldError = (data) => {

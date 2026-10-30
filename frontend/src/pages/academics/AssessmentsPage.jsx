@@ -1,3 +1,4 @@
+import { schoolNowDate } from '../../utils/schoolTime'
 import { useEffect, useMemo, useState } from 'react'
 import EmptyState from '../../components/ui/EmptyState'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -120,7 +121,7 @@ export default function AssessmentsPage() {
   const classSelectorScope = getClassSelectorScope(activeAcademicYear?.id)
   const canEditPrincipalRemark = !isTeacher || isSchoolAdmin || isPrincipal || user?.role === 'SUPER_ADMIN'
 
-  const today = new Date()
+  const today = schoolNowDate()
   const [academicYearId, setAcademicYearId] = useState(activeAcademicYear?.id ? String(activeAcademicYear.id) : '')
   const [selectedMonth, setSelectedMonth] = useState(String(today.getMonth() + 1))
   const [selectedClassId, setSelectedClassId] = useState('')

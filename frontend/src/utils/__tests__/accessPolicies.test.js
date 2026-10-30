@@ -3,6 +3,8 @@ import {
   canAccessFinanceRoute,
   canAccessManagementRoute,
   canAccessInventoryRoute,
+  canAccessPromotionRoute,
+  canAccessLmsRoute,
 } from '../accessPolicies'
 
 describe('accessPolicies', () => {
@@ -20,6 +22,26 @@ describe('accessPolicies', () => {
     it('allows admin roles', () => {
       expect(canAccessFinanceRoute('SCHOOL_ADMIN', { collectOnly: false })).toBe(true)
       expect(canAccessFinanceRoute('ACCOUNTANT', { collectOnly: false })).toBe(true)
+    })
+  })
+
+  describe('canAccessLmsRoute', () => {
+    it('keeps accountant, driver and staff out of teaching pages', () => {
+      for (const r of ['ACCOUNTANT', 'DRIVER', 'STAFF']) expect(canAccessLmsRoute(r)).toBe(false)
+    })
+
+    it('leaves admin, principal, manager and teacher in', () => {
+      for (const r of ['SCHOOL_ADMIN', 'PRINCIPAL', 'MANAGER', 'TEACHER']) expect(canAccessLmsRoute(r)).toBe(true)
+    })
+  })
+
+  describe('canAccessPromotionRoute', () => {
+    it('lets admin, principal and manager in', () => {
+      for (const r of ['SCHOOL_ADMIN', 'PRINCIPAL', 'MANAGER']) expect(canAccessPromotionRoute(r)).toBe(true)
+    })
+
+    it('keeps accountant, driver, teacher and staff out', () => {
+      for (const r of ['ACCOUNTANT', 'DRIVER', 'TEACHER', 'STAFF']) expect(canAccessPromotionRoute(r)).toBe(false)
     })
   })
 
