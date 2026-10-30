@@ -12,6 +12,7 @@ from django.apps import apps
 from core.cache_utils import cached_api
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
+from django.core.cache import cache
 from django.db.models import Count, Q
 from datetime import timedelta
 
@@ -510,6 +511,11 @@ class SchoolViewSet(TenantQuerySetMixin, viewsets.ReadOnlyModelViewSet):
     # logo): by-subdomain above answers with the full school record, contact details and all.
     APP_SEARCH_MIN_CHARS = 3
     APP_SEARCH_LIMIT = 8
+    # The phone downloads the whole opt-in list once and filters it as you type. Only schools that
+    # switched themselves on are in it, and it is capped; the cache keeps it off the database.
+    APP_DIRECTORY_LIMIT = 500
+    APP_DIRECTORY_CACHE_KEY = 'schools:app-directory'
+    APP_DIRECTORY_CACHE_SECONDS = 300
 
     @staticmethod
     def _public_school(school):
@@ -532,6 +538,17 @@ class SchoolViewSet(TenantQuerySetMixin, viewsets.ReadOnlyModelViewSet):
             .order_by('name')[:self.APP_SEARCH_LIMIT]
         )
         return Response([self._public_school(s) for s in schools])
+
+    @action(detail=False, methods=['get'], url_path='app-directory', permission_classes=[AllowAny],
+            authentication_classes=[], throttle_classes=[SchoolLookupThrottle])
+    def app_directory(self, request):
+        """GET /api/schools/app-directory/ -- every school that chose to be listed (code, name, logo)."""
+        data = cache.get(self.APP_DIRECTORY_CACHE_KEY)
+        if data is None:
+            schools = School.objects.filter(is_active=True, listed_in_app=True).order_by('name')[:self.APP_DIRECTORY_LIMIT]
+            data = [self._public_school(s) for s in schools]
+            cache.set(self.APP_DIRECTORY_CACHE_KEY, data, self.APP_DIRECTORY_CACHE_SECONDS)
+        return Response(data)
 
     @action(detail=False, methods=['get'], url_path='app-info', permission_classes=[AllowAny],
             authentication_classes=[], throttle_classes=[SchoolLookupThrottle])
@@ -562,6 +579,8 @@ class SchoolViewSet(TenantQuerySetMixin, viewsets.ReadOnlyModelViewSet):
             return Response({'error': 'listed_in_app must be true or false.'}, status=status.HTTP_400_BAD_REQUEST)
         school.listed_in_app = listed
         school.save(update_fields=['listed_in_app', 'updated_at'])
+        # The directory is cached; a school that just switched itself on or off should show at once.
+        cache.delete(self.APP_DIRECTORY_CACHE_KEY)
         return Response({'listed_in_app': school.listed_in_app})
 
     @action(detail=False, methods=['get', 'put'])

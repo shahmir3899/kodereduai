@@ -93,6 +93,7 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
                     'is_default': school.id == (user.school_id or 0),
                     'subdomain': school.subdomain,
                     'timezone': school.timezone,
+                    'logo': school.logo,
                     'enabled_modules': school.get_effective_modules(),
                 })
             # Ensure at least one default
@@ -107,6 +108,7 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
                     'is_default': mem.is_default,
                     'subdomain': mem.school.subdomain,
                     'timezone': mem.school.timezone,
+                    'logo': mem.school.logo,
                     'enabled_modules': mem.school.get_effective_modules(),
                 })
             # Legacy fallback: include user.school if not already in memberships
@@ -120,6 +122,7 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
                         'is_default': not any(s['is_default'] for s in schools),
                         'subdomain': legacy_school.subdomain,
                         'timezone': legacy_school.timezone,
+                        'logo': legacy_school.logo,
                         'enabled_modules': legacy_school.get_effective_modules(),
                     })
                 except School.DoesNotExist:

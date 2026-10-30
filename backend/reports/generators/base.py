@@ -8,6 +8,8 @@ import io
 import logging
 from datetime import datetime
 
+from core.pdf_branding import reportlab_header
+
 logger = logging.getLogger(__name__)
 
 
@@ -148,8 +150,11 @@ class BaseReportGenerator:
                     elements.append(Paragraph(self.school.name, title_style))
                     elements.append(Paragraph(data.get('title', 'Report'), styles['Heading2']))
             else:
-                elements.append(Paragraph(self.school.name, title_style))
-                elements.append(Paragraph(data.get('title', 'Report'), styles['Heading2']))
+                # The school's logo beside its name and the report title; no logo, no change.
+                elements.extend(reportlab_header(self.school, [
+                    Paragraph(self.school.name, title_style),
+                    Paragraph(data.get('title', 'Report'), styles['Heading2']),
+                ]))
             elements.append(Spacer(1, 12))
 
             # Subtitle / date range

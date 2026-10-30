@@ -2848,8 +2848,17 @@ class AccountViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
             pdf.set_auto_page_break(auto=True, margin=10)
             pdf.add_page()
 
+            # The active school's logo beside the title (the ledger can span an organisation's accounts,
+            # so the school comes from the request, not the account).
+            from core.pdf_branding import fpdf_logo
+            ledger_school = getattr(request, 'tenant_school', None) or getattr(account, 'school', None)
+            text_x = fpdf_logo(pdf, ledger_school, x=10, y=8, height_mm=14)
+            if text_x != 10:
+                pdf.set_xy(text_x, 8)
+
             pdf.set_font('Helvetica', 'B', 14)
             pdf.cell(0, 8, safe_text(f"Account Ledger - {account.name}"), ln=1)
+            pdf.set_x(text_x)
             pdf.set_font('Helvetica', '', 10)
             pdf.cell(0, 6, safe_text(f"Generated: {timezone.localdate().isoformat()}"), ln=1)
             pdf.ln(2)

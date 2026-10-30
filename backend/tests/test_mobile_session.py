@@ -80,3 +80,13 @@ class TestMobileSession:
     def test_a_wrong_password_is_still_refused_on_the_phone(self, client, person):
         resp = _post(client, LOGIN, {'username': person.username, 'password': 'nope'}, HTTP_X_CLIENT='mobile')
         assert resp.status_code == 401
+
+
+@pytest.mark.django_db
+def test_sign_in_carries_each_schools_logo(client, db):
+    from schools.models import UserSchoolMembership
+    school = School.objects.create(name='PYTEST Logo School', subdomain='pytest-logo', logo='https://x.test/logo.png')
+    user = get_user_model().objects.create_user(username='pytest_logo', email='logo@pytest.test', password=PASSWORD, role='STAFF', school=school)
+    UserSchoolMembership.objects.create(user=user, school=school, role='STAFF', is_default=True)
+    body = _post(client, LOGIN, {'username': 'pytest_logo', 'password': PASSWORD}).json()
+    assert [s['logo'] for s in body['user']['schools']] == ['https://x.test/logo.png']

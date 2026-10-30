@@ -16,6 +16,7 @@ from schools.models import School
 SEARCH = '/api/schools/app-search/'
 INFO = '/api/schools/app-info/'
 LISTING = '/api/schools/app-listing/'
+DIRECTORY = '/api/schools/app-directory/'
 
 
 @pytest.fixture(autouse=True)
@@ -118,3 +119,39 @@ class TestListingSwitch:
 
     def test_login_is_required(self, client, db):
         assert client.get(LISTING).status_code in (401, 403)
+
+
+@pytest.mark.django_db
+class TestDirectory:
+    def test_lists_only_opted_in_active_schools_with_public_fields(self, client, schools):
+        body = client.get(DIRECTORY).json()
+        assert [s['subdomain'] for s in body] == ['oakridge', 'oakwood'] or [s['subdomain'] for s in body] == ['oakwood', 'oakridge']
+        assert all(set(s) == {'subdomain', 'name', 'logo'} for s in body)
+        assert 'hidden' not in [s['subdomain'] for s in body]
+        assert 'closedoaks' not in [s['subdomain'] for s in body]
+
+    def test_needs_no_login(self, client, schools):
+        assert client.get(DIRECTORY).status_code == 200
+
+    def test_is_sorted_by_name(self, client, db):
+        School.objects.create(name='Zed School', subdomain='zed', listed_in_app=True)
+        School.objects.create(name='Alpha School', subdomain='alpha', listed_in_app=True)
+        assert [s['name'] for s in client.get(DIRECTORY).json()] == ['Alpha School', 'Zed School']
+
+    def test_is_capped(self, client, db, monkeypatch):
+        from schools.views import SchoolViewSet
+        monkeypatch.setattr(SchoolViewSet, 'APP_DIRECTORY_LIMIT', 3)
+        for i in range(6):
+            School.objects.create(name=f'School {i}', subdomain=f'cap{i}', listed_in_app=True)
+        assert len(client.get(DIRECTORY).json()) == 3
+
+    def test_switching_the_listing_refreshes_the_cached_list(self, api, client, seed_data):
+        token, sid = seed_data['tokens']['admin'], seed_data['SID_A']
+        code = School.objects.get(id=sid).subdomain
+        assert code not in [s['subdomain'] for s in client.get(DIRECTORY).json()]
+        resp = api.client.put(
+            LISTING, data=json.dumps({'listed_in_app': True}), content_type='application/json',
+            HTTP_AUTHORIZATION=f'Bearer {token}', HTTP_X_SCHOOL_ID=str(sid),
+        )
+        assert resp.status_code == 200
+        assert code in [s['subdomain'] for s in client.get(DIRECTORY).json()]

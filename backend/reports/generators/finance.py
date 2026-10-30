@@ -14,6 +14,8 @@ from decimal import Decimal
 
 from django.http import QueryDict
 
+from core.pdf_branding import reportlab_header
+
 from .base import BaseReportGenerator
 
 MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
@@ -183,13 +185,12 @@ class FinanceSummaryReportGenerator(BaseReportGenerator):
         heading = ParagraphStyle('FinHeading', parent=styles['Heading3'], fontSize=13, spaceBefore=14, spaceAfter=6)
         muted = ParagraphStyle('FinMuted', parent=styles['Normal'], fontSize=9, textColor=colors.HexColor('#646464'))
 
-        elements = [
+        elements = reportlab_header(self.school, [
             Paragraph(data['title'], title),
             Paragraph(self.school.name, styles['Normal']),
             Paragraph(data['subtitle'], muted),
             Paragraph(f"Generated: {timezone.localtime().strftime('%B %d, %Y %I:%M %p')}", muted),
-            Spacer(1, 8),
-        ]
+        ]) + [Spacer(1, 8)]
         for section in data['sections']:
             elements.append(Paragraph(section['heading'], heading))
             rows = [section['headers']] + [['' if c is None else str(c) for c in r] for r in section['rows']]
