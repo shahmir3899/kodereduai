@@ -204,8 +204,11 @@ class TestAllocationAndProtection(KuickpayModelBase):
         ))
 
     def test_fee_row_with_an_allocation_cannot_be_deleted(self):
-        with self.assertRaises(ProtectedError):
+        # FeePayment.delete() refuses first with a readable error; the PROTECT foreign key below
+        # is the backstop for paths that skip delete().
+        with self.assertRaises(ValidationError):
             self.row.delete()
+        self.assertTrue(FeePayment.objects.filter(pk=self.row.pk).exists())
 
     def test_queryset_delete_of_an_allocated_fee_row_is_also_blocked(self):
         # The path generation's delete_recreate uses: it bypasses FeePayment.delete(), so only

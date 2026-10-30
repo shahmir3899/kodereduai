@@ -4,6 +4,21 @@
 > **Repository:** `shahmir3899/kodereduai` (Education AI), commit `68a306b`. `~` = approximate line.
 > **Supersedes** Revisions 1–2.
 
+## Build status
+
+| Phase | Status |
+|---|---|
+| A0 regression/characterization tests + impact analysis | **Done** — `finance/test_fee_generation_regression.py`, `docs/KUICKPAY_A0_IMPACT_ANALYSIS.md` |
+| A3 models + migration `0028` | **Done** — verified on SQLite and PostgreSQL 16, reversible |
+| A1 `finance/ledger.py` + `kuickpay_ledger_report` command | **Done** |
+| A2 generation improvements F-1, F-2, F-3, F-4, F-8 | **Done** — see "A2 as built" below |
+| A4 consumer-number generator, A5 bill lifecycle + parent endpoint | Not started |
+| Track B (live endpoints) | **Blocked** — official Kuickpay specification and K-0…K-22 |
+
+**A2 as built (deviations from the plan text).** (1) `delete_recreate` keeps the batched queryset delete but only for rows without a recorded payment or allocation, instead of switching to per-row `delete()`; the target period is verified open before the run starts. (2) The explicit administrator refresh is `ledger.refresh_chain` and the `kuickpay_ledger_report --refresh [--apply]` command; no new API endpoint was added. (3) `generate_single` is now one transaction with row locks. (4) `ProtectedError` is mapped to HTTP 409 in `core.views.custom_exception_handler`.
+
+---
+
 ## 0. How to read this document
 
 | Tag | Meaning |
@@ -656,7 +671,21 @@ Not changed: `student_exits/transfer.py`, `admissions/views.py`, `class_move_fee
 
 ---
 
-## 20. New proposals needing your approval **[NA]** (not covered by prior decisions)
+## 20. Decisions F-1 … F-8 — answered
+
+| ID | Decision | Answer |
+|---|---|---|
+| F-1 | Carry the latest prior same-category balance (fixes lost balances, D1) | **Approved** |
+| F-2 | `delete_recreate` / `generate_single` refuse rows with recorded payments or allocations (D4) | **Approved** (also applied to annual generation, which had the same defect) |
+| F-3 | No automatic propagation to later months in release 1; admin-triggered refresh only | **Approved** |
+| F-4 | `FeePayment.save()/delete()` guard for rows with Kuickpay allocations | **Approved** |
+| F-5 | Discounts/scholarships stay out of generation; pilot uses student-level fee structures | **Approved** |
+| F-6 | Pilot school and its Bank `Account` | **Deferred** — needed only at go-live (Phase B5) |
+| F-7 | Alerts for urgent exceptional transactions / long-unposted receipts | **In-app notification + reconciliation report** (no email) |
+| F-8 | Locks: advisory lock + `select_for_update` + atomic manual-payment paths | **Approved** |
+| §10 | Model definitions and migration `0028` | **Signed off and built** |
+
+Original proposal table (kept for reference):
 
 These implement AD-9 but change behaviour or add design choices beyond what you approved; the exact designs are in §4.
 

@@ -180,16 +180,15 @@ class TestCarryForward(FeeGenerationRegressionBase):
         jan = _row(self.student, self.tuition, 1, 2026)
         self.assertEqual(jan.previous_balance, TUITION_FEE)
 
-    def test_r4_characterization_missing_intervening_row_drops_the_balance(self):
-        # CHARACTERIZATION of defect D1 (flips under approval F-1).
-        # January is unpaid, no February row exists, March is generated: January's balance is lost.
+    def test_r4_missing_intervening_row_carries_the_balance(self):
+        # Was a characterization of defect D1; flipped by approval F-1 (Kuickpay plan Phase A2).
+        # January is unpaid, no February row exists, March is generated: January's balance carries.
         _gen(self.school, 1, 2026, [self.tuition])
         _gen(self.school, 3, 2026, [self.tuition])
         mar = _row(self.student, self.tuition, 3, 2026)
-        self.assertEqual(mar.previous_balance, Decimal('0'))
-        self.assertEqual(mar.amount_due, TUITION_FEE)
-        # The staff-visible outstanding (latest row per category) silently loses January too.
-        self.assertEqual(student_pending_fees(self.student)['total'], TUITION_FEE)
+        self.assertEqual(mar.previous_balance, TUITION_FEE)
+        self.assertEqual(mar.amount_due, TUITION_FEE * 2)
+        self.assertEqual(student_pending_fees(self.student)['total'], TUITION_FEE * 2)
 
     def test_r5_categories_carry_independently(self):
         _gen(self.school, 1, 2026, [self.tuition, self.transport])
@@ -252,14 +251,18 @@ class TestConflictStrategies(FeeGenerationRegressionBase):
         self.assertNotEqual(new.id, old_id)
         self.assertEqual(new.amount_due, Decimal('1200'))
 
-    def test_r9_characterization_delete_recreate_destroys_a_recorded_payment(self):
-        # CHARACTERIZATION of defect D4 (flips under approval F-2).
-        self.pay(_row(self.student, self.tuition, 1, 2026), '400')
-        _gen(self.school, 1, 2026, [self.tuition], strategy='delete_recreate')
-        new = _row(self.student, self.tuition, 1, 2026)
-        self.assertEqual(new.amount_paid, Decimal('0'))
-        self.assertIsNone(new.payment_date)
-        self.assertIsNone(new.account)
+    def test_r9_delete_recreate_protects_a_row_with_a_recorded_payment(self):
+        # Was a characterization of defect D4 (payment destroyed); flipped by approval F-2.
+        paid = self.pay(_row(self.student, self.tuition, 1, 2026), '400')
+        result = _gen(self.school, 1, 2026, [self.tuition], strategy='delete_recreate')
+        kept = _row(self.student, self.tuition, 1, 2026)
+        self.assertEqual(kept.id, paid.id)
+        self.assertEqual(kept.amount_paid, Decimal('400'))
+        self.assertEqual(kept.amount_due, TUITION_FEE)
+        self.assertEqual(result['protected_conflict'], 1)
+        # The unpaid row of the other student is still replaced exactly as before.
+        self.assertEqual(result['deleted_recreated'], 1)
+        self.assertEqual(_row(self.student2, self.tuition, 1, 2026).amount_due, Decimal('1200'))
 
     def test_r13_rows_carried_from_a_transfer_are_never_regenerated(self):
         carried = SimpleNamespace(

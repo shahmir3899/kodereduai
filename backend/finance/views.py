@@ -152,26 +152,11 @@ def _filter_students_by_scope(queryset, school_id, class_id=None, academic_year_
     )
 
 
-def _get_previous_month_balance(school_id, student_id, month, year, monthly_category_id):
-    prev_month = month - 1
-    prev_year = year
-    if prev_month == 0:
-        prev_month = 12
-        prev_year = year - 1
-
-    prev_payment = FeePayment.objects.filter(
-        school_id=school_id,
-        student_id=student_id,
-        fee_type='MONTHLY',
-        monthly_category_id=monthly_category_id,
-        month=prev_month,
-        year=prev_year,
-    ).first()
-
-    if not prev_payment:
-        return Decimal('0')
-
-    return (prev_payment.amount_due or Decimal('0')) - (prev_payment.amount_paid or Decimal('0'))
+def _get_previous_month_balance(school_id, student_id, month, year, monthly_category_id, lock=False):
+    """Balance carried into (month, year): the student's latest earlier row of this category, so a
+    missing intervening month does not lose it. One implementation, shared with bulk generation."""
+    from . import ledger
+    return ledger.carry_in_balance(school_id, student_id, monthly_category_id, year, month, lock=lock)
 
 
 class FeeStructureViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet):
@@ -590,12 +575,17 @@ class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
     def perform_update(self, serializer):
         instance = serializer.instance
         amount_paid = serializer.validated_data.get('amount_paid', instance.amount_paid)
-        if amount_paid and amount_paid > 0 and not serializer.validated_data.get('payment_date') and not instance.payment_date:
-            serializer.save(collected_by=self.request.user, payment_date=timezone.localdate())
-        else:
-            serializer.save(collected_by=self.request.user)
+        # Row lock held until the save commits, so two simultaneous edits (or an edit during fee
+        # generation) are applied one after the other instead of overwriting each other.
+        with transaction.atomic():
+            FeePayment.objects.select_for_update().get(pk=instance.pk)
+            if amount_paid and amount_paid > 0 and not serializer.validated_data.get('payment_date') and not instance.payment_date:
+                serializer.save(collected_by=self.request.user, payment_date=timezone.localdate())
+            else:
+                serializer.save(collected_by=self.request.user)
 
     @action(detail=False, methods=['post'], url_path='generate_single')
+    @transaction.atomic
     def generate_single(self, request):
         """Generate a single fee record from fee structure using bulk-consistent calculations."""
         serializer = GenerateSingleFeeSerializer(data=request.data)
@@ -676,6 +666,7 @@ class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
                 month=month,
                 year=year,
                 monthly_category_id=monthly_category_id,
+                lock=True,
             )
             base_monthly_fee = base_amount
             amount_due = previous_balance + base_amount
@@ -690,7 +681,7 @@ class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
             year=year,
             annual_category_id=annual_category_id,
             monthly_category_id=monthly_category_id,
-        ).first()
+        ).order_by('id').select_for_update().first()
 
         if existing_payment:
             if existing_payment.carried_from_exit_id:
@@ -749,7 +740,18 @@ class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
                     'record': FeePaymentSerializer(existing_payment, context={'request': request}).data,
                 })
 
-            # delete_recreate
+            # delete_recreate re-inserts the row with nothing paid, so a row with a recorded
+            # payment is protected exactly like the 'update' case above.
+            from .tasks import _allocated_fee_row_ids, _has_recorded_payment
+            if _has_recorded_payment(existing_payment, _allocated_fee_row_ids([existing_payment.id])):
+                return Response({
+                    'created': False,
+                    'updated': False,
+                    'skipped': True,
+                    'protected_conflict': True,
+                    'message': 'Existing record has a recorded payment; it was not deleted or recreated.',
+                    'record': FeePaymentSerializer(existing_payment, context={'request': request}).data,
+                }, status=409)
             existing_payment.delete()
 
         create_kwargs = {
@@ -1215,16 +1217,22 @@ class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
             if not account_id:
                 return Response({'detail': 'Please select account'}, status=400)
 
-            payments = FeePayment.objects.filter(id__in=ids, school_id=school_id)
+            payment_ids = list(
+                FeePayment.objects.filter(id__in=ids, school_id=school_id)
+                .order_by('id').values_list('id', flat=True)
+            )
             updated_count = 0
-            for payment in payments:
-                payment.amount_paid = payment.amount_due
-                payment.account_id = account_id
-                payment.payment_method = payment_method
-                payment.collected_by = request.user
-                if not payment.payment_date:
-                    payment.payment_date = timezone.localdate()
-                payment.save()
+            for payment_id in payment_ids:
+                # One lock per record (id order): a concurrent edit or generation waits instead of racing.
+                with transaction.atomic():
+                    payment = FeePayment.objects.select_for_update().get(pk=payment_id)
+                    payment.amount_paid = payment.amount_due
+                    payment.account_id = account_id
+                    payment.payment_method = payment_method
+                    payment.collected_by = request.user
+                    if not payment.payment_date:
+                        payment.payment_date = timezone.localdate()
+                    payment.save()
                 updated_count += 1
             return Response({'updated': updated_count, 'errors': []})
 
@@ -1241,19 +1249,20 @@ class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
         errors = []
         for item in records:
             try:
-                payment = FeePayment.objects.get(id=item['id'], school_id=school_id)
-                if 'amount_paid' in item:
-                    payment.amount_paid = Decimal(str(item['amount_paid']))
-                if 'payment_date' in item:
-                    payment.payment_date = item['payment_date']
-                elif Decimal(str(item.get('amount_paid', 0))) > 0 and not payment.payment_date:
-                    payment.payment_date = timezone.localdate()
-                if 'payment_method' in item:
-                    payment.payment_method = item['payment_method']
-                if 'account' in item:
-                    payment.account_id = item['account']
-                payment.collected_by = request.user
-                payment.save()
+                with transaction.atomic():
+                    payment = FeePayment.objects.select_for_update().get(id=item['id'], school_id=school_id)
+                    if 'amount_paid' in item:
+                        payment.amount_paid = Decimal(str(item['amount_paid']))
+                    if 'payment_date' in item:
+                        payment.payment_date = item['payment_date']
+                    elif Decimal(str(item.get('amount_paid', 0))) > 0 and not payment.payment_date:
+                        payment.payment_date = timezone.localdate()
+                    if 'payment_method' in item:
+                        payment.payment_method = item['payment_method']
+                    if 'account' in item:
+                        payment.account_id = item['account']
+                    payment.collected_by = request.user
+                    payment.save()
                 updated_count += 1
             except FeePayment.DoesNotExist:
                 errors.append(f"Record {item.get('id')} not found")

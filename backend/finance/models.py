@@ -1,7 +1,7 @@
 from django.core.exceptions import ValidationError
 from django.core.validators import RegexValidator
 from django.db import models
-from django.db.models import Q
+from django.db.models import Q, Sum
 from django.utils import timezone
 
 
@@ -671,6 +671,17 @@ class FeePayment(models.Model):
                     f"amount_paid={self.amount_paid} requires both payment_date and account."
                 )
 
+        # --- Safeguard 3: confirmed Kuickpay money cannot be written away ---
+        # An edit that lowers amount_paid below what Kuickpay already credited to this row would
+        # silently erase real money. Only rows that already exist can hold allocations.
+        if self.pk:
+            allocated = self.kuickpay_allocated_total()
+            if allocated and (self.amount_paid or 0) < allocated:
+                raise ValidationError(
+                    f"amount_paid cannot be less than the {allocated} already credited to this record "
+                    f"by confirmed Kuickpay payments."
+                )
+
         # --- Safeguard 2: reject writes to closed periods ---
         # Only check period lock for MONTHLY fees (month 1-12).
         # ANNUAL/ADMISSION/BOOKS/FINE use month=0 and are not tied to a calendar month.
@@ -690,8 +701,19 @@ class FeePayment(models.Model):
 
         super().save(*args, **kwargs)
 
+    def kuickpay_allocated_total(self):
+        """Sum of confirmed Kuickpay allocations credited to this row (one indexed query)."""
+        return KuickpayPaymentAllocation.objects.filter(
+            fee_payment_id=self.pk,
+        ).aggregate(t=Sum('amount'))['t'] or 0
+
     def delete(self, *args, **kwargs):
-        """Block deletion of fee records in closed periods (monthly only)."""
+        """Block deletion of fee records in closed periods (monthly only), and of records that
+        hold confirmed Kuickpay payments."""
+        if self.pk and self.kuickpay_allocated_total():
+            raise ValidationError(
+                "This fee record holds confirmed Kuickpay payments and cannot be deleted."
+            )
         if self.month >= 1 and self.month <= 12:
             is_locked = MonthlyClosing.objects.filter(
                 school_id=self.school_id, year=self.year, month=self.month,

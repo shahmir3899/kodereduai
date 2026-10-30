@@ -403,6 +403,15 @@ class FeePaymentUpdateSerializer(serializers.ModelSerializer):
             if not account and (not self.instance or not self.instance.account):
                 raise serializers.ValidationError({'account': 'Please select account'})
 
+        # Confirmed Kuickpay money on this record can never be edited away (FeePayment.save() also
+        # enforces this; checking here gives the API a field-level message).
+        if amount is not None and self.instance is not None:
+            allocated = self.instance.kuickpay_allocated_total()
+            if allocated and amount < allocated:
+                raise serializers.ValidationError({
+                    'amount_paid': f'Cannot be less than {allocated}, already credited by confirmed Kuickpay payments.'
+                })
+
         # Validate account belongs to the same school (multi-tenancy)
         school_id = _serializer_school_id(self)
         if school_id and account:

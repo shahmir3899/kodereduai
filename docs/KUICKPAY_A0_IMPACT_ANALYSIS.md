@@ -44,5 +44,5 @@ Evidence for "current behaviour" is the characterization suite `backend/finance/
 4. Propagate-on-payment is excluded from release 1 (F-3) because it would change `Sum(amount_due)`-based monthly totals.
 5. Discounts and scholarships are not applied by generation (R-19) and are unchanged by this plan (F-5).
 
-## Gate
-Phases A1 onward do not start until F-1…F-8 are answered. Cases R-4 and R-9 (and the D5 queryset-delete test) are the tests that flip when F-1 / F-2 are approved and implemented.
+## Outcome
+F-1, F-2, F-3, F-4 and F-8 were approved and implemented in Phase A2. Cases R-4 and R-9 flipped exactly as predicted (they are now `test_r4_missing_intervening_row_carries_the_balance` and `test_r9_delete_recreate_protects_a_row_with_a_recorded_payment`); the other 24 characterization cases pass unchanged, which confirms the change is limited to the gap and paid-row cases. The D5 queryset-delete test is unchanged because the queryset delete is retained for unprotected rows.
