@@ -229,6 +229,11 @@ export const sessionsApi = {
     api.get('/api/sessions/academic-years/', { params }),
   getSessionClasses: (params?: Record<string, unknown>) =>
     api.get('/api/sessions/session-classes/', { params }),
+  createSessionClass: (data: object) => api.post('/api/sessions/session-classes/', data),
+  updateSessionClass: (id: number, data: object) => api.patch(`/api/sessions/session-classes/${id}/`, data),
+  deleteSessionClass: (id: number) => api.delete(`/api/sessions/session-classes/${id}/`),
+  // Creates this year's sections from the master classes (existing ones are left alone).
+  initializeSessionClasses: (data: object) => api.post('/api/sessions/session-classes/initialize/', data),
   getEnrollments: (params?: Record<string, unknown>) =>
     api.get('/api/sessions/enrollments/', { params }),
   getTerms: (params?: Record<string, unknown>) =>
@@ -279,6 +284,10 @@ export const classesApi = {
     api.get('/api/classes/', { params }),
   getClass: (id: number) =>
     api.get(`/api/classes/${id}/`),
+  // Class setup (admin and principal).
+  createClass: (data: object) => api.post('/api/classes/', data),
+  updateClass: (id: number, data: object) => api.patch(`/api/classes/${id}/`, data),
+  deleteClass: (id: number) => api.delete(`/api/classes/${id}/`),
 };
 
 // ─── Finance API ─────────────────────────────────────────────────────────────
@@ -308,6 +317,9 @@ export const financeApi = {
     api.get('/api/finance/fee-structures/', { params }),
   bulkSetFeeStructures: (data: object) =>
     api.post('/api/finance/fee-structures/bulk_set/', data),
+  // Amounts for single students in one class, replacing only the students sent.
+  bulkSetStudentFeeStructures: (data: object) =>
+    api.post('/api/finance/fee-structures/bulk_set_students/', data),
   getMonthlyCategories: (params?: Record<string, unknown>) =>
     api.get('/api/finance/monthly-categories/', { params }),
   createMonthlyCategory: (data: object) =>
@@ -318,6 +330,15 @@ export const financeApi = {
     api.post('/api/finance/annual-categories/', data),
   getAccountBalances: (params?: Record<string, unknown>) =>
     api.get('/api/finance/accounts/balances/', { params }),
+  // Transfers between accounts and month closing (admin and principal; accountants are read-only).
+  getTransfers: (params?: Record<string, unknown>) =>
+    api.get('/api/finance/transfers/', { params }),
+  createTransfer: (data: object) => api.post('/api/finance/transfers/', data),
+  updateTransfer: (id: number, data: object) => api.patch(`/api/finance/transfers/${id}/`, data),
+  deleteTransfer: (id: number) => api.delete(`/api/finance/transfers/${id}/`),
+  getClosings: () => api.get('/api/finance/accounts/closings/'),
+  closeMonth: (data: { year: number; month: number; notes?: string }) =>
+    api.post('/api/finance/accounts/close_month/', data),
   getRecentEntries: (params?: Record<string, unknown>) =>
     api.get('/api/finance/accounts/recent_entries/', { params }),
 
@@ -410,6 +431,32 @@ export const hrApi = {
     api.get('/api/hr/staff/', { params }),
   getStaffMember: (id: number) =>
     api.get(`/api/hr/staff/${id}/`),
+  // Staff directory writes (admin and principal). Delete only deactivates; reactivate undoes it.
+  getNextEmployeeId: () => api.get('/api/hr/staff/next-employee-id/'),
+  createStaff: (data: object) => api.post('/api/hr/staff/', data),
+  updateStaff: (id: number, data: object) => api.patch(`/api/hr/staff/${id}/`, data),
+  deleteStaff: (id: number) => api.delete(`/api/hr/staff/${id}/`),
+  reactivateStaff: (id: number) => api.post(`/api/hr/staff/${id}/reactivate/`),
+  getDepartments: (params?: Record<string, unknown>) => api.get('/api/hr/departments/', { params }),
+  createDepartment: (data: object) => api.post('/api/hr/departments/', data),
+  updateDepartment: (id: number, data: object) => api.patch(`/api/hr/departments/${id}/`, data),
+  deleteDepartment: (id: number) => api.delete(`/api/hr/departments/${id}/`),
+  getDesignations: (params?: Record<string, unknown>) => api.get('/api/hr/designations/', { params }),
+  createDesignation: (data: object) => api.post('/api/hr/designations/', data),
+  updateDesignation: (id: number, data: object) => api.patch(`/api/hr/designations/${id}/`, data),
+  deleteDesignation: (id: number) => api.delete(`/api/hr/designations/${id}/`),
+  createLeavePolicy: (data: object) => api.post('/api/hr/leave-policies/', data),
+  updateLeavePolicy: (id: number, data: object) => api.patch(`/api/hr/leave-policies/${id}/`, data),
+  deleteLeavePolicy: (id: number) => api.delete(`/api/hr/leave-policies/${id}/`),
+  getQualifications: (params?: Record<string, unknown>) => api.get('/api/hr/qualifications/', { params }),
+  createQualification: (data: object) => api.post('/api/hr/qualifications/', data),
+  updateQualification: (id: number, data: object) => api.patch(`/api/hr/qualifications/${id}/`, data),
+  deleteQualification: (id: number) => api.delete(`/api/hr/qualifications/${id}/`),
+  // Documents go as multipart so the photo or file rides along; a JSON edit keeps the old file.
+  getDocuments: (params?: Record<string, unknown>) => api.get('/api/hr/documents/', { params }),
+  createDocument: (form: FormData) => api.post('/api/hr/documents/', form, { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 60000 }),
+  updateDocument: (id: number, data: object) => api.patch(`/api/hr/documents/${id}/`, data),
+  deleteDocument: (id: number) => api.delete(`/api/hr/documents/${id}/`),
   getLeaveApplications: (params?: Record<string, unknown>) =>
     api.get('/api/hr/leave-applications/', { params }),
   getLeavePolicies: (params?: Record<string, unknown>) =>
@@ -487,8 +534,23 @@ export const admissionsApi = {
   getConversionLikelihood: () => api.get('/api/admissions/conversion-likelihood/'),
 };
 
+// ─── School profile (admin and principal) ────────────────────────────────────
+
+export const schoolsApi = {
+  getMySchool: () => api.get('/api/schools/current/'),
+  uploadAsset: (form: FormData) => api.post('/api/schools/upload_asset/', form, { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 60000 }),
+  deleteAsset: (assetType: string) => api.delete('/api/schools/delete_asset/', { params: { asset_type: assetType } }),
+  updateTimeZone: (timezone: string) => api.put('/api/schools/time_zone/', { timezone }),
+  updateExamConfig: (data: object) => api.put('/api/schools/exam_config/', data),
+  updateAttendanceConfig: (data: object) => api.put('/api/schools/attendance_config/', data),
+};
+
 export const usersApi = {
   getUsers: (params?: Record<string, unknown>) => api.get('/api/users/', { params }),
+  // Users and roles of the school (admin and principal): the server refuses roles above the caller's.
+  createUser: (data: object) => api.post('/api/users/', data),
+  updateUser: (id: number, data: object) => api.patch(`/api/users/${id}/`, data),
+  resetPassword: (id: number, data: object) => api.post(`/api/users/${id}/reset_password/`, data),
 };
 
 // ─── Academics API ───────────────────────────────────────────────────────────
@@ -498,6 +560,24 @@ export const academicsApi = {
     api.get('/api/academics/class-subjects/', { params }),
   getSubjects: (params?: Record<string, unknown>) =>
     api.get('/api/academics/subjects/', { params }),
+  // Subjects, class subjects, class teachers and timetable editing (admin and principal write).
+  createSubject: (data: object) => api.post('/api/academics/subjects/', data),
+  updateSubject: (id: number, data: object) => api.patch(`/api/academics/subjects/${id}/`, data),
+  deleteSubject: (id: number) => api.delete(`/api/academics/subjects/${id}/`),
+  createClassSubject: (data: object) => api.post('/api/academics/class-subjects/', data),
+  updateClassSubject: (id: number, data: object) => api.patch(`/api/academics/class-subjects/${id}/`, data),
+  deleteClassSubject: (id: number) => api.delete(`/api/academics/class-subjects/${id}/`),
+  getClassTeachers: (params?: Record<string, unknown>) => api.get('/api/academics/class-teachers/', { params }),
+  createClassTeacher: (data: object) => api.post('/api/academics/class-teachers/', data),
+  deleteClassTeacher: (id: number) => api.delete(`/api/academics/class-teachers/${id}/`),
+  getTimetableSlots: (params?: Record<string, unknown>) => api.get('/api/academics/timetable-slots/', { params }),
+  createTimetableSlot: (data: object) => api.post('/api/academics/timetable-slots/', data),
+  updateTimetableSlot: (id: number, data: object) => api.patch(`/api/academics/timetable-slots/${id}/`, data),
+  deleteTimetableSlot: (id: number) => api.delete(`/api/academics/timetable-slots/${id}/`),
+  // Replaces one class day (or one section's override of it) with the entries sent.
+  bulkSaveTimetable: (data: object) => api.post('/api/academics/timetable-entries/bulk_save/', data),
+  // Drops a section's override of one day so it follows the shared timetable again.
+  clearSectionTimetableDay: (data: { session_class: number; day: string }) => api.post('/api/academics/timetable-entries/clear_section_day/', data),
   getMyTimetable: (params?: Record<string, unknown>) =>
     api.get('/api/academics/timetable-entries/my_timetable/', { params }),
   getMyClassTeacherAssignments: (params?: Record<string, unknown>) =>
@@ -521,6 +601,14 @@ export const academicsApi = {
 export const examinationsApi = {
   getExamTypes: (params?: Record<string, unknown>) =>
     api.get('/api/examinations/exam-types/', { params }),
+  createExamType: (data: object) => api.post('/api/examinations/exam-types/', data),
+  updateExamType: (id: number, data: object) => api.patch(`/api/examinations/exam-types/${id}/`, data),
+  deleteExamType: (id: number) => api.delete(`/api/examinations/exam-types/${id}/`),
+  getGradeScales: (params?: Record<string, unknown>) =>
+    api.get('/api/examinations/grade-scales/', { params }),
+  createGradeScale: (data: object) => api.post('/api/examinations/grade-scales/', data),
+  updateGradeScale: (id: number, data: object) => api.patch(`/api/examinations/grade-scales/${id}/`, data),
+  deleteGradeScale: (id: number) => api.delete(`/api/examinations/grade-scales/${id}/`),
   getExamSubjects: (params?: Record<string, unknown>) =>
     api.get('/api/examinations/exam-subjects/', { params }),
   getMarks: (params?: Record<string, unknown>) =>
@@ -530,6 +618,22 @@ export const examinationsApi = {
     api.post('/api/examinations/marks/bulk_entry/', data),
   getExams: (params?: Record<string, unknown>) =>
     api.get('/api/examinations/exams/', { params }),
+  // Exam groups: the date sheet and publishing (admin and principal).
+  getExamGroups: (params?: Record<string, unknown>) =>
+    api.get('/api/examinations/exam-groups/', { params }),
+  getDateSheet: (groupId: number) => api.get(`/api/examinations/exam-groups/${groupId}/date-sheet/`),
+  updateDateSheet: (groupId: number, entries: object[]) =>
+    api.patch(`/api/examinations/exam-groups/${groupId}/date-sheet/`, { date_sheet: entries }),
+  updateDateBySubject: (groupId: number, data: { subject_id: number; exam_date: string | null }) =>
+    api.post(`/api/examinations/exam-groups/${groupId}/update-date-by-subject/`, data),
+  publishScheduleAll: (groupId: number) => api.post(`/api/examinations/exam-groups/${groupId}/publish-schedule-all/`),
+  unpublishScheduleAll: (groupId: number) => api.post(`/api/examinations/exam-groups/${groupId}/unpublish-schedule-all/`),
+  announceResultsAll: (groupId: number) => api.post(`/api/examinations/exam-groups/${groupId}/announce-results-all/`),
+  unpublishResultsAll: (groupId: number) => api.post(`/api/examinations/exam-groups/${groupId}/unpublish-results-all/`),
+  publishExamSchedule: (id: number) => api.post(`/api/examinations/exams/${id}/publish-schedule/`),
+  unpublishExamSchedule: (id: number) => api.post(`/api/examinations/exams/${id}/unpublish-schedule/`),
+  announceExamResults: (id: number) => api.post(`/api/examinations/exams/${id}/announce-results/`),
+  unpublishExamResults: (id: number) => api.post(`/api/examinations/exams/${id}/unpublish-results/`),
   // Exam creation (admin and principal): one exam per whole class; the date sheet wizard stays on the web.
   // Several classes at once with their date sheet, in one transaction (409 lists classes that already have it).
   wizardCreateExamGroup: (data: object) => api.post('/api/examinations/exam-groups/wizard-create/', data),

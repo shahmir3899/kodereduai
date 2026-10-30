@@ -1,6 +1,7 @@
 import React from 'react';
-import OpenOnWeb from '../../components/nav/OpenOnWeb';
+import ExamTypesScreen from '../../components/exams/ExamTypesScreen';
 
+// Managers see the types; only admin and principal change them (as on the web).
 export default function Screen() {
-  return <OpenOnWeb title="Exam Types" note="Exam types are managed on the web version." />;
+  return <ExamTypesScreen canEdit={false} />;
 }

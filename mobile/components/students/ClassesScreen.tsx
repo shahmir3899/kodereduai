@@ -5,6 +5,7 @@ import { sectionRows } from '../../services/students';
 import { useAcademicYear, useSessionClasses } from '../../hooks/useAcademicYear';
 import { usePersonaBase } from '../../hooks/usePersonaBase';
 import { useRefreshControl } from '../../hooks/useRefreshControl';
+import Button from '../ui/Button';
 import Skeleton from '../ui/Skeleton';
 import ErrorState from '../ui/ErrorState';
 import EmptyState from '../ui/EmptyState';
@@ -15,10 +16,12 @@ interface Props {
   allowedMasterIds?: Set<number>;
   // Manager has no student-level data: the rows show counts only and do not open the roster.
   linkStudents?: boolean;
+  // Admin and principal: adds the way into class setup (add, edit, delete, sections).
+  canManage?: boolean;
 }
 
-// The year's sections with their student counts. Read-only: adding and editing classes stays on the web.
-export default function ClassesScreen({ allowedMasterIds, linkStudents = true }: Props) {
+// The year's sections with their student counts; admin and principal can open class setup from it.
+export default function ClassesScreen({ allowedMasterIds, linkStudents = true, canManage = false }: Props) {
   const router = useRouter();
   const base = usePersonaBase();
   const year = useAcademicYear();
@@ -37,7 +40,12 @@ export default function ClassesScreen({ allowedMasterIds, linkStudents = true }:
       data={rows}
       keyExtractor={(r) => String(r.id)}
       refreshControl={refreshControl}
-      ListHeaderComponent={<Text style={styles.year}>{year.current.name}</Text>}
+      ListHeaderComponent={(
+        <View>
+          <Text style={styles.year}>{year.current.name}</Text>
+          {canManage ? <Button title="Add and edit classes" size="sm" variant="outline" style={{ marginBottom: Spacing.md }} onPress={() => router.push('/(admin)/class-setup' as Href)} /> : null}
+        </View>
+      )}
       ListEmptyComponent={<EmptyState title="No classes" message="There are no classes to show for this year." />}
       renderItem={({ item: r }) => (
         <TouchableOpacity accessibilityRole="button" style={styles.row} disabled={!linkStudents}

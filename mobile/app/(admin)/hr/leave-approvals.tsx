@@ -1,12 +1,17 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, RefreshControl, Alert } from 'react-native';
+import React from 'react';
+import { View, Text, StyleSheet, ScrollView } from 'react-native';
+import { useRouter, type Href } from 'expo-router';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { parentsApi } from '../../../services/api';
+import { useScopedQuery } from '../../../hooks/useScopedQuery';
+import { useRefreshControl } from '../../../hooks/useRefreshControl';
+import { saveFailureMessage } from '../../../services/errorKind';
 import Card from '../../../components/ui/Card';
 import Badge from '../../../components/ui/Badge';
 import Button from '../../../components/ui/Button';
-import Spinner from '../../../components/ui/Spinner';
-import EmptyState from '../../../components/ui/EmptyState';
-import { Colors, FontSize, Spacing, BorderRadius } from '../../../constants/colors';
+import QueryBoundary from '../../../components/ui/QueryBoundary';
+import { useToast } from '../../../components/ui/Toast';
+import { Colors, FontSize, Spacing } from '../../../constants/colors';
 
 interface LeaveRequest {
   id: number;
@@ -21,44 +26,31 @@ interface LeaveRequest {
 }
 
 export default function LeaveApprovals() {
-  const [requests, setRequests] = useState<LeaveRequest[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [processing, setProcessing] = useState<number | null>(null);
+  const router = useRouter();
+  const toast = useToast();
+  const qc = useQueryClient();
+  const query = useScopedQuery<LeaveRequest[]>('admin-leave-requests', ['PENDING'], async () => {
+    const r = await parentsApi.getAdminLeaveRequests({ status: 'PENDING' });
+    return r.data.results || r.data || [];
+  });
+  const refreshControl = useRefreshControl(query.refetch);
 
-  const fetchRequests = async () => {
-    try {
-      const response = await parentsApi.getAdminLeaveRequests({ status: 'PENDING' });
-      setRequests(response.data.results || response.data || []);
-    } catch (error) { console.error('Failed to fetch leave requests:', error); }
-    finally { setLoading(false); setRefreshing(false); }
-  };
-
-  useEffect(() => { fetchRequests(); }, []);
-  const onRefresh = () => { setRefreshing(true); fetchRequests(); };
-
-  const handleReview = async (id: number, action: 'APPROVED' | 'REJECTED') => {
-    setProcessing(id);
-    try {
-      await parentsApi.reviewLeaveRequest(id, { status: action });
-      Alert.alert('Success', `Leave request ${action.toLowerCase()}.`);
-      fetchRequests();
-    } catch (error) {
-      console.error('Failed to review leave:', error);
-      Alert.alert('Error', 'Failed to process leave request.');
-    } finally { setProcessing(null); }
-  };
-
-  if (loading) return <Spinner fullScreen message="Loading..." />;
+  const review = useMutation({
+    mutationFn: ({ id, status }: { id: number; status: 'APPROVED' | 'REJECTED' }) => parentsApi.reviewLeaveRequest(id, { status }),
+    onSuccess: (_d, { status }) => {
+      toast.success(`Leave request ${status.toLowerCase()}.`);
+      qc.invalidateQueries({ predicate: (q) => q.queryKey[0] === 'admin-leave-requests' });
+    },
+    onError: (e) => toast.error(saveFailureMessage(e, 'Could not process the leave request.')),
+  });
+  const busy = (id: number) => review.isPending && review.variables?.id === id;
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
+    <ScrollView style={styles.container} contentContainerStyle={styles.content} refreshControl={refreshControl}>
       <Text style={styles.title}>Leave Approvals</Text>
-      {requests.length === 0 ? (
-        <EmptyState title="No Pending Requests" message="All leave requests have been processed." />
-      ) : (
-        requests.map((req) => (
+      <Button title="Leave policies" size="sm" variant="outline" style={{ marginBottom: Spacing.md }} onPress={() => router.push('/(admin)/hr/leave-policies' as Href)} />
+      <QueryBoundary query={query} emptyTitle="No Pending Requests" emptyMessage="All leave requests have been processed.">
+        {(requests) => requests.map((req) => (
           <Card key={req.id} style={styles.card}>
             <View style={styles.cardHeader}>
               <View>
@@ -70,14 +62,14 @@ export default function LeaveApprovals() {
             <Text style={styles.dates}>{req.start_date} to {req.end_date}</Text>
             <Text style={styles.reason}>{req.reason}</Text>
             <View style={styles.actions}>
-              <Button title="Reject" variant="danger" size="sm" onPress={() => handleReview(req.id, 'REJECTED')}
-                loading={processing === req.id} style={{ flex: 1 }} />
-              <Button title="Approve" size="sm" onPress={() => handleReview(req.id, 'APPROVED')}
-                loading={processing === req.id} style={{ flex: 1 }} />
+              <Button title="Reject" variant="danger" size="sm" onPress={() => review.mutate({ id: req.id, status: 'REJECTED' })}
+                loading={busy(req.id)} style={{ flex: 1 }} />
+              <Button title="Approve" size="sm" onPress={() => review.mutate({ id: req.id, status: 'APPROVED' })}
+                loading={busy(req.id)} style={{ flex: 1 }} />
             </View>
           </Card>
-        ))
-      )}
+        ))}
+      </QueryBoundary>
     </ScrollView>
   );
 }

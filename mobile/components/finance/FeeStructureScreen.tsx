@@ -25,8 +25,7 @@ import { Colors, FontSize, Spacing } from '../../constants/colors';
 
 // The amounts each class is charged per category, monthly or annual. Admin and principal only.
 // Saving closes the class's current charge for each changed category and opens the new amount from
-// the chosen date, so earlier fee records are not rewritten. Generating records and per-student
-// overrides stay on the web (see the note at the bottom).
+// the chosen date, so earlier fee records are not rewritten. Amounts for single students are on their own screen.
 export default function FeeStructureScreen() {
   const router = useRouter();
   const toast = useToast();
@@ -121,7 +120,7 @@ export default function FeeStructureScreen() {
       )}
 
       <Button title="Generate fee records" variant="outline" onPress={() => router.push('/(admin)/finance/fee-generate' as Href)} />
-      <Text style={styles.hint}>Changing the amount for a single student is done on the web.</Text>
+      <Button title="Amounts for single students" variant="outline" onPress={() => router.push('/(admin)/finance/student-fees' as Href)} />
     </ScrollView>
   );
 }

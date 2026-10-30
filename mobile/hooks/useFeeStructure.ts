@@ -1,7 +1,8 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { financeApi } from '../services/api';
+import { financeApi, studentsApi } from '../services/api';
 import { listOf } from '../services/academicYear';
 import type { FeeCategory, FeeKind, FeeStructure } from '../services/feeStructure';
+import type { FeeStudent } from '../services/studentFees';
 import { useAcademicYear } from './useAcademicYear';
 import { useScopedQuery } from './useScopedQuery';
 
@@ -31,4 +32,22 @@ export function useFeeStructureActions(kind: FeeKind) {
       onSuccess: () => qc.invalidateQueries({ predicate: (q) => q.queryKey[0] === 'feeCategories' }),
     }),
   };
+}
+
+// Active students of one master class this year, for the per-student amounts screen. Not a money
+// root: names and roll numbers only.
+export function useFeeClassStudents(classId: number | null) {
+  const { current } = useAcademicYear();
+  return useScopedQuery('feeClassStudents', [classId, current?.id ?? null], async () =>
+    listOf<FeeStudent>((await studentsApi.getStudents({
+      class_id: classId, is_active: true, page_size: 9999, ...(current?.id ? { academic_year: current.id } : {}),
+    })).data), { enabled: classId != null && !!current?.id });
+}
+
+export function useStudentFeeSave() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (d: object) => financeApi.bulkSetStudentFeeStructures(d),
+    onSuccess: () => ['feeStructures', 'feePayments', 'feeSummary'].forEach((root) => qc.invalidateQueries({ predicate: (q) => q.queryKey[0] === root })),
+  });
 }

@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import { FlatList, View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { useRouter, type Href } from 'expo-router';
+import Button from '../ui/Button';
 import { financeApi } from '../../services/api';
 import { periodRange } from '../../services/accountant';
 import { exportErrorMessage, ledgerFileName } from '../../services/reports';
@@ -17,7 +19,9 @@ import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors'
 
 // Account balances, read-only. The server already hides the accounts the school keeps private
 // from restricted roles.
-export default function AccountsScreen() {
+// `canManage` adds transfers and month closing (admin and principal); accountants only read.
+export default function AccountsScreen({ canManage = false }: { canManage?: boolean }) {
+  const router = useRouter();
   const q = useAccountBalances();
   const toast = useToast();
   const [busy, setBusy] = useState<string | null>(null);
@@ -49,9 +53,17 @@ export default function AccountsScreen() {
       keyExtractor={(a) => String(a.id)}
       refreshControl={refreshControl}
       ListHeaderComponent={
-        <View style={styles.total}>
-          <Text style={styles.totalLabel}>Total balance · {accounts.length} account{accounts.length === 1 ? '' : 's'}</Text>
-          <Text style={styles.totalValue}>{formatMoney(totalBalance(accounts))}</Text>
+        <View>
+          <View style={styles.total}>
+            <Text style={styles.totalLabel}>Total balance · {accounts.length} account{accounts.length === 1 ? '' : 's'}</Text>
+            <Text style={styles.totalValue}>{formatMoney(totalBalance(accounts))}</Text>
+          </View>
+          {canManage ? (
+            <View style={styles.manage}>
+              <Button title="Transfers" size="sm" variant="outline" style={styles.manageBtn} onPress={() => router.push('/(admin)/finance/transfers' as Href)} />
+              <Button title="Close month" size="sm" variant="outline" style={styles.manageBtn} onPress={() => router.push('/(admin)/finance/close-month' as Href)} />
+            </View>
+          ) : null}
         </View>
       }
       ListEmptyComponent={<EmptyState title="No accounts" message="No accounts are visible to your role." />}
@@ -87,6 +99,8 @@ const styles = StyleSheet.create({
   total: { backgroundColor: Colors.surface, borderRadius: BorderRadius.md, padding: Spacing.lg, marginBottom: Spacing.md },
   totalLabel: { fontSize: FontSize.sm, color: Colors.textSecondary },
   totalValue: { fontSize: FontSize.xxl, fontWeight: '700', color: Colors.primary, marginTop: 2 },
+  manage: { flexDirection: 'row', gap: Spacing.sm, marginBottom: Spacing.md },
+  manageBtn: { flex: 1 },
   row: { flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.surface, borderRadius: BorderRadius.md, padding: Spacing.md, marginBottom: Spacing.sm, gap: Spacing.md },
   who: { flex: 1, alignItems: 'flex-start', gap: 4 },
   name: { fontSize: FontSize.md, fontWeight: '600', color: Colors.text },

@@ -2,29 +2,14 @@ import React from 'react';
 import { Tabs } from 'expo-router';
 import Icon from '../../components/ui/Icon';
 import RoleGuard from '../../components/nav/RoleGuard';
-import { Colors, FontSize } from '../../constants/colors';
+import { useTabScreenOptions } from '../../components/nav/tabBarStyle';
 
 export default function AdminLayout() {
+  const screenOptions = useTabScreenOptions();
   return (
     <RoleGuard persona="admin">
     <Tabs
-      screenOptions={{
-        headerStyle: { backgroundColor: Colors.surface },
-        headerTitleStyle: { fontWeight: '600', fontSize: FontSize.lg },
-        headerTintColor: Colors.text,
-        tabBarActiveTintColor: Colors.primary,
-        tabBarInactiveTintColor: Colors.textTertiary,
-        tabBarStyle: {
-          backgroundColor: Colors.surface,
-          borderTopColor: Colors.border,
-          paddingBottom: 4,
-          height: 56,
-        },
-        tabBarLabelStyle: {
-          fontSize: FontSize.xs,
-          fontWeight: '500',
-        },
-      }}
+      screenOptions={screenOptions}
     >
       <Tabs.Screen
         name="dashboard"
@@ -76,17 +61,25 @@ export default function AdminLayout() {
       <Tabs.Screen name="papers" options={{ href: null, title: 'Question Papers' }} />
       <Tabs.Screen name="paper-builder" options={{ href: null, title: 'Paper Builder' }} />
       <Tabs.Screen name="insights" options={{ href: null, title: 'Insights' }} />
-      <Tabs.Screen name="exam-types-web" options={{ href: null, title: 'Exam Types' }} />
-      <Tabs.Screen name="grade-scale-web" options={{ href: null, title: 'Grade Scale' }} />
+      <Tabs.Screen name="exam-types" options={{ href: null, title: 'Exam Types' }} />
+      <Tabs.Screen name="grade-scale" options={{ href: null, title: 'Grade Scale' }} />
       <Tabs.Screen name="sessions-web" options={{ href: null, title: 'Academic Sessions' }} />
       <Tabs.Screen name="promotion-web" options={{ href: null, title: 'Promotion' }} />
       <Tabs.Screen name="school-setup-web" options={{ href: null, title: 'School Setup' }} />
+      <Tabs.Screen name="settings" options={{ href: null, title: 'Settings' }} />
+      <Tabs.Screen name="school-profile" options={{ href: null, title: 'School Profile' }} />
+      <Tabs.Screen name="subjects" options={{ href: null, title: 'Subjects' }} />
+      <Tabs.Screen name="users" options={{ href: null, title: 'Users and Roles' }} />
+      <Tabs.Screen name="exam-groups" options={{ href: null, title: 'Date Sheets and Publishing' }} />
+      <Tabs.Screen name="date-sheet" options={{ href: null, title: 'Date Sheet' }} />
       <Tabs.Screen name="exam-wizard" options={{ href: null, title: 'New Exams (several classes)' }} />
       <Tabs.Screen name="library" options={{ href: null, headerShown: false }} />
       <Tabs.Screen name="admissions" options={{ href: null, headerShown: false }} />
       <Tabs.Screen name="inventory" options={{ href: null, headerShown: false }} />
-      <Tabs.Screen name="timetable" options={{ href: null }} />
+      <Tabs.Screen name="timetable" options={{ href: null, title: 'Timetable' }} />
+      <Tabs.Screen name="timetable-periods" options={{ href: null, title: 'Periods and Breaks' }} />
       <Tabs.Screen name="results" options={{ href: null }} />
+      <Tabs.Screen name="class-setup" options={{ href: null, title: 'Add and Edit Classes' }} />
       <Tabs.Screen name="classes" options={{ href: null, title: 'Classes' }} />
       <Tabs.Screen name="assignments" options={{ href: null, headerShown: false }} />
       <Tabs.Screen name="report-cards" options={{ href: null, title: 'Report Cards' }} />

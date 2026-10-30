@@ -228,8 +228,9 @@ export function buildStaffNavigation(ctx: NavContext): NavGroup[] {
         ]);
   }
 
-  // Admin and principal only, like the web; the wizard itself stays on the web.
-  if (!isStaffLevel) add('Setup', [item('School Setup', '/school-setup')]);
+  // Admin and principal only, like the web; the wizard itself stays on the web. Settings holds the
+// users and roles screen.
+  if (!isStaffLevel) add('Setup', [item('School Setup', '/school-setup'), item('Settings', '/settings')]);
 
   if (persona === 'staff' && isStaff) add('Me', [item('Change Password', '/staff/change-password')]);
 

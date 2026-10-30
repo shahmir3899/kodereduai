@@ -102,6 +102,7 @@ export default function ExamsAdminScreen() {
   const header = (
     <View>
       <SegmentedTabs tabs={FILTERS} value={status} onChange={setStatus} />
+      <Button title="Date sheets and publishing" size="sm" variant="secondary" onPress={() => router.push('/(admin)/exam-groups' as Href)} />
       <Button title="+ New exams for several classes" size="sm" onPress={() => router.push('/(admin)/exam-wizard' as Href)} />
       <View style={{ height: Spacing.sm }} />
       <Button title="+ One exam for one class" size="sm" variant="outline" onPress={() => { setForm(emptyExamForm()); setError(null); setEditing('new'); }} />
