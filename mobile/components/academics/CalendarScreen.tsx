@@ -22,9 +22,9 @@ export default function CalendarScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.nav}>
-        <TouchableOpacity accessibilityRole="button" onPress={() => setYm(shiftMonth(ym.year, ym.month, -1))}><Text style={styles.arrow}>‹</Text></TouchableOpacity>
+        <TouchableOpacity accessibilityRole="button" accessibilityLabel="Previous month" onPress={() => setYm(shiftMonth(ym.year, ym.month, -1))}><Text style={styles.arrow}>‹</Text></TouchableOpacity>
         <Text style={styles.title}>{monthTitle(ym.year, ym.month)}</Text>
-        <TouchableOpacity accessibilityRole="button" onPress={() => setYm(shiftMonth(ym.year, ym.month, 1))}><Text style={styles.arrow}>›</Text></TouchableOpacity>
+        <TouchableOpacity accessibilityRole="button" accessibilityLabel="Next month" onPress={() => setYm(shiftMonth(ym.year, ym.month, 1))}><Text style={styles.arrow}>›</Text></TouchableOpacity>
       </View>
       {query.isLoading ? <Skeleton /> : query.isError && !query.data ? (
         <ErrorState error={query.error} onRetry={() => query.refetch()} />

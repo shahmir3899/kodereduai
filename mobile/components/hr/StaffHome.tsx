@@ -12,6 +12,8 @@ import { formatMoney } from '../../services/feeCollect';
 import Card from '../ui/Card';
 import StatusPill from '../ui/StatusPill';
 import SchoolSwitcher from '../nav/SchoolSwitcher';
+import StatTiles from '../dashboard/StatTiles';
+import RecentNotifications from '../dashboard/RecentNotifications';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
 
 // Port of frontend/src/pages/staff/StaffDashboard.jsx: own leave, payslips, assigned items and
@@ -57,14 +59,7 @@ export default function StaffHome() {
       <Text style={styles.greeting}>Welcome back, {name}</Text>
       <SchoolSwitcher />
 
-      <View style={styles.tiles}>
-        {tiles.map((t) => (
-          <TouchableOpacity accessibilityRole="button" key={t.label} style={styles.tile} onPress={() => go(t.route)}>
-            <Text style={styles.tileValue} numberOfLines={1} adjustsFontSizeToFit>{t.value}</Text>
-            <Text style={styles.tileLabel}>{t.label}</Text>
-          </TouchableOpacity>
-        ))}
-      </View>
+      <StatTiles tiles={tiles} onPress={go} />
 
       <View style={styles.actions}>
         {quick.map((a) => (
@@ -89,6 +84,7 @@ export default function StaffHome() {
           </Card>
         </>
       ) : null}
+      <RecentNotifications enabled={isModuleEnabled('notifications')} onSeeAll={() => go(routeFor('staff', '/notifications'))} />
     </ScrollView>
   );
 }
@@ -97,10 +93,6 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
   content: { padding: Spacing.lg, paddingBottom: Spacing.xxxl },
   greeting: { fontSize: FontSize.xl, fontWeight: '700', color: Colors.text },
-  tiles: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.md, marginTop: Spacing.lg },
-  tile: { width: '47%', backgroundColor: Colors.surface, borderRadius: BorderRadius.md, padding: Spacing.md },
-  tileValue: { fontSize: FontSize.xl, fontWeight: '700', color: Colors.primary },
-  tileLabel: { fontSize: FontSize.sm, color: Colors.textSecondary, marginTop: 2 },
   actions: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.md, marginTop: Spacing.lg },
   quick: { width: '30%', minWidth: 84, alignItems: 'center', backgroundColor: Colors.surface, borderRadius: BorderRadius.md, paddingVertical: Spacing.md },
   quickIcon: { fontSize: 22 },

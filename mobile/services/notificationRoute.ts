@@ -8,6 +8,6 @@ import { routeFor } from '../navigation/routes';
 export function notificationTapRoute(persona: Persona, data: Record<string, unknown> | null | undefined): string {
   const screen = data?.screen;
   if (typeof screen === 'string' && screen.startsWith(`/(${persona})/`)) return screen;
-  // A persona with no inbox screen yet (teacher) lands on its home.
+  // A persona with no inbox screen would land on its home.
   return routeFor(persona, '/notifications') ?? homeRouteFor(persona);
 }

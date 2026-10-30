@@ -16,6 +16,7 @@ import {
 import Card from '../../components/ui/Card';
 import Skeleton from '../../components/ui/Skeleton';
 import StatusPill from '../../components/ui/StatusPill';
+import Hero from '../../components/dashboard/HeroCard';
 import SchoolSwitcher from '../../components/nav/SchoolSwitcher';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
 
@@ -237,26 +238,6 @@ export default function TeacherDashboard() {
   );
 }
 
-function Hero({ tone, eyebrow, title, subtitle, action }: {
-  tone: 'blue' | 'green' | 'gray'; eyebrow: string; title: string; subtitle?: string;
-  action?: { label: string; onPress: () => void };
-}) {
-  const bg = tone === 'blue' ? Colors.infoLight : tone === 'green' ? Colors.successLight : Colors.surfaceSecondary;
-  const fg = tone === 'blue' ? Colors.info : tone === 'green' ? Colors.success : Colors.textSecondary;
-  return (
-    <View style={[styles.hero, { backgroundColor: bg }]}>
-      <Text style={[styles.eyebrow, { color: fg }]}>{eyebrow}</Text>
-      <Text style={styles.heroTitle}>{title}</Text>
-      {subtitle ? <Text style={styles.heroSub}>{subtitle}</Text> : null}
-      {action ? (
-        <TouchableOpacity accessibilityRole="button" style={[styles.heroBtn, { backgroundColor: fg }]} onPress={action.onPress}>
-          <Text style={styles.heroBtnText}>{action.label}</Text>
-        </TouchableOpacity>
-      ) : null}
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
   content: { padding: Spacing.lg, paddingBottom: Spacing.xxxl },
@@ -270,12 +251,6 @@ const styles = StyleSheet.create({
   attCount: { fontSize: FontSize.xl, fontWeight: '700', minWidth: 44 },
   attLabel: { flex: 1, fontSize: FontSize.sm, color: Colors.text },
   arrow: { fontSize: FontSize.xl, color: Colors.textTertiary },
-  hero: { borderRadius: BorderRadius.lg, padding: Spacing.lg },
-  eyebrow: { fontSize: FontSize.xs, fontWeight: '700', textTransform: 'uppercase' },
-  heroTitle: { fontSize: FontSize.lg, fontWeight: '700', color: Colors.text, marginTop: Spacing.xs },
-  heroSub: { fontSize: FontSize.sm, color: Colors.textSecondary, marginTop: 2 },
-  heroBtn: { alignSelf: 'flex-start', borderRadius: BorderRadius.md, paddingHorizontal: Spacing.lg, paddingVertical: Spacing.sm, marginTop: Spacing.md },
-  heroBtnText: { color: Colors.textInverse, fontWeight: '700', fontSize: FontSize.sm },
   period: { flexDirection: 'row', alignItems: 'center', padding: Spacing.md, marginBottom: Spacing.sm },
   periodNow: { borderWidth: 1, borderColor: Colors.info, backgroundColor: Colors.infoLight },
   time: { width: 76, marginRight: Spacing.md },

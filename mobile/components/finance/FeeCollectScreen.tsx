@@ -99,11 +99,11 @@ export default function FeeCollectScreen({ classOptions, canRecord = true }: Pro
   const header = (
     <View>
       <View style={styles.stepper}>
-        <TouchableOpacity accessibilityRole="button" hitSlop={10} disabled={feeType === 'ANNUAL'} onPress={() => setYm(stepFeeMonth(ym.year, ym.month, -1, current))}>
+        <TouchableOpacity accessibilityRole="button" accessibilityLabel="Previous month" hitSlop={10} disabled={feeType === 'ANNUAL'} onPress={() => setYm(stepFeeMonth(ym.year, ym.month, -1, current))}>
           <Text style={[styles.step, feeType === 'ANNUAL' && styles.stepOff]}>‹</Text>
         </TouchableOpacity>
         <Text style={styles.month}>{feeType === 'ANNUAL' ? `Annual ${ym.year}` : `${MONTH_NAMES[ym.month - 1]} ${ym.year}`}</Text>
-        <TouchableOpacity accessibilityRole="button" hitSlop={10} disabled={feeType === 'ANNUAL' || (ym.year === current.year && ym.month === current.month)}
+        <TouchableOpacity accessibilityRole="button" accessibilityLabel="Next month" hitSlop={10} disabled={feeType === 'ANNUAL' || (ym.year === current.year && ym.month === current.month)}
           onPress={() => setYm(stepFeeMonth(ym.year, ym.month, 1, current))}>
           <Text style={[styles.step, (feeType === 'ANNUAL' || (ym.year === current.year && ym.month === current.month)) && styles.stepOff]}>›</Text>
         </TouchableOpacity>

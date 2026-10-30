@@ -4,6 +4,9 @@ import BottomSheet from './BottomSheet';
 import SearchBar from './SearchBar';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
 
+// Past this many options a list is too long to scan, so the search box shows without being asked for.
+export const SEARCH_FROM = 8;
+
 export interface SelectOption<V extends string | number = string | number> {
   value: V;
   label: string;
@@ -17,7 +20,8 @@ interface SelectProps<V extends string | number> {
   placeholder?: string;
   error?: string;
   disabled?: boolean;
-  // Adds a search box in the sheet: for long lists such as a class roster.
+  // Adds a search box in the sheet: for long lists such as a class roster. A list of more than
+  // SEARCH_FROM options gets one by default; pass false to turn it off.
   searchable?: boolean;
 }
 
@@ -31,8 +35,9 @@ export default function Select<V extends string | number>({
   placeholder = 'Select...',
   error,
   disabled,
-  searchable,
+  searchable: searchableProp,
 }: SelectProps<V>) {
+  const searchable = searchableProp ?? options.length > SEARCH_FROM;
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const selected = options.find((o) => o.value === value);

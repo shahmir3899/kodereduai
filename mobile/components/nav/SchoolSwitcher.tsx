@@ -45,8 +45,8 @@ export default function SchoolSwitcher() {
       </TouchableOpacity>
 
       <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
-        <Pressable style={styles.backdrop} onPress={() => switchingId === null && setOpen(false)}>
-          <Pressable style={styles.sheet}>
+        <Pressable style={styles.backdrop} accessibilityRole="button" accessibilityLabel="Close" onPress={() => switchingId === null && setOpen(false)}>
+          <Pressable style={styles.sheet} accessible={false}>
             <Text style={styles.sheetTitle}>Switch school</Text>
             {schools.map((school) => {
               const active = school.id === activeSchool?.id;

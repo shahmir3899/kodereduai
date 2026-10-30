@@ -134,3 +134,51 @@ export function examNote(report: { earlier_exam_names?: string[]; weighted?: boo
     ? `Weighted result across: ${[...report.earlier_exam_names, report.main_exam?.name].filter(Boolean).join(', ')}`
     : `Result is from ${report.main_exam?.name}. Earlier exams shown for reference: ${report.earlier_exam_names.join(', ')}`;
 }
+
+// ── PDF layout and file ──────────────────────────────────────────────────────────────────────────
+export type ReportTemplate = 'enhanced' | 'traditional';
+export const REPORT_TEMPLATES: Array<{ value: ReportTemplate; label: string }> = [
+  { value: 'enhanced', label: 'Enhanced' },
+  { value: 'traditional', label: 'Traditional' },
+];
+export const DEFAULT_TEMPLATE: ReportTemplate = 'enhanced';
+
+// A saved or unknown value falls back to the default rather than asking the server for a layout it
+// does not have.
+export function normalizeTemplate(value: unknown): ReportTemplate {
+  return value === 'traditional' || value === 'enhanced' ? value : DEFAULT_TEMPLATE;
+}
+
+// The same query the card itself was loaded with, plus the layout, so the PDF matches the screen.
+export function reportCardPdfParams(input: {
+  studentId: number; enrollmentId: number | null; yearId: number | null; examIds: number[]; template: ReportTemplate;
+}): Record<string, unknown> {
+  return {
+    student_id: input.studentId,
+    enrollment_id: input.enrollmentId || undefined,
+    academic_year_id: input.yearId,
+    exam_ids: input.examIds.join(','),
+    template: input.template,
+  };
+}
+
+export function reportCardFileName(studentName: string | undefined, template: ReportTemplate): string {
+  const name = (studentName || 'Student').replace(/[^a-zA-Z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'Student';
+  return `Report_Card_${name}_${template === 'traditional' ? 'Traditional' : 'Enhanced'}.pdf`;
+}
+
+// The server's own words for 400 and 404; the files are fetched as bytes, so the JSON message is
+// read out of the bytes.
+export function reportCardPdfError(error: unknown): string {
+  const e = error as { response?: { status?: number; data?: ArrayBuffer | { detail?: string } } } | null;
+  if (!e?.response) return (error as Error)?.message || 'No connection. Connect to the internet and try again.';
+  if (e.response.status === 403) return 'Your role cannot print this report card.';
+  try {
+    const data = e.response.data;
+    const parsed = data instanceof ArrayBuffer ? JSON.parse(new TextDecoder().decode(data)) : data;
+    if (parsed?.detail) return String(parsed.detail);
+  } catch {
+    // Not JSON: use the generic text.
+  }
+  return 'The report card could not be created. Try again in a moment.';
+}

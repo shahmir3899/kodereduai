@@ -11,9 +11,10 @@ const TABS: TabSpec[] = [
 
 // Opened from More or the Home screen; no tab of their own. location-sharing is a leftover
 // driver-style screen with no link to it; it stays hidden until it is confirmed unused.
-const HIDDEN = ['attendance', 'fees', 'exam-schedule', 'library', 'transport', 'ai-helper', 'profile', 'inbox', 'change-password', 'location-sharing'];
+const HIDDEN = ['my-profile', 'attendance', 'fees', 'exam-schedule', 'library', 'transport', 'ai-helper', 'profile', 'inbox', 'change-password', 'location-sharing'];
 
 const TITLES: Record<string, string> = {
+  'my-profile': 'My Profile',
   attendance: 'Attendance',
   fees: 'Fees',
   'exam-schedule': 'Exam Schedule',

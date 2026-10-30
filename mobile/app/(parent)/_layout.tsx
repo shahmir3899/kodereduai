@@ -10,9 +10,10 @@ const TABS: TabSpec[] = [
 ];
 
 // Opened from Home or More; no tab of their own.
-const HIDDEN = ['inbox', 'change-password'];
+const HIDDEN = ['my-profile', 'inbox', 'change-password'];
 
 const TITLES: Record<string, string> = {
+  'my-profile': 'My Profile',
   leave: 'Leave Requests',
   inbox: 'Notifications',
   'change-password': 'Change Password',
