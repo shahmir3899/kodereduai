@@ -2101,6 +2101,31 @@ class TestResultsAndReportCard:
         assert 'summary' in data, f"keys={list(data.keys())}"
         assert 'enrollment_info' in data, f"keys={list(data.keys())}"
 
+    def test_f5b_report_card_pdf(self, exam_prereqs, api):
+        """F5b: the report card PDF is built from the same payload, in either layout."""
+        d = exam_prereqs
+        env = self._setup_full_env(d, api)
+        base = f'/api/examinations/report-card/pdf/?student_id={env["student_1"].id}&academic_year_id={d["academic_year"].id}'
+        for template in ('enhanced', 'traditional'):
+            resp = api.get(f'{base}&template={template}', d['tokens']['admin'], d['SID_A'])
+            assert resp.status_code == 200, f"{template}: status={resp.status_code}"
+            assert resp['Content-Type'] == 'application/pdf'
+            assert resp.content.startswith(b'%PDF')
+            assert 'report-card-' in resp['Content-Disposition']
+        # No template means the default layout.
+        assert api.get(base, d['tokens']['admin'], d['SID_A']).status_code == 200
+
+    def test_f5c_report_card_pdf_rejects_bad_requests(self, exam_prereqs, api):
+        """F5c: an unknown layout is a 400, and the same checks as the card apply (student_id is required)."""
+        d = exam_prereqs
+        env = self._setup_full_env(d, api)
+        bad = api.get(
+            f'/api/examinations/report-card/pdf/?student_id={env["student_1"].id}&academic_year_id={d["academic_year"].id}&template=fancy',
+            d['tokens']['admin'], d['SID_A'],
+        )
+        assert bad.status_code == 400
+        assert api.get('/api/examinations/report-card/pdf/', d['tokens']['admin'], d['SID_A']).status_code == 400
+
     def test_f6_report_card_structure(self, exam_prereqs, api):
         """F6: Report card student info and summary have correct fields."""
         d = exam_prereqs
