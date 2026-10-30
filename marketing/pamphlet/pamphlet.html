@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Education AI Pamphlet</title>
+<style>
+@page{size:A4;margin:0}
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--navy:#0b1d3a;--blue:#0284c7;--blue2:#0369a1;--cyan:#06b6d4;--gold:#f59e0b;--soft:#f0f7ff;--ink:#111827;--mut:#5b6678}
+html,body{width:210mm;height:297mm;font-family:"Segoe UI",Arial,sans-serif;color:var(--ink);-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.page{width:210mm;height:297mm;position:relative;overflow:hidden;background:#fff}
+/* hero */
+.hero{height:96mm;background:linear-gradient(135deg,#0b1d3a 0%,#0369a1 70%,#06b6d4 130%);color:#fff;padding:10mm 12mm 0;position:relative}
+.herobg{position:absolute;inset:0;overflow:hidden}.herobg:before{content:"";position:absolute;right:-30mm;top:-40mm;width:110mm;height:110mm;border-radius:50%;background:rgba(255,255,255,.07)}
+.brand{font-weight:800;font-size:15pt;letter-spacing:.3px}
+.brand span{color:#7dd3fc}
+.tag{display:inline-block;margin-top:5mm;background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);padding:1.2mm 3.5mm;border-radius:20mm;font-size:8.5pt;font-weight:600}
+h1{font-size:23pt;line-height:1.1;margin-top:3.5mm;font-weight:800;max-width:92mm}
+h1 em{font-style:normal;color:#fcd34d}
+.sub{font-size:9.5pt;line-height:1.4;margin-top:3mm;max-width:92mm;color:#e0f2fe}
+.laptop{position:absolute;right:10mm;top:16mm;width:96mm}
+.laptop .scr{border:2.2mm solid #1f2937;border-bottom-width:2mm;border-radius:3mm 3mm 0 0;background:#fff;overflow:hidden;box-shadow:0 6mm 10mm rgba(0,0,0,.35)}
+.laptop .scr img{display:block;width:100%}
+.laptop .base{height:3mm;background:linear-gradient(#d1d5db,#9ca3af);border-radius:0 0 4mm 4mm;margin:0 -4mm}
+.phones{position:absolute;left:12mm;top:72mm;display:flex;gap:4mm}
+.phone{width:27mm;border:1.6mm solid #111827;border-radius:5mm;overflow:hidden;background:#fff;box-shadow:0 4mm 8mm rgba(0,0,0,.35)}
+.phone img{display:block;width:100%;height:36mm;object-fit:cover;object-position:top}
+.phone.mid{margin-top:-5mm}
+.cap{position:absolute;left:12mm;bottom:2.5mm;font-size:8pt;color:#bae6fd;font-weight:600;display:none}
+/* body */
+.body{padding:22mm 12mm 0}
+.sec{font-size:13pt;font-weight:800;color:var(--navy);display:flex;align-items:center;gap:3mm;margin-bottom:3.5mm}
+.sec:after{content:"";flex:1;height:.4mm;background:linear-gradient(90deg,var(--blue),transparent)}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:3mm}
+.card{background:var(--soft);border-radius:3mm;padding:2.6mm 3.2mm;border-left:1.2mm solid var(--blue)}
+.card b{display:block;font-size:9.5pt;color:var(--navy);margin-bottom:.8mm}
+.card p{font-size:8pt;line-height:1.35;color:var(--mut)}
+.why{margin-top:4mm;display:grid;grid-template-columns:1fr 1fr;gap:1.6mm 6mm}
+.why div{font-size:8.8pt;line-height:1.3;padding-left:5.5mm;position:relative}
+.why div:before{content:"✓";position:absolute;left:0;top:0;color:#fff;background:var(--blue);width:4mm;height:4mm;border-radius:50%;font-size:7pt;text-align:center;line-height:4mm;font-weight:700}
+.stats{margin-top:4mm;display:flex;justify-content:space-between;background:var(--navy);color:#fff;border-radius:3mm;padding:2.5mm 6mm}
+.stats div{text-align:center}
+.stats b{display:block;font-size:15pt;color:#fcd34d}
+.stats span{font-size:7.5pt;color:#bae6fd}
+/* footer */
+.foot{position:absolute;left:0;right:0;bottom:0;height:25mm;background:linear-gradient(90deg,#0369a1,#0284c7);color:#fff;display:flex;align-items:center;justify-content:space-between;padding:0 12mm}
+.foot .l{font-size:14pt;font-weight:800;line-height:1.15}
+.foot .l small{display:block;font-size:9pt;font-weight:500;color:#e0f2fe;margin-top:1mm}
+.call{background:#fff;color:var(--navy);border-radius:4mm;padding:2mm 6mm;text-align:center}
+.call small{display:block;font-size:8pt;font-weight:700;color:var(--blue2);letter-spacing:.6px;text-transform:uppercase}
+.call b{font-size:17pt;letter-spacing:.5px}
+.call i{display:block;font-style:normal;font-size:8.5pt;color:var(--mut);margin-top:.5mm}
+</style></head><body>
+<div class="page">
+  <div class="hero"><div class="herobg"></div>
+    <div class="brand">Education<span>AI</span></div>
+    <div class="tag">All-in-one School Management System</div>
+    <h1>Run your whole school from <em>one app.</em></h1>
+    <p class="sub">Attendance, fees, exams, staff and parents — managed on the web and on your phone, with smart AI to save hours every week.</p>
+    <div class="laptop"><div class="scr"><img src="img/dashboard-desktop.png"></div><div class="base"></div></div>
+    <div class="phones">
+      <div class="phone"><img src="img/fees-mobile.png"></div>
+      <div class="phone mid"><img src="img/dashboard-mobile.png"></div>
+      <div class="phone"><img src="img/exams-mobile.png"></div>
+    </div>
+  </div>
+
+  <div class="body">
+    <div class="sec">What Education AI does for your school</div>
+    <div class="grid">
+      <div class="card"><b>Attendance</b><p>Mark student and staff attendance in seconds, with face-recognition option and instant absence alerts.</p></div>
+      <div class="card"><b>Fees &amp; Finance</b><p>Fee vouchers, collection tracking, discounts, expenses and clear reports of who has paid and who hasn't.</p></div>
+      <div class="card"><b>Exams &amp; Report Cards</b><p>Enter marks, set grading rules and print professional report cards automatically.</p></div>
+      <div class="card"><b>Timetable &amp; Lesson Plans</b><p>Auto-generate class timetables and plan lessons, assignments and curriculum.</p></div>
+      <div class="card"><b>HR &amp; Payroll</b><p>Staff records, leave, salaries and payslips — all in one place.</p></div>
+      <div class="card"><b>Parent &amp; Student Portal</b><p>Parents see attendance, results and fees live, and message the school directly.</p></div>
+      <div class="card"><b>Admissions</b><p>Track enquiries and convert them to admissions without paperwork.</p></div>
+      <div class="card"><b>Transport, Library, Hostel</b><p>Routes with GPS, book issuing, hostel rooms and gate passes.</p></div>
+      <div class="card"><b>Notifications</b><p>Fee reminders, absence alerts and announcements pushed to parents' phones.</p></div>
+    </div>
+
+    <div class="sec" style="margin-top:5mm">Why schools choose us</div>
+    <div class="why">
+      <div>Works on <b>web and mobile app</b> — admin, teacher and parent</div>
+      <div><b>Multi-branch</b>: manage many campuses from one login</div>
+      <div>Enable only the <b>modules you need</b></div>
+      <div>Role-based access — everyone sees only what they should</div>
+      <div><b>AI insights</b> flag low fee collection and at-risk students</div>
+      <div>Secure cloud data — no servers or hardware to buy</div>
+    </div>
+
+    <div class="stats">
+      <div><b>18+</b><span>Modules</span></div>
+      <div><b>9</b><span>User roles</span></div>
+      <div><b>Web + App</b><span>Android &amp; browser</span></div>
+      <div><b>0</b><span>Hardware needed</span></div>
+    </div>
+  </div>
+
+  <div class="foot">
+    <div class="l">Book a free demo today<small>www.educationai.pk</small></div>
+    <div class="call"><small>Call / WhatsApp</small><b>0316 7394390</b><i>Education AI</i></div>
+  </div>
+</div>
+</body></html>
