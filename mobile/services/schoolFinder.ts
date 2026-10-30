@@ -3,8 +3,8 @@
 // scanning its QR code; each ends with a saved school code. The code is only a front door: sign-in
 // is still username and password, and the server decides which schools you may use.
 
-export const SEARCH_MIN_CHARS = 3;
-export const SEARCH_DEBOUNCE_MS = 400;
+// How many matches the list shows at once; typing more narrows it.
+export const DIRECTORY_SHOW = 20;
 
 export interface PublicSchool { subdomain: string; name: string; logo?: string | null }
 
@@ -46,12 +46,29 @@ export function parseSchoolCode(input: string | null | undefined): string | null
   return isValidCode(text) ? text : null;
 }
 
-export const shouldSearch = (text: string) => text.trim().length >= SEARCH_MIN_CHARS;
+// Filters the downloaded list of schools as the person types, from the first letter, with no server
+// call. Best matches first: a name that starts with the text, then a word in the name that does, then
+// the code, then any other part of the name. Ties keep the list's own (alphabetical) order.
+export function filterDirectory(list: PublicSchool[], text: string, limit = DIRECTORY_SHOW): PublicSchool[] {
+  const q = text.trim().toLowerCase();
+  if (!q) return [];
+  const scored: Array<{ school: PublicSchool; rank: number; index: number }> = [];
+  list.forEach((school, index) => {
+    const name = school.name.toLowerCase();
+    const code = school.subdomain.toLowerCase();
+    let rank = -1;
+    if (name.startsWith(q)) rank = 0;
+    else if (name.split(/[^a-z0-9]+/).some((w) => w.startsWith(q))) rank = 1;
+    else if (code.startsWith(q)) rank = 2;
+    else if (name.includes(q) || code.includes(q)) rank = 3;
+    if (rank >= 0) scored.push({ school, rank, index });
+  });
+  return scored.sort((a, b) => a.rank - b.rank || a.index - b.index).slice(0, limit).map((x) => x.school);
+}
 
-export function searchHint(text: string): string {
-  const n = text.trim().length;
-  if (n === 0) return 'Type your school name or code.';
-  if (n < SEARCH_MIN_CHARS) return `Type at least ${SEARCH_MIN_CHARS} letters.`;
+export function searchHint(text: string, total: number): string {
+  if (total === 0) return 'No school has chosen to be listed yet. Use your school code or QR code below.';
+  if (!text.trim()) return 'Type your school name or code.';
   return '';
 }
 

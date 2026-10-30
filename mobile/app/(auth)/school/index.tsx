@@ -1,10 +1,10 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, KeyboardAvoidingView, Platform, Image, ActivityIndicator } from 'react-native';
 import { useRouter, type Href } from 'expo-router';
 import { schoolDirectoryApi } from '../../../services/api';
 import { setSchoolCode } from '../../../services/auth';
-import { lookupFailureText, parseSchoolCode, searchHint, shouldSearch, type PublicSchool } from '../../../services/schoolFinder';
-import { useSchoolSearch } from '../../../hooks/useSchoolFinder';
+import { filterDirectory, lookupFailureText, parseSchoolCode, searchHint, type PublicSchool } from '../../../services/schoolFinder';
+import { useSchoolDirectory } from '../../../hooks/useSchoolFinder';
 import Input from '../../../components/ui/Input';
 import Button from '../../../components/ui/Button';
 import Avatar from '../../../components/ui/Avatar';
@@ -18,7 +18,9 @@ export default function FindSchool() {
   const [code, setCode] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [looking, setLooking] = useState(false);
-  const results = useSchoolSearch(text);
+  const directory = useSchoolDirectory();
+  // Filtering happens on the phone, so every keystroke answers at once.
+  const matches = useMemo(() => filterDirectory(directory.data ?? [], text), [directory.data, text]);
 
   const choose = async (c: string) => {
     await setSchoolCode(c);
@@ -40,7 +42,7 @@ export default function FindSchool() {
     }
   };
 
-  const hint = searchHint(text);
+  const hint = directory.data ? searchHint(text, directory.data.length) : '';
 
   return (
     <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
@@ -50,17 +52,22 @@ export default function FindSchool() {
         <Text style={styles.sub}>Search for your school, or use its code or QR code.</Text>
 
         <Input label="School name or code" value={text} onChangeText={setText} placeholder="e.g. Oakwood" autoCapitalize="none" autoCorrect={false} />
+        {directory.isLoading ? <ActivityIndicator color={Colors.primary} style={{ margin: Spacing.md }} accessibilityLabel="Loading schools" /> : null}
+        {directory.isError && !directory.data ? (
+          <View style={styles.retryBox} accessibilityRole="alert">
+            <Text style={styles.error}>{lookupFailureText(directory.error)}</Text>
+            <Button title="Try again" size="sm" variant="outline" onPress={() => directory.refetch()} />
+          </View>
+        ) : null}
         {hint ? <Text style={styles.hint}>{hint}</Text> : null}
-        {shouldSearch(text) && results.isLoading ? <ActivityIndicator color={Colors.primary} style={{ margin: Spacing.md }} /> : null}
-        {shouldSearch(text) && results.isError ? <Text style={styles.error} accessibilityRole="alert">{lookupFailureText(results.error)}</Text> : null}
-        {shouldSearch(text) && results.data && results.data.length === 0 ? (
+        {directory.data && text.trim() && matches.length === 0 && directory.data.length > 0 ? (
           <Text style={styles.hint}>No listed school matches. If your school did not appear, enter its code below.</Text>
         ) : null}
-        {(results.data ?? []).map((s: PublicSchool) => (
+        {matches.map((s: PublicSchool) => (
           <TouchableOpacity key={s.subdomain} accessibilityRole="button" accessibilityLabel={`${s.name}. Choose this school`} style={styles.row} onPress={() => choose(s.subdomain)}>
             <Avatar name={s.name} uri={s.logo} size={48} />
             <View style={styles.who}>
-              <Text style={styles.name} numberOfLines={1}>{s.name}</Text>
+              <Text style={styles.name} numberOfLines={2}>{s.name}</Text>
               <Text style={styles.code} numberOfLines={1}>{s.subdomain}</Text>
             </View>
           </TouchableOpacity>
@@ -89,6 +96,7 @@ const styles = StyleSheet.create({
   sub: { fontSize: FontSize.sm, color: Colors.textSecondary, textAlign: 'center' },
   hint: { fontSize: FontSize.sm, color: Colors.textSecondary },
   error: { fontSize: FontSize.sm, color: Colors.error },
+  retryBox: { gap: Spacing.sm, alignItems: 'flex-start' },
   row: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md, backgroundColor: Colors.surface, borderRadius: BorderRadius.md, padding: Spacing.md, minHeight: 64 },
   who: { flex: 1 },
   name: { fontSize: FontSize.md, fontWeight: '600', color: Colors.text },

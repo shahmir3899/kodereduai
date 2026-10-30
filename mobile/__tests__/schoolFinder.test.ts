@@ -1,5 +1,5 @@
 import {
-  isValidCode, lookupFailureText, parseSchoolCode, preferredSchool, schoolLink, searchHint, shouldSearch,
+  DIRECTORY_SHOW, filterDirectory, isValidCode, lookupFailureText, parseSchoolCode, preferredSchool, schoolLink, searchHint, type PublicSchool,
 } from '../services/schoolFinder';
 
 describe('school code', () => {
@@ -33,14 +33,53 @@ describe('school code', () => {
   });
 });
 
-describe('search', () => {
-  it('starts at three letters and says why not before that', () => {
-    expect(shouldSearch('oa')).toBe(false);
-    expect(shouldSearch(' oa ')).toBe(false);
-    expect(shouldSearch('oak')).toBe(true);
-    expect(searchHint('')).toMatch(/Type your school/);
-    expect(searchHint('oa')).toMatch(/at least 3/);
-    expect(searchHint('oak')).toBe('');
+describe('search the downloaded list', () => {
+  const list: PublicSchool[] = [
+    { subdomain: 'focus', name: 'The Focus Montessori and School - Branch 1' },
+    { subdomain: 'focus2', name: 'The Focus Montessori and School - Branch 2' },
+    { subdomain: 'oakwood', name: 'Oakwood Academy' },
+    { subdomain: 'beacon', name: 'Beacon House Focus Campus' },
+    { subdomain: 'zed', name: 'Zed School' },
+  ];
+  const codes = (text: string) => filterDirectory(list, text).map((s) => s.subdomain);
+
+  it('finds both Focus branches, and works from the first letters', () => {
+    expect(codes('focus')).toEqual(['focus', 'focus2', 'beacon']);
+    expect(codes('f')).toEqual(['focus', 'focus2', 'beacon']);
+    expect(codes('the foc')).toEqual(['focus', 'focus2']);
+  });
+
+  it('puts names that start with the text first, then words, then codes, then the rest', () => {
+    expect(codes('oak')).toEqual(['oakwood']);
+    expect(codes('house')).toEqual(['beacon']);
+    expect(codes('mont')).toEqual(['focus', 'focus2']);
+    expect(codes('ood')).toEqual(['oakwood']);
+  });
+
+  it('ignores case and spaces around the text', () => {
+    expect(codes('  FOCUS ')).toEqual(['focus', 'focus2', 'beacon']);
+  });
+
+  it('finds a school by the code it was given', () => {
+    expect(codes('focus2')).toEqual(['focus2']);
+  });
+
+  it('shows nothing for empty text and nothing for a miss', () => {
+    expect(codes('')).toEqual([]);
+    expect(codes('   ')).toEqual([]);
+    expect(codes('xyz')).toEqual([]);
+  });
+
+  it('shows at most a screenful', () => {
+    const many = Array.from({ length: 50 }, (_, i) => ({ subdomain: `s${i}`, name: `School ${i}` }));
+    expect(filterDirectory(many, 'school')).toHaveLength(DIRECTORY_SHOW);
+    expect(filterDirectory(many, 'school', 5)).toHaveLength(5);
+  });
+
+  it('explains an empty directory and an empty box', () => {
+    expect(searchHint('', 0)).toMatch(/chosen to be listed/);
+    expect(searchHint('', 4)).toMatch(/Type your school/);
+    expect(searchHint('foc', 4)).toBe('');
   });
 });
 

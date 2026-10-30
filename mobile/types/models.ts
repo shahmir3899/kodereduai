@@ -8,6 +8,8 @@ export interface School {
   timezone?: string;
   // The school's code (its web address prefix); the login response sends it.
   subdomain?: string | null;
+  // The school's logo URL; absent or null when none was uploaded.
+  logo?: string | null;
 }
 
 export interface User {

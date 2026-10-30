@@ -543,8 +543,9 @@ export const admissionsApi = {
 
 // Public: the front door needs them before anyone has signed in, so they send no token.
 export const schoolDirectoryApi = {
-  search: (q: string) => api.get('/api/schools/app-search/', { params: { q } }),
-  info: (code: string) => api.get('/api/schools/app-info/', { params: { code } }),
+  // Short timeouts: the person is waiting at the front door, and a slow server should say so.
+  directory: () => api.get('/api/schools/app-directory/', { timeout: 10000 }),
+  info: (code: string) => api.get('/api/schools/app-info/', { params: { code }, timeout: 10000 }),
 };
 
 export const schoolsApi = {

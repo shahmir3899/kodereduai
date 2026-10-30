@@ -13,6 +13,8 @@ export const PERSISTED_QUERY_ROOTS = new Set([
   'classSubjects',
   'academicYears',
   'timetable',
+  // Public list of schools for the front screen; nothing private in it.
+  'schoolDirectory',
 ]);
 
 // Money numbers must never come from a cache: these roots are always stale, and any successful
