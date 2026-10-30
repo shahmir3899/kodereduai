@@ -3,6 +3,7 @@ import { useRouter } from 'expo-router';
 import { useAuth } from '../contexts/AuthContext';
 import Spinner from '../components/ui/Spinner';
 import { homeRouteFor } from '../navigation/personas';
+import { getSchoolCode } from '../services/auth';
 
 export default function Index() {
   const { loading, isAuthenticated, persona } = useAuth();
@@ -12,7 +13,12 @@ export default function Index() {
     if (loading) return;
 
     if (!isAuthenticated) {
-      router.replace('/(auth)/login');
+      // A new phone has no school yet: start on the school search. Later launches open that
+      // school's sign-in page.
+      getSchoolCode().then(
+        (code) => router.replace(code ? '/(auth)/login' : '/(auth)/school'),
+        () => router.replace('/(auth)/login'),
+      );
       return;
     }
 

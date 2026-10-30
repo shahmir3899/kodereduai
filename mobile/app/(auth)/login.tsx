@@ -8,8 +8,10 @@ import {
   ScrollView,
   TouchableOpacity,
   Alert,
+  Image,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, type Href } from 'expo-router';
+import { useSavedSchool } from '../../hooks/useSchoolFinder';
 import { useAuth } from '../../contexts/AuthContext';
 import Input from '../../components/ui/Input';
 import Button from '../../components/ui/Button';
@@ -23,6 +25,9 @@ export default function LoginScreen() {
   const [loading, setLoading] = useState(false);
   const { login, sessionExpired } = useAuth();
   const router = useRouter();
+  // The school picked on the front screen: its logo and name head the page. Without one (or when it
+  // cannot be loaded) the page shows the app's own brand and signing in still works.
+  const saved = useSavedSchool();
 
   const handleLogin = async () => {
     if (!username.trim() || !password.trim()) {
@@ -53,11 +58,16 @@ export default function LoginScreen() {
       >
         {/* Header */}
         <View style={styles.header}>
-          <View style={styles.logoContainer}>
-            <Text style={styles.logoText}>K</Text>
-          </View>
-          <Text style={styles.appName}>Education AI</Text>
-          <Text style={styles.tagline}>Smart School Management</Text>
+          {saved.school?.logo ? (
+            <Image source={{ uri: saved.school.logo }} style={styles.schoolLogo} resizeMode="contain" accessibilityLabel={`${saved.school.name} logo`} />
+          ) : (
+            <Image source={require('../../assets/icon.png')} style={styles.schoolLogo} accessibilityLabel="Education AI" />
+          )}
+          <Text style={styles.appName}>{saved.school?.name ?? 'Education AI'}</Text>
+          <Text style={styles.tagline}>{saved.school ? 'Powered by Education AI' : 'Smart School Management'}</Text>
+          <TouchableOpacity accessibilityRole="button" onPress={() => router.push('/(auth)/school' as Href)} style={styles.changeSchool}>
+            <Text style={styles.changeSchoolText}>{saved.code ? 'Not your school? Change school' : 'Find your school'}</Text>
+          </TouchableOpacity>
         </View>
 
         {/* Form */}
@@ -128,6 +138,9 @@ export default function LoginScreen() {
 }
 
 const styles = StyleSheet.create({
+  schoolLogo: { width: 88, height: 88, borderRadius: BorderRadius.lg, marginBottom: Spacing.sm },
+  changeSchool: { minHeight: 44, justifyContent: 'center', marginTop: Spacing.sm },
+  changeSchoolText: { color: Colors.primary, fontSize: FontSize.sm, fontWeight: '600' },
   container: {
     flex: 1,
     backgroundColor: Colors.background,

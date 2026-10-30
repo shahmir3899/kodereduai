@@ -6,6 +6,8 @@ export interface School {
   enabled_modules: Record<string, boolean>;
   // IANA zone of the school; absent on old payloads (Asia/Karachi is assumed)
   timezone?: string;
+  // The school's code (its web address prefix); the login response sends it.
+  subdomain?: string | null;
 }
 
 export interface User {

@@ -34,3 +34,15 @@ export function loginErrorMessage(error: ErrorLike): string {
   }
   return data?.detail || data?.error || 'Invalid credentials. Please try again.';
 }
+
+// What a refresh answers with. The server rotates the refresh token on every refresh and hands back
+// the new one; the app must keep it. The old code kept only the access token, so the refresh token
+// from sign-in aged out after its fixed lifetime and the person was asked for a password again.
+export function tokensFromRefresh(data: unknown): { access: string; refresh: string | null } | null {
+  const d = data as { access?: unknown; refresh?: unknown } | null | undefined;
+  if (!d || typeof d.access !== 'string' || !d.access) return null;
+  return { access: d.access, refresh: typeof d.refresh === 'string' && d.refresh ? d.refresh : null };
+}
+
+// Sent on sign-in so the server gives this phone its long, renewing sign-in window.
+export const MOBILE_CLIENT_HEADERS = { 'X-Client': 'mobile' } as const;

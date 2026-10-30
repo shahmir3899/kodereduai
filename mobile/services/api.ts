@@ -5,9 +5,10 @@ import {
   getRefreshToken,
   getActiveSchoolId,
   setAccessToken,
+  setRefreshToken,
   clearTokens,
 } from './auth';
-import { isAuthEndpoint, refreshEndsSession } from './sessionRules';
+import { isAuthEndpoint, refreshEndsSession, tokensFromRefresh } from './sessionRules';
 
 const extra = (Constants.expoConfig?.extra ?? {}) as Record<string, unknown>;
 
@@ -98,8 +99,12 @@ api.interceptors.response.use(
           const response = await axios.post(`${API_URL}/api/auth/refresh/`, {
             refresh: refreshToken,
           });
-          const { access } = response.data;
+          const tokens = tokensFromRefresh(response.data);
+          if (!tokens) throw new Error('The refresh answer had no access token.');
+          const access = tokens.access;
           await setAccessToken(access);
+          // The server rotates the refresh token; keeping the new one is what slides the window.
+          if (tokens.refresh) await setRefreshToken(tokens.refresh);
 
           processQueue(null, access);
           originalRequest.headers.Authorization = `Bearer ${access}`;
@@ -536,7 +541,15 @@ export const admissionsApi = {
 
 // ─── School profile (admin and principal) ────────────────────────────────────
 
+// Public: the front door needs them before anyone has signed in, so they send no token.
+export const schoolDirectoryApi = {
+  search: (q: string) => api.get('/api/schools/app-search/', { params: { q } }),
+  info: (code: string) => api.get('/api/schools/app-info/', { params: { code } }),
+};
+
 export const schoolsApi = {
+  getAppListing: () => api.get('/api/schools/app-listing/'),
+  setAppListing: (listed: boolean) => api.put('/api/schools/app-listing/', { listed_in_app: listed }),
   getMySchool: () => api.get('/api/schools/current/'),
   uploadAsset: (form: FormData) => api.post('/api/schools/upload_asset/', form, { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 60000 }),
   deleteAsset: (assetType: string) => api.delete('/api/schools/delete_asset/', { params: { asset_type: assetType } }),

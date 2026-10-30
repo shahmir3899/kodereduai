@@ -1,7 +1,9 @@
 import React from 'react';
-import { ScrollView, View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { ScrollView, View, Text, TouchableOpacity, Switch, StyleSheet } from 'react-native';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNavGroups } from '../../hooks/useNavGroups';
+import { useAppLock } from '../../contexts/AppLockContext';
+import { useToast } from '../ui/Toast';
 import NavGroupList from './NavGroupList';
 import SchoolSwitcher from './SchoolSwitcher';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
@@ -11,6 +13,13 @@ import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors'
 export default function MoreScreen() {
   const auth = useAuth();
   const groups = useNavGroups();
+  const lock = useAppLock();
+  const toast = useToast();
+  const toggleLock = async (on: boolean) => {
+    const problem = await lock.setEnabled(on);
+    if (problem) toast.error(problem);
+    else toast.success(on ? 'App lock is on.' : 'App lock is off.');
+  };
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -18,6 +27,15 @@ export default function MoreScreen() {
         <SchoolSwitcher />
       </View>
       <NavGroupList groups={groups} />
+      <View style={styles.group}>
+        <View style={styles.row}>
+          <View style={styles.flex}>
+            <Text style={styles.rowText}>Fingerprint or face lock</Text>
+            <Text style={styles.hint}>Ask for it when the app is opened or comes back after a while.</Text>
+          </View>
+          <Switch value={lock.enabled} onValueChange={toggleLock} accessibilityLabel="Fingerprint or face lock" />
+        </View>
+      </View>
       <View style={styles.group}>
         <TouchableOpacity accessibilityRole="button" style={styles.row} onPress={auth.logout}>
           <Text style={[styles.rowText, { color: Colors.error }]}>Log out</Text>
@@ -34,4 +52,6 @@ const styles = StyleSheet.create({
   group: { backgroundColor: Colors.surface, borderRadius: BorderRadius.md, marginBottom: Spacing.md, overflow: 'hidden' },
   row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: Spacing.md, paddingVertical: Spacing.md },
   rowText: { fontSize: FontSize.md, color: Colors.text },
+  flex: { flex: 1, marginRight: Spacing.md },
+  hint: { fontSize: FontSize.xs, color: Colors.textSecondary, marginTop: 2 },
 });

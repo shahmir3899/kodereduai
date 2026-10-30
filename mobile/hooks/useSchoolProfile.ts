@@ -18,3 +18,14 @@ export function useSchoolProfileActions() {
     attendance: useMutation({ mutationFn: (d: object) => schoolsApi.updateAttendanceConfig(d), onSuccess: done }),
   };
 }
+
+// Whether the school appears in the app's school search (off until an admin turns it on).
+export function useAppListing() {
+  const qc = useQueryClient();
+  const query = useScopedQuery('schoolProfile', ['listing'], async () => Boolean((await schoolsApi.getAppListing()).data?.listed_in_app));
+  const set = useMutation({
+    mutationFn: (listed: boolean) => schoolsApi.setAppListing(listed),
+    onSuccess: () => qc.invalidateQueries({ predicate: (q) => q.queryKey[0] === 'schoolProfile' }),
+  });
+  return { query, set };
+}

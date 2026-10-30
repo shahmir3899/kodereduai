@@ -79,7 +79,13 @@
         }
       ],
       "@react-native-community/datetimepicker",
-      "expo-font"
+      "expo-font",
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Education AI uses Face ID to unlock the app."
+        }
+      ]
     ],
     "extra": {
       "apiUrl": "https://personal-gateway-sg.onrender.com/educationai",

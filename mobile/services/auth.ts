@@ -4,6 +4,11 @@ const KEYS = {
   ACCESS_TOKEN: 'access_token',
   REFRESH_TOKEN: 'refresh_token',
   ACTIVE_SCHOOL_ID: 'active_school_id',
+  // The school picked on the front screen. Kept across sign-outs, so the next sign-in opens on the
+  // same school's page; clearTokens does not touch it.
+  SCHOOL_CODE: 'school_code',
+  // Device setting, kept across sign-outs: whether the app asks for a fingerprint or face to open.
+  APP_LOCK: 'app_lock',
 } as const;
 
 export async function getAccessToken(): Promise<string | null> {
@@ -43,4 +48,25 @@ export async function clearTokens(): Promise<void> {
     SecureStore.deleteItemAsync(KEYS.REFRESH_TOKEN),
     SecureStore.deleteItemAsync(KEYS.ACTIVE_SCHOOL_ID),
   ]);
+}
+
+export async function getSchoolCode(): Promise<string | null> {
+  return SecureStore.getItemAsync(KEYS.SCHOOL_CODE);
+}
+
+export async function setSchoolCode(code: string): Promise<void> {
+  await SecureStore.setItemAsync(KEYS.SCHOOL_CODE, code);
+}
+
+export async function clearSchoolCode(): Promise<void> {
+  await SecureStore.deleteItemAsync(KEYS.SCHOOL_CODE);
+}
+
+export async function getAppLockEnabled(): Promise<boolean> {
+  return (await SecureStore.getItemAsync(KEYS.APP_LOCK)) === '1';
+}
+
+export async function setAppLockEnabled(on: boolean): Promise<void> {
+  if (on) await SecureStore.setItemAsync(KEYS.APP_LOCK, '1');
+  else await SecureStore.deleteItemAsync(KEYS.APP_LOCK);
 }

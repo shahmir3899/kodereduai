@@ -1,4 +1,4 @@
-import { isAuthEndpoint, loginErrorMessage, refreshEndsSession } from '../services/sessionRules';
+import { isAuthEndpoint, loginErrorMessage, MOBILE_CLIENT_HEADERS, refreshEndsSession, tokensFromRefresh } from '../services/sessionRules';
 
 describe('refreshEndsSession', () => {
   it('ends the session when the refresh token is rejected', () => {
@@ -49,5 +49,29 @@ describe('loginErrorMessage', () => {
 
   it('does not blame the credentials for a server error', () => {
     expect(loginErrorMessage({ response: { status: 503, data: {} } })).toMatch(/server had a problem/);
+  });
+});
+
+describe('tokensFromRefresh', () => {
+  it('keeps the rotated refresh token the server sends back', () => {
+    expect(tokensFromRefresh({ access: 'a2', refresh: 'r2' })).toEqual({ access: 'a2', refresh: 'r2' });
+  });
+
+  it('copes with an answer that has no new refresh token', () => {
+    expect(tokensFromRefresh({ access: 'a2' })).toEqual({ access: 'a2', refresh: null });
+    expect(tokensFromRefresh({ access: 'a2', refresh: '' })).toEqual({ access: 'a2', refresh: null });
+  });
+
+  it('refuses an answer without an access token', () => {
+    expect(tokensFromRefresh({})).toBeNull();
+    expect(tokensFromRefresh({ access: '' })).toBeNull();
+    expect(tokensFromRefresh(null)).toBeNull();
+    expect(tokensFromRefresh({ access: 5 })).toBeNull();
+  });
+});
+
+describe('phone sign-in header', () => {
+  it('tells the server this is the phone app', () => {
+    expect(MOBILE_CLIENT_HEADERS).toEqual({ 'X-Client': 'mobile' });
   });
 });

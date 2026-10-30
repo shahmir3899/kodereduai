@@ -76,6 +76,13 @@ Admin and principal: exam types and the grade scale; date sheet editing and publ
 
 **Tab bar:** a folder under a tab group needs its own `_layout.tsx` (use `components/nav/FolderStack.tsx`). Without one, expo-router hoists every file into the parent tab bar as a button; that gave the admin bar 28 extra tabs. `__tests__/routeStructure.test.ts` fails if a folder lacks a layout or an admin route is not declared in `(admin)/_layout.tsx`.
 
+## Sign-in, school choice and app lock (2026-10-30)
+
+- **School front door:** a new phone opens on "Find your school": search by name (3+ letters, listed schools only, 8 at most), type an exact code (works for unlisted schools), or scan the school's QR code (`educationai://school/<code>`). The chosen code is kept across sign-outs and the sign-in page shows that school's logo and name. "Skip" signs in without a school. The code is only a front door: the server still decides which schools a user may use, and the app sends the school id in `X-School-ID`. A school appears in the search only when an admin switches on "Show in the app's school search" (School profile, off by default); that screen also shows the school's QR code and a share button. Server: `GET /api/schools/app-search/`, `/api/schools/app-info/` (public, 30 a minute, code, name and logo only), `GET/PUT /api/schools/app-listing/` (admin); column `School.listed_in_app` (migration `schools/0021`). The older `/api/schools/by-subdomain/` is still used by the web and still returns the full school record to anyone; trimming it is open.
+- **Stay signed in:** the app now keeps the rotated refresh token the server returns (it used to keep only the access token, so every phone was signed out about a day after sign-in), and sends `X-Client: mobile` on sign-in. A phone session's refresh token lasts `MOBILE_REFRESH_DAYS` (default 30) of inactivity and renews on each use; the web keeps its short lifetimes. A deactivated user cannot renew. Changing a password does not end a phone session (that needs the token blacklist app and a migration).
+- **App lock:** More, "Fingerprint or face lock". Needs the phone's fingerprint, face or screen lock; asks on a cold start and when the app returns after 30 seconds away; turning it on or off needs the prompt. "Sign out and use password" is on the lock screen. Needs `expo-local-authentication`, so a new APK.
+- **New native modules since the last APK:** `expo-document-picker`, `react-native-svg` (QR code), `expo-local-authentication`.
+
 ## What is left (2026-10-30)
 
 **Whole areas with no mobile screens for admin and principal**

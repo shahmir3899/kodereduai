@@ -4,6 +4,7 @@ import api, { authApi, setLogoutCallback } from '../services/api';
 import {
   getAccessToken,
   getActiveSchoolId,
+  getSchoolCode,
   setTokens,
   setActiveSchoolId,
   clearTokens,
@@ -12,9 +13,10 @@ import type { User, School, LoginResponse } from '../types/models';
 import type { ModuleKey } from '../constants/modules';
 import { clearQueryCache } from '../services/queryClient';
 import { performSchoolSwitch } from '../services/schoolSwitch';
-import { refreshEndsSession } from '../services/sessionRules';
+import { MOBILE_CLIENT_HEADERS, refreshEndsSession } from '../services/sessionRules';
 import { unregisterCurrentPushToken } from '../services/notifications';
 import { personaFor, type Persona } from '../navigation/personas';
+import { preferredSchool } from '../services/schoolFinder';
 
 interface AuthContextType {
   user: User | null;
@@ -136,7 +138,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const response = await api.post<LoginResponse>('/api/auth/login/', {
       username,
       password,
-    });
+    }, { headers: MOBILE_CLIENT_HEADERS });
 
     const { access, refresh, user: userData } = response.data;
 
@@ -149,7 +151,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setSessionExpired(false);
     setUser(normalized);
 
-    const school = resolveActiveSchool(normalized);
+    // Someone who belongs to several schools lands in the one they picked on the front screen.
+    const picked = preferredSchool(normalized.schools ?? [], await getSchoolCode());
+    const school = resolveActiveSchool(normalized, picked ? String(picked.id) : null);
     setActiveSchool(school);
     if (school) {
       await setActiveSchoolId(String(school.id));

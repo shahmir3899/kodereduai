@@ -5,6 +5,7 @@ import { StatusBar } from 'expo-status-bar';
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client';
 import { AuthProvider, useAuth } from '../contexts/AuthContext';
 import { NotificationProvider } from '../contexts/NotificationContext';
+import { AppLockProvider } from '../contexts/AppLockContext';
 import { ToastProvider } from '../components/ui/Toast';
 import OfflineBanner from '../components/ui/OfflineBanner';
 import { reportCrash, startCrashReporting } from '../services/crashReporting';
@@ -37,9 +38,11 @@ export default function RootLayout() {
       <AuthProvider>
         <NotificationProvider>
           <ToastProvider>
-            <StatusBar style="dark" />
-            <Navigator />
-            <OfflineBanner />
+            <AppLockProvider>
+              <StatusBar style="dark" />
+              <Navigator />
+              <OfflineBanner />
+            </AppLockProvider>
           </ToastProvider>
         </NotificationProvider>
       </AuthProvider>

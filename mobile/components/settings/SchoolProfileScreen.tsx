@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, Image, Switch, StyleSheet } from 'react-native';
+import { View, Text, ScrollView, Image, Switch, Share, StyleSheet } from 'react-native';
+import QRCode from 'react-native-qrcode-svg';
 import * as ImagePicker from 'expo-image-picker';
 import { useAuth } from '../../contexts/AuthContext';
-import { useSchoolProfile, useSchoolProfileActions } from '../../hooks/useSchoolProfile';
+import { useAppListing, useSchoolProfile, useSchoolProfileActions } from '../../hooks/useSchoolProfile';
+import { schoolLink } from '../../services/schoolFinder';
 import { useRefreshControl } from '../../hooks/useRefreshControl';
 import {
   assetProblem, ASSET_LABEL, COMMENT_LENGTHS, COMMENT_PHRASES_MAX, COMMENT_TONES, commentChanged, commentSettingsOf, contactLines, DEFAULT_TIME_ZONE,
@@ -41,6 +43,7 @@ function Body({ school }: { school: SchoolProfile }) {
   const [risk, setRisk] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [uploading, setUploading] = useState<AssetType | null>(null);
+  const listing = useAppListing();
 
   const fail = (e: unknown, fallback: string) => toast.error(inventoryErrorMessage(e, fallback));
 
@@ -97,6 +100,20 @@ function Body({ school }: { school: SchoolProfile }) {
     try { await actions.attendance.mutateAsync({ risk_threshold: Number(riskText) }); setRisk(null); toast.success('Risk threshold saved.'); } catch (e) { fail(e, 'Could not save the threshold.'); }
   };
 
+  const toggleListing = async (on: boolean) => {
+    try {
+      await listing.set.mutateAsync(on);
+      toast.success(on ? 'Your school now appears in the app search.' : 'Your school is hidden from the app search.');
+    } catch (e) { fail(e, 'Could not change the setting.'); }
+  };
+
+  const shareLink = async () => {
+    if (!school.subdomain) return;
+    try {
+      await Share.share({ message: `Open the Education AI app and choose ${school.name}, or use the school code: ${school.subdomain}\n${schoolLink(school.subdomain)}` });
+    } catch { /* The share sheet was closed. */ }
+  };
+
   const asset = (type: AssetType, url: string | null | undefined, title: string, hint: string) => (
     <Card style={styles.card}>
       <Text style={styles.section}>{title}</Text>
@@ -117,6 +134,27 @@ function Body({ school }: { school: SchoolProfile }) {
         {contactLines(school).map((l) => <View key={l.label} style={styles.line}><Text style={styles.label}>{l.label}</Text><Text style={styles.value}>{l.value}</Text></View>)}
         <Select label="Time zone" value={school.timezone || DEFAULT_TIME_ZONE} onChange={(z) => changeZone(String(z))} options={timeZoneOptions(school.timezone).map((z) => ({ value: z, label: z }))} disabled={actions.timeZone.isPending} />
         <Text style={styles.hint}>Dates such as "today" follow this clock.</Text>
+      </Card>
+
+      <Card style={styles.card}>
+        <Text style={styles.section}>School in the app</Text>
+        <Text style={styles.hint}>Parents and staff pick this school when they first open the app. Anyone can use the code or QR code below; the search list is optional.</Text>
+        {school.subdomain ? (
+          <>
+            <View style={styles.line}><Text style={styles.label}>School code</Text><Text style={styles.value} selectable>{school.subdomain}</Text></View>
+            <View style={styles.qr} accessible accessibilityLabel={`QR code for the school code ${school.subdomain}`}>
+              <QRCode value={schoolLink(school.subdomain)} size={176} />
+            </View>
+            <Button title="Share the school link" variant="outline" size="sm" onPress={shareLink} />
+          </>
+        ) : <Text style={styles.hint}>This school has no code yet. Ask the platform admin to set one.</Text>}
+        <View style={styles.toggle}>
+          <View style={styles.flex}>
+            <Text style={styles.value}>Show in the app's school search</Text>
+            <Text style={styles.hint}>Off keeps the school private: people need the code or QR code.</Text>
+          </View>
+          <Switch value={listing.query.data === true} onValueChange={toggleListing} disabled={listing.query.isLoading || listing.set.isPending} accessibilityLabel="Show in the app's school search" />
+        </View>
       </Card>
 
       {asset('logo', school.logo, 'School logo', 'Used on reports, receipts and the school header. A square image, at least 200 by 200.')}
@@ -165,6 +203,7 @@ const styles = StyleSheet.create({
   value: { fontSize: FontSize.sm, fontWeight: '600', color: Colors.text, flexShrink: 1, textAlign: 'right' },
   logo: { width: 128, height: 128, alignSelf: 'flex-start', borderRadius: BorderRadius.md, backgroundColor: Colors.surfaceSecondary },
   letterhead: { width: '100%', height: 90, borderRadius: BorderRadius.md, backgroundColor: Colors.surfaceSecondary },
+  qr: { alignItems: 'center', padding: Spacing.md, backgroundColor: '#ffffff', borderRadius: BorderRadius.md, alignSelf: 'center' },
   pair: { flexDirection: 'row', gap: Spacing.sm },
   half: { flex: 1 },
   toggle: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md },
