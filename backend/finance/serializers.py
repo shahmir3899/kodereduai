@@ -212,6 +212,12 @@ class FeePaymentSerializer(serializers.ModelSerializer):
     account_name = serializers.CharField(source='account.name', read_only=True, default=None)
     academic_year_name = serializers.CharField(source='academic_year.name', read_only=True, default=None)
     fee_type_display = serializers.CharField(source='get_fee_type_display', read_only=True)
+    # Money received through Kuickpay on this record (amount, coverage, references), or null.
+    kuickpay = serializers.SerializerMethodField()
+
+    def get_kuickpay(self, obj):
+        from finance.kuickpay.received import received_summary
+        return received_summary(obj)
 
     def _get_active_enrollment(self, obj):
         if not obj.student or not obj.academic_year:
@@ -326,6 +332,7 @@ class FeePaymentSerializer(serializers.ModelSerializer):
             'receipt_number', 'notes',
             'collected_by', 'collected_by_name',
             'account', 'account_name',
+            'kuickpay',
             'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'status', 'created_at', 'updated_at']

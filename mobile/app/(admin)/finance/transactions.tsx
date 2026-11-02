@@ -45,7 +45,7 @@ export default function TransactionHistory() {
       const fees = (feesRes.data.results || feesRes.data || []).map((item: any) => ({
         id: `fee-${item.id}`,
         type: 'FEE' as const,
-        description: `${item.student_name || 'Student'} - ${item.month ? `Month ${item.month}` : 'Fee'}`,
+        description: `${item.student_name || 'Student'} - ${item.month ? `Month ${item.month}` : 'Fee'}${item.kuickpay ? ` · via Kuickpay (${item.kuickpay.reference_text})` : ''}`,
         amount: parseFloat(item.amount_paid || item.amount || 0),
         date: item.paid_date || item.due_date || item.created_at || '',
         status: item.status,

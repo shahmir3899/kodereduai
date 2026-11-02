@@ -3,6 +3,8 @@ from .models import (
     Account, Transfer, FeeStructure, FeePayment, Expense, OtherIncome,
     FinanceAIChatMessage, MonthlyClosing, AccountSnapshot, AnnualFeeCategory,
     MonthlyFeeCategory,
+    KuickpayBiller, KuickpaySchoolMapping, KuickpayBill, KuickpayTransaction,
+    KuickpayPaymentAllocation, KuickpayCallbackLog, KuickpayReconciliationEvent,
 )
 
 
@@ -82,4 +84,61 @@ class AccountSnapshotAdmin(admin.ModelAdmin):
     search_fields = ['account__name']
 
 
+# ── Kuickpay ──────────────────────────────────────────────────────────────────────────────
+# Setup records (biller, school mapping) are editable. Everything the integration writes is a
+# financial or audit record and is read-only here: no adds, edits or deletes through the admin.
 
+@admin.register(KuickpayBiller)
+class KuickpayBillerAdmin(admin.ModelAdmin):
+    list_display = ['name', 'prefix', 'mode', 'consumer_number_length', 'is_enabled']
+    list_filter = ['mode', 'is_enabled']
+    search_fields = ['name', 'prefix']
+
+
+@admin.register(KuickpaySchoolMapping)
+class KuickpaySchoolMappingAdmin(admin.ModelAdmin):
+    # Saving runs KuickpaySchoolMapping.clean(): the account must be this school's Bank account, and an
+    # enabled mapping needs the school's own contact email (<= 30 chars) and phone (92... or 03...).
+    list_display = ['school', 'biller', 'settlement_account', 'due_day', 'is_enabled']
+    list_filter = ['is_enabled', 'biller']
+
+
+class _ReadOnlyAdmin(admin.ModelAdmin):
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(KuickpayBill)
+class KuickpayBillAdmin(_ReadOnlyAdmin):
+    list_display = ['consumer_number', 'school', 'student_ref', 'year', 'month', 'status', 'suspend_reason']
+    list_filter = ['status', 'school']
+    search_fields = ['consumer_number']
+
+
+@admin.register(KuickpayTransaction)
+class KuickpayTransactionAdmin(_ReadOnlyAdmin):
+    list_display = ['id', 'consumer_number', 'tran_auth_id', 'tran_date', 'amount', 'status', 'reason', 'urgent']
+    list_filter = ['status', 'urgent']
+    search_fields = ['consumer_number', 'tran_auth_id']
+
+
+@admin.register(KuickpayPaymentAllocation)
+class KuickpayPaymentAllocationAdmin(_ReadOnlyAdmin):
+    list_display = ['transaction', 'fee_payment_ref', 'amount', 'period_year', 'period_month', 'posting_date']
+
+
+@admin.register(KuickpayCallbackLog)
+class KuickpayCallbackLogAdmin(_ReadOnlyAdmin):
+    list_display = ['received_at', 'endpoint', 'auth_ok', 'consumer_number', 'result_code', 'latency_ms']
+    list_filter = ['endpoint', 'auth_ok', 'result_code']
+
+
+@admin.register(KuickpayReconciliationEvent)
+class KuickpayReconciliationEventAdmin(_ReadOnlyAdmin):
+    list_display = ['transaction', 'action', 'actor', 'created_at']

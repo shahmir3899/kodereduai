@@ -20,7 +20,16 @@ def credentials_ok(request):
 
 
 def https_ok(request):
-    return not getattr(settings, 'KUICKPAY_REQUIRE_HTTPS', True) or request.is_secure()
+    """True when the call arrived over HTTPS.
+
+    The live service runs behind Render's TLS proxy with ENVIRONMENT=local, and Django only trusts
+    X-Forwarded-Proto in production mode, so request.is_secure() is False there. The proxy header is
+    therefore also honoured; the check exists to refuse plain-HTTP callers, not to authenticate.
+    """
+    if not getattr(settings, 'KUICKPAY_REQUIRE_HTTPS', True):
+        return True
+    forwarded = (request.META.get('HTTP_X_FORWARDED_PROTO') or '').split(',')[0].strip().lower()
+    return request.is_secure() or forwarded == 'https'
 
 
 class KuickpayThrottle(AnonRateThrottle):

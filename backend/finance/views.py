@@ -29,6 +29,7 @@ from students.models import Student, Class
 from students.status_groups import ENROLLED_STATUSES
 from django.utils import timezone
 from .models import (
+    KuickpayPaymentAllocation,
     Account, Transfer, FeeStructure, FeePayment, Expense, OtherIncome,
     ExpenseCategory, IncomeCategory, AnnualFeeCategory, MonthlyFeeCategory,
     DEFAULT_EXPENSE_CATEGORIES, DEFAULT_INCOME_CATEGORIES, SUGGESTED_ANNUAL_CATEGORIES, SUGGESTED_MONTHLY_CATEGORIES,
@@ -447,7 +448,12 @@ class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
                 queryset=StudentEnrollment.objects.select_related('session_class', 'academic_year')
                 .order_by('-is_active', '-updated_at', '-id'),
                 to_attr='prefetched_enrollments',
-            )
+            ),
+            # The "received via Kuickpay" label: one query for the page, not one per row.
+            Prefetch(
+                'kuickpay_allocations',
+                queryset=KuickpayPaymentAllocation.objects.select_related('transaction'),
+            ),
         )
 
         # Filter by active school (works for all users including super admin)

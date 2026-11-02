@@ -1,4 +1,5 @@
 import { getSchoolTimeZone } from '../../utils/schoolTime'
+import KuickpayReceived from '../../components/KuickpayReceived'
 import { Fragment, useRef, useMemo } from 'react'
 import { TONE } from '../../components/ui/statusTones'
 import { MONTHS } from './FeeFilters'
@@ -285,7 +286,10 @@ export default function FeeTable({
                                   onClick={(e) => e.stopPropagation()}
                                 />
                               ) : (
-                                <p className="font-medium text-green-700">{Number(payment.amount_paid).toLocaleString()}</p>
+                                <>
+                    <p className="font-medium text-green-700">{Number(payment.amount_paid).toLocaleString()}</p>
+                    <KuickpayReceived kuickpay={payment.kuickpay} />
+                  </>
                               )}
                             </div>
                             <div
@@ -449,7 +453,10 @@ export default function FeeTable({
                       onClick={(e) => e.stopPropagation()}
                     />
                   ) : (
+                    <>
                     <p className="font-medium text-green-700">{Number(payment.amount_paid).toLocaleString()}</p>
+                    <KuickpayReceived kuickpay={payment.kuickpay} />
+                  </>
                   )}
                 </div>
                 <div
@@ -669,7 +676,10 @@ export default function FeeTable({
                           onClick={(e) => e.stopPropagation()}
                         />
                       ) : (
-                        Number(payment.amount_paid).toLocaleString()
+                        <>
+                          {Number(payment.amount_paid).toLocaleString()}
+                          <KuickpayReceived kuickpay={payment.kuickpay} className="justify-end" />
+                        </>
                       )}
                     </td>
                     <td className={`px-3 py-2 text-sm font-medium text-right ${balance > 0 ? 'text-orange-700' : balance < 0 ? 'text-blue-700' : 'text-green-700'}`}>

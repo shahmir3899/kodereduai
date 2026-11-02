@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { TONE } from '../../components/ui/statusTones'
+import KuickpayReceived from '../../components/KuickpayReceived'
 import PageHeader from '../../components/ui/PageHeader'
 import { useQuery } from '@tanstack/react-query'
 import { studentPortalApi } from '../../services/api'
@@ -165,7 +166,7 @@ export default function StudentFees() {
               { key: 'month', header: 'Month', mobile: 'title', cellClassName: 'font-medium', render: (p) => p.month_name || p.fee_type_name || p.month || '-' },
               { key: 'year', header: 'Year', cellClassName: 'text-gray-600', render: (p) => p.year || filterYear },
               { key: 'due', header: 'Amount Due', align: 'right', render: (p) => `PKR ${parseFloat(p.amount_due || 0).toLocaleString()}` },
-              { key: 'paid', header: 'Amount Paid', align: 'right', cellClassName: 'text-green-700 font-medium', render: (p) => `PKR ${parseFloat(p.amount_paid || 0).toLocaleString()}` },
+              { key: 'paid', header: 'Amount Paid', align: 'right', cellClassName: 'text-green-700 font-medium', render: (p) => (<div>PKR {parseFloat(p.amount_paid || 0).toLocaleString()}<KuickpayReceived kuickpay={p.kuickpay} className="justify-end" /></div>) },
               { key: 'status', header: 'Status', mobile: 'status', render: (p) => <Badge colors={STATUS_COLORS[p.status]}>{p.status}</Badge> },
               { key: 'date', header: 'Payment Date', cellClassName: 'text-gray-500', render: (p) => (p.payment_date ? new Date(p.payment_date).toLocaleDateString() : '-') },
               { key: 'method', header: 'Method', cellClassName: 'text-gray-500', render: (p) => p.payment_method || '-' },
@@ -175,6 +176,7 @@ export default function StudentFees() {
                 title={payment.month_name || payment.fee_type_name || `${payment.month}/${payment.year}`}
                 meta={payment.payment_date ? `Paid ${new Date(payment.payment_date).toLocaleDateString()}${payment.payment_method ? ` via ${payment.payment_method}` : ''}` : undefined}
                 status={<Badge colors={STATUS_COLORS[payment.status]}>{payment.status}</Badge>}
+                description={<KuickpayReceived kuickpay={payment.kuickpay} />}
                 breakdown={[
                   { label: 'Due', value: parseFloat(payment.amount_due || 0) },
                   { label: 'Paid', value: parseFloat(payment.amount_paid || 0), emphasis: true },

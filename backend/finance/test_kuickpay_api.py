@@ -122,6 +122,15 @@ class TestAuthentication(ApiBase):
             self.assertEqual(self.inquire(self.number).status_code, 403)
             self.assertEqual(self.inquire(self.number, secure=True).json()['response_Code'], '00')
 
+    def test_the_render_proxy_header_counts_as_https(self):
+        # The live service runs behind Render's TLS proxy with ENVIRONMENT=local, so Django itself
+        # does not mark the request secure; X-Forwarded-Proto is the only signal.
+        with override_settings(KUICKPAY_REQUIRE_HTTPS=True):
+            ok = self.inquire(self.number, HTTP_X_FORWARDED_PROTO='https')
+            self.assertEqual(ok.json()['response_Code'], '00')
+            self.assertEqual(self.inquire(self.number, HTTP_X_FORWARDED_PROTO='http').status_code, 403)
+            self.assertEqual(self.inquire(self.number).status_code, 403)
+
     def test_only_post_is_allowed(self):
         self.assertEqual(self.client.get('/api/v1/BillInquiry', **self.auth).status_code, 405)
 

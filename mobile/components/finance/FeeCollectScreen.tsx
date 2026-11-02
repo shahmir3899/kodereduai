@@ -19,6 +19,7 @@ import Skeleton from '../ui/Skeleton';
 import ErrorState from '../ui/ErrorState';
 import EmptyState from '../ui/EmptyState';
 import StatusPill from '../ui/StatusPill';
+import KuickpayReceivedLabel from './KuickpayReceivedLabel';
 import { useToast } from '../ui/Toast';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
 
@@ -157,6 +158,7 @@ export default function FeeCollectScreen({ classOptions, canRecord = true }: Pro
                 <Amount label="Received" value={formatMoney(Number(p.amount_paid))} color={Colors.success} />
                 <Amount label="Balance" value={formatMoney(balance)} color={balance > 0 ? Colors.error : Colors.textSecondary} />
               </View>
+              <KuickpayReceivedLabel kuickpay={p.kuickpay} />
               {Number(p.previous_balance) > 0 ? <Text style={styles.carry}>Includes {formatMoney(Number(p.previous_balance))} carried forward</Text> : null}
               {canRecord && canRecordPayment(p) ? (
                 <TouchableOpacity accessibilityRole="button" style={styles.record} onPress={() => open(p)}>
