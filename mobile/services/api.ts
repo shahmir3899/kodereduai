@@ -782,6 +782,13 @@ export const examinationsApi = {
     Object.entries(extra).forEach(([k, v]) => { if (v !== undefined && v !== null && v !== '') sp.append(k, String(v)); });
     return api.get(`/api/examinations/questions/?${sp.toString()}`);
   },
+  // Picture extraction: a photo is read in the background (OCR and an AI reading); poll the upload until it is EXTRACTED or FAILED.
+  // Pages after the first send the group_id the first page returned. Papers and worksheets share the contract.
+  uploadPaperImage: (form: FormData) => api.post('/api/examinations/paper-uploads/upload-image/', form, { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 120000 }),
+  getPaperUpload: (id: number) => api.get(`/api/examinations/paper-uploads/${id}/`, { timeout: 30000 }),
+  confirmPaperUpload: (id: number, data: object) => api.post(`/api/examinations/paper-uploads/${id}/confirm/`, data),
+  uploadWorksheetImage: (form: FormData) => api.post('/api/examinations/worksheet-uploads/upload-image/', form, { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 120000 }),
+  getWorksheetUpload: (id: number) => api.get(`/api/examinations/worksheet-uploads/${id}/`, { timeout: 30000 }),
   // Search by meaning (needs a class), and subject tags on a question (add_tag, with remove). Same calls as the web.
   semanticSearchQuestions: (params?: Record<string, unknown>) => api.get('/api/examinations/questions/semantic_search/', { params }),
   addQuestionTag: (id: number, tagId: number, remove = false) =>

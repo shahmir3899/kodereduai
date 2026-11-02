@@ -2,15 +2,16 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, ScrollView, FlatList, Switch, TouchableOpacity, StyleSheet } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { examinationsApi } from '../../services/api';
+import { bankQuestionPayload, confirmPayload, emptyCapture, type CaptureState, type ReviewQuestion } from '../../services/paperCapture';
 import { useMasterClasses } from '../../hooks/useAcademicYear';
 import { usePaper, usePaperActions, usePaperCoverage, usePaperExams, usePaperLessons } from '../../hooks/usePapers';
 import { useAcademicYear } from '../../hooks/useAcademicYear';
-import { useQuestionsPaged } from '../../hooks/useQuestionBank';
+import { useQuestionActions, useQuestionsPaged } from '../../hooks/useQuestionBank';
 import { useSubjectsList } from '../../hooks/useManager';
 import { useDebouncedValue } from '../../hooks/useDebouncedValue';
 import {
   addQuestion, assignSection, buildAutosavePayload, buildEnsurePayload, countIn, dropSection,
-  emptyPaperForm, hydrateStructure, marksOf, moveQuestion, PAPER_STATUSES,
+  emptyPaperForm, hydrateStructure, marksOf, moveQuestion, PAPER_STATUSES, pickedFromQuestion,
   paperFileName, paperToForm, paperTotal, pickedFromPaperRow, reconcileNote, removeQuestion, 
   statusSteps, validatePaper, type PaperForm, type PickedQuestion, type Section,
 } from '../../services/paperBuilder';
@@ -31,6 +32,7 @@ import { useToast } from '../ui/Toast';
 import { confirm } from '../ui/confirm';
 import BottomSheet from '../ui/BottomSheet';
 import QuickQuestionSheet from './QuickQuestionSheet';
+import PaperCaptureSheet from './PaperCaptureSheet';
 import SectionsEditor from './SectionsEditor';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
 
@@ -44,6 +46,7 @@ export default function PaperBuilderScreen() {
   const router = useRouter();
   const toast = useToast();
   const actions = usePaperActions();
+  const questions = useQuestionActions();
   const classes = useMasterClasses();
   const subjects = useSubjectsList();
   const saved = usePaper(routeId);
@@ -57,6 +60,12 @@ export default function PaperBuilderScreen() {
   const [busy, setBusy] = useState(false);
   const [loaded, setLoaded] = useState(!routeId);
   const [quick, setQuick] = useState(false);
+  // Capture from photos: the capture lives here so closing its sheet keeps it. Accepting creates the reviewed questions in
+  // the bank, adds them with their sections, and remembers the pages to confirm once the paper is saved.
+  const [capture, setCapture] = useState<CaptureState>(emptyCapture());
+  const [captureOpen, setCaptureOpen] = useState(false);
+  const [pendingConfirm, setPendingConfirm] = useState<{ uploadIds: number[]; questions: ReviewQuestion[] } | null>(null);
+  const createdByLocal = React.useRef(new Map<string, Question>());
   // The title follows "Exam - Class - Subject" until the person types their own (or clears it back to empty).
   const [titleAuto, setTitleAuto] = useState(!routeId);
   const { current: year } = useAcademicYear();
@@ -95,6 +104,34 @@ export default function PaperBuilderScreen() {
   const groups = sections.filter((s) => s.type !== 'divider');
   const total = useMemo(() => paperTotal(picked, sections), [picked, sections]);
 
+  const acceptCapture = async (c: CaptureState) => {
+    if (!form.subject) throw new Error('Choose the subject first.');
+    const made: Array<{ q: ReviewQuestion; question: Question }> = [];
+    for (let i = 0; i < c.questions.length; i += 1) {
+      const rq = c.questions[i];
+      let question = createdByLocal.current.get(rq.localId);
+      if (!question) {
+        try {
+          question = (await questions.create.mutateAsync(bankQuestionPayload(rq, form.subject))).data as Question;
+        } catch (e) {
+          throw new Error(`Question ${i + 1} could not be added: ${inventoryErrorMessage(e, 'the server refused it.')} Fix it and accept again; the earlier ones are kept.`);
+        }
+        createdByLocal.current.set(rq.localId, question);
+      }
+      made.push({ q: rq, question });
+    }
+    if (c.header.title.trim()) { setTitleAuto(false); set('title', c.header.title.trim()); }
+    if (c.header.duration.trim()) set('duration', c.header.duration.trim());
+    setSections((ss) => [...ss, ...c.sections]);
+    setPicked((ps) => [...ps, ...made.map(({ q, question }) => ({ ...pickedFromQuestion(question), sectionKey: q.sectionKey }))]);
+    setPendingConfirm((prev) => ({
+      uploadIds: [...(prev?.uploadIds ?? []), ...c.pages.filter((p) => p.status === 'extracted' && p.uploadId).map((p) => p.uploadId as number)],
+      questions: [...(prev?.questions ?? []), ...c.questions],
+    }));
+    createdByLocal.current.clear();
+    setCapture(emptyCapture());
+  };
+
   const save = async (stay = false) => {
     const problem = validatePaper(form, picked, sections);
     if (problem) return setError(problem);
@@ -116,6 +153,11 @@ export default function PaperBuilderScreen() {
       setSavedStatus(form.status);
       // Link the chosen lesson plans when they differ from what the server has (the web does the same once a draft exists).
       if (target && !sameIds(lessonIds, cov.linkedIds)) await actions.linkLessons.mutateAsync({ id: target, ids: lessonIds });
+      // The learning loop is told what the person made of each captured page; the paper itself is already saved above.
+      if (target && pendingConfirm) {
+        await Promise.all(pendingConfirm.uploadIds.map((uid) => examinationsApi.confirmPaperUpload(uid, confirmPayload(target as number, pendingConfirm.questions)).catch(() => undefined)));
+        setPendingConfirm(null);
+      }
       toast.success('Paper saved.');
       if (stay) await coverage.refetch();
       else router.back();
@@ -209,6 +251,9 @@ export default function PaperBuilderScreen() {
       ))}
       <Button title="+ Add questions from the bank" variant="outline" onPress={() => setPicker(true)} />
       <Button title="+ Write a new question" variant="outline" onPress={() => setQuick(true)} disabled={!form.subject} />
+      <Button title={capture.pages.length ? `Capture from photos (${capture.pages.length} page${capture.pages.length === 1 ? '' : 's'} in progress)` : 'Capture from photos'} variant="outline"
+        onPress={() => setCaptureOpen(true)} disabled={!form.classObj || !form.subject} />
+      {!form.classObj || !form.subject ? <Text style={styles.sub}>Choose the class and subject to capture a printed paper from photos.</Text> : null}
 
       {picked.length > 0 ? (
         <View style={styles.q}>
@@ -245,6 +290,8 @@ export default function PaperBuilderScreen() {
       <Button title="Save and check coverage" variant="outline" onPress={() => save(true)} disabled={busy} />
       {paperId ? <Button title="Share PDF" variant="outline" onPress={share} disabled={busy} /> : null}
 
+      <PaperCaptureSheet kind="paper" visible={captureOpen} onClose={() => setCaptureOpen(false)} classId={form.classObj} subjectId={form.subject}
+        capture={capture} setCapture={setCapture} onAccept={acceptCapture} />
       <QuickQuestionSheet
         visible={quick} subject={form.subject} onClose={() => setQuick(false)}
         onCreated={(q) => setPicked((ps) => { const next = addQuestion(ps, q); return groups.length === 1 ? assignSection(next, q.id, groups[0].key) : next; })}

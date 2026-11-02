@@ -27,9 +27,11 @@ import EmptyState from '../ui/EmptyState';
 import BottomSheet from '../ui/BottomSheet';
 import { useToast } from '../ui/Toast';
 import SectionsEditor from './SectionsEditor';
+import PaperCaptureSheet from './PaperCaptureSheet';
+import { emptyCapture, worksheetItems, type CaptureState } from '../../services/paperCapture';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
 
-type Tab = 'items' | 'compose' | 'bank';
+type Tab = 'items' | 'compose' | 'bank' | 'scan';
 const AUTOSAVE_MS = 800;
 
 // Build a worksheet: title and instructions, sections, and items written by hand or taken from the question bank.
@@ -51,6 +53,9 @@ export default function WorksheetBuilderScreen() {
   const [current, setCurrent] = useState<WorksheetItem>(emptyItem());
   const [error, setError] = useState<string | null>(null);
   const [picker, setPicker] = useState(false);
+  // Scan a printed worksheet: the capture lives here so closing the sheet keeps it until it is accepted or started over.
+  const [capture, setCapture] = useState<CaptureState>(emptyCapture());
+  const [scanOpen, setScanOpen] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [pictureBusy, setPictureBusy] = useState(false);
   const hydrated = useRef(false);
@@ -188,7 +193,7 @@ export default function WorksheetBuilderScreen() {
       ) : null}
 
       <SegmentedTabs
-        tabs={[{ value: 'items', label: `Items (${items.length})` }, ...(editable ? [{ value: 'compose', label: 'Add manually' }, { value: 'bank', label: 'From bank' }] : [])] as Array<{ value: Tab; label: string }>}
+        tabs={[{ value: 'items', label: `Items (${items.length})` }, ...(editable ? [{ value: 'compose', label: 'Add manually' }, { value: 'bank', label: 'From bank' }, { value: 'scan', label: 'Scan' }] : [])] as Array<{ value: Tab; label: string }>}
         value={tab} onChange={setTab}
       />
 
@@ -248,6 +253,24 @@ export default function WorksheetBuilderScreen() {
           ) : <Text style={styles.sub}>This worksheet has no subject, so the question bank cannot be narrowed. Add questions manually instead.</Text>}
         </View>
       ) : null}
+
+      {tab === 'scan' && editable ? (
+        <View style={styles.card}>
+          <Text style={styles.sub}>Photograph a printed worksheet and the questions are read from it, so you can check and add them instead of retyping the sheet.</Text>
+          <Button title={capture.pages.length ? `Scan (${capture.pages.length} page${capture.pages.length === 1 ? '' : 's'} in progress)` : 'Scan a printed worksheet'} onPress={() => setScanOpen(true)} />
+        </View>
+      ) : null}
+
+      <PaperCaptureSheet
+        kind="worksheet" visible={scanOpen} onClose={() => setScanOpen(false)} classId={worksheet.class_obj} subjectId={worksheet.subject ?? null}
+        capture={capture} setCapture={setCapture}
+        onAccept={async (c) => {
+          setSections((ss) => [...ss, ...c.sections]);
+          setItems((its) => [...its, ...worksheetItems(c.questions, newLocalId)]);
+          setCapture(emptyCapture());
+          setTab('items');
+        }}
+      />
 
       <BankPicker
         visible={picker} subject={worksheet.subject ?? null} excluded={excludedQuestionIds(items)} onClose={() => setPicker(false)}
