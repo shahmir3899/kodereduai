@@ -16,6 +16,8 @@ export interface PaperQuestionRow {
   question_text: string;
   question_type?: string;
   section_key?: string;
+  bloom_level?: string | null;
+  question_snapshot?: { bloom_level?: string | null } | null;
 }
 
 export interface Paper {
@@ -31,6 +33,8 @@ export interface Paper {
   subject_name?: string;
   paper_questions?: PaperQuestionRow[];
   structure?: Array<Record<string, unknown>>;
+  exam?: number | null;
+  render_options?: { answer_lines?: boolean } | null;
   created_at?: string;
 }
 
@@ -47,16 +51,19 @@ export interface PickedQuestion {
   override: string;
   // The section (structure key) this question sits in; '' = not in a section.
   sectionKey: string;
+  // Thinking level, for the paper's mix chart (a paper loaded from the server only has it when the server sends it).
+  bloom?: string | null;
 }
 
 export const pickedFromQuestion = (q: Question): PickedQuestion => ({
-  question: q.id, text: q.question_text, type: q.question_type, bankMarks: Number(q.marks) || 0, override: '', sectionKey: '',
+  question: q.id, text: q.question_text, type: q.question_type, bankMarks: Number(q.marks) || 0, override: '', sectionKey: '', bloom: q.bloom_level ?? null,
 });
 
 export const pickedFromPaperRow = (r: PaperQuestionRow): PickedQuestion => ({
   question: r.question, text: r.question_text, type: r.question_type ?? '', bankMarks: Number(r.marks) || 0,
   override: r.marks_override != null && r.marks_override !== '' && Number(r.marks_override) !== Number(r.marks) ? String(Number(r.marks_override)) : '',
   sectionKey: r.section_key ?? '',
+  bloom: r.bloom_level ?? r.question_snapshot?.bloom_level ?? null,
 });
 
 export const marksOf = (p: Pick<PickedQuestion, 'bankMarks' | 'override'>): number =>
@@ -84,12 +91,16 @@ export interface PaperForm {
   duration: string;
   instructions: string;
   status: string;
+  // The exam this paper belongs to (optional) and the print option that draws ruled lines under answers.
+  exam: number | null;
+  answerLines: boolean;
 }
 
-export const emptyPaperForm = (): PaperForm => ({ title: '', classObj: null, subject: null, duration: '60', instructions: '', status: 'DRAFT' });
+export const emptyPaperForm = (): PaperForm => ({ title: '', classObj: null, subject: null, duration: '60', instructions: '', status: 'DRAFT', exam: null, answerLines: false });
 
 export const paperToForm = (p: Paper): PaperForm => ({
   title: p.paper_title, classObj: p.class_obj, subject: p.subject, duration: p.duration_minutes != null ? String(p.duration_minutes) : '', instructions: p.instructions ?? '', status: p.status,
+  exam: p.exam ?? null, answerLines: !!p.render_options?.answer_lines,
 });
 
 export function paperFileName(title: string): string {
@@ -260,7 +271,9 @@ export function buildEnsurePayload(f: PaperForm, picked: PickedQuestion[], secti
     paper_title: f.title.trim(),
     class_obj: f.classObj,
     subject: f.subject,
+    ...(f.exam ? { exam: f.exam } : {}),
     instructions: f.instructions.trim(),
+    render_options: { answer_lines: f.answerLines },
     ...(f.duration.trim() ? { duration_minutes: Number(f.duration) } : {}),
     total_marks: paperTotal(picked, sections),
     structure: serializeStructure(sections),

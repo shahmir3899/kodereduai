@@ -1,13 +1,13 @@
 import React, { useMemo, useState } from 'react';
 import { View, Text, FlatList, ActivityIndicator, TouchableOpacity, StyleSheet, type RefreshControlProps } from 'react-native';
 import { hrApi } from '../../services/api';
-import { usePayrollActions, usePayrollSummary, usePayslipsPaged } from '../../hooks/usePayroll';
+import { useNetPayHistory, usePayrollActions, usePayrollSummary, usePayslipsPaged } from '../../hooks/usePayroll';
 import { useRefreshControl } from '../../hooks/useRefreshControl';
 import { todayString } from '../../services/attendanceEntry';
 import { monthLabel, stepMonth } from '../../services/register';
 import { payslipPeriod, payslipTone } from '../../services/accountant';
 import {
-  breakdownLines, generationText, payslipActions, payslipFileName, STATUS_FILTERS, summaryLine, type PayslipFull,
+  breakdownLines, generationText, netPayTrend, trendNote, payslipActions, payslipFileName, STATUS_FILTERS, summaryLine, type PayslipFull,
 } from '../../services/payroll';
 import { exportErrorMessage } from '../../services/reports';
 import { shareReportFile } from '../../services/reportShare';
@@ -42,6 +42,8 @@ export default function PayrollScreen() {
   const rows = useMemo(() => query.data?.pages.flatMap((p) => p.results) ?? [], [query.data]);
 
   const [open, setOpen] = useState<PayslipFull | null>(null);
+  const history = useNetPayHistory(month, period.year, open !== null);
+  const trend = open ? netPayTrend(history.data, open.staff_member) : [];
   const [paidOn, setPaidOn] = useState(todayString());
   const [busy, setBusy] = useState<string | null>(null);
 
@@ -124,7 +126,7 @@ export default function PayrollScreen() {
     </View>
   );
 
-  if (query.isLoading) return <View style={styles.container}><View style={styles.content}>{header}</View><Skeleton /></View>;
+  if (query.isLoading) return <View style={styles.container}><View style={styles.content}>{header}</View><Skeleton variant="list" /></View>;
   if (query.isError && !query.data) return <ErrorState error={query.error} onRetry={() => query.refetch()} />;
 
   const actionsFor = open ? payslipActions(open.status) : null;
@@ -163,6 +165,19 @@ export default function PayrollScreen() {
             {breakdownLines(open.allowances_breakdown).map((l) => <Line key={`a-${l.label}`} label={`+ ${l.label}`} value={l.amount} />)}
             {breakdownLines(open.deductions_breakdown).map((l) => <Line key={`d-${l.label}`} label={`− ${l.label}`} value={l.amount} />)}
             <Line label="Net pay" value={Number(open.net_salary) || 0} bold />
+            {trend.length > 0 ? (
+              <View style={styles.trend}>
+                <Text style={styles.sub}>Net pay, last 6 months{trendNote(trend) ? `  ·  ${trendNote(trend)}` : ''}</Text>
+                <View style={styles.bars}>
+                  {trend.map((b, i) => (
+                    <View key={i} style={styles.barCol} accessible accessibilityLabel={`${b.label}: ${b.value == null ? 'no payslip' : formatMoney(b.value)}`}>
+                      <View style={[styles.bar, { height: Math.max(4, Math.round(b.ratio * 48)), opacity: b.value == null ? 0.2 : 1 }]} />
+                      <Text style={styles.barLabel}>{b.label}</Text>
+                    </View>
+                  ))}
+                </View>
+              </View>
+            ) : null}
             {open.working_days ? <Text style={styles.sub}>Present {open.present_days ?? 0} of {open.working_days} working days</Text> : null}
             {open.payment_date ? <Text style={styles.sub}>Paid on {open.payment_date}</Text> : null}
             {actionsFor?.markPaid ? <DateField label="Payment date" value={paidOn} onChange={setPaidOn} /> : null}
@@ -189,6 +204,11 @@ function Line({ label, value, bold }: { label: string; value: number; bold?: boo
 }
 
 const styles = StyleSheet.create({
+  trend: { marginTop: Spacing.md },
+  bars: { flexDirection: 'row', alignItems: 'flex-end', gap: Spacing.sm, marginTop: Spacing.sm, height: 70 },
+  barCol: { flex: 1, alignItems: 'center', justifyContent: 'flex-end' },
+  bar: { width: '70%', backgroundColor: Colors.primary, borderRadius: 3 },
+  barLabel: { fontSize: 10, color: Colors.textSecondary, marginTop: 2 },
   container: { flex: 1, backgroundColor: Colors.background },
   content: { padding: Spacing.lg, paddingBottom: Spacing.xxxl },
   monthRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: Spacing.md },

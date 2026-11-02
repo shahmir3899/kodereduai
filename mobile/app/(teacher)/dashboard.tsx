@@ -5,19 +5,20 @@ import { useAuth } from '../../contexts/AuthContext';
 import { routeFor } from '../../navigation/routes';
 import {
   useMyClassAssignments, useMyStudentsAtRisk, useMyTimetable, useOffDayToday, usePendingSubmissions,
-  useSectionProgress, useTeacherExams,
+  useSectionProgress, useTeacherExams, useWeekLessonPlans,
 } from '../../hooks/useTeacher';
 import { useRefreshControl } from '../../hooks/useRefreshControl';
 import { dayCodeFor, entriesForDay, formatSlotTime } from '../../services/teacher';
 import {
   assignmentLabel, attendanceClassId, buildTeacherAttention, examsAwaitingMarks, findPeriod, isPending,
-  matchAssignment, minutesLabel, studentsAtRiskCount, upcomingExams,
+  matchAssignment, minutesLabel, planIsDone, studentsAtRiskCount, upcomingExams, weekPlanStats, type WeekPlan,
 } from '../../services/teacherDashboard';
 import Card from '../../components/ui/Card';
 import Skeleton from '../../components/ui/Skeleton';
 import StatusPill from '../../components/ui/StatusPill';
 import Hero from '../../components/dashboard/HeroCard';
 import SchoolSwitcher from '../../components/nav/SchoolSwitcher';
+import RecentNotifications from '../../components/dashboard/RecentNotifications';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
 
 const TONE_COLOR = { red: Colors.error, amber: Colors.warning } as const;
@@ -38,9 +39,10 @@ export default function TeacherDashboard() {
   const submissions = usePendingSubmissions(academicsOn);
   const risk = useMyStudentsAtRisk(academicsOn && assignments.length > 0);
   const exams = useTeacherExams(examsOn);
+  const weekPlans = useWeekLessonPlans(academicsOn);
 
   const refreshControl = useRefreshControl(
-    timetable.refetch, assignmentsQ.refetch, progress.refetch, submissions.refetch, risk.refetch, exams.refetch,
+    timetable.refetch, assignmentsQ.refetch, progress.refetch, submissions.refetch, risk.refetch, exams.refetch, weekPlans.refetch,
   );
 
   const today = useMemo(() => entriesForDay(timetable.data ?? [], dayCodeFor(now)), [timetable.data]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -225,6 +227,18 @@ export default function TeacherDashboard() {
         </>
       ) : null}
 
+      {academicsOn ? (
+        <>
+          <View style={styles.headRow}>
+            <Text style={styles.section}>Lesson plans this week</Text>
+            <TouchableOpacity accessibilityRole="button" style={styles.linkBox} onPress={() => go(routeFor('teacher', '/academics/lesson-plans'))}>
+              <Text style={styles.link}>View all</Text>
+            </TouchableOpacity>
+          </View>
+          <WeekPlans plans={weekPlans.data ?? []} loading={weekPlans.isLoading} failed={weekPlans.isError && !weekPlans.data} />
+        </>
+      ) : null}
+
       <Text style={styles.section}>Quick actions</Text>
       <View style={styles.actions}>
         {quick.map((a) => (
@@ -234,7 +248,36 @@ export default function TeacherDashboard() {
           </TouchableOpacity>
         ))}
       </View>
+
+      <RecentNotifications enabled={isModuleEnabled('notifications')} onSeeAll={() => go(routeFor('teacher', '/notifications'))} />
     </ScrollView>
+  );
+}
+
+function WeekPlans({ plans, loading, failed }: { plans: WeekPlan[]; loading: boolean; failed: boolean }) {
+  const stats = weekPlanStats(plans);
+  if (loading) return <Card style={styles.list}><Text style={styles.muted}>Loading…</Text></Card>;
+  if (failed) return <Card style={styles.list}><Text style={styles.muted}>Could not load lesson plans.</Text></Card>;
+  if (stats.total === 0) return <Card style={styles.list}><Text style={styles.muted}>No lesson plans this week.</Text></Card>;
+  return (
+    <Card style={styles.list}>
+      <View style={styles.barRow}>
+        <View style={styles.bar} accessibilityRole="progressbar" accessibilityValue={{ min: 0, max: stats.total, now: stats.done }}>
+          <View style={[styles.barFill, { width: `${(stats.done / stats.total) * 100}%` }]} />
+        </View>
+        <Text style={styles.barText}>{stats.done}/{stats.total}</Text>
+      </View>
+      <Text style={styles.muted}>{stats.done} done  ·  {stats.published} published  ·  {stats.draft} draft</Text>
+      {plans.slice(0, 4).map((p) => (
+        <View key={p.id} style={styles.planRow}>
+          <View style={styles.planText}>
+            <Text style={styles.listRow} numberOfLines={1}>{p.title || p.topic || 'Lesson plan'}</Text>
+            <Text style={styles.cls} numberOfLines={1}>{[p.subject_name, p.class_name].filter(Boolean).join(' — ')}</Text>
+          </View>
+          <StatusPill label={planIsDone(p) ? 'Done' : p.status === 'PUBLISHED' ? 'Published' : 'Draft'} tone={planIsDone(p) ? 'success' : p.status === 'PUBLISHED' ? 'info' : 'neutral'} />
+        </View>
+      ))}
+    </Card>
   );
 }
 
@@ -260,6 +303,15 @@ const styles = StyleSheet.create({
   cls: { fontSize: FontSize.sm, color: Colors.textSecondary, marginTop: 2 },
   section2: { flexDirection: 'row', alignItems: 'center', padding: Spacing.md, marginBottom: Spacing.sm },
   list: { padding: Spacing.md },
+  headRow: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between' },
+  linkBox: { minHeight: 44, justifyContent: 'center' },
+  link: { fontSize: FontSize.sm, color: Colors.primary, fontWeight: '600' },
+  barRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, marginBottom: Spacing.sm },
+  bar: { flex: 1, height: 10, borderRadius: BorderRadius.full, backgroundColor: Colors.surfaceSecondary, overflow: 'hidden' },
+  barFill: { height: '100%', backgroundColor: Colors.success },
+  barText: { fontSize: FontSize.xs, fontWeight: '600', color: Colors.textSecondary },
+  planRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: Spacing.sm, paddingTop: Spacing.sm, marginTop: Spacing.sm, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: Colors.border },
+  planText: { flex: 1 },
   listRow: { fontSize: FontSize.sm, color: Colors.text, paddingVertical: 3 },
   risk: { padding: Spacing.md, marginBottom: Spacing.sm },
   riskTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: Spacing.sm },

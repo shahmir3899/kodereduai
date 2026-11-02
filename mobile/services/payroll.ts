@@ -153,3 +153,41 @@ export function salaryPreview(f: Pick<SalaryForm, 'basic' | 'allowances' | 'dedu
   const deductions = pairsTotal(f.deductions);
   return { gross, deductions, net: gross - deductions };
 }
+
+// ─── Net pay, last months ───────────────────────────────────────────────────────────────────
+
+export interface NetPayHistory {
+  periods: Array<{ month: number; year: number }>;
+  history: Record<string, Array<{ month: number; year: number; net_salary: number | string }>>;
+}
+
+const SHORT_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+export interface TrendBar { label: string; value: number | null; ratio: number }
+
+// One bar per month the server returned, oldest first. A month with no payslip has no bar. Bars are
+// scaled to the largest month so the shape is readable at a glance.
+export function netPayTrend(data: NetPayHistory | null | undefined, staffId: number): TrendBar[] {
+  if (!data) return [];
+  const mine = data.history?.[String(staffId)] ?? [];
+  const byPeriod = new Map(mine.map((r) => [`${r.year}-${r.month}`, num(r.net_salary)]));
+  const values = data.periods.map((p) => (byPeriod.has(`${p.year}-${p.month}`) ? (byPeriod.get(`${p.year}-${p.month}`) as number) : null));
+  const max = Math.max(0, ...values.map((v) => v ?? 0));
+  return data.periods.map((p, i) => ({
+    label: SHORT_MONTHS[p.month - 1] ?? String(p.month),
+    value: values[i],
+    ratio: values[i] != null && max > 0 ? (values[i] as number) / max : 0,
+  }));
+}
+
+// "Down 4% from May", or nothing when there is no earlier month to compare with.
+export function trendNote(bars: TrendBar[]): string | null {
+  const have = bars.filter((b) => b.value != null) as Array<TrendBar & { value: number }>;
+  if (have.length < 2) return null;
+  const last = have[have.length - 1];
+  const prev = have[have.length - 2];
+  if (prev.value === 0) return null;
+  const pct = Math.round(((last.value - prev.value) / prev.value) * 100);
+  if (pct === 0) return `Same as ${prev.label}`;
+  return `${pct > 0 ? 'Up' : 'Down'} ${Math.abs(pct)}% from ${prev.label}`;
+}

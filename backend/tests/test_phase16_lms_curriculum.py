@@ -726,6 +726,45 @@ class TestTocParser:
         assert body["source"] == "rule_based"
         assert len(body.get("chapters", [])) >= 1
 
+    def test_suggest_toc_reaches_the_ai_prompt(self, seed_data, api):
+        """The prompt holds literal JSON braces; building it must not raise, or the AI never runs."""
+        import json
+        import sys
+        import types
+        from lms.models import Book
+        token = seed_data["tokens"]["admin"]
+        sid = seed_data["SID_A"]
+        book = Book.objects.create(
+            school=seed_data["school_a"], class_obj=seed_data["classes"][0], subject=seed_data["subjects"][0],
+            title=f"{P16}Suggest TOC AI", language="en",
+        )
+        seen = {}
+
+        class FakeCompletions:
+            def create(self, **kwargs):
+                seen["prompt"] = kwargs["messages"][-1]["content"]
+                answer = {"chapters": [{"title": "Numbers", "topics": [{"title": "Counting"}]}], "confidence": 0.9}
+                message = types.SimpleNamespace(content=json.dumps(answer))
+                return types.SimpleNamespace(choices=[types.SimpleNamespace(message=message)])
+
+        class FakeGroq:
+            def __init__(self, api_key=None):
+                self.chat = types.SimpleNamespace(completions=FakeCompletions())
+
+        fake_module = types.ModuleType("groq")
+        fake_module.Groq = FakeGroq
+        with patch.dict(sys.modules, {"groq": fake_module}), patch("lms.toc_ai_suggester.settings") as mock_settings:
+            mock_settings.GROQ_API_KEY = "test-key"
+            mock_settings.GROQ_MODEL = "test-model"
+            resp = api.post(f"/api/lms/books/{book.id}/suggest_toc/", {"raw_text": "Unit 1 Numbers\nCounting"}, token, sid)
+
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["source"] == "ai"
+        assert body["chapters"][0]["title"] == "Numbers"
+        assert "Unit 1 Numbers" in seen["prompt"]
+        assert '"chapters"' in seen["prompt"]
+
     def test_bulk_toc_empty_text(self, seed_data, api, lms_book):
         token = seed_data["tokens"]["admin"]
         sid = seed_data["SID_A"]

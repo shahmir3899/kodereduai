@@ -4,6 +4,16 @@ import ChatInterface from '../../components/ChatInterface';
 import { studentPortalApi } from '../../services/api';
 import { Colors, FontSize, Spacing } from '../../constants/colors';
 
+// The same starters the web offers.
+const SUGGESTIONS = [
+  'Help me understand fractions',
+  'Explain photosynthesis',
+  'Quiz me on history',
+  'How do I solve quadratic equations?',
+  'What are the parts of a cell?',
+  'Summarize the water cycle',
+];
+
 export default function AIStudyHelper() {
   return (
     <View style={styles.container}>
@@ -17,6 +27,7 @@ export default function AIStudyHelper() {
         }
         getHistory={() => studentPortalApi.getStudyHelperHistory()}
         clearHistory={() => studentPortalApi.clearStudyHelperHistory()}
+        suggestions={SUGGESTIONS}
         placeholder="Ask a study question..."
         welcomeMessage="Hi! I'm your AI study helper. Ask me anything about your subjects - I can help with explanations, practice questions, and more!"
       />

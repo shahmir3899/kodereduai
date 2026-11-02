@@ -14,6 +14,7 @@ import Select from '../ui/Select';
 import DateField from '../ui/DateField';
 import Button from '../ui/Button';
 import Card from '../ui/Card';
+import StaffPhoto from './StaffPhoto';
 import ErrorState from '../ui/ErrorState';
 import Skeleton from '../ui/Skeleton';
 import { useToast } from '../ui/Toast';
@@ -88,6 +89,7 @@ export default function StaffFormScreen({ id }: { id: number | null }) {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+      {!creating && member.data ? <StaffPhoto staffId={member.data.id} name={member.data.full_name} photoUrl={(member.data as { photo_url?: string | null }).photo_url} /> : null}
       <Card style={styles.card}>
         <Text style={styles.section}>Personal</Text>
         <Input label="First name" value={form.firstName} onChangeText={(v) => set('firstName', v)} />

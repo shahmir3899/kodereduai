@@ -44,6 +44,9 @@ export interface Question {
   option_c_image_url?: string | null;
   option_d_image_url?: string | null;
   answer_image_url?: string | null;
+  is_ai_generated?: boolean;
+  verified_by?: number | null;
+  verified_at?: string | null;
 }
 
 export interface QuestionForm {

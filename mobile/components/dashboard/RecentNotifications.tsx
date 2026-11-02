@@ -36,7 +36,7 @@ export default function RecentNotifications({ enabled, onSeeAll }: { enabled: bo
 const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between' },
   section: { fontSize: FontSize.lg, fontWeight: '600', color: Colors.text, marginTop: Spacing.xl, marginBottom: Spacing.md },
-  linkBox: { minHeight: 44, justifyContent: 'center' },
+  linkBox: { minHeight: 44, minWidth: 44, justifyContent: 'center', alignItems: 'flex-end' },
   link: { fontSize: FontSize.sm, color: Colors.primary, fontWeight: '600' },
   list: { padding: Spacing.md },
   muted: { fontSize: FontSize.sm, color: Colors.textSecondary },

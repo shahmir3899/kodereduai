@@ -11,6 +11,7 @@ import { financeApi } from '../../../services/api';
 import Card from '../../../components/ui/Card';
 import StatCard from '../../../components/StatCard';
 import QueryBoundary from '../../../components/ui/QueryBoundary';
+import FeeOverviewCard from '../../../components/finance/FeeOverviewCard';
 import { useScopedQuery } from '../../../hooks/useScopedQuery';
 import { useRefreshControl } from '../../../hooks/useRefreshControl';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../../constants/colors';
@@ -106,6 +107,8 @@ export default function FinanceDashboard() {
       </QueryBoundary>
 
       {/* Navigation Items */}
+      <FeeOverviewCard />
+
       <Text style={styles.sectionTitle}>Quick Actions</Text>
       {navItems.map((item) => (
         <TouchableOpacity accessibilityRole="button"

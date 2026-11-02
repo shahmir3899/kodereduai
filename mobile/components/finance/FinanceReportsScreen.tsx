@@ -8,7 +8,7 @@ import { useAcademicYear } from '../../hooks/useAcademicYear';
 import { useExpenseCategories, useFinanceSummary, useMonthlyTrend } from '../../hooks/useAccountant';
 import { useRefreshControl } from '../../hooks/useRefreshControl';
 import {
-  categoryShares, incomeVsExpense, PERIOD_LABELS, rangeFor, trendBars, type DateRange, type Period,
+  categoryShares, PERIOD_LABELS, rangeFor, trendBars, type DateRange, type Period,
 } from '../../services/accountant';
 import { formatMoney } from '../../services/feeCollect';
 import {
@@ -19,6 +19,7 @@ import SegmentedTabs from '../ui/SegmentedTabs';
 import DateField from '../ui/DateField';
 import Button from '../ui/Button';
 import Card from '../ui/Card';
+import IncomeExpenseCard from './IncomeExpenseCard';
 import Skeleton from '../ui/Skeleton';
 import ErrorState from '../ui/ErrorState';
 import { useToast } from '../ui/Toast';
@@ -52,7 +53,6 @@ export default function FinanceReportsScreen() {
 
   const income = Number(summary.data?.total_income ?? 0) || 0;
   const expenses = Number(summary.data?.total_expenses ?? 0) || 0;
-  const { net, incomePct, expensePct } = incomeVsExpense(income, expenses);
   const bars = trendBars(trend.data ?? []);
   const shares = categoryShares(cats.data?.categories ?? [], cats.data?.total ?? 0);
 
@@ -92,14 +92,7 @@ export default function FinanceReportsScreen() {
 
       {range ? (
         summary.isLoading ? <Skeleton /> : summary.isError && !summary.data ? <ErrorState error={summary.error} onRetry={() => summary.refetch()} /> : (
-          <Card>
-            <Bar label="Income" value={income} pct={incomePct} color={Colors.success} />
-            <Bar label="Expenses" value={expenses} pct={expensePct} color={Colors.error} />
-            <View style={styles.net}>
-              <Text style={styles.netLabel}>Net balance</Text>
-              <Text style={[styles.netValue, { color: net >= 0 ? Colors.success : Colors.error }]}>{formatMoney(net)}</Text>
-            </View>
-          </Card>
+          <IncomeExpenseCard income={income} expenses={expenses} />
         )
       ) : null}
 
@@ -184,17 +177,6 @@ export default function FinanceReportsScreen() {
   );
 }
 
-function Bar({ label, value, pct, color }: { label: string; value: number; pct: number; color: string }) {
-  return (
-    <View style={styles.bar}>
-      <View style={styles.barHead}>
-        <Text style={styles.barLabel}>{label}</Text>
-        <Text style={[styles.barValue, { color }]}>{formatMoney(value)}</Text>
-      </View>
-      <View style={styles.track}><View style={[styles.fill, { width: `${pct}%`, backgroundColor: color }]} /></View>
-    </View>
-  );
-}
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
@@ -203,15 +185,8 @@ const styles = StyleSheet.create({
   date: { flex: 1 },
   hint: { fontSize: FontSize.sm, color: Colors.textSecondary, marginBottom: Spacing.md },
   muted: { fontSize: FontSize.sm, color: Colors.textSecondary },
-  bar: { marginBottom: Spacing.md },
-  barHead: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 },
-  barLabel: { fontSize: FontSize.sm, color: Colors.textSecondary },
-  barValue: { fontSize: FontSize.sm, fontWeight: '700' },
   track: { height: 10, borderRadius: 5, backgroundColor: Colors.surfaceSecondary, overflow: 'hidden' },
   fill: { height: 10, borderRadius: 5 },
-  net: { flexDirection: 'row', justifyContent: 'space-between', borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: Colors.border, paddingTop: Spacing.md },
-  netLabel: { fontSize: FontSize.sm, color: Colors.textSecondary },
-  netValue: { fontSize: FontSize.lg, fontWeight: '700' },
   section: { fontSize: FontSize.lg, fontWeight: '600', color: Colors.text, marginTop: Spacing.xl, marginBottom: Spacing.md },
   trendRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, marginBottom: Spacing.sm },
   trendLabel: { width: 52, fontSize: FontSize.xs, color: Colors.textSecondary },

@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, Platform, StyleSheet } from 'react-native
 import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { format } from 'date-fns';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
+import DateFieldWeb from './DateFieldWeb';
 
 interface DateFieldProps {
   label?: string;
@@ -22,7 +23,13 @@ function parse(value: string): Date {
   return new Date(y, (m || 1) - 1, d || 1);
 }
 
-export default function DateField({ label, value, onChange, placeholder = 'Select date', error, minimumDate, maximumDate }: DateFieldProps) {
+export default function DateField(props: DateFieldProps) {
+  // A browser has no native picker; web builds (used for testing the app in a browser) get a plain date input.
+  if (Platform.OS === 'web') return <DateFieldWeb {...props} />;
+  return <NativeDateField {...props} />;
+}
+
+function NativeDateField({ label, value, onChange, placeholder = 'Select date', error, minimumDate, maximumDate }: DateFieldProps) {
   const [open, setOpen] = useState(false);
 
   const handle = (event: DateTimePickerEvent, date?: Date) => {

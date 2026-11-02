@@ -12,10 +12,11 @@ import { isAuthEndpoint, refreshEndsSession, tokensFromRefresh } from './session
 
 const extra = (Constants.expoConfig?.extra ?? {}) as Record<string, unknown>;
 
-const APP_ENV = String(extra.appEnv ?? process.env.EXPO_PUBLIC_APP_ENV ?? 'development');
+const APP_ENV = String(process.env.EXPO_PUBLIC_APP_ENV ?? extra.appEnv ?? 'development');
 const ALLOW_INSECURE_HTTP =
-  String(extra.allowInsecureHttp ?? process.env.EXPO_PUBLIC_ALLOW_INSECURE_HTTP ?? 'false').toLowerCase() === 'true';
-const API_URL = String(extra.apiUrl ?? process.env.EXPO_PUBLIC_API_URL ?? 'http://10.0.2.2:8000');
+  String(process.env.EXPO_PUBLIC_ALLOW_INSECURE_HTTP ?? extra.allowInsecureHttp ?? 'false').toLowerCase() === 'true';
+// The env var wins so a local run can point at a local backend; app.json carries the release URL.
+const API_URL = String(process.env.EXPO_PUBLIC_API_URL ?? extra.apiUrl ?? 'http://10.0.2.2:8000');
 
 if (APP_ENV === 'production' && API_URL.startsWith('http://') && !ALLOW_INSECURE_HTTP) {
   throw new Error('Insecure API URL is blocked in production. Configure an HTTPS API URL.');
@@ -139,6 +140,11 @@ export default api;
 // ─── Attendance API ──────────────────────────────────────────────────────────
 
 export const attendanceApi = {
+  // Anomalies the server finds each day (admin and principal), and the monthly register as a PDF.
+  getAnomalies: (params?: Record<string, unknown>) => api.get('/api/attendance/anomalies/', { params }),
+  resolveAnomaly: (id: number, data: object) => api.post(`/api/attendance/anomalies/${id}/resolve/`, data),
+  downloadRegisterPdf: (params: Record<string, unknown>) =>
+    api.get('/api/attendance/records/download_register_pdf/', { params, responseType: 'arraybuffer', timeout: 60000 }),
   uploadImageToStorage: (formData: FormData) =>
     api.post('/api/attendance/upload-image/', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
@@ -180,6 +186,10 @@ export const attendanceApi = {
 export const lmsApi = {
   getBooks: (params?: Record<string, unknown>) =>
     api.get('/api/lms/books/', { params }),
+  // Curriculum Coverage: topics with taught, tested and planned-date state; the planned date is per year.
+  getTopics: (params?: Record<string, unknown>) => api.get('/api/lms/topics/', { params }),
+  setTopicPlannedDate: (topicId: number, data: { academic_year: number; planned_date: string | null }) =>
+    api.post(`/api/lms/topics/${topicId}/set-planned-date/`, data),
   getBookTree: (id: number) =>
     api.get(`/api/lms/books/${id}/tree/`),
   getLessonPlans: (params?: Record<string, unknown>) => api.get('/api/lms/lesson-plans/', { params }),
@@ -205,6 +215,26 @@ export const lmsApi = {
   getTocJob: (jobId: string) => api.get(`/api/lms/toc-jobs/${jobId}/`, { timeout: 30000 }),
   parseToc: (bookId: number, data: object) => api.post(`/api/lms/books/${bookId}/parse_toc/`, data),
   applyToc: (bookId: number, data: object) => api.post(`/api/lms/books/${bookId}/apply_toc/`, data),
+  deleteBook: (id: number) => api.delete(`/api/lms/books/${id}/`),
+  // Contents typed or pasted: rule-based split (parse_toc, parse_toc_stream above 50 KB), or the AI outline
+  // (suggest_toc reads the raw text and answers chapters, topics and a confidence). Same calls as the web.
+  parseTocStream: (bookId: number, data: object) => api.post(`/api/lms/books/${bookId}/parse_toc_stream/`, data, { timeout: 120000 }),
+  suggestToc: (bookId: number, data: object) => api.post(`/api/lms/books/${bookId}/suggest_toc/`, data, { timeout: 120000 }),
+  getSyllabusProgress: (params?: Record<string, unknown>) => api.get('/api/lms/books/syllabus_progress/', { params }),
+  // Topic content: sub-topic text and minutes, and the topic's content blocks with revisions and tags.
+  updateSubtopic: (id: number, data: object) => api.patch(`/api/lms/subtopics/${id}/`, data),
+  getContentBlocks: (params?: Record<string, unknown>) => api.get('/api/lms/content-blocks/', { params }),
+  createContentBlock: (data: object) => api.post('/api/lms/content-blocks/', data),
+  updateContentBlock: (id: number, data: object) => api.patch(`/api/lms/content-blocks/${id}/`, data),
+  deleteContentBlock: (id: number) => api.delete(`/api/lms/content-blocks/${id}/`),
+  getContentBlockRevisions: (id: number) => api.get(`/api/lms/content-blocks/${id}/revisions/`),
+  restoreContentBlockRevision: (id: number, revisionId: number) =>
+    api.post(`/api/lms/content-blocks/${id}/restore/`, {}, { params: { revision_id: revisionId } }),
+  addContentBlockTag: (id: number, tagId: number, remove = false) =>
+    api.post(`/api/lms/content-blocks/${id}/add_tag/`, { tag_id: tagId, ...(remove ? { remove: true } : {}) }),
+  semanticSearchContentBlocks: (params?: Record<string, unknown>) => api.get('/api/lms/content-blocks/semantic_search/', { params }),
+  getTags: (params?: Record<string, unknown>) => api.get('/api/lms/tags/', { params }),
+  createTag: (data: object) => api.post('/api/lms/tags/', data),
   getAssignments: (params?: Record<string, unknown>) =>
     api.get('/api/lms/assignments/', { params }),
   getAssignment: (id: number) =>
@@ -230,6 +260,11 @@ export const lmsApi = {
 // ─── Sessions API (academic years, session classes, enrolments, calendar) ───
 
 export const sessionsApi = {
+  // Calendar entries: events and OFF days. Writing is for admin and principal.
+  getCalendarEntries: (params?: Record<string, unknown>) => api.get('/api/sessions/calendar-entries/', { params }),
+  createCalendarEntry: (data: object) => api.post('/api/sessions/calendar-entries/', data),
+  updateCalendarEntry: (id: number, data: object) => api.patch(`/api/sessions/calendar-entries/${id}/`, data),
+  deleteCalendarEntry: (id: number) => api.delete(`/api/sessions/calendar-entries/${id}/`),
   getAcademicYears: (params?: Record<string, unknown>) =>
     api.get('/api/sessions/academic-years/', { params }),
   getSessionClasses: (params?: Record<string, unknown>) =>
@@ -243,6 +278,17 @@ export const sessionsApi = {
     api.get('/api/sessions/enrollments/', { params }),
   getTerms: (params?: Record<string, unknown>) =>
     api.get('/api/sessions/terms/', { params }),
+  // Academic year and term management (admin and principal; the server refuses the rest).
+  createAcademicYear: (data: object) => api.post('/api/sessions/academic-years/', data),
+  updateAcademicYear: (id: number, data: object) => api.patch(`/api/sessions/academic-years/${id}/`, data),
+  deleteAcademicYear: (id: number) => api.delete(`/api/sessions/academic-years/${id}/`),
+  setCurrentYear: (id: number, data: object) => api.post(`/api/sessions/academic-years/${id}/set_current/`, data),
+  getYearSummary: (id: number) => api.get(`/api/sessions/academic-years/${id}/summary/`),
+  createTerm: (data: object) => api.post('/api/sessions/terms/', data),
+  updateTerm: (id: number, data: object) => api.patch(`/api/sessions/terms/${id}/`, data),
+  deleteTerm: (id: number) => api.delete(`/api/sessions/terms/${id}/`),
+  importTermsPreview: (data: object) => api.post('/api/sessions/terms/import-preview/', data),
+  importTermsApply: (data: object) => api.post('/api/sessions/terms/import-apply/', data),
   getCalendarMonthView: (params?: Record<string, unknown>) =>
     api.get('/api/sessions/calendar-entries/month-view/', { params }),
   getCalendarDayStatus: (params?: Record<string, unknown>) =>
@@ -250,6 +296,11 @@ export const sessionsApi = {
 };
 
 // ─── Bootstrap API (one-request dashboards) ─────────────────────────────────
+
+// Rule-based notices for the dashboard (the same endpoint the web home uses).
+export const tasksApi = {
+  getAIInsights: (params?: Record<string, unknown>) => api.get('/api/tasks/ai-insights/', { params }),
+};
 
 export const bootstrapApi = {
   // sections: comma-separated, any of attendance,hr,finance,admissions,transport,library,hostel,inventory
@@ -271,8 +322,23 @@ export const studentsApi = {
     api.post('/api/students/', data),
   updateStudent: (id: number, data: Record<string, unknown>) =>
     api.patch(`/api/students/${id}/`, data),
-  deleteStudent: (id: number) =>
-    api.delete(`/api/students/${id}/`),
+  // Soft delete: hides the student; the records stay and the student can be restored. The reason is required.
+  deleteStudent: (id: number, reason: string) =>
+    api.delete(`/api/students/${id}/`, { data: { reason } }),
+  getDeletedStudents: () => api.get('/api/students/deleted/'),
+  restoreStudent: (id: number, data: Record<string, unknown>) => api.post(`/api/students/${id}/restore/`, data),
+  getReclassifyPreview: (id: number, params: Record<string, unknown>) => api.get(`/api/students/${id}/reclassify-preview/`, { params }),
+  reclassifyStudent: (id: number, data: Record<string, unknown>) => api.post(`/api/students/${id}/reclassify/`, data),
+  getDocuments: (id: number) => api.get(`/api/students/${id}/documents/`),
+  deleteDocument: (id: number, docId: number) => api.delete(`/api/students/${id}/documents/${docId}/`),
+  // Status and history (admin and principal): which outcomes are allowed, Graduated or Repeat, enrollment history.
+  getRemovalPreview: (id: number) => api.get(`/api/students/${id}/removal-preview/`),
+  setOutcome: (id: number, data: Record<string, unknown>) => api.post(`/api/students/${id}/outcome/`, data),
+  getEnrollmentHistory: (id: number) => api.get(`/api/students/${id}/enrollment_history/`),
+  uploadPhoto: (id: number, form: FormData) =>
+    api.post(`/api/students/${id}/upload_photo/`, form, { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 60000 }),
+  removePhoto: (id: number) =>
+    api.post(`/api/students/${id}/remove_photo/`),
   getStudentsByClass: (params?: Record<string, unknown>) =>
     api.get('/api/students/by_class/', { params }),
   getProfileSummary: (id: number) =>
@@ -304,12 +370,37 @@ export const financeApi = {
   // Fee Payments
   getFeePayments: (params?: Record<string, unknown>) =>
     api.get('/api/finance/fee-payments/', { params }),
+  // Permanent delete of one fee record. The phone offers it only for a record with nothing paid.
+  deleteFeePayment: (id: number) => api.delete(`/api/finance/fee-payments/${id}/`),
   recordPayment: (id: number, data: Record<string, unknown>) =>
     api.patch(`/api/finance/fee-payments/${id}/`, data),
   createPayment: (data: Record<string, unknown>) =>
     api.post('/api/finance/fee-payments/', data),
   getAccounts: (params?: Record<string, unknown>) =>
     api.get('/api/finance/accounts/', { params }),
+  // Account management (admin and principal; the server refuses the rest).
+  createAccount: (data: object) => api.post('/api/finance/accounts/', data),
+  // include_inactive: the server's detail lookup skips switched-off accounts unless it is set, so without it an
+  // inactive account could be neither re-activated nor deleted (404).
+  updateAccount: (id: number, data: object) => api.patch(`/api/finance/accounts/${id}/`, data, { params: { include_inactive: true } }),
+  deleteAccount: (id: number) => api.delete(`/api/finance/accounts/${id}/`, { params: { include_inactive: true } }),
+  // Category management: the same calls the web manager modals make.
+  getExpenseCategories: (params?: Record<string, unknown>) => api.get('/api/finance/expense-categories/', { params }),
+  createExpenseCategory: (data: object) => api.post('/api/finance/expense-categories/', data),
+  updateExpenseCategory: (id: number, data: object) => api.patch(`/api/finance/expense-categories/${id}/`, data),
+  deleteExpenseCategory: (id: number) => api.delete(`/api/finance/expense-categories/${id}/`),
+  getIncomeCategories: (params?: Record<string, unknown>) => api.get('/api/finance/income-categories/', { params }),
+  createIncomeCategory: (data: object) => api.post('/api/finance/income-categories/', data),
+  updateIncomeCategory: (id: number, data: object) => api.patch(`/api/finance/income-categories/${id}/`, data),
+  deleteIncomeCategory: (id: number) => api.delete(`/api/finance/income-categories/${id}/`),
+  updateMonthlyCategory: (id: number, data: object) => api.patch(`/api/finance/monthly-categories/${id}/`, data),
+  deleteMonthlyCategory: (id: number) => api.delete(`/api/finance/monthly-categories/${id}/`),
+  getMonthlyCategorySuggestions: () => api.get('/api/finance/monthly-categories/suggestions/'),
+  updateAnnualCategory: (id: number, data: object) => api.patch(`/api/finance/annual-categories/${id}/`, data),
+  deleteAnnualCategory: (id: number) => api.delete(`/api/finance/annual-categories/${id}/`),
+  getAnnualCategorySuggestions: () => api.get('/api/finance/annual-categories/suggestions/'),
+  // The canonical summary the web Fee Overview uses: totals plus by category and by class.
+  getFeeSummary: (params?: Record<string, unknown>) => api.get('/api/finance/fee-payments/fee_summary/', { params }),
   getMonthlySummary: (params?: Record<string, unknown>) =>
     api.get('/api/finance/fee-payments/monthly_summary/', { params }),
   getStudentLedger: (params?: Record<string, unknown>) =>
@@ -336,6 +427,8 @@ export const financeApi = {
     api.get('/api/finance/annual-categories/', { params }),
   createAnnualCategory: (data: object) =>
     api.post('/api/finance/annual-categories/', data),
+  getAccountLedger: (params?: Record<string, unknown>) =>
+    api.get('/api/finance/accounts/ledger/', { params }),
   getAccountBalances: (params?: Record<string, unknown>) =>
     api.get('/api/finance/accounts/balances/', { params }),
   // Transfers between accounts and month closing (admin and principal; accountants are read-only).
@@ -445,6 +538,10 @@ export const hrApi = {
   updateStaff: (id: number, data: object) => api.patch(`/api/hr/staff/${id}/`, data),
   deleteStaff: (id: number) => api.delete(`/api/hr/staff/${id}/`),
   reactivateStaff: (id: number) => api.post(`/api/hr/staff/${id}/reactivate/`),
+  // Staff photo (admin and principal): upload or replace, and remove.
+  uploadStaffPhoto: (id: number, form: FormData) =>
+    api.post(`/api/hr/staff/${id}/upload_photo/`, form, { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 60000 }),
+  removeStaffPhoto: (id: number) => api.post(`/api/hr/staff/${id}/remove_photo/`),
   getDepartments: (params?: Record<string, unknown>) => api.get('/api/hr/departments/', { params }),
   createDepartment: (data: object) => api.post('/api/hr/departments/', data),
   updateDepartment: (id: number, data: object) => api.patch(`/api/hr/departments/${id}/`, data),
@@ -479,6 +576,9 @@ export const hrApi = {
     api.get('/api/hr/attendance/', { params }),
   getAttendanceSummary: (params?: Record<string, unknown>) =>
     api.get('/api/hr/attendance/summary/', { params }),
+  // Admin and principal mark the whole day in one call; the server turns an OFF day into On leave.
+  bulkMarkAttendance: (data: Record<string, unknown>) =>
+    api.post('/api/hr/attendance/bulk_mark/', data),
   approveLeave: (id: number, data?: Record<string, unknown>) =>
     api.post(`/api/hr/leave-applications/${id}/approve/`, data),
   rejectLeave: (id: number, data?: Record<string, unknown>) =>
@@ -487,6 +587,8 @@ export const hrApi = {
   getPayslips: (params?: Record<string, unknown>) =>
     api.get('/api/hr/payslips/', { params }),
   // Payroll (admin and principal): generation, approval, payment, salary structures.
+  // Net pay for the last few months for every staff member, in one request (for the trend in a payslip).
+  getNetPayHistory: (params?: Record<string, unknown>) => api.get('/api/hr/payslips/net_pay_history/', { params }),
   getPayrollSummary: (params?: Record<string, unknown>) =>
     api.get('/api/hr/payslips/payroll_summary/', { params }),
   generatePayslips: (data: object) => api.post('/api/hr/payslips/generate_payslips/', data),
@@ -547,13 +649,11 @@ export const admissionsApi = {
 // Public: the front door needs them before anyone has signed in, so they send no token.
 export const schoolDirectoryApi = {
   // Short timeouts: the person is waiting at the front door, and a slow server should say so.
-  directory: () => api.get('/api/schools/app-directory/', { timeout: 10000 }),
-  info: (code: string) => api.get('/api/schools/app-info/', { params: { code }, timeout: 10000 }),
+  // The web's own public lookup; it returns the full record, so callers keep only code, name and logo.
+  info: (code: string) => api.get('/api/schools/by-subdomain/', { params: { subdomain: code }, timeout: 10000 }),
 };
 
 export const schoolsApi = {
-  getAppListing: () => api.get('/api/schools/app-listing/'),
-  setAppListing: (listed: boolean) => api.put('/api/schools/app-listing/', { listed_in_app: listed }),
   getMySchool: () => api.get('/api/schools/current/'),
   uploadAsset: (form: FormData) => api.post('/api/schools/upload_asset/', form, { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 60000 }),
   deleteAsset: (assetType: string) => api.delete('/api/schools/delete_asset/', { params: { asset_type: assetType } }),
@@ -579,6 +679,10 @@ export const academicsApi = {
     api.get('/api/academics/subjects/', { params }),
   // Subjects, class subjects, class teachers and timetable editing (admin and principal write).
   createSubject: (data: object) => api.post('/api/academics/subjects/', data),
+  // Several at once; the server skips a code the school already has.
+  downloadTimetablePdf: (params: Record<string, unknown>) =>
+    api.get('/api/academics/timetable-entries/download-pdf/', { params, responseType: 'arraybuffer' }),
+  bulkCreateSubjects: (data: object) => api.post('/api/academics/subjects/bulk_create/', data),
   updateSubject: (id: number, data: object) => api.patch(`/api/academics/subjects/${id}/`, data),
   deleteSubject: (id: number) => api.delete(`/api/academics/subjects/${id}/`),
   createClassSubject: (data: object) => api.post('/api/academics/class-subjects/', data),
@@ -599,6 +703,8 @@ export const academicsApi = {
     api.get('/api/academics/timetable-entries/my_timetable/', { params }),
   getMyClassTeacherAssignments: (params?: Record<string, unknown>) =>
     api.get('/api/academics/class-teachers/my_classes/', { params }),
+  getMySubjectAssignments: (params?: Record<string, unknown>) =>
+    api.get('/api/academics/class-subjects/my_subject_assignments/', { params }),
   getMyStudentsAtRisk: (params?: Record<string, unknown>) =>
     api.get('/api/academics/class-teachers/my_students_at_risk/', { params }),
   getTimetableByClass: (classId: number, sessionClassId?: number | null) =>
@@ -639,6 +745,8 @@ export const examinationsApi = {
   getExamGroups: (params?: Record<string, unknown>) =>
     api.get('/api/examinations/exam-groups/', { params }),
   getDateSheet: (groupId: number) => api.get(`/api/examinations/exam-groups/${groupId}/date-sheet/`),
+  downloadDateSheetPdf: (groupId: number) =>
+    api.get(`/api/examinations/exam-groups/${groupId}/download-date-sheet-pdf/`, { responseType: 'arraybuffer' }),
   updateDateSheet: (groupId: number, entries: object[]) =>
     api.patch(`/api/examinations/exam-groups/${groupId}/date-sheet/`, { date_sheet: entries }),
   updateDateBySubject: (groupId: number, data: { subject_id: number; exam_date: string | null }) =>
@@ -667,6 +775,22 @@ export const examinationsApi = {
   uploadQuestionPicture: (id: number, form: FormData) =>
     api.post(`/api/examinations/questions/${id}/diagram/`, form, { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 60000 }),
   removeQuestionPicture: (id: number, slot: string) => api.post(`/api/examinations/questions/${id}/remove_diagram/`, { slot }),
+  // Questions of chosen book topics: the server wants `topics` repeated (topics=1&topics=2), as the web sends it.
+  getQuestionsByTopics: (topicIds: number[], extra: Record<string, unknown> = {}) => {
+    const sp = new URLSearchParams();
+    topicIds.forEach((id) => sp.append('topics', String(id)));
+    Object.entries(extra).forEach(([k, v]) => { if (v !== undefined && v !== null && v !== '') sp.append(k, String(v)); });
+    return api.get(`/api/examinations/questions/?${sp.toString()}`);
+  },
+  // Search by meaning (needs a class), and subject tags on a question (add_tag, with remove). Same calls as the web.
+  semanticSearchQuestions: (params?: Record<string, unknown>) => api.get('/api/examinations/questions/semantic_search/', { params }),
+  addQuestionTag: (id: number, tagId: number, remove = false) =>
+    api.post(`/api/examinations/questions/${id}/add_tag/`, { tag_id: tagId, ...(remove ? { remove: true } : {}) }),
+  bulkDeleteExamPapers: (ids: number[]) => api.post('/api/examinations/exam-papers/bulk_delete/', { ids }),
+  generatePaperDocx: (id: number) => api.get(`/api/examinations/exam-papers/${id}/generate-docx/`, { responseType: 'arraybuffer' }),
+  // Published lesson plans linked to a paper, and what they cover (learning objectives, topics).
+  linkPaperLessonPlans: (id: number, data: object) => api.post(`/api/examinations/exam-papers/${id}/link_lesson_plans/`, data),
+  getPaperCoverage: (id: number) => api.get(`/api/examinations/exam-papers/${id}/coverage_stats/`),
   getExamPapers: (params?: Record<string, unknown>) =>
     api.get('/api/examinations/exam-papers/', { params }),
   getExamPaper: (id: number) => api.get(`/api/examinations/exam-papers/${id}/`),
@@ -680,6 +804,14 @@ export const examinationsApi = {
   generatePaperPdf: (id: number) => api.get(`/api/examinations/exam-papers/${id}/generate-pdf/`, { responseType: 'arraybuffer' }),
   getWorksheets: (params?: Record<string, unknown>) =>
     api.get('/api/examinations/worksheets/', { params }),
+  // Worksheet authoring (same calls as the web): a draft is made first, then autosaved whole.
+  getWorksheet: (id: number) => api.get(`/api/examinations/worksheets/${id}/`),
+  ensureWorksheetDraft: (data: object) => api.post('/api/examinations/worksheets/ensure-draft/', data),
+  autosaveWorksheetDraft: (id: number, data: object) => api.post(`/api/examinations/worksheets/${id}/autosave/`, data),
+  deleteWorksheet: (id: number) => api.delete(`/api/examinations/worksheets/${id}/`),
+  duplicateWorksheet: (id: number) => api.post(`/api/examinations/worksheets/${id}/duplicate/`, {}),
+  generateWorksheetPdf: (id: number) => api.get(`/api/examinations/worksheets/${id}/generate-pdf/`, { responseType: 'arraybuffer' }),
+  generateWorksheetDocx: (id: number) => api.get(`/api/examinations/worksheets/${id}/generate-docx/`, { responseType: 'arraybuffer' }),
   getExamResults: (id: number, params?: Record<string, unknown>) =>
     api.get(`/api/examinations/exams/${id}/results/`, { params }),
   getStudentTermAssessmentRoster: (params?: Record<string, unknown>) =>
@@ -703,9 +835,6 @@ export const examinationsApi = {
     api.get(`/api/examinations/exams/${id}/class_summary/`),
   getReportCard: (params?: Record<string, unknown>) =>
     api.get('/api/examinations/report-card/', { params }),
-  // The same card as a PDF made by the server; `template` is 'enhanced' or 'traditional'.
-  getReportCardPdf: (params: Record<string, unknown>) =>
-    api.get('/api/examinations/report-card/pdf/', { params, responseType: 'arraybuffer', timeout: 60000 }),
 };
 
 // ─── Auth API ────────────────────────────────────────────────────────────────
@@ -745,8 +874,13 @@ export const notificationsApi = {
     api.post(`/api/notifications/${id}/mark-read/`),
   markAllRead: () =>
     api.post('/api/notifications/mark-all-read/'),
+  // One person (recipient_identifier) or a role group (broadcast), with a recipient preview first.
   send: (data: Record<string, unknown>) =>
     api.post('/api/notifications/send/', data),
+  broadcast: (data: Record<string, unknown>) =>
+    api.post('/api/notifications/broadcast/', data),
+  previewBroadcast: (data: Record<string, unknown>) =>
+    api.post('/api/notifications/broadcast/preview/', data),
   sendChatMessage: (data: Record<string, unknown>) =>
     api.post('/api/notifications/ai-chat/', data),
 };
@@ -754,6 +888,9 @@ export const notificationsApi = {
 // ─── Parents API ─────────────────────────────────────────────────────────────
 
 export const parentsApi = {
+  // A one-time code that links a parent's own login to the student (admin and principal).
+  generateInvite: (data: Record<string, unknown>) =>
+    api.post('/api/parents/admin/generate-invite/', data),
   register: (data: Record<string, unknown>) =>
     api.post('/api/parents/register/', data),
   getMyChildren: () =>
@@ -825,13 +962,6 @@ export const studentPortalApi = {
     api.delete('/api/students/portal/study-helper/'),
 };
 
-// ─── Payment API ─────────────────────────────────────────────────────────────
-
-export const paymentApi = {
-  getPaymentStatus: (orderId: string) =>
-    api.get(`/api/finance/payment-status/${orderId}/`),
-};
-
 // ─── Transport API ───────────────────────────────────────────────────────────
 
 export const transportApi = {
@@ -845,20 +975,9 @@ export const transportApi = {
     api.get('/api/transport/vehicles/my/'),
   getStops: (params?: Record<string, unknown>) =>
     api.get('/api/transport/stops/', { params }),
-  // Student GPS Journey (existing)
-  startJourney: (data: { journey_type: string; latitude: number; longitude: number }) =>
-    api.post('/api/transport/journey/start/', data),
-  endJourney: (data: { journey_id: number; latitude?: number; longitude?: number }) =>
-    api.post('/api/transport/journey/end/', data),
-  updateJourney: (data: { journey_id: number; latitude: number; longitude: number; accuracy: number; speed?: number | null; battery_level?: number | null }) =>
-    api.post('/api/transport/journey/update/', data),
   // Parents follow the route's bus (the legacy journey/track/ is the student's own sharing).
   trackStudent: (studentId: number) =>
     api.get(`/api/transport/route-journey/track/${studentId}/`),
-  getJourneyHistory: (studentId: number) =>
-    api.get(`/api/transport/journey/history/${studentId}/`),
-  getActiveJourneys: () =>
-    api.get('/api/transport/journey/active/'),
   // Route Journey (driver/admin)
   startRouteJourney: (data: { journey_type: string; latitude?: number; longitude?: number; route_id?: number }) =>
     api.post('/api/transport/route-journey/start/', data),
@@ -870,11 +989,6 @@ export const transportApi = {
     api.get('/api/transport/route-journey/active/'),
   getRouteJourneyHistory: (params?: Record<string, unknown>) =>
     api.get('/api/transport/route-journey/history/', { params }),
-  // Driver boarding: the route comes from the driver's own vehicle, and only today can be marked.
-  getDriverBoarding: () =>
-    api.get('/api/transport/driver/boarding/'),
-  markDriverBoarding: (records: Array<{ student_id: number; boarding_status: string }>) =>
-    api.post('/api/transport/driver/boarding/', { records }),
 };
 
 // ─── Library API ─────────────────────────────────────────────────────────────
@@ -940,7 +1054,7 @@ export const faceAttendanceApi = {
 export const messagingApi = {
   getThreads: () => api.get('/api/messaging/threads/'),
   getThread: (id: string) => api.get(`/api/messaging/threads/${id}/`),
-  createThread: (data: { recipient_user_id: number; message: string; subject?: string; student_id?: number }) =>
+  createThread: (data: { recipient_user_id: number; message: string; subject?: string; student_id?: number; message_type?: string }) =>
     api.post('/api/messaging/threads/', data),
   reply: (id: string, message: string) =>
     api.post(`/api/messaging/threads/${id}/reply/`, { message }),

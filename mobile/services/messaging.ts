@@ -43,6 +43,16 @@ export function recipientLabel(r: Recipient): string {
   return r.student_name ? `${who} — ${r.student_name}` : who;
 }
 
+// The kind the web files a new thread under, chosen from who it goes to (the server stores it and
+// checks a teacher's parent and student threads against the classes they teach).
+export type MessageType = 'GENERAL' | 'TEACHER_PARENT' | 'TEACHER_STUDENT' | 'ADMIN_STAFF';
+export function messageTypeFor(r: Pick<Recipient, 'role'>): MessageType {
+  if (r.role === 'PARENT') return 'TEACHER_PARENT';
+  if (r.role === 'STUDENT') return 'TEACHER_STUDENT';
+  if (r.role && ['TEACHER', 'STAFF', 'MANAGER', 'ACCOUNTANT'].includes(r.role)) return 'ADMIN_STAFF';
+  return 'GENERAL';
+}
+
 // Newest activity first; a thread with no message yet sorts by its creation time.
 export function sortThreads(threads: Thread[]): Thread[] {
   const when = (t: Thread) => Date.parse(t.latest_message_at || t.created_at || '') || 0;

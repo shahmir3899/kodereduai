@@ -12,7 +12,8 @@ import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors'
 const LINKS: Array<{ title: string; sub: string; route: string }> = [
   { title: 'Staff directory', sub: 'Add and edit staff', route: '/(admin)/hr/staff' },
   { title: 'Departments and designations', sub: 'Job titles and teams', route: '/(admin)/hr/departments' },
-  { title: 'Leave approvals', sub: 'Requests waiting for you', route: '/(admin)/hr/leave-approvals' },
+  { title: 'Staff leave', sub: 'Applications waiting for you', route: '/(admin)/hr/leave' },
+  { title: 'Staff attendance', sub: 'Mark the day for every staff member', route: '/(admin)/hr/attendance' },
   { title: 'Leave policies', sub: 'Days allowed each year', route: '/(admin)/hr/leave-policies' },
   { title: 'Documents and qualifications', sub: 'IDs, contracts, certificates', route: '/(admin)/hr/documents' },
 ];

@@ -11,6 +11,9 @@ import { useAttendanceClassOptions } from '../../hooks/useAcademicYear';
 import { useScopedQuery } from '../../hooks/useScopedQuery';
 import { useRefreshControl } from '../../hooks/useRefreshControl';
 import Select from '../ui/Select';
+import Button from '../ui/Button';
+import { registerFileName, registerPdfParams } from '../../services/pdfDownloads';
+import { usePdfShare } from '../../hooks/usePdfShare';
 import BottomSheet from '../ui/BottomSheet';
 import Skeleton from '../ui/Skeleton';
 import ErrorState from '../ui/ErrorState';
@@ -44,6 +47,7 @@ export default function AttendanceRegisterScreen({ classOptions }: Props) {
   const [ym, setYm] = useState(current);
   const [classId, setClassId] = useState<number | null>(null);
   const [openStudent, setOpenStudent] = useState<RegisterRow | null>(null);
+  const pdf = usePdfShare();
 
   // Teachers get their first section pre-selected, as on the web.
   useEffect(() => {
@@ -111,6 +115,11 @@ export default function AttendanceRegisterScreen({ classOptions }: Props) {
           <Text style={[styles.step, atCurrent && styles.stepOff]}>›</Text>
         </TouchableOpacity>
       </View>
+      {option ? (
+        <Button title="Register PDF" size="sm" variant="outline" loading={pdf.busy} disabled={pdf.busy} style={{ alignSelf: 'flex-start', marginBottom: Spacing.md }}
+          onPress={() => pdf.share(() => attendanceApi.downloadRegisterPdf(registerPdfParams(option, ym.year, ym.month0 + 1, yearId) as Record<string, unknown>) as Promise<{ data: ArrayBuffer }>,
+            registerFileName(option.label, ym.year, ym.month0 + 1))} />
+      ) : null}
       {!loading && register.rows.length > 0 ? (
         <View style={styles.totals}>
           <Total label="Present" value={register.totals.present} color={Colors.success} />

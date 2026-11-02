@@ -1,6 +1,6 @@
 import React from 'react';
 import type { UseQueryResult } from '@tanstack/react-query';
-import Skeleton from './Skeleton';
+import Skeleton, { type SkeletonVariant } from './Skeleton';
 import ErrorState from './ErrorState';
 import EmptyState from './EmptyState';
 import { queryViewState } from '../../services/queryRules';
@@ -12,6 +12,8 @@ interface QueryBoundaryProps<T> {
   isEmpty?: (data: T) => boolean;
   emptyTitle?: string;
   emptyMessage?: string;
+  // Shape of the loading placeholder; defaults to the plain card rows.
+  skeleton?: SkeletonVariant;
   children: (data: T) => React.ReactNode;
 }
 
@@ -21,6 +23,7 @@ export default function QueryBoundary<T>({
   isEmpty = (d) => Array.isArray(d) && d.length === 0,
   emptyTitle = 'Nothing here yet',
   emptyMessage,
+  skeleton,
   children,
 }: QueryBoundaryProps<T>) {
   const hasData = query.data !== undefined;
@@ -32,7 +35,7 @@ export default function QueryBoundary<T>({
     isPaused: query.fetchStatus === 'paused',
   });
 
-  if (state === 'loading') return <Skeleton />;
+  if (state === 'loading') return <Skeleton variant={skeleton} />;
   if (state === 'offline') return <ErrorState offline onRetry={() => query.refetch()} />;
   if (state === 'error') return <ErrorState error={query.error} onRetry={() => query.refetch()} />;
   if (state === 'empty') return <EmptyState title={emptyTitle} message={emptyMessage} />;

@@ -9,9 +9,8 @@ const TABS: TabSpec[] = [
   { name: 'more', title: 'More', icon: 'menu-outline' },
 ];
 
-// Opened from More or the Home screen; no tab of their own. location-sharing is a leftover
-// driver-style screen with no link to it; it stays hidden until it is confirmed unused.
-const HIDDEN = ['my-profile', 'attendance', 'fees', 'exam-schedule', 'library', 'transport', 'ai-helper', 'profile', 'inbox', 'change-password', 'location-sharing'];
+// Opened from More or the Home screen; no tab of their own.
+const HIDDEN = ['my-profile', 'attendance', 'fees', 'exam-schedule', 'library', 'transport', 'ai-helper', 'profile', 'inbox', 'change-password'];
 
 const TITLES: Record<string, string> = {
   'my-profile': 'My Profile',

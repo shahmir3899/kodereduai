@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Image, Text, View, StyleSheet } from 'react-native';
 import { Colors } from '../../constants/colors';
 
@@ -8,10 +8,13 @@ interface AvatarProps {
   size?: number;
 }
 
-// Photo when there is one, otherwise the person's initials.
+// Photo when there is one, otherwise the person's initials. A photo that fails to load (a deleted
+// file, a dead link) falls back to the initials instead of leaving an empty circle.
 export default function Avatar({ name, uri, size = 40 }: AvatarProps) {
   const box = { width: size, height: size, borderRadius: size / 2 };
-  if (uri) return <Image source={{ uri }} style={box} resizeMethod="resize" accessibilityIgnoresInvertColors />;
+  const [failed, setFailed] = useState(false);
+  useEffect(() => setFailed(false), [uri]);
+  if (uri && !failed) return <Image source={{ uri }} style={box} resizeMethod="resize" onError={() => setFailed(true)} accessibilityIgnoresInvertColors />;
   const initials = name.trim().split(/\s+/).slice(0, 2).map((p) => p[0]?.toUpperCase() ?? '').join('');
   return (
     <View style={[styles.fallback, box]}>

@@ -3,13 +3,23 @@ import type { Q } from './types';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
 import { useStudentResults } from '../../hooks/useStudentPortal';
 import { useRefreshControl } from '../../hooks/useRefreshControl';
-import { examPercentage, subjectMarks, type PortalResultExam } from '../../services/studentPortal';
+import { examPercentage, examTotals, pctTone, subjectMarks, subjectResult, type PortalResultExam, type SubjectResult } from '../../services/studentPortal';
 import Skeleton from '../ui/Skeleton';
 import ErrorState from '../ui/ErrorState';
 import EmptyState from '../ui/EmptyState';
 import Card from '../ui/Card';
 import StatusPill from '../ui/StatusPill';
+import type { Tone } from '../ui/StatusPill';
 import { Colors, FontSize, Spacing } from '../../constants/colors';
+
+const RESULT_PILL: Record<Exclude<SubjectResult, 'none'>, { label: string; tone: Tone }> = {
+  pass: { label: 'Pass', tone: 'success' },
+  fail: { label: 'Fail', tone: 'error' },
+  absent: { label: 'Absent', tone: 'neutral' },
+};
+const TONE_COLOR: Record<string, string> = {
+  success: Colors.success, info: Colors.info, warning: Colors.warning, error: Colors.error, neutral: Colors.textSecondary,
+};
 
 // Published exam results, newest first. Tap an exam for its subject marks.
 export function ResultsView({ query }: { query: Q<PortalResultExam[]> }) {
@@ -35,17 +45,28 @@ export function ResultsView({ query }: { query: Q<PortalResultExam[]> }) {
               </View>
               <View style={styles.right}>
                 {e.grade ? <StatusPill label={`Grade ${e.grade}`} tone="success" /> : null}
-                <Text style={styles.pct}>{pct != null ? `${pct}%` : '–'}</Text>
+                <Text style={[styles.pct, { color: TONE_COLOR[pctTone(pct)] }]}>{pct != null ? `${pct}%` : '–'}</Text>
               </View>
             </TouchableOpacity>
             {isOpen ? (
               <View style={styles.subjects}>
-                {e.subjects.map((s, i) => (
-                  <View key={`${s.subject}-${i}`} style={styles.row}>
-                    <Text style={styles.subject} numberOfLines={1}>{s.subject}</Text>
-                    <Text style={[styles.marks, s.is_absent && { color: Colors.error }]}>{subjectMarks(s)}</Text>
-                  </View>
-                ))}
+                {e.subjects.map((s, i) => {
+                  const result = subjectResult(s);
+                  return (
+                    <View key={`${s.subject}-${i}`} style={styles.row}>
+                      <Text style={styles.subject} numberOfLines={1}>{s.subject}</Text>
+                      <Text style={styles.marks}>{subjectMarks(s)}</Text>
+                      <View style={styles.pill}>
+                        {result !== 'none' ? <StatusPill label={RESULT_PILL[result].label} tone={RESULT_PILL[result].tone} /> : null}
+                      </View>
+                    </View>
+                  );
+                })}
+                <View style={[styles.row, styles.total]}>
+                  <Text style={[styles.subject, styles.bold]}>Total</Text>
+                  <Text style={[styles.marks, styles.bold]}>{(() => { const t = examTotals(e); return t.max > 0 ? `${t.got} / ${t.max}` : '–'; })()}</Text>
+                  <View style={styles.pill}>{e.grade ? <StatusPill label={`Grade ${e.grade}`} tone="success" /> : null}</View>
+                </View>
               </View>
             ) : null}
           </Card>
@@ -69,7 +90,10 @@ const styles = StyleSheet.create({
   right: { alignItems: 'flex-end', gap: 4 },
   pct: { fontSize: FontSize.lg, fontWeight: '700', color: Colors.primary },
   subjects: { marginTop: Spacing.sm, paddingTop: Spacing.sm, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: Colors.border },
-  row: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 4 },
+  row: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, paddingVertical: 4 },
+  pill: { width: 84, alignItems: 'flex-end' },
+  total: { marginTop: Spacing.xs, paddingTop: Spacing.xs, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: Colors.border },
+  bold: { fontWeight: '700' },
   subject: { flex: 1, fontSize: FontSize.sm, color: Colors.text },
   marks: { fontSize: FontSize.sm, fontWeight: '600', color: Colors.text },
 });

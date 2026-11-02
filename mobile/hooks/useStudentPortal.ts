@@ -1,9 +1,9 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { studentPortalApi } from '../services/api';
+import { sessionsApi, studentPortalApi } from '../services/api';
 import { listOf } from '../services/academicYear';
 import type {
   ExamScheduleExam, LibraryIssue, PortalAssignment, PortalAttendance, PortalDashboard, PortalFee,
-  PortalResultExam, PortalStudent, PortalTimetable, PortalTransport,
+  DayStatusMap, PortalResultExam, PortalStudent, PortalTimetable, PortalTransport,
 } from '../services/studentPortal';
 import { useScopedQuery } from './useScopedQuery';
 
@@ -70,4 +70,13 @@ export function useSubmitAssignment() {
       qc.invalidateQueries({ queryKey: ['studentDashboard'] });
     },
   });
+}
+
+// School calendar status (off days, holidays) for a date range, scoped to the student's class
+// like the web. An error leaves the map empty: the screens then fall back to Sundays only.
+export function useStudentDayStatus(from: string, to: string, classId?: number | null) {
+  return useScopedQuery<DayStatusMap>('studentDayStatus', [from, to, classId ?? null], async () => {
+    const res = await sessionsApi.getCalendarDayStatus({ date_from: from, date_to: to, class_id: classId || undefined });
+    return (res.data?.days ?? {}) as DayStatusMap;
+  }, { staleTime: 5 * 60_000 });
 }

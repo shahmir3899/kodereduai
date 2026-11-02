@@ -1,7 +1,8 @@
 import React, { useCallback, useState } from 'react';
-import { View, Text, ScrollView, StyleSheet } from 'react-native';
-import { useFocusEffect, useRouter } from 'expo-router';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
+import { useFocusEffect, useRouter, type Href } from 'expo-router';
 import { useAuth } from '../../contexts/AuthContext';
+import { routeFor } from '../../navigation/routes';
 import { transportApi } from '../../services/api';
 import {
   getCurrentLocation, getPermissionState, requestPermissionState, resumeTracking, startBackgroundLocationUpdates,
@@ -15,6 +16,10 @@ import { apiErrorMessage } from '../../services/parentPortal';
 import { useMyVehicle, useRouteDetail, useRouteHistory } from '../../hooks/useDriver';
 import { useTrackedJourney } from '../../hooks/useTrackedJourney';
 import { useRefreshControl } from '../../hooks/useRefreshControl';
+import { useUnreadNotifications } from '../../hooks/useStaff';
+import { OwnHrPanels, useOwnHr } from '../../components/hr/OwnHrHome';
+import StatTiles from '../../components/dashboard/StatTiles';
+import RecentNotifications from '../../components/dashboard/RecentNotifications';
 import { formatSlotTime } from '../../services/teacher';
 import LocationDisclosure from '../../components/driver/LocationDisclosure';
 import SchoolSwitcher from '../../components/nav/SchoolSwitcher';
@@ -26,10 +31,17 @@ import Skeleton from '../../components/ui/Skeleton';
 import ErrorState from '../../components/ui/ErrorState';
 import { useToast } from '../../components/ui/Toast';
 import { confirm } from '../../components/ui/confirm';
-import { Colors, FontSize, Spacing } from '../../constants/colors';
+import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
 
 export default function DriverHome() {
-  const { user } = useAuth();
+  const { user, isModuleEnabled } = useAuth();
+  const hrOn = isModuleEnabled('hr');
+  const own = useOwnHr({
+    attendance: routeFor('driver', '/hr/attendance'),
+    leave: routeFor('driver', '/hr/leave'),
+    payslips: routeFor('driver', '/hr/payslips'),
+  });
+  const unreadNotes = useUnreadNotifications();
   const router = useRouter();
   const toast = useToast();
   const vehicle = useMyVehicle();
@@ -37,7 +49,7 @@ export default function DriverHome() {
   const detail = useRouteDetail(routeId);
   const history = useRouteHistory(routeId);
   const tracked = useTrackedJourney();
-  const refreshControl = useRefreshControl(vehicle.refetch, detail.refetch, history.refetch, tracked.refresh);
+  const refreshControl = useRefreshControl(vehicle.refetch, detail.refetch, history.refetch, tracked.refresh, ...own.refetch);
 
   const [type, setType] = useState<JourneyType>('TO_SCHOOL');
   const [starting, setStarting] = useState(false);
@@ -133,6 +145,8 @@ export default function DriverHome() {
       <Text style={styles.greeting}>Hello, {name}</Text>
       <SchoolSwitcher />
 
+      {hrOn ? <StatTiles tiles={own.tiles} onPress={(r) => router.push(r as Href)} /> : null}
+
       {!v ? (
         <Card style={styles.card}>
           <Text style={styles.title}>No vehicle assigned</Text>
@@ -214,6 +228,23 @@ export default function DriverHome() {
         </>
       )}
 
+      <View style={styles.actions}>
+        {[
+          { label: 'My Profile', icon: '👤', route: '/(driver)/my-profile', show: true },
+          { label: 'Apply Leave', icon: '🗓️', route: routeFor('driver', '/hr/leave'), show: hrOn },
+          { label: 'Payslips', icon: '🧾', route: routeFor('driver', '/hr/payslips'), show: hrOn },
+          { label: unreadNotes > 0 ? `Notifications (${unreadNotes})` : 'Notifications', icon: '🔔', route: routeFor('driver', '/notifications'), show: isModuleEnabled('notifications') },
+        ].filter((a) => a.show).map((a) => (
+          <TouchableOpacity accessibilityRole="button" key={a.label} style={styles.quick} onPress={() => a.route && router.push(a.route as Href)}>
+            <Text style={styles.quickIcon}>{a.icon}</Text>
+            <Text style={styles.quickLabel}>{a.label}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
+      {hrOn ? <OwnHrPanels balance={own.balance} payslips={own.payslips} /> : null}
+      <RecentNotifications enabled={isModuleEnabled('notifications')} onSeeAll={() => router.push('/(driver)/inbox' as Href)} />
+
       <LocationDisclosure visible={disclosure} onClose={() => setDisclosure(false)} onContinue={askPermission} busy={asking} denied={denied} />
     </ScrollView>
   );
@@ -225,6 +256,10 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
   content: { padding: Spacing.lg, paddingBottom: Spacing.xxxl },
   greeting: { fontSize: FontSize.xl, fontWeight: '700', color: Colors.text },
+  actions: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.md, marginTop: Spacing.lg },
+  quick: { width: '30%', minWidth: 84, alignItems: 'center', backgroundColor: Colors.surface, borderRadius: BorderRadius.md, paddingVertical: Spacing.md },
+  quickIcon: { fontSize: 22 },
+  quickLabel: { fontSize: FontSize.xs, color: Colors.text, marginTop: 4, textAlign: 'center' },
   card: { padding: Spacing.md, marginTop: Spacing.md },
   liveCard: { padding: Spacing.md, marginTop: Spacing.md, borderWidth: 1, borderColor: Colors.success },
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: Spacing.sm },

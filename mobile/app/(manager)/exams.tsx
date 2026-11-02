@@ -1,6 +1,7 @@
 import React from 'react';
-import OpenOnWeb from '../../components/nav/OpenOnWeb';
+import ExamsAdminScreen from '../../components/exams/ExamsAdminScreen';
 
+// A manager can read exams but not change them (the server answers admin and principal only).
 export default function Screen() {
-  return <OpenOnWeb title="Exams" note="Creating and scheduling exams is done on the web version for now." />;
+  return <ExamsAdminScreen readOnly />;
 }

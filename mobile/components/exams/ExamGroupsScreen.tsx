@@ -7,6 +7,9 @@ import {
   canAnnounce, groupProgress, progressText, progressTone, resultsReplyText, scheduleReplyText, type ExamGroupRow, type GroupExam,
 } from '../../services/examGroups';
 import { inventoryErrorMessage } from '../../services/inventory';
+import { examinationsApi } from '../../services/api';
+import { dateSheetFileName } from '../../services/pdfDownloads';
+import { usePdfShare } from '../../hooks/usePdfShare';
 import Button from '../ui/Button';
 import Card from '../ui/Card';
 import QueryBoundary from '../ui/QueryBoundary';
@@ -33,6 +36,7 @@ function GroupCard({ group }: { group: ExamGroupRow }) {
   const router = useRouter();
   const toast = useToast();
   const pub = useGroupPublishing();
+  const pdf = usePdfShare();
   const [open, setOpen] = useState(false);
   const exams = group.exams ?? [];
   const p = groupProgress(exams);
@@ -88,6 +92,8 @@ function GroupCard({ group }: { group: ExamGroupRow }) {
       </View>
 
       <Button title="Edit date sheet" size="sm" variant="outline" onPress={() => router.push({ pathname: '/(admin)/date-sheet', params: { groupId: String(group.id) } } as unknown as Href)} />
+      <Button title="Date sheet PDF" size="sm" variant="outline" loading={pdf.busy} disabled={pdf.busy} style={{ marginTop: Spacing.sm }}
+        onPress={() => pdf.share(() => examinationsApi.downloadDateSheetPdf(group.id) as Promise<{ data: ArrayBuffer }>, dateSheetFileName(group.name))} />
       <View style={styles.pair}>
         <Button title="Publish schedule" size="sm" style={styles.half} onPress={() => schedule(true)} disabled={busy} />
         <Button title="Hide schedule" size="sm" variant="secondary" style={styles.half} onPress={() => schedule(false)} disabled={busy || p.schedule.done === 0} />

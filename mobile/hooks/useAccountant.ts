@@ -1,7 +1,7 @@
 import { financeApi } from '../services/api';
 import { listOf } from '../services/academicYear';
 import {
-  normalizeFeeSummary, type AccountBalance, type DateRange, type ExpenseCategory, type RecentEntry, type TrendMonth,
+  accountsOf, normalizeFeeSummary, type LedgerPayload, type DateRange, type ExpenseCategory, type RecentEntry, type TrendMonth,
 } from '../services/accountant';
 import type { FeePayment } from '../services/feeCollect';
 import { useAcademicYear } from './useAcademicYear';
@@ -12,7 +12,16 @@ import { useScopedPagedQuery, useScopedQuery } from './useScopedQuery';
 
 export function useAccountBalances() {
   return useScopedQuery('accounts', ['balances'], async () =>
-    listOf<AccountBalance>((await financeApi.getAccountBalances()).data));
+    accountsOf((await financeApi.getAccountBalances()).data));
+}
+
+// One account's running ledger, newest first, capped so a long history stays light.
+export function useAccountLedger(accountId: number, from: string, to: string) {
+  return useScopedQuery('accounts', ['ledger', accountId, from, to], async () =>
+    (await financeApi.getAccountLedger({
+      account_id: accountId, ordering: 'desc', limit: 200,
+      ...(from ? { date_from: from } : {}), ...(to ? { date_to: to } : {}),
+    })).data as LedgerPayload, { enabled: !!accountId });
 }
 
 export function useRecentEntries(limit = 8) {

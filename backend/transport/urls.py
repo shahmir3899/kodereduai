@@ -26,7 +26,6 @@ from .views import (
     RouteJourneyTrackView,
     ActiveRouteJourneysView,
     RouteJourneyHistoryView,
-    DriverBoardingView,
 )
 
 router = DefaultRouter()
@@ -55,9 +54,6 @@ urlpatterns = [
     path('route-journey/track/<int:student_id>/', RouteJourneyTrackView.as_view(), name='route-journey-track'),
     path('route-journey/active/', ActiveRouteJourneysView.as_view(), name='route-journey-active'),
     path('route-journey/history/', RouteJourneyHistoryView.as_view(), name='route-journey-history'),
-
-    # Driver boarding (own route, today only)
-    path('driver/boarding/', DriverBoardingView.as_view(), name='driver-boarding'),
 
     path('', include(router.urls)),
 ]

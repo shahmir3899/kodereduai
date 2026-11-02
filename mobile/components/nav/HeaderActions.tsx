@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../../contexts/AuthContext';
@@ -9,16 +9,26 @@ import { routeFor } from '../../navigation/routes';
 import { shouldShowYearChip, unreadLabel } from '../../services/headerView';
 import Icon from '../ui/Icon';
 import UserBadge from './UserBadge';
+import YearSheet from './YearSheet';
 import { Colors, FontSize, Spacing } from '../../constants/colors';
 
-// Academic year on staff screens. Display only: each screen still picks its own year where it matters.
+// Academic year on staff screens. Admin, manager and accountant can tap it to choose another year
+// (amber while a past year is shown); for everyone else it is display only.
 function YearChip() {
-  const { current } = useAcademicYear();
+  const { current, isPast, canChoose } = useAcademicYear();
+  const [open, setOpen] = useState(false);
   if (!current) return null;
-  return (
-    <View style={styles.chip} accessible accessibilityLabel={`Academic year ${current.name}`}>
-      <Text style={styles.chipText} numberOfLines={1}>{current.name}</Text>
+  const chip = (
+    <View style={[styles.chip, isPast && styles.chipPast]} accessible accessibilityLabel={`Academic year ${current.name}${isPast ? ', a past year' : ''}`}>
+      <Text style={[styles.chipText, isPast && styles.chipTextPast]} numberOfLines={1}>{current.name}{canChoose ? ' ▾' : ''}</Text>
     </View>
+  );
+  if (!canChoose) return chip;
+  return (
+    <>
+      <TouchableOpacity accessibilityRole="button" accessibilityLabel={`Academic year ${current.name}. Change`} hitSlop={8} onPress={() => setOpen(true)}>{chip}</TouchableOpacity>
+      <YearSheet visible={open} onClose={() => setOpen(false)} />
+    </>
   );
 }
 
@@ -52,7 +62,9 @@ export default function HeaderActions() {
 
 const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center' },
-  chip: { backgroundColor: Colors.infoLight, borderRadius: 12, paddingHorizontal: Spacing.sm, paddingVertical: 2, marginRight: Spacing.xs, maxWidth: 90 },
+  chip: { backgroundColor: Colors.infoLight, borderRadius: 12, paddingHorizontal: Spacing.sm, paddingVertical: 2, marginRight: Spacing.xs, maxWidth: 130 },
+  chipPast: { backgroundColor: Colors.warningLight },
+  chipTextPast: { color: Colors.warningText },
   chipText: { fontSize: FontSize.xs, fontWeight: '600', color: Colors.infoText },
   bell: { minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
   badge: { position: 'absolute', top: 6, right: 4, minWidth: 18, height: 18, borderRadius: 9, backgroundColor: Colors.errorText, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4 },

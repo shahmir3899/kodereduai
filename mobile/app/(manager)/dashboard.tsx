@@ -21,19 +21,22 @@ export default function ManagerDashboard() {
   const lmsOn = isModuleEnabled('lms');
   const notifOn = isModuleEnabled('notifications');
 
+  const lessonPlans = useCount('lessonPlans', lmsOn, lmsApi.getLessonPlans);
   const assignments = useCount('assignments', lmsOn, lmsApi.getAssignments, { status: 'PUBLISHED' });
   const questions = useCount('questions', examsOn, examinationsApi.getQuestions);
   const papers = useCount('examPapers', examsOn, examinationsApi.getExamPapers);
   const worksheets = useCount('worksheets', examsOn, examinationsApi.getWorksheets);
     const unread = useUnreadMessages();
   const refreshControl = useRefreshControl(
-    assignments.refetch, questions.refetch, papers.refetch, worksheets.refetch,
+    lessonPlans.refetch, assignments.refetch, questions.refetch, papers.refetch, worksheets.refetch,
   );
 
   const go = (route?: string) => route && router.push(route as Href);
   const name = [user?.first_name, user?.last_name].filter(Boolean).join(' ') || user?.username;
 
+  // No Lesson Plans screen for a manager (the web hides it too), so that tile is a count only.
   const tiles = [
+    { label: 'Lesson Plans', value: lessonPlans.data, route: undefined, show: lmsOn },
     { label: 'Active Assignments', value: assignments.data, route: routeFor('manager', '/academics/assignments'), show: lmsOn },
     { label: 'Question Bank', value: questions.data, route: routeFor('manager', '/academics/questions'), show: examsOn },
     { label: 'Exam Papers', value: papers.data, route: routeFor('manager', '/academics/papers'), show: examsOn },
@@ -41,6 +44,9 @@ export default function ManagerDashboard() {
   ].filter((t) => t.show);
 
   const quick = [
+    { label: 'Question Bank', icon: '❓', route: routeFor('manager', '/academics/questions'), show: examsOn },
+    { label: 'Paper Builder', icon: '📝', route: routeFor('manager', '/academics/paper-builder'), show: examsOn },
+    { label: 'Assignments', icon: '📚', route: routeFor('manager', '/academics/assignments'), show: lmsOn },
     { label: 'Timetable', icon: '📅', route: routeFor('manager', '/academics/timetable'), show: isModuleEnabled('academics') },
     { label: 'Classes', icon: '🏫', route: routeFor('manager', '/classes'), show: isModuleEnabled('students') },
     { label: 'My Leave', icon: '🗓️', route: routeFor('manager', '/hr/leave'), show: isModuleEnabled('hr') },

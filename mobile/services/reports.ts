@@ -54,7 +54,9 @@ export function ledgerFileName(accountName: string, range: DateRange | null, ext
 
 export const MIME = {
   pdf: 'application/pdf',
+  zip: 'application/zip',
   xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
 } as const;
 
 // A PDF starts with "%PDF"; an error page saved under a .pdf name would open as a broken file.
@@ -63,7 +65,7 @@ export function looksLikePdf(bytes: ArrayBuffer | Uint8Array): boolean {
   return b.length > 4 && b[0] === 0x25 && b[1] === 0x50 && b[2] === 0x44 && b[3] === 0x46;
 }
 
-// An Excel file is a zip: it starts with "PK".
+// An Excel or Word file is a zip: it starts with "PK".
 export function looksLikeXlsx(bytes: ArrayBuffer | Uint8Array): boolean {
   const b = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
   return b.length > 2 && b[0] === 0x50 && b[1] === 0x4b;

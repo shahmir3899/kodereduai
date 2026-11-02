@@ -58,6 +58,8 @@ export interface FeeFilters {
   masterClassId?: number | null;
   sessionClassId?: number | null;
   status?: string;
+  // A category name as feeLabel gives it (for example Tuition Fee).
+  category?: string;
   search?: string;
 }
 
@@ -72,6 +74,7 @@ export function filterPayments(list: FeePayment[], f: FeeFilters): FeePayment[] 
       if (p.class_obj_id !== f.masterClassId) return false;
     }
     if (f.status && p.status !== f.status) return false;
+    if (f.category && feeLabel(p) !== f.category) return false;
     if (q) {
       const hit = (p.student_name || '').toLowerCase().includes(q) || String(p.student_roll ?? '').toLowerCase().includes(q);
       if (!hit) return false;
@@ -166,4 +169,32 @@ export function stepFeeMonth(
   const index = year * 12 + (month - 1) + delta;
   const next = { year: Math.floor(index / 12), month: (((index % 12) + 12) % 12) + 1 };
   return next.year * 12 + next.month > current.year * 12 + current.month ? { ...current } : next;
+}
+
+// The status chips: Advance means overpaid, as on the web's filter.
+export type StatusTab = 'ALL' | FeeStatus;
+export const STATUS_TABS: Array<{ value: StatusTab; label: string }> = [
+  { value: 'ALL', label: 'All' },
+  { value: 'UNPAID', label: 'Unpaid' },
+  { value: 'PARTIAL', label: 'Partial' },
+  { value: 'PAID', label: 'Paid' },
+  { value: 'ADVANCE', label: 'Advance' },
+];
+
+// The categories present in the loaded list (Tuition Fee, Annual Fee ...), so the filter offers only
+// what can match.
+export function categoryOptions(list: FeePayment[]): string[] {
+  return Array.from(new Set(list.map(feeLabel).filter(Boolean))).sort((a, b) => a.localeCompare(b));
+}
+
+// A phone deletes only a record with nothing paid on it. One with a payment is money history and
+// stays on the web, where the full delete exists.
+export function canDeleteFee(p: Pick<FeePayment, 'status' | 'amount_paid'>): boolean {
+  return p.status === 'UNPAID' && num(p.amount_paid) === 0;
+}
+
+// "Ali Raza: Tuition Fee, November 2026" for a confirmation.
+export function feeDescription(p: FeePayment): string {
+  const when = p.month ? `${MONTH_NAMES[p.month - 1] ?? ''} ${p.year}` : String(p.year);
+  return `${p.student_name}: ${feeLabel(p)}, ${when.trim()}`;
 }

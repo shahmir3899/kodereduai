@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
-import { useStudentAttendance } from '../../hooks/useStudentPortal';
+import { useStudentAttendance, useStudentDayStatus, useStudentProfile } from '../../hooks/useStudentPortal';
 import { useRefreshControl } from '../../hooks/useRefreshControl';
 import { attendanceCells, rateTone, type AttendanceCode, type PortalAttendance } from '../../services/studentPortal';
 import type { Q } from './types';
@@ -20,12 +20,15 @@ const WEEK = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 // Month calendar with the summary for that month.
 export interface MonthData { records: PortalAttendance['records']; summary: PortalAttendance['summary'] }
 
-export function AttendanceView({ useMonth }: { useMonth: (year: number, month: number) => Q<MonthData> }) {
+export function AttendanceView({ useMonth, classId }: { useMonth: (year: number, month: number) => Q<MonthData>; classId?: number | null }) {
   const now = new Date();
   const [ym, setYm] = useState({ year: now.getFullYear(), month: now.getMonth() + 1 });
   const query = useMonth(ym.year, ym.month);
   const refreshControl = useRefreshControl(query.refetch);
-  const cells = useMemo(() => attendanceCells(ym.year, ym.month, query.data?.records ?? []), [ym, query.data]);
+  const last = new Date(ym.year, ym.month, 0).getDate();
+  const mm = String(ym.month).padStart(2, '0');
+  const dayStatus = useStudentDayStatus(`${ym.year}-${mm}-01`, `${ym.year}-${mm}-${String(last).padStart(2, '0')}`, classId);
+  const cells = useMemo(() => attendanceCells(ym.year, ym.month, query.data?.records ?? [], dayStatus.data), [ym, query.data, dayStatus.data]);
   const atCurrent = ym.year === now.getFullYear() && ym.month === now.getMonth() + 1;
 
   const summary = query.data?.summary;
@@ -58,8 +61,8 @@ export function AttendanceView({ useMonth }: { useMonth: (year: number, month: n
             {cells.map((c, i) => (
               <View key={i} style={styles.cell}>
                 {c.day ? (
-                  <View style={[styles.day, c.status ? { backgroundColor: COLORS[c.status] } : null]}>
-                    <Text style={[styles.dayText, c.status ? { color: Colors.textInverse } : null]}>{c.day}</Text>
+                  <View style={[styles.day, c.status ? { backgroundColor: COLORS[c.status] } : c.off ? styles.dayOff : null]}>
+                    <Text style={[styles.dayText, c.status ? { color: Colors.textInverse } : c.off ? styles.dayOffText : null]}>{c.day}</Text>
                   </View>
                 ) : null}
               </View>
@@ -73,6 +76,10 @@ export function AttendanceView({ useMonth }: { useMonth: (year: number, month: n
                 <Text style={styles.legendText}>{label}</Text>
               </View>
             ))}
+            <View style={styles.legendItem}>
+              <View style={[styles.swatch, styles.swatchOff]} />
+              <Text style={styles.legendText}>Off day</Text>
+            </View>
           </View>
         </>
       )}
@@ -81,7 +88,8 @@ export function AttendanceView({ useMonth }: { useMonth: (year: number, month: n
 }
 
 export default function StudentAttendanceScreen() {
-  return <AttendanceView useMonth={useStudentAttendance} />;
+  const profile = useStudentProfile();
+  return <AttendanceView useMonth={useStudentAttendance} classId={profile.data?.class_obj} />;
 }
 
 const styles = StyleSheet.create({
@@ -100,6 +108,9 @@ const styles = StyleSheet.create({
   cell: { width: '14.285%', alignItems: 'center', paddingVertical: 3 },
   day: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
   dayText: { fontSize: FontSize.sm, color: Colors.text },
+  dayOff: { backgroundColor: Colors.background },
+  dayOffText: { color: Colors.textTertiary },
+  swatchOff: { backgroundColor: Colors.background, borderWidth: 1, borderColor: Colors.border },
   legend: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.lg, marginTop: Spacing.lg },
   legendItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   swatch: { width: 12, height: 12, borderRadius: 6 },

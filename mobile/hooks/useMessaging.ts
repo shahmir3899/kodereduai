@@ -44,7 +44,7 @@ export function useMessageActions() {
     onSuccess: refresh,
   });
   const create = useMutation({
-    mutationFn: (d: { recipient_user_id: number; message: string; subject?: string; student_id?: number }) => messagingApi.createThread(d),
+    mutationFn: (d: { recipient_user_id: number; message: string; subject?: string; student_id?: number; message_type?: string }) => messagingApi.createThread(d),
     onSuccess: refresh,
   });
   return { reply, create };

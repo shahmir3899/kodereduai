@@ -6,7 +6,7 @@ import { useSectionClassTeachers, useSectionSubjects, useSubjectActions, useSubj
 import { useRefreshControl } from '../../hooks/useRefreshControl';
 import {
   buildClassSubjectPayload, buildClassTeacherPayload, buildSubjectPayload, classSubjectSubtitle, classSubjectToForm, emptyClassSubjectForm, emptySubjectForm,
-  subjectSubtitle, subjectToForm, totalPeriods, unassignedSubjects, validateClassSubject, validateClassTeacher, validateSubject,
+  bulkResultText, buildBulkPayload, missingPresets, subjectSubtitle, subjectToForm, totalPeriods, unassignedSubjects, validateClassSubject, validateClassTeacher, validateSubject,
   type ClassSubjectForm, type ClassSubjectRow, type Scope, type Subject, type SubjectForm,
 } from '../../services/subjectsAdmin';
 import { inventoryErrorMessage } from '../../services/inventory';
@@ -55,6 +55,9 @@ function SubjectsTab() {
   const [editing, setEditing] = useState<Subject | 'new' | null>(null);
   const [form, setForm] = useState<SubjectForm>(emptySubjectForm());
   const [error, setError] = useState<string | null>(null);
+  const [quick, setQuick] = useState(false);
+  const [picked, setPicked] = useState<string[]>([]);
+  const missing = useMemo(() => missingPresets(q.data ?? []), [q.data]);
   const set = <K extends keyof SubjectForm>(k: K, v: SubjectForm[K]) => setForm((f) => ({ ...f, [k]: v }));
 
   const open = (s: Subject | 'new') => { setForm(s === 'new' ? emptySubjectForm() : subjectToForm(s)); setError(null); setEditing(s); };
@@ -73,6 +76,18 @@ function SubjectsTab() {
     } catch (e) { setError(inventoryErrorMessage(e)); }
   };
 
+  const openQuick = () => { setPicked(missing.map((m) => m.code)); setError(null); setQuick(true); };
+
+  const saveQuick = async () => {
+    if (picked.length === 0) return setError('Choose at least one subject.');
+    setError(null);
+    try {
+      const res = await actions.bulkCreateSubjects.mutateAsync(buildBulkPayload(picked));
+      toast.success(bulkResultText(res));
+      setQuick(false);
+    } catch (e) { setError(inventoryErrorMessage(e)); }
+  };
+
   const remove = async (s: Subject) => {
     if (!(await confirm({ title: 'Switch off this subject?', message: `${s.name} stops being offered. Old results and timetables keep it.`, confirmLabel: 'Switch off', destructive: true }))) return;
     try {
@@ -85,7 +100,10 @@ function SubjectsTab() {
   return (
     <>
       <ScrollView contentContainerStyle={styles.content} refreshControl={refreshControl} keyboardShouldPersistTaps="handled">
-        <Button title="+ Add subject" size="sm" onPress={() => open('new')} />
+        <View style={styles.topRow}>
+          <Button title="+ Add subject" size="sm" onPress={() => open('new')} />
+          {q.data && missing.length > 0 ? <Button title={`Add common subjects (${missing.length})`} size="sm" variant="outline" onPress={openQuick} /> : null}
+        </View>
         <QueryBoundary query={q} emptyTitle="No subjects" emptyMessage="Add the subjects your school teaches, for example Maths and English.">
           {(list) => list.map((s) => (
             <TouchableOpacity key={s.id} accessibilityRole="button" accessibilityLabel={`${s.name}. Edit`} style={styles.row} onPress={() => open(s)}>
@@ -98,6 +116,20 @@ function SubjectsTab() {
           ))}
         </QueryBoundary>
       </ScrollView>
+      <FormSheet visible={quick} title="Add common subjects" onClose={() => setQuick(false)} onSubmit={saveQuick} submitLabel={`Add ${picked.length} subject${picked.length === 1 ? '' : 's'}`}
+        busy={actions.bulkCreateSubjects.isPending} error={error}>
+        <Text style={styles.sub}>The usual Pakistan curriculum subjects your school does not have yet. Tap to choose.</Text>
+        {missing.map((m) => {
+          const on = picked.includes(m.code);
+          return (
+            <TouchableOpacity key={m.code} accessibilityRole="checkbox" accessibilityState={{ checked: on }} onPress={() => setPicked((cur) => (on ? cur.filter((c) => c !== m.code) : [...cur, m.code]))}
+              style={[styles.pick, on && styles.pickOn]}>
+              <Text style={styles.name}>{on ? '✓  ' : ''}{m.name}</Text>
+              <Text style={styles.sub}>{m.code}</Text>
+            </TouchableOpacity>
+          );
+        })}
+      </FormSheet>
       <FormSheet visible={editing !== null} title={editing === 'new' ? 'New subject' : 'Edit subject'} onClose={() => setEditing(null)} onSubmit={save}
         submitLabel="Save" busy={actions.createSubject.isPending || actions.updateSubject.isPending} error={error}>
         <Input label="Name" value={form.name} onChangeText={(v) => set('name', v)} placeholder="e.g. Mathematics" />
@@ -244,6 +276,9 @@ function ClassesTab() {
 }
 
 const styles = StyleSheet.create({
+  topRow: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm },
+  pick: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderWidth: 1, borderColor: Colors.border, borderRadius: BorderRadius.md, padding: Spacing.md, marginBottom: Spacing.xs },
+  pickOn: { borderColor: Colors.primary, backgroundColor: Colors.infoLight },
   container: { flex: 1, backgroundColor: Colors.background },
   tabs: { padding: Spacing.lg, paddingBottom: 0 },
   content: { padding: Spacing.lg, paddingBottom: Spacing.xxxl, gap: Spacing.md },

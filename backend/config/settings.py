@@ -298,6 +298,7 @@ CORS_ALLOW_HEADERS = [
     'x-csrftoken',
     'x-requested-with',
     'x-school-id',
+    'x-client',  # the mobile app sends it at login; browser builds of the app need it allowed
 ]
 
 # =============================================================================

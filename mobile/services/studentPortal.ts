@@ -8,6 +8,7 @@ export interface PortalStudent {
   id: number;
   name: string;
   class_name?: string;
+  class_obj?: number | null;
   roll_number?: string | number | null;
   admission_number?: string | null;
   date_of_birth?: string | null;
@@ -20,6 +21,7 @@ export interface PortalStudent {
   guardian_name?: string | null;
   guardian_relation?: string | null;
   guardian_phone?: string | null;
+  guardian_email?: string | null;
   parent_name?: string | null;
   parent_phone?: string | null;
   emergency_contact?: string | null;
@@ -45,10 +47,20 @@ export function rateTone(rate: number): 'success' | 'warning' | 'error' {
   return rate >= 90 ? 'success' : rate >= 75 ? 'warning' : 'error';
 }
 
-export interface CalendarCell { day: number | null; status: AttendanceCode | null }
+export interface CalendarCell { day: number | null; status: AttendanceCode | null; off?: boolean }
+
+export type DayStatusMap = Record<string, { is_off_day?: boolean } | null | undefined>;
+
+// Attendance % for a tile: an off day reads N/A (as on the web), as does a student with no days yet.
+export function attendanceTile(att: { total_days: number; rate: number } | null | undefined, isOffDay: boolean): string {
+  if (isOffDay || !att || !(att.total_days > 0)) return 'N/A';
+  return `${att.rate}%`;
+}
 
 // Month grid (Monday first) with the day's status from the records; null cells pad the week.
-export function attendanceCells(year: number, month: number, records: PortalAttendance['records']): CalendarCell[] {
+// `off` marks a day the school calendar closes; when the calendar has no answer for a date only
+// Sunday counts as closed, as on the web.
+export function attendanceCells(year: number, month: number, records: PortalAttendance['records'], dayStatus?: DayStatusMap): CalendarCell[] {
   const byDay = new Map<number, AttendanceCode>();
   for (const r of records) {
     const [y, m, d] = r.date.split('-').map(Number);
@@ -57,7 +69,12 @@ export function attendanceCells(year: number, month: number, records: PortalAtte
   const lead = (new Date(year, month - 1, 1).getDay() + 6) % 7;
   const days = new Date(year, month, 0).getDate();
   const cells: CalendarCell[] = Array.from({ length: lead }, () => ({ day: null, status: null }));
-  for (let d = 1; d <= days; d++) cells.push({ day: d, status: byDay.get(d) ?? null });
+  for (let d = 1; d <= days; d++) {
+    const key = `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    const known = dayStatus?.[key];
+    const off = known ? !!known.is_off_day : new Date(year, month - 1, d).getDay() === 0;
+    cells.push({ day: d, status: byDay.get(d) ?? null, off });
+  }
   while (cells.length % 7) cells.push({ day: null, status: null });
   return cells;
 }
@@ -65,13 +82,20 @@ export function attendanceCells(year: number, month: number, records: PortalAtte
 // ── Timetable ─────────────────────────────────────────────────────────────────
 
 export interface PortalTimetable {
-  slots: Array<{ id: number; name: string; start_time: string; end_time: string; slot_type?: string; order: number }>;
+  slots: Array<{ id: number; name: string; start_time: string; end_time: string; slot_type?: string; order: number; applicable_days?: string[] | null }>;
   entries: Array<{ day: string; slot_id: number; subject: string | null; teacher: string | null; room?: string | null }>;
 }
 
 export type PortalPeriod = TimetableEntry & { teacher_name?: string | null; room?: string | null };
 
+// A slot that is not a lesson (Break, Lunch, Assembly).
+export function isSpecialSlot(type?: string | null): boolean {
+  return !!type && type !== 'PERIOD';
+}
+
 // Join entries to their slots so the Teacher day-tab helpers (entriesForDay, formatSlotTime) work.
+// Break, Lunch and Assembly slots have no entries of their own, so each one is added to every day
+// that has lessons and that the slot applies to (applicable_days), as the web shows them.
 export function portalPeriods(data: PortalTimetable | null | undefined): PortalPeriod[] {
   const slots = new Map((data?.slots ?? []).map((s) => [s.id, s]));
   const out: PortalPeriod[] = [];
@@ -91,6 +115,19 @@ export function portalPeriods(data: PortalTimetable | null | undefined): PortalP
       room: e.room,
     });
   });
+  const days = new Set(out.map((p) => p.day));
+  let next = out.length + 1;
+  for (const slot of data?.slots ?? []) {
+    if (!isSpecialSlot(slot.slot_type)) continue;
+    for (const day of days) {
+      if (slot.applicable_days?.length && !slot.applicable_days.includes(day)) continue;
+      if (out.some((p) => p.day === day && p.slot_name === slot.name && p.slot_start_time === slot.start_time)) continue;
+      out.push({
+        id: next++, day, slot_name: slot.name, slot_order: slot.order, slot_type: slot.slot_type,
+        slot_start_time: slot.start_time, slot_end_time: slot.end_time, subject_name: null,
+      });
+    }
+  }
   return out;
 }
 
@@ -204,7 +241,41 @@ export interface PortalResultExam {
   exam_date?: string | null;
   grade?: string | null;
   branch?: string | null;
-  subjects: Array<{ subject: string; marks_obtained: number | null; total_marks: number | null; is_absent: boolean; remarks?: string }>;
+  average_percentage?: number | null;
+  subjects: Array<{
+    subject: string; marks_obtained: number | null; total_marks: number | null; passing_marks?: number | null;
+    percentage?: number | null; grade?: string | null; is_absent: boolean; remarks?: string;
+  }>;
+}
+
+export type SubjectResult = 'pass' | 'fail' | 'absent' | 'none';
+
+// Pass/Fail follows the exam's own passing marks for the subject; 40 % only stands in when the
+// server sent none (same rule as the web).
+export function subjectResult(s: PortalResultExam['subjects'][number]): SubjectResult {
+  if (s.is_absent) return 'absent';
+  if (s.marks_obtained == null) return 'none';
+  if (s.passing_marks != null) return s.marks_obtained >= s.passing_marks ? 'pass' : 'fail';
+  const pct = s.total_marks ? (s.marks_obtained / s.total_marks) * 100 : 0;
+  return pct >= 40 ? 'pass' : 'fail';
+}
+
+// Marks and maximum over the subjects that were sat, for the exam's total row.
+export function examTotals(exam: PortalResultExam) {
+  let got = 0;
+  let max = 0;
+  for (const s of exam.subjects) {
+    if (s.is_absent || s.marks_obtained == null) continue;
+    got += s.marks_obtained;
+    max += s.total_marks || 0;
+  }
+  return { got, max, pct: max > 0 ? Math.round((got / max) * 100) : null };
+}
+
+// Colour band of a percentage (web: 80 green, 60 blue, 40 amber, else red).
+export function pctTone(pct: number | null | undefined): 'success' | 'info' | 'warning' | 'error' | 'neutral' {
+  if (pct == null) return 'neutral';
+  return pct >= 80 ? 'success' : pct >= 60 ? 'info' : pct >= 40 ? 'warning' : 'error';
 }
 
 // Overall percentage of the marked subjects (absent or unmarked ones don't count), as the grade does.
@@ -239,6 +310,22 @@ export function feeTotals(rows: PortalFee[]) {
     paid += Number(r.amount_paid) || 0;
   }
   return { due, paid, pending: Math.max(0, due - paid) };
+}
+
+export type FeeYear = number | 'ALL';
+
+// Years that have fee rows, newest first (the server sends every year and ignores a year filter).
+export function feeYears(rows: PortalFee[]): number[] {
+  return [...new Set(rows.map((r) => r.year))].sort((a, b) => b - a);
+}
+
+// Opens on the current year when it has rows, otherwise on all years.
+export function defaultFeeYear(years: number[], now: number = new Date().getFullYear()): FeeYear {
+  return years.includes(now) ? now : 'ALL';
+}
+
+export function filterFeesByYear(rows: PortalFee[], year: FeeYear): PortalFee[] {
+  return year === 'ALL' ? rows : rows.filter((r) => r.year === year);
 }
 
 export function sortFees(rows: PortalFee[]): PortalFee[] {

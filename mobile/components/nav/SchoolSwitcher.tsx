@@ -1,75 +1,82 @@
 import React, { useState } from 'react';
 import { Modal, View, Text, TouchableOpacity, Pressable, StyleSheet, ActivityIndicator, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useToast } from '../ui/Toast';
 import { useAuth } from '../../contexts/AuthContext';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
 
-// Shows the active school's name; a user with more than one school can tap it to switch.
-export default function SchoolSwitcher() {
+// The "Switch school" sheet, shared by the dashboards' school name and the side menu's school block.
+export function SchoolSwitchSheet({ visible, onClose }: { visible: boolean; onClose: () => void }) {
   const { user, activeSchool, switchSchool } = useAuth();
   const router = useRouter();
-  const [open, setOpen] = useState(false);
+  const toast = useToast();
   const [switchingId, setSwitchingId] = useState<number | null>(null);
-
   const schools = user?.schools ?? [];
-  const name = activeSchool?.name || user?.school_name || '';
-  if (!name) return null;
-  if (schools.length <= 1) return <Text style={styles.plain}>{name}</Text>;
 
   const pick = async (id: number) => {
     if (id === activeSchool?.id) {
-      setOpen(false);
+      onClose();
       return;
     }
     setSwitchingId(id);
     try {
       await switchSchool(id);
-      setOpen(false);
+      onClose();
       // The new school may give this user a different role, so re-route from the top.
       router.replace('/');
     } catch (error: any) {
-      Alert.alert(
-        'Could not switch school',
-        error?.response?.data?.error || 'Please try again.',
-      );
+      // A toast, not Alert.alert: Alert shows nothing on the web build.
+      toast.error(error?.response?.data?.error || 'Could not switch school. Please try again.');
     } finally {
       setSwitchingId(null);
     }
   };
 
   return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <Pressable style={styles.backdrop} accessibilityRole="button" accessibilityLabel="Close" onPress={() => switchingId === null && onClose()}>
+        <Pressable style={styles.sheet} accessible={false}>
+          <Text style={styles.sheetTitle}>Switch school</Text>
+          {schools.map((school) => {
+            const active = school.id === activeSchool?.id;
+            return (
+              <TouchableOpacity accessibilityRole="button"
+                key={school.id}
+                style={[styles.row, active && styles.rowActive]}
+                disabled={switchingId !== null}
+                onPress={() => pick(school.id)}
+              >
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.rowText, active && styles.rowTextActive]}>{school.name}</Text>
+                  <Text style={styles.roleText}>{school.role.replace(/_/g, ' ').toLowerCase()}</Text>
+                </View>
+                {switchingId === school.id
+                  ? <ActivityIndicator color={Colors.primary} />
+                  : active && <Text style={styles.tick}>✓</Text>}
+              </TouchableOpacity>
+            );
+          })}
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
+// Shows the active school's name; a user with more than one school can tap it to switch.
+export default function SchoolSwitcher() {
+  const { user, activeSchool } = useAuth();
+  const [open, setOpen] = useState(false);
+  const schools = user?.schools ?? [];
+  const name = activeSchool?.name || user?.school_name || '';
+  if (!name) return null;
+  if (schools.length <= 1) return <Text style={styles.plain}>{name}</Text>;
+  return (
     <>
       <TouchableOpacity accessibilityRole="button" style={styles.button} onPress={() => setOpen(true)}>
         <Text style={styles.buttonText} numberOfLines={1}>{name}</Text>
         <Text style={styles.chevron}>▾</Text>
       </TouchableOpacity>
-
-      <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
-        <Pressable style={styles.backdrop} accessibilityRole="button" accessibilityLabel="Close" onPress={() => switchingId === null && setOpen(false)}>
-          <Pressable style={styles.sheet} accessible={false}>
-            <Text style={styles.sheetTitle}>Switch school</Text>
-            {schools.map((school) => {
-              const active = school.id === activeSchool?.id;
-              return (
-                <TouchableOpacity accessibilityRole="button"
-                  key={school.id}
-                  style={[styles.row, active && styles.rowActive]}
-                  disabled={switchingId !== null}
-                  onPress={() => pick(school.id)}
-                >
-                  <View style={{ flex: 1 }}>
-                    <Text style={[styles.rowText, active && styles.rowTextActive]}>{school.name}</Text>
-                    <Text style={styles.roleText}>{school.role.replace(/_/g, ' ').toLowerCase()}</Text>
-                  </View>
-                  {switchingId === school.id
-                    ? <ActivityIndicator color={Colors.primary} />
-                    : active && <Text style={styles.tick}>✓</Text>}
-                </TouchableOpacity>
-              );
-            })}
-          </Pressable>
-        </Pressable>
-      </Modal>
+      <SchoolSwitchSheet visible={open} onClose={() => setOpen(false)} />
     </>
   );
 }

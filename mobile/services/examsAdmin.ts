@@ -31,6 +31,8 @@ export interface ExamRow {
   marks_expected_count?: number;
   marks_entry_complete?: boolean;
   fail_threshold_subjects: number;
+  // False for an exam that was deleted (the server only switches it off).
+  is_active?: boolean;
 }
 
 export interface ExamForm {
@@ -86,4 +88,38 @@ export function populateText(r: { added_count?: number; total_count?: number } |
   const total = r?.total_count ?? 0;
   if (total === 0) return 'No subjects are assigned to this class yet, so the exam has none. Assign subjects to the class on the web, then use Sync subjects.';
   return added > 0 ? `${added} subject${added === 1 ? '' : 's'} added (${total} in total).` : `Subjects are up to date (${total}).`;
+}
+
+// ─── Removed exams and shortcuts ────────────────────────────────────────────────────────────
+
+// The list filter: a status, or Removed (an exam that was deleted; the server only switches it off).
+export const EXAM_FILTERS = [
+  { value: '', label: 'All' }, { value: 'SCHEDULED', label: 'Upcoming' }, { value: 'MARKS_ENTRY', label: 'Marks' },
+  { value: 'PUBLISHED', label: 'Published' }, { value: 'REMOVED', label: 'Removed' },
+];
+
+export function examListParams(filter: string): Record<string, unknown> {
+  if (filter === 'REMOVED') return { is_active: false };
+  return filter ? { status: filter } : {};
+}
+
+export const reactivatePayload = () => ({ is_active: true });
+
+export const isRemoved = (e: Pick<ExamRow, 'is_active'>) => e.is_active === false;
+
+// Marks entry and Results open with the class, type and exam already chosen. A whole-class exam spans
+// every section, so the first section of its class is picked; with no sections, the class itself.
+export function examShortcutParams(
+  e: Pick<ExamRow, 'id' | 'class_obj' | 'exam_type' | 'session_class'>,
+  options: Array<{ id: number; classObj: number | null; isSession: boolean }>,
+): { class: string; exam: string; type: string } | null {
+  const mine = options.filter((o) => (o.isSession ? o.classObj : o.id) === e.class_obj);
+  const target = (e.session_class != null ? mine.find((o) => o.id === e.session_class) : null) ?? mine.find((o) => o.isSession) ?? mine[0];
+  return target ? { class: String(target.id), exam: String(e.id), type: String(e.exam_type) } : null;
+}
+
+// Reads the shortcut parameters back, ignoring anything that is not a number.
+export function parseShortcut(p: { class?: string; exam?: string; type?: string }) {
+  const n = (v?: string) => (v && /^\d+$/.test(v) ? Number(v) : null);
+  return { classId: n(p.class), examId: n(p.exam), typeId: n(p.type) };
 }

@@ -47,6 +47,7 @@ export default function StudentProfileScreen() {
         <Row label="Name" value={s.guardian_name || s.parent_name} />
         <Row label="Relation" value={s.guardian_relation} />
         <Row label="Phone" value={s.guardian_phone || s.parent_phone} />
+        <Row label="Email" value={s.guardian_email} />
         <Row label="Emergency" value={s.emergency_contact} />
       </Card>
     </ScrollView>

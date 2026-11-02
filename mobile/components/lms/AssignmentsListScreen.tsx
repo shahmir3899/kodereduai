@@ -19,6 +19,8 @@ import EmptyState from '../ui/EmptyState';
 import StatusPill, { type Tone } from '../ui/StatusPill';
 import { useToast } from '../ui/Toast';
 import { confirm } from '../ui/confirm';
+import ScopeBadge from '../teacher/ScopeBadge';
+import { useTeacherScope } from '../../hooks/useTeacher';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
 
 const STATUS_TONE: Record<string, Tone> = { DRAFT: 'neutral', PUBLISHED: 'success', CLOSED: 'error' };
@@ -28,17 +30,21 @@ type StatusTab = 'ALL' | 'DRAFT' | 'PUBLISHED' | 'CLOSED';
 interface Props {
   // Teachers pass their own sections; admins leave it out and get every class.
   classOptions?: ClassOption[];
-  // Manager reads the list only: no student submissions, no create/edit/publish/delete.
+  // Reads the list only: no student submissions, no create/edit/publish/delete.
   readOnly?: boolean;
+  // Manager: drafts only. Can create, edit and delete drafts; a teacher publishes (the server refuses a
+  // manager publish, close, and any change to a published assignment).
+  draftOnly?: boolean;
 }
 
 const apiMessage = (e: any, fallback: string) => e?.response?.data?.detail || fallback;
 
 // Homework, projects, classwork, labs and diary entries for the active year.
-export default function AssignmentsListScreen({ classOptions, readOnly = false }: Props) {
+export default function AssignmentsListScreen({ classOptions, readOnly = false, draftOnly = false }: Props) {
   const router = useRouter();
   const base = usePersonaBase();
   const toast = useToast();
+  const scope = useTeacherScope();
   const { options } = useAttendanceClassOptions(classOptions);
   const query = useAssignments();
   const subjects = useSubjectList();
@@ -125,6 +131,7 @@ export default function AssignmentsListScreen({ classOptions, readOnly = false }
                 <StatusPill label={a.status} tone={STATUS_TONE[a.status] ?? 'neutral'} />
               </View>
               <Text style={styles.meta}>{a.class_name || 'N/A'} · {a.subject_name || 'N/A'}</Text>
+              <ScopeBadge scope={scope.classify(a.class_obj, a.subject)} />
               <View style={styles.row}>
                 <StatusPill label={a.assignment_type} tone={TYPE_TONE[a.assignment_type] ?? 'neutral'} />
                 <Text style={[styles.due, late && styles.late]}>
@@ -132,11 +139,11 @@ export default function AssignmentsListScreen({ classOptions, readOnly = false }
                 </Text>
               </View>
               {readOnly ? null : <View style={styles.actions}>
-                <Action label={`Submissions (${a.submission_count ?? 0})`} onPress={() => go('submissions', a.id)} primary />
-                <Action label="Edit" onPress={() => go('form', a.id)} />
-                {canPublish(a) ? <Action label="Publish" onPress={() => run(actions.publish.mutateAsync(a.id), 'Assignment published!', 'Failed to publish assignment')} /> : null}
-                {canClose(a) ? <Action label="Close" onPress={() => run(actions.close.mutateAsync(a.id), 'Assignment closed!', 'Failed to close assignment')} /> : null}
-                <Action label="Delete" onPress={() => remove(a)} danger />
+                {draftOnly ? null : <Action label={`Submissions (${a.submission_count ?? 0})`} onPress={() => go('submissions', a.id)} primary />}
+                {draftOnly && a.status !== 'DRAFT' ? null : <Action label="Edit" onPress={() => go('form', a.id)} />}
+                {!draftOnly && canPublish(a) ? <Action label="Publish" onPress={() => run(actions.publish.mutateAsync(a.id), 'Assignment published!', 'Failed to publish assignment')} /> : null}
+                {!draftOnly && canClose(a) ? <Action label="Close" onPress={() => run(actions.close.mutateAsync(a.id), 'Assignment closed!', 'Failed to close assignment')} /> : null}
+                {draftOnly && a.status !== 'DRAFT' ? null : <Action label="Delete" onPress={() => remove(a)} danger />}
               </View>}
             </View>
           );
@@ -145,6 +152,7 @@ export default function AssignmentsListScreen({ classOptions, readOnly = false }
       {readOnly ? null : (
         <View style={styles.footer}>
           <Button title="New assignment" onPress={() => go('form')} fullWidth size="lg" />
+          <Button title="Daily diary" variant="outline" onPress={() => go('diary')} fullWidth style={styles.diaryBtn} />
         </View>
       )}
     </View>
@@ -161,7 +169,7 @@ function Action({ label, onPress, primary, danger }: { label: string; onPress: (
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
-  content: { padding: Spacing.lg, paddingBottom: 100 },
+  content: { padding: Spacing.lg, paddingBottom: 160 },
   filterToggle: { alignSelf: 'flex-start', marginBottom: Spacing.md },
   filterToggleText: { fontSize: FontSize.sm, color: Colors.primary, fontWeight: '600' },
   clear: { fontSize: FontSize.sm, color: Colors.error, marginBottom: Spacing.md },
@@ -175,5 +183,6 @@ const styles = StyleSheet.create({
   actions: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.md, marginTop: Spacing.sm, paddingTop: Spacing.sm, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: Colors.border },
   action: { paddingVertical: 2 },
   actionText: { fontSize: FontSize.sm, fontWeight: '600', color: Colors.textSecondary },
+  diaryBtn: { marginTop: Spacing.sm },
   footer: { position: 'absolute', left: 0, right: 0, bottom: 0, padding: Spacing.lg, backgroundColor: Colors.surface, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: Colors.border },
 });

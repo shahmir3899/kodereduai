@@ -3,42 +3,43 @@ import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-nati
 import { useRouter, type Href } from 'expo-router';
 import { useAuth } from '../../contexts/AuthContext';
 import { routeFor } from '../../navigation/routes';
-import { useMyInventory, useMyPayslips, useUnreadNotifications } from '../../hooks/useStaff';
-import { useMyLeaveApplications } from '../../hooks/useMyHr';
+import { useMyInventory, useUnreadNotifications } from '../../hooks/useStaff';
 import { useUnreadMessages } from '../../hooks/useMessaging';
 import { useRefreshControl } from '../../hooks/useRefreshControl';
-import { payslipPeriod, sortPayslips } from '../../services/accountant';
-import { formatMoney } from '../../services/feeCollect';
+import { sortAssignments } from '../../services/accountant';
 import Card from '../ui/Card';
-import StatusPill from '../ui/StatusPill';
 import SchoolSwitcher from '../nav/SchoolSwitcher';
 import StatTiles from '../dashboard/StatTiles';
 import RecentNotifications from '../dashboard/RecentNotifications';
+import { OwnHrPanels, useOwnHr } from './OwnHrHome';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
 
-// Port of frontend/src/pages/staff/StaffDashboard.jsx: own leave, payslips, assigned items and
-// the unread counts. Staff have no student, finance or academic data.
+// Port of frontend/src/pages/staff/StaffDashboard.jsx: own attendance, leave, payslips, assigned
+// items and the unread counts. Staff have no student, finance or academic data.
 export default function StaffHome() {
   const { user, isModuleEnabled } = useAuth();
   const router = useRouter();
   const hrOn = isModuleEnabled('hr');
-  const leave = useMyLeaveApplications();
-  const payslips = useMyPayslips();
+  const own = useOwnHr({
+    attendance: routeFor('staff', '/hr/self-service'),
+    leave: routeFor('staff', '/hr/self-service'),
+    payslips: routeFor('staff', '/hr/payslips'),
+  });
   const inventory = useMyInventory();
   const unreadNotes = useUnreadNotifications();
   const unreadMsgs = useUnreadMessages();
-  const refreshControl = useRefreshControl(leave.refetch, payslips.refetch, inventory.refetch);
+  const refreshControl = useRefreshControl(...own.refetch, inventory.refetch);
 
   const go = (route?: string) => route && router.push(route as Href);
   const name = [user?.first_name, user?.last_name].filter(Boolean).join(' ') || user?.username;
-  const pending = (leave.data ?? []).filter((a) => a.status === 'PENDING').length;
-  const latest = sortPayslips(payslips.data ?? [])[0];
+  const pending = (own.leave.data ?? []).filter((a) => a.status === 'PENDING').length;
   const held = (inventory.data ?? []).filter((a) => a.is_active).length;
+  const items = sortAssignments(inventory.data ?? []).filter((a) => a.is_active).slice(0, 5);
 
   const tiles = [
     ...(hrOn ? [
-      { label: 'Pending Leave', value: leave.data ? String(pending) : '–', route: routeFor('staff', '/hr/self-service') },
-      { label: latest ? `Latest payslip` : 'Payslips', value: latest ? formatMoney(Number(latest.net_salary) || 0) : '–', route: routeFor('staff', '/hr/payslips') },
+      ...own.tiles,
+      ...(pending > 0 ? [{ label: 'Pending Leave', value: String(pending), route: routeFor('staff', '/hr/self-service') }] : []),
     ] : []),
     ...(isModuleEnabled('inventory') && (inventory.data ?? []).length > 0
       ? [{ label: 'Items With You', value: String(held), route: routeFor('staff', '/inventory/assignments') }]
@@ -49,8 +50,10 @@ export default function StaffHome() {
   ];
 
   const quick = [
+    { label: 'My Profile', icon: '👤', route: '/(staff)/my-profile', show: true },
     { label: 'Apply Leave', icon: '🗓️', route: routeFor('staff', '/hr/self-service'), show: hrOn },
     { label: 'Payslips', icon: '🧾', route: routeFor('staff', '/hr/payslips'), show: hrOn },
+    { label: unreadNotes > 0 ? `Notifications (${unreadNotes})` : 'Notifications', icon: '🔔', route: routeFor('staff', '/notifications'), show: isModuleEnabled('notifications') },
     { label: unreadMsgs > 0 ? `Messages (${unreadMsgs})` : 'Messages', icon: '💬', route: routeFor('staff', '/messages'), show: true },
   ].filter((a) => a.show);
 
@@ -70,15 +73,15 @@ export default function StaffHome() {
         ))}
       </View>
 
-      {hrOn && latest ? (
+      {hrOn ? <OwnHrPanels balance={own.balance} payslips={own.payslips} /> : null}
+      {items.length > 0 ? (
         <>
-          <Text style={styles.section}>Recent payslips</Text>
+          <Text style={styles.section}>Assigned items</Text>
           <Card style={styles.list}>
-            {sortPayslips(payslips.data ?? []).slice(0, 3).map((p) => (
-              <View key={p.id} style={styles.line}>
-                <Text style={styles.lineTitle}>{payslipPeriod(p)}</Text>
-                <StatusPill label={p.status_display ?? p.status} tone={p.status === 'PAID' ? 'success' : p.status === 'APPROVED' ? 'info' : 'neutral'} />
-                <Text style={styles.lineAmount}>{formatMoney(Number(p.net_salary) || 0)}</Text>
+            {items.map((a) => (
+              <View key={a.id} style={styles.line}>
+                <Text style={styles.lineTitle} numberOfLines={1}>{a.item_name}</Text>
+                <Text style={styles.lineAmount}>{Number(a.quantity)}{a.item_unit ? ` ${a.item_unit}` : ''}</Text>
               </View>
             ))}
           </Card>

@@ -11,6 +11,8 @@ export default function Layout() {
       }}
     >
       <Stack.Screen name="index" options={{ title: 'Assignments' }} />
+      <Stack.Screen name="form" options={{ title: 'Assignment draft' }} />
+      <Stack.Screen name="diary" options={{ title: 'Daily diary' }} />
     </Stack>
   );
 }

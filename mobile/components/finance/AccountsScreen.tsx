@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { FlatList, View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { useRouter, type Href } from 'expo-router';
 import Button from '../ui/Button';
+import SegmentedTabs from '../ui/SegmentedTabs';
+import ManageAccounts from './ManageAccounts';
 import { financeApi } from '../../services/api';
 import { periodRange } from '../../services/accountant';
 import { exportErrorMessage, ledgerFileName } from '../../services/reports';
@@ -21,6 +23,19 @@ import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors'
 // from restricted roles.
 // `canManage` adds transfers and month closing (admin and principal); accountants only read.
 export default function AccountsScreen({ canManage = false }: { canManage?: boolean }) {
+  const [tab, setTab] = useState<'balances' | 'manage'>('balances');
+  if (!canManage) return <AccountBalances canManage={false} />;
+  return (
+    <View style={styles.container}>
+      <View style={styles.tabs}>
+        <SegmentedTabs tabs={[{ value: 'balances', label: 'Balances' }, { value: 'manage', label: 'Manage' }]} value={tab} onChange={setTab} />
+      </View>
+      {tab === 'balances' ? <AccountBalances canManage /> : <ManageAccounts />}
+    </View>
+  );
+}
+
+function AccountBalances({ canManage }: { canManage: boolean }) {
   const router = useRouter();
   const q = useAccountBalances();
   const toast = useToast();
@@ -58,12 +73,10 @@ export default function AccountsScreen({ canManage = false }: { canManage?: bool
             <Text style={styles.totalLabel}>Total balance · {accounts.length} account{accounts.length === 1 ? '' : 's'}</Text>
             <Text style={styles.totalValue}>{formatMoney(totalBalance(accounts))}</Text>
           </View>
-          {canManage ? (
-            <View style={styles.manage}>
-              <Button title="Transfers" size="sm" variant="outline" style={styles.manageBtn} onPress={() => router.push('/(admin)/finance/transfers' as Href)} />
-              <Button title="Close month" size="sm" variant="outline" style={styles.manageBtn} onPress={() => router.push('/(admin)/finance/close-month' as Href)} />
-            </View>
-          ) : null}
+          <View style={styles.manage}>
+            <Button title="Transfers" size="sm" variant="outline" style={styles.manageBtn} onPress={() => router.push((canManage ? '/(admin)/finance/transfers' : '/(accountant)/transfers') as Href)} />
+            {canManage ? <Button title="Close month" size="sm" variant="outline" style={styles.manageBtn} onPress={() => router.push('/(admin)/finance/close-month' as Href)} /> : null}
+          </View>
         </View>
       }
       ListEmptyComponent={<EmptyState title="No accounts" message="No accounts are visible to your role." />}
@@ -76,6 +89,12 @@ export default function AccountsScreen({ canManage = false }: { canManage?: bool
           <View style={styles.right}>
             <Text style={styles.amount}>{formatMoney(Number(a.net_balance ?? a.balance) || 0)}</Text>
             <View style={styles.exports}>
+              <TouchableOpacity
+                accessibilityRole="button" accessibilityLabel={`Open ${a.name} ledger`} style={styles.export}
+                onPress={() => router.push({ pathname: canManage ? '/(admin)/finance/account-ledger' : '/(accountant)/account-ledger', params: { id: a.id, name: a.name } } as Href)}
+              >
+                <Text style={styles.exportText}>Ledger</Text>
+              </TouchableOpacity>
               {(['pdf', 'xlsx'] as const).map((kind) => (
                 <TouchableOpacity
                   key={kind} accessibilityRole="button" disabled={busy !== null}
@@ -95,6 +114,7 @@ export default function AccountsScreen({ canManage = false }: { canManage?: bool
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
+  tabs: { padding: Spacing.lg, paddingBottom: 0 },
   content: { padding: Spacing.lg },
   total: { backgroundColor: Colors.surface, borderRadius: BorderRadius.md, padding: Spacing.lg, marginBottom: Spacing.md },
   totalLabel: { fontSize: FontSize.sm, color: Colors.textSecondary },

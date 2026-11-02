@@ -29,6 +29,14 @@ export function useSubmissions(assignmentId: number | null) {
 }
 
 // 'subjects' is on the persisted reference-data list.
+// Subjects taught in one class (a subject repeats when it has several teachers or sections).
+export function useClassSubjectRows(masterClassId: number | null) {
+  return useScopedQuery('classSubjects', ['diary', masterClassId], async () =>
+    listOf<{ subject: number; subject_name?: string; subject_code?: string | null }>(
+      (await academicsApi.getClassSubjects({ class_obj: masterClassId, page_size: 9999 })).data),
+  { enabled: !!masterClassId, staleTime: 2 * 60_000 });
+}
+
 export function useSubjectList() {
   return useScopedQuery('subjects', [], async () =>
     listOf<{ id: number; name: string }>((await academicsApi.getSubjects({ page_size: 9999 })).data),
@@ -37,14 +45,14 @@ export function useSubjectList() {
 
 // Teacher picker for the form. Some schools add teachers as staff rows with no linked user
 // account, in which case the role filter finds nobody; the web then falls back to everyone.
-export function useTeacherStaff() {
+export function useTeacherStaff(enabled = true) {
   return useScopedQuery('staff', ['teachers'], async () => {
     const asTeachers = listOf<{ id: number; user?: number | null; full_name?: string }>(
       (await hrApi.getStaff({ role: 'TEACHER', page_size: 9999 })).data,
     );
     if (asTeachers.length > 0) return asTeachers;
     return listOf<{ id: number; user?: number | null; full_name?: string }>((await hrApi.getStaff({ page_size: 9999 })).data);
-  }, { staleTime: 5 * 60_000 });
+  }, { staleTime: 5 * 60_000, enabled });
 }
 
 // Every assignment change refreshes the list (and the dashboard's "to grade" count).

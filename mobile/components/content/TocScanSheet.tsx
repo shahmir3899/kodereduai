@@ -7,6 +7,9 @@ import {
   applyPayload, applyResultText, removeTocChapter, removeTocTopic, TOC_POLL_LIMIT_MS, tocCounts, tocImageProblem, tocJobState,
   tocPollDelay, type TocChapter,
 } from '../../services/curriculum';
+import {
+  buildTocFromLabeledText, confidenceText, outlineFromParse, outlineFromSuggestion, TOC_LARGE_TEXT, TOC_MAX_TEXT, type OutlineResult,
+} from '../../services/curriculumContent';
 import { inventoryErrorMessage } from '../../services/inventory';
 import Button from '../ui/Button';
 import Input from '../ui/Input';
@@ -30,6 +33,7 @@ export default function TocScanSheet({ bookId, visible, onClose }: { bookId: num
   const [warnings, setWarnings] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [meta, setMeta] = useState<{ source: string; confidence: number | null } | null>(null);
   const cancelled = useRef(false);
   // One key per outline: if the connection drops mid-request and it is sent again, the server
   // answers with the first result instead of adding every chapter twice.
@@ -38,7 +42,7 @@ export default function TocScanSheet({ bookId, visible, onClose }: { bookId: num
   useEffect(() => {
     if (visible) {
       cancelled.current = false;
-      setStep('start'); setText(''); setChapters([]); setWarnings([]); setError(null); setBusy(false);
+      setStep('start'); setText(''); setChapters([]); setWarnings([]); setError(null); setBusy(false); setMeta(null);
       key.current = `toc-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     } else cancelled.current = true;
   }, [visible]);
@@ -78,17 +82,52 @@ export default function TocScanSheet({ bookId, visible, onClose }: { bookId: num
     }
   };
 
+  const show = (o: OutlineResult) => {
+    setChapters(o.chapters);
+    setWarnings(o.warnings);
+    setMeta({ source: o.source, confidence: o.confidence });
+    setStep('preview');
+  };
+
+  // Same order as the web: lines labelled CHAPTER: / TOPIC: are used as they are, large text goes to the
+  // chunked parse, anything else to the normal parse.
   const parse = async () => {
-    if (!text.trim()) return setError('There is no text to use. Take the photo again.');
+    if (!text.trim()) return setError('There is no text to use.');
+    if (text.length > TOC_MAX_TEXT) return setError('The text is too large (over 500 KB). Split it into parts.');
     setBusy(true);
     setError(null);
     try {
-      const data = (await lmsApi.parseToc(bookId, { toc_text: text })).data as { chapters: TocChapter[]; warnings?: string[] };
-      setChapters(data.chapters ?? []);
-      setWarnings(data.warnings ?? []);
-      setStep('preview');
+      const labeled = buildTocFromLabeledText(text);
+      if (labeled.hasLabels) {
+        if (labeled.chapters.length === 0) return setError('No chapter or topic lines found in the labelled text.');
+        return show({ chapters: labeled.chapters, warnings: labeled.warnings, source: 'manual', confidence: 1 });
+      }
+      const res = text.length > TOC_LARGE_TEXT ? await lmsApi.parseTocStream(bookId, { toc_text: text }) : await lmsApi.parseToc(bookId, { toc_text: text });
+      show(outlineFromParse(res.data));
     } catch (e) {
       setError(inventoryErrorMessage(e, 'Could not split the text into chapters.'));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // The AI reads the raw text and answers chapters, topics and how sure it is. Nothing is added until "Add".
+  const suggest = async () => {
+    if (!text.trim()) return setError('There is no text to use.');
+    if (text.length > TOC_MAX_TEXT) return setError('The text is too large (over 500 KB). Split it into parts.');
+    setBusy(true);
+    setError(null);
+    try {
+      const labeled = buildTocFromLabeledText(text);
+      if (labeled.hasLabels) {
+        if (labeled.chapters.length === 0) return setError('No chapter or topic lines found in the labelled text.');
+        return show({ chapters: labeled.chapters, warnings: labeled.warnings, source: 'manual', confidence: 1 });
+      }
+      const o = outlineFromSuggestion((await lmsApi.suggestToc(bookId, { raw_text: text })).data);
+      if (o.chapters.length === 0) return setError('The AI could not find any chapters in this text.');
+      show(o);
+    } catch (e) {
+      setError(inventoryErrorMessage(e, 'Could not build the outline with AI. Try the Split button instead.'));
     } finally {
       setBusy(false);
     }
@@ -111,7 +150,7 @@ export default function TocScanSheet({ bookId, visible, onClose }: { bookId: num
   };
 
   const counts = tocCounts(chapters);
-  const title = step === 'review' ? 'Check the text' : step === 'preview' ? 'Check the outline' : 'Scan contents page';
+  const title = step === 'review' ? 'Contents text' : step === 'preview' ? 'Check the outline' : 'Add contents';
 
   return (
     <FormSheet
@@ -121,20 +160,23 @@ export default function TocScanSheet({ bookId, visible, onClose }: { bookId: num
     >
       {step === 'start' ? (
         <View style={styles.gap}>
-          <Text style={styles.hint}>Photograph the table of contents of the book, straight on and in good light. The chapters and topics are read from the page; you check them before anything is added.</Text>
+          <Text style={styles.hint}>Photograph the table of contents of the book, straight on and in good light, or type or paste it. The chapters and topics are worked out from it; you check them before anything is added.</Text>
           <Button title="Take a photo" onPress={() => pick(true)} />
           <Button title="Choose from photos" variant="outline" onPress={() => pick(false)} />
+          <Button title="Type or paste the contents" variant="outline" onPress={() => { setError(null); setStep('review'); }} />
         </View>
       ) : null}
       {step === 'working' ? <Text style={styles.hint}>Reading the page… this takes up to a minute. Keep this open.</Text> : null}
       {step === 'review' ? (
         <View style={styles.gap}>
-          <Text style={styles.hint}>Fix any misread words. One line per chapter or topic; indent topics under their chapter.</Text>
+          <Text style={styles.hint}>One line per chapter or topic; indent topics under their chapter. You can also write CHAPTER: and TOPIC: before each line. Fix any misread words.</Text>
           <Input value={text} onChangeText={setText} multiline style={styles.text} />
+          <Button title="Build outline with AI" variant="outline" onPress={suggest} disabled={busy} />
         </View>
       ) : null}
       {step === 'preview' ? (
         <View style={styles.gap}>
+          {meta && meta.source !== 'rule_based' && meta.source !== 'manual' ? <Text style={styles.hint}>AI outline{meta.confidence != null ? `, ${confidenceText(meta.confidence)}` : ''}. Remove anything that is wrong, then add.</Text> : null}
           {warnings.map((w) => <Text key={w} style={styles.warn}>{w}</Text>)}
           {chapters.map((c, ci) => (
             <View key={`${ci}-${c.title}`} style={styles.chapter}>

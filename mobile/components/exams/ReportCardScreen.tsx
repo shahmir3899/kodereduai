@@ -6,10 +6,13 @@ import { classParams, todayString, type ClassOption } from '../../services/atten
 import {
   DEFAULT_SIGNATURE_LABELS, PODIUM, adjacentEnrollment, attendanceNote, attendanceShares, examCell, examNote, examTotal,
   formatClassAvg, formatIssueDate, formatPct, normalizeExamSelection, shortExamName, sortEnrollments, sortExams, stars,
-  toggleExam, REPORT_TEMPLATES, normalizeTemplate, reportCardFileName, reportCardPdfError, reportCardPdfParams,
+  toggleExam, REPORT_TEMPLATES, normalizeTemplate, reportCardFileName, reportCardPdfError, reportCardQueryParams,
   type Attendance, type EnrollmentRef, type ExamRef, type ReportExam, type ReportTemplate,
 } from '../../services/reportCard';
 import { shareReportFile } from '../../services/reportShare';
+import { makeReportCardPdf } from '../../services/reportCardPdf';
+import type { CardReport } from '../../services/reportCardHtml';
+import { useSchoolProfile } from '../../hooks/useSchoolProfile';
 import { loadTemplate, saveTemplate } from '../../services/reportCardPrefs';
 import { MONTH_NAMES } from '../../services/assessments';
 import { useAcademicYear } from '../../hooks/useAcademicYear';
@@ -26,6 +29,7 @@ import { CommentRow } from './CommentTools';
 import SegmentedTabs from '../ui/SegmentedTabs';
 import Button from '../ui/Button';
 import { useToast } from '../ui/Toast';
+import BulkReportCardsSheet from './BulkReportCardsSheet';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
 
 interface ReportSubject {
@@ -53,12 +57,14 @@ interface Props {
   useClassOptions: (yearId: number | null) => { options: ClassOption[]; isLoading: boolean; isError?: boolean };
   // Teachers get their first section pre-selected, as on the web.
   autoSelectFirst?: boolean;
+  // Admin and principal: make every student's card for the class as one ZIP.
+  canBulk?: boolean;
 }
 
 // View-only report card, one student at a time. The numbers all come from the server; the card is
 // keyed to the main (latest) exam. Comments can be edited or regenerated here; the issue date,
 // promotion and the PDF stay on the web for now.
-export default function ReportCardScreen({ useClassOptions, autoSelectFirst }: Props) {
+export default function ReportCardScreen({ useClassOptions, autoSelectFirst, canBulk }: Props) {
   const year = useAcademicYear();
   const [pickedYear, setPickedYear] = useState<number | null>(null);
   const yearId = pickedYear ?? year.current?.id ?? null;
@@ -67,6 +73,8 @@ export default function ReportCardScreen({ useClassOptions, autoSelectFirst }: P
   const [enrollmentId, setEnrollmentId] = useState<number | null>(null);
   const [template, setTemplate] = useState<ReportTemplate>('enhanced');
   const [sharing, setSharing] = useState(false);
+  const school = useSchoolProfile();
+  const [bulkOpen, setBulkOpen] = useState(false);
   const toast = useToast();
 
   // The layout choice is remembered on this phone, like the web remembers it.
@@ -100,19 +108,22 @@ export default function ReportCardScreen({ useClassOptions, autoSelectFirst }: P
 
   // Fresh each time: a card must reflect marks entered a minute ago.
   const reportQ = useScopedQuery('reportCard', [enrollment?.student ?? null, enrollmentId, yearId, examIds.join(',')], async () =>
-    (await examinationsApi.getReportCard({
-      student_id: enrollment!.student, enrollment_id: enrollmentId || undefined, academic_year_id: yearId, exam_ids: examIds.join(','),
-    })).data as Report,
+    (await examinationsApi.getReportCard(
+      reportCardQueryParams({ studentId: enrollment!.student, enrollmentId, yearId, examIds }),
+    )).data as Report,
   { enabled: !!enrollment && !!yearId && examIds.length > 0, staleTime: 0 });
   const refreshControl = useRefreshControl(reportQ.refetch);
 
-  // The server draws the PDF from the same data as the card, then the phone's share sheet opens.
+  // The phone draws the PDF from the card's own data (and the school's name, address and logo), then
+  // the share sheet opens.
   const sharePdf = async () => {
-    if (!enrollment || !yearId) return;
+    const report = reportQ.data;
+    if (!report) return;
     setSharing(true);
     try {
-      const params = reportCardPdfParams({ studentId: enrollment.student, enrollmentId, yearId, examIds, template });
-      await shareReportFile(() => examinationsApi.getReportCardPdf(params), reportCardFileName(reportQ.data?.student_name, template), 'pdf');
+      await shareReportFile(
+        () => makeReportCardPdf(report as unknown as CardReport, school.data, template),
+        reportCardFileName(report.student_name, template), 'pdf');
     } catch (e) {
       toast.error(reportCardPdfError(e));
     } finally {
@@ -146,6 +157,10 @@ export default function ReportCardScreen({ useClassOptions, autoSelectFirst }: P
         options={students.map((s) => ({ value: s.id, label: `${s.roll_number ? `${s.roll_number}. ` : ''}${s.student_name}` }))}
         onChange={setEnrollmentId} placeholder="Select a student" disabled={!option || enrollQ.isLoading} />
 
+      {canBulk && option && students.length > 0 && examIds.length > 0 && yearId ? (
+        <Button title={`All report cards (${students.length}) as ZIP`} variant="outline" size="sm" onPress={() => setBulkOpen(true)} style={styles.bulkBtn} />
+      ) : null}
+
       {students.length > 0 && enrollmentId ? (
         <View style={styles.nav}>
           <TouchableOpacity accessibilityRole="button" disabled={!prev} onPress={() => prev && setEnrollmentId(prev.id)}>
@@ -172,6 +187,11 @@ export default function ReportCardScreen({ useClassOptions, autoSelectFirst }: P
           </Card>
         <Card_ report={report} studentId={enrollment.student} onChanged={() => reportQ.refetch()} />
         </>
+      ) : null}
+      {canBulk && yearId ? (
+        <BulkReportCardsSheet visible={bulkOpen} onClose={() => setBulkOpen(false)} yearId={yearId} examIds={examIds} template={template}
+          className={option?.label ?? 'Class'}
+          students={students.map((e) => ({ studentId: e.student, enrollmentId: e.id, name: e.student_name, roll: e.roll_number }))} />
       ) : null}
     </ScrollView>
   );
@@ -371,6 +391,7 @@ function Remark({ who, text }: { who: string; text: string }) {
 }
 
 const styles = StyleSheet.create({
+  bulkBtn: { alignSelf: 'flex-start', marginBottom: Spacing.md },
   pdfBar: { marginBottom: Spacing.md },
   pdfTitle: { fontSize: FontSize.sm, fontWeight: '700', color: Colors.text, marginBottom: Spacing.sm },
   container: { flex: 1, backgroundColor: Colors.background },

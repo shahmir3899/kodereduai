@@ -149,16 +149,16 @@ export function normalizeTemplate(value: unknown): ReportTemplate {
   return value === 'traditional' || value === 'enhanced' ? value : DEFAULT_TEMPLATE;
 }
 
-// The same query the card itself was loaded with, plus the layout, so the PDF matches the screen.
-export function reportCardPdfParams(input: {
-  studentId: number; enrollmentId: number | null; yearId: number | null; examIds: number[]; template: ReportTemplate;
+// The query that loads one student's card. The PDF is drawn on the phone from this same payload, so
+// it can never show a number the screen does not.
+export function reportCardQueryParams(input: {
+  studentId: number; enrollmentId: number | null; yearId: number | null; examIds: number[];
 }): Record<string, unknown> {
   return {
     student_id: input.studentId,
     enrollment_id: input.enrollmentId || undefined,
     academic_year_id: input.yearId,
     exam_ids: input.examIds.join(','),
-    template: input.template,
   };
 }
 
@@ -167,8 +167,8 @@ export function reportCardFileName(studentName: string | undefined, template: Re
   return `Report_Card_${name}_${template === 'traditional' ? 'Traditional' : 'Enhanced'}.pdf`;
 }
 
-// The server's own words for 400 and 404; the files are fetched as bytes, so the JSON message is
-// read out of the bytes.
+// The server's own words for 400 and 404 when the card data cannot be loaded (a message in JSON,
+// or the same message as bytes), else a plain sentence.
 export function reportCardPdfError(error: unknown): string {
   const e = error as { response?: { status?: number; data?: ArrayBuffer | { detail?: string } } } | null;
   if (!e?.response) return (error as Error)?.message || 'No connection. Connect to the internet and try again.';

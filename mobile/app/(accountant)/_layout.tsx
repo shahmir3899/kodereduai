@@ -10,7 +10,7 @@ const TABS: TabSpec[] = [
 ];
 
 // Opened from Reports, More or the dashboard; no tab of their own.
-const HIDDEN = ['my-profile', 'accounts', 'income', 'expenses', 'inventory', 'inventory-items', 'inventory-movements', 'inventory-assignments', 'inventory-reorder', 'leave', 'my-attendance', 'payslips', 'inbox', 'change-password'];
+const HIDDEN = ['my-profile', 'accounts', 'account-ledger', 'transfers', 'income', 'expenses', 'inventory', 'inventory-items', 'inventory-movements', 'inventory-assignments', 'inventory-reorder', 'leave', 'my-attendance', 'payslips', 'inbox', 'change-password'];
 
 const TITLES: Record<string, string> = {
   'my-profile': 'My Profile',
@@ -18,6 +18,8 @@ const TITLES: Record<string, string> = {
   fees: 'Fee Records',
   reports: 'Finance Reports',
   accounts: 'Accounts',
+  'account-ledger': 'Ledger',
+  transfers: 'Transfers',
   income: 'Other Income',
   expenses: 'Expenses',
   inventory: 'Inventory',

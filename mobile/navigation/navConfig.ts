@@ -83,7 +83,7 @@ export function buildStaffNavigation(ctx: NavContext): NavGroup[] {
           ...(!isStaffLevel ? [item('Fee Setup', '/finance/fees/setup')] : []),
           item('Other Income', '/finance/income'),
           item('Expenses', '/finance/expenses'),
-          ...(!isStaffLevel ? [item('Discounts', '/finance/discounts')] : []),
+          ...(!isStaffLevel ? [item('Discounts', '/finance/discounts'), item('Categories', '/finance/categories')] : []),
         ]);
   }
 
@@ -344,7 +344,7 @@ export function buildParentNavigation(): NavGroup[] {
 
 // A driver's web sidebar is the Transport group plus their own HR self-service (DRIVER_NAV in
 // frontend/src/navigation/navigationConfig.js). On the phone Transport is the journey and
-// boarding screens; the web's route, vehicle and assignment admin pages stay on the web.
+// journey screens; the web's route, vehicle and assignment admin pages stay on the web.
 export function buildDriverNavigation(isModuleEnabled: (key: ModuleKey) => boolean): NavGroup[] {
   const item = (name: string, webPath: string): NavItem => ({ name, webPath, href: routeFor('driver', webPath) });
   const groups: NavGroup[] = [
@@ -353,7 +353,6 @@ export function buildDriverNavigation(isModuleEnabled: (key: ModuleKey) => boole
       items: [
         item('Dashboard', '/dashboard'),
         item('Active Journey', '/transport/journey'),
-        ...(isModuleEnabled('transport') ? [item('Student Boarding', '/transport/boarding')] : []),
       ],
     },
     {
@@ -364,7 +363,7 @@ export function buildDriverNavigation(isModuleEnabled: (key: ModuleKey) => boole
       ],
     },
   ];
-  if (isModuleEnabled('hr')) groups.push({ name: 'My HR', items: [item('My Leave', '/hr/leave'), item('My Attendance', '/hr/attendance')] });
+  if (isModuleEnabled('hr')) groups.push({ name: 'My HR', items: [item('My Leave', '/hr/leave'), item('My Attendance', '/hr/attendance'), item('My Payslips', '/hr/payslips')] });
   groups.push({ name: 'Me', items: [item('Change Password', '/driver/change-password')] });
   return groups;
 }

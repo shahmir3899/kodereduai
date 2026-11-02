@@ -127,7 +127,11 @@ describe('validation and payloads', () => {
   });
   it('builds the draft payload with structure and the total', () => {
     const e = buildEnsurePayload({ ...base, instructions: ' Answer all ' }, picked, []);
-    expect(e).toEqual({ paper_title: 'Term 1', class_obj: 5, subject: 4, instructions: 'Answer all', duration_minutes: 60, total_marks: 6, structure: [] });
+    expect(e).toEqual({ paper_title: 'Term 1', class_obj: 5, subject: 4, instructions: 'Answer all', render_options: { answer_lines: false }, duration_minutes: 60, total_marks: 6, structure: [] });
+    // The exam is optional; answer lines is a print option the web keeps in render_options.
+    const withExam = buildEnsurePayload({ ...base, exam: 9, answerLines: true }, picked, []);
+    expect(withExam).toMatchObject({ exam: 9, render_options: { answer_lines: true } });
+    expect(e).not.toHaveProperty('exam');
     expect(buildEnsurePayload({ ...base, duration: '' }, picked, [])).not.toHaveProperty('duration_minutes');
     const withSections = buildEnsurePayload(base, picked, [makeSection(0, { key: 'a', slotsShown: 2, marksPerQuestion: 5 })]);
     expect(withSections.total_marks).toBe(10);

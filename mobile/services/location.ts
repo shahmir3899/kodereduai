@@ -31,8 +31,7 @@ async function sendPing(journey: ActiveJourney, ping: Ping): Promise<SendOutcome
     battery_level: null,
   };
   try {
-    if (journey.mode === 'route') await transportApi.updateRouteJourney(payload);
-    else await transportApi.updateJourney(payload);
+    await transportApi.updateRouteJourney(payload);
     return 'ok';
   } catch (error) {
     return classifySendError(error);
@@ -104,7 +103,7 @@ export async function getCurrentLocation(): Promise<Location.LocationObject | nu
   }
 }
 
-async function startTask(mode: 'student' | 'route', notificationBody?: string): Promise<void> {
+async function startTask(notificationBody?: string): Promise<void> {
   const isStarted = await Location.hasStartedLocationUpdatesAsync(BACKGROUND_LOCATION_TASK).catch(() => false);
   if (isStarted) return;
 
@@ -116,9 +115,7 @@ async function startTask(mode: 'student' | 'route', notificationBody?: string): 
     showsBackgroundLocationIndicator: true,
     foregroundService: {
       notificationTitle: 'Journey in progress',
-      notificationBody: notificationBody || (mode === 'route'
-        ? 'Bus location is being shared with parents.'
-        : 'Your location is being shared with your parents.'),
+      notificationBody: notificationBody || 'Bus location is being shared with parents.',
       notificationColor: '#4F46E5',
     },
   });
@@ -127,17 +124,16 @@ async function startTask(mode: 'student' | 'route', notificationBody?: string): 
 /**
  * Start background location updates for a journey, remembering it so tracking survives the app
  * being killed.
- * @param mode - 'student' for student self-tracking, 'route' for driver route journey.
  */
 export async function startBackgroundLocationUpdates(
   journeyId: number,
-  mode: 'student' | 'route' = 'student',
+  mode: 'route' = 'route',
   notificationBody?: string,
   meta: Pick<ActiveJourney, 'routeName' | 'journeyType' | 'startedAt'> = { startedAt: new Date().toISOString() },
 ): Promise<void> {
   await saveActiveJourney({ id: journeyId, mode, ...meta });
   await saveBuffer([]);
-  await startTask(mode, notificationBody);
+  await startTask(notificationBody);
 }
 
 /** The journey this phone is reporting, if any (survives a restart). */
@@ -158,7 +154,7 @@ export async function getQueuedCount(): Promise<number> {
 export async function resumeTracking(): Promise<ActiveJourney | null> {
   const journey = await loadActiveJourney();
   if (!journey) return null;
-  await startTask(journey.mode);
+  await startTask();
   return journey;
 }
 

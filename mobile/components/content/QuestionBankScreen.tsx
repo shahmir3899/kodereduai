@@ -1,9 +1,11 @@
 import React, { useMemo, useState } from 'react';
 import { View, Text, FlatList, ActivityIndicator, TouchableOpacity, StyleSheet, type RefreshControlProps } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
+import { useAuth } from '../../contexts/AuthContext';
 import { useMasterClasses } from '../../hooks/useAcademicYear';
+import { useSubjectTags } from '../../hooks/useCurriculum';
 import { useBooksForClassSubject } from '../../hooks/useLessonPlans';
-import { useQuestionActions, useQuestionsPaged } from '../../hooks/useQuestionBank';
+import { useQuestionActions, useQuestionsPaged, useSemanticQuestions } from '../../hooks/useQuestionBank';
 import { topicSummary } from '../../services/lessonPlanTools';
 import LessonPlanTopicPicker from '../lms/LessonPlanTopicPicker';
 import { useSubjectsList } from '../../hooks/useManager';
@@ -13,8 +15,12 @@ import {
   BLOOM_LEVELS, buildQuestionPayload, hasPicture, pictureProblem, slotsFor, type PictureSlot, DIFFICULTIES, difficultyTone, emptyQuestionForm, isEditableType, QUESTION_TYPES,
   questionToForm, typeLabel, validateQuestion, type Question, type QuestionForm,
 } from '../../services/questionBank';
+import {
+  aiLabel, aiStatus, canCreateTag, filterTags, hitContext, newTagPayload, SEARCH_MODES, SEMANTIC_DEBOUNCE_MS, toggleId, verifyPayload, type SearchMode,
+} from '../../services/questionExtras';
 import { inventoryErrorMessage } from '../../services/inventory';
 import SearchBar from '../ui/SearchBar';
+import SegmentedTabs from '../ui/SegmentedTabs';
 import Select from '../ui/Select';
 import Input from '../ui/Input';
 import Button from '../ui/Button';
@@ -41,7 +47,20 @@ export default function QuestionBankScreen() {
   const [subjectFilter, setSubjectFilter] = useState<number>(-1);
   const [typeFilter, setTypeFilter] = useState(ANY);
   const [diffFilter, setDiffFilter] = useState(ANY);
-  const query = useQuestionsPaged(term, subjectFilter === -1 ? null : subjectFilter, typeFilter, diffFilter);
+  const [bloomFilter, setBloomFilter] = useState(ANY);
+  const [tagFilter, setTagFilter] = useState<number>(-1);
+  const [mode, setMode] = useState<SearchMode>('keyword');
+  const [classFilter, setClassFilter] = useState<number | null>(null);
+  const { user } = useAuth();
+  const subjectId = subjectFilter === -1 ? null : subjectFilter;
+  const filterTagList = useSubjectTags(subjectId);
+  const query = useQuestionsPaged(term, subjectId, typeFilter, diffFilter, bloomFilter, tagFilter === -1 ? null : tagFilter);
+  // The web waits 600 ms after typing before it asks the server to search by meaning, and needs a class.
+  const meaningTerm = useDebouncedValue(mode === 'meaning' ? search.trim() : '', SEMANTIC_DEBOUNCE_MS);
+  const meaning = useSemanticQuestions(meaningTerm, classFilter, subjectId);
+  const hits = meaning.data ?? [];
+  const useHits = mode === 'meaning' && !!meaningTerm && hits.length > 0;
+  const fellBack = mode === 'meaning' && !!meaningTerm && meaning.isSuccess && hits.length === 0;
   const refreshControl = useRefreshControl(query.refetch) as React.ReactElement<RefreshControlProps>;
   const rows = useMemo(() => query.data?.pages.flatMap((p) => p.results) ?? [], [query.data]);
 
@@ -54,6 +73,10 @@ export default function QuestionBankScreen() {
   const books = useBooksForClassSubject(topicClass, form.subject);
   const [topicPicker, setTopicPicker] = useState(false);
   const [pictureBusy, setPictureBusy] = useState<string | null>(null);
+  const [tagIds, setTagIds] = useState<number[]>([]);
+  const [tagSearch, setTagSearch] = useState('');
+  const [verifying, setVerifying] = useState<number | null>(null);
+  const formTags = useSubjectTags(form.subject);
   const current = editing && editing !== 'new' ? editing : null;
 
   const open = (q: Question | 'new') => {
@@ -63,6 +86,8 @@ export default function QuestionBankScreen() {
       return;
     }
     setForm(q === 'new' ? { ...emptyQuestionForm(), subject: subjectFilter === -1 ? null : subjectFilter } : questionToForm(q));
+    setTagIds([]);
+    setTagSearch('');
     setEditing(q);
   };
 
@@ -75,6 +100,10 @@ export default function QuestionBankScreen() {
       if (editing === 'new') {
         const res = await actions.create.mutateAsync(payload);
         const created = res.data as Question;
+        // As on the web, tags picked before the first save are linked once the question exists.
+        if (created?.id && tagIds.length > 0) {
+          await Promise.all(tagIds.map((tagId) => actions.tag.mutateAsync({ id: created.id, tagId }))).catch(() => toast.error('Some tags could not be linked.'));
+        }
         // Pictures need a saved question, so stay on it and offer them.
         toast.success('Question saved. You can add pictures now.');
         if (created?.id) { setEditing(created); return; }
@@ -126,6 +155,44 @@ export default function QuestionBankScreen() {
     }
   };
 
+  // On a saved question a tag is linked or unlinked at once (and put back if the server refuses); on a new one it waits for Save.
+  const toggleTag = async (tagId: number) => {
+    const on = tagIds.includes(tagId);
+    setTagIds((ids) => toggleId(ids, tagId));
+    if (!current) return;
+    try {
+      await actions.tag.mutateAsync({ id: current.id, tagId, remove: on });
+    } catch {
+      setTagIds((ids) => toggleId(ids, tagId));
+      toast.error(on ? 'Could not remove the tag.' : 'Could not link the tag.');
+    }
+  };
+
+  const makeTag = async () => {
+    if (!form.subject || !tagSearch.trim()) return;
+    try {
+      const res = await actions.createTag.mutateAsync(newTagPayload(tagSearch, form.subject));
+      const id = (res.data as { id?: number })?.id;
+      setTagSearch('');
+      if (id) await toggleTag(id);
+    } catch (e) {
+      toast.error(inventoryErrorMessage(e, 'Could not create the tag.'));
+    }
+  };
+
+  const verify = async (q: Question) => {
+    if (!user?.id) return toast.error('Unable to verify: sign in again.');
+    setVerifying(q.id);
+    try {
+      await actions.update.mutateAsync({ id: q.id, data: verifyPayload(user.id) });
+      toast.success('Marked as verified.');
+    } catch (e) {
+      toast.error(inventoryErrorMessage(e, 'Could not verify the question.'));
+    } finally {
+      setVerifying(null);
+    }
+  };
+
   const remove = async (q: Question) => {
     if (!(await confirm({ title: 'Delete this question?', message: 'Papers that already use it keep their own copy of the wording.', confirmLabel: 'Delete', destructive: true }))) return;
     try {
@@ -139,11 +206,23 @@ export default function QuestionBankScreen() {
 
   const header = (
     <View>
-      <SearchBar value={search} onChangeText={setSearch} placeholder="Search questions..." />
+      <SegmentedTabs tabs={SEARCH_MODES.map((m) => ({ value: m.value, label: m.label }))} value={mode} onChange={setMode} />
+      <SearchBar value={search} onChangeText={setSearch} placeholder={mode === 'meaning' ? 'Describe what you are looking for...' : 'Search questions...'} />
+      {mode === 'meaning' ? (
+        <Select label="Class (needed to search by meaning)" searchable value={classFilter} onChange={setClassFilter} placeholder="Choose a class"
+          options={(masterClasses.data ?? []).map((c) => ({ value: Number(c.id), label: String(c.name) }))} />
+      ) : null}
       <Select label="Subject" value={subjectFilter} onChange={setSubjectFilter}
         options={[{ value: -1, label: 'All subjects' }, ...(subjects.data ?? []).map((s) => ({ value: s.id, label: s.name }))]} />
       <Select label="Type" value={typeFilter} onChange={setTypeFilter} options={[{ value: ANY, label: 'All types' }, ...QUESTION_TYPES.map((t) => ({ value: t.value as string, label: t.label }))]} />
       <Select label="Difficulty" value={diffFilter} onChange={setDiffFilter} options={[{ value: ANY, label: 'Any difficulty' }, ...DIFFICULTIES.map((d) => ({ value: d.value as string, label: d.label }))]} />
+      <Select label="Thinking level" value={bloomFilter} onChange={setBloomFilter} options={[{ value: ANY, label: 'Any thinking level' }, ...BLOOM_LEVELS.map((b) => ({ value: b.value as string, label: b.label }))]} />
+      {subjectId ? (
+        <Select label="Tag" value={tagFilter} onChange={setTagFilter} options={[{ value: -1, label: 'Any tag' }, ...(filterTagList.data ?? []).map((t) => ({ value: t.id, label: t.name }))]} />
+      ) : null}
+      {mode === 'meaning' && !classFilter ? <Text style={styles.sub}>Choose a class to search by meaning.</Text> : null}
+      {mode === 'meaning' && meaning.isFetching ? <ActivityIndicator color={Colors.primary} style={{ margin: Spacing.sm }} /> : null}
+      {fellBack ? <Text style={styles.sub}>Nothing close in meaning; showing keyword results instead.</Text> : null}
       <Button title="+ New question" size="sm" onPress={() => open('new')} />
     </View>
   );
@@ -155,24 +234,35 @@ export default function QuestionBankScreen() {
     <View style={styles.container}>
       <FlatList
         contentContainerStyle={styles.content}
-        data={rows}
+        data={useHits ? (hits as unknown as Question[]) : rows}
         keyExtractor={(q) => String(q.id)}
         keyboardShouldPersistTaps="handled"
         refreshControl={refreshControl}
         ListHeaderComponent={header}
-        onEndReached={() => query.hasNextPage && !query.isFetchingNextPage && query.fetchNextPage()}
+        onEndReached={() => !useHits && query.hasNextPage && !query.isFetchingNextPage && query.fetchNextPage()}
         onEndReachedThreshold={0.5}
         ListEmptyComponent={<EmptyState title="No questions" message={term ? 'Nothing matches your search.' : 'Write the first question.'} />}
         ListFooterComponent={query.isFetchingNextPage ? <ActivityIndicator color={Colors.primary} style={{ margin: Spacing.lg }} /> : null}
-        renderItem={({ item: q }) => (
-          <TouchableOpacity accessibilityRole="button" style={styles.row} onPress={() => open(q)}>
+        renderItem={({ item: q }) => {
+          const ai = aiStatus(q);
+          const hit = useHits ? (q as unknown as { book_title?: string; chapter_title?: string; topic_title?: string }) : null;
+          return (
+          <TouchableOpacity accessibilityRole="button" style={styles.row} onPress={() => (useHits ? undefined : open(q))} disabled={useHits}>
             <Text style={styles.text} numberOfLines={3}>{q.question_text}</Text>
+            {hit && hitContext(hit as never) ? <Text style={styles.sub}>{hitContext(hit as never)}</Text> : null}
+            {ai ? (
+              <View style={styles.meta}>
+                <StatusPill label={aiLabel(ai)} tone={ai === 'verified' ? 'success' : 'warning'} />
+                {ai === 'unverified' ? <Button title="Mark verified" size="sm" variant="outline" onPress={() => verify(q)} loading={verifying === q.id} disabled={verifying !== null} /> : null}
+              </View>
+            ) : null}
             <View style={styles.meta}>
               <Text style={styles.sub}>{[q.subject_name, typeLabel(q.question_type), `${Number(q.marks)} mark${Number(q.marks) === 1 ? '' : 's'}`].filter(Boolean).join('  ·  ')}</Text>
               <StatusPill label={DIFFICULTIES.find((d) => d.value === q.difficulty_level)?.label ?? q.difficulty_level} tone={difficultyTone(q.difficulty_level)} />
             </View>
           </TouchableOpacity>
-        )}
+          );
+        }}
       />
 
       <FormSheet visible={editing !== null} title={editing === 'new' ? 'New question' : 'Edit question'} onClose={() => setEditing(null)} onSubmit={save}
@@ -234,6 +324,25 @@ export default function QuestionBankScreen() {
             ))}
           </View>
         ) : <Text style={styles.sub}>Save the question first to add pictures.</Text>}
+        <View style={styles.pictures}>
+          <Text style={styles.sub}>Tags (subject tags)</Text>
+          {!form.subject ? <Text style={styles.sub}>Choose the subject to see its tags.</Text> : (
+            <>
+              <Input value={tagSearch} onChangeText={setTagSearch} placeholder="Search or add a tag" autoCapitalize="none" />
+              <View style={styles.tagWrap}>
+                {filterTags(formTags.data ?? [], tagSearch).map((t) => {
+                  const on = tagIds.includes(t.id);
+                  return (
+                    <TouchableOpacity key={t.id} accessibilityRole="button" accessibilityState={{ selected: on }} accessibilityLabel={`${on ? 'Remove' : 'Add'} tag ${t.name}`} onPress={() => toggleTag(t.id)} style={[styles.tag, on && styles.tagOn]}>
+                      <Text style={[styles.tagText, on && styles.tagTextOn]}>{on ? '✓ ' : ''}{t.name}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+              {canCreateTag(formTags.data ?? [], tagSearch) ? <Button title={`Create tag "${tagSearch.trim()}"`} size="sm" variant="outline" onPress={makeTag} loading={actions.createTag.isPending} /> : null}
+            </>
+          )}
+        </View>
         <Input label="Marks" value={form.marks} onChangeText={(v) => set('marks', v)} keyboardType="decimal-pad" />
         <Select label="Difficulty" value={form.difficulty} onChange={(v) => set('difficulty', v)} options={DIFFICULTIES.map((d) => ({ value: d.value as string, label: d.label }))} />
         <Select label="Thinking level (optional)" value={form.bloom} onChange={(v) => set('bloom', v)} placeholder="Not set" options={BLOOM_LEVELS.map((b) => ({ value: b.value as string, label: b.label }))} />
@@ -258,4 +367,9 @@ const styles = StyleSheet.create({
   matchCol: { flex: 1 },
   pictures: { gap: Spacing.xs },
   pictureLabel: { flex: 1 },
+  tagWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.xs },
+  tag: { minHeight: 36, justifyContent: 'center', paddingHorizontal: Spacing.md, borderRadius: BorderRadius.sm, backgroundColor: Colors.surfaceSecondary, borderWidth: 1, borderColor: 'transparent' },
+  tagOn: { borderColor: Colors.primary },
+  tagText: { fontSize: FontSize.sm, color: Colors.text },
+  tagTextOn: { color: Colors.primary, fontWeight: '600' },
 });

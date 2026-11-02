@@ -3,7 +3,7 @@ import { View, Text, ScrollView, TextInput, Switch, KeyboardAvoidingView, Platfo
 import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
 import {
   ASSIGNMENT_TYPES, SINGLE_FORM_TYPES, STATUSES, TYPE_HELP, buildPayload, emptyForm, firstFieldError, formFromAssignment,
-  resolveDefaultTeacherId, setType, splitSectionId, validateForm, type AssignmentForm,
+  resolveDefaultTeacherId, setType, splitSectionId, teacherSelectOptions, validateForm, type AssignmentForm,
 } from '../../services/assignments';
 import type { ClassOption } from '../../services/attendanceEntry';
 import { useAuth } from '../../contexts/AuthContext';
@@ -29,14 +29,14 @@ export default function AssignmentFormScreen({ classOptions }: Props) {
   const router = useRouter();
   const navigation = useNavigation();
   const toast = useToast();
-  const { user, isTeacher } = useAuth();
+  const { user, isTeacher, isManager } = useAuth();
   const { id } = useLocalSearchParams<{ id?: string }>();
   const editingId = id ? Number(id) : null;
 
   const { year, options, isLoading: classesLoading } = useAttendanceClassOptions(classOptions);
   const sessionClasses = useSessionClasses(year.current?.id);
   const subjects = useSubjectList();
-  const staff = useTeacherStaff();
+  const staff = useTeacherStaff(!isManager); // a manager cannot read the staff list and does not pick a teacher
   const timetable = useMyTimetable();
   const existing = useAssignment(editingId);
   const actions = useAssignmentActions();
@@ -68,11 +68,7 @@ export default function AssignmentFormScreen({ classOptions }: Props) {
 
   // A teacher whose staff list is closed to them can still pick themselves, via the timetable.
   const selfId = isTeacher ? resolveDefaultTeacherId(staff.data ?? [], user?.id, timetable.data?.find((e) => e.teacher)?.teacher) : null;
-  const teacherOptions = useMemo(() => {
-    const list = (staff.data ?? []).map((s) => ({ value: s.id, label: s.full_name || `Staff #${s.id}` }));
-    if (selfId && !list.some((o) => o.value === selfId)) list.unshift({ value: selfId, label: 'Me' });
-    return list;
-  }, [staff.data, selfId]);
+  const teacherOptions = useMemo(() => teacherSelectOptions(staff.data ?? [], selfId), [staff.data, selfId]);
 
   const dirty = JSON.stringify(form) !== JSON.stringify(baseline);
   const dirtyRef = useRef(false);
@@ -89,7 +85,7 @@ export default function AssignmentFormScreen({ classOptions }: Props) {
   const set = <K extends keyof AssignmentForm>(key: K, value: AssignmentForm[K]) => setForm((f) => ({ ...f, [key]: value }));
 
   const submit = async () => {
-    const problem = validateForm(form);
+    const problem = validateForm(form, { teacherRequired: !isManager });
     if (problem) {
       toast.error(problem);
       return;
@@ -100,6 +96,7 @@ export default function AssignmentFormScreen({ classOptions }: Props) {
       masterClassId: option.classObj ?? option.id,
       sessionClassId: option.isSession ? splitSectionId(option.id, sessionList) : null,
       academicYearId: year.current?.id,
+      draftOnly: isManager,
     });
     try {
       if (editingId) await actions.update.mutateAsync({ id: editingId, data: payload });
@@ -130,8 +127,12 @@ export default function AssignmentFormScreen({ classOptions }: Props) {
           onChange={(v) => set('classId', v)} placeholder="Select a class" />
         <Select label="Subject *" value={form.subject} options={(subjects.data ?? []).map((s) => ({ value: s.id, label: s.name }))}
           onChange={(v) => set('subject', v)} placeholder="Select a subject" />
-        <Select label="Teacher *" value={form.teacher} options={teacherOptions} onChange={(v) => set('teacher', v)}
-          placeholder="Select a teacher" searchable />
+        {isManager ? (
+          <Text style={styles.help}>Teacher: set automatically from the subject&apos;s assigned teacher. Saved as a draft; a teacher publishes it.</Text>
+        ) : (
+          <Select label="Teacher *" value={form.teacher} options={teacherOptions} onChange={(v) => set('teacher', v)}
+            placeholder="Select a teacher" searchable />
+        )}
         <Select label="Type" value={form.assignment_type} options={types.map((t) => ({ value: t, label: t[0] + t.slice(1).toLowerCase() }))}
           onChange={(v) => setForm((f) => setType(f, v))} />
         <Text style={styles.help}>{TYPE_HELP[form.assignment_type]}</Text>
@@ -160,8 +161,10 @@ export default function AssignmentFormScreen({ classOptions }: Props) {
           </>
         ) : null}
 
-        <Select label="Status" value={form.status} options={STATUSES.map((s) => ({ value: s, label: s[0] + s.slice(1).toLowerCase() }))}
-          onChange={(v) => set('status', v)} />
+        {isManager ? null : (
+          <Select label="Status" value={form.status} options={STATUSES.map((s) => ({ value: s, label: s[0] + s.slice(1).toLowerCase() }))}
+            onChange={(v) => set('status', v)} />
+        )}
       </ScrollView>
 
       <View style={styles.footer}>

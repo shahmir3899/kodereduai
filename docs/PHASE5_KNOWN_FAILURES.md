@@ -392,3 +392,23 @@ Notes: the `test_*.py` scripts in the backend root (`test_phase1.py`, `test_audi
 - **Not fixed:** `AdmissionNote.note_type` is client-writable, so a user could post `SYSTEM` or `STATUS_CHANGE` lines; the phone only sends `NOTE` or `CALL`. The followups endpoints use `date.today()` while the likelihood service uses `timezone.localdate()` (can differ around midnight).
 - **Still allowed by the server:** editing or deleting a CONVERTED enquiry (the web and the phone hide both).
 
+
+## Found while building mobile teacher Batch 12 (2026-11-01, not fixed)
+- **Web Create Daily Diary is refused by the server.** `AssignmentsPage.jsx` `bulkDiaryMutation` posts one DIARY assignment per subject with no `teacher`, and `AssignmentCreateSerializer` requires it (the model field is not null): the response is `{"teacher": ["This field is required."]}`. Seen from the phone build with the same payload on 2026-11-01. Fix on the web: send the signed-in teacher's staff id (admins need a teacher choice), or default it on the server for a diary. The mobile Daily Diary sends the teacher.
+
+## Found while building mobile student Batch 13 (2026-11-01, not fixed)
+- **Web student Dashboard tiles read the wrong keys.** `StudentDashboard.jsx` takes `dashboard.stats` (`attendance_rate`, `fee_outstanding`, `upcoming_assignments_count`), but `StudentDashboardView` returns `attendance`, `fees` and `upcoming_assignments` and no `stats`. The attendance and fee tiles therefore show N/A and the assignments tile falls back to the list length. Mobile reads the real keys.
+- **`/api/students/portal/fees/` returns a plain list** (no `summary` object); `StudentFees.jsx` reads `fees.summary` first and always falls back to summing rows, including rows already handed over to a new branch.
+
+## Found while building mobile student Batch 14 (2026-11-02, not fixed)
+- **Web student Timetable cannot place periods by time.** `StudentTimetable.jsx` reads `start_time`, `end_time` and `slot_type` from each entry, but `StudentTimetableView` sends entries as `day, slot_id, subject, teacher, room`; the times and `slot_type` are only in the separate `slots` list. Read from code, not run in a browser. Mobile joins entries to slots by `slot_id`.
+- **`/api/students/portal/fees/` ignores `?year=`** and returns every year; the web year filter therefore does nothing (the page sums all rows). Mobile filters on the phone.
+
+## Found while building mobile manager Batch 18 (2026-11-02, not fixed)
+- **A manager cannot pick a teacher for an assignment.** The assignment create serializer needs a teacher, the picker is filled from `GET /api/hr/staff/`, and that answers 403 "Only Admins can access this HR data" for a manager (the server allows a manager to create assignments). The web diary form already omits the teacher; the web assignment form has the same dependency. Options: let a manager read a teacher-only staff list (server change), or let the server default the teacher for a manager. Needs the owner's decision; no mobile code until then.
+  **Resolved 2026-11-02 (owner decision):** a manager now only prepares drafts and the server fills the teacher from the subject's assignment (`lms/assignment_rules.py`); a manager cannot publish, close or change a published assignment. Done on the server, the web page, the mobile app and the user guide.
+- **Web manager Exams page** is open to a manager, but every exam write is refused for that role (exam views are admin and principal only); whether it shows create controls was not checked in a browser.
+
+## Found while building mobile staff Batch 20 (2026-11-02, not fixed on the web)
+- **Web own-attendance cards read the wrong keys.** `StaffAttendancePage.jsx` `MyAttendanceView` takes `summary.PRESENT`, `ABSENT`, `LATE`, `HALF_DAY`, `ON_LEAVE`, but `GET /api/hr/attendance/summary/` answers lowercase `present`, `absent`, `late`, `half_day`, `on_leave`, so those cards show 0 for a teacher, manager, staff, accountant and driver (the Rate card reads `attendance_rate`, which is right). The mobile screen had the same mistake and is fixed. The web staff Dashboard reads the lowercase keys correctly.
+- **Test account:** `SEED_TEST_staff_e2e` (school 37) no longer accepts the dev password `Abcd1234`.

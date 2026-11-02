@@ -12,7 +12,7 @@ const TABS: TabSpec[] = [
 const HIDDEN = [
   'my-profile',
   'schedule', 'subjects', 'calendar', 'classes', 'inbox', 'leave', 'my-attendance',
-  'questions', 'papers', 'worksheets', 'paper-builder', 'exam-types', 'exams', 'sessions-web', 'promotion-web',
+  'questions', 'papers', 'worksheets', 'worksheet-builder', 'paper-builder', 'exam-types', 'exams', 'sessions-web', 'promotion-web',
 ];
 
 const STACKS = ['assignments', 'curriculum'];
@@ -21,7 +21,7 @@ const TITLES: Record<string, string> = {
   'my-profile': 'My Profile',
   schedule: 'Timetable', subjects: 'Subjects', calendar: 'Academic Calendar', classes: 'Classes',
   inbox: 'Notifications', leave: 'My Leave', 'my-attendance': 'My Attendance', questions: 'Question Bank',
-  papers: 'Question Papers', worksheets: 'Worksheets', 'paper-builder': 'Paper Builder',
+  papers: 'Question Papers', worksheets: 'Worksheets', 'worksheet-builder': 'Worksheet', 'paper-builder': 'Paper Builder',
   'exam-types': 'Exam Types', exams: 'Exams', 'sessions-web': 'Academic Sessions', 'promotion-web': 'Promotion',
 };
 

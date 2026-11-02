@@ -21,7 +21,6 @@ from core.mixins import TenantQuerySetMixin
 from core.audit import log_admin_action
 from core.models import AdminActionLog
 from .models import School, Organization, UserSchoolMembership
-from .throttles import SchoolLookupThrottle
 from .serializers import (
     SchoolSerializer,
     SchoolCreateSerializer,
@@ -506,82 +505,6 @@ class SchoolViewSet(TenantQuerySetMixin, viewsets.ReadOnlyModelViewSet):
                 {'detail': f'School with subdomain "{subdomain}" not found.'},
                 status=status.HTTP_404_NOT_FOUND
             )
-
-    # The phone app's front door. Public, so they return only what a login page needs (code, name,
-    # logo): by-subdomain above answers with the full school record, contact details and all.
-    APP_SEARCH_MIN_CHARS = 3
-    APP_SEARCH_LIMIT = 8
-    # The phone downloads the whole opt-in list once and filters it as you type. Only schools that
-    # switched themselves on are in it, and it is capped; the cache keeps it off the database.
-    APP_DIRECTORY_LIMIT = 500
-    APP_DIRECTORY_CACHE_KEY = 'schools:app-directory'
-    APP_DIRECTORY_CACHE_SECONDS = 300
-
-    @staticmethod
-    def _public_school(school):
-        return {'subdomain': school.subdomain, 'name': school.name, 'logo': school.logo}
-
-    @action(detail=False, methods=['get'], url_path='app-search', permission_classes=[AllowAny],
-            authentication_classes=[], throttle_classes=[SchoolLookupThrottle])
-    def app_search(self, request):
-        """GET /api/schools/app-search/?q=oak -- schools that chose to be listed, by name or code.
-
-        Fewer than three letters returns an empty list, and only a handful of rows ever come back, so
-        the list cannot be dumped. A school that is not listed is found only by its exact code.
-        """
-        q = (request.query_params.get('q') or '').strip()
-        if len(q) < self.APP_SEARCH_MIN_CHARS:
-            return Response([])
-        schools = (
-            School.objects.filter(is_active=True, listed_in_app=True)
-            .filter(Q(name__icontains=q) | Q(subdomain__istartswith=q))
-            .order_by('name')[:self.APP_SEARCH_LIMIT]
-        )
-        return Response([self._public_school(s) for s in schools])
-
-    @action(detail=False, methods=['get'], url_path='app-directory', permission_classes=[AllowAny],
-            authentication_classes=[], throttle_classes=[SchoolLookupThrottle])
-    def app_directory(self, request):
-        """GET /api/schools/app-directory/ -- every school that chose to be listed (code, name, logo)."""
-        data = cache.get(self.APP_DIRECTORY_CACHE_KEY)
-        if data is None:
-            schools = School.objects.filter(is_active=True, listed_in_app=True).order_by('name')[:self.APP_DIRECTORY_LIMIT]
-            data = [self._public_school(s) for s in schools]
-            cache.set(self.APP_DIRECTORY_CACHE_KEY, data, self.APP_DIRECTORY_CACHE_SECONDS)
-        return Response(data)
-
-    @action(detail=False, methods=['get'], url_path='app-info', permission_classes=[AllowAny],
-            authentication_classes=[], throttle_classes=[SchoolLookupThrottle])
-    def app_info(self, request):
-        """GET /api/schools/app-info/?code=demo -- one school by its exact code, listed or not."""
-        code = (request.query_params.get('code') or '').strip()
-        if not code:
-            return Response({'detail': 'Missing code.'}, status=status.HTTP_400_BAD_REQUEST)
-        school = School.objects.filter(subdomain__iexact=code, is_active=True).first()
-        if school is None:
-            return Response({'detail': 'No school has this code.'}, status=status.HTTP_404_NOT_FOUND)
-        return Response(self._public_school(school))
-
-    @action(detail=False, methods=['get', 'put'], url_path='app-listing')
-    def app_listing(self, request):
-        """Get or change whether this school appears in the phone app's school search."""
-        school = getattr(request, 'tenant_school', None) or request.user.school
-        if not school:
-            return Response({'error': 'No school associated with this user.'}, status=status.HTTP_404_NOT_FOUND)
-        if request.method == 'GET':
-            return Response({'listed_in_app': school.listed_in_app})
-
-        from core.permissions import get_effective_role, ADMIN_ROLES
-        if get_effective_role(request) not in ADMIN_ROLES:
-            return Response({'error': 'Only school admins can change this.'}, status=status.HTTP_403_FORBIDDEN)
-        listed = request.data.get('listed_in_app')
-        if not isinstance(listed, bool):
-            return Response({'error': 'listed_in_app must be true or false.'}, status=status.HTTP_400_BAD_REQUEST)
-        school.listed_in_app = listed
-        school.save(update_fields=['listed_in_app', 'updated_at'])
-        # The directory is cached; a school that just switched itself on or off should show at once.
-        cache.delete(self.APP_DIRECTORY_CACHE_KEY)
-        return Response({'listed_in_app': school.listed_in_app})
 
     @action(detail=False, methods=['get', 'put'])
     def exam_config(self, request):

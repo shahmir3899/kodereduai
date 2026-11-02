@@ -13,6 +13,7 @@ export default function AssignmentsLayout() {
       <Stack.Screen name="index" options={{ title: 'Assignments' }} />
       <Stack.Screen name="form" options={{ title: 'Assignment' }} />
       <Stack.Screen name="submissions" options={{ title: 'Submissions' }} />
+      <Stack.Screen name="diary" options={{ title: 'Daily diary' }} />
     </Stack>
   );
 }

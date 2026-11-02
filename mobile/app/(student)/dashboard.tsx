@@ -3,23 +3,31 @@ import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-nati
 import { useRouter, type Href } from 'expo-router';
 import { useAuth } from '../../contexts/AuthContext';
 import { routeFor } from '../../navigation/routes';
-import { useStudentDashboard } from '../../hooks/useStudentPortal';
+import { useStudentDashboard, useStudentDayStatus, useStudentResults } from '../../hooks/useStudentPortal';
 import { useRefreshControl } from '../../hooks/useRefreshControl';
-import { dueLabel, rateTone } from '../../services/studentPortal';
+import { attendanceTile, dueLabel, examPercentage, pctTone, rateTone } from '../../services/studentPortal';
+import { schoolToday } from '../../services/schoolTime';
 import { formatMoney } from '../../services/feeCollect';
 import { formatSlotTime } from '../../services/teacher';
 import Card from '../../components/ui/Card';
 import Skeleton from '../../components/ui/Skeleton';
 import ErrorState from '../../components/ui/ErrorState';
 import SchoolSwitcher from '../../components/nav/SchoolSwitcher';
+import RecentNotifications from '../../components/dashboard/RecentNotifications';
+import StatusPill from '../../components/ui/StatusPill';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
 
 const TONE = { success: Colors.success, warning: Colors.warning, error: Colors.error } as const;
+const PCT_COLOR = { success: Colors.success, info: Colors.info, warning: Colors.warning, error: Colors.error, neutral: Colors.textSecondary } as const;
 
 export default function StudentDashboard() {
-  const { user } = useAuth();
+  const { user, isModuleEnabled } = useAuth();
   const router = useRouter();
   const query = useStudentDashboard();
+  const results = useStudentResults();
+  const today = schoolToday();
+  const dayStatus = useStudentDayStatus(today, today, query.data?.student?.class_obj);
+  const isOffDay = !!dayStatus.data?.[today]?.is_off_day;
   const refreshControl = useRefreshControl(query.refetch);
   const go = (route?: string, params?: Record<string, string | number>) =>
     route && router.push((params ? { pathname: route, params } : route) as Href);
@@ -32,10 +40,16 @@ export default function StudentDashboard() {
 
   const quick = [
     { label: 'Attendance', icon: '✅', route: routeFor('student', '/student/attendance') },
-    { label: 'Fees', icon: '💰', route: routeFor('student', '/student/fees') },
+    { label: 'Results', icon: '📊', route: routeFor('student', '/student/results') },
+    { label: 'Tasks', icon: '📝', route: routeFor('student', '/student/assignments') },
+    { label: 'Timetable', icon: '⏰', route: routeFor('student', '/student/timetable') },
     { label: 'Exams', icon: '🗓️', route: routeFor('student', '/student/exam-schedule') },
+    { label: 'Fees', icon: '💰', route: routeFor('student', '/student/fees') },
     { label: 'Library', icon: '📚', route: routeFor('student', '/student/library') },
+    { label: 'Transport', icon: '🚌', route: routeFor('student', '/student/transport') },
+    { label: 'Study helper', icon: '🤖', route: routeFor('student', '/student/study-helper') },
   ];
+  const recent = (results.data ?? []).slice(0, 4);
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content} refreshControl={refreshControl}>
@@ -45,14 +59,18 @@ export default function StudentDashboard() {
 
       <View style={styles.tiles}>
         <TouchableOpacity accessibilityRole="button" style={styles.tile} onPress={() => go(routeFor('student', '/student/attendance'))}>
-          <Text style={[styles.tileValue, { color: d.attendance.total_days > 0 ? TONE[rateTone(d.attendance.rate)] : Colors.textSecondary }]}>
-            {d.attendance.total_days > 0 ? `${d.attendance.rate}%` : '–'}
+          <Text style={[styles.tileValue, { color: d.attendance.total_days > 0 && !isOffDay ? TONE[rateTone(d.attendance.rate)] : Colors.textSecondary }]}>
+            {attendanceTile(d.attendance, isOffDay)}
           </Text>
           <Text style={styles.tileLabel}>Attendance</Text>
         </TouchableOpacity>
         <TouchableOpacity accessibilityRole="button" style={styles.tile} onPress={() => go(routeFor('student', '/student/fees'))}>
           <Text style={[styles.tileValue, { color: pending > 0 ? Colors.error : Colors.success }]}>{formatMoney(pending)}</Text>
           <Text style={styles.tileLabel}>Fees pending</Text>
+        </TouchableOpacity>
+        <TouchableOpacity accessibilityRole="button" style={styles.tile} onPress={() => go(routeFor('student', '/student/assignments'))}>
+          <Text style={styles.tileValue}>{d.upcoming_assignments.length}</Text>
+          <Text style={styles.tileLabel}>Tasks due soon</Text>
         </TouchableOpacity>
       </View>
 
@@ -80,6 +98,30 @@ export default function StudentDashboard() {
         </TouchableOpacity>
       ))}
 
+      {recent.length > 0 ? (
+        <>
+          <View style={styles.headRow}>
+            <Text style={styles.section}>Recent results</Text>
+            <TouchableOpacity accessibilityRole="button" onPress={() => go(routeFor('student', '/student/results'))} style={styles.linkBox}>
+              <Text style={styles.link}>View all</Text>
+            </TouchableOpacity>
+          </View>
+          {recent.map((r) => {
+            const pct = examPercentage(r);
+            return (
+              <Card key={r.exam_id} style={styles.period}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.subject} numberOfLines={1}>{r.exam_name}</Text>
+                  <Text style={styles.sub}>{[r.exam_type, r.exam_date].filter(Boolean).join('  ·  ')}</Text>
+                </View>
+                {r.grade ? <StatusPill label={`Grade ${r.grade}`} tone="success" /> : null}
+                <Text style={[styles.pct, { color: PCT_COLOR[pctTone(pct)] }]}>{pct != null ? `${pct}%` : '–'}</Text>
+              </Card>
+            );
+          })}
+        </>
+      ) : null}
+
       <Text style={styles.section}>Quick links</Text>
       <View style={styles.actions}>
         {quick.map((a) => (
@@ -89,6 +131,8 @@ export default function StudentDashboard() {
           </TouchableOpacity>
         ))}
       </View>
+
+      <RecentNotifications enabled={isModuleEnabled('notifications')} onSeeAll={() => go(routeFor('student', '/notifications'))} />
     </ScrollView>
   );
 }
@@ -107,6 +151,10 @@ const styles = StyleSheet.create({
   period: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md, padding: Spacing.md, marginBottom: Spacing.sm },
   time: { width: 76, fontSize: FontSize.sm, fontWeight: '700', color: Colors.primary },
   subject: { fontSize: FontSize.md, fontWeight: '600', color: Colors.text },
+  headRow: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between' },
+  linkBox: { minHeight: 44, minWidth: 44, justifyContent: 'center', alignItems: 'flex-end' },
+  link: { fontSize: FontSize.sm, color: Colors.primary, fontWeight: '600' },
+  pct: { fontSize: FontSize.lg, fontWeight: '700' },
   arrow: { fontSize: FontSize.xl, color: Colors.textTertiary },
   actions: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.md },
   quick: { width: '22%', minWidth: 72, alignItems: 'center', backgroundColor: Colors.surface, borderRadius: BorderRadius.md, paddingVertical: Spacing.md },

@@ -19,6 +19,7 @@ from rest_framework import viewsets, status
 from rest_framework.decorators import action, api_view, permission_classes as perm_classes
 from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.response import Response
+from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.throttling import UserRateThrottle
 
@@ -1828,7 +1829,10 @@ class AssignmentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
     ViewSet for managing assignments.
 
     - Admins/Principals have full CRUD access.
-    - Teachers and Managers can create and edit assignments.
+    - Teachers can create and edit assignments.
+    - A Manager can only prepare DRAFTS: it cannot publish, close, or change a published
+      assignment, and it never picks the teacher (the subject's assigned teacher is used,
+      see lms.assignment_rules). A teacher or admin publishes.
     - Other authenticated users have read-only access.
     - `publish` action changes status to PUBLISHED.
     - `close` action changes status to CLOSED.
@@ -1902,6 +1906,76 @@ class AssignmentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
 
         return queryset
 
+    # ── Manager: drafts only, teacher from the subject assignment ───────────────
+
+    def _is_manager(self):
+        return get_effective_role(self.request) == 'MANAGER'
+
+    def _manager_data(self, instance=None):
+        """The request body for a manager's write: status forced to DRAFT, teacher resolved."""
+        data = self.request.data.copy()
+        wanted = data.get('status')
+        if wanted not in (None, '', Assignment.Status.DRAFT):
+            raise PermissionDenied('A manager can only save drafts. A teacher publishes the assignment.')
+        data['status'] = Assignment.Status.DRAFT
+
+        def pick(name):
+            value = data.get(name)
+            if value in (None, ''):
+                return getattr(instance, f'{name}_id', None) if instance else None
+            return int(value)
+
+        class_obj, subject = pick('class_obj'), pick('subject')
+        if 'session_class' in data:
+            section = int(data['session_class']) if data.get('session_class') not in (None, '') else None
+        else:
+            section = getattr(instance, 'session_class_id', None)
+        if instance is not None and (class_obj, subject, section) == (
+            instance.class_obj_id, instance.subject_id, instance.session_class_id,
+        ):
+            data['teacher'] = instance.teacher_id  # nothing that decides the teacher changed
+            return data
+        if not class_obj or not subject:
+            raise ValidationError({'detail': 'Choose a class and a subject.'})
+
+        from academic_sessions.models import AcademicYear
+        school_id = ensure_tenant_school_id(self.request) or self.request.user.school_id
+        year = data.get('academic_year') or (instance.academic_year_id if instance else None)
+        if not year:
+            current = AcademicYear.objects.filter(school_id=school_id, is_current=True, is_active=True).first()
+            year = current.id if current else None
+        from lms.assignment_rules import resolve_subject_teacher
+        teacher, problem = resolve_subject_teacher(school_id, year, class_obj, subject, section)
+        if problem:
+            raise ValidationError({'detail': problem})
+        data['teacher'] = teacher
+        return data
+
+    def create(self, request, *args, **kwargs):
+        if not self._is_manager():
+            return super().create(request, *args, **kwargs)
+        serializer = self.get_serializer(data=self._manager_data())
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)
+        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=self.get_success_headers(serializer.data))
+
+    def update(self, request, *args, **kwargs):
+        if not self._is_manager():
+            return super().update(request, *args, **kwargs)
+        partial = kwargs.pop('partial', False)
+        instance = self.get_object()
+        if instance.status != Assignment.Status.DRAFT:
+            raise PermissionDenied('A manager can only change drafts. This assignment is already published.')
+        serializer = self.get_serializer(instance, data=self._manager_data(instance), partial=partial)
+        serializer.is_valid(raise_exception=True)
+        self.perform_update(serializer)
+        return Response(serializer.data)
+
+    def destroy(self, request, *args, **kwargs):
+        if self._is_manager() and self.get_object().status != Assignment.Status.DRAFT:
+            raise PermissionDenied('A manager can only delete drafts.')
+        return super().destroy(request, *args, **kwargs)
+
     def perform_create(self, serializer):
         """Auto-resolve academic year if not provided."""
         academic_year = serializer.validated_data.get('academic_year')
@@ -1929,6 +2003,8 @@ class AssignmentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
 
         POST /api/lms/assignments/{id}/publish/
         """
+        if self._is_manager():
+            raise PermissionDenied('A manager prepares drafts; a teacher or admin publishes them.')
         assignment = self.get_object()
 
         if assignment.status == Assignment.Status.PUBLISHED:
@@ -1961,6 +2037,8 @@ class AssignmentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
 
         POST /api/lms/assignments/{id}/close/
         """
+        if self._is_manager():
+            raise PermissionDenied('A manager cannot close assignments; a teacher or admin does.')
         assignment = self.get_object()
 
         if assignment.status == Assignment.Status.CLOSED:

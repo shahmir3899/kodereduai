@@ -11,6 +11,7 @@ import {
   ActivityIndicator,
   Alert,
 } from 'react-native';
+import { confirm } from './ui/confirm';
 import { Colors, FontSize, Spacing, BorderRadius } from '../constants/colors';
 
 interface ChatMessage {
@@ -26,6 +27,8 @@ interface ChatInterfaceProps {
   clearHistory?: () => Promise<unknown>;
   placeholder?: string;
   welcomeMessage?: string;
+  // Tap-to-ask starters, shown while the chat has no history.
+  suggestions?: string[];
 }
 
 export default function ChatInterface({
@@ -34,6 +37,7 @@ export default function ChatInterface({
   clearHistory,
   placeholder = 'Type a message...',
   welcomeMessage = 'Hello! How can I help you today?',
+  suggestions,
 }: ChatInterfaceProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
@@ -62,10 +66,10 @@ export default function ChatInterface({
     }
   };
 
-  const handleSend = async () => {
-    if (!input.trim() || loading) return;
+  const handleSend = async (text?: string) => {
+    const userMessage = (text ?? input).trim();
+    if (!userMessage || loading) return;
 
-    const userMessage = input.trim();
     setInput('');
     setMessages((prev) => [...prev, { role: 'user', content: userMessage }]);
     setLoading(true);
@@ -87,24 +91,24 @@ export default function ChatInterface({
     }
   };
 
-  const handleClear = () => {
+  const handleClear = async () => {
     if (!clearHistory) return;
-    Alert.alert('Clear Chat', 'Are you sure you want to clear the chat history?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Clear',
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            await clearHistory();
-            setMessages([{ role: 'assistant', content: welcomeMessage }]);
-          } catch {
-            Alert.alert('Error', 'Failed to clear chat history.');
-          }
-        },
-      },
-    ]);
+    const yes = await confirm({
+      title: 'Clear chat',
+      message: 'Delete this whole conversation? Your saved chat cannot be brought back.',
+      confirmLabel: 'Clear chat',
+      destructive: true,
+    });
+    if (!yes) return;
+    try {
+      await clearHistory();
+      setMessages([{ role: 'assistant', content: welcomeMessage }]);
+    } catch {
+      Alert.alert('Error', 'Failed to clear chat history.');
+    }
   };
+
+  const fresh = messages.length === 1 && messages[0].role === 'assistant' && !loading;
 
   if (historyLoading) {
     return (
@@ -155,6 +159,16 @@ export default function ChatInterface({
         )}
       />
 
+      {fresh && suggestions?.length ? (
+        <View style={styles.suggestions}>
+          {suggestions.map((q) => (
+            <TouchableOpacity key={q} accessibilityRole="button" style={styles.chip} onPress={() => handleSend(q)}>
+              <Text style={styles.chipText}>{q}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      ) : null}
+
       {/* Loading indicator */}
       {loading && (
         <View style={styles.typingIndicator}>
@@ -177,7 +191,7 @@ export default function ChatInterface({
         />
         <TouchableOpacity accessibilityRole="button"
           style={[styles.sendBtn, (!input.trim() || loading) && styles.sendBtnDisabled]}
-          onPress={handleSend}
+          onPress={() => handleSend()}
           disabled={!input.trim() || loading}
         >
           <Text style={styles.sendBtnText}>Send</Text>
@@ -192,6 +206,9 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.background,
   },
+  suggestions: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm, paddingHorizontal: Spacing.lg, paddingBottom: Spacing.sm },
+  chip: { backgroundColor: Colors.surface, borderRadius: BorderRadius.full, paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm, borderWidth: StyleSheet.hairlineWidth, borderColor: Colors.border },
+  chipText: { fontSize: FontSize.sm, color: Colors.text },
   loadingContainer: {
     flex: 1,
     alignItems: 'center',

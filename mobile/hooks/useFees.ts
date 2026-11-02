@@ -9,7 +9,7 @@ import { useScopedQuery } from './useScopedQuery';
 // and refreshed after any mutation), see services/queryRules.ts.
 // Teacher scoping is enforced server-side regardless of the params below.
 export function useFeePayments(feeType: FeeTypeTab, month: number, year: number) {
-  const ay = useAcademicYear();
+  const ay = useAcademicYear({ lockToCurrent: true });
   const yearId = ay.current?.id ?? null;
   const fetchType = async (type: 'MONTHLY' | 'ANNUAL') =>
     listOf<FeePayment>((await financeApi.getFeePayments({
@@ -39,6 +39,18 @@ export function useRecordPayment() {
       queryClient.invalidateQueries({ queryKey: ['feePayments'] });
       queryClient.invalidateQueries({ queryKey: ['feeSummary'] });
       queryClient.invalidateQueries({ queryKey: ['accounts'] });
+      queryClient.invalidateQueries({ queryKey: ['adminDashboard'] });
+    },
+  });
+}
+
+export function useDeleteFeePayment() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => financeApi.deleteFeePayment(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['feePayments'] });
+      queryClient.invalidateQueries({ queryKey: ['feeSummary'] });
       queryClient.invalidateQueries({ queryKey: ['adminDashboard'] });
     },
   });

@@ -97,8 +97,8 @@ describe('attendance', () => {
     ]);
     expect(cells.length % 7).toBe(0);
     expect(cells.slice(0, 3).every((c) => c.day === null)).toBe(true);
-    expect(cells[3]).toEqual({ day: 1, status: 'PRESENT' });
-    expect(cells[4]).toEqual({ day: 2, status: 'ABSENT' });
+    expect(cells[3]).toEqual({ day: 1, status: 'PRESENT', off: false });
+    expect(cells[4]).toEqual({ day: 2, status: 'ABSENT', off: false });
     expect(cells.filter((c) => c.day !== null)).toHaveLength(31);
   });
   it('tones the rate', () => {

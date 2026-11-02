@@ -3,7 +3,7 @@ import { ScrollView, StyleSheet } from 'react-native';
 import { useRouter, type Href } from 'expo-router';
 import { useMessageActions, useRecipients } from '../../hooks/useMessaging';
 import { usePersonaBase } from '../../hooks/usePersonaBase';
-import { canSend, recipientKey, recipientLabel } from '../../services/messaging';
+import { canSend, messageTypeFor, recipientKey, recipientLabel } from '../../services/messaging';
 import Select from '../ui/Select';
 import Input from '../ui/Input';
 import Button from '../ui/Button';
@@ -37,6 +37,7 @@ export default function NewMessageScreen() {
     // The API checks the person against the child, so both ids go up together.
     create.mutateAsync({
       recipient_user_id: person.id,
+      message_type: messageTypeFor(person),
       message: body.trim(),
       ...(person.student_id ? { student_id: person.student_id } : {}),
       ...(subject.trim() ? { subject: subject.trim() } : {}),

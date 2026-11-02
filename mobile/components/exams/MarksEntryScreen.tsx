@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { parseShortcut } from '../../services/examsAdmin';
 import {
   View, Text, FlatList, TextInput, Switch, TouchableOpacity, KeyboardAvoidingView, Platform, StyleSheet, Alert,
 } from 'react-native';
-import { useNavigation } from 'expo-router';
+import { useLocalSearchParams, useNavigation } from 'expo-router';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { examinationsApi, studentsApi } from '../../services/api';
 import { listOf } from '../../services/academicYear';
@@ -21,6 +22,8 @@ import ErrorState from '../ui/ErrorState';
 import EmptyState from '../ui/EmptyState';
 import { useToast } from '../ui/Toast';
 import { confirm } from '../ui/confirm';
+import ScopeBadge from '../teacher/ScopeBadge';
+import { useTeacherScope } from '../../hooks/useTeacher';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
 
 interface Props {
@@ -33,6 +36,7 @@ interface Props {
 export default function MarksEntryScreen({ classOptions }: Props) {
   const toast = useToast();
   const queryClient = useQueryClient();
+  const scope = useTeacherScope();
   const navigation = useNavigation();
   const { year, options, isLoading: classesLoading } = useAttendanceClassOptions(classOptions);
   const yearId = year.current?.id ?? null;
@@ -49,6 +53,18 @@ export default function MarksEntryScreen({ classOptions }: Props) {
   const appliedKey = useRef('');
   rowsRef.current = rows;
   baselineRef.current = baseline;
+
+  // Opened from an exam (Exams, Enter marks): start on that class, type and exam, once.
+  const shortcut = parseShortcut(useLocalSearchParams<{ class?: string; exam?: string; type?: string }>());
+  const shortcutApplied = useRef(false);
+  useEffect(() => {
+    if (shortcutApplied.current || options.length === 0 || shortcut.classId == null) return;
+    if (!options.some((o) => o.id === shortcut.classId)) return;
+    shortcutApplied.current = true;
+    setClassId(shortcut.classId);
+    if (shortcut.typeId != null) setTypeId(shortcut.typeId);
+    if (shortcut.examId != null) setExamId(shortcut.examId);
+  }, [options, shortcut.classId, shortcut.typeId, shortcut.examId]);
 
   // Teachers get their first section pre-selected, as on the web.
   useEffect(() => {
@@ -190,6 +206,7 @@ export default function MarksEntryScreen({ classOptions }: Props) {
         onChange={(id) => pick('subject', id)} placeholder={examId && !subjectsQ.isLoading && subjects.length === 0 ? 'No subjects added to this exam' : 'Select subject'}
         disabled={!examId} />
 
+      {exam && subject ? <ScopeBadge scope={scope.classify(exam.class_obj, subject.subject)} /> : null}
       {subject && rows.length > 0 ? (
         <View style={styles.info}>
           <Text style={styles.infoText}>Total <Text style={styles.bold}>{subject.total_marks}</Text>  ·  Passing <Text style={styles.bold}>{subject.passing_marks}</Text></Text>

@@ -1,4 +1,6 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { useLocalSearchParams } from 'expo-router';
+import { parseShortcut } from '../../services/examsAdmin';
 import { View, Text, FlatList, TouchableOpacity, StyleSheet } from 'react-native';
 import { examinationsApi } from '../../services/api';
 import { listOf } from '../../services/academicYear';
@@ -32,6 +34,17 @@ export default function ResultsScreen({ classOptions }: Props) {
   const [classId, setClassId] = useState<number | null>(null);
   const [examId, setExamId] = useState<number | null>(null);
   const [open, setOpen] = useState<number | null>(null);
+
+  // Opened from an exam (Exams, View results): start on that class and exam, once.
+  const shortcut = parseShortcut(useLocalSearchParams<{ class?: string; exam?: string }>());
+  const shortcutApplied = useRef(false);
+  useEffect(() => {
+    if (shortcutApplied.current || options.length === 0 || shortcut.classId == null) return;
+    if (!options.some((o) => o.id === shortcut.classId)) return;
+    shortcutApplied.current = true;
+    setClassId(shortcut.classId);
+    if (shortcut.examId != null) setExamId(shortcut.examId);
+  }, [options, shortcut.classId, shortcut.examId]);
 
   // Teachers get their first section pre-selected, as on the web.
   useEffect(() => {

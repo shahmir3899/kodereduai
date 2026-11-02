@@ -15,6 +15,9 @@ import { inventoryErrorMessage } from '../../services/inventory';
 import Input from '../ui/Input';
 import Select from '../ui/Select';
 import Button from '../ui/Button';
+import { academicsApi } from '../../services/api';
+import { timetableFileName, timetablePdfParams } from '../../services/pdfDownloads';
+import { usePdfShare } from '../../hooks/usePdfShare';
 import Skeleton from '../ui/Skeleton';
 import ErrorState from '../ui/ErrorState';
 import EmptyState from '../ui/EmptyState';
@@ -32,6 +35,7 @@ export default function TimetableEditorScreen() {
   const router = useRouter();
   const toast = useToast();
   const { year, options, isLoading: optionsLoading } = useAttendanceClassOptions();
+  const pdf = usePdfShare();
   const [optionId, setOptionId] = useState<number | null>(null);
   const option = options.find((o) => o.id === (optionId ?? options[0]?.id)) ?? null;
   const classObj = option ? (option.isSession ? option.classObj : option.id) : null;
@@ -180,6 +184,10 @@ export default function TimetableEditorScreen() {
             ) : null}
           </>
         )}
+        {option ? (
+          <Button title="Timetable PDF" variant="outline" loading={pdf.busy} disabled={pdf.busy || timetablePdfParams(classObj, sessionClass) == null}
+            onPress={() => pdf.share(() => academicsApi.downloadTimetablePdf(timetablePdfParams(classObj, sessionClass) as Record<string, unknown>) as Promise<{ data: ArrayBuffer }>, timetableFileName(option.label))} />
+        ) : null}
         <Button title="Periods and breaks" variant="outline" onPress={() => router.push('/(admin)/timetable-periods' as Href)} />
       </ScrollView>
 

@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
 import { useStudentTimetable } from '../../hooks/useStudentPortal';
 import { useRefreshControl } from '../../hooks/useRefreshControl';
-import { portalPeriods, type PortalPeriod } from '../../services/studentPortal';
+import { isSpecialSlot, portalPeriods, type PortalPeriod } from '../../services/studentPortal';
 import type { Q } from './types';
 import { DAY_CODES, DAY_LABELS, dayCodeFor, daysWithEntries, entriesForDay, formatSlotTime, type DayCode } from '../../services/teacher';
 import Skeleton from '../ui/Skeleton';
@@ -10,6 +10,12 @@ import ErrorState from '../ui/ErrorState';
 import EmptyState from '../ui/EmptyState';
 import Card from '../ui/Card';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
+
+const SPECIAL: Record<string, { label: string; bg: string }> = {
+  BREAK: { label: 'Break', bg: '#FEF9C3' },
+  LUNCH: { label: 'Lunch', bg: '#FFEDD5' },
+  ASSEMBLY: { label: 'Assembly', bg: '#DBEAFE' },
+};
 
 // The student's own weekly timetable, one day at a time (opens on today).
 export function TimetableView({ query, toPeriods }: { query: Q<unknown>; toPeriods: (data: any) => PortalPeriod[] }) {
@@ -35,7 +41,12 @@ export function TimetableView({ query, toPeriods }: { query: Q<unknown>; toPerio
           </TouchableOpacity>
         ))}
       </View>
-      {entriesForDay(periods, day).map((p) => (
+      {entriesForDay(periods, day).map((p) => isSpecialSlot(p.slot_type) ? (
+        <View key={p.id} style={[styles.special, { backgroundColor: SPECIAL[p.slot_type!]?.bg ?? Colors.surface }]}>
+          <Text style={styles.specialName}>{p.slot_name || p.slot_type}</Text>
+          <Text style={styles.timeSub}>{formatSlotTime(p.slot_start_time)} – {formatSlotTime(p.slot_end_time)}</Text>
+        </View>
+      ) : (
         <Card key={p.id} style={styles.period}>
           <View style={styles.time}>
             <Text style={styles.timeText}>{formatSlotTime(p.slot_start_time)}</Text>
@@ -49,6 +60,14 @@ export function TimetableView({ query, toPeriods }: { query: Q<unknown>; toPerio
           </View>
         </Card>
       ))}
+      <View style={styles.legend}>
+        {Object.entries(SPECIAL).map(([k, v]) => (
+          <View key={k} style={styles.legendItem}>
+            <View style={[styles.swatch, { backgroundColor: v.bg }]} />
+            <Text style={styles.timeSub}>{v.label}</Text>
+          </View>
+        ))}
+      </View>
     </ScrollView>
   );
 }
@@ -68,6 +87,11 @@ const styles = StyleSheet.create({
   dot: { width: 5, height: 5, borderRadius: 3, backgroundColor: Colors.primary, marginTop: 3 },
   dotActive: { backgroundColor: Colors.textInverse },
   period: { flexDirection: 'row', alignItems: 'center', padding: Spacing.md, marginBottom: Spacing.sm },
+  special: { alignItems: 'center', padding: Spacing.md, marginBottom: Spacing.sm, borderRadius: BorderRadius.md },
+  specialName: { fontSize: FontSize.md, fontWeight: '700', color: Colors.text },
+  legend: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.lg, marginTop: Spacing.md },
+  legendItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  swatch: { width: 12, height: 12, borderRadius: 3, borderWidth: StyleSheet.hairlineWidth, borderColor: Colors.border },
   time: { width: 76, marginRight: Spacing.md },
   timeText: { fontSize: FontSize.sm, fontWeight: '700', color: Colors.primary },
   timeSub: { fontSize: FontSize.xs, color: Colors.textSecondary },

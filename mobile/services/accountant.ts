@@ -59,6 +59,46 @@ export function normalizeFeeSummary(raw: Record<string, unknown> | null | undefi
   };
 }
 
+// ── Ledger and month filter ───────────────────────────────────────────────────
+
+export interface LedgerEntry {
+  id: number; type: string; date: string | null; description: string; school_name?: string | null;
+  credit: number | string; debit: number | string; running_balance: number | string;
+}
+
+export interface LedgerPayload {
+  account?: { id: number; name: string } | null;
+  opening_balance: number | string; total_credits: number | string; total_debits: number | string; closing_balance: number | string;
+  entries: LedgerEntry[];
+}
+
+// Same labels as the web ledger table.
+export function ledgerTypeLabel(type: string): string {
+  switch (type) {
+    case 'fee_payment': return 'Fee payment';
+    case 'other_income': return 'Other income';
+    case 'expense': return 'Expense';
+    case 'transfer_in': return 'Transfer in';
+    case 'transfer_out': return 'Transfer out';
+    default: return type.replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase());
+  }
+}
+
+// First and last day of a month as YYYY-MM-DD.
+export function monthRange(year: number, month: number): DateRange {
+  const last = new Date(year, month, 0).getDate();
+  const mm = String(month).padStart(2, '0');
+  return { from: `${year}-${mm}-01`, to: `${year}-${mm}-${String(last).padStart(2, '0')}` };
+}
+
+// The balances endpoint answers { accounts: [...], grand_total, ... } (not a plain list or a
+// paged { results }), so the accounts are read from that key.
+export function accountsOf(data: unknown): AccountBalance[] {
+  if (Array.isArray(data)) return data as AccountBalance[];
+  const accounts = (data as { accounts?: unknown } | null | undefined)?.accounts;
+  return Array.isArray(accounts) ? (accounts as AccountBalance[]) : [];
+}
+
 export const totalBalance = (accounts: AccountBalance[]): number =>
   accounts.reduce((sum, a) => sum + num(a.net_balance ?? a.balance), 0);
 

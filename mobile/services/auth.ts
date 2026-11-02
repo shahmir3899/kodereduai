@@ -1,4 +1,4 @@
-import * as SecureStore from 'expo-secure-store';
+import * as SecureStore from './secureStore';
 
 const KEYS = {
   ACCESS_TOKEN: 'access_token',

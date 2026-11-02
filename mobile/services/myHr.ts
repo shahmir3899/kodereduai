@@ -98,8 +98,43 @@ export interface StaffAttendanceRecord {
   check_out?: string | null;
   notes?: string | null;
 }
+// The summary endpoint answers lowercase keys (present, half_day, working_days, ...). The uppercase
+// ones are what this type used to name; they are kept as a fallback only.
 export interface AttendanceSummary {
-  PRESENT?: number; ABSENT?: number; LATE?: number; HALF_DAY?: number; ON_LEAVE?: number; attendance_rate?: number | null;
+  present?: number; absent?: number; late?: number; half_day?: number; on_leave?: number;
+  working_days?: number; off_days?: number; total?: number; attendance_rate?: number | null;
+  PRESENT?: number; ABSENT?: number; LATE?: number; HALF_DAY?: number; ON_LEAVE?: number;
+}
+
+export function attendanceCounts(s: AttendanceSummary | null | undefined) {
+  return {
+    present: s?.present ?? s?.PRESENT ?? 0,
+    absent: s?.absent ?? s?.ABSENT ?? 0,
+    late: s?.late ?? s?.LATE ?? 0,
+    halfDay: s?.half_day ?? s?.HALF_DAY ?? 0,
+    onLeave: s?.on_leave ?? s?.ON_LEAVE ?? 0,
+    workingDays: s?.working_days ?? null,
+    offDays: s?.off_days ?? null,
+    rate: s?.attendance_rate ?? null,
+  };
+}
+
+// The Home tile "Attendance This Month": days present over working days, as the web's staff
+// dashboard. N/A while the month has no working days; a dash until the summary has loaded.
+export function attendanceTile(s: AttendanceSummary | null | undefined): { value: string; hint: string } {
+  if (!s) return { value: '–', hint: '' };
+  const c = attendanceCounts(s);
+  if (c.workingDays === 0) return { value: 'N/A', hint: 'No working days yet' };
+  const over = c.workingDays ?? (c.present + c.absent + c.late + c.halfDay + c.onLeave);
+  const rate = c.rate != null ? `${Math.round(c.rate)}% present` : '';
+  const off = c.offDays != null ? `${c.offDays} off` : '';
+  return { value: `${c.present}/${over}`, hint: [rate, off].filter(Boolean).join(' · ') };
+}
+
+// Total days of leave left across every leave type.
+export function leaveRemaining(balances: Array<Pick<LeaveBalance, 'days_remaining'>> | null | undefined): number | null {
+  if (!balances) return null;
+  return balances.reduce((sum, b) => sum + (Number(b.days_remaining) || 0), 0);
 }
 
 export const ATTENDANCE_LABELS: Record<StaffAttendanceStatus, string> = {

@@ -2,7 +2,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { academicsApi, examinationsApi, sessionsApi } from '../services/api';
 import type { ClassSubjectDto } from '../services/examWizard';
 import { listOf } from '../services/academicYear';
-import type { ExamRow } from '../services/examsAdmin';
+import { examListParams, type ExamRow } from '../services/examsAdmin';
 import { useAcademicYear } from './useAcademicYear';
 import { useScopedPagedQuery, useScopedQuery } from './useScopedQuery';
 
@@ -11,7 +11,7 @@ export function useExamsPaged(status: string) {
   return useScopedPagedQuery<ExamRow>('examsAdmin', ['paged', status, current?.id ?? null], async (page) => {
     const data = (await examinationsApi.getExams({
       page, page_size: 20, include_marks_status: true,
-      ...(status ? { status } : {}), ...(current?.id ? { academic_year: current.id } : {}),
+      ...examListParams(status), ...(current?.id ? { academic_year: current.id } : {}),
     })).data as { results?: ExamRow[]; next?: string | null; count?: number } | ExamRow[];
     if (Array.isArray(data)) return { results: data, next: null, count: data.length };
     return { results: data.results ?? [], next: data.next ?? null, count: data.count ?? 0 };

@@ -3,17 +3,21 @@ import { View, Text, ScrollView, FlatList, Switch, TouchableOpacity, StyleSheet 
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { examinationsApi } from '../../services/api';
 import { useMasterClasses } from '../../hooks/useAcademicYear';
-import { usePaper, usePaperActions } from '../../hooks/usePapers';
+import { usePaper, usePaperActions, usePaperCoverage, usePaperExams, usePaperLessons } from '../../hooks/usePapers';
+import { useAcademicYear } from '../../hooks/useAcademicYear';
 import { useQuestionsPaged } from '../../hooks/useQuestionBank';
 import { useSubjectsList } from '../../hooks/useManager';
 import { useDebouncedValue } from '../../hooks/useDebouncedValue';
 import {
-  addQuestion, allocatedMarks, assignSection, autoDistribution, buildAutosavePayload, buildEnsurePayload, countIn, dropSection,
-  emptyPaperForm, hydrateStructure, isChoice, makeDivider, makeSection, marksOf, moveQuestion, moveSection, PAPER_STATUSES,
-  paperFileName, paperToForm, paperTotal, pickedFromPaperRow, reconcileNote, removeQuestion, SECTION_TYPES, setChoice, setSlotsCounted,
-  setSlotsShown, statusSteps, validatePaper, type PaperForm, type PickedQuestion, type Section,
+  addQuestion, assignSection, buildAutosavePayload, buildEnsurePayload, countIn, dropSection,
+  emptyPaperForm, hydrateStructure, marksOf, moveQuestion, PAPER_STATUSES,
+  paperFileName, paperToForm, paperTotal, pickedFromPaperRow, reconcileNote, removeQuestion, 
+  statusSteps, validatePaper, type PaperForm, type PickedQuestion, type Section,
 } from '../../services/paperBuilder';
 import { typeLabel, type Question } from '../../services/questionBank';
+import {
+  autoPaperTitle, BLOOM_ORDER, bloomMix, coverageView, examOptionLabel, lessonLine, sameIds, sloText, toggleId, topicsOfLessons,
+} from '../../services/questionExtras';
 import { inventoryErrorMessage } from '../../services/inventory';
 import { exportErrorMessage } from '../../services/reports';
 import { shareReportFile } from '../../services/reportShare';
@@ -26,6 +30,8 @@ import ErrorState from '../ui/ErrorState';
 import { useToast } from '../ui/Toast';
 import { confirm } from '../ui/confirm';
 import BottomSheet from '../ui/BottomSheet';
+import QuickQuestionSheet from './QuickQuestionSheet';
+import SectionsEditor from './SectionsEditor';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
 
 // Build or edit a question paper from the question bank: details, sections (question groups with
@@ -50,11 +56,35 @@ export default function PaperBuilderScreen() {
   const [picker, setPicker] = useState(false);
   const [busy, setBusy] = useState(false);
   const [loaded, setLoaded] = useState(!routeId);
+  const [quick, setQuick] = useState(false);
+  // The title follows "Exam - Class - Subject" until the person types their own (or clears it back to empty).
+  const [titleAuto, setTitleAuto] = useState(!routeId);
+  const { current: year } = useAcademicYear();
+  const exams = usePaperExams(form.classObj, year?.id);
+  const lessons = usePaperLessons(form.classObj, form.subject);
+  const coverage = usePaperCoverage(paperId);
+  const cov = coverageView(coverage.data);
+  const [lessonIds, setLessonIds] = useState<number[]>([]);
+  const lessonsSeeded = React.useRef(false);
+  // Seeded from what the server already has linked, so an unseeded empty choice is never taken for "clear everything".
+  useEffect(() => {
+    if (!lessonsSeeded.current && coverage.data) { lessonsSeeded.current = true; setLessonIds(cov.linkedIds); }
+  }, [coverage.data, cov.linkedIds]);
+  const narrowedTopics = useMemo(() => topicsOfLessons(lessons.data ?? [], lessonIds), [lessons.data, lessonIds]);
+  const mix = useMemo(() => bloomMix(picked.map((p) => ({ bloom_level: p.bloom }))), [picked]);
   const set = <K extends keyof PaperForm>(k: K, v: PaperForm[K]) => setForm((f) => ({ ...f, [k]: v }));
+  const examLabel = (() => { const e = (exams.data ?? []).find((x) => x.id === form.exam); return e ? examOptionLabel(e) : ''; })();
+  const className = String((classes.data ?? []).find((c) => Number(c.id) === form.classObj)?.name ?? '');
+  const suggested = autoPaperTitle(examLabel, className, (subjects.data ?? []).find((x) => x.id === form.subject)?.name ?? '');
+  useEffect(() => {
+    if (titleAuto && suggested && suggested !== form.title) setForm((f) => ({ ...f, title: suggested }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [titleAuto, suggested]);
 
   useEffect(() => {
     if (routeId && saved.data && !loaded) {
       setForm(paperToForm(saved.data));
+      setTitleAuto(!saved.data.paper_title?.trim());
       setSavedStatus(saved.data.status);
       setSections(hydrateStructure(saved.data.structure));
       setPicked([...(saved.data.paper_questions ?? [])].sort((a, b) => a.question_order - b.question_order).map(pickedFromPaperRow));
@@ -64,9 +94,8 @@ export default function PaperBuilderScreen() {
 
   const groups = sections.filter((s) => s.type !== 'divider');
   const total = useMemo(() => paperTotal(picked, sections), [picked, sections]);
-  const updateSection = (key: string, fn: (s: Section) => Section) => setSections((ss) => ss.map((s) => (s.key === key ? fn(s) : s)));
 
-  const save = async () => {
+  const save = async (stay = false) => {
     const problem = validatePaper(form, picked, sections);
     if (problem) return setError(problem);
     setError(null);
@@ -85,8 +114,11 @@ export default function PaperBuilderScreen() {
       await actions.autosave.mutateAsync({ id: target, data: buildAutosavePayload(form, picked, sections) });
       if (steps.last) await actions.update.mutateAsync({ id: target, data: { status: form.status } });
       setSavedStatus(form.status);
+      // Link the chosen lesson plans when they differ from what the server has (the web does the same once a draft exists).
+      if (target && !sameIds(lessonIds, cov.linkedIds)) await actions.linkLessons.mutateAsync({ id: target, ids: lessonIds });
       toast.success('Paper saved.');
-      router.back();
+      if (stay) await coverage.refetch();
+      else router.back();
     } catch (e) {
       setError(inventoryErrorMessage(e));
     } finally {
@@ -111,50 +143,50 @@ export default function PaperBuilderScreen() {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-      <Input label="Paper title" value={form.title} onChangeText={(v) => set('title', v)} />
+      <Input label="Paper title" value={form.title} onChangeText={(v) => { setTitleAuto(v.trim() === ''); set('title', v); }} />
+      {titleAuto && suggested ? <Text style={styles.sub}>Made from the exam, class and subject. Type your own any time.</Text> : null}
       <Select label="Class" searchable value={form.classObj} onChange={(v) => set('classObj', v)} placeholder="Choose a class"
         options={(classes.data ?? []).map((c) => ({ value: Number(c.id), label: String(c.name) }))} />
       <Select label="Subject" searchable value={form.subject} onChange={(v) => set('subject', v)} placeholder="Choose a subject"
         options={(subjects.data ?? []).map((s) => ({ value: s.id, label: s.name }))} />
+      {form.classObj ? (
+        <Select label="Exam (optional)" value={form.exam ?? -1} onChange={(v) => set('exam', v === -1 ? null : Number(v))} placeholder="Choose an exam"
+          options={[{ value: -1, label: exams.isLoading ? 'Loading exams…' : (exams.data ?? []).length ? 'No exam' : 'No exams for this class this year' }, ...(exams.data ?? []).map((e) => ({ value: e.id, label: examOptionLabel(e) }))]} />
+      ) : null}
       <Input label="Duration (minutes)" value={form.duration} onChangeText={(v) => set('duration', v)} keyboardType="number-pad" />
       <Input label="Instructions for students" value={form.instructions} onChangeText={(v) => set('instructions', v)} multiline />
+      <View style={styles.row}>
+        <Text style={[styles.sub, styles.col]}>Print ruled answer lines under each answer</Text>
+        <Switch value={form.answerLines} onValueChange={(on) => set('answerLines', on)} accessibilityLabel="Print answer lines" />
+      </View>
 
-      <Text style={styles.section}>Sections · {allocatedMarks(sections)} marks</Text>
-      <Text style={styles.sub}>Optional. Sections print the paper as Question 1, 2, 3… with "attempt any N" choices. Without them the paper is one list.</Text>
-      {sections.map((s, i) => (
-        <View key={s.key} style={styles.q}>
-          {s.type === 'divider' ? (
-            <Input label="Divider (printed heading)" value={s.title} onChangeText={(v) => updateSection(s.key, (x) => ({ ...x, title: v }))} />
-          ) : (
+      {form.classObj && form.subject ? (
+        <View style={styles.q}>
+          <Text style={styles.name}>Narrow by lesson plans (optional)</Text>
+          {lessons.isLoading ? <Text style={styles.sub}>Loading lesson plans…</Text> : (lessons.data ?? []).length === 0 ? <Text style={styles.sub}>No lesson plans found for this class and subject.</Text> : (
             <>
-              <Input label="Title" value={s.title} onChangeText={(v) => updateSection(s.key, (x) => ({ ...x, title: v }))} />
-              <Select label="Question type" value={s.question_type} onChange={(v) => updateSection(s.key, (x) => ({ ...x, question_type: v }))}
-                options={SECTION_TYPES.map((t) => ({ value: t, label: typeLabel(t) }))} />
-              <View style={styles.row}>
-                <View style={styles.col}><Input label="Questions shown" value={String(s.slotsShown)} onChangeText={(v) => updateSection(s.key, (x) => setSlotsShown(x, v))} keyboardType="number-pad" /></View>
-                <View style={styles.col}><Input label="Marks each" value={String(s.marksPerQuestion)} onChangeText={(v) => updateSection(s.key, (x) => ({ ...x, marksPerQuestion: Number(v) || 0 }))} keyboardType="decimal-pad" /></View>
-              </View>
-              <View style={styles.row}>
-                <Text style={[styles.sub, styles.col]}>Student chooses which to attempt</Text>
-                <Switch value={isChoice(s)} onValueChange={(on) => updateSection(s.key, (x) => setChoice(x, on))} accessibilityLabel="Student chooses which questions to attempt" />
-              </View>
-              {isChoice(s) ? <Input label="Questions to attempt" value={String(s.slotsCounted)} onChangeText={(v) => updateSection(s.key, (x) => setSlotsCounted(x, v))} keyboardType="number-pad" /> : null}
-              <Input label="Instruction (optional)" value={s.instruction} onChangeText={(v) => updateSection(s.key, (x) => ({ ...x, instruction: v, autoInstruction: false }))} />
-              <Text style={styles.sub}>{countIn(picked, s.key)} of {s.slotsShown} questions placed here</Text>
+              {(lessons.data ?? []).map((l) => {
+                const on = lessonIds.includes(l.id);
+                return (
+                  <TouchableOpacity key={l.id} accessibilityRole="checkbox" accessibilityState={{ checked: on }} style={[styles.pick, on && styles.picked]} onPress={() => setLessonIds((ids) => toggleId(ids, l.id))}>
+                    <Text style={styles.qText} numberOfLines={2}>{on ? '☑ ' : '☐ '}{l.title}</Text>
+                    <Text style={styles.sub}>{lessonLine(l)}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+              {lessonIds.length > 0 ? <Button title="Clear selection" size="sm" variant="ghost" onPress={() => setLessonIds([])} /> : null}
+              {narrowedTopics.length > 0 ? <Text style={styles.sub}>The question picker is narrowed to {narrowedTopics.length} topic(s): {narrowedTopics.map((t) => `${t.topic_number ?? ''} ${t.title ?? ''}`.trim()).join(', ')}</Text> : null}
+              <Text style={styles.sub}>The chosen lesson plans are linked to the paper when you save; the coverage below follows them.</Text>
             </>
           )}
-          <View style={styles.qActions}>
-            <TouchableOpacity accessibilityRole="button" accessibilityLabel="Move section up" style={styles.btn} onPress={() => setSections((ss) => moveSection(ss, i, -1))}><Text style={styles.btnText}>↑</Text></TouchableOpacity>
-            <TouchableOpacity accessibilityRole="button" accessibilityLabel="Move section down" style={styles.btn} onPress={() => setSections((ss) => moveSection(ss, i, 1))}><Text style={styles.btnText}>↓</Text></TouchableOpacity>
-            <TouchableOpacity accessibilityRole="button" accessibilityLabel="Remove section" style={styles.btn} onPress={() => { const r = dropSection(sections, picked, s.key); setSections(r.sections); setPicked(r.picked); }}><Text style={[styles.btnText, { color: Colors.error }]}>✕</Text></TouchableOpacity>
-          </View>
         </View>
-      ))}
-      <View style={styles.row}>
-        <Button title="+ Section" size="sm" variant="outline" onPress={() => setSections((ss) => [...ss, makeSection(ss.filter((x) => x.type !== 'divider').length)])} />
-        <Button title="+ Divider" size="sm" variant="outline" onPress={() => setSections((ss) => [...ss, makeDivider(ss.filter((x) => x.type === 'divider').length)])} />
-        <Button title="Standard layout" size="sm" variant="ghost" onPress={() => setSections(autoDistribution(form.title ? total || 100 : 100))} />
-      </View>
+      ) : null}
+
+      <SectionsEditor
+        sections={sections} onChange={setSections} noun="paper" standardTotal={form.title ? total || 100 : 100}
+        placed={(key) => countIn(picked, key)}
+        onRemove={(key) => { const r = dropSection(sections, picked, key); setSections(r.sections); setPicked(r.picked); }}
+      />
 
       <Text style={styles.section}>Questions · {picked.length} · {total} marks</Text>
       {picked.map((p, i) => (
@@ -176,14 +208,49 @@ export default function PaperBuilderScreen() {
         </View>
       ))}
       <Button title="+ Add questions from the bank" variant="outline" onPress={() => setPicker(true)} />
+      <Button title="+ Write a new question" variant="outline" onPress={() => setQuick(true)} disabled={!form.subject} />
+
+      {picked.length > 0 ? (
+        <View style={styles.q}>
+          <Text style={styles.name}>Thinking levels</Text>
+          {BLOOM_ORDER.filter((k) => mix.counts[k] > 0).map((k) => <Text key={k} style={styles.sub}>{k.charAt(0).toUpperCase() + k.slice(1)}: {mix.counts[k]} ({mix.percent[k]}%)</Text>)}
+          {mix.surfaceHeavy ? <Text style={styles.warn}>More than 70% of the questions only ask to remember or understand ({mix.surfacePercent}%).</Text> : null}
+        </View>
+      ) : null}
+
+      {paperId ? (
+        <View style={styles.q}>
+          <Text style={styles.name}>Curriculum coverage</Text>
+          {coverage.isLoading ? <Text style={styles.sub}>Loading coverage…</Text> : coverage.isError ? <Text style={styles.error}>Could not load coverage.</Text> : (
+            <>
+              {reconcileNote(picked, sections) ? <Text style={styles.warn}>Allocated marks (sections) do not match the total marks of the paper.</Text> : null}
+              <Text style={styles.sub}>{cov.total} learning objectives in the linked lesson plans · {cov.coveredCount} covered ({cov.percent}%)</Text>
+              <View style={styles.track}><View style={[styles.fill, { width: `${cov.percent}%` }]} /></View>
+              {cov.total === 0 ? <Text style={styles.sub}>Link lesson plans above, then save, to see which objectives the questions reach.</Text> : (
+                <>
+                  <Text style={styles.name}>Covered</Text>
+                  {cov.covered.length === 0 ? <Text style={styles.sub}>None yet.</Text> : cov.covered.map((o) => <Text key={o.id} style={styles.sub}>✓ {sloText(o)}</Text>)}
+                  <Text style={styles.name}>Not covered</Text>
+                  {cov.uncovered.length === 0 ? <Text style={styles.sub}>Every objective is covered.</Text> : cov.uncovered.map((o) => <Text key={o.id} style={styles.sub}>• {sloText(o)}</Text>)}
+                </>
+              )}
+            </>
+          )}
+        </View>
+      ) : <Text style={styles.sub}>Save the paper to see curriculum coverage.</Text>}
 
       <Select label="Status" value={form.status} onChange={(v) => set('status', v)} options={PAPER_STATUSES.map((s) => ({ value: s.value as string, label: s.label }))} />
       {error ? <Text style={styles.error} accessibilityRole="alert">{error}</Text> : null}
-      <Button title="Save paper" onPress={save} loading={busy} disabled={busy} />
+      <Button title="Save paper" onPress={() => save(false)} loading={busy} disabled={busy} />
+      <Button title="Save and check coverage" variant="outline" onPress={() => save(true)} disabled={busy} />
       {paperId ? <Button title="Share PDF" variant="outline" onPress={share} disabled={busy} /> : null}
 
+      <QuickQuestionSheet
+        visible={quick} subject={form.subject} onClose={() => setQuick(false)}
+        onCreated={(q) => setPicked((ps) => { const next = addQuestion(ps, q); return groups.length === 1 ? assignSection(next, q.id, groups[0].key) : next; })}
+      />
       <QuestionPicker
-        visible={picker} subject={form.subject} chosen={picked} onClose={() => setPicker(false)}
+        visible={picker} subject={form.subject} topicIds={narrowedTopics.map((t) => t.id)} chosen={picked} onClose={() => setPicker(false)}
         onToggle={(q, on) => setPicked((ps) => {
           if (!on) return removeQuestion(ps, q.id);
           const next = addQuestion(ps, q);
@@ -195,16 +262,16 @@ export default function PaperBuilderScreen() {
   );
 }
 
-function QuestionPicker({ visible, subject, chosen, onClose, onToggle }: {
-  visible: boolean; subject: number | null; chosen: PickedQuestion[]; onClose: () => void; onToggle: (q: Question, on: boolean) => void;
+function QuestionPicker({ visible, subject, topicIds, chosen, onClose, onToggle }: {
+  visible: boolean; subject: number | null; topicIds: number[]; chosen: PickedQuestion[]; onClose: () => void; onToggle: (q: Question, on: boolean) => void;
 }) {
   const [search, setSearch] = useState('');
   const term = useDebouncedValue(search.trim(), 400);
-  const query = useQuestionsPaged(term, subject, '', '');
+  const query = useQuestionsPaged(term, subject, '', '', '', null, topicIds);
   const rows = useMemo(() => query.data?.pages.flatMap((p) => p.results) ?? [], [query.data]);
   const ids = new Set(chosen.map((c) => c.question));
   return (
-    <BottomSheet visible={visible} onClose={onClose} title={subject ? 'Add questions (this subject)' : 'Add questions'}>
+    <BottomSheet visible={visible} onClose={onClose} title={topicIds.length ? `Add questions (${topicIds.length} topic${topicIds.length === 1 ? '' : 's'})` : subject ? 'Add questions (this subject)' : 'Add questions'}>
       <View style={styles.pickerBody}>
         <SearchBar value={search} onChangeText={setSearch} placeholder="Search questions..." />
         <FlatList
@@ -240,6 +307,10 @@ const styles = StyleSheet.create({
   btn: { minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
   btnText: { fontSize: FontSize.lg, color: Colors.primary },
   error: { color: Colors.error, fontSize: FontSize.sm },
+  warn: { color: Colors.warningText, fontSize: FontSize.sm },
+  name: { fontSize: FontSize.md, fontWeight: '600', color: Colors.text },
+  track: { height: 8, borderRadius: 4, backgroundColor: Colors.surfaceSecondary, overflow: 'hidden' },
+  fill: { height: 8, backgroundColor: Colors.success },
   pickerBody: { paddingHorizontal: Spacing.lg, gap: Spacing.sm },
   pickerList: { maxHeight: 380 },
   pick: { backgroundColor: Colors.surfaceSecondary, borderRadius: BorderRadius.sm, padding: Spacing.sm, marginBottom: Spacing.xs, minHeight: 44 },

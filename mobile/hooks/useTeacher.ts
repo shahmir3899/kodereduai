@@ -2,8 +2,10 @@ import { useMemo } from 'react';
 import { academicsApi, attendanceApi, examinationsApi, lmsApi, sessionsApi } from '../services/api';
 import { listOf } from '../services/academicYear';
 import { teacherClassOptions, type TimetableEntry } from '../services/teacher';
-import { countOf, sectionParams, type Assignment, type ExamLite, type SectionProgress } from '../services/teacherDashboard';
+import { countOf, sectionParams, weekRange, type WeekPlan, type Assignment, type ExamLite, type SectionProgress } from '../services/teacherDashboard';
 import { todayString } from '../services/attendanceEntry';
+import { buildScopeLookup, resolveScope } from '../services/teacherScope';
+import { useAuth } from '../contexts/AuthContext';
 import { useScopedQuery } from './useScopedQuery';
 import { useAcademicYear, useSessionClasses } from './useAcademicYear';
 
@@ -45,6 +47,29 @@ export function useMyClassAssignments() {
     listOf<Assignment>(
       (await academicsApi.getMyClassTeacherAssignments(year.current?.id ? { academic_year: year.current.id } : undefined)).data,
     ), { enabled: !year.isLoading });
+}
+
+// Class teacher / subject teacher: why a row is visible to this teacher. Only teachers load it;
+// for anyone else classify() gives null and no badge shows.
+export function useTeacherScope() {
+  const { isTeacher, isModuleEnabled } = useAuth();
+  const year = useAcademicYear();
+  const enabled = isTeacher && isModuleEnabled('academics') && !year.isLoading;
+  const params = year.current?.id ? { academic_year: year.current.id } : undefined;
+  const classes = useScopedQuery('myClassAssignments', [year.current?.id ?? null], async () =>
+    listOf<{ class_obj?: number | null }>((await academicsApi.getMyClassTeacherAssignments(params)).data), { enabled });
+  const subjects = useScopedQuery('mySubjectAssignments', [year.current?.id ?? null], async () =>
+    listOf<{ class_obj?: number | null; subject?: number | null }>((await academicsApi.getMySubjectAssignments(params)).data), { enabled });
+  const lookup = useMemo(() => buildScopeLookup(classes.data ?? [], subjects.data ?? []), [classes.data, subjects.data]);
+  const ready = enabled && !classes.isLoading && !subjects.isLoading;
+  return { classify: (classId: unknown, subjectId?: unknown) => (ready ? resolveScope(lookup, classId, subjectId) : null) };
+}
+
+// This week's lesson plans (the dashboard panel). The server limits them to the teacher's own.
+export function useWeekLessonPlans(enabled: boolean) {
+  const { from, to } = weekRange(new Date());
+  return useScopedQuery('lessonPlans', ['week', from, to], async () =>
+    listOf<WeekPlan>((await lmsApi.getLessonPlans({ date_from: from, date_to: to, page_size: 30 })).data), { enabled, staleTime: 60_000 });
 }
 
 // Calendar day-status for today: is the school closed?

@@ -1,5 +1,6 @@
 import type { DayCode } from './teacher';
 import type { PortalPeriod, AttendanceCode } from './studentPortal';
+import { formatMoney } from './feeCollect';
 
 // Pure logic for the Parent screens. DTOs follow backend/parents/views.py and overview.py; the
 // per-child library, transport, exam schedule, results and fees payloads match the student
@@ -44,6 +45,63 @@ export interface ChildOverview {
 
 export const childName = (c: Pick<ChildLink, 'student_name' | 'class_name'>) =>
   c.class_name ? `${c.student_name} (${c.class_name})` : c.student_name;
+
+// ── Attention strip ───────────────────────────────────────────────────────────
+
+export type AttentionTone = 'red' | 'amber' | 'blue';
+export interface AttentionItem { key: string; label: string; href: string; tone: AttentionTone }
+
+// Whole days from today to an ISO date (0 today, negative past), by local calendar day.
+export function daysUntil(iso: string | null | undefined, now: Date = new Date()): number | null {
+  if (!iso) return null;
+  const [y, m, d] = iso.split('-').map(Number);
+  if (!y || !m || !d) return null;
+  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  return Math.round((new Date(y, m - 1, d).getTime() - start) / 86_400_000);
+}
+
+// Chips for the top of the parent Home, as the web's attention strip: what needs a look today.
+// Children whose overview has not loaded are skipped. Red first, then amber, then blue.
+export function attentionItems(
+  kids: Array<{ studentId: number; overview: ChildOverview | null | undefined }>,
+  opts: { unreadMessages?: number; now?: Date } = {},
+): AttentionItem[] {
+  const items: AttentionItem[] = [];
+  let pendingLeave = 0;
+  for (const { studentId, overview: o } of kids) {
+    if (!o) continue;
+    const first = (o.student_name || 'Your child').split(' ')[0];
+    const base = `/(parent)/children/${studentId}`;
+    if (!o.today.is_off_day && o.attendance_summary.today === 'ABSENT') {
+      items.push({ key: `absent-${studentId}`, label: `${first} was marked absent today`, href: `${base}/attendance`, tone: 'red' });
+    }
+    const outstanding = Number(o.fee_summary.outstanding) || 0;
+    const overdue = Number(o.fee_summary.overdue_amount) || 0;
+    if (outstanding > 0) {
+      items.push({
+        key: `fees-${studentId}`,
+        label: `${first}: ${formatMoney(outstanding)} fees outstanding${overdue > 0 ? ' (some overdue)' : ''}`,
+        href: `${base}/fees`,
+        tone: overdue > 0 ? 'red' : 'amber',
+      });
+    }
+    const days = o.next_exam ? daysUntil(o.next_exam.exam_date, opts.now) : null;
+    if (o.next_exam && days != null && days >= 0 && days <= 7) {
+      const when = days === 0 ? 'today' : days === 1 ? 'tomorrow' : `in ${days} days`;
+      items.push({ key: `exam-${studentId}`, label: `${first}: ${o.next_exam.subject_name} exam ${when}`, href: `${base}/exam-schedule`, tone: 'blue' });
+    }
+    pendingLeave += o.pending_leave_count || 0;
+  }
+  if (pendingLeave > 0) {
+    items.push({ key: 'leave', label: `${pendingLeave} leave request${pendingLeave === 1 ? '' : 's'} awaiting approval`, href: '/(parent)/leave', tone: 'amber' });
+  }
+  const unread = opts.unreadMessages ?? 0;
+  if (unread > 0) {
+    items.push({ key: 'messages', label: `${unread} unread message${unread === 1 ? '' : 's'}`, href: '/(parent)/messages', tone: 'amber' });
+  }
+  const rank = { red: 0, amber: 1, blue: 2 };
+  return items.sort((a, b) => rank[a.tone] - rank[b.tone]);
+}
 
 // ── Attendance ────────────────────────────────────────────────────────────────
 

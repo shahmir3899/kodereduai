@@ -60,3 +60,6 @@ Method: automatic comparison of all 100+ `nav_path` blocks with real sidebar lab
 1. Delete the OCR content permanently, or keep it hidden for when OCR returns?
 2. Are SMS, Email and Push real channels today, or only In-App?
 3. Which role is the main audience for videos: teacher, school admin, or both?
+
+## 2026-11-02: manager assignments
+Section 12.3 (Creating Assignments) now explains the manager's draft-only rule and the "no teacher assigned" message, and the Chapter 1 role table no longer says a Manager works with students. The 12.3 video shows the admin steps and was not re-recorded.

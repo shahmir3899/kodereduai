@@ -31,6 +31,7 @@ export function useSubjectActions() {
   const qc = useQueryClient();
   const done = () => refresh(qc);
   return {
+    bulkCreateSubjects: useMutation({ mutationFn: async (d: object) => (await academicsApi.bulkCreateSubjects(d)).data as { created?: number; skipped?: number }, onSuccess: done }),
     createSubject: useMutation({ mutationFn: (d: object) => academicsApi.createSubject(d), onSuccess: done }),
     updateSubject: useMutation({ mutationFn: ({ id, data }: { id: number; data: object }) => academicsApi.updateSubject(id, data), onSuccess: done }),
     deleteSubject: useMutation({ mutationFn: (id: number) => academicsApi.deleteSubject(id), onSuccess: done }),

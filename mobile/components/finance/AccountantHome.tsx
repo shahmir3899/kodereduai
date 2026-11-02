@@ -4,13 +4,14 @@ import { useRouter, type Href } from 'expo-router';
 import { useAuth } from '../../contexts/AuthContext';
 import { routeFor } from '../../navigation/routes';
 import {
-  useAccountBalances, useMonthFeeSummary, useOverdueFees, useRecentEntries,
+  useAccountBalances, useFinanceSummary, useMonthFeeSummary, useOverdueFees, useRecentEntries,
 } from '../../hooks/useAccountant';
 import { useUnreadMessages } from '../../hooks/useMessaging';
 import { useRefreshControl } from '../../hooks/useRefreshControl';
-import { entryAmount, entrySign, rateTone, totalBalance } from '../../services/accountant';
+import { entryAmount, entrySign, periodRange, rateTone, totalBalance } from '../../services/accountant';
 import { balanceOf, formatMoney } from '../../services/feeCollect';
 import Card from '../ui/Card';
+import IncomeExpenseCard from './IncomeExpenseCard';
 import StatusPill from '../ui/StatusPill';
 import SchoolSwitcher from '../nav/SchoolSwitcher';
 import StatTiles from '../dashboard/StatTiles';
@@ -25,9 +26,10 @@ export default function AccountantHome() {
   const balances = useAccountBalances();
   const fees = useMonthFeeSummary();
   const recent = useRecentEntries(8);
+  const month = useFinanceSummary(periodRange('MONTH'));
   const overdue = useOverdueFees(6);
   const unread = useUnreadMessages();
-  const refreshControl = useRefreshControl(balances.refetch, fees.refetch, recent.refetch, overdue.refetch);
+  const refreshControl = useRefreshControl(balances.refetch, fees.refetch, recent.refetch, overdue.refetch, month.refetch);
 
   const go = (route?: string) => route && router.push(route as Href);
   const name = [user?.first_name, user?.last_name].filter(Boolean).join(' ') || user?.username;
@@ -82,6 +84,28 @@ export default function AccountantHome() {
         </>
       ) : null}
 
+      <Text style={styles.section}>Income vs expense, this month</Text>
+      {month.data ? (
+        <IncomeExpenseCard income={Number(month.data.total_income ?? 0) || 0} expenses={Number(month.data.total_expenses ?? 0) || 0} />
+      ) : <Card style={styles.list}><Text style={styles.muted}>{month.isLoading ? 'Loading…' : 'Could not load.'}</Text></Card>}
+
+      <View style={styles.sectionRow}>
+        <Text style={styles.section}>Account balances</Text>
+        <TouchableOpacity accessibilityRole="button" onPress={() => go(routeFor('accountant', '/finance/accounts'))} style={styles.linkBox}>
+          <Text style={styles.link}>See all</Text>
+        </TouchableOpacity>
+      </View>
+      <Card style={styles.list}>
+        {accounts.length === 0 ? (
+          <Text style={styles.muted}>{balances.isLoading ? 'Loading…' : 'No accounts yet.'}</Text>
+        ) : accounts.map((a) => (
+          <View key={a.id} style={styles.line}>
+            <Text style={[styles.lineTitle, styles.lineBody]} numberOfLines={1}>{a.name}</Text>
+            <Text style={styles.lineAmount}>{formatMoney(Number(a.net_balance ?? a.balance) || 0)}</Text>
+          </View>
+        ))}
+      </Card>
+
       <Text style={styles.section}>Recent transactions</Text>
       <Card style={styles.list}>
         {(recent.data ?? []).length === 0 ? (
@@ -123,6 +147,9 @@ export default function AccountantHome() {
 }
 
 const styles = StyleSheet.create({
+  sectionRow: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between' },
+  linkBox: { minHeight: 44, minWidth: 44, justifyContent: 'center', alignItems: 'flex-end' },
+  link: { fontSize: FontSize.sm, color: Colors.primary, fontWeight: '600' },
   container: { flex: 1, backgroundColor: Colors.background },
   content: { padding: Spacing.lg, paddingBottom: Spacing.xxxl },
   greeting: { fontSize: FontSize.xl, fontWeight: '700', color: Colors.text },

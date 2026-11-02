@@ -3,7 +3,7 @@ import { View, Text, ScrollView, Image, Switch, Share, StyleSheet } from 'react-
 import QRCode from 'react-native-qrcode-svg';
 import * as ImagePicker from 'expo-image-picker';
 import { useAuth } from '../../contexts/AuthContext';
-import { useAppListing, useSchoolProfile, useSchoolProfileActions } from '../../hooks/useSchoolProfile';
+import { useSchoolProfile, useSchoolProfileActions } from '../../hooks/useSchoolProfile';
 import { schoolLink } from '../../services/schoolFinder';
 import { useRefreshControl } from '../../hooks/useRefreshControl';
 import {
@@ -43,7 +43,6 @@ function Body({ school }: { school: SchoolProfile }) {
   const [risk, setRisk] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [uploading, setUploading] = useState<AssetType | null>(null);
-  const listing = useAppListing();
 
   const fail = (e: unknown, fallback: string) => toast.error(inventoryErrorMessage(e, fallback));
 
@@ -100,13 +99,6 @@ function Body({ school }: { school: SchoolProfile }) {
     try { await actions.attendance.mutateAsync({ risk_threshold: Number(riskText) }); setRisk(null); toast.success('Risk threshold saved.'); } catch (e) { fail(e, 'Could not save the threshold.'); }
   };
 
-  const toggleListing = async (on: boolean) => {
-    try {
-      await listing.set.mutateAsync(on);
-      toast.success(on ? 'Your school now appears in the app search.' : 'Your school is hidden from the app search.');
-    } catch (e) { fail(e, 'Could not change the setting.'); }
-  };
-
   const shareLink = async () => {
     if (!school.subdomain) return;
     try {
@@ -148,13 +140,6 @@ function Body({ school }: { school: SchoolProfile }) {
             <Button title="Share the school link" variant="outline" size="sm" onPress={shareLink} />
           </>
         ) : <Text style={styles.hint}>This school has no code yet. Ask the platform admin to set one.</Text>}
-        <View style={styles.toggle}>
-          <View style={styles.flex}>
-            <Text style={styles.value}>Show in the app's school search</Text>
-            <Text style={styles.hint}>Off keeps the school private: people need the code or QR code.</Text>
-          </View>
-          <Switch value={listing.query.data === true} onValueChange={toggleListing} disabled={listing.query.isLoading || listing.set.isPending} accessibilityLabel="Show in the app's school search" />
-        </View>
       </Card>
 
       {asset('logo', school.logo, 'School logo', 'Used on reports, receipts and the school header. A square image, at least 200 by 200.')}

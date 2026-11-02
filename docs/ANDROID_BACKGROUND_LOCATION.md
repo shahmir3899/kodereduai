@@ -45,7 +45,7 @@ Needs a fresh APK build (new native-affecting code paths: background task, foreg
 8. Turn GPS off, try Start journey: a clear message, no crash.
 9. End journey with data off: the confirm explains the journey stays open; end it again with data on and it closes.
 10. Battery: note the percentage drop over a 30 minute journey, with the screen off.
-11. Boarding tab: roster shows only your route's students; mark some; Save; reopen: marks persist. Admin web Transport Attendance shows the same marks for today.
-12. A driver with no vehicle or no route sees a clear message on Home and Boarding.
+11. (Boarding was removed on 2026-11-02; the web driver has no boarding either.)
+12. A driver with no vehicle or no route sees a clear message on Home.
 
 Record failures in `docs/PHASE5_KNOWN_FAILURES.md`.

@@ -3,7 +3,7 @@ import { View, Text, FlatList, TouchableOpacity, StyleSheet } from 'react-native
 import { todayString } from '../../services/attendanceEntry';
 import { monthLabel, stepMonth } from '../../services/register';
 import {
-  ATTENDANCE_LABELS, attendanceTone, monthRange, shortTime, sortAttendance,
+  ATTENDANCE_LABELS, attendanceCounts, attendanceTone, monthRange, shortTime, sortAttendance,
 } from '../../services/myHr';
 import { useMyAttendance } from '../../hooks/useMyHr';
 import { useRefreshControl } from '../../hooks/useRefreshControl';
@@ -23,6 +23,7 @@ export default function MyAttendanceScreen() {
   const refreshControl = useRefreshControl(records.refetch, summary.refetch);
   const atCurrent = ym.year === current.year && ym.month0 === current.month0;
   const s = summary.data;
+  const c = attendanceCounts(s);
 
   const header = (
     <View>
@@ -35,12 +36,12 @@ export default function MyAttendanceScreen() {
       </View>
       {s ? (
         <View style={styles.cards}>
-          <Card label="Present" value={s.PRESENT ?? 0} color={Colors.success} />
-          <Card label="Absent" value={s.ABSENT ?? 0} color={Colors.error} />
-          <Card label="Late" value={s.LATE ?? 0} color={Colors.warning} />
-          <Card label="Half day" value={s.HALF_DAY ?? 0} color="#ea580c" />
-          <Card label="On leave" value={s.ON_LEAVE ?? 0} color={Colors.info} />
-          <Card label="Rate" value={s.attendance_rate != null ? `${s.attendance_rate}%` : '—'} color={Colors.text} />
+          <Card label="Present" value={c.present} color={Colors.success} />
+          <Card label="Absent" value={c.absent} color={Colors.error} />
+          <Card label="Late" value={c.late} color={Colors.warning} />
+          <Card label="Half day" value={c.halfDay} color="#ea580c" />
+          <Card label="On leave" value={c.onLeave} color={Colors.info} />
+          <Card label="Rate" value={c.rate != null ? `${c.rate}%` : '—'} color={Colors.text} />
         </View>
       ) : null}
     </View>

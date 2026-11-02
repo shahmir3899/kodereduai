@@ -1,4 +1,4 @@
-import { canSend, roleLabel, sortThreads, threadTitle, timeAgo, totalUnread } from '../services/messaging';
+import { canSend, messageTypeFor, roleLabel, sortThreads, threadTitle, timeAgo, totalUnread } from '../services/messaging';
 
 describe('threads', () => {
   const threads = [
@@ -40,5 +40,15 @@ describe('canSend', () => {
     expect(canSend('hi', null, true)).toBe(false);
     expect(canSend('hi', 5, true)).toBe(true);
     expect(canSend('hi', null, false)).toBe(true);
+  });
+});
+
+describe('message type', () => {
+  it('files a thread the way the web does, from who it goes to', () => {
+    expect(messageTypeFor({ role: 'PARENT' })).toBe('TEACHER_PARENT');
+    expect(messageTypeFor({ role: 'STUDENT' })).toBe('TEACHER_STUDENT');
+    ['TEACHER', 'STAFF', 'MANAGER', 'ACCOUNTANT'].forEach((role) => expect(messageTypeFor({ role })).toBe('ADMIN_STAFF'));
+    expect(messageTypeFor({ role: 'SCHOOL_ADMIN' })).toBe('GENERAL');
+    expect(messageTypeFor({})).toBe('GENERAL');
   });
 });

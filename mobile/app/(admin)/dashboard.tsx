@@ -17,6 +17,8 @@ import HeroCard from '../../components/dashboard/HeroCard';
 import AttendanceBreakdown from '../../components/dashboard/AttendanceBreakdown';
 import MonthlyFeeCard from '../../components/dashboard/MonthlyFeeCard';
 import LeadershipInsights from '../../components/dashboard/LeadershipInsights';
+import AIInsightsCard from '../../components/dashboard/AIInsightsCard';
+import Icon, { type IconName } from '../../components/ui/Icon';
 import RecentNotifications from '../../components/dashboard/RecentNotifications';
 import { dayHero } from '../../services/dashboardView';
 import Card from '../../components/ui/Card';
@@ -48,7 +50,7 @@ export default function AdminDashboard() {
   const refreshControl = useRefreshControl(query.refetch);
 
   const data = query.data;
-  if (query.isLoading || year.isLoading) return <Skeleton />;
+  if (query.isLoading || year.isLoading) return <Skeleton variant="stats" />;
   if (query.isError && !data) return <ErrorState error={query.error} onRetry={() => query.refetch()} />;
 
   const att = data?.attendance;
@@ -68,19 +70,20 @@ export default function AdminDashboard() {
       unpaid: routeFor('admin', '/finance/fees/collect'),
       leave: routeFor('admin', '/hr/leave'),
       payroll: routeFor('admin', '/hr/payroll'),
+      staffAttendance: routeFor('admin', '/hr/attendance'),
       enquiries: routeFor('admin', '/admissions'),
     },
   });
 
-  const quick: Array<{ label: string; icon: string; route?: string; show: boolean }> = [
-    { label: 'Attendance', icon: '✅', route: routeFor('admin', '/attendance/manual-entry'), show: isModuleEnabled('attendance') },
-    { label: 'Collect Fee', icon: '💰', route: routeFor('admin', '/finance/fees/collect'), show: isModuleEnabled('finance') },
-    { label: 'Students', icon: '👥', route: routeFor('admin', '/students'), show: isModuleEnabled('students') },
-    { label: 'Staff', icon: '🏢', route: routeFor('admin', '/hr/staff'), show: isModuleEnabled('hr') },
-    { label: 'Send Alert', icon: '📢', route: '/(admin)/notifications/send', show: isModuleEnabled('notifications') },
-    { label: 'Timetable', icon: '📅', route: routeFor('admin', '/academics/timetable'), show: isModuleEnabled('academics') },
-    { label: 'Results', icon: '📊', route: routeFor('admin', '/academics/results'), show: isModuleEnabled('examinations') },
-    { label: 'AI Chat', icon: '🤖', route: '/(admin)/ai-assistant', show: true },
+  const quick: Array<{ label: string; icon: IconName; route?: string; show: boolean }> = [
+    { label: 'Attendance', icon: 'checkmark-done-outline' as IconName, route: routeFor('admin', '/attendance/manual-entry'), show: isModuleEnabled('attendance') },
+    { label: 'Collect Fee', icon: 'cash-outline' as IconName, route: routeFor('admin', '/finance/fees/collect'), show: isModuleEnabled('finance') },
+    { label: 'Students', icon: 'people-outline' as IconName, route: routeFor('admin', '/students'), show: isModuleEnabled('students') },
+    { label: 'Staff', icon: 'briefcase-outline' as IconName, route: routeFor('admin', '/hr/staff'), show: isModuleEnabled('hr') },
+    { label: 'Send Alert', icon: 'megaphone-outline' as IconName, route: '/(admin)/notifications/send', show: isModuleEnabled('notifications') },
+    { label: 'Timetable', icon: 'calendar-outline' as IconName, route: routeFor('admin', '/academics/timetable'), show: isModuleEnabled('academics') },
+    { label: 'Results', icon: 'bar-chart-outline' as IconName, route: routeFor('admin', '/academics/results'), show: isModuleEnabled('examinations') },
+    { label: 'AI Chat', icon: 'chatbubbles-outline' as IconName, route: '/(admin)/ai-assistant', show: true },
   ].filter((a) => a.show);
 
   return (
@@ -170,11 +173,13 @@ export default function AdminDashboard() {
       <View style={styles.actions}>
         {quick.map((a) => (
           <TouchableOpacity accessibilityRole="button" key={a.label} style={[styles.action, !a.route && styles.actionOff]} disabled={!a.route} onPress={() => go(a.route)}>
-            <Text style={styles.actionIcon}>{a.icon}</Text>
+            <Icon name={a.icon} size={24} color={Colors.primary} />
             <Text style={styles.actionLabel}>{a.label}</Text>
           </TouchableOpacity>
         ))}
       </View>
+
+      <AIInsightsCard />
 
       <LeadershipInsights />
 

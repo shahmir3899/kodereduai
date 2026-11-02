@@ -88,7 +88,7 @@ const firstFieldError = (data) => {
 }
 
 export default function AssignmentsPage() {
-  const { user, isSchoolAdmin, isPrincipal, isTeacher } = useAuth()
+  const { user, isSchoolAdmin, isPrincipal, isTeacher, isManager } = useAuth()
   const { activeAcademicYear } = useAcademicYear()
   const { sessionClasses } = useSessionClasses(activeAcademicYear?.id)
   const queryClient = useQueryClient()
@@ -137,7 +137,11 @@ export default function AssignmentsPage() {
     return siblings.length > 1 ? parseInt(sessionClassId, 10) : null
   }
   const { classifyScope, isTeacherEnabled } = useTeacherScopeLookup({ academicYearId: activeAcademicYear?.id })
-  const canCreateDailyDiary = isSchoolAdmin || isPrincipal || isTeacher
+  const canCreateDailyDiary = isSchoolAdmin || isPrincipal || isTeacher || isManager
+  // A manager prepares drafts only: the server picks the teacher from the subject's
+  // assignment and refuses publish, close and any change to a published assignment.
+  const canPublish = !isManager
+  const canChange = (a) => !isManager || a.status === 'DRAFT'
 
   const { data: classTeacherScopeRes, isLoading: classTeacherScopeLoading } = useQuery({
     queryKey: ['myClassTeacherAssignments', activeAcademicYear?.id],
@@ -455,7 +459,7 @@ export default function AssignmentsPage() {
       showError('Please select a subject')
       return
     }
-    if (!form.teacher) {
+    if (!form.teacher && !isManager) {
       showError('Please select a teacher')
       return
     }
@@ -476,6 +480,10 @@ export default function AssignmentsPage() {
       subject: parseInt(form.subject),
       teacher: form.teacher ? parseInt(form.teacher) : null,
       total_marks: parseInt(form.total_marks) || 100,
+    }
+    if (isManager) {
+      delete payload.teacher // the server uses the subject's assigned teacher
+      payload.status = 'DRAFT'
     }
 
     if (editingAssignment) {
@@ -727,10 +735,10 @@ export default function AssignmentsPage() {
                   ]}
                   actions={[
                     { label: `Submissions (${a.submission_count ?? 0})`, tone: 'primary', onClick: () => navigate(`/academics/assignments/${a.id}/submissions`) },
-                    { label: 'Edit', tone: 'info', onClick: () => openEditModal(a) },
-                    ...(a.status === 'DRAFT' ? [{ label: 'Publish', tone: 'success', onClick: () => publishMutation.mutate(a.id) }] : []),
-                    ...(a.status === 'PUBLISHED' ? [{ label: 'Close', tone: 'orange', onClick: () => closeMutation.mutate(a.id) }] : []),
-                    { label: 'Delete', tone: 'danger', onClick: () => setDeleteConfirm(a) },
+                    ...(canChange(a) ? [{ label: 'Edit', tone: 'info', onClick: () => openEditModal(a) }] : []),
+                    ...(canPublish && a.status === 'DRAFT' ? [{ label: 'Publish', tone: 'success', onClick: () => publishMutation.mutate(a.id) }] : []),
+                    ...(canPublish && a.status === 'PUBLISHED' ? [{ label: 'Close', tone: 'orange', onClick: () => closeMutation.mutate(a.id) }] : []),
+                    ...(canChange(a) ? [{ label: 'Delete', tone: 'danger', onClick: () => setDeleteConfirm(a) }] : []),
                   ]}
                 >
                   {isTeacherEnabled && (
@@ -833,13 +841,15 @@ export default function AssignmentsPage() {
                         </button>
                       </td>
                       <td className="px-4 py-3 text-right whitespace-nowrap">
+                        {canChange(a) && (
                         <button
                           onClick={() => openEditModal(a)}
                           className="text-sm text-blue-600 hover:text-blue-800 font-medium mr-3"
                         >
                           Edit
                         </button>
-                        {a.status === 'DRAFT' && (
+                        )}
+                        {canPublish && a.status === 'DRAFT' && (
                           <button
                             onClick={() => publishMutation.mutate(a.id)}
                             disabled={publishMutation.isPending}
@@ -848,7 +858,7 @@ export default function AssignmentsPage() {
                             Publish
                           </button>
                         )}
-                        {a.status === 'PUBLISHED' && (
+                        {canPublish && a.status === 'PUBLISHED' && (
                           <button
                             onClick={() => closeMutation.mutate(a.id)}
                             disabled={closeMutation.isPending}
@@ -857,12 +867,14 @@ export default function AssignmentsPage() {
                             Close
                           </button>
                         )}
+                        {canChange(a) && (
                         <button
                           onClick={() => setDeleteConfirm(a)}
                           className="text-sm text-red-600 hover:text-red-800 font-medium"
                         >
                           Delete
                         </button>
+                        )}
                       </td>
                     </tr>
                   ))}
@@ -926,6 +938,14 @@ export default function AssignmentsPage() {
 
               {/* Teacher & Type */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {isManager ? (
+                  <div>
+                    <label className="label">Teacher</label>
+                    <p className="text-sm text-gray-600 mt-2">
+                      Set automatically from the subject&apos;s assigned teacher. Saved as a draft; a teacher publishes it.
+                    </p>
+                  </div>
+                ) : (
                 <div>
                   <label className="label">Teacher *</label>
                   <StaffFilter
@@ -935,6 +955,7 @@ export default function AssignmentsPage() {
                     placeholder="Select Teacher"
                   />
                 </div>
+                )}
                 <div>
                   <label className="label">Assignment Type</label>
                   <select
@@ -995,7 +1016,8 @@ export default function AssignmentsPage() {
                 <Field label="Status">
 <select
                     className="input"
-                    value={form.status}
+                    value={isManager ? 'DRAFT' : form.status}
+                    disabled={isManager}
                     onChange={(e) => setForm({ ...form, status: e.target.value })}
                   >
                     {STATUSES.map((s) => (

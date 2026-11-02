@@ -6,7 +6,7 @@
 
 export interface ActiveJourney {
   id: number;
-  mode: 'route' | 'student';
+  mode: 'route';
   routeName?: string;
   journeyType?: string;
   startedAt: string;

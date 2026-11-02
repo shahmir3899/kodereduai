@@ -1,48 +1,6 @@
 import {
-  activeJourneyOf, boardingCounts, changedRecords, durationLabel, groupByStop, isToday, journeyStateFromHistory,
-  markAll, nextBoarding, sortStops, statusOf, type BoardingStudent, type JourneyRow,
+  activeJourneyOf, durationLabel, isToday, journeyStateFromHistory, sortStops, type JourneyRow,
 } from '../services/driver';
-
-const stu = (id: number, stop: string | null, order: number | null, status: BoardingStudent['boarding_status'] = null): BoardingStudent => ({
-  student_id: id, name: `S${id}`, stop_name: stop, stop_order: order, boarding_status: status,
-});
-
-describe('boarding', () => {
-  const students = [stu(1, 'B', 2), stu(2, 'A', 1, 'BOARDED'), stu(3, 'A', 1), stu(4, null, null)];
-
-  it('cycles unmarked -> boarded -> not boarded -> absent -> unmarked', () => {
-    expect(nextBoarding(null)).toBe('BOARDED');
-    expect(nextBoarding('BOARDED')).toBe('NOT_BOARDED');
-    expect(nextBoarding('NOT_BOARDED')).toBe('ABSENT');
-    expect(nextBoarding('ABSENT')).toBeNull();
-    expect(nextBoarding(undefined)).toBe('BOARDED');
-  });
-
-  it('shows the draft over the saved status', () => {
-    expect(statusOf(students[1], {})).toBe('BOARDED');
-    expect(statusOf(students[1], { 2: 'ABSENT' })).toBe('ABSENT');
-    expect(statusOf(students[1], { 2: null })).toBeNull();
-  });
-
-  it('sends only what changed, and nothing for a student set back to unmarked', () => {
-    expect(changedRecords(students, { 1: 'BOARDED', 2: 'BOARDED', 3: null })).toEqual([{ student_id: 1, boarding_status: 'BOARDED' }]);
-    expect(changedRecords(students, { 2: 'ABSENT' })).toEqual([{ student_id: 2, boarding_status: 'ABSENT' }]);
-    expect(changedRecords(students, {})).toEqual([]);
-  });
-
-  it('counts by status including unmarked', () => {
-    expect(boardingCounts(students, { 1: 'ABSENT' })).toEqual({ BOARDED: 1, NOT_BOARDED: 0, ABSENT: 1, unmarked: 2 });
-  });
-
-  it('groups by stop order with unassigned last', () => {
-    expect(groupByStop(students).map((g) => [g.title, g.students.length])).toEqual([['A', 2], ['B', 1], ['No stop', 1]]);
-  });
-
-  it('marks only the unmarked ones when marking all', () => {
-    const next = markAll(students, 'BOARDED', { 3: 'ABSENT' });
-    expect(next).toEqual({ 3: 'ABSENT', 1: 'BOARDED', 4: 'BOARDED' });
-  });
-});
 
 describe('journey history', () => {
   const rows: JourneyRow[] = [

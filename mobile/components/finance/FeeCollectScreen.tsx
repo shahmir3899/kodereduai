@@ -2,12 +2,18 @@ import React, { useMemo, useState } from 'react';
 import { View, Text, FlatList, TextInput, TouchableOpacity, ScrollView, StyleSheet } from 'react-native';
 import { todayString, type ClassOption } from '../../services/attendanceEntry';
 import {
-  MONTH_NAMES, PAYMENT_METHODS, balanceOf, buildPaymentPatch, canRecordPayment, emptyPaymentForm, feeLabel,
-  filterPayments, formatMoney, sortPayments, statusTone, stepFeeMonth, summarize, validatePayment,
-  type FeePayment, type FeeTypeTab, type PaymentForm,
+  MONTH_NAMES, PAYMENT_METHODS, STATUS_TABS, balanceOf, buildPaymentPatch, canDeleteFee, canRecordPayment, categoryOptions, emptyPaymentForm,
+  feeDescription, feeLabel, filterPayments, formatMoney, sortPayments, statusTone, stepFeeMonth, summarize, validatePayment,
+  type FeePayment, type FeeTypeTab, type PaymentForm, type StatusTab,
 } from '../../services/feeCollect';
 import { useAttendanceClassOptions } from '../../hooks/useAcademicYear';
-import { useAccounts, useFeePayments, useRecordPayment } from '../../hooks/useFees';
+import { useAccounts, useDeleteFeePayment, useFeePayments, useRecordPayment } from '../../hooks/useFees';
+import { useAcademicYear } from '../../hooks/useAcademicYear';
+import { reportsApi } from '../../services/api';
+import { shareReportFile } from '../../services/reportShare';
+import { feeReportFileName, feeReportRequest } from '../../services/reports';
+import { staffLeaveErrorMessage } from '../../services/staffLeave';
+import FormSheet from '../inventory/FormSheet';
 import { useRefreshControl } from '../../hooks/useRefreshControl';
 import SearchBar from '../ui/SearchBar';
 import SegmentedTabs from '../ui/SegmentedTabs';
@@ -27,13 +33,15 @@ interface Props {
   classOptions?: ClassOption[];
   // Read-only roles (accountant) see the list but can't record.
   canRecord?: boolean;
+  // Admin and principal: delete an unpaid record, and share the month's fee collection report.
+  canManage?: boolean;
 }
 
-type StatusTab = 'ALL' | 'UNPAID' | 'PARTIAL' | 'PAID';
+const ALL_CATEGORIES = '__all';
 
 // Record fee payments: pick a month and class, tap a student's fee, enter what was received.
 // Needs a connection; the server decides what each role may see and change.
-export default function FeeCollectScreen({ classOptions, canRecord = true }: Props) {
+export default function FeeCollectScreen({ classOptions, canRecord = true, canManage = false }: Props) {
   const toast = useToast();
   const { options, isLoading: classesLoading } = useAttendanceClassOptions(classOptions);
   const isTeacherScope = !!classOptions;
@@ -44,6 +52,10 @@ export default function FeeCollectScreen({ classOptions, canRecord = true }: Pro
   const [feeType, setFeeType] = useState<FeeTypeTab>('MONTHLY');
   const [status, setStatus] = useState<StatusTab>('ALL');
   const [classId, setClassId] = useState<number | null>(null);
+  const [category, setCategory] = useState<string>(ALL_CATEGORIES);
+  const [deleting, setDeleting] = useState<FeePayment | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [reporting, setReporting] = useState(false);
   const [search, setSearch] = useState('');
   const [paying, setPaying] = useState<FeePayment | null>(null);
   const [form, setForm] = useState<PaymentForm | null>(null);
@@ -56,6 +68,8 @@ export default function FeeCollectScreen({ classOptions, canRecord = true }: Pro
   const query = useFeePayments(feeType, ym.month, ym.year);
   const accounts = useAccounts();
   const record = useRecordPayment();
+  const remove = useDeleteFeePayment();
+  const academicYear = useAcademicYear({ lockToCurrent: true });
   const refreshControl = useRefreshControl(query.refetch, accounts.refetch);
   const today = todayString();
 
@@ -63,10 +77,32 @@ export default function FeeCollectScreen({ classOptions, canRecord = true }: Pro
     masterClassId: option ? (option.classObj ?? option.id) : null,
     sessionClassId: option?.isSession ? option.id : null,
     status: status === 'ALL' ? '' : status,
+    category: category === ALL_CATEGORIES ? '' : category,
     search,
-  })), [query.data, option, status, search]);
+  })), [query.data, option, status, category, search]);
+  const categories = useMemo(() => categoryOptions(query.data ?? []), [query.data]);
   const totals = useMemo(() => summarize(shown), [shown]);
   const activeAccounts = (accounts.data ?? []).filter((a) => a.is_active !== false);
+
+  const confirmDelete = async () => {
+    if (!deleting) return;
+    setDeleteError(null);
+    try {
+      await remove.mutateAsync(deleting.id);
+      toast.success('Fee record deleted.');
+      setDeleting(null);
+    } catch (e) { setDeleteError(staffLeaveErrorMessage(e, 'Could not delete the fee record.')); }
+  };
+
+  // The server's fee collection report covers the whole school for the month shown.
+  const shareMonthReport = async () => {
+    setReporting(true);
+    try {
+      await shareReportFile(() => reportsApi.generateInstant(feeReportRequest('FEE_COLLECTION', ym.month, ym.year, academicYear.current?.id)) as Promise<{ data: ArrayBuffer }>,
+        feeReportFileName('FEE_COLLECTION', ym.month, ym.year), 'pdf');
+    } catch (e) { toast.error((e as Error)?.message || 'Could not make the report.'); }
+    finally { setReporting(false); }
+  };
 
   const open = (p: FeePayment) => {
     setPaying(p);
@@ -112,9 +148,15 @@ export default function FeeCollectScreen({ classOptions, canRecord = true }: Pro
         tabs={[{ value: 'MONTHLY', label: 'Monthly' }, { value: 'ANNUAL', label: 'Annual' }, { value: 'ALL', label: 'All types' }]} />
       <Select label="Class" value={effectiveClassId} options={options.map((o) => ({ value: o.id, label: o.label }))}
         onChange={setClassId} placeholder={isTeacherScope ? 'Select a class' : 'All classes'} />
-      <SegmentedTabs<StatusTab> value={status} onChange={setStatus}
-        tabs={[{ value: 'ALL', label: 'All' }, { value: 'UNPAID', label: 'Unpaid' }, { value: 'PARTIAL', label: 'Partial' }, { value: 'PAID', label: 'Paid' }]} />
+      <SegmentedTabs<StatusTab> value={status} onChange={setStatus} tabs={STATUS_TABS} scrollable />
+      {categories.length > 1 ? (
+        <Select label="Category" value={category} onChange={(v) => setCategory(String(v))}
+          options={[{ value: ALL_CATEGORIES, label: 'All categories' }, ...categories.map((c) => ({ value: c, label: c }))]} />
+      ) : null}
       <SearchBar value={search} onChangeText={setSearch} placeholder="Search by name or roll number..." />
+      {canManage && feeType !== 'ANNUAL' ? (
+        <Button title={`${MONTH_NAMES[ym.month - 1]} report (PDF, whole school)`} size="sm" variant="outline" onPress={shareMonthReport} loading={reporting} disabled={reporting} style={styles.reportBtn} />
+      ) : null}
       {shown.length > 0 ? (
         <View style={styles.totals}>
           <Total label="Due" value={formatMoney(totals.due)} color={Colors.text} />
@@ -158,6 +200,11 @@ export default function FeeCollectScreen({ classOptions, canRecord = true }: Pro
                 <Amount label="Balance" value={formatMoney(balance)} color={balance > 0 ? Colors.error : Colors.textSecondary} />
               </View>
               {Number(p.previous_balance) > 0 ? <Text style={styles.carry}>Includes {formatMoney(Number(p.previous_balance))} carried forward</Text> : null}
+              {canManage && canDeleteFee(p) ? (
+                <TouchableOpacity accessibilityRole="button" accessibilityLabel={`Delete fee: ${feeDescription(p)}`} style={styles.delete} onPress={() => { setDeleteError(null); setDeleting(p); }}>
+                  <Text style={styles.deleteText}>Delete this record</Text>
+                </TouchableOpacity>
+              ) : null}
               {canRecord && canRecordPayment(p) ? (
                 <TouchableOpacity accessibilityRole="button" style={styles.record} onPress={() => open(p)}>
                   <Text style={styles.recordText}>Record payment</Text>
@@ -167,6 +214,11 @@ export default function FeeCollectScreen({ classOptions, canRecord = true }: Pro
           );
         }}
       />
+
+      <FormSheet visible={deleting !== null} title="Delete this fee record?" onClose={() => setDeleting(null)} onSubmit={confirmDelete} submitLabel="Delete" busy={remove.isPending} error={deleteError}>
+        {deleting ? <Text style={styles.sheetWho}>{feeDescription(deleting)}</Text> : null}
+        <Text style={styles.sheetSub}>Nothing has been paid on it. Deleting it cannot be undone.</Text>
+      </FormSheet>
 
       <BottomSheet visible={!!paying && !!form} onClose={() => setPaying(null)} title="Record payment">
         {paying && form ? (
@@ -235,6 +287,9 @@ const styles = StyleSheet.create({
   amount: { flex: 1 },
   amountLabel: { fontSize: 10, color: Colors.textSecondary },
   amountValue: { fontSize: FontSize.sm, fontWeight: '700' },
+  reportBtn: { alignSelf: 'flex-start', marginBottom: Spacing.md },
+  delete: { marginTop: Spacing.sm, borderWidth: 1, borderColor: Colors.error, borderRadius: BorderRadius.md, paddingVertical: Spacing.sm, alignItems: 'center' },
+  deleteText: { color: Colors.error, fontWeight: '700', fontSize: FontSize.sm },
   carry: { fontSize: FontSize.xs, color: Colors.warning, marginTop: Spacing.xs },
   record: { marginTop: Spacing.sm, backgroundColor: Colors.primary, borderRadius: BorderRadius.md, paddingVertical: Spacing.sm, alignItems: 'center' },
   recordText: { color: Colors.textInverse, fontWeight: '700', fontSize: FontSize.sm },

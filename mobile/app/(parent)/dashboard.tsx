@@ -2,7 +2,9 @@ import React from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
 import { useRouter, type Href } from 'expo-router';
 import { useAuth } from '../../contexts/AuthContext';
-import { useChildren, useLeaveRequests } from '../../hooks/useParent';
+import { useChildOverviews, useChildren, useLeaveRequests } from '../../hooks/useParent';
+import { attentionItems } from '../../services/parentPortal';
+import AttentionStrip from '../../components/parent/AttentionStrip';
 import { useRecentNotifications } from '../../hooks/useManager';
 import { useThreads } from '../../hooks/useMessaging';
 import { totalUnread } from '../../services/messaging';
@@ -21,6 +23,8 @@ export default function ParentDashboard() {
   const children = useChildren();
   const leave = useLeaveRequests();
   const threads = useThreads();
+  const kids = children.data ?? [];
+  const overviews = useChildOverviews(kids.map((k) => k.student));
   const notifications = useRecentNotifications(isModuleEnabled('notifications'), 3);
   const refreshControl = useRefreshControl(children.refetch, leave.refetch, threads.refetch, notifications.refetch);
   const go = (route: string) => router.push(route as Href);
@@ -28,7 +32,6 @@ export default function ParentDashboard() {
   if (children.isLoading) return <Skeleton />;
   if (children.isError && !children.data) return <ErrorState error={children.error} onRetry={() => children.refetch()} />;
 
-  const kids = children.data ?? [];
   const unread = totalUnread(threads.data ?? []);
   const pendingLeave = (leave.data ?? []).filter((l) => l.status === 'PENDING').length;
   const name = [user?.first_name, user?.last_name].filter(Boolean).join(' ') || user?.username;
@@ -37,6 +40,7 @@ export default function ParentDashboard() {
     <ScrollView style={styles.container} contentContainerStyle={styles.content} refreshControl={refreshControl}>
       <Text style={styles.greeting}>Welcome, {name}</Text>
       <SchoolSwitcher />
+      <AttentionStrip items={attentionItems(kids.map((k, i) => ({ studentId: k.student, overview: overviews[i]?.data })), { unreadMessages: unread })} />
 
       {kids.length === 0 ? (
         <EmptyState title="No children linked" message="Ask the school office for an invite code to link your child, or switch school above." />

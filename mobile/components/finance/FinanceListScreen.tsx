@@ -2,10 +2,16 @@ import React, { useMemo, useState } from 'react';
 import { View, Text, FlatList, ActivityIndicator, StyleSheet, type RefreshControlProps } from 'react-native';
 import { financeApi } from '../../services/api';
 import { balanceOf, formatMoney, type FeePayment, type FeeStatus } from '../../services/feeCollect';
-import { useFinanceList } from '../../hooks/useAccountant';
+import { useExpenseCategories, useFinanceList } from '../../hooks/useAccountant';
+import { categoryShares, monthRange } from '../../services/accountant';
+import { schoolToday } from '../../services/schoolTime';
 import { useDebouncedValue } from '../../hooks/useDebouncedValue';
 import { useRefreshControl } from '../../hooks/useRefreshControl';
 import SegmentedTabs from '../ui/SegmentedTabs';
+import FeeOverviewCard from './FeeOverviewCard';
+import MonthFilter, { type YearMonth } from './MonthFilter';
+import TransfersScreen from './TransfersScreen';
+import Card from '../ui/Card';
 import SearchBar from '../ui/SearchBar';
 import Skeleton from '../ui/Skeleton';
 import ErrorState from '../ui/ErrorState';
@@ -36,7 +42,22 @@ const FEE_TONE: Record<FeeStatus, 'error' | 'warning' | 'success' | 'info'> = {
 // Read-only lists for the Accountant: the finance API refuses every write for that role, so
 // there is deliberately no add, edit or collect control here.
 export default function FinanceListScreen({ kind }: { kind: 'fees' | 'expenses' | 'income' }) {
-  return kind === 'fees' ? <FeesList /> : <LedgerList kind={kind} />;
+  if (kind === 'fees') return <FeesList />;
+  if (kind === 'income') return <LedgerList kind="income" />;
+  return <ExpensesAndTransfers />;
+}
+
+// The web's Expenses & Transfers page: two tabs, both read only here.
+function ExpensesAndTransfers() {
+  const [tab, setTab] = useState<'expenses' | 'transfers'>('expenses');
+  return (
+    <View style={styles.container}>
+      <View style={styles.tabs}>
+        <SegmentedTabs tabs={[{ value: 'expenses', label: 'Expenses' }, { value: 'transfers', label: 'Transfers' }]} value={tab} onChange={setTab} />
+      </View>
+      {tab === 'expenses' ? <LedgerList kind="expenses" /> : <TransfersScreen readOnly />}
+    </View>
+  );
 }
 
 function FeesList() {
@@ -54,6 +75,7 @@ function FeesList() {
 
   const header = (
     <View>
+      <FeeOverviewCard />
       <SegmentedTabs tabs={STATUS_TABS} value={tab} onChange={setTab} />
       <SearchBar value={search} onChangeText={setSearch} placeholder="Search student..." />
       {query.data ? <Text style={styles.count}>{total} record{total === 1 ? '' : 's'}</Text> : null}
@@ -85,16 +107,37 @@ function FeesList() {
 function LedgerList({ kind }: { kind: 'expenses' | 'income' }) {
   const isExpense = kind === 'expenses';
   const [search, setSearch] = useState('');
+  const [ym, setYm] = useState<YearMonth | null>(null);
+  const range = ym ? monthRange(ym.year, ym.month) : null;
   const term = useDebouncedValue(search.trim(), 400);
   const query = useFinanceList<LedgerRow>(
     isExpense ? 'expenses' : 'otherIncome',
     isExpense ? financeApi.getExpenses : financeApi.getOtherIncome,
-    { ...(term ? { search: term } : {}), ordering: '-date' },
+    { ...(term ? { search: term } : {}), ...(range ? { date_from: range.from, date_to: range.to } : {}), ordering: '-date' },
   );
+  // Category breakdown for what the filter shows (all months: since the start).
+  const cats = useExpenseCategories(isExpense ? (range ?? { from: '2000-01-01', to: schoolToday() }) : null);
+  const shares = categoryShares(cats.data?.categories ?? [], cats.data?.total ?? 0);
   const refreshControl = useRefreshControl(query.refetch);
   const rows = useMemo(() => query.data?.pages.flatMap((p) => p.results) ?? [], [query.data]);
 
-  const header = <SearchBar value={search} onChangeText={setSearch} placeholder={isExpense ? 'Search expenses...' : 'Search income...'} />;
+  const header = (
+    <View>
+      <MonthFilter value={ym} onChange={setYm} />
+      {isExpense && shares.length > 0 ? (
+        <Card style={styles.breakdown}>
+          <Text style={styles.title}>Category breakdown</Text>
+          {shares.map((c) => (
+            <View key={c.name} style={styles.catRow}>
+              <Text style={styles.sub} numberOfLines={1}>{c.name}</Text>
+              <Text style={styles.sub}>{formatMoney(c.amount)} · {c.pct}%</Text>
+            </View>
+          ))}
+        </Card>
+      ) : null}
+      <SearchBar value={search} onChangeText={setSearch} placeholder={isExpense ? 'Search expenses...' : 'Search income...'} />
+    </View>
+  );
 
   return (
     <List
@@ -131,7 +174,7 @@ interface ListProps<T> {
 }
 
 function List<T>({ query, header, rows, refreshControl, emptyTitle, keyOf, renderRow }: ListProps<T>) {
-  if (query.isLoading) return <View style={styles.container}><View style={styles.content}>{header}</View><Skeleton /></View>;
+  if (query.isLoading) return <View style={styles.container}><View style={styles.content}>{header}</View><Skeleton variant="list" /></View>;
   if (query.isError && !query.data) return <ErrorState onRetry={() => query.refetch()} />;
   return (
     <FlatList
@@ -154,6 +197,9 @@ function List<T>({ query, header, rows, refreshControl, emptyTitle, keyOf, rende
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
   content: { padding: Spacing.lg },
+  tabs: { paddingHorizontal: Spacing.lg, paddingTop: Spacing.lg },
+  breakdown: { padding: Spacing.md, marginBottom: Spacing.md },
+  catRow: { flexDirection: 'row', justifyContent: 'space-between', gap: Spacing.md, marginTop: 6 },
   count: { fontSize: FontSize.xs, color: Colors.textSecondary, marginBottom: Spacing.md },
   row: { flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.surface, borderRadius: BorderRadius.md, padding: Spacing.md, marginBottom: Spacing.sm, gap: Spacing.md },
   who: { flex: 1 },

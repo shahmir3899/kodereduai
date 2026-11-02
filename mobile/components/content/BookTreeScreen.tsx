@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
-import { useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, useRouter, type Href } from 'expo-router';
+import { usePersonaBase } from '../../hooks/usePersonaBase';
 import { useBookTree } from '../../hooks/useManager';
 import { useCurriculumActions } from '../../hooks/useCurriculum';
 import { useRefreshControl } from '../../hooks/useRefreshControl';
@@ -21,6 +22,8 @@ import { useToast } from '../ui/Toast';
 import { confirm } from '../ui/confirm';
 import FormSheet from '../inventory/FormSheet';
 import TocScanSheet from './TocScanSheet';
+import BookInfoCard from './BookInfoCard';
+import type { BookDetail } from '../../services/curriculumContent';
 import { Colors, FontSize, Spacing } from '../../constants/colors';
 
 type TopicWithPages = TreeTopic & { page_start?: number | null; page_end?: number | null; content_kind?: string };
@@ -33,6 +36,8 @@ export default function BookTreeScreen({ editable = false }: { editable?: boolea
   const { id } = useLocalSearchParams<{ id: string }>();
   const bookId = Number(id);
   const toast = useToast();
+  const router = useRouter();
+  const base = usePersonaBase();
   const actions = useCurriculumActions();
   const query = useBookTree(bookId);
   const refreshControl = useRefreshControl(query.refetch);
@@ -119,15 +124,16 @@ export default function BookTreeScreen({ editable = false }: { editable?: boolea
   const toolbar = editable ? (
     <View style={styles.toolbar}>
       <Button title="+ Chapter" size="sm" onPress={() => openChapter('new')} />
-      <Button title="Scan contents page" size="sm" variant="outline" onPress={() => setScan(true)} />
+      <Button title="Add contents" size="sm" variant="outline" onPress={() => setScan(true)} />
     </View>
   ) : null;
 
   return (
     <View style={styles.container}>
       <ScrollView contentContainerStyle={styles.content} refreshControl={refreshControl}>
+        <BookInfoCard book={(query.data ?? { id: bookId }) as BookDetail} editable={editable} />
         {toolbar}
-        {chapters.length === 0 ? <EmptyState title="No chapters yet" message={editable ? 'Add a chapter, or scan the contents page.' : 'This book has no table of contents.'} /> : chapters.map((c) => {
+        {chapters.length === 0 ? <EmptyState title="No chapters yet" message={editable ? 'Add a chapter, or add the contents by photo, text or AI.' : 'This book has no table of contents.'} /> : chapters.map((c) => {
           const topics = c.topics ?? [];
           const isOpen = open === c.id;
           return (
@@ -139,11 +145,13 @@ export default function BookTreeScreen({ editable = false }: { editable?: boolea
               {isOpen ? (
                 <View style={styles.topics}>
                   {topics.length === 0 ? <Text style={styles.muted}>No topics.</Text> : topics.map((t) => (
-                    editable ? (
-                      <TouchableOpacity key={t.id} accessibilityRole="button" style={styles.topicRow} onPress={() => openTopic(c, t as TopicWithPages)}>
-                        <Text style={styles.topic}>{t.topic_number != null ? `${t.topic_number}  ` : ''}{t.title}</Text>
+                    <View key={t.id} style={styles.topicRow}>
+                      <TouchableOpacity accessibilityRole="button" accessibilityLabel={`Open ${t.title}`} style={styles.topicMain}
+                        onPress={() => router.push({ pathname: `${base}/curriculum/topic`, params: { bookId, topicId: t.id } } as Href)}>
+                        <Text style={styles.topic} numberOfLines={3}>{(t as { is_covered?: boolean }).is_covered ? '✓ ' : ''}{t.topic_number != null ? `${t.topic_number}  ` : ''}{t.title}</Text>
                       </TouchableOpacity>
-                    ) : <Text key={t.id} style={styles.topic}>{t.topic_number != null ? `${t.topic_number}  ` : ''}{t.title}</Text>
+                      {editable ? <Button title="Edit" size="sm" variant="ghost" onPress={() => openTopic(c, t as TopicWithPages)} /> : null}
+                    </View>
                   ))}
                   {editable ? (
                     <View style={styles.toolbar}>
@@ -191,7 +199,8 @@ const styles = StyleSheet.create({
   chapter: { flex: 1, fontSize: FontSize.md, fontWeight: '600', color: Colors.text },
   count: { fontSize: FontSize.xs, color: Colors.textSecondary },
   topics: { marginTop: Spacing.sm, paddingTop: Spacing.sm, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: Colors.border },
-  topicRow: { minHeight: 44, justifyContent: 'center' },
+  topicRow: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
+  topicMain: { flex: 1, justifyContent: 'center', minHeight: 44 },
   topic: { fontSize: FontSize.sm, color: Colors.text, paddingVertical: 3 },
   muted: { fontSize: FontSize.sm, color: Colors.textSecondary },
 });

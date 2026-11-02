@@ -41,6 +41,7 @@ export const MONEY_QUERY_ROOTS = [
   'studentDiscounts',
   'feeStructures',
   'feeCategories',
+  'categories',
   // Admin dashboard bundles the monthly fee numbers with attendance and HR.
   'adminDashboard',
 ];

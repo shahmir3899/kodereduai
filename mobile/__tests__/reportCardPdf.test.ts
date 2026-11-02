@@ -1,5 +1,5 @@
 import {
-  DEFAULT_TEMPLATE, REPORT_TEMPLATES, normalizeTemplate, reportCardFileName, reportCardPdfError, reportCardPdfParams,
+  DEFAULT_TEMPLATE, REPORT_TEMPLATES, normalizeTemplate, reportCardFileName, reportCardPdfError, reportCardQueryParams,
 } from '../services/reportCard';
 
 describe('normalizeTemplate', () => {
@@ -15,15 +15,15 @@ describe('normalizeTemplate', () => {
   });
 });
 
-describe('reportCardPdfParams', () => {
-  it('sends the same query as the card plus the layout', () => {
-    expect(reportCardPdfParams({ studentId: 7, enrollmentId: 12, yearId: 3, examIds: [4, 9], template: 'traditional' })).toEqual({
-      student_id: 7, enrollment_id: 12, academic_year_id: 3, exam_ids: '4,9', template: 'traditional',
+describe('reportCardQueryParams', () => {
+  it('is the query that loads the card the PDF is drawn from', () => {
+    expect(reportCardQueryParams({ studentId: 7, enrollmentId: 12, yearId: 3, examIds: [4, 9] })).toEqual({
+      student_id: 7, enrollment_id: 12, academic_year_id: 3, exam_ids: '4,9',
     });
   });
 
   it('leaves out an enrollment that is not chosen', () => {
-    expect(reportCardPdfParams({ studentId: 7, enrollmentId: null, yearId: 3, examIds: [4], template: 'enhanced' }).enrollment_id).toBeUndefined();
+    expect(reportCardQueryParams({ studentId: 7, enrollmentId: null, yearId: 3, examIds: [4] }).enrollment_id).toBeUndefined();
   });
 });
 

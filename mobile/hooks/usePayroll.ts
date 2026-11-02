@@ -2,7 +2,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { hrApi } from '../services/api';
 import { listOf } from '../services/academicYear';
 import type { Appraisal } from '../services/appraisals';
-import type { PayrollSummary, PayslipFull, SalaryStructure } from '../services/payroll';
+import type { NetPayHistory, PayrollSummary, PayslipFull, SalaryStructure } from '../services/payroll';
 import { useScopedPagedQuery, useScopedQuery } from './useScopedQuery';
 
 // Salary data is never persisted to the phone: the roots below are money roots (queryRules.ts).
@@ -59,4 +59,10 @@ export function useAppraisalActions() {
     update: useMutation({ mutationFn: ({ id, data }: { id: number; data: object }) => hrApi.updateAppraisal(id, data), onSuccess: refresh }),
     remove: useMutation({ mutationFn: (id: number) => hrApi.deleteAppraisal(id), onSuccess: refresh }),
   };
+}
+
+// Net pay of the last six months up to the month shown, for the trend in a payslip.
+export function useNetPayHistory(month: number, year: number, enabled: boolean) {
+  return useScopedQuery('payroll', ['netPayHistory', month, year], async () =>
+    (await hrApi.getNetPayHistory({ month, year, months: 6 })).data as NetPayHistory, { enabled, staleTime: 60_000 });
 }

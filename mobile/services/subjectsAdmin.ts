@@ -87,3 +87,33 @@ export function validateClassTeacher(teacher: number | null, scope: Scope, exist
 export const buildClassTeacherPayload = (teacher: number, scope: Scope) => ({
   session_class: scope.sessionClass, teacher, ...(scope.academicYear != null ? { academic_year: scope.academicYear } : {}),
 });
+
+// ─── Common subjects (quick add) ────────────────────────────────────────────────────────────
+
+// The Pakistan-curriculum list the web offers for quick add, matched by code.
+export const PRESET_SUBJECTS: Array<{ name: string; code: string }> = [
+  { name: 'Mathematics', code: 'MATH' }, { name: 'English', code: 'ENG' }, { name: 'Urdu', code: 'URDU' },
+  { name: 'Islamiat', code: 'ISL' }, { name: 'Pakistan Studies', code: 'PST' }, { name: 'Science', code: 'SCI' },
+  { name: 'Physics', code: 'PHY' }, { name: 'Chemistry', code: 'CHEM' }, { name: 'Biology', code: 'BIO' },
+  { name: 'Computer Science', code: 'CS' }, { name: 'Social Studies', code: 'SST' }, { name: 'General Knowledge', code: 'GK' },
+  { name: 'Art', code: 'ART' }, { name: 'Physical Education', code: 'PE' },
+];
+
+// The presets the school does not have yet. A subject that is switched off still counts as present,
+// because the server refuses a repeated code.
+export function missingPresets(subjects: Array<Pick<Subject, 'code'>>) {
+  const have = new Set(subjects.map((s) => s.code.trim().toUpperCase()));
+  return PRESET_SUBJECTS.filter((p) => !have.has(p.code));
+}
+
+export function buildBulkPayload(codes: string[]) {
+  const wanted = new Set(codes);
+  return { subjects: PRESET_SUBJECTS.filter((p) => wanted.has(p.code)).map((p) => ({ name: p.name, code: p.code, is_elective: false })) };
+}
+
+export function bulkResultText(r: { created?: number; skipped?: number } | undefined): string {
+  const created = r?.created ?? 0;
+  const skipped = r?.skipped ?? 0;
+  if (created === 0) return skipped ? 'Nothing added: they already exist.' : 'Nothing was added.';
+  return `Added ${created} subject${created === 1 ? '' : 's'}${skipped ? ` (${skipped} already existed)` : ''}.`;
+}

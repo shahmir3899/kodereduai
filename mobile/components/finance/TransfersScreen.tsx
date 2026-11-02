@@ -22,7 +22,7 @@ import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors'
 
 // Money moved between the school's accounts. Admin and principal only. Recording and deleting both
 // change balances, so each asks first; a closed month refuses the change and the server says why.
-export default function TransfersScreen() {
+export default function TransfersScreen({ readOnly = false }: { readOnly?: boolean }) {
   const toast = useToast();
   const { isPrincipal } = useAuth();
   const [from, setFrom] = useState('');
@@ -76,15 +76,15 @@ export default function TransfersScreen() {
   return (
     <View style={styles.container}>
       <ScrollView contentContainerStyle={styles.content} refreshControl={refreshControl} keyboardShouldPersistTaps="handled">
-        <Button title="+ Record a transfer" size="sm" onPress={() => open('new')} />
+        {readOnly ? null : <Button title="+ Record a transfer" size="sm" onPress={() => open('new')} />}
         <View style={styles.dates}>
           <View style={styles.half}><DateField label="From date" value={from} onChange={setFrom} /></View>
           <View style={styles.half}><DateField label="To date" value={to} onChange={setTo} /></View>
         </View>
         {from || to ? <Button title="Clear dates" size="sm" variant="ghost" onPress={() => { setFrom(''); setTo(''); }} /> : null}
-        <QueryBoundary query={q} emptyTitle="No transfers" emptyMessage="Record a transfer to move money between accounts.">
+        <QueryBoundary query={q} emptyTitle="No transfers" emptyMessage={readOnly ? 'No money has been moved between accounts in this period.' : 'Record a transfer to move money between accounts.'}>
           {(list) => list.map((t) => (
-            <TouchableOpacity key={t.id} accessibilityRole="button" accessibilityLabel={`${transferTitle(t)}, ${formatMoney(Number(t.amount))}, ${t.date}. Edit`} style={styles.row} onPress={() => open(t)}>
+            <TouchableOpacity key={t.id} accessibilityRole="button" accessibilityLabel={`${transferTitle(t)}, ${formatMoney(Number(t.amount))}, ${t.date}${readOnly ? '' : '. Edit'}`} style={styles.row} disabled={readOnly} onPress={() => open(t)}>
               <View style={styles.who}>
                 <Text style={styles.name} numberOfLines={1}>{transferTitle(t)}</Text>
                 <Text style={styles.sub} numberOfLines={1}>{[t.date, t.description].filter(Boolean).join('  ·  ')}</Text>
@@ -95,7 +95,7 @@ export default function TransfersScreen() {
         </QueryBoundary>
       </ScrollView>
 
-      <FormSheet visible={editing !== null} title={editing === 'new' ? 'New transfer' : 'Edit transfer'} onClose={() => setEditing(null)} onSubmit={save}
+      {readOnly ? null : <FormSheet visible={editing !== null} title={editing === 'new' ? 'New transfer' : 'Edit transfer'} onClose={() => setEditing(null)} onSubmit={save}
         submitLabel="Save" busy={actions.create.isPending || actions.update.isPending} error={error}>
         <Select label="From account" value={form.from} onChange={(v) => set('from', Number(v))} placeholder="Choose an account" options={fromOptions.map((a) => ({ value: a.id, label: a.name }))} />
         <Select label="To account" value={form.to} onChange={(v) => set('to', Number(v))} placeholder="Choose an account" options={toOptions.map((a) => ({ value: a.id, label: a.name }))} />
@@ -103,7 +103,7 @@ export default function TransfersScreen() {
         <DateField label="Date" value={form.date} onChange={(v) => set('date', v)} />
         <Input label="Note (optional)" value={form.description} onChangeText={(v) => set('description', v)} />
         {editing && editing !== 'new' ? <Button title="Delete transfer" variant="danger" size="sm" onPress={() => remove(editing)} /> : null}
-      </FormSheet>
+      </FormSheet>}
     </View>
   );
 }

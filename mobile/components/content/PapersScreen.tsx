@@ -7,10 +7,14 @@ import { usePersonaBase } from '../../hooks/usePersonaBase';
 import { useDebouncedValue } from '../../hooks/useDebouncedValue';
 import { useRefreshControl } from '../../hooks/useRefreshControl';
 import { PAPER_STATUSES, paperFileName, paperTone, type Paper } from '../../services/paperBuilder';
+import { bulkDeleteMessage, bulkDeleteResult, docxFileName, selectedAll, toggleAll, toggleId } from '../../services/questionExtras';
+import { useMasterClasses } from '../../hooks/useAcademicYear';
+import { useSubjectsList } from '../../hooks/useManager';
 import { inventoryErrorMessage } from '../../services/inventory';
 import { exportErrorMessage } from '../../services/reports';
 import { shareReportFile } from '../../services/reportShare';
 import SearchBar from '../ui/SearchBar';
+import Select from '../ui/Select';
 import Button from '../ui/Button';
 import Skeleton from '../ui/Skeleton';
 import ErrorState from '../ui/ErrorState';
@@ -29,10 +33,21 @@ export default function PapersScreen() {
   const actions = usePaperActions();
   const [search, setSearch] = useState('');
   const term = useDebouncedValue(search.trim(), 400);
-  const query = usePapersPaged(term);
+  const [classFilter, setClassFilter] = useState<number>(-1);
+  const [subjectFilter, setSubjectFilter] = useState<number>(-1);
+  const [statusFilter, setStatusFilter] = useState('');
+  const classes = useMasterClasses();
+  const subjects = useSubjectsList();
+  const query = usePapersPaged(term, { classId: classFilter === -1 ? null : classFilter, subject: subjectFilter === -1 ? null : subjectFilter, status: statusFilter });
   const refreshControl = useRefreshControl(query.refetch) as React.ReactElement<RefreshControlProps>;
   const rows = useMemo(() => query.data?.pages.flatMap((p) => p.results) ?? [], [query.data]);
   const [busy, setBusy] = useState<number | null>(null);
+  // Choosing papers is page-scoped: ids from a list that is no longer on screen must not ride along in a bulk delete.
+  const [selecting, setSelecting] = useState(false);
+  const [selected, setSelected] = useState<number[]>([]);
+  const filterKey = `${term}|${classFilter}|${subjectFilter}|${statusFilter}`;
+  React.useEffect(() => { setSelected([]); }, [filterKey]);
+  const rowIds = rows.map((r) => r.id);
 
   const open = (id?: number) => router.push({ pathname: `${base}/paper-builder`, ...(id ? { params: { id } } : {}) } as Href);
 
@@ -44,6 +59,30 @@ export default function PapersScreen() {
       toast.error((e as { response?: unknown }).response ? exportErrorMessage(e) : (e as Error).message);
     } finally {
       setBusy(null);
+    }
+  };
+
+  const shareDocx = async (p: Paper) => {
+    setBusy(p.id);
+    try {
+      await shareReportFile(() => examinationsApi.generatePaperDocx(p.id), docxFileName(p.paper_title), 'docx');
+    } catch (e) {
+      toast.error((e as { response?: unknown }).response ? exportErrorMessage(e) : (e as Error).message);
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const removeSelected = async () => {
+    if (selected.length === 0) return;
+    if (!(await confirm({ title: 'Delete selected papers?', message: bulkDeleteMessage(selected.length), confirmLabel: 'Delete', destructive: true }))) return;
+    try {
+      const res = await actions.removeMany.mutateAsync(selected);
+      toast.success(bulkDeleteResult(res.data));
+      setSelected([]);
+      setSelecting(false);
+    } catch (e) {
+      toast.error(inventoryErrorMessage(e, 'Could not delete the papers.'));
     }
   };
 
@@ -60,7 +99,19 @@ export default function PapersScreen() {
   const header = (
     <View>
       <SearchBar value={search} onChangeText={setSearch} placeholder="Search papers..." />
-      <Button title="+ New paper" size="sm" onPress={() => open()} />
+      <Select label="Class" searchable value={classFilter} onChange={setClassFilter} options={[{ value: -1, label: 'All classes' }, ...(classes.data ?? []).map((c) => ({ value: Number(c.id), label: String(c.name) }))]} />
+      <Select label="Subject" searchable value={subjectFilter} onChange={setSubjectFilter} options={[{ value: -1, label: 'All subjects' }, ...(subjects.data ?? []).map((s) => ({ value: s.id, label: s.name }))]} />
+      <Select label="Status" value={statusFilter} onChange={setStatusFilter} options={[{ value: '', label: 'Any status' }, ...PAPER_STATUSES.map((s) => ({ value: s.value as string, label: s.label }))]} />
+      <View style={styles.actions}>
+        <Button title="+ New paper" size="sm" onPress={() => open()} />
+        <Button title={selecting ? 'Done selecting' : 'Select'} size="sm" variant="outline" onPress={() => { setSelecting((v) => !v); setSelected([]); }} />
+      </View>
+      {selecting ? (
+        <View style={styles.actions}>
+          <Button title={selectedAll(rowIds, selected) ? 'Clear page' : 'Select page'} size="sm" variant="ghost" onPress={() => setSelected((s) => toggleAll(rowIds, s))} />
+          <Button title={`Delete selected (${selected.length})`} size="sm" variant="danger" disabled={selected.length === 0 || actions.removeMany.isPending} onPress={removeSelected} />
+        </View>
+      ) : null}
     </View>
   );
 
@@ -82,7 +133,9 @@ export default function PapersScreen() {
         ListFooterComponent={query.isFetchingNextPage ? <ActivityIndicator color={Colors.primary} style={{ margin: Spacing.lg }} /> : null}
         renderItem={({ item: p }) => (
           <View style={styles.card}>
-            <TouchableOpacity accessibilityRole="button" style={styles.top} onPress={() => open(p.id)}>
+            <TouchableOpacity accessibilityRole={selecting ? 'checkbox' : 'button'} accessibilityState={selecting ? { checked: selected.includes(p.id) } : undefined} style={styles.top}
+              onPress={() => (selecting ? setSelected((s) => toggleId(s, p.id)) : open(p.id))}>
+              {selecting ? <Text style={styles.check}>{selected.includes(p.id) ? '☑' : '☐'}</Text> : null}
               <View style={styles.who}>
                 <Text style={styles.name} numberOfLines={2}>{p.paper_title}</Text>
                 <Text style={styles.sub} numberOfLines={1}>{[p.class_name, p.subject_name, `${Number(p.total_marks)} marks`].filter(Boolean).join('  ·  ')}</Text>
@@ -91,6 +144,7 @@ export default function PapersScreen() {
             </TouchableOpacity>
             <View style={styles.actions}>
               <Button title="Share PDF" size="sm" variant="outline" onPress={() => share(p)} loading={busy === p.id} disabled={busy !== null} />
+              <Button title="Share Word" size="sm" variant="outline" onPress={() => shareDocx(p)} disabled={busy !== null} />
               <Button title="Delete" size="sm" variant="ghost" onPress={() => remove(p)} disabled={busy !== null} />
             </View>
           </View>
@@ -108,5 +162,6 @@ const styles = StyleSheet.create({
   who: { flex: 1 },
   name: { fontSize: FontSize.md, fontWeight: '600', color: Colors.text },
   sub: { fontSize: FontSize.sm, color: Colors.textSecondary, marginTop: 2 },
-  actions: { flexDirection: 'row', gap: Spacing.sm },
+  actions: { flexDirection: 'row', gap: Spacing.sm, flexWrap: 'wrap' },
+  check: { fontSize: FontSize.xl, color: Colors.primary },
 });

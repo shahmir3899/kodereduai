@@ -131,3 +131,22 @@ export function buildTeacherAttention(input: {
 export function minutesLabel(minutes: number): string {
   return minutes >= 60 ? `${Math.floor(minutes / 60)}h ${minutes % 60}m` : `${minutes} min`;
 }
+
+// Sunday to Saturday around `now`, as 'yyyy-MM-dd' (the same week the web dashboard uses).
+export function weekRange(now: Date): { from: string; to: string } {
+  const fmt = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - now.getDay());
+  const end = new Date(start.getFullYear(), start.getMonth(), start.getDate() + 6);
+  return { from: fmt(start), to: fmt(end) };
+}
+
+export interface WeekPlan { id: number; title?: string; topic?: string; status?: string; is_completed?: boolean; subject_name?: string; class_name?: string }
+
+export const planIsDone = (p: WeekPlan) => p.status === 'COMPLETED' || !!p.is_completed;
+
+// Done, published (not done) and draft counts for the week's lesson plans.
+export function weekPlanStats(plans: WeekPlan[]) {
+  const done = plans.filter(planIsDone).length;
+  const published = plans.filter((p) => !planIsDone(p) && p.status === 'PUBLISHED').length;
+  return { total: plans.length, done, published, draft: plans.length - done - published };
+}

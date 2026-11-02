@@ -121,7 +121,7 @@
                 ],
                 [
                   "Manager",
-                  "Academics, content, classes and students"
+                  "Academics content, curriculum, assignment drafts and classes"
                 ],
                 [
                   "Accountant",
@@ -2946,6 +2946,16 @@
               "type": "step",
               "number": 4,
               "text": "Click 'Publish' so students can see it in their portal."
+            },
+            {
+              "type": "info_box",
+              "title": "If you are a Manager",
+              "text": "A Manager prepares assignments but does not publish them. Choose the class and subject; there is no Teacher box, because the teacher assigned to that subject for the class is filled in for you, and the assignment is saved as a Draft. A Manager cannot publish or close an assignment, or change one that is already published; the teacher (or an admin) reviews the draft in Assignments and clicks 'Publish'."
+            },
+            {
+              "type": "info_box",
+              "title": "No teacher assigned yet?",
+              "text": "If no teacher, or more than one teacher, is assigned to the subject for that class, the draft is not saved and a message explains why. Ask the School Admin to assign one in 'Class Assignments' (or choose a single section), then try again."
             }
           ],
           "video": "ch12-creating-assignments"

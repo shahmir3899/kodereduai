@@ -28,6 +28,8 @@ import StatusPill from '../ui/StatusPill';
 import { useToast } from '../ui/Toast';
 import { confirm } from '../ui/confirm';
 import FormSheet from '../inventory/FormSheet';
+import ScopeBadge from '../teacher/ScopeBadge';
+import { useTeacherScope } from '../../hooks/useTeacher';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
 
 type Tab = '' | 'DRAFT' | 'PUBLISHED';
@@ -38,6 +40,7 @@ const TABS: Array<{ value: Tab; label: string }> = [{ value: '', label: 'All' },
 // and draft with AI).
 export default function LessonPlansScreen({ classOptions }: { classOptions?: ClassOption[] }) {
   const toast = useToast();
+  const scope = useTeacherScope();
   const { activeSchool, isSchoolAdminNav } = useAuth();
   const { current: year } = useAcademicYear();
   const actions = useLessonPlanActions();
@@ -163,6 +166,7 @@ export default function LessonPlansScreen({ classOptions }: { classOptions?: Cla
             <View style={styles.who}>
               <Text style={styles.name} numberOfLines={1}>{p.title}</Text>
               <Text style={styles.sub} numberOfLines={1}>{[p.lesson_date, p.class_name, p.subject_name, isSchoolAdminNav ? p.teacher_name : ''].filter(Boolean).join('  ·  ')}</Text>
+              <ScopeBadge scope={scope.classify(p.class_obj, p.subject)} />
             </View>
             <StatusPill label={p.status === 'PUBLISHED' ? 'Published' : 'Draft'} tone={statusTone(p.status)} />
           </TouchableOpacity>

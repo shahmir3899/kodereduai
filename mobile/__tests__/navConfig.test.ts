@@ -96,6 +96,9 @@ describe('teacher', () => {
     expect(nav).toContain('/inventory/assignments');
     expect(navFor('TEACHER', { hasInventoryAssignments: false })).not.toContain('/inventory/assignments');
   });
+  it('opens messages, worksheets and its inventory in the app, not as Soon', () => {
+    ['/messages', '/academics/worksheets', '/inventory/assignments'].forEach((p) => expect(routeFor('teacher', p)).toBeDefined());
+  });
   it('gets only own leave and attendance from HR', () => {
     expect(nav).toEqual(expect.arrayContaining(['/hr/leave', '/hr/attendance']));
     expect(nav).not.toContain('/hr/payroll');
@@ -328,12 +331,10 @@ describe('driver', () => {
   it('is transport and own HR only: no students, finance or academics', () => {
     const hrefs = items.map((i) => i.href ?? '').join(' ');
     expect(hrefs).not.toMatch(/students|finance|marks|results|attendance\/|fees|hr\/staff/);
-    expect(items.map((i) => i.webPath)).toEqual(expect.arrayContaining(['/transport/journey', '/transport/boarding', '/hr/leave']));
+    expect(items.map((i) => i.webPath)).toEqual(expect.arrayContaining(['/transport/journey', '/hr/leave']));
   });
-  it('hides boarding when transport is off and HR when hr is off', () => {
+  it('hides HR when hr is off', () => {
     const off = (m: string) => (key: string) => key !== m;
-    const noTransport = buildDriverNavigation(off('transport') as never).flatMap((g) => g.items).map((i) => i.webPath);
-    expect(noTransport).not.toContain('/transport/boarding');
     const noHr = buildDriverNavigation(off('hr') as never).flatMap((g) => g.items).map((i) => i.webPath);
     expect(noHr).not.toContain('/hr/leave');
   });

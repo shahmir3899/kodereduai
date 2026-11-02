@@ -77,7 +77,7 @@ export function buildAttentionItems(input: {
   isModuleEnabled: (key: ModuleKey) => boolean;
   data: DashboardData;
   isToday: boolean;
-  routes: Partial<Record<'attendance' | 'unpaid' | 'leave' | 'payroll' | 'enquiries', string>>;
+  routes: Partial<Record<'attendance' | 'unpaid' | 'leave' | 'payroll' | 'enquiries' | 'staffAttendance', string>>;
 }): AttentionItem[] {
   const { isModuleEnabled: on, data, isToday, routes } = input;
   const items: AttentionItem[] = [];
@@ -98,7 +98,7 @@ export function buildAttentionItems(input: {
     add('leave', data.hr?.pending_leave_applications, 'leave requests pending', 'amber', routes.leave);
     add('payroll', data.hr?.pending_payroll_approvals, 'payslips awaiting approval', 'amber', routes.payroll);
     if (isToday && !offDay && data.hr) {
-      add('staffatt', Math.max((data.hr.active_staff || 0) - (data.hr.attendance_marked_today || 0), 0), 'staff attendance unmarked', 'amber');
+      add('staffatt', Math.max((data.hr.active_staff || 0) - (data.hr.attendance_marked_today || 0), 0), 'staff attendance unmarked', 'amber', routes.staffAttendance);
     }
   }
   if (on('admissions')) {

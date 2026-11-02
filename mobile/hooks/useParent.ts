@@ -1,4 +1,6 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueries, useQueryClient } from '@tanstack/react-query';
+import { useAuth } from '../contexts/AuthContext';
+import { scopedKey } from '../services/queryRules';
 import { parentsApi, transportApi } from '../services/api';
 import { listOf } from '../services/academicYear';
 import type {
@@ -19,6 +21,21 @@ export function useChildren() {
 export function useChildOverview(studentId: number, enabled = true) {
   return useScopedQuery('childOverview', [studentId], async () =>
     (await parentsApi.getChildOverview(studentId)).data as ChildOverview, { enabled: enabled && !!studentId, staleTime: 60_000 });
+}
+
+// Every child's overview at once, under the same keys as useChildOverview so the child cards
+// and the attention strip share one request each.
+export function useChildOverviews(studentIds: number[]) {
+  const { activeSchool } = useAuth();
+  const schoolId = activeSchool?.id ?? 0;
+  return useQueries({
+    queries: studentIds.map((id) => ({
+      queryKey: scopedKey('childOverview', schoolId, [id]),
+      queryFn: async () => (await parentsApi.getChildOverview(id)).data as ChildOverview,
+      enabled: schoolId > 0 && !!id,
+      staleTime: 60_000,
+    })),
+  });
 }
 
 export function useChildAttendance(studentId: number, year: number, month: number) {

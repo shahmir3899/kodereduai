@@ -141,7 +141,8 @@ def suggest_toc_structure(raw_text, language='en'):
         client = Groq(api_key=api_key)
         model_name = settings.GROQ_MODEL
 
-        prompt = TOC_SUGGESTION_PROMPT.format(raw_text=text)
+        # str.format would choke on the literal JSON braces in the prompt (KeyError), so the AI never ran.
+        prompt = TOC_SUGGESTION_PROMPT.replace('{raw_text}', text)
         def _run_completion():
             return client.chat.completions.create(
                 model=model_name,

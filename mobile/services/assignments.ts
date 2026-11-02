@@ -145,11 +145,13 @@ export function setType(form: AssignmentForm, type: AssignmentType): AssignmentF
 }
 
 // First problem found, in the order the web checks them; null when the form is fine.
-export function validateForm(f: AssignmentForm): string | null {
+// A manager does not choose the teacher (the server uses the subject's assigned teacher), so
+// `teacherRequired` is false for that role.
+export function validateForm(f: AssignmentForm, opts: { teacherRequired?: boolean } = {}): string | null {
   if (!f.title.trim()) return 'Title is required';
   if (!f.classId) return 'Please select a class';
   if (!f.subject) return 'Please select a subject';
-  if (!f.teacher) return 'Please select a teacher';
+  if (opts.teacherRequired !== false && !f.teacher) return 'Please select a teacher';
   if (!f.description.trim()) return 'Description is required';
   if (f.assignment_type !== 'DIARY' && f.requires_submission && !f.due_date) {
     return 'Due date is required for submission-based assignments';
@@ -162,6 +164,8 @@ export function buildPayload(input: {
   masterClassId: number;
   sessionClassId: number | null;
   academicYearId?: number | null;
+  // A manager only saves drafts and sends no teacher: the server fills it in.
+  draftOnly?: boolean;
 }) {
   const { form } = input;
   return {
@@ -171,13 +175,13 @@ export function buildPayload(input: {
     class_obj: input.masterClassId,
     session_class: input.sessionClassId,
     subject: form.subject,
-    teacher: form.teacher,
+    ...(input.draftOnly ? {} : { teacher: form.teacher }),
     assignment_type: form.assignment_type,
     requires_submission: form.requires_submission,
     due_date: form.due_date || null,
     total_marks: parseInt(form.total_marks, 10) || 100,
     attachments_allowed: form.attachments_allowed,
-    status: form.status,
+    status: input.draftOnly ? 'DRAFT' : form.status,
     ...(input.academicYearId ? { academic_year: input.academicYearId } : {}),
   };
 }
@@ -191,6 +195,13 @@ export function resolveDefaultTeacherId(
 ): number | null {
   const mine = userId != null ? staff.find((s) => s.user === userId) : undefined;
   return mine?.id ?? timetableTeacherId ?? null;
+}
+
+// Teacher choices for a form: the staff list, plus "Me" when the signed-in teacher is not in it.
+export function teacherSelectOptions(staff: Array<{ id: number; full_name?: string }>, selfId: number | null) {
+  const list = staff.map((s) => ({ value: s.id, label: s.full_name || `Staff #${s.id}` }));
+  if (selfId && !list.some((o) => o.value === selfId)) list.unshift({ value: selfId, label: 'Me' });
+  return list;
 }
 
 // First field error from a DRF 400, so the toast says what is wrong instead of "failed".

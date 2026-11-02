@@ -1,18 +1,23 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { examinationsApi } from '../services/api';
+import { examinationsApi, lmsApi } from '../services/api';
+import { questionListParams, semanticHitsOf, semanticParams, type SemanticHit } from '../services/questionExtras';
 import type { Question } from '../services/questionBank';
-import { useScopedPagedQuery } from './useScopedQuery';
+import { useScopedPagedQuery, useScopedQuery } from './useScopedQuery';
 
-export function useQuestionsPaged(search: string, subject: number | null, type: string, difficulty: string) {
-  return useScopedPagedQuery<Question>('questions', ['paged', search, subject, type, difficulty], async (page) => {
-    const data = (await examinationsApi.getQuestions({
-      page, page_size: 20,
-      ...(search ? { search } : {}), ...(subject ? { subject } : {}),
-      ...(type ? { question_type: type } : {}), ...(difficulty ? { difficulty } : {}),
-    })).data as { results?: Question[]; next?: string | null; count?: number } | Question[];
+export function useQuestionsPaged(search: string, subject: number | null, type: string, difficulty: string, bloom = '', tagId: number | null = null, topicIds: number[] = []) {
+  return useScopedPagedQuery<Question>('questions', ['paged', search, subject, type, difficulty, bloom, tagId, topicIds.join(',')], async (page) => {
+    const params = questionListParams({ search, subject, type, difficulty, bloom, tagId }, page);
+    const data = (await (topicIds.length ? examinationsApi.getQuestionsByTopics(topicIds, params) : examinationsApi.getQuestions(params))).data as
+      { results?: Question[]; next?: string | null; count?: number } | Question[];
     if (Array.isArray(data)) return { results: data, next: null, count: data.length };
     return { results: data.results ?? [], next: data.next ?? null, count: data.count ?? 0 };
   });
+}
+
+// Search by meaning: the server ranks questions by how close they are in meaning; it needs a class.
+export function useSemanticQuestions(q: string, classId: number | null, subject: number | null) {
+  return useScopedQuery<SemanticHit[]>('questions', ['semantic', q, classId, subject], async () =>
+    semanticHitsOf((await examinationsApi.semanticSearchQuestions(semanticParams(q, classId, subject))).data), { enabled: q.trim().length > 0 && !!classId });
 }
 
 export function useQuestionActions() {
@@ -23,6 +28,8 @@ export function useQuestionActions() {
     create: useMutation({ mutationFn: (d: object) => examinationsApi.createQuestion(d), onSuccess: refresh }),
     update: useMutation({ mutationFn: ({ id, data }: { id: number; data: object }) => examinationsApi.updateQuestion(id, data), onSuccess: refresh }),
     remove: useMutation({ mutationFn: (id: number) => examinationsApi.deleteQuestion(id), onSuccess: refresh }),
+    tag: useMutation({ mutationFn: ({ id, tagId, remove }: { id: number; tagId: number; remove?: boolean }) => examinationsApi.addQuestionTag(id, tagId, remove) }),
+    createTag: useMutation({ mutationFn: (d: object) => lmsApi.createTag(d), onSuccess: () => qc.invalidateQueries({ predicate: (q) => q.queryKey[0] === 'contentBlocks' }) }),
     uploadPicture: useMutation({ mutationFn: ({ id, form }: { id: number; form: FormData }) => examinationsApi.uploadQuestionPicture(id, form), onSuccess: refresh }),
     removePicture: useMutation({ mutationFn: ({ id, slot }: { id: number; slot: string }) => examinationsApi.removeQuestionPicture(id, slot), onSuccess: refresh }),
   };
