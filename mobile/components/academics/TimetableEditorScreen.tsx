@@ -4,7 +4,7 @@ import { useRouter, type Href } from 'expo-router';
 import { useAcademicYear, useAttendanceClassOptions } from '../../hooks/useAcademicYear';
 import { useStaffPicker } from '../../hooks/useHrAdmin';
 import { useSectionSubjects } from '../../hooks/useSubjectsAdmin';
-import { useEditableTimetable, useTimetableActions, useTimetableSlots } from '../../hooks/useTimetableEdit';
+import { useEditableTimetable, useQualityScore, useTimetableActions, useTimetableSlots } from '../../hooks/useTimetableEdit';
 import { useRefreshControl } from '../../hooks/useRefreshControl';
 import {
   bulkSavePayload, DAY_NAMES, DAY_SHORT, dayChanged, draftFromEntries, EDIT_DAYS, emptyCell, filledCount, hasOverride, isLessonSlot,
@@ -12,7 +12,11 @@ import {
 } from '../../services/timetableEdit';
 import { dayCodeFor } from '../../services/teacher';
 import { inventoryErrorMessage } from '../../services/inventory';
+import { conflictParams, hasSharedEntries, showScore, splitResultText, type ConflictData } from '../../services/timetableWeek';
 import Input from '../ui/Input';
+import SegmentedTabs from '../ui/SegmentedTabs';
+import WeekGrid from './WeekGrid';
+import { ClashNotice, ScoreBadge, ScoreSheet, SubstituteSheet } from './TimetableTools';
 import Select from '../ui/Select';
 import Button from '../ui/Button';
 import { academicsApi } from '../../services/api';
@@ -56,30 +60,66 @@ export default function TimetableEditorScreen() {
   const [errors, setErrors] = useState<string[]>([]);
   // The grid on screen follows the server until the person edits; a refetch must not wipe edits.
   const [dirty, setDirty] = useState(false);
+  const quality = useQualityScore(classObj, (entries.data ?? []).length > 0 && !dirty);
   useEffect(() => { if (!dirty) setDraft(original); }, [original, dirty]);
   useEffect(() => { setDirty(false); setErrors([]); }, [day, classObj, sessionClass]);
 
   const [editing, setEditing] = useState<Slot | null>(null);
   const [cell, setCellForm] = useState<Cell>(emptyCell());
+  // Day edits one day at a time; Week shows the whole week at a glance and jumps to the day when a lesson is tapped.
+  const [view, setView] = useState<'day' | 'week'>('day');
+  const [scoreOpen, setScoreOpen] = useState(false);
+  const [subOpen, setSubOpen] = useState(false);
+  const [conflict, setConflict] = useState<ConflictData | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   const changed = dayChanged(original, draft);
   const staffOptions = useMemo(() => (staff.data ?? []).map((s) => ({ value: s.id, label: s.full_name })), [staff.data]);
   const subjectOptions = useMemo(() => (classSubjects.data ?? []).map((r) => ({ value: r.subject, label: r.subject_name })), [classSubjects.data]);
 
-  const open = (s: Slot) => { setCellForm(draft[s.id] ?? emptyCell()); setEditing(s); };
+  const open = (s: Slot) => { setCellForm(draft[s.id] ?? emptyCell()); setConflict(null); setEditing(s); };
 
   const chooseSubject = (subjectId: number) => {
     const row = (classSubjects.data ?? []).find((r) => r.subject === subjectId);
     // The class's usual teacher for the subject is filled in, unless one was already chosen.
+    const teacherId = cell.teacher ?? row?.teacher ?? null;
     setCellForm((c) => ({
       ...c, subject: subjectId, subjectName: row?.subject_name ?? '',
       teacher: c.teacher ?? row?.teacher ?? null, teacherName: c.teacher != null ? c.teacherName : row?.teacher_name ?? '',
     }));
+    if (cell.teacher == null && teacherId != null) void checkClash(teacherId);
+  };
+
+  // As on the web, picking a teacher asks the server whether they already teach another class in this period, so the clash
+  // is seen before Save; ignoring a failed check is fine, Save still refuses a real clash.
+  const checkClash = async (teacherId: number | null) => {
+    setConflict(null);
+    if (teacherId == null || !editing || classObj == null) return;
+    try {
+      const res = (await academicsApi.checkTeacherConflicts(conflictParams(teacherId, day, editing.id, classObj, sessionClass))).data as ConflictData;
+      if (res.has_conflict) setConflict(res);
+    } catch { /* the save will still refuse a real clash */ }
   };
 
   const chooseTeacher = (v: string | number) => {
     const id = v === '' ? null : Number(v);
     setCellForm((c) => ({ ...c, teacher: id, teacherName: staffOptions.find((o) => o.value === id)?.label ?? '' }));
+    void checkClash(id);
+  };
+
+  const pickAlternative = (id: number, name: string) => {
+    setCellForm((c) => ({ ...c, teacher: id, teacherName: name }));
+    setConflict(null);
+  };
+
+  const split = async () => {
+    if (classObj == null) return;
+    if (!(await confirm({ title: 'Give each section its own timetable?', message: 'The class timetable is copied into each of its sections, and the shared one is removed. Each section can then be changed on its own.', confirmLabel: 'Split' }))) return;
+    try {
+      const res = await actions.split.mutateAsync({ class_obj: classObj });
+      setNotice(splitResultText(res.data));
+      setDirty(false);
+    } catch (e) { setNotice(inventoryErrorMessage(e, 'Failed to give each section its own timetable.')); }
   };
 
   const applyCell = () => {
@@ -133,6 +173,16 @@ export default function TimetableEditorScreen() {
     <View style={styles.container}>
       <ScrollView contentContainerStyle={styles.content} refreshControl={refreshControl} keyboardShouldPersistTaps="handled">
         <Select label="Class" searchable value={option?.id ?? null} onChange={(v) => { setOptionId(Number(v)); }} options={options.map((o) => ({ value: o.id, label: o.label }))} />
+        {showScore(quality.data) ? <ScoreBadge score={quality.data} onPress={() => setScoreOpen(true)} /> : null}
+        <SegmentedTabs tabs={[{ value: 'day', label: 'Day' }, { value: 'week', label: 'Week' }]} value={view} onChange={setView} />
+        {notice ? <View style={styles.noticeBox}><Text style={styles.sub}>{notice}</Text></View> : null}
+        {view === 'week' ? (
+          entries.isLoading ? <Skeleton /> : (
+            <WeekGrid slots={slots.data ?? []} entries={entries.data ?? []}
+              onCellPress={(d, slot) => { setDay(d); setView('day'); open(slot); }} />
+          )
+        ) : (
+        <>
         <View style={styles.days}>
           {EDIT_DAYS.map((d) => (
             <TouchableOpacity key={d} accessibilityRole="button" accessibilityState={{ selected: d === day }} accessibilityLabel={DAY_NAMES[d]} style={[styles.day, d === day && styles.dayActive]} onPress={() => setDay(d)}>
@@ -184,20 +234,30 @@ export default function TimetableEditorScreen() {
             ) : null}
           </>
         )}
+        </>
+        )}
         {option ? (
           <Button title="Timetable PDF" variant="outline" loading={pdf.busy} disabled={pdf.busy || timetablePdfParams(classObj, sessionClass) == null}
             onPress={() => pdf.share(() => academicsApi.downloadTimetablePdf(timetablePdfParams(classObj, sessionClass) as Record<string, unknown>) as Promise<{ data: ArrayBuffer }>, timetableFileName(option.label))} />
         ) : null}
         <Button title="Periods and breaks" variant="outline" onPress={() => router.push('/(admin)/timetable-periods' as Href)} />
+        <Button title="Find a substitute" variant="outline" onPress={() => setSubOpen(true)} />
+        {sessionClass != null && hasSharedEntries(entries.data ?? []) && (entries.data ?? []).length > 0 ? (
+          <Button title="Give each section its own timetable" variant="outline" onPress={split} loading={actions.split.isPending} />
+        ) : null}
       </ScrollView>
 
       <FormSheet visible={editing !== null} title={editing ? `${editing.name}  ·  ${slotTimes(editing)}` : ''} onClose={() => setEditing(null)} onSubmit={applyCell} submitLabel="Set period">
         <Select label="Subject" searchable value={cell.subject} onChange={(v) => chooseSubject(Number(v))} placeholder="Choose a subject" options={subjectOptions} />
         {subjectOptions.length === 0 ? <Text style={styles.sub}>This class has no subjects yet. Add them under Subjects, By class.</Text> : null}
         <Select<string | number> label="Teacher" searchable value={cell.teacher} placeholder="No teacher" onChange={chooseTeacher} options={[{ value: '', label: 'No teacher' }, ...staffOptions]} />
+        <ClashNotice conflict={conflict} params={{ teacher: cell.teacher, day, slot: editing?.id, class_id: classObj, subject: cell.subject ?? undefined }} onPickTeacher={pickAlternative} />
         <Input label="Room (optional)" value={cell.room} onChangeText={(v) => setCellForm((c) => ({ ...c, room: v }))} />
         {draft[editing?.id ?? -1] ? <Button title="Clear this period" variant="danger" size="sm" onPress={clearCell} /> : null}
       </FormSheet>
+
+      <ScoreSheet visible={scoreOpen} onClose={() => setScoreOpen(false)} score={quality.data ?? null} />
+      <SubstituteSheet visible={subOpen} onClose={() => setSubOpen(false)} teachers={staffOptions} />
     </View>
   );
 }
@@ -219,6 +279,7 @@ const styles = StyleSheet.create({
   name: { fontSize: FontSize.md, fontWeight: '600', color: Colors.text },
   sub: { fontSize: FontSize.sm, color: Colors.textSecondary },
   empty: { fontSize: FontSize.sm, color: Colors.textTertiary },
+  noticeBox: { backgroundColor: Colors.infoLight, borderRadius: BorderRadius.md, padding: Spacing.md },
   errorBox: { backgroundColor: Colors.errorLight, borderRadius: BorderRadius.md, padding: Spacing.md, gap: 4 },
   errorText: { color: Colors.errorText, fontSize: FontSize.sm },
 });

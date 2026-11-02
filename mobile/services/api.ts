@@ -682,6 +682,12 @@ export const academicsApi = {
   // Several at once; the server skips a code the school already has.
   downloadTimetablePdf: (params: Record<string, unknown>) =>
     api.get('/api/academics/timetable-entries/download-pdf/', { params, responseType: 'arraybuffer' }),
+  // Timetable helpers the web page uses (rule-based on the server; generation is not on the phone).
+  getTimetableQualityScore: (classId: number) => api.get('/api/academics/timetable-entries/quality_score/', { params: { class_id: classId } }),
+  checkTeacherConflicts: (params: Record<string, unknown>) => api.get('/api/academics/timetable-entries/teacher_conflicts/', { params }),
+  suggestConflictResolution: (params: Record<string, unknown>) => api.get('/api/academics/timetable-entries/suggest_resolution/', { params }),
+  suggestSubstitute: (params: Record<string, unknown>) => api.get('/api/academics/timetable-entries/suggest_substitute/', { params, timeout: 60000 }),
+  splitTimetableForSections: (data: object) => api.post('/api/academics/timetable-entries/split_for_sections/', data),
   bulkCreateSubjects: (data: object) => api.post('/api/academics/subjects/bulk_create/', data),
   updateSubject: (id: number, data: object) => api.patch(`/api/academics/subjects/${id}/`, data),
   deleteSubject: (id: number) => api.delete(`/api/academics/subjects/${id}/`),

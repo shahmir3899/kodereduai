@@ -2,26 +2,44 @@ import React, { useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
 import { useAttendanceClassOptions } from '../../hooks/useAcademicYear';
 import { useClassTimetable } from '../../hooks/useManager';
+import { useEditableTimetable, useQualityScore, useTimetableSlots } from '../../hooks/useTimetableEdit';
+import { usePdfShare } from '../../hooks/usePdfShare';
+import { academicsApi } from '../../services/api';
+import { timetableFileName, timetablePdfParams } from '../../services/pdfDownloads';
+import { showScore } from '../../services/timetableWeek';
 import { useRefreshControl } from '../../hooks/useRefreshControl';
 import {
   DAY_CODES, DAY_LABELS, dayCodeFor, daysWithEntries, entriesForDay, formatSlotTime, type DayCode,
 } from '../../services/teacher';
 import Select from '../ui/Select';
+import Button from '../ui/Button';
+import SegmentedTabs from '../ui/SegmentedTabs';
+import WeekGrid from './WeekGrid';
+import { ScoreBadge, ScoreSheet } from './TimetableTools';
 import Skeleton from '../ui/Skeleton';
 import ErrorState from '../ui/ErrorState';
 import EmptyState from '../ui/EmptyState';
 import Card from '../ui/Card';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
 
-// Read-only weekly timetable of one class or section, for roles that don't teach (Manager).
+// Read-only timetable of one class or section, for roles that don't teach (Manager): a day at a time or the whole
+// week at a glance, the quality score, and the server's PDF.
 export default function ClassTimetableScreen() {
   const { options, isLoading: optionsLoading } = useAttendanceClassOptions();
   const [classId, setClassId] = useState<number | null>(null);
   const [picked, setPicked] = useState<DayCode | null>(null);
+  const [view, setView] = useState<'day' | 'week'>('day');
+  const [scoreOpen, setScoreOpen] = useState(false);
+  const pdf = usePdfShare();
 
   const option = options.find((o) => o.id === (classId ?? options[0]?.id)) ?? null;
   const query = useClassTimetable(option ? (option.classObj ?? option.id) : null, option?.isSession ? option.id : null);
   const refreshControl = useRefreshControl(query.refetch);
+  const classObj = option ? (option.classObj ?? option.id) : null;
+  const sessionClass = option?.isSession ? option.id : null;
+  const slots = useTimetableSlots();
+  const week = useEditableTimetable(classObj, sessionClass);
+  const quality = useQualityScore(classObj, (query.data ?? []).length > 0);
 
   if (optionsLoading) return <Skeleton />;
   if (options.length === 0) return <EmptyState title="No classes" message="This school has no classes set up yet." />;
@@ -36,7 +54,11 @@ export default function ClassTimetableScreen() {
       <Select label="Class" value={option?.id ?? null} searchable options={options.map((o) => ({ value: o.id, label: o.label }))}
         onChange={(v) => { setClassId(v); setPicked(null); }} />
 
-      {query.isLoading ? <Skeleton /> : query.isError && !query.data ? (
+      {showScore(quality.data) ? <ScoreBadge score={quality.data} onPress={() => setScoreOpen(true)} /> : null}
+      <SegmentedTabs tabs={[{ value: 'day', label: 'Day' }, { value: 'week', label: 'Week' }]} value={view} onChange={setView} />
+      {view === 'week' ? (
+        week.isLoading || slots.isLoading ? <Skeleton /> : (week.data ?? []).length === 0 ? <EmptyState title="No periods yet" message="This class has no timetable." /> : <WeekGrid slots={slots.data ?? []} entries={week.data ?? []} />
+      ) : query.isLoading ? <Skeleton /> : query.isError && !query.data ? (
         <ErrorState error={query.error} onRetry={() => query.refetch()} />
       ) : entries.length === 0 ? (
         <EmptyState title="No periods yet" message="This class has no timetable." />
@@ -65,6 +87,11 @@ export default function ClassTimetableScreen() {
           ))}
         </>
       )}
+      {option && timetablePdfParams(classObj, sessionClass) != null ? (
+        <Button title="Timetable PDF" variant="outline" loading={pdf.busy} disabled={pdf.busy}
+          onPress={() => pdf.share(() => academicsApi.downloadTimetablePdf(timetablePdfParams(classObj, sessionClass) as Record<string, unknown>) as Promise<{ data: ArrayBuffer }>, timetableFileName(option.label))} />
+      ) : null}
+      <ScoreSheet visible={scoreOpen} onClose={() => setScoreOpen(false)} score={quality.data ?? null} />
     </ScrollView>
   );
 }
