@@ -29,6 +29,7 @@ import Skeleton from '../ui/Skeleton';
 import ErrorState from '../ui/ErrorState';
 import EmptyState from '../ui/EmptyState';
 import StatusPill from '../ui/StatusPill';
+import KuickpayReceivedLabel from '../finance/KuickpayReceivedLabel';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
 
 type Tab = 'info' | 'attendance' | 'results' | 'fees' | 'history' | 'documents';
@@ -230,6 +231,7 @@ export default function StudentProfileScreen({ canEdit }: Props) {
               <Text style={styles.sub}>
                 Due {formatMoney(Number(f.amount_due))}  ·  Received {formatMoney(Number(f.amount_paid))}  ·  Balance {formatMoney(balanceOf(f))}
               </Text>
+              <KuickpayReceivedLabel kuickpay={f.kuickpay} />
             </Card>
           ))
       ) : null}

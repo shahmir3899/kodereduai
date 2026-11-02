@@ -9,6 +9,7 @@ from decimal import Decimal
 from celery import shared_task
 from django.utils import timezone
 
+from . import ledger
 from .generation_planner import plan_scope_records
 
 logger = logging.getLogger(__name__)
@@ -20,6 +21,25 @@ def _normalize_decimal(value):
 
 # A row that took over a balance from another branch (branch transfer) is never
 # regenerated or overwritten: treating it as "unchanged" makes every strategy skip it.
+def _allocated_fee_row_ids(row_ids):
+    """Ids of fee rows holding confirmed Kuickpay money. Those rows are never deleted or recreated."""
+    from finance.models import KuickpayPaymentAllocation
+
+    row_ids = list(row_ids)
+    if not row_ids:
+        return set()
+    return set(
+        KuickpayPaymentAllocation.objects.filter(fee_payment_ref__in=row_ids)
+        .values_list('fee_payment_ref', flat=True)
+    )
+
+
+def _has_recorded_payment(row, allocated_ids):
+    """delete_recreate re-inserts a row with amount_paid=0, so a row with any recorded payment
+    must be left alone or the payment is destroyed."""
+    return _normalize_decimal(row.amount_paid) > 0 or row.id in allocated_ids
+
+
 def _is_annual_conflict(existing_payment, expected_amount_due):
     if existing_payment.carried_from_exit_id:
         return False
@@ -119,12 +139,6 @@ def generate_monthly_fees_task(
         total = len(students) * len(categories)
         update_task_progress(task_id, current=0, total=total)
 
-        prev_month = month - 1
-        prev_year = year
-        if prev_month == 0:
-            prev_month = 12
-            prev_year = year - 1
-
         created_count = 0
         updated_count = 0
         deleted_recreated_count = 0
@@ -136,9 +150,13 @@ def generate_monthly_fees_task(
         progress = 0
 
         with transaction.atomic():
+            # Two generations for the same month would race on the same rows; serialize them.
+            ledger.lock_generation(school_id, year, month)
             for category in categories:
                 cat_id = category.id
 
+                # Locked (id order, no joins) so a payment recorded while this runs cannot be
+                # overwritten by bulk_update below.
                 existing_payments = {
                     fp.student_id: fp
                     for fp in FeePayment.objects.filter(
@@ -148,9 +166,10 @@ def generate_monthly_fees_task(
                         fee_type='MONTHLY',
                         monthly_category_id=cat_id,
                         student_id__in=student_ids,
-                    )
+                    ).order_by('id').select_for_update()
                 }
                 existing_ids = set(existing_payments)
+                allocated_row_ids = _allocated_fee_row_ids([fp.id for fp in existing_payments.values()])
 
                 plan = plan_scope_records(
                     school_id=school_id,
@@ -163,16 +182,11 @@ def generate_monthly_fees_task(
                 )
                 no_fee_count += plan['no_fee_structure']
 
-                prev_balances = {}
-                for sid, due, paid in FeePayment.objects.filter(
-                    school_id=school_id,
-                    month=prev_month,
-                    year=prev_year,
-                    fee_type='MONTHLY',
-                    monthly_category_id=cat_id,
-                    student_id__in=student_ids,
-                ).values_list('student_id', 'amount_due', 'amount_paid'):
-                    prev_balances[sid] = (due or Decimal('0')) - (paid or Decimal('0'))
+                # Latest earlier row per student, not only last calendar month, so a missing
+                # intervening month cannot drop an unpaid balance. Locked: see above.
+                prev_balances = ledger.carry_in_balances(
+                    school_id, student_ids, cat_id, year, month, lock=True,
+                )
 
                 to_create = []
                 to_update = []
@@ -213,6 +227,11 @@ def generate_monthly_fees_task(
                             existing_payment.compute_status()
                             to_update.append(existing_payment)
                             updated_count += 1
+                            continue
+
+                        if _has_recorded_payment(existing_payment, allocated_row_ids):
+                            protected_conflict_count += 1
+                            skipped_count += 1
                             continue
 
                         delete_ids.append(existing_payment.id)
@@ -277,6 +296,16 @@ def generate_monthly_fees_task(
             ),
         }
         logger.info(f"{task_id} core generation took {time.monotonic() - t0:.2f}s")
+
+        # Kuickpay: issue this cycle's bills and supersede last cycle's. Non-fatal for the same
+        # reason as the notification below (generation already committed); kuickpay_sweep_task
+        # repairs anything this misses. A school with no enabled Kuickpay mapping returns at once.
+        try:
+            from finance.kuickpay.bills import activate_bills_for_scope
+
+            activate_bills_for_scope(school_id, year, month, student_ids=student_ids)
+        except Exception as e:
+            logger.error(f"Kuickpay bill activation failed for school {school_id} ({month}/{year}): {e}")
 
         # Event-driven fee-pending notifications: fire right after generation
         # instead of waiting on the old day-5/day-8 Celery Beat schedule.
@@ -388,9 +417,10 @@ def generate_annual_fees_task(
                         fee_type='ANNUAL',
                         annual_category_id=category.id,
                         student_id__in=student_ids,
-                    )
+                    ).order_by('id').select_for_update()
                 }
                 existing_ids = set(existing_payments)
+                allocated_row_ids = _allocated_fee_row_ids([fp.id for fp in existing_payments.values()])
 
                 plan = plan_scope_records(
                     school_id=school_id,
@@ -438,6 +468,11 @@ def generate_annual_fees_task(
                             existing_payment.compute_status()
                             to_update.append(existing_payment)
                             updated_count += 1
+                            continue
+
+                        if _has_recorded_payment(existing_payment, allocated_row_ids):
+                            protected_conflict_count += 1
+                            skipped_count += 1
                             continue
 
                         delete_ids.append(existing_payment.id)
@@ -621,3 +656,41 @@ def generate_onetime_fees_task(
         logger.exception(f"One-time fee generation failed: {e}")
         mark_task_failed(task_id, str(e))
         raise
+
+
+@shared_task(bind=True, time_limit=900)
+def kuickpay_sweep_task(self):
+    """Beat: give every pilot-enabled school's students a bill for their latest cycle and re-sync
+    suspended/active state with the ledger. Does nothing until a school's mapping is enabled."""
+    from finance.kuickpay.bills import sweep_school
+    from finance.models import KuickpaySchoolMapping
+
+    summary = {}
+    for school_id in KuickpaySchoolMapping.objects.filter(
+        is_enabled=True, biller__is_enabled=True,
+    ).values_list('school_id', flat=True):
+        summary[school_id] = sweep_school(school_id)
+    return summary
+
+
+@shared_task(bind=True, time_limit=900)
+def kuickpay_reconciliation_task(self):
+    """Beat: raise an in-app alert to school admins when money or bills need attention
+    (at most one alert per admin per day; the report itself is `manage.py kuickpay_reconcile`)."""
+    from finance.kuickpay.reconciliation import send_alerts
+    from finance.models import KuickpaySchoolMapping
+    from schools.models import School
+
+    sent = {}
+    for school_id in KuickpaySchoolMapping.objects.filter(is_enabled=True).values_list('school_id', flat=True):
+        sent[school_id] = send_alerts(School.objects.get(pk=school_id))
+    return sent
+
+
+@shared_task(bind=True, time_limit=900)
+def kuickpay_post_pending_task(self):
+    """Beat: finish crediting Kuickpay payments that were stored durably but not yet posted (a crash,
+    a transient database error, or a closed accounting period). Idempotent."""
+    from finance.kuickpay.services import post_pending
+
+    return post_pending(older_than_seconds=60)

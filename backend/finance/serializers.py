@@ -212,6 +212,12 @@ class FeePaymentSerializer(serializers.ModelSerializer):
     account_name = serializers.CharField(source='account.name', read_only=True, default=None)
     academic_year_name = serializers.CharField(source='academic_year.name', read_only=True, default=None)
     fee_type_display = serializers.CharField(source='get_fee_type_display', read_only=True)
+    # Money received through Kuickpay on this record (amount, coverage, references), or null.
+    kuickpay = serializers.SerializerMethodField()
+
+    def get_kuickpay(self, obj):
+        from finance.kuickpay.received import received_summary
+        return received_summary(obj)
 
     def _get_active_enrollment(self, obj):
         if not obj.student or not obj.academic_year:
@@ -326,6 +332,7 @@ class FeePaymentSerializer(serializers.ModelSerializer):
             'receipt_number', 'notes',
             'collected_by', 'collected_by_name',
             'account', 'account_name',
+            'kuickpay',
             'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'status', 'created_at', 'updated_at']
@@ -402,6 +409,15 @@ class FeePaymentUpdateSerializer(serializers.ModelSerializer):
         if amount is not None and amount > 0:
             if not account and (not self.instance or not self.instance.account):
                 raise serializers.ValidationError({'account': 'Please select account'})
+
+        # Confirmed Kuickpay money on this record can never be edited away (FeePayment.save() also
+        # enforces this; checking here gives the API a field-level message).
+        if amount is not None and self.instance is not None:
+            allocated = self.instance.kuickpay_allocated_total()
+            if allocated and amount < allocated:
+                raise serializers.ValidationError({
+                    'amount_paid': f'Cannot be less than {allocated}, already credited by confirmed Kuickpay payments.'
+                })
 
         # Validate account belongs to the same school (multi-tenancy)
         school_id = _serializer_school_id(self)

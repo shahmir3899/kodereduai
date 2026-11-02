@@ -89,12 +89,17 @@ def attendance_months(student, segments=None):
 # ── Fees ─────────────────────────────────────────────────────────────────────
 
 def fee_payments(student, segments=None):
-    from finance.models import FeePayment
+    from django.db.models import Prefetch
+    from finance.models import FeePayment, KuickpayPaymentAllocation
 
     segments = segments or segments_for(student)
     return (
         FeePayment.objects.filter(timeline.fees_q(segments))
         .select_related('monthly_category', 'annual_category')
+        # The "received via Kuickpay" label on each row, in one extra query.
+        .prefetch_related(Prefetch(
+            'kuickpay_allocations', queryset=KuickpayPaymentAllocation.objects.select_related('transaction'),
+        ))
         .order_by('-year', '-month', '-id')
     )
 

@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useState } from 'react'
+import KuickpayReceived from '../../../components/KuickpayReceived'
 import { TONE } from '../../../components/ui/statusTones'
 import ErrorState from '../../../components/ui/ErrorState'
 import LoadingState from '../../../components/ui/LoadingState'
@@ -241,7 +242,10 @@ export function FeesTab({ data, isLoading, error }) {
               </td>
               <td className="px-4 py-3 text-sm text-gray-600">{p.fee_type_name || p.fee_type || '-'}</td>
               <td className="px-4 py-3 text-sm text-gray-900 text-right">PKR {parseFloat(p.amount_due || 0).toLocaleString()}</td>
-              <td className="px-4 py-3 text-sm text-gray-900 text-right">PKR {parseFloat(p.amount_paid || 0).toLocaleString()}</td>
+              <td className="px-4 py-3 text-sm text-gray-900 text-right">
+                PKR {parseFloat(p.amount_paid || 0).toLocaleString()}
+                <KuickpayReceived kuickpay={p.kuickpay} className="justify-end" />
+              </td>
               <td className="px-4 py-3">
                 <span className={`px-2 py-0.5 rounded text-xs font-medium ${statusColors[p.status] || TONE.neutral}`}>
                   {p.status}

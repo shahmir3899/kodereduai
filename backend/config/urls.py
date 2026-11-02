@@ -177,6 +177,9 @@ urlpatterns = [
     # Finance
     path('api/finance/', include('finance.urls')),
 
+    # Kuickpay calls these fixed paths (/api/v1/BillInquiry, /api/v1/BillPayment) with header auth
+    path('', include('finance.kuickpay.urls')),
+
     # HR & Staff Management
     path('api/hr/', include('hr.urls')),
 

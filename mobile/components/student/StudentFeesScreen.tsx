@@ -11,6 +11,7 @@ import EmptyState from '../ui/EmptyState';
 import Card from '../ui/Card';
 import SegmentedTabs from '../ui/SegmentedTabs';
 import StatusPill from '../ui/StatusPill';
+import KuickpayReceivedLabel from '../finance/KuickpayReceivedLabel';
 import { Colors, FontSize, Spacing } from '../../constants/colors';
 
 // The student's own fee ledger. Paying happens at school: no payment gateway is live.
@@ -62,6 +63,7 @@ export function FeesView({ query }: { query: Q<PortalFee[]> }) {
               {formatMoney(Number(f.amount_paid) || 0)} of {formatMoney(Number(f.amount_due) || 0)}
               {balanceOf(f) > 0 && !f.handed_over ? `  ·  ${formatMoney(balanceOf(f))} left` : ''}
             </Text>
+            <KuickpayReceivedLabel kuickpay={f.kuickpay} />
           </View>
           <StatusPill label={f.status[0] + f.status.slice(1).toLowerCase()} tone={statusTone(f.status)} />
         </Card>

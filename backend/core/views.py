@@ -1,6 +1,7 @@
 from datetime import timedelta
 
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.db.models import ProtectedError
 from django.utils import timezone
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
@@ -103,5 +104,12 @@ def custom_exception_handler(exc, context):
         else:
             detail = [str(exc)]
         return Response({'detail': detail}, status=status.HTTP_400_BAD_REQUEST)
+
+    if isinstance(exc, ProtectedError):
+        # A protected foreign key (e.g. a fee row holding confirmed Kuickpay money) refused a delete.
+        return Response(
+            {'detail': 'This record is referenced by other records and cannot be deleted.'},
+            status=status.HTTP_409_CONFLICT,
+        )
 
     return exception_handler(exc, context)

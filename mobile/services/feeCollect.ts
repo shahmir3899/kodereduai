@@ -4,6 +4,17 @@
 export type FeeStatus = 'UNPAID' | 'PARTIAL' | 'PAID' | 'ADVANCE';
 export type FeeTypeTab = 'MONTHLY' | 'ANNUAL' | 'ALL';
 
+// Money received through Kuickpay on a fee record, worded by the server (finance/kuickpay/received.py)
+// so every role and both apps show the same text. null/absent when nothing came in that way.
+export interface KuickpayReceived {
+  gateway: string;
+  received: string;
+  coverage: 'FULL' | 'PARTIAL';
+  label: string;
+  reference_text: string;
+  payments: Array<{ reference: string; receipt: string; date: string; amount: string }>;
+}
+
 export interface FeePayment {
   id: number;
   student: number;
@@ -29,6 +40,7 @@ export interface FeePayment {
   account?: number | null;
   account_name?: string | null;
   collected_by_name?: string | null;
+  kuickpay?: KuickpayReceived | null;
 }
 
 export const PAYMENT_METHODS = [
@@ -197,4 +209,16 @@ export function canDeleteFee(p: Pick<FeePayment, 'status' | 'amount_paid'>): boo
 export function feeDescription(p: FeePayment): string {
   const when = p.month ? `${MONTH_NAMES[p.month - 1] ?? ''} ${p.year}` : String(p.year);
   return `${p.student_name}: ${feeLabel(p)}, ${when.trim()}`;
+}
+
+// The "received via Kuickpay" line for a fee record, or null. A single payment also shows the day it was paid.
+export function kuickpayNote(f: { kuickpay?: KuickpayReceived | null }): { label: string; reference: string; tone: 'success' | 'info' } | null {
+  const k = f.kuickpay;
+  if (!k) return null;
+  let reference = k.reference_text;
+  if (k.payments.length === 1) {
+    const [y, m, d] = k.payments[0].date.split('-').map(Number);
+    reference += `  ·  ${d} ${MONTH_NAMES[m - 1].slice(0, 3)} ${y}`;
+  }
+  return { label: k.label, reference, tone: k.coverage === 'FULL' ? 'success' : 'info' };
 }

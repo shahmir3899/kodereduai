@@ -1,6 +1,7 @@
 from django.core.exceptions import ValidationError
+from django.core.validators import RegexValidator
 from django.db import models
-from django.db.models import Q
+from django.db.models import Q, Sum
 from django.utils import timezone
 
 
@@ -670,6 +671,17 @@ class FeePayment(models.Model):
                     f"amount_paid={self.amount_paid} requires both payment_date and account."
                 )
 
+        # --- Safeguard 3: confirmed Kuickpay money cannot be written away ---
+        # An edit that lowers amount_paid below what Kuickpay already credited to this row would
+        # silently erase real money. Only rows that already exist can hold allocations.
+        if self.pk:
+            allocated = self.kuickpay_allocated_total()
+            if allocated and (self.amount_paid or 0) < allocated:
+                raise ValidationError(
+                    f"amount_paid cannot be less than the {allocated} already credited to this record "
+                    f"by confirmed Kuickpay payments."
+                )
+
         # --- Safeguard 2: reject writes to closed periods ---
         # Only check period lock for MONTHLY fees (month 1-12).
         # ANNUAL/ADMISSION/BOOKS/FINE use month=0 and are not tied to a calendar month.
@@ -689,8 +701,19 @@ class FeePayment(models.Model):
 
         super().save(*args, **kwargs)
 
+    def kuickpay_allocated_total(self):
+        """Sum of confirmed Kuickpay allocations credited to this row (one indexed query)."""
+        return KuickpayPaymentAllocation.objects.filter(
+            fee_payment_id=self.pk,
+        ).aggregate(t=Sum('amount'))['t'] or 0
+
     def delete(self, *args, **kwargs):
-        """Block deletion of fee records in closed periods (monthly only)."""
+        """Block deletion of fee records in closed periods (monthly only), and of records that
+        hold confirmed Kuickpay payments."""
+        if self.pk and self.kuickpay_allocated_total():
+            raise ValidationError(
+                "This fee record holds confirmed Kuickpay payments and cannot be deleted."
+            )
         if self.month >= 1 and self.month <= 12:
             is_locked = MonthlyClosing.objects.filter(
                 school_id=self.school_id, year=self.year, month=self.month,
@@ -1421,3 +1444,330 @@ class OnlinePayment(models.Model):
     def __str__(self):
         student_name = self.student.name if self.student else 'Deleted Student'
         return f"{student_name} - {self.amount} {self.currency} ({self.get_status_display()})"
+
+
+# =============================================================================
+# Kuickpay (End-to-End) integration — additive models.
+#
+# FeePayment stays the only fee-liability ledger. These models hold the payable
+# reference (consumer number), the durable payment records and the audit trail;
+# none of them stores a balance of its own. See docs/KUICKPAY_TECHNICAL_ASSESSMENT.md §10.
+#
+# PROTECT is deliberate on every audit-bearing reference: a bill, callback or allocation
+# must never disappear because a student, school or fee row was deleted.
+# =============================================================================
+
+_DIGITS_ONLY = RegexValidator(r'^[0-9]+$', 'Digits only.')
+
+
+class KuickpayBiller(models.Model):
+    """Biller identity as Kuickpay knows it. Says nothing about where funds settle."""
+
+    class Mode(models.TextChoices):
+        UAT = 'UAT', 'UAT'
+        PROD = 'PROD', 'Production'
+
+    name = models.CharField(max_length=100)
+    prefix = models.CharField(max_length=5, validators=[_DIGITS_ONLY])
+    institution_id = models.CharField(max_length=32, blank=True, default='')
+    # Null until Kuickpay confirms the maximum length (assessment K-1).
+    consumer_number_length = models.PositiveSmallIntegerField(null=True, blank=True)
+    check_digit_scheme = models.CharField(max_length=20, default='NONE')
+    mode = models.CharField(max_length=4, choices=Mode.choices, default=Mode.UAT)
+    # Suffix of the environment variables holding this biller's credentials. Never a secret itself.
+    credentials_key = models.CharField(max_length=50, blank=True, default='')
+    is_enabled = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['prefix', 'mode']
+        constraints = [
+            models.UniqueConstraint(fields=['prefix', 'mode'], name='uniq_kuickpay_biller_prefix_mode'),
+        ]
+
+    def __str__(self):
+        return f"{self.name} ({self.prefix}, {self.mode})"
+
+
+class KuickpaySchoolMapping(models.Model):
+    """School -> biller, plus the internal bookkeeping account its receipts are posted to.
+
+    settlement_account is Education AI bookkeeping only (FeePayment.save() requires an
+    account); it does not describe how Kuickpay actually settles funds.
+    """
+    school = models.OneToOneField(
+        'schools.School', on_delete=models.PROTECT, related_name='kuickpay_mapping',
+    )
+    biller = models.ForeignKey(KuickpayBiller, on_delete=models.PROTECT, related_name='school_mappings')
+    settlement_account = models.ForeignKey(
+        Account, on_delete=models.PROTECT, related_name='kuickpay_school_mappings',
+    )
+    # Day of the billing month printed as the bill's due date (Kuickpay requires one; fee rows have none).
+    # Capped at 28 so it exists in every month.
+    due_day = models.PositiveSmallIntegerField(default=10)
+    is_enabled = models.BooleanField(default=False)
+    enabled_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                condition=Q(due_day__gte=1, due_day__lte=28), name='kuickpay_mapping_due_day_1_28',
+            ),
+        ]
+
+    def clean(self):
+        account = self.settlement_account if self.settlement_account_id else None
+        if account is not None:
+            if account.school_id != self.school_id:
+                raise ValidationError({'settlement_account': 'Account must belong to the same school.'})
+            if account.account_type != Account.AccountType.BANK:
+                raise ValidationError({'settlement_account': 'Settlement account must be a Bank account.'})
+        if self.is_enabled:
+            self._validate_contact_details()
+
+    def _validate_contact_details(self):
+        """Kuickpay's inquiry response requires an email (max 30) and a phone number starting 92 or 03.
+        We send the school's own office details, never a parent's, so the school must have valid ones."""
+        school = self.school
+        email = (school.contact_email or '').strip()
+        phone = ''.join(ch for ch in (school.contact_phone or '') if ch.isdigit())
+        if phone.startswith('0092'):
+            phone = phone[2:]
+        problems = []
+        if not email or len(email) > 30:
+            problems.append("School contact email is required and must be at most 30 characters.")
+        if not phone.startswith(('92', '03')):
+            problems.append("School contact phone is required and must start with 92 or 03.")
+        if problems:
+            raise ValidationError({'__all__': problems})
+
+    def __str__(self):
+        return f"{self.school} -> {self.biller}"
+
+
+class KuickpayBill(models.Model):
+    """One payable reference per student per monthly cycle.
+
+    The member fee rows are resolved from the ledger at runtime, never stored here, so
+    regenerating a fee row cannot orphan the consumer number.
+    """
+
+    class Status(models.TextChoices):
+        ACTIVE = 'ACTIVE', 'Active'
+        SUSPENDED = 'SUSPENDED', 'Suspended'
+        SUPERSEDED = 'SUPERSEDED', 'Superseded'
+
+    OPEN_STATUSES = (Status.ACTIVE, Status.SUSPENDED)
+
+    school = models.ForeignKey('schools.School', on_delete=models.PROTECT, related_name='kuickpay_bills')
+    biller = models.ForeignKey(KuickpayBiller, on_delete=models.PROTECT, related_name='bills')
+    student = models.ForeignKey(
+        'students.Student', on_delete=models.SET_NULL, null=True, blank=True, related_name='kuickpay_bills',
+    )
+    # Denormalised so the bill still identifies its student after the student row is deleted.
+    student_ref = models.PositiveIntegerField()
+    year = models.SmallIntegerField()
+    month = models.SmallIntegerField()
+    consumer_number = models.CharField(max_length=19, validators=[_DIGITS_ONLY])
+    status = models.CharField(max_length=12, choices=Status.choices, default=Status.ACTIVE)
+    suspend_reason = models.CharField(max_length=40, blank=True, default='')
+    suspended_at = models.DateTimeField(null=True, blank=True)
+    activated_at = models.DateTimeField(default=timezone.now)
+    superseded_at = models.DateTimeField(null=True, blank=True)
+    superseded_by = models.ForeignKey(
+        'self', on_delete=models.PROTECT, null=True, blank=True, related_name='supersedes',
+    )
+    # Per-row due/paid at activation. Audit only: payable is always recomputed from the ledger.
+    activation_snapshot = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-year', '-month', 'student_ref']
+        indexes = [
+            models.Index(fields=['school', 'status'], name='kpbill_school_status_idx'),
+            models.Index(fields=['student_ref'], name='kpbill_student_ref_idx'),
+        ]
+        constraints = [
+            models.UniqueConstraint(fields=['consumer_number'], name='uniq_kuickpay_bill_consumer_number'),
+            models.UniqueConstraint(
+                fields=['school', 'student_ref', 'year', 'month'], name='uniq_kuickpay_bill_student_cycle',
+            ),
+            # The hard guarantee behind "only the latest bill is payable".
+            models.UniqueConstraint(
+                fields=['school', 'student_ref'],
+                condition=Q(status__in=['ACTIVE', 'SUSPENDED']),
+                name='uniq_kuickpay_one_open_bill_per_student',
+            ),
+            models.CheckConstraint(
+                condition=Q(month__gte=1, month__lte=12), name='kuickpay_bill_month_1_12',
+            ),
+            models.CheckConstraint(
+                condition=(
+                    Q(status='SUPERSEDED', superseded_at__isnull=False)
+                    | (~Q(status='SUPERSEDED') & Q(superseded_at__isnull=True))
+                ),
+                name='kuickpay_bill_superseded_consistent',
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.consumer_number} {self.month}/{self.year} ({self.status})"
+
+
+class KuickpayTransaction(models.Model):
+    """Durable record of one authenticated payment callback, stored before any ledger work."""
+
+    class Status(models.TextChoices):
+        RECEIVED = 'RECEIVED', 'Received'
+        POSTED = 'POSTED', 'Posted'
+        PENDING_PERIOD_LOCK = 'PENDING_PERIOD_LOCK', 'Pending (closed period)'
+        PENDING_RETRY = 'PENDING_RETRY', 'Pending retry'
+        HELD = 'HELD', 'Held for reconciliation'
+        EXCEPTIONAL_EXPIRED = 'EXCEPTIONAL_EXPIRED', 'Exceptional (after expiry)'
+        REJECTED = 'REJECTED', 'Rejected'
+
+    bill = models.ForeignKey(KuickpayBill, on_delete=models.PROTECT, related_name='transactions')
+    consumer_number = models.CharField(max_length=19)
+    # Width is provisional until the specification is confirmed (K-11); not unique on its own.
+    tran_auth_id = models.CharField(max_length=16)
+    tran_date = models.DateField()
+    tran_time = models.TimeField()
+    bank_mnemonic = models.CharField(max_length=8, blank=True, default='')
+    # tran_date/tran_time interpreted in the configured Kuickpay zone, stored as an aware UTC instant.
+    tran_at = models.DateTimeField(null=True, blank=True)
+    timestamp_reliable = models.BooleanField(default=True)
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    allocated_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    held_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    status = models.CharField(max_length=24, choices=Status.choices, default=Status.RECEIVED)
+    reason = models.CharField(max_length=60, blank=True, default='')
+    bill_status_at_receipt = models.CharField(max_length=12, blank=True, default='')
+    superseded_at_snapshot = models.DateTimeField(null=True, blank=True)
+    urgent = models.BooleanField(default=False)
+    request_payload = models.JSONField(default=dict, blank=True)
+    response_snapshot = models.JSONField(default=dict, blank=True)
+    ledger_error = models.TextField(blank=True, default='')
+    received_at = models.DateTimeField(default=timezone.now)
+    posted_at = models.DateTimeField(null=True, blank=True)
+    posting_date = models.DateField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['-received_at']
+        indexes = [
+            models.Index(fields=['status', 'received_at'], name='kptxn_status_received_idx'),
+            models.Index(fields=['bill'], name='kptxn_bill_idx'),
+        ]
+        constraints = [
+            # Kuickpay's duplicate rule compares consumer number, authorization id, amount and payment
+            # DATE (time is not compared), and the authorization id is unique within a date.
+            models.UniqueConstraint(
+                fields=['consumer_number', 'tran_auth_id', 'tran_date'],
+                name='uniq_kuickpay_txn_identity',
+            ),
+            models.CheckConstraint(condition=Q(amount__gt=0), name='kuickpay_txn_amount_positive'),
+            models.CheckConstraint(
+                condition=Q(allocated_amount__gte=0, held_amount__gte=0),
+                name='kuickpay_txn_parts_non_negative',
+            ),
+            models.CheckConstraint(
+                condition=Q(allocated_amount__lte=models.F('amount') - models.F('held_amount')),
+                name='kuickpay_txn_parts_within_amount',
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.consumer_number} {self.tran_auth_id} {self.amount} ({self.status})"
+
+
+class KuickpayPaymentAllocation(models.Model):
+    """Part of a transaction credited to one fee row. Independent, idempotent, never deleted."""
+    transaction = models.ForeignKey(
+        KuickpayTransaction, on_delete=models.PROTECT, related_name='allocations',
+    )
+    # PROTECT: a fee row holding confirmed Kuickpay money cannot be deleted by any path.
+    fee_payment = models.ForeignKey(
+        FeePayment, on_delete=models.PROTECT, related_name='kuickpay_allocations',
+    )
+    fee_payment_ref = models.PositiveIntegerField()
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    period_year = models.SmallIntegerField()
+    period_month = models.SmallIntegerField()
+    category_id = models.PositiveIntegerField(null=True, blank=True)
+    row_balance_before = models.DecimalField(max_digits=12, decimal_places=2)
+    row_balance_after = models.DecimalField(max_digits=12, decimal_places=2)
+    posting_date = models.DateField()
+    posted_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        ordering = ['transaction_id', 'id']
+        indexes = [
+            models.Index(fields=['fee_payment_ref'], name='kpalloc_feepayment_ref_idx'),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=['transaction', 'fee_payment_ref'], name='uniq_kuickpay_alloc_txn_row',
+            ),
+            models.CheckConstraint(condition=Q(amount__gt=0), name='kuickpay_alloc_amount_positive'),
+        ]
+
+    def __str__(self):
+        return f"txn {self.transaction_id} -> fee {self.fee_payment_ref}: {self.amount}"
+
+
+class KuickpayCallbackLog(models.Model):
+    """Append-only evidence of every request to the Kuickpay endpoints (redacted)."""
+    endpoint = models.CharField(max_length=20)
+    received_at = models.DateTimeField(default=timezone.now)
+    remote_ip = models.GenericIPAddressField(null=True, blank=True)
+    auth_ok = models.BooleanField(default=False)
+    consumer_number = models.CharField(max_length=19, blank=True, default='')
+    result_code = models.CharField(max_length=20, blank=True, default='')
+    http_status = models.PositiveSmallIntegerField(null=True, blank=True)
+    latency_ms = models.PositiveIntegerField(null=True, blank=True)
+    redacted_request = models.JSONField(default=dict, blank=True)
+    redacted_response = models.JSONField(default=dict, blank=True)
+    transaction = models.ForeignKey(
+        KuickpayTransaction, on_delete=models.SET_NULL, null=True, blank=True, related_name='callback_logs',
+    )
+    bill = models.ForeignKey(
+        KuickpayBill, on_delete=models.SET_NULL, null=True, blank=True, related_name='callback_logs',
+    )
+
+    class Meta:
+        ordering = ['-received_at']
+        indexes = [
+            models.Index(fields=['consumer_number', 'received_at'], name='kplog_consumer_received_idx'),
+        ]
+
+    def __str__(self):
+        return f"{self.endpoint} {self.received_at:%Y-%m-%d %H:%M:%S} ({self.result_code})"
+
+
+class KuickpayReconciliationEvent(models.Model):
+    """Append-only record of every manual or automated reconciliation decision."""
+
+    class Action(models.TextChoices):
+        POSTED = 'POSTED', 'Posted'
+        HELD = 'HELD', 'Held'
+        REFUND_REQUESTED = 'REFUND_REQUESTED', 'Refund requested'
+        REFUNDED = 'REFUNDED', 'Refunded'
+        NOTE = 'NOTE', 'Note'
+
+    transaction = models.ForeignKey(
+        KuickpayTransaction, on_delete=models.PROTECT, related_name='reconciliation_events',
+    )
+    actor = models.ForeignKey(
+        'users.User', on_delete=models.SET_NULL, null=True, blank=True, related_name='kuickpay_reconciliation_events',
+    )
+    action = models.CharField(max_length=20, choices=Action.choices)
+    details = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['created_at', 'id']
+
+    def __str__(self):
+        return f"txn {self.transaction_id}: {self.action}"
