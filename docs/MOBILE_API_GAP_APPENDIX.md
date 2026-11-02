@@ -1,7 +1,7 @@
 # Mobile app and web API coverage
 
 Generated 2026-11-02 by `python scripts/mobile_api_gap.py` (rerun it after each batch).
-The web calls **768** distinct endpoints. The mobile app calls **475** of them (**293 not called**). Mobile-only endpoints (the web never calls them): **2**.
+The web calls **768** distinct endpoints. The mobile app calls **485** of them (**283 not called**). Mobile-only endpoints (the web never calls them): **2**.
 
 A call whose URL is a bare variable is not seen (none exist today, checked 2026-11-02); nested template strings are handled. This file is a reference; the plan is `MOBILE_CHANGE_LIST.md`.
 
@@ -34,7 +34,7 @@ Each row groups related endpoints. "Used" is how many of the web's endpoints for
 | Academics | Periods and breaks | 4 of 6 | Mostly used |  |
 | Academics | Subjects | 5 of 7 | Mostly used |  |
 | Academics | Subjects of each class | 5 of 8 | Mostly used |  |
-| Academics | Timetable | 5 of 12 | Partly used |  |
+| Academics | Timetable | 10 of 12 | Mostly used |  |
 | Admissions | Conversion likelihood | 1 of 1 | Fully used |  |
 | Admissions | Enquiries | 9 of 10 | Mostly used |  |
 | Admissions | Follow-ups | 2 of 2 | Fully used |  |
@@ -55,13 +55,13 @@ Each row groups related endpoints. "Used" is how many of the web's endpoints for
 | Exams | Exams | 16 of 20 | Mostly used |  |
 | Exams | Grade scale | 4 of 4 | Fully used |  |
 | Exams | Marks entry | 2 of 6 | Partly used |  |
-| Exams | Paper photo scan | 0 of 4 | Not used | Version 2 |
+| Exams | Paper photo scan | 3 of 4 | Mostly used | Version 2 |
 | Exams | Question bank | 8 of 11 | Mostly used |  |
 | Exams | Question papers | 12 of 15 | Mostly used | Partly built; AI and Word export on the web |
 | Exams | Report cards | 1 of 4 | Partly used |  |
 | Exams | Skills and behaviour assessment | 3 of 5 | Mostly used |  |
 | Exams | Student responses | 0 of 2 | Not used | Version 2 |
-| Exams | Worksheets | 8 of 13 | Mostly used | Version 2 |
+| Exams | Worksheets | 10 of 13 | Mostly used | Version 2 |
 | Finance | AI assistant | 3 of 3 | Fully used |  |
 | Finance | AI fee predictor | 0 of 1 | Not used | Web only |
 | Finance | Accounts and ledger | 11 of 13 | Mostly used |  |
@@ -224,15 +224,10 @@ Each row groups related endpoints. "Used" is how many of the web's endpoints for
 - `GET /api/academics/class-subjects/workload_analysis/`
 - `POST /api/academics/class-subjects/bulk-assign/`
 
-### Academics: Timetable (7)
+### Academics: Timetable (2)
 
 - `GET /api/academics/timetable-entries/`
-- `GET /api/academics/timetable-entries/quality_score/`
-- `GET /api/academics/timetable-entries/suggest_resolution/`
-- `GET /api/academics/timetable-entries/suggest_substitute/`
-- `GET /api/academics/timetable-entries/teacher_conflicts/`
 - `POST /api/academics/timetable-entries/auto_generate/`
-- `POST /api/academics/timetable-entries/split_for_sections/`
 
 ### Admissions: Enquiries (1)
 
@@ -318,12 +313,9 @@ Each row groups related endpoints. "Used" is how many of the web's endpoints for
 - `PATCH /api/examinations/marks/{}/`
 - `POST /api/examinations/marks/`
 
-### Exams: Paper photo scan (4)
+### Exams: Paper photo scan (1)
 
 - `GET /api/examinations/paper-uploads/`
-- `GET /api/examinations/paper-uploads/{}/`
-- `POST /api/examinations/paper-uploads/upload-image/`
-- `POST /api/examinations/paper-uploads/{}/confirm/`
 
 ### Exams: Question bank (3)
 
@@ -353,12 +345,10 @@ Each row groups related endpoints. "Used" is how many of the web's endpoints for
 - `GET /api/examinations/student-responses/`
 - `POST /api/examinations/student-responses/`
 
-### Exams: Worksheets (5)
+### Exams: Worksheets (3)
 
 - `GET /api/examinations/worksheet-uploads/`
-- `GET /api/examinations/worksheet-uploads/{}/`
 - `PATCH /api/examinations/worksheets/{}/`
-- `POST /api/examinations/worksheet-uploads/upload-image/`
 - `POST /api/examinations/worksheet-uploads/{}/confirm/`
 
 ### Finance: AI fee predictor (1)
