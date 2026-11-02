@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   View,
   Text,
@@ -6,8 +6,6 @@ import {
   ScrollView,
   Image,
   TouchableOpacity,
-  Alert,
-  RefreshControl,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { faceAttendanceApi } from '../../../services/api';
@@ -15,6 +13,12 @@ import Button from '../../../components/ui/Button';
 import Badge from '../../../components/ui/Badge';
 import Card from '../../../components/ui/Card';
 import Spinner from '../../../components/ui/Spinner';
+import Skeleton from '../../../components/ui/Skeleton';
+import ErrorState from '../../../components/ui/ErrorState';
+import { useToast } from '../../../components/ui/Toast';
+import { saveFailureMessage } from '../../../services/errorKind';
+import { useScopedQuery } from '../../../hooks/useScopedQuery';
+import { useRefreshControl } from '../../../hooks/useRefreshControl';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../../constants/colors';
 
 interface Detection {
@@ -53,49 +57,35 @@ interface SessionData {
 export default function FaceAttendanceReview() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const [session, setSession] = useState<SessionData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
+  const toast = useToast();
   const [confirming, setConfirming] = useState(false);
   const [presentIds, setPresentIds] = useState<Set<number>>(new Set());
+  // The roll starts from the matched faces once; later refetches (a pull to refresh, the polling
+  // while processing) must not undo the ticks the reviewer has made.
+  const seeded = useRef(false);
 
-  const fetchSession = useCallback(async () => {
-    try {
-      const res = await faceAttendanceApi.getSession(id!);
-      const data = res.data;
-      setSession(data);
+  // Fresh each time, and followed every 3 seconds while the server is still matching faces.
+  const query = useScopedQuery<SessionData>('faceSession', [id], async () =>
+    (await faceAttendanceApi.getSession(id!)).data,
+  {
+    enabled: !!id,
+    staleTime: 0,
+    refetchInterval: (q) => ((q.state.data as SessionData | undefined)?.status === 'PROCESSING' ? 3000 : false),
+  });
+  const session = query.data ?? null;
+  const refreshControl = useRefreshControl(query.refetch);
 
-      // Initialize present IDs from auto-matched + flagged detections
-      if (data.status === 'NEEDS_REVIEW' && presentIds.size === 0) {
-        const matched = new Set<number>();
-        for (const det of data.detections || []) {
-          if (
-            (det.match_status === 'AUTO_MATCHED' || det.match_status === 'FLAGGED') &&
-            det.matched_student
-          ) {
-            matched.add(det.matched_student.id);
-          }
-        }
-        setPresentIds(matched);
+  useEffect(() => {
+    if (!session || seeded.current || session.status !== 'NEEDS_REVIEW') return;
+    seeded.current = true;
+    const matched = new Set<number>();
+    for (const det of session.detections || []) {
+      if ((det.match_status === 'AUTO_MATCHED' || det.match_status === 'FLAGGED') && det.matched_student) {
+        matched.add(det.matched_student.id);
       }
-    } catch (err) {
-      console.error('Failed to fetch session:', err);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
     }
-  }, [id]);
-
-  useEffect(() => {
-    fetchSession();
-  }, [fetchSession]);
-
-  // Poll while processing
-  useEffect(() => {
-    if (!session || session.status !== 'PROCESSING') return;
-    const interval = setInterval(fetchSession, 3000);
-    return () => clearInterval(interval);
-  }, [session?.status, fetchSession]);
+    setPresentIds(matched);
+  }, [session]);
 
   const toggleStudent = (studentId: number) => {
     setPresentIds((prev) => {
@@ -116,13 +106,10 @@ export default function FaceAttendanceReview() {
       await faceAttendanceApi.confirmSession(session.id, {
         present_student_ids: Array.from(presentIds),
       });
-      Alert.alert('Success', 'Attendance confirmed successfully.', [
-        { text: 'OK', onPress: () => router.back() },
-      ]);
+      toast.success('Attendance confirmed.');
+      router.back();
     } catch (error: any) {
-      const msg =
-        error.response?.data?.error || error.response?.data?.detail || 'Confirmation failed.';
-      Alert.alert('Error', msg);
+      toast.error(error.response?.data?.error || error.response?.data?.detail || saveFailureMessage(error, 'Confirmation failed.'));
     } finally {
       setConfirming(false);
     }
@@ -132,9 +119,10 @@ export default function FaceAttendanceReview() {
     if (!session) return;
     try {
       await faceAttendanceApi.reprocessSession(session.id);
-      setSession((prev) => (prev ? { ...prev, status: 'PROCESSING' } : prev));
-    } catch (error: any) {
-      Alert.alert('Error', 'Failed to reprocess session.');
+      seeded.current = false;
+      await query.refetch();
+    } catch (error) {
+      toast.error(saveFailureMessage(error, 'Could not reprocess the session.'));
     }
   };
 
@@ -149,7 +137,8 @@ export default function FaceAttendanceReview() {
     return map[session.status] || { label: session.status, variant: 'default' as const };
   }, [session?.status]);
 
-  if (loading) return <Spinner fullScreen message="Loading session..." />;
+  if (query.isLoading) return <Skeleton />;
+  if (query.isError && !session) return <ErrorState error={query.error} onRetry={() => query.refetch()} />;
 
   if (!session) {
     return (
@@ -197,7 +186,7 @@ export default function FaceAttendanceReview() {
     <ScrollView
       style={styles.container}
       contentContainerStyle={styles.content}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchSession(); }} />}
+      refreshControl={refreshControl}
     >
       {/* Header */}
       <View style={styles.header}>
@@ -269,7 +258,7 @@ export default function FaceAttendanceReview() {
             Class Roll ({presentIds.size}/{session.class_students.length} present)
           </Text>
           {session.class_students.map((student) => (
-            <TouchableOpacity accessibilityRole="button"
+            <TouchableOpacity accessibilityRole="checkbox" accessibilityState={{ checked: presentIds.has(student.id) }}
               key={student.id}
               style={[
                 styles.studentRow,

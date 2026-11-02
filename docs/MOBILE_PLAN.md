@@ -200,3 +200,10 @@ Admin and principal only, like the web route guard and the server (`IsSchoolAdmi
 Backend changes (uncommitted, 9 tests in `tests/test_admissions_hardening.py`, no migration): a note can only be filed on an enquiry of the active school (it used to trust the URL id); the note's `enquiry` field is read-only (it used to be a required body field); `ConversionLikelihoodView` is now admin/principal only and gated on the admissions module (it was open to any staff role).
 Server quirks the phone works around: every enquiry PATCH must carry `name`, `father_name` and `mobile` (the serializer validates them even on a partial update), so edit sends the whole form, with nulls to clear the grade or follow-up date.
 
+
+### Scope change (2026-10-30)
+Transport management, Library and Hostel screens for admin and principal are **version 2**, not v1. Out of the v1 QA matrix: those three module columns for the admin/principal personas (the driver, student and parent transport/library views and the existing gate-pass and issue/return screens stay in v1 and in QA).
+### Polish phase (2026-10-30) - planned, nothing built
+1. AI remark suggestion on Assessments (teacher and principal remark). 2. User profile photo in the header (school logo moves to More) plus a Profile screen with upload and remove. 3. AI comments on Results and Report card (generate, progress, cancel, regenerate, edit). 4. Dashboard and list polish from the web comparison. Details and the comparison table: `docs/MOBILE.md`, "Web vs mobile comparison".
+
+Full polish plan: `docs/MOBILE_UI_POLISH_PLAN.md`.

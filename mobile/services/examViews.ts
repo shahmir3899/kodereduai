@@ -7,6 +7,8 @@ export interface ResultMark {
   total_marks?: number;
   marks_obtained: number | null;
   is_absent?: boolean;
+  ai_comment?: string | null;
+  comment_source?: 'AI' | 'FALLBACK' | 'EDITED' | null;
 }
 export interface ResultRow {
   student_id: number;
@@ -19,6 +21,8 @@ export interface ResultRow {
   grade?: string | null;
   is_pass?: boolean;
   marks?: ResultMark[];
+  overall_comment?: string | null;
+  overall_comment_source?: 'AI' | 'FALLBACK' | 'EDITED' | null;
 }
 
 export type ResultStatus = 'pass' | 'fail' | 'incomplete';

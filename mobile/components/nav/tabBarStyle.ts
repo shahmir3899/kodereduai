@@ -1,6 +1,6 @@
 import React from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import SchoolBadge from './SchoolBadge';
+import HeaderActions from './HeaderActions';
 import { Colors, FontSize } from '../../constants/colors';
 
 // A fixed 56px bar sat under the gesture/nav bar on phones with a bottom inset, so the labels were
@@ -23,7 +23,8 @@ export function useTabScreenOptions() {
     },
     tabBarLabelStyle: { fontSize: FontSize.xs, fontWeight: '500' as const },
     tabBarAllowFontScaling: false,
-    // The school's logo sits at the right of every tab screen's header.
-    headerRight: () => React.createElement(SchoolBadge, { compact: true }),
+    // Year, notification bell and the signed-in user's photo sit at the right of every tab screen's
+    // header (the school logo is in More).
+    headerRight: () => React.createElement(HeaderActions),
   };
 }

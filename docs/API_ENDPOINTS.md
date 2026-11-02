@@ -284,6 +284,7 @@ Pagination: All list endpoints return `{count, next, previous, results}`. Defaul
 | GET/POST | /api/examinations/grade-scales/ | | |
 | GET | /api/examinations/exams/{id}/results/ | | Now includes `exam_type_weight` in response |
 | GET | /api/examinations/report-card/ | student_id, academic_year_id or enrollment_id, term_id | Enrollment-driven historical report card. Requires `student_id` plus either `academic_year_id` or `enrollment_id`. Returns flat `subjects` array, `grade_scales`, `calculation_mode` (simple\|weighted), and `enrollment_info` with session class vs current class context |
+| GET | /api/examinations/report-card/pdf/ | same as report-card, plus template (enhanced\|traditional, default enhanced) | The same card as a PDF built on the server from the report-card payload (`examinations/report_card_pdf.py`). Same permissions as the card; a draft is printed with a DRAFT line. Used by the mobile app's Share PDF; the web still draws its own PDF in the browser. Text is Helvetica, so characters outside Windows-1252 (for example Urdu) are not drawn |
 | **NEW CURRICULUM INTEGRATION** | | | |
 | GET/POST | /api/examinations/questions/ | subject, exam_type, question_type, difficulty, topics, lesson_plan, search, is_active | Includes `tested_topics` and `tested_topics_details` fields |
 | POST | /api/examinations/questions/generate_from_lesson/ | | Generate AI questions from lesson plan. Body: {lesson_plan_id, question_count (5-20), question_type, difficulty_level}. Returns: {questions: [...], message} |

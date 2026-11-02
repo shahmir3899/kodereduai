@@ -12,6 +12,8 @@ import Skeleton from '../ui/Skeleton';
 import ErrorState from '../ui/ErrorState';
 import EmptyState from '../ui/EmptyState';
 import StatusPill from '../ui/StatusPill';
+import { CommentJobCard, StudentComments } from './CommentTools';
+import { commentRows } from '../../services/examComments';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
 
 interface Props {
@@ -21,8 +23,9 @@ interface Props {
 
 const RANK_COLOR: Record<number, string> = { 1: '#eab308', 2: '#9ca3af', 3: '#d97706' };
 
-// Ranked results for one exam, with a pass/fail summary. Read-only: the AI comment tools stay
-// on the web.
+// Ranked results for one exam, with a pass/fail summary, and the AI report-card comment tools
+// (generate for the exam, then edit or regenerate per student). The server decides who may do
+// what; its refusal is shown as it is.
 export default function ResultsScreen({ classOptions }: Props) {
   const { year, options, isLoading: classesLoading } = useAttendanceClassOptions(classOptions);
   const yearId = year.current?.id ?? null;
@@ -70,6 +73,8 @@ export default function ResultsScreen({ classOptions }: Props) {
         placeholder={option && !examsQ.isLoading && (examsQ.data ?? []).length === 0 ? 'No exams for this class' : 'Select exam'}
         disabled={!option} />
 
+      {examId ? <CommentJobCard examId={examId} onFinished={() => resultsQ.refetch()} /> : null}
+
       {summary ? (
         <>
           <View style={styles.cards}>
@@ -110,8 +115,8 @@ export default function ResultsScreen({ classOptions }: Props) {
         const status = resultStatus(item);
         const expanded = open === item.student_id;
         return (
-          <TouchableOpacity accessibilityRole="button" style={[styles.row, status === 'fail' && styles.rowFail]} onPress={() => setOpen(expanded ? null : item.student_id)}>
-            <View style={styles.main}>
+          <View style={[styles.row, status === 'fail' && styles.rowFail]}>
+            <TouchableOpacity accessibilityRole="button" accessibilityState={{ expanded }} style={styles.main} onPress={() => setOpen(expanded ? null : item.student_id)}>
               <View style={[styles.rank, { backgroundColor: item.rank != null && RANK_COLOR[item.rank] ? RANK_COLOR[item.rank] : Colors.surfaceSecondary }]}>
                 <Text style={[styles.rankText, item.rank != null && RANK_COLOR[item.rank] ? { color: Colors.textInverse } : null]}>{item.rank ?? '—'}</Text>
               </View>
@@ -126,7 +131,7 @@ export default function ResultsScreen({ classOptions }: Props) {
                 <StatusPill label={status === 'pass' ? 'Pass' : status === 'fail' ? 'Fail' : 'Incomplete'}
                   tone={status === 'pass' ? 'success' : status === 'fail' ? 'error' : 'warning'} />
               </View>
-            </View>
+            </TouchableOpacity>
             {expanded ? (
               <View style={styles.detail}>
                 {(item.marks ?? []).map((m, i) => (
@@ -137,9 +142,11 @@ export default function ResultsScreen({ classOptions }: Props) {
                     </Text>
                   </View>
                 ))}
+                <Text style={styles.commentsTitle}>Comments</Text>
+                <StudentComments examId={examId!} studentId={item.student_id} rows={commentRows(item)} onChanged={() => resultsQ.refetch()} />
               </View>
             ) : null}
-          </TouchableOpacity>
+          </View>
         );
       }}
     />
@@ -176,6 +183,7 @@ const styles = StyleSheet.create({
   right: { alignItems: 'flex-end', gap: 4 },
   grade: { fontSize: FontSize.sm, fontWeight: '700', color: Colors.info },
   detail: { marginTop: Spacing.sm, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: Colors.border, paddingTop: Spacing.sm },
+  commentsTitle: { fontSize: FontSize.sm, fontWeight: '700', color: Colors.text, marginTop: Spacing.md, marginBottom: 2 },
   markRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 3 },
   markSubject: { flex: 1, fontSize: FontSize.sm, color: Colors.text },
   markValue: { fontSize: FontSize.sm, fontWeight: '600', color: Colors.text },

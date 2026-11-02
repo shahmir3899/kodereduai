@@ -8,9 +8,9 @@ import { examinationsApi } from '../../services/api';
 import { listOf } from '../../services/academicYear';
 import type { ClassOption } from '../../services/attendanceEntry';
 import {
-  BEHAVIOUR_FIELDS, RATING_LABELS, SKILL_FIELDS, TOTAL_RATINGS, buildBulkPayload, canEditPrincipalRemark,
+  BEHAVIOUR_FIELDS, RATING_LABELS, SKILL_FIELDS, TOTAL_RATINGS, buildBulkPayload, buildRemarkRequest, canEditPrincipalRemark, canSuggestRemark,
   changedStudents, formFromRow, monthOptions, ratedCount, toggleRating,
-  type AssessmentForm, type RatingField, type RosterRow,
+  type AssessmentForm, type RatingField, type RemarkType, type RosterRow,
 } from '../../services/assessments';
 import { useAuth } from '../../contexts/AuthContext';
 import { useAttendanceClassOptions } from '../../hooks/useAcademicYear';
@@ -22,8 +22,9 @@ import Button from '../ui/Button';
 import Skeleton from '../ui/Skeleton';
 import ErrorState from '../ui/ErrorState';
 import EmptyState from '../ui/EmptyState';
-import StatusPill from '../ui/StatusPill';
+import RecordCard from '../ui/RecordCard';
 import { useToast } from '../ui/Toast';
+import { saveFailureMessage } from '../../services/errorKind';
 import { confirm } from '../ui/confirm';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
 
@@ -158,14 +159,14 @@ export default function AssessmentsScreen({ classOptions }: Props) {
           const rated = ratedCount(form);
           const isChanged = changed.includes(item.student);
           return (
-            <TouchableOpacity accessibilityRole="button" style={styles.row} onPress={() => setEditing(item.student)}>
-              <View style={styles.who}>
-                <Text style={styles.name} numberOfLines={1}>{item.student_name}</Text>
-                <Text style={styles.sub}>{item.roll_number ? `Roll ${item.roll_number}  ·  ` : ''}{rated}/{TOTAL_RATINGS} rated</Text>
-              </View>
-              {isChanged ? <StatusPill label="Unsaved" tone="warning" /> : rated === TOTAL_RATINGS ? <StatusPill label="Done" tone="success" /> : null}
-              <Text style={styles.arrow}>›</Text>
-            </TouchableOpacity>
+            <RecordCard
+              title={item.student_name}
+              subtitle={`${item.roll_number ? `Roll ${item.roll_number}  ·  ` : ''}${rated}/${TOTAL_RATINGS} rated`}
+              avatarName={item.student_name}
+              status={isChanged ? { label: 'Unsaved', tone: 'warning' } : rated === TOTAL_RATINGS ? { label: 'Done', tone: 'success' } : undefined}
+              accessibilityLabel={`${item.student_name}, ${rated} of ${TOTAL_RATINGS} rated`}
+              onPress={() => setEditing(item.student)}
+            />
           );
         }}
       />
@@ -195,6 +196,30 @@ export default function AssessmentsScreen({ classOptions }: Props) {
 function Editor({ row, form, canPrincipal, onChange, onClose }: {
   row: RosterRow; form: AssessmentForm; canPrincipal: boolean; onChange: (f: AssessmentForm) => void; onClose: () => void;
 }) {
+  const [drafting, setDrafting] = useState<RemarkType | null>(null);
+  // Shown inline: this editor is a Modal, which would cover a toast from the app root.
+  const [note, setNote] = useState<{ text: string; error: boolean } | null>(null);
+
+  // The draft goes into the box for the teacher to edit; nothing is saved until Save changes.
+  const suggest = async (type: RemarkType) => {
+    setDrafting(type);
+    setNote(null);
+    try {
+      const { remark, fallback } = (await examinationsApi.aiSuggestAssessmentRemark(buildRemarkRequest(form, type))).data ?? {};
+      if (!remark) { setNote({ text: 'Rate at least one skill first.', error: false }); return; }
+      onChange({ ...form, [type === 'teacher' ? 'teacher_remark' : 'principal_remark']: remark });
+      setNote({ text: fallback ? 'Suggested text added (template, not AI). Review before saving.' : 'AI draft added. Review before saving.', error: false });
+    } catch (e) {
+      setNote({ text: saveFailureMessage(e, 'Could not get a suggestion. Please try again.'), error: true });
+    } finally {
+      setDrafting(null);
+    }
+  };
+  const suggestButton = (type: RemarkType) => (
+    <Button title="Suggest with AI" size="sm" variant="outline" onPress={() => suggest(type)}
+      loading={drafting === type} disabled={!canSuggestRemark(form) || drafting !== null} />
+  );
+
   const group = (title: string, fields: ReadonlyArray<readonly [RatingField, string]>) => (
     <View style={styles.group}>
       <Text style={styles.groupTitle}>{title}</Text>
@@ -229,10 +254,17 @@ function Editor({ row, form, canPrincipal, onChange, onClose }: {
       <ScrollView contentContainerStyle={styles.editorBody} keyboardShouldPersistTaps="handled">
         {group('Skills', SKILL_FIELDS)}
         {group('Behaviour', BEHAVIOUR_FIELDS)}
-        <Text style={styles.groupTitle}>Teacher remark</Text>
+        {note ? <Text accessibilityLiveRegion="polite" style={[styles.note, note.error && styles.noteError]}>{note.text}</Text> : null}
+        <View style={styles.remarkHead}>
+          <Text style={styles.groupTitle}>Teacher remark</Text>
+          {suggestButton('teacher')}
+        </View>
         <TextInput style={styles.remark} multiline value={form.teacher_remark} placeholder="Remark about this student"
           placeholderTextColor={Colors.textTertiary} onChangeText={(t) => onChange({ ...form, teacher_remark: t })} />
-        <Text style={styles.groupTitle}>Principal remark</Text>
+        <View style={styles.remarkHead}>
+          <Text style={styles.groupTitle}>Principal remark</Text>
+          {canPrincipal ? suggestButton('principal') : null}
+        </View>
         {canPrincipal ? (
           <TextInput style={styles.remark} multiline value={form.principal_remark} placeholder="Principal remark"
             placeholderTextColor={Colors.textTertiary} onChangeText={(t) => onChange({ ...form, principal_remark: t })} />
@@ -269,5 +301,8 @@ const styles = StyleSheet.create({
   chipText: { fontSize: FontSize.md, fontWeight: '600', color: Colors.textSecondary },
   chipTextOn: { color: Colors.textInverse },
   remark: { minHeight: 80, textAlignVertical: 'top', backgroundColor: Colors.surface, borderWidth: 1, borderColor: Colors.border, borderRadius: BorderRadius.md, padding: Spacing.md, fontSize: FontSize.sm, color: Colors.text, marginBottom: Spacing.lg },
+  remarkHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  note: { fontSize: FontSize.sm, color: Colors.textSecondary, marginBottom: Spacing.sm },
+  noteError: { color: Colors.error },
   readonly: { fontSize: FontSize.sm, color: Colors.textSecondary, marginBottom: Spacing.lg },
 });

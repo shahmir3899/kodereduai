@@ -1,29 +1,29 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
   Image,
-  Alert,
-  RefreshControl,
   TouchableOpacity,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
-import { Picker } from '@react-native-picker/picker';
-import { faceAttendanceApi, classesApi, studentsApi } from '../../../services/api';
+import { faceAttendanceApi, studentsApi } from '../../../services/api';
+import { listOf } from '../../../services/academicYear';
+import { saveFailureMessage } from '../../../services/errorKind';
+import { useMasterClasses } from '../../../hooks/useAcademicYear';
+import { useScopedQuery } from '../../../hooks/useScopedQuery';
+import { useRefreshControl } from '../../../hooks/useRefreshControl';
 import Button from '../../../components/ui/Button';
 import Card from '../../../components/ui/Card';
 import Badge from '../../../components/ui/Badge';
-import Spinner from '../../../components/ui/Spinner';
+import Select from '../../../components/ui/Select';
+import Skeleton from '../../../components/ui/Skeleton';
+import ErrorState from '../../../components/ui/ErrorState';
+import { useToast } from '../../../components/ui/Toast';
+import { confirm } from '../../../components/ui/confirm';
 import EmptyState from '../../../components/ui/EmptyState';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../../constants/colors';
-
-interface ClassItem {
-  id: number;
-  name: string;
-  section?: string;
-}
 
 interface Student {
   id: number;
@@ -40,61 +40,35 @@ interface Enrollment {
 }
 
 export default function FaceEnrollment() {
-  const [classes, setClasses] = useState<ClassItem[]>([]);
-  const [students, setStudents] = useState<Student[]>([]);
-  const [enrollments, setEnrollments] = useState<Enrollment[]>([]);
-  const [selectedClass, setSelectedClass] = useState('');
-  const [selectedStudent, setSelectedStudent] = useState('');
+  const toast = useToast();
+  const [selectedClass, setSelectedClass] = useState<number | null>(null);
+  const [selectedStudent, setSelectedStudent] = useState<number | null>(null);
   const [photo, setPhoto] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
   const [enrolling, setEnrolling] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
 
-  useEffect(() => {
-    loadClasses();
-  }, []);
+  // Master classes are persisted reference data, so the picker still opens offline.
+  const classesQ = useMasterClasses();
+  const classOptions = (classesQ.data ?? []).map((c) => ({
+    value: Number(c.id),
+    label: `${c.name}${c.section ? ` - ${c.section}` : ''}`,
+  }));
 
-  useEffect(() => {
-    if (selectedClass) {
-      loadStudents(selectedClass);
-      loadEnrollments();
-    } else {
-      setStudents([]);
-      setEnrollments([]);
-    }
-    setSelectedStudent('');
+  const studentsQ = useScopedQuery('faceEnrollStudents', [selectedClass], async () =>
+    listOf<Student>((await studentsApi.getStudents({ class_obj: selectedClass, page_size: 500 })).data),
+  { enabled: !!selectedClass, staleTime: 60_000 });
+  const studentOptions = (studentsQ.data ?? []).map((s) => ({ value: s.id, label: `${s.name} (Roll: ${s.roll_number || '—'})` }));
+
+  // Fresh each time, so an enrolment made a moment ago (or on the web) is listed.
+  const enrollQ = useScopedQuery('faceEnrollments', [selectedClass], async () =>
+    listOf<Enrollment>((await faceAttendanceApi.getEnrollments({ class_id: selectedClass })).data),
+  { enabled: !!selectedClass, staleTime: 0 });
+  const enrollments = enrollQ.data ?? [];
+  const refreshControl = useRefreshControl(classesQ.refetch, enrollQ.refetch);
+
+  const chooseClass = (id: number) => {
+    setSelectedClass(id);
+    setSelectedStudent(null);
     setPhoto(null);
-  }, [selectedClass]);
-
-  const loadClasses = async () => {
-    try {
-      const res = await classesApi.getClasses({ page_size: 100 });
-      setClasses(res.data.results || res.data || []);
-    } catch (err) {
-      console.error('Failed to load classes:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const loadStudents = async (classId: string) => {
-    try {
-      const res = await studentsApi.getStudents({ class_obj: classId, page_size: 100 });
-      setStudents(res.data.results || res.data || []);
-    } catch (err) {
-      console.error('Failed to load students:', err);
-    }
-  };
-
-  const loadEnrollments = async () => {
-    try {
-      const params: Record<string, unknown> = {};
-      if (selectedClass) params.class_id = selectedClass;
-      const res = await faceAttendanceApi.getEnrollments(params);
-      setEnrollments(res.data.results || res.data || []);
-    } catch (err) {
-      console.error('Failed to load enrollments:', err);
-    }
   };
 
   const pickPhoto = async () => {
@@ -111,7 +85,7 @@ export default function FaceEnrollment() {
 
   const handleEnroll = async () => {
     if (!selectedStudent || !photo) {
-      Alert.alert('Error', 'Please select a student and pick a photo.');
+      toast.error('Choose a student and pick a photo first.');
       return;
     }
 
@@ -131,46 +105,30 @@ export default function FaceEnrollment() {
 
       // Enroll face
       await faceAttendanceApi.enrollFace({
-        student_id: parseInt(selectedStudent),
+        student_id: selectedStudent,
         image_url: imageUrl,
       });
 
-      Alert.alert('Success', 'Face enrolled successfully. The embedding is being generated.');
+      toast.success('Face enrolled. The embedding is being generated.');
       setPhoto(null);
-      setSelectedStudent('');
-      loadEnrollments();
+      setSelectedStudent(null);
+      enrollQ.refetch();
     } catch (error: any) {
-      const msg =
-        error.response?.data?.error || error.response?.data?.detail || 'Enrollment failed.';
-      Alert.alert('Error', msg);
+      toast.error(error.response?.data?.error || error.response?.data?.detail || saveFailureMessage(error, 'Enrollment failed.'));
     } finally {
       setEnrolling(false);
     }
   };
 
-  const handleDelete = (enrollmentId: number) => {
-    Alert.alert('Remove Enrollment', 'Are you sure you want to remove this face enrollment?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Remove',
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            await faceAttendanceApi.deleteEnrollment(enrollmentId);
-            loadEnrollments();
-          } catch (err) {
-            Alert.alert('Error', 'Failed to remove enrollment.');
-          }
-        },
-      },
-    ]);
-  };
-
-  const onRefresh = () => {
-    setRefreshing(true);
-    Promise.all([loadClasses(), selectedClass ? loadEnrollments() : Promise.resolve()]).finally(
-      () => setRefreshing(false)
-    );
+  const handleDelete = async (enrollmentId: number) => {
+    if (!(await confirm({ title: 'Remove enrollment?', message: 'This student will no longer be matched by face until enrolled again.', confirmLabel: 'Remove', destructive: true }))) return;
+    try {
+      await faceAttendanceApi.deleteEnrollment(enrollmentId);
+      toast.success('Enrollment removed.');
+      enrollQ.refetch();
+    } catch (err) {
+      toast.error(saveFailureMessage(err, 'Could not remove the enrollment.'));
+    }
   };
 
   const qualityVariant = (score: number): 'success' | 'warning' | 'error' => {
@@ -179,13 +137,11 @@ export default function FaceEnrollment() {
     return 'error';
   };
 
-  if (loading) return <Spinner fullScreen message="Loading..." />;
-
   return (
     <ScrollView
       style={styles.container}
       contentContainerStyle={styles.content}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+      refreshControl={refreshControl}
     >
       <Text style={styles.title}>Face Enrollment</Text>
       <Text style={styles.subtitle}>
@@ -194,46 +150,16 @@ export default function FaceEnrollment() {
 
       {/* Class Selector */}
       <Card style={styles.section}>
-        <Text style={styles.label}>Select Class</Text>
-        <View style={styles.pickerWrapper}>
-          <Picker
-            selectedValue={selectedClass}
-            onValueChange={setSelectedClass}
-            style={styles.picker}
-          >
-            <Picker.Item label="Choose a class..." value="" />
-            {classes.map((cls) => (
-              <Picker.Item
-                key={cls.id}
-                label={`${cls.name}${cls.section ? ` - ${cls.section}` : ''}`}
-                value={String(cls.id)}
-              />
-            ))}
-          </Picker>
-        </View>
+        <Select label="Class" value={selectedClass} options={classOptions} onChange={chooseClass}
+          placeholder={classesQ.isLoading ? 'Loading classes...' : classesQ.isError ? 'Could not load classes' : 'Choose a class...'}
+          disabled={classesQ.isLoading || classOptions.length === 0} />
+        {classesQ.isError ? <ErrorState error={classesQ.error} onRetry={() => classesQ.refetch()} /> : null}
 
-        {/* Student Selector */}
-        {selectedClass && (
-          <>
-            <Text style={[styles.label, { marginTop: Spacing.lg }]}>Select Student</Text>
-            <View style={styles.pickerWrapper}>
-              <Picker
-                selectedValue={selectedStudent}
-                onValueChange={setSelectedStudent}
-                style={styles.picker}
-              >
-                <Picker.Item label="Choose a student..." value="" />
-                {students.map((s) => (
-                  <Picker.Item
-                    key={s.id}
-                    label={`${s.name} (Roll: ${s.roll_number || '—'})`}
-                    value={String(s.id)}
-                  />
-                ))}
-              </Picker>
-            </View>
-          </>
-        )}
+        {selectedClass ? (
+          <Select label="Student" value={selectedStudent} options={studentOptions} onChange={setSelectedStudent}
+            placeholder={studentsQ.isLoading ? 'Loading students...' : studentsQ.isError ? 'Could not load students' : 'Choose a student...'}
+            disabled={studentsQ.isLoading || studentOptions.length === 0} />
+        ) : null}
 
         {/* Photo Selection */}
         {selectedStudent && (
@@ -241,7 +167,7 @@ export default function FaceEnrollment() {
             {photo ? (
               <View style={styles.photoPreview}>
                 <Image source={{ uri: photo }} style={styles.previewImage} />
-                <TouchableOpacity accessibilityRole="button" onPress={() => setPhoto(null)} style={styles.removePhoto}>
+                <TouchableOpacity accessibilityRole="button" accessibilityLabel="Remove photo" onPress={() => setPhoto(null)} style={styles.removePhoto}>
                   <Text style={styles.removePhotoText}>✕</Text>
                 </TouchableOpacity>
               </View>
@@ -269,7 +195,11 @@ export default function FaceEnrollment() {
           <Text style={styles.sectionTitle}>
             Enrolled Faces ({enrollments.length})
           </Text>
-          {enrollments.length === 0 ? (
+          {enrollQ.isLoading ? (
+            <Skeleton />
+          ) : enrollQ.isError && !enrollQ.data ? (
+            <ErrorState error={enrollQ.error} onRetry={() => enrollQ.refetch()} />
+          ) : enrollments.length === 0 ? (
             <EmptyState
               title="No Enrollments"
               message="No students in this class have face embeddings enrolled yet."
@@ -297,7 +227,7 @@ export default function FaceEnrollment() {
                       />
                     </View>
                   </View>
-                  <TouchableOpacity accessibilityRole="button"
+                  <TouchableOpacity accessibilityRole="button" accessibilityLabel="Delete face enrollment"
                     onPress={() => handleDelete(enr.id)}
                     style={styles.deleteBtn}
                   >

@@ -120,3 +120,25 @@ export function buildBulkPayload(input: {
       .map((r) => buildAssessmentPayload(r.student, input.edits[r.student], input.canEditPrincipal)),
   };
 }
+
+export type RemarkType = 'teacher' | 'principal';
+
+// The server reads ratings keyed by the label ("Social Skills"), not the field name, and skips
+// anything unrated. The principal draft also gets the teacher's text so the two do not repeat.
+export function buildRemarkRequest(form: AssessmentForm, remarkType: RemarkType) {
+  const ratings: Record<string, number> = {};
+  for (const [key, label] of [...SKILL_FIELDS, ...BEHAVIOUR_FIELDS]) {
+    const value = form[key];
+    if (value != null) ratings[label] = value;
+  }
+  return {
+    ratings,
+    remark_type: remarkType,
+    ...(remarkType === 'principal' && form.teacher_remark ? { teacher_remark: form.teacher_remark } : {}),
+  };
+}
+
+// Nothing to draft from until at least one rating is given (the server returns no remark then).
+export function canSuggestRemark(form: AssessmentForm): boolean {
+  return ratedCount(form) > 0;
+}

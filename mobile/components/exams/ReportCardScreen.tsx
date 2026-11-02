@@ -6,8 +6,11 @@ import { classParams, todayString, type ClassOption } from '../../services/atten
 import {
   DEFAULT_SIGNATURE_LABELS, PODIUM, adjacentEnrollment, attendanceNote, attendanceShares, examCell, examNote, examTotal,
   formatClassAvg, formatIssueDate, formatPct, normalizeExamSelection, shortExamName, sortEnrollments, sortExams, stars,
-  toggleExam, type Attendance, type EnrollmentRef, type ExamRef, type ReportExam,
+  toggleExam, REPORT_TEMPLATES, normalizeTemplate, reportCardFileName, reportCardPdfError, reportCardPdfParams,
+  type Attendance, type EnrollmentRef, type ExamRef, type ReportExam, type ReportTemplate,
 } from '../../services/reportCard';
+import { shareReportFile } from '../../services/reportShare';
+import { loadTemplate, saveTemplate } from '../../services/reportCardPrefs';
 import { MONTH_NAMES } from '../../services/assessments';
 import { useAcademicYear } from '../../hooks/useAcademicYear';
 import { useScopedQuery } from '../../hooks/useScopedQuery';
@@ -19,12 +22,16 @@ import Skeleton from '../ui/Skeleton';
 import ErrorState from '../ui/ErrorState';
 import EmptyState from '../ui/EmptyState';
 import StatusPill from '../ui/StatusPill';
+import { CommentRow } from './CommentTools';
+import SegmentedTabs from '../ui/SegmentedTabs';
+import Button from '../ui/Button';
+import { useToast } from '../ui/Toast';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
 
 interface ReportSubject {
   subject_id: number; subject_name: string; total_marks?: number | string; marks_obtained?: number | null;
   is_absent?: boolean; percentage?: number | null; grade?: string | null; class_avg?: number | string | null;
-  is_pass?: boolean | null; comment?: string | null;
+  is_pass?: boolean | null; comment?: string | null; comment_exam_id?: number | null;
 }
 interface Report {
   school_name?: string; academic_year_name?: string; exam_display?: string; student_name?: string; roll_number?: string;
@@ -34,7 +41,7 @@ interface Report {
     obtained_marks?: number | string; overall_pass?: boolean | null } | null;
   attendance?: Attendance | null;
   conduct_assessment?: { month?: number; skills?: ConductItem[]; behaviour?: ConductItem[]; teacher_remark?: string; principal_remark?: string } | null;
-  promotion_applicable?: boolean; promotion_status?: string; overall_comment?: string; issue_date?: string | null;
+  promotion_applicable?: boolean; promotion_status?: string; overall_comment?: string; overall_comment_exam_id?: number | null; issue_date?: string | null;
   signature_labels?: Record<string, string>;
   enrollment_info?: { current_class?: string } | null;
 }
@@ -49,8 +56,8 @@ interface Props {
 }
 
 // View-only report card, one student at a time. The numbers all come from the server; the card is
-// keyed to the main (latest) exam. Editing the issue date, promotion and comments, and the PDF,
-// stay on the web for now.
+// keyed to the main (latest) exam. Comments can be edited or regenerated here; the issue date,
+// promotion and the PDF stay on the web for now.
 export default function ReportCardScreen({ useClassOptions, autoSelectFirst }: Props) {
   const year = useAcademicYear();
   const [pickedYear, setPickedYear] = useState<number | null>(null);
@@ -58,6 +65,13 @@ export default function ReportCardScreen({ useClassOptions, autoSelectFirst }: P
   const [classId, setClassId] = useState<number | null>(null);
   const [examIds, setExamIds] = useState<number[]>([]);
   const [enrollmentId, setEnrollmentId] = useState<number | null>(null);
+  const [template, setTemplate] = useState<ReportTemplate>('enhanced');
+  const [sharing, setSharing] = useState(false);
+  const toast = useToast();
+
+  // The layout choice is remembered on this phone, like the web remembers it.
+  useEffect(() => { loadTemplate().then((t) => setTemplate(normalizeTemplate(t))); }, []);
+  const chooseTemplate = (t: ReportTemplate) => { setTemplate(t); saveTemplate(t); };
 
   const classes = useClassOptions(yearId);
   useEffect(() => {
@@ -91,6 +105,20 @@ export default function ReportCardScreen({ useClassOptions, autoSelectFirst }: P
     })).data as Report,
   { enabled: !!enrollment && !!yearId && examIds.length > 0, staleTime: 0 });
   const refreshControl = useRefreshControl(reportQ.refetch);
+
+  // The server draws the PDF from the same data as the card, then the phone's share sheet opens.
+  const sharePdf = async () => {
+    if (!enrollment || !yearId) return;
+    setSharing(true);
+    try {
+      const params = reportCardPdfParams({ studentId: enrollment.student, enrollmentId, yearId, examIds, template });
+      await shareReportFile(() => examinationsApi.getReportCardPdf(params), reportCardFileName(reportQ.data?.student_name, template), 'pdf');
+    } catch (e) {
+      toast.error(reportCardPdfError(e));
+    } finally {
+      setSharing(false);
+    }
+  };
 
   const reset = (from: 'year' | 'class') => {
     if (from === 'year') setClassId(null);
@@ -136,13 +164,20 @@ export default function ReportCardScreen({ useClassOptions, autoSelectFirst }: P
       ) : reportQ.isError && !report ? (
         <ErrorState message={(reportQ.error as any)?.response?.data?.detail} onRetry={() => reportQ.refetch()} />
       ) : report ? (
-        <Card_ report={report} />
+        <>
+          <Card style={styles.pdfBar}>
+            <Text style={styles.pdfTitle}>PDF layout</Text>
+            <SegmentedTabs tabs={REPORT_TEMPLATES} value={template} onChange={chooseTemplate} />
+            <Button title="Share report card PDF" onPress={sharePdf} loading={sharing} disabled={sharing} fullWidth />
+          </Card>
+        <Card_ report={report} studentId={enrollment.student} onChanged={() => reportQ.refetch()} />
+        </>
       ) : null}
     </ScrollView>
   );
 }
 
-function Card_({ report }: { report: Report }) {
+function Card_({ report, studentId, onChanged }: { report: Report; studentId: number; onChanged: () => void }) {
   const subjects = report.subjects ?? [];
   const exams = report.exams ?? [];
   const multi = exams.length > 1;
@@ -151,7 +186,16 @@ function Card_({ report }: { report: Report }) {
   const podium = summary?.rank ? PODIUM[summary.rank] : undefined;
   const note = examNote(report);
   const conduct = report.conduct_assessment;
-  const comments = subjects.filter((s) => s.comment);
+  // Edit and regenerate go to the exam each comment belongs to (the main, latest exam of the card).
+  const editableComments = [
+    ...(report.overall_comment_exam_id
+      ? [{ key: 'overall', examId: report.overall_comment_exam_id, row: { key: 'overall', label: 'Overall', subjectId: null, text: report.overall_comment ?? '', source: null } }]
+      : []),
+    ...subjects.filter((s) => s.comment_exam_id).map((s) => ({
+      key: `s${s.subject_id}`, examId: s.comment_exam_id as number,
+      row: { key: `s${s.subject_id}`, label: s.subject_name, subjectId: s.subject_id, text: s.comment ?? '', source: null },
+    })),
+  ];
   const subjectIds = subjects.map((s) => s.subject_id);
   const issue = report.issue_date || todayString();
   const sig = { ...DEFAULT_SIGNATURE_LABELS, ...(report.signature_labels || {}) };
@@ -271,15 +315,15 @@ function Card_({ report }: { report: Report }) {
         </View>
       ) : null}
 
-      {report.overall_comment || comments.length > 0 ? (
-        <>
-          <Text style={styles.section}>Comments</Text>
-          <Card style={styles.block}>
-            {report.overall_comment ? <Remark who="Overall" text={report.overall_comment} /> : null}
-            {comments.map((s) => <Remark key={s.subject_id} who={s.subject_name} text={s.comment as string} />)}
-          </Card>
-        </>
-      ) : null}
+      <Text style={styles.section}>Comments</Text>
+      <Card style={styles.block}>
+        {editableComments.length === 0 ? <Text style={styles.muted}>No exam to attach a comment to yet.</Text> : null}
+        {editableComments.map((c) => (
+          <CommentRow key={c.key} row={c.row} showSource={false}
+            onSave={async (comment) => { await examinationsApi.editComment(c.examId, { studentId, subjectId: c.row.subjectId, comment }); onChanged(); }}
+            onRegenerate={async () => { await examinationsApi.regenerateComment(c.examId, { studentId, subjectId: c.row.subjectId }); onChanged(); }} />
+        ))}
+      </Card>
 
       <Card style={styles.block}>
         <Row k="Date of issue" v={formatIssueDate(issue)} />
@@ -327,6 +371,8 @@ function Remark({ who, text }: { who: string; text: string }) {
 }
 
 const styles = StyleSheet.create({
+  pdfBar: { marginBottom: Spacing.md },
+  pdfTitle: { fontSize: FontSize.sm, fontWeight: '700', color: Colors.text, marginBottom: Spacing.sm },
   container: { flex: 1, backgroundColor: Colors.background },
   content: { padding: Spacing.lg, paddingBottom: Spacing.xxxl },
   nav: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: Spacing.md },

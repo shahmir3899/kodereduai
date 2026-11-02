@@ -10,9 +10,10 @@ const TABS: TabSpec[] = [
 ];
 
 // Opened from More; no tab of their own.
-const HIDDEN = ['leave', 'my-attendance', 'inbox', 'change-password'];
+const HIDDEN = ['my-profile', 'leave', 'my-attendance', 'inbox', 'change-password'];
 
 const TITLES: Record<string, string> = {
+  'my-profile': 'My Profile',
   dashboard: 'Driver',
   journey: 'Active Journey',
   boarding: 'Student Boarding',

@@ -3601,6 +3601,45 @@ class ReportCardView(ModuleAccessMixin, APIView):
         })
 
 
+class ReportCardPdfView(ModuleAccessMixin, APIView):
+    """The report card as a PDF, in one of two layouts (?template=enhanced|traditional).
+
+    Takes the same query params as ReportCardView and builds the file from that view's own
+    payload, so the PDF can never disagree with the card on screen. Same permissions too:
+    staff can print a draft (the PDF says DRAFT), anyone else only announced results.
+    """
+    required_module = 'examinations'
+    permission_classes = [IsAuthenticated, CanViewStudentData, HasSchoolAccess]
+
+    def get(self, request):
+        from .report_card_pdf import DEFAULT_TEMPLATE, TEMPLATES, render_report_card_pdf
+
+        template = request.query_params.get('template') or DEFAULT_TEMPLATE
+        if template not in TEMPLATES:
+            return Response({'detail': f"template must be one of: {', '.join(TEMPLATES)}."}, status=400)
+
+        inner = ReportCardView()
+        inner.request = request
+        inner.format_kwarg = None
+        inner.args = ()
+        inner.kwargs = {}
+        response = inner.get(request)
+        if response.status_code != 200:
+            return response
+
+        from core.school_time import school_today
+        from schools.models import School
+
+        school_id = _resolve_school_id(request)
+        school = School.objects.filter(id=school_id).first()
+        report = response.data
+        pdf = render_report_card_pdf(report, school, template, today=school_today(school_id))
+        safe_name = re.sub(r'[^A-Za-z0-9_-]+', '_', str(report.get('student_name') or 'student')).strip('_') or 'student'
+        out = HttpResponse(pdf, content_type='application/pdf')
+        out['Content-Disposition'] = f'attachment; filename="report-card-{safe_name}.pdf"'
+        return out
+
+
 class ReportCardMetaView(ModuleAccessMixin, APIView):
     """Saves the hand-editable parts of a report card: promotion status (final exams
     only), issue date and signature captions. All of it belongs to the card's main

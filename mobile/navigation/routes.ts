@@ -62,6 +62,7 @@ const ADMIN_ROUTES: Record<string, string> = {
 };
 
 const TEACHER_ROUTES: Record<string, string> = {
+  '/notifications': '/(teacher)/inbox',
   '/attendance/manual-entry': '/(teacher)/attendance',
   '/attendance/register': '/(teacher)/register',
   '/academics/timetable': '/(teacher)/schedule',

@@ -28,6 +28,7 @@ export interface FinanceSection {
   total_pending: number | string;
   unpaid_count: number;
   partial_count: number;
+  paid_count?: number;
 }
 // A section the server could not build comes back null; absent means module off / not allowed.
 export interface DashboardData {

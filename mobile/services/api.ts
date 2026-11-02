@@ -255,6 +255,9 @@ export const bootstrapApi = {
   // sections: comma-separated, any of attendance,hr,finance,admissions,transport,library,hostel,inventory
   getAdminDashboard: (params?: Record<string, unknown>) =>
     api.get('/api/bootstrap/admin-dashboard/', { params }),
+  // Admissions, departures, books, question bank and lesson plan counts. School admin and principal only.
+  getLeadershipAcademicInsights: (params?: Record<string, unknown>) =>
+    api.get('/api/bootstrap/leadership-academic-insights/', { params }),
 };
 
 // ─── Students API ────────────────────────────────────────────────────────────
@@ -683,10 +686,26 @@ export const examinationsApi = {
     api.get('/api/examinations/student-term-assessment/roster/', { params }),
   bulkSaveStudentTermAssessment: (data: Record<string, unknown>) =>
     api.post('/api/examinations/student-term-assessment/bulk-save/', data),
+  // AI report-card comments. Generation runs on the server; start it, then poll getCommentJob.
+  // A null subjectId is the student's overall comment.
+  generateComments: (examId: number, force = false) =>
+    api.post(`/api/examinations/exams/${examId}/generate-comments/`, { force }),
+  getCommentJob: (examId: number) => api.get(`/api/examinations/exams/${examId}/comment-job/`),
+  cancelCommentJob: (examId: number) => api.post(`/api/examinations/exams/${examId}/cancel-comment-job/`),
+  editComment: (examId: number, body: { studentId: number; subjectId: number | null; comment: string }) =>
+    api.post(`/api/examinations/exams/${examId}/edit-comment/`, { student_id: body.studentId, subject_id: body.subjectId, comment: body.comment }),
+  regenerateComment: (examId: number, body: { studentId: number; subjectId: number | null }) =>
+    api.post(`/api/examinations/exams/${examId}/regenerate-comment/`, { student_id: body.studentId, subject_id: body.subjectId }),
+  // Drafts a teacher or principal remark from the ratings; the reply is {remark, fallback}.
+  aiSuggestAssessmentRemark: (data: Record<string, unknown>) =>
+    api.post('/api/examinations/student-term-assessment/ai-remark/', data),
   getClassSummary: (id: number) =>
     api.get(`/api/examinations/exams/${id}/class_summary/`),
   getReportCard: (params?: Record<string, unknown>) =>
     api.get('/api/examinations/report-card/', { params }),
+  // The same card as a PDF made by the server; `template` is 'enhanced' or 'traditional'.
+  getReportCardPdf: (params: Record<string, unknown>) =>
+    api.get('/api/examinations/report-card/pdf/', { params, responseType: 'arraybuffer', timeout: 60000 }),
 };
 
 // ─── Auth API ────────────────────────────────────────────────────────────────
@@ -701,6 +720,10 @@ export const authApi = {
     api.patch('/api/auth/me/', data),
   changePassword: (data: Record<string, unknown>) =>
     api.post('/api/auth/change-password/', data),
+  // multipart field name is `file`; the reply is {profile_photo_url}.
+  uploadProfilePhoto: (form: FormData) =>
+    api.post('/api/auth/me/photo/', form, { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 60000 }),
+  removeProfilePhoto: () => api.delete('/api/auth/me/photo/'),
   registerPushToken: (data: { token: string; device_type: string }) =>
     api.post('/api/auth/register-push-token/', data),
   unregisterPushToken: (data: { token: string }) =>

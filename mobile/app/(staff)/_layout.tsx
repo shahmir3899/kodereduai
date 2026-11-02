@@ -9,9 +9,10 @@ const TABS: TabSpec[] = [
 ];
 
 // Opened from More or the dashboard; no tab of their own.
-const HIDDEN = ['payslips', 'inventory', 'inbox', 'change-password'];
+const HIDDEN = ['my-profile', 'payslips', 'inventory', 'inbox', 'change-password'];
 
 const TITLES: Record<string, string> = {
+  'my-profile': 'My Profile',
   dashboard: 'Home',
   'self-service': 'Self Service',
   payslips: 'My Payslips',

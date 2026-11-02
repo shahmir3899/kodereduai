@@ -6,8 +6,8 @@ describe('notificationTapRoute', () => {
     expect(notificationTapRoute('driver', undefined)).toBe('/(driver)/inbox');
     expect(notificationTapRoute('parent', null)).toBe('/(parent)/inbox');
   });
-  it('falls back to home for a persona with no inbox screen', () => {
-    expect(notificationTapRoute('teacher', {})).toBe('/(teacher)/dashboard');
+  it('opens the teacher inbox too', () => {
+    expect(notificationTapRoute('teacher', {})).toBe('/(teacher)/inbox');
   });
   it('honours a screen inside the same persona group', () => {
     expect(notificationTapRoute('parent', { screen: '/(parent)/leave' })).toBe('/(parent)/leave');

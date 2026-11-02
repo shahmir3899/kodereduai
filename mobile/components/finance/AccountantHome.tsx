@@ -13,12 +13,14 @@ import { balanceOf, formatMoney } from '../../services/feeCollect';
 import Card from '../ui/Card';
 import StatusPill from '../ui/StatusPill';
 import SchoolSwitcher from '../nav/SchoolSwitcher';
+import StatTiles from '../dashboard/StatTiles';
+import RecentNotifications from '../dashboard/RecentNotifications';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
 
 // Port of frontend/src/pages/AccountantDashboard.jsx, minus the quick actions that write
 // (record payment, expense, transfer): the finance API is read-only for this role.
 export default function AccountantHome() {
-  const { user } = useAuth();
+  const { user, isModuleEnabled } = useAuth();
   const router = useRouter();
   const balances = useAccountBalances();
   const fees = useMonthFeeSummary();
@@ -51,14 +53,7 @@ export default function AccountantHome() {
       <Text style={styles.greeting}>Welcome back, {name}</Text>
       <SchoolSwitcher />
 
-      <View style={styles.tiles}>
-        {tiles.map((t) => (
-          <TouchableOpacity accessibilityRole="button" key={t.label} style={styles.tile} onPress={() => go(t.route)}>
-            <Text style={styles.tileValue} numberOfLines={1} adjustsFontSizeToFit>{t.value}</Text>
-            <Text style={styles.tileLabel}>{t.label}</Text>
-          </TouchableOpacity>
-        ))}
-      </View>
+      <StatTiles tiles={tiles} onPress={go} />
       {summary?.rate != null ? (
         <View style={styles.rateRow}><StatusPill label={summary.rate >= 80 ? 'On track' : summary.rate >= 50 ? 'Needs attention' : 'Critical'} tone={rateTone(summary.rate)} /></View>
       ) : null}
@@ -122,6 +117,7 @@ export default function AccountantHome() {
           </Card>
         </>
       ) : null}
+      <RecentNotifications enabled={isModuleEnabled('notifications')} onSeeAll={() => go(routeFor('accountant', '/notifications'))} />
     </ScrollView>
   );
 }
@@ -130,10 +126,6 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
   content: { padding: Spacing.lg, paddingBottom: Spacing.xxxl },
   greeting: { fontSize: FontSize.xl, fontWeight: '700', color: Colors.text },
-  tiles: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.md, marginTop: Spacing.lg },
-  tile: { width: '47%', backgroundColor: Colors.surface, borderRadius: BorderRadius.md, padding: Spacing.md },
-  tileValue: { fontSize: FontSize.xl, fontWeight: '700', color: Colors.primary },
-  tileLabel: { fontSize: FontSize.sm, color: Colors.textSecondary, marginTop: 2 },
   rateRow: { marginTop: Spacing.sm, alignItems: 'flex-start' },
   actions: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.md, marginTop: Spacing.lg },
   quick: { width: '22%', minWidth: 72, alignItems: 'center', backgroundColor: Colors.surface, borderRadius: BorderRadius.md, paddingVertical: Spacing.md },

@@ -32,9 +32,9 @@ export function AttendanceView({ useMonth }: { useMonth: (year: number, month: n
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content} refreshControl={refreshControl}>
       <View style={styles.nav}>
-        <TouchableOpacity accessibilityRole="button" onPress={() => setYm(shiftMonth(ym.year, ym.month, -1))}><Text style={styles.arrow}>‹</Text></TouchableOpacity>
+        <TouchableOpacity accessibilityRole="button" accessibilityLabel="Previous month" onPress={() => setYm(shiftMonth(ym.year, ym.month, -1))}><Text style={styles.arrow}>‹</Text></TouchableOpacity>
         <Text style={styles.title}>{monthTitle(ym.year, ym.month)}</Text>
-        <TouchableOpacity accessibilityRole="button" disabled={atCurrent} onPress={() => setYm(shiftMonth(ym.year, ym.month, 1))}>
+        <TouchableOpacity accessibilityRole="button" accessibilityLabel="Next month" disabled={atCurrent} onPress={() => setYm(shiftMonth(ym.year, ym.month, 1))}>
           <Text style={[styles.arrow, atCurrent && styles.off]}>›</Text>
         </TouchableOpacity>
       </View>

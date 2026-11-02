@@ -103,11 +103,11 @@ export default function AttendanceRegisterScreen({ classOptions }: Props) {
         placeholder="Select a class"
       />
       <View style={styles.stepper}>
-        <TouchableOpacity accessibilityRole="button" hitSlop={10} onPress={() => setYm(stepMonth(ym.year, ym.month0, -1, current))}>
+        <TouchableOpacity accessibilityRole="button" accessibilityLabel="Previous month" hitSlop={10} onPress={() => setYm(stepMonth(ym.year, ym.month0, -1, current))}>
           <Text style={styles.step}>‹</Text>
         </TouchableOpacity>
         <Text style={styles.month}>{monthLabel(ym.year, ym.month0)}</Text>
-        <TouchableOpacity accessibilityRole="button" hitSlop={10} disabled={atCurrent} onPress={() => setYm(stepMonth(ym.year, ym.month0, 1, current))}>
+        <TouchableOpacity accessibilityRole="button" accessibilityLabel="Next month" hitSlop={10} disabled={atCurrent} onPress={() => setYm(stepMonth(ym.year, ym.month0, 1, current))}>
           <Text style={[styles.step, atCurrent && styles.stepOff]}>›</Text>
         </TouchableOpacity>
       </View>

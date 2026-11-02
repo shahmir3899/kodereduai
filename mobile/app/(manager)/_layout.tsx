@@ -10,6 +10,7 @@ const TABS: TabSpec[] = [
 
 // Reached from Academics, More or the dashboard; no tab of their own.
 const HIDDEN = [
+  'my-profile',
   'schedule', 'subjects', 'calendar', 'classes', 'inbox', 'leave', 'my-attendance',
   'questions', 'papers', 'worksheets', 'paper-builder', 'exam-types', 'exams', 'sessions-web', 'promotion-web',
 ];
@@ -17,6 +18,7 @@ const HIDDEN = [
 const STACKS = ['assignments', 'curriculum'];
 
 const TITLES: Record<string, string> = {
+  'my-profile': 'My Profile',
   schedule: 'Timetable', subjects: 'Subjects', calendar: 'Academic Calendar', classes: 'Classes',
   inbox: 'Notifications', leave: 'My Leave', 'my-attendance': 'My Attendance', questions: 'Question Bank',
   papers: 'Question Papers', worksheets: 'Worksheets', 'paper-builder': 'Paper Builder',

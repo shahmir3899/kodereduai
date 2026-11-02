@@ -61,8 +61,8 @@ eas build --platform android --profile production    # Play bundle
 
 ## Known gaps (see `PHASE5_KNOWN_FAILURES.md`)
 
-- The older admin screens (finance dashboard, expenses, income, transactions, hostel gate passes, library issue, notification send and history, attendance capture/review, face attendance) still use ad hoc spinners and alerts rather than the shared loading, error and offline components.
-- Icon-only buttons have roles but not all have descriptive labels.
+- The finance, hostel, library and notification screens already use the shared loading, error and toast components (checked 2026-10-30). The face attendance screens were moved over then too. The photo-register capture and review screens (`attendance/capture`, `attendance/review`) still use their own handling, but nothing links to them while OCR is parked.
+- The report card PDF on the phone comes from a new server endpoint (see the end of this file); it is similar to, not pixel-identical with, the web's browser-made PDF, and non-Latin text (for example Urdu names) is not drawn in it.
 - No live device results yet: nothing has been run on a phone.
 
 ## Built since: Admissions (2026-10-29)
@@ -85,10 +85,10 @@ Admin and principal: exam types and the grade scale; date sheet editing and publ
 
 ## What is left (2026-10-30)
 
+**Moved to version 2 (decided 2026-10-30)**
+- Transport management, Library and Hostel screens for admin and principal. The driver app, student/parent transport and library views, and the existing gate-pass and issue/return screens stay as they are.
+
 **Whole areas with no mobile screens for admin and principal**
-- Transport management: routes, vehicles, assignments, transport attendance (the dashboard and the driver app exist).
-- Library: dashboard, catalog, overdue (issue and return exist).
-- Hostel: dashboard, rooms, allocations (gate passes exist).
 - Enabled modules in Settings and the school setup wizard (a web notice only).
 - Timetable auto-generation, AI suggestions, substitutes and splitting a class timetable into sections; the students-to-section allocator; subject workload and gap analysis; bulk subject assignment.
 - Academic calendar editing, sessions and promotion (web notices).
@@ -105,8 +105,53 @@ Admin and principal: exam types and the grade scale; date sheet editing and publ
 **Platform and release**
 - Barcode and SKU scanning for inventory (planned for the end).
 - Device testing of everything above, and the role by module matrix in `MOBILE_QA.md`.
-- Camera and upload screens (attendance capture and review, face attendance) still use their own loading and error handling.
 - Urdu and right-to-left, dark mode, iOS, over-the-air updates (all deliberately out of v1).
 - Store assets (graphics, screenshots, listing text), the Sentry DSN, and a fresh APK for the new native modules.
 - Commits: nothing in this work is committed yet.
 
+
+## Web vs mobile comparison, and the polish list (2026-10-30)
+
+Compared by reading the web pages and components against the mobile screens (no device or browser run). Mobile shares the same API, so the gap is mostly presentation and the AI tools mobile never called.
+
+### The two requested items
+
+| # | Web | Mobile today | To do |
+|---|---|---|---|
+| 1 | **AI comments.** Results page: Generate Comments (background job, progress, cancel), Regenerate, edit per subject and overall (`generate-comments/`, `comment-job/`, `cancel-comment-job/`, `edit-comment/`, `regenerate-comment/`). Assessments page: AI-suggest the teacher and principal remark from the ratings (`student-term-assessment/ai-remark/` returns `{remark, fallback}`). | Results screen is read-only (its header comment says the AI tools "stay" on the web). Report card shows comments but cannot edit or regenerate. Assessments remark boxes are plain text boxes. | (a) Assessments: "Suggest with AI" button beside both remark boxes, fills the box, teacher edits and saves. (b) Results/Report card: Generate for the exam with progress and cancel, Regenerate and Edit per student and subject, "AI / edited" label. Same role rules as the server (`_assert_can_bulk_generate_comments`). |
+| 2 | **User photo.** Profile page: upload (with crop) and remove, `POST/DELETE /api/auth/me/photo/`; `profile_photo_url` is on the user. | The header and More show the **school** logo (`components/nav/SchoolBadge.tsx`). No profile screen, no photo upload; `Avatar` already supports a photo. | Header shows the user's photo (initials if none); the school logo moves into More beside the school name and the switcher. New Profile screen: photo (camera or gallery, crop square, upload, remove), name, phone, email. Needs `expo-image-picker` (new native module: new APK). Parents and students use the same endpoint. |
+
+### Wider comparison (web is richer)
+
+| Area | Web | Mobile | Polish to add |
+|---|---|---|---|
+| Admin dashboard (608 lines vs 198) | Hero card, stat cards with subtitles, date stepper, attendance breakdown, monthly fee collection card, session health, AI insights, leadership insight panels, guide progress, notifications feed, module health | Needs attention, absent list, quick actions | Stat card row, monthly fee card, attendance breakdown, leadership insights, recent notifications |
+| Teacher dashboard (493 vs 297) | Hero (current period), timetable, section attendance, exams and marks entry, students needing attention | Close; no hero for the current period shown as card, no per-section attendance bars | Hero card, section attendance bars |
+| Lists | Card/table toggle with shared `RecordCard`, `StatusPill`, `Avatar`, `TrendStrip`, `LedgerCard` | Many lists are plain rows; older admin screens use ad hoc spinners and alerts | Shared record card, consistent loading/error/empty states on the screens listed under Known gaps |
+| Charts | Fee charts, trend strips, risk and analytics charts | Mostly numbers and bars | Small trend strips on dashboards, finance and attendance |
+| Header / identity | Photo avatar, notification bell with unread count, school and year switchers in the top bar | School logo only | User photo, bell with unread badge, year chip |
+| Search | Searchable selects for students and classes | Plain selects in places | Searchable picker for long lists |
+| Report card | Templates (traditional/enhanced), bulk print, PDF | View and PDF | Template choice, share PDF in one tap |
+| Empty states / skeletons | `EmptyState`, `Skeleton`, `ErrorState` everywhere | Present in the UI kit, not used everywhere | Use them on every list |
+
+### Order of work (proposed)
+1. AI remark on Assessments (small, one endpoint).
+2. User photo: Profile screen, header avatar, More shows the school logo.
+3. Results and report card AI comments (generate, regenerate, edit).
+4. Admin dashboard polish, then the shared card, trend strip and empty/loading pass on the older screens.
+
+### Built since (2026-10-30, polish phases A to C; uncommitted, never run on a device)
+- **A. AI remark on Assessments:** "Suggest with AI" beside the teacher and principal remarks; fills the box, saves nothing by itself.
+- **B. User photo and Profile:** the header and the top of More show the signed-in user's photo (initials if none) and open `my-profile` (all roles): take or choose a photo (square crop), upload, remove, edit name, phone and email. The school logo and name stay in More under the user row. No new native module.
+- **C. AI comments:** Results has Generate comments / Regenerate all with live progress and Stop, and per student edit and regenerate; the Report card can edit and regenerate its comments. Code: `components/exams/CommentTools.tsx`, `services/examComments.ts`.
+- Plan and what is next: `docs/MOBILE_UI_POLISH_PLAN.md` (phases D to F).
+- **D and E (dashboards, header):** admin home has the day hero, four-state attendance bar, monthly fee card and latest notifications; the header has the academic year chip (staff shells), a notification bell with unread count, and the user's photo; `RecordCard` is the shared list row; pickers with more than 8 options get a search box; teachers now have a notifications inbox. Code: `components/dashboard/*`, `components/nav/HeaderActions.tsx`, `components/ui/RecordCard.tsx`, `services/{dashboardView,headerView}.ts`.
+- **D finished, F done (2026-10-30, uncommitted, never run on a device):**
+  - **D:** admin home has a "School insights" section (admissions and departures, books, question bank, lesson plans by teacher) that loads only when opened; manager, accountant and staff homes share `StatTiles`; accountant and staff homes show the latest notifications. Trend strips are not built (the dashboard API sends no history).
+  - **F:** face attendance review, capture and enrollment now use `useScopedQuery`, `Skeleton`/`ErrorState`, the shared `Select` (searchable) and toasts; the review screen no longer resets the reviewer's ticks on a refetch. `__tests__/touchableA11y.test.ts` checks every touchable for a role and every symbol-only button for a label; 24 buttons were fixed (month and day steppers, remove and delete buttons, login links, the school switcher backdrop).
+
+## Report card PDF and layout choice (2026-10-30; backend added, uncommitted, never run on a device)
+
+The report card screen has a PDF layout picker (Enhanced or Traditional, remembered on the phone) and a "Share report card PDF" button that opens the share sheet. The PDF is made by the server: `GET /api/examinations/report-card/pdf/?template=...` (same params and permissions as `report-card/`), built in `backend/examinations/report_card_pdf.py` from that view's own payload, so it cannot disagree with the screen. **This is a backend change** (new view, URL, renderer, tests; no model or migration). Phone side: `services/reportCard.ts` (layout, params, file name, error text), `services/reportCardPrefs.ts`, `components/exams/ReportCardScreen.tsx`, test `__tests__/reportCardPdf.test.ts`. No new native module, so no new APK for this.
+Checked here: the renderer's 9 tests pass and both layouts were rendered to images and looked over (single and multi-exam, one page for a typical card, two for a fully loaded multi-exam card). **Not run:** the endpoint tests in `backend/tests/test_phase6_examinations.py` (`test_f5b`, `test_f5c`; Django is not installed in this container) and the endpoint against a real database.
+Limits: Helvetica only (Windows-1252 text); no student photo or podium banner on the server PDF; bulk PDFs and the web's own export are unchanged.

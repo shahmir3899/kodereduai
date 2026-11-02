@@ -4,7 +4,7 @@ import { useRouter, type Href } from 'expo-router';
 import { useAuth } from '../../contexts/AuthContext';
 import { bootstrapApi } from '../../services/api';
 import {
-  attendanceRate, buildAttentionItems, collectionRate, staffPresentPct, stepDate,
+  attendanceRate, buildAttentionItems, staffPresentPct, stepDate,
   type DashboardData,
 } from '../../services/adminDashboard';
 import { todayString } from '../../services/attendanceEntry';
@@ -13,13 +13,18 @@ import { useAcademicYear } from '../../hooks/useAcademicYear';
 import { useScopedQuery } from '../../hooks/useScopedQuery';
 import { useRefreshControl } from '../../hooks/useRefreshControl';
 import StatCard from '../../components/StatCard';
+import HeroCard from '../../components/dashboard/HeroCard';
+import AttendanceBreakdown from '../../components/dashboard/AttendanceBreakdown';
+import MonthlyFeeCard from '../../components/dashboard/MonthlyFeeCard';
+import LeadershipInsights from '../../components/dashboard/LeadershipInsights';
+import RecentNotifications from '../../components/dashboard/RecentNotifications';
+import { dayHero } from '../../services/dashboardView';
 import Card from '../../components/ui/Card';
 import Skeleton from '../../components/ui/Skeleton';
 import ErrorState from '../../components/ui/ErrorState';
 import SchoolSwitcher from '../../components/nav/SchoolSwitcher';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
 
-const money = (n: number | string | undefined) => `PKR ${Math.round(Number(n || 0)).toLocaleString()}`;
 const rateColor = (r: number | null) => (r == null ? Colors.textTertiary : r >= 90 ? Colors.success : r >= 75 ? Colors.warning : Colors.error);
 const TONE_COLOR = { red: Colors.error, amber: Colors.warning, blue: Colors.info } as const;
 
@@ -52,7 +57,6 @@ export default function AdminDashboard() {
   const offDay = !!att?.is_off_day;
   const rate = attendanceRate(att);
   const staffPct = staffPresentPct(hr, offDay);
-  const collected = collectionRate(fee);
 
   const go = (route?: string) => route && router.push(route as Href);
   const attention = buildAttentionItems({
@@ -94,16 +98,22 @@ export default function AdminDashboard() {
 
       {/* Day stepper: look at a past day's attendance */}
       <View style={styles.stepper}>
-        <TouchableOpacity accessibilityRole="button" onPress={() => setDate(stepDate(date, -1, today))} hitSlop={10}><Text style={styles.stepBtn}>‹</Text></TouchableOpacity>
+        <TouchableOpacity accessibilityRole="button" accessibilityLabel="Previous day" onPress={() => setDate(stepDate(date, -1, today))} hitSlop={10}><Text style={styles.stepBtn}>‹</Text></TouchableOpacity>
         <TouchableOpacity accessibilityRole="button" onPress={() => setDate(today)} disabled={isToday}>
           <Text style={styles.stepDate}>{isToday ? 'Today' : date}</Text>
         </TouchableOpacity>
-        <TouchableOpacity accessibilityRole="button" onPress={() => setDate(stepDate(date, 1, today))} disabled={isToday} hitSlop={10}>
+        <TouchableOpacity accessibilityRole="button" accessibilityLabel="Next day" onPress={() => setDate(stepDate(date, 1, today))} disabled={isToday} hitSlop={10}>
           <Text style={[styles.stepBtn, isToday && styles.stepDisabled]}>›</Text>
         </TouchableOpacity>
       </View>
-      {offDay ? (
-        <Text style={styles.offDay}>OFF day{att?.off_day_types?.length ? `: ${att.off_day_types.join(', ')}` : ''}</Text>
+
+      {/* The day at a glance */}
+      {isModuleEnabled('attendance') && att ? (
+        <View style={styles.hero}>
+          <HeroCard {...dayHero({ isOffDay: offDay, offTypes: att.off_day_types, rate, present: att.present_count, total: att.total_students })}
+            eyebrow={isToday ? 'Today' : date} />
+          {!offDay ? <View style={styles.gap}><AttendanceBreakdown report={att} /></View> : null}
+        </View>
       ) : null}
 
       {/* Needs attention */}
@@ -112,7 +122,7 @@ export default function AdminDashboard() {
         <Card style={styles.clear}><Text style={styles.clearText}>All clear. Nothing needs attention.</Text></Card>
       ) : (
         attention.map((it) => (
-          <TouchableOpacity accessibilityRole="button" key={it.key} disabled={!it.href} onPress={() => go(it.href)}>
+          <TouchableOpacity accessibilityRole="button" accessibilityLabel="Next day" key={it.key} disabled={!it.href} onPress={() => go(it.href)}>
             <Card style={styles.attention}>
               <Text style={[styles.attCount, { color: TONE_COLOR[it.tone] }]}>{it.count}</Text>
               <Text style={styles.attLabel}>{it.label}</Text>
@@ -130,13 +140,16 @@ export default function AdminDashboard() {
             <StatCard title="Attendance" value={offDay ? 'N/A' : rate != null ? `${rate}%` : '—'} subtitle={att && !offDay ? `${att.absent_count} absent · ${att.leave_count} leave` : undefined} color={offDay ? Colors.textTertiary : rateColor(rate)} />
           </>
         ) : null}
-        {isModuleEnabled('finance') ? (
-          <StatCard title="Monthly fees" value={fee ? money(fee.total_collected) : '—'} subtitle={fee ? `${collected ?? 0}% of ${money(fee.total_due)} · ${money(fee.total_pending)} pending` : undefined} color={Colors.warning} />
-        ) : null}
         {isModuleEnabled('hr') ? (
           <StatCard title="Staff present" value={hr ? (staffPct != null ? `${staffPct}%` : offDay ? 'N/A' : '—') : '—'} subtitle={hr ? `${hr.staff_on_leave_today} on leave · ${hr.active_staff} active` : undefined} color={Colors.success} />
         ) : null}
       </View>
+
+      {isModuleEnabled('finance') && fee ? (
+        <View style={styles.gap}>
+          <MonthlyFeeCard fee={fee} onDetails={() => go(routeFor('admin', '/finance/fees/collect'))} />
+        </View>
+      ) : null}
 
       {/* Absent students for the chosen day */}
       {att?.absent_students && att.absent_students.length > 0 ? (
@@ -162,6 +175,10 @@ export default function AdminDashboard() {
           </TouchableOpacity>
         ))}
       </View>
+
+      <LeadershipInsights />
+
+      <RecentNotifications enabled={isModuleEnabled('notifications')} onSeeAll={() => go(routeFor('admin', '/notifications'))} />
     </ScrollView>
   );
 }
@@ -178,7 +195,8 @@ const styles = StyleSheet.create({
   stepBtn: { fontSize: 28, color: Colors.primary, paddingHorizontal: Spacing.sm },
   stepDisabled: { color: Colors.border },
   stepDate: { fontSize: FontSize.md, fontWeight: '600', color: Colors.text, minWidth: 110, textAlign: 'center' },
-  offDay: { textAlign: 'center', color: Colors.textSecondary, fontSize: FontSize.sm, marginTop: Spacing.xs },
+  hero: { marginTop: Spacing.lg },
+  gap: { marginTop: Spacing.md },
   section: { fontSize: FontSize.lg, fontWeight: '600', color: Colors.text, marginTop: Spacing.xl, marginBottom: Spacing.md },
   clear: { padding: Spacing.md },
   clearText: { color: Colors.success, fontSize: FontSize.sm, fontWeight: '600' },
