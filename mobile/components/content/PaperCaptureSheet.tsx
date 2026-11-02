@@ -122,7 +122,8 @@ export default function PaperCaptureSheet({ kind, visible, onClose, classId, sub
   const working = stage !== 'idle';
   const last = capture.pages[capture.pages.length - 1];
   const failed = last?.status === 'failed';
-  const nudge = marksNudge(capture);
+  // A worksheet is usually ungraded, so only a paper is checked against its printed total.
+  const nudge = kind === 'paper' ? marksNudge(capture) : null;
   const groups = capture.sections.filter((s) => s.type !== 'divider');
   const first = capture.pages.length === 0;
 
