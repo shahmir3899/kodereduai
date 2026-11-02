@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from finance.models import KuickpayBill
 
 MIN_REFERENCE_DIGITS = 6
-MAX_TOTAL_LENGTH = 19          # width of KuickpayBill.consumer_number
+MAX_TOTAL_LENGTH = 18          # Kuickpay BPS guide v3.2: consumer number is numeric, max 18 digits
 # scheme name -> number of check digits it appends. Extended only when Kuickpay confirms an algorithm.
 CHECK_DIGIT_SCHEMES = {'NONE': 0}
 

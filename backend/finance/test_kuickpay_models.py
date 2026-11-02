@@ -154,11 +154,16 @@ class TestTransactionConstraints(KuickpayModelBase):
         self.txn(self.b1, auth='000123')
         self.txn(self.b2, auth='000123')
 
-    def test_same_authorization_id_on_a_different_date_or_time_is_accepted(self):
+    def test_same_authorization_id_on_a_different_date_is_accepted(self):
         self.txn(self.b1, auth='000123')
         self.txn(self.b1, auth='000123', on=date(2026, 1, 11))
-        self.txn(self.b1, auth='000123', at=time(10, 0, 1))
-        self.assertEqual(KuickpayTransaction.objects.filter(tran_auth_id='000123').count(), 3)
+        self.assertEqual(KuickpayTransaction.objects.filter(tran_auth_id='000123').count(), 2)
+
+    def test_transaction_time_is_not_part_of_the_identity(self):
+        # Kuickpay's duplicate rule compares consumer, authorization id, amount and DATE only, so a
+        # retry carrying a different time must not create a second row.
+        self.txn(self.b1, auth='000123')
+        self.assertRejected(lambda: self.txn(self.b1, auth='000123', at=time(10, 0, 1)))
 
     def test_amount_must_be_positive(self):
         self.assertRejected(lambda: self.txn(self.b1, amount='0'))

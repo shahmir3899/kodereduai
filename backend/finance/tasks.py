@@ -685,3 +685,12 @@ def kuickpay_reconciliation_task(self):
     for school_id in KuickpaySchoolMapping.objects.filter(is_enabled=True).values_list('school_id', flat=True):
         sent[school_id] = send_alerts(School.objects.get(pk=school_id))
     return sent
+
+
+@shared_task(bind=True, time_limit=900)
+def kuickpay_post_pending_task(self):
+    """Beat: finish crediting Kuickpay payments that were stored durably but not yet posted (a crash,
+    a transient database error, or a closed accounting period). Idempotent."""
+    from finance.kuickpay.services import post_pending
+
+    return post_pending(older_than_seconds=60)

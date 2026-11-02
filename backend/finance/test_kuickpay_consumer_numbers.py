@@ -29,16 +29,17 @@ class TestFormat(TestCase):
 
     def test_length_beyond_the_column_width_is_refused(self):
         with self.assertRaises(cn.ConsumerNumberConfigError):
-            cn.format_for_biller(biller(consumer_number_length=20))
+            cn.format_for_biller(biller(consumer_number_length=19))
 
     def test_too_few_reference_digits_is_refused(self):
         with self.assertRaises(cn.ConsumerNumberConfigError):
             cn.format_for_biller(biller(consumer_number_length=9))
 
-    def test_eighteen_and_nineteen_digit_layouts_are_both_supported_by_configuration(self):
-        for length in (18, 19):
-            fmt = cn.format_for_biller(biller(consumer_number_length=length, mode='PROD' if length == 18 else 'UAT'))
-            self.assertEqual(fmt.reference_digits, length - 5)
+    def test_eighteen_digits_is_the_maximum_per_the_kuickpay_guide(self):
+        fmt = cn.format_for_biller(biller(consumer_number_length=18))
+        self.assertEqual(fmt.reference_digits, 13)
+        with self.assertRaises(cn.ConsumerNumberConfigError):
+            cn.format_for_biller(biller(consumer_number_length=19, mode='PROD'))
 
     def test_validity(self):
         fmt = cn.format_for_biller(biller())

@@ -12,15 +12,117 @@
 | A3 models + migration `0028` | **Done** — verified on SQLite and PostgreSQL 16, reversible |
 | A1 `finance/ledger.py` + `kuickpay_ledger_report` command | **Done** |
 | A2 generation improvements F-1, F-2, F-3, F-4, F-8 | **Done** — see "A2 as built" below |
-| A4 consumer-number generator | **Done** — `finance/kuickpay/consumer_numbers.py`; refuses to issue until the biller's length is confirmed (K-1); only the "no check digit" scheme exists until Kuickpay names an algorithm (K-4) |
+| A4 consumer-number generator | **Done** (cap now 18 digits per the guide) — `finance/kuickpay/consumer_numbers.py`; refuses to issue until the biller's length is confirmed (K-1); only the "no check digit" scheme exists until Kuickpay names an algorithm (K-4) |
 | A5 bill lifecycle | **Done** — `finance/kuickpay/bills.py`, `payable.py`; post-generation hook in `generate_monthly_fees_task`, `kuickpay_sweep_task` (Beat, every 30 min), `kuickpay_activate_bills` command; one-open-bill rule enforced by the database and verified under concurrency on PostgreSQL |
 | Parent endpoint | **Done** — `GET /api/parents/children/<id>/kuickpay-bill/` (`parents/kuickpay_views.py`, `finance/kuickpay/parent_summary.py`) |
 | In-app alert + reconciliation report (F-7) | **Done** — `finance/kuickpay/reconciliation.py`, `kuickpay_reconcile` command, `kuickpay_reconciliation_task` (Beat, every 6 h), `trigger_kuickpay_reconciliation_alert` (GENERAL event type, counts only, one alert per admin per day) |
-| Track B (live endpoints) | **Blocked** — official Kuickpay specification and K-0…K-22 |
+| Track B: Bill Inquiry and Bill Payment | **Built to the Kuickpay BPS guide v3.2** — `finance/kuickpay/{contract,auth,services,views,urls}.py`, served at `/api/v1/BillInquiry` and `/api/v1/BillPayment` (also `/api/v1/payment`), header authentication, two-phase durable payment, AD-10 expired-payment rule, retry sweep (`kuickpay_post_pending`, Beat every 5 min). Verified on SQLite and PostgreSQL 16 including concurrent callbacks. **Not live**: disabled until `EDU_KUICKPAY_ENABLED` and a school mapping are switched on, and payments are refused until `EDU_KUICKPAY_AMOUNT_UNIT` is set (K-25). Remaining work is Kuickpay's answers (K-9, K-21, K-23…K-29), a test deployment and the sandbox run |
+| Migration `0029` | **Done and approved** — transaction identity is now (consumer number, authorization id, date); adds the per-school `due_day` and `bank_mnemonic`; reversible on PostgreSQL |
 
 **Pilot gating.** Every Kuickpay path is inert until a school has an enabled `KuickpaySchoolMapping` whose biller is also enabled, and the generator will not issue numbers until `consumer_number_length` is set. Nothing is enabled by default, so deploying this changes no behaviour for any school.
 
 **A2 as built (deviations from the plan text).** (1) `delete_recreate` keeps the batched queryset delete but only for rows without a recorded payment or allocation, instead of switching to per-row `delete()`; the target period is verified open before the run starts. (2) The explicit administrator refresh is `ledger.refresh_chain` and the `kuickpay_ledger_report --refresh [--apply]` command; no new API endpoint was added. (3) `generate_single` is now one transaction with row locks. (4) `ProtectedError` is mapped to HTTP 409 in `core.views.custom_exception_handler`.
+
+---
+
+## 0A. Official Kuickpay document received — "BPS Integration Guide v3.2" (September 2026)
+
+Source: `Kuickpay_BPS_Integration_Guide_v3_2.pdf` (12 pages, prepared by Innovarge / Nimra Shafqat), supplied by the owner. **This is the first official contract text we have; it supersedes the "no field is verified" statements elsewhere in this document.** Facts below are quoted from it; anything it does not say is listed as still open.
+
+### Process stated by Kuickpay
+We build and host two REST APIs (Bill Inquiry, Bill Payment) to this format and **share an API collection with Kuickpay; after their testing, a sandbox is provided** for independent testing. So the sandbox comes *after* we have working endpoints on a publicly reachable test deployment. Support is split into Business (onboarding, commercial, account approvals, merchant portal), Tech (integration, UAT testing) and Operations (settlements, production failures).
+
+### Verified contract
+| Topic | What the document says |
+|---|---|
+| Authentication | `username` and `password` in **HTTP headers**, not the body (each alphanumeric, max 20). Failure: `{"response_Code": "04", "message": "Invalid username or password."}` |
+| Endpoints | Inquiry `/api/v1/BillInquiry`. Payment is given as `/api/v1/payment` (base endpoints) **and** `../api/v1/BillPayment` (request details) — inconsistent |
+| Method / body | `POST`, JSON |
+| Inquiry request | `consumer_number` (numeric, max 18, mandatory), `bank_mnemonic` (optional, alnum 8), `reserved` (optional, 200). The field table uses camelCase (`consumerNumber`), the example body uses snake_case |
+| Inquiry response | `response_Code` (2), `consumer_Detail` (30, name/title of voucher holder), `bill_status` (`U` unpaid/payable, `P` paid/no further payment, `B` blocked, `T` top-up), `due_date` (`yyyyMMdd`), `amount_within_dueDate`, `amount_after_dueDate`, `email_address` (30, mandatory), `contact_number` (mandatory, numeric, starts `92` or `03`), `billing_month` (`yyMM`), and only when paid: `date_paid` (`yyyyMMdd`), `amount_paid`, `tran_auth_Id`; plus `reserved` |
+| Amount fields | `amount_within_dueDate` / `amount_after_dueDate`: 14 characters, sign + 13 digits, last two are minor units (`+0000000012000` = Rs 120.00). `amount_paid`: 12 digits, no sign (`000000012000` = Rs 120.00) |
+| Consumer number | Numeric, max 18 digits. The example says the **first 5 digits are the Kuickpay prefix** (`01520…`). Examples are 9–12 digits long, and one starts with `0` (so it must be stored as text) |
+| Payment request | `consumer_number`, `tran_auth_id` (numeric 6, "**unique within same date**"), `transaction_amount` (numeric string), `tran_date` (`YYYYMMDD`), `tran_time` (`HHMMSS`), `bank_mnemonic` (mandatory), `reserved` |
+| Payment success | `{"response_Code": "00", "Identification_parameter": "<receipt id, numeric, 20 digits, left-padded with zeros>", "reserved": ""}` |
+| Duplicates | Kuickpay compares **consumer number, transaction authorization ID, amount paid and payment date**. All match an already-paid transaction → code `03` (duplicate). Any mismatch against an existing record → code `04` |
+| Response codes | `00` success/found, `01` consumer number not found, `02` blocked/inactive (payment not allowed), `03` unknown error or duplicate, `04` invalid data / wrong credentials / mismatched transaction, `05` server error |
+| Two-step flow | Send inquiry; proceed only if `response_Code == "00"` and `bill_status == "U"`; "if blocked or already paid, payment is not allowed"; then send payment |
+| Environments | Merchant portal UAT `uatmerchantportal.kuickpay.com`, live `business.kuickpay.com`; payment portal UAT `uatpayments.kuickpay.com`, live `payments.kuickpay.com` |
+
+### Contradictions inside the document (need Kuickpay to settle)
+1. Payment endpoint name (`/api/v1/payment` vs `/api/v1/BillPayment`).
+2. Field name style (camelCase table vs snake_case examples; `response_Code`, `consumer_Detail`, `tran_auth_Id`).
+3. A blocked bill is shown as `response_Code "02"` in the JSON example but as `bill_status "B"` in the field table.
+4. Payment code `03` is "Unknown error/duplicate/bad transaction" in one table and "Duplicate (all fields match)" in another.
+5. Consumer-number length: this guide says 18; the public instructions example had 19 digits. The guide is the contract, so **the plan now uses a maximum of 18**, pending confirmation.
+
+### What this document does NOT answer
+Whether `transaction_amount` is in rupees or minor units (the example is `"5000"`; the inquiry amounts are minor-unit padded); the time zone of `tran_date`/`tran_time`; whether payments after `due_date` are refused; partial payments and overpayments; any bill-expiry concept; whether a payment can be declined before the customer is debited; reversals/refunds; retry policy and timeouts; source IP ranges; reconciliation/settlement report format; settlement bank-account requirements; whether a check digit or sequential numbering is allowed; whether Institution ID equals the prefix; whether one merchant can serve several schools.
+
+### What this changes in the plan
+| Area | Change | Status |
+|---|---|---|
+| **Transaction identity** | The built constraint is `(consumer_number, tran_auth_id, tran_date, tran_time)`. Kuickpay's duplicate rule ignores `tran_time` and compares amount. It should become **unique `(consumer_number, tran_auth_id, tran_date)`** with a different amount or other mismatch answered as code `04`. Otherwise a retry carrying a different time could be credited twice | Needs migration `0029` — **needs your sign-off** |
+| Consumer-number cap | Generator cap lowered from 19 to the guide's 18; prefix is assigned by Kuickpay | Small code change |
+| Inquiry mapping | Payable bill → `00` + `U`. Fully paid → `00` + `P` with `date_paid`/`amount_paid`/`tran_auth_Id` of the last Kuickpay payment. Suspended or superseded → `02`. Unknown number → `01`. Bad credentials/data → `04`. Internal failure → `05`. The use of `02` for superseded numbers is our proposal and **must be confirmed** | Proposal |
+| Payment receipt | `Identification_parameter` = our `KuickpayTransaction` id, left-padded to 20 digits | Proposal |
+| Expired-payment rule (AD-10) | The two-step flow means an expired number is normally stopped at inquiry, before debit. The document still gives no transaction time zone, no timestamp-reliability statement and no pre-debit rejection for the payment call, so the in-flight/exceptional rule stays as designed and its gate stays open | Open (K-21, K-22) |
+| **Due date is mandatory** | `due_date` is required in every inquiry response, but `FeePayment` has no due date anywhere in the fee system | **New business decision B-13** |
+| **Parent contact data is mandatory** | `email_address` and `contact_number` are mandatory, which conflicts with AD-16 (minimum data). Options: send the *school's* office phone and email, or ask Kuickpay whether blank/placeholder values are accepted | **New business decision B-14** |
+| URL layout | Kuickpay will call `/api/v1/BillInquiry` and the payment path **without a trailing slash**, at the root of our host (not under `/api/kuickpay/`) unless they confirm a configurable base path | Proposal |
+| Test deployment | Kuickpay tests against a publicly reachable HTTPS deployment with its own database, test school, biller and credentials, separate from production | **New business decision B-15** |
+
+### Status of the original questions
+| ID | Status |
+|---|---|
+| K-0 | **Answered** (this document); the sandbox follows after we share an API collection |
+| K-1 | **Answered: 18** (public 19-digit example unexplained; confirm) |
+| K-2 | **Partly:** Kuickpay assigns the prefix; whether Institution ID equals it is still open |
+| K-3, K-4, K-5, K-6, K-7 | Open |
+| K-8 | **Owner's expectation (2026-11-02):** no partial or over-payments are expected; release 1 accepts the exact amount only (`EDU_KUICKPAY_ALLOW_PARTIAL` stays off). To be confirmed with Kuickpay later; not a blocker |
+| K-9 | **Partly:** formats given (`yyyyMMdd`, `HHMMSS`, AN14); the amount unit of `transaction_amount` and the time zone are open |
+| K-10 | **Answered** (code table above, with the contradictions listed) |
+| K-11 | **Answered:** duplicate = same consumer number + authorization id + amount + payment date; auth id is unique within a date |
+| K-12 | Open: no expiry concept; due date only |
+| K-13 | **Owner's answer:** no pre-debit decline mechanism is expected; problem transactions go to Kuickpay disputes / open cases. Design consequence below |
+| K-14, K-15, K-17, K-18, K-19 | Open |
+| K-16 | **Answered:** headers `username` and `password` |
+| K-20 | **Partly:** sandbox provided after we share an API collection |
+| K-21 | Open: is `tran_date`+`tran_time` reliable and in which zone? (needed to decide in-flight vs exceptional) |
+| K-22 | **Reframed by the owner's answer to K-13:** there is no pre-debit rejection, so a payment for an expired number arrives *after* the customer was debited. AD-10 already covers this (retain, flag urgent, never silently discard); what remains is what we return to Kuickpay for it (K-29, decision B-16) |
+| K-23 *(new)* | Payment path: `/api/v1/payment` or `/api/v1/BillPayment`? Can a base path be configured? |
+| K-24 *(new)* | Request field names: camelCase or snake_case? Is key casing (`response_Code`) significant? |
+| K-25 *(new)* | Unit of `transaction_amount` (rupees or minor units)? |
+| K-26 *(new)* | How is a blocked bill returned: code `02` or `bill_status B`? Is `02` right for a superseded number? |
+| K-27 *(new)* | Are blank or placeholder `email_address` / `contact_number` accepted? |
+| K-28 *(new)* | Is a payment after `due_date` refused by Kuickpay or allowed at `amount_after_dueDate`? |
+| K-29 *(new)* | If we answer a payment with a non-`00` code after the customer was debited (e.g. `02` for an expired number, `04` for a wrong amount), what does Kuickpay do: automatic reversal, retry, or open a case? Who contacts whom? |
+
+### Answers received (owner, 2026-11-02, relayed from Kuickpay)
+| ID | Answer | In the code |
+|---|---|---|
+| K-25 | `transaction_amount` is in **rupees** | Set `EDU_KUICKPAY_AMOUNT_UNIT=RUPEES`. Left as an explicit environment setting (not a default) so payments stay refused until someone sets it on purpose. Confirm once with a real UAT payment |
+| K-9 | Transaction time zone is **Pakistan (Asia/Karachi)** | Already the default of `EDU_KUICKPAY_TIMEZONE` |
+| K-23 | Try both payment paths one by one | Both `/api/v1/BillPayment` and `/api/v1/payment` are already served |
+| K-24 | Try both field-name styles one by one | Both camelCase and snake_case request fields are already accepted |
+| K-21 | Transaction timestamps are reliable | The AD-10 in-flight/exceptional rule is confirmed workable on this point |
+| K-29 | "Your case is in progress" (Kuickpay handles a non-`00` reply after debit through its case process) | Consistent with decision B-16; exact reversal/refund behaviour to be observed in UAT |
+
+### Decisions approved on 2026-11-02
+| ID | Decision | Built as |
+|---|---|---|
+| B-13 | Due date: **per-school due day, default the 10th** of the billing month (1-28) | `KuickpaySchoolMapping.due_day`; `due_date` = billing year/month/due day; the amount after the due date equals the amount within it (no late fee) |
+| B-14 | Inquiry contact fields: **the school's own office email and phone**, never a parent's | Enabling a mapping requires a school email (max 30 chars) and a phone starting `92` or `03`; the bank also sees only the masked student name and the school name |
+| B-15 | Approve migration `0029` and the 18-digit cap | Done |
+| B-16 | A payment we cannot credit (expired, suspended, already paid) is answered **`02`** and kept in our own record, flagged urgent; a wrong amount is answered `04` and kept `HELD`; in-flight money is answered `00` | `services.payment_response`; Kuickpay's own case process handles refunds (K-29 asks them to confirm how they treat a non-`00` reply after debit) |
+
+### Owner answers of 2026-11-02 and their design consequences
+| Topic | Answer | Consequence |
+|---|---|---|
+| Pre-debit decline | Not expected; issues become disputes/open cases | **AD-10 stays implementable.** It never required pre-debit rejection ("where possible"): expired numbers are stopped at *inquiry* (Kuickpay's two-step flow), and a payment that still arrives after supersession is retained, flagged urgent and reconciled through the Kuickpay case process. Remaining gap: timestamp reliability (K-21) and the response code we return (B-16) |
+| Partial / over-payments | None expected; confirm later | Exact-amount only. A payment whose amount differs from the live payable is **not credited**: it is stored as `HELD` (reason `unexpected_amount`), flagged for reconciliation, and answered with code `04` (mismatched data). No setting change needed |
+| Bank account / settlement | Use the owner's own **Early Bird Coder Kids** bank account for testing | The internal bookkeeping `Account` (type BANK) for the test school is created by an administrator in the existing Accounts screen; no code. This partly answers F-6: the test school is Early Bird Coder Kids (exact school record to be confirmed). Real settlement terms and whether Kuickpay settles per school stay with Kuickpay's Business team (K-5) |
+
 
 ---
 
@@ -38,7 +140,7 @@
 * **Track A — internal.** Fee-ledger improvement, bill model, bill lifecycle, parent endpoint. Does not depend on Kuickpay's API.
 * **Track B — Kuickpay-facing.** Live Bill Inquiry / Bill Payment, authentication, response codes, simulator/UAT. **Blocked until the official specification is obtained and K-0…K-22 are answered.** Nothing in Track B may be coded against assumed API behaviour.
 
-**Official Kuickpay specification status [K]:** no Kuickpay document exists in the repository (content search for `kuickpay`/`biller`/`consumer number` found nothing before these plans). `developers.kuickpay.com` still does not resolve from this environment. **No API field, header name, response code, amount unit, consumer-number format, transaction-identity guarantee or expiry behaviour is verified** (§19). This document defines *internal* behaviour and the *conditions the spec must satisfy*; it never states what Kuickpay's wire format is.
+**Official Kuickpay specification status [K]:** (superseded by §0A, the Kuickpay BPS Integration Guide v3.2, received 2026-11-02.) Earlier: no Kuickpay document existed in the repository (content search for `kuickpay`/`biller`/`consumer number` found nothing before these plans). `developers.kuickpay.com` still does not resolve from this environment. **No API field, header name, response code, amount unit, consumer-number format, transaction-identity guarantee or expiry behaviour is verified** (§19). This document defines *internal* behaviour and the *conditions the spec must satisfy*; it never states what Kuickpay's wire format is.
 
 ---
 

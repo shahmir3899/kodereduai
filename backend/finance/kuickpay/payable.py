@@ -67,17 +67,24 @@ def _allocated_by_row(row_ids):
     return {ref: total for ref, total in totals}
 
 
-def unposted_receipts(school_id, student_ref):
-    """Amount received through Kuickpay for this student that is not yet allocated or held."""
+def unposted_receipts(school_id, student_ref, *, exclude_txn_id=None):
+    """Amount received through Kuickpay for this student that is not yet allocated or held.
+
+    ``exclude_txn_id`` leaves out the transaction being posted right now, which must not count
+    against its own payable.
+    """
     total = ZERO
-    for amount, allocated, held in KuickpayTransaction.objects.filter(
+    receipts = KuickpayTransaction.objects.filter(
         bill__school_id=school_id, bill__student_ref=student_ref, status__in=UNPOSTED_STATUSES,
-    ).values_list('amount', 'allocated_amount', 'held_amount'):
+    )
+    if exclude_txn_id is not None:
+        receipts = receipts.exclude(pk=exclude_txn_id)
+    for amount, allocated, held in receipts.values_list('amount', 'allocated_amount', 'held_amount'):
         total += amount - allocated - held
     return total
 
 
-def evaluate(bill):
+def evaluate(bill, *, exclude_txn_id=None):
     """Read-only evaluation of a bill against the ledger."""
     result = BillEvaluation()
     student = Student.objects.filter(pk=bill.student_ref, school_id=bill.school_id).first()
@@ -97,7 +104,7 @@ def evaluate(bill):
             kuickpay_allocated=allocated.get(row.id, ZERO),
         ))
     result.ledger_payable = sum((line.balance for line in result.rows), ZERO)
-    result.processing = unposted_receipts(bill.school_id, bill.student_ref)
+    result.processing = unposted_receipts(bill.school_id, bill.student_ref, exclude_txn_id=exclude_txn_id)
     result.payable = max(ZERO, result.ledger_payable - result.processing)
 
     # Order matters only for the reported reason; any one of them makes the bill non-payable.

@@ -382,6 +382,10 @@ CELERY_BEAT_SCHEDULE = {
         'task': 'finance.tasks.kuickpay_sweep_task',
         'schedule': crontab(minute='*/30'),
     },
+    'kuickpay-post-pending': {
+        'task': 'finance.tasks.kuickpay_post_pending_task',
+        'schedule': crontab(minute='*/5'),
+    },
     'kuickpay-reconciliation-alerts': {
         'task': 'finance.tasks.kuickpay_reconciliation_task',
         'schedule': crontab(minute='15', hour='*/6'),
@@ -566,6 +570,21 @@ logging.getLogger(__name__).info("REDIS_URL=%r", mask_url(REDIS_URL))
 # =============================================================================
 # AI / LLM Configuration
 # =============================================================================
+# =============================================================================
+# Kuickpay (End-to-End billing) — see docs/KUICKPAY_TECHNICAL_ASSESSMENT.md
+# Nothing is enabled by default. Credentials come only from the environment.
+# =============================================================================
+KUICKPAY_ENABLED = os.getenv('EDU_KUICKPAY_ENABLED', 'false').lower() in ('1', 'true', 'yes')
+KUICKPAY_USERNAME = os.getenv('EDU_KUICKPAY_USERNAME', '')
+KUICKPAY_PASSWORD = os.getenv('EDU_KUICKPAY_PASSWORD', '')
+# Zone of Kuickpay's tran_date/tran_time. The guide does not state it (question K-9).
+KUICKPAY_TIMEZONE = os.getenv('EDU_KUICKPAY_TIMEZONE', 'Asia/Karachi')
+# Unit of transaction_amount: RUPEES or MINOR (paisa). The guide does not state it (K-25), so while
+# this is blank every payment is refused rather than credited at a guessed amount.
+KUICKPAY_AMOUNT_UNIT = os.getenv('EDU_KUICKPAY_AMOUNT_UNIT', '').upper()
+# Reject plain-HTTP calls. Turn off only for local development.
+KUICKPAY_REQUIRE_HTTPS = os.getenv('EDU_KUICKPAY_REQUIRE_HTTPS', 'true').lower() in ('1', 'true', 'yes')
+
 GROQ_API_KEY = os.getenv('EDU_GROQ_API_KEY', '')
 GROQ_MODEL = os.getenv('EDU_GROQ_MODEL', 'openai/gpt-oss-120b')
 

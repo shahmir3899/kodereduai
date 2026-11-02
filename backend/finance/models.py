@@ -1503,19 +1503,46 @@ class KuickpaySchoolMapping(models.Model):
     settlement_account = models.ForeignKey(
         Account, on_delete=models.PROTECT, related_name='kuickpay_school_mappings',
     )
+    # Day of the billing month printed as the bill's due date (Kuickpay requires one; fee rows have none).
+    # Capped at 28 so it exists in every month.
+    due_day = models.PositiveSmallIntegerField(default=10)
     is_enabled = models.BooleanField(default=False)
     enabled_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                condition=Q(due_day__gte=1, due_day__lte=28), name='kuickpay_mapping_due_day_1_28',
+            ),
+        ]
+
     def clean(self):
         account = self.settlement_account if self.settlement_account_id else None
-        if account is None:
-            return
-        if account.school_id != self.school_id:
-            raise ValidationError({'settlement_account': 'Account must belong to the same school.'})
-        if account.account_type != Account.AccountType.BANK:
-            raise ValidationError({'settlement_account': 'Settlement account must be a Bank account.'})
+        if account is not None:
+            if account.school_id != self.school_id:
+                raise ValidationError({'settlement_account': 'Account must belong to the same school.'})
+            if account.account_type != Account.AccountType.BANK:
+                raise ValidationError({'settlement_account': 'Settlement account must be a Bank account.'})
+        if self.is_enabled:
+            self._validate_contact_details()
+
+    def _validate_contact_details(self):
+        """Kuickpay's inquiry response requires an email (max 30) and a phone number starting 92 or 03.
+        We send the school's own office details, never a parent's, so the school must have valid ones."""
+        school = self.school
+        email = (school.contact_email or '').strip()
+        phone = ''.join(ch for ch in (school.contact_phone or '') if ch.isdigit())
+        if phone.startswith('0092'):
+            phone = phone[2:]
+        problems = []
+        if not email or len(email) > 30:
+            problems.append("School contact email is required and must be at most 30 characters.")
+        if not phone.startswith(('92', '03')):
+            problems.append("School contact phone is required and must start with 92 or 03.")
+        if problems:
+            raise ValidationError({'__all__': problems})
 
     def __str__(self):
         return f"{self.school} -> {self.biller}"
@@ -1608,6 +1635,7 @@ class KuickpayTransaction(models.Model):
     tran_auth_id = models.CharField(max_length=16)
     tran_date = models.DateField()
     tran_time = models.TimeField()
+    bank_mnemonic = models.CharField(max_length=8, blank=True, default='')
     # tran_date/tran_time interpreted in the configured Kuickpay zone, stored as an aware UTC instant.
     tran_at = models.DateTimeField(null=True, blank=True)
     timestamp_reliable = models.BooleanField(default=True)
@@ -1633,8 +1661,10 @@ class KuickpayTransaction(models.Model):
             models.Index(fields=['bill'], name='kptxn_bill_idx'),
         ]
         constraints = [
+            # Kuickpay's duplicate rule compares consumer number, authorization id, amount and payment
+            # DATE (time is not compared), and the authorization id is unique within a date.
             models.UniqueConstraint(
-                fields=['consumer_number', 'tran_auth_id', 'tran_date', 'tran_time'],
+                fields=['consumer_number', 'tran_auth_id', 'tran_date'],
                 name='uniq_kuickpay_txn_identity',
             ),
             models.CheckConstraint(condition=Q(amount__gt=0), name='kuickpay_txn_amount_positive'),
