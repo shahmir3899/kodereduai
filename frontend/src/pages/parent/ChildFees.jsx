@@ -3,6 +3,7 @@ import { useState } from 'react'
 import Modal from '../../components/ui/Modal'
 import { TONE } from '../../components/ui/statusTones'
 import KuickpayReceived from '../../components/KuickpayReceived'
+import KuickpayBillCard from '../../components/KuickpayBillCard'
 import PageHeader from '../../components/ui/PageHeader'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation } from '@tanstack/react-query'
@@ -92,6 +93,13 @@ export default function ChildFees() {
     enabled: !!studentId,
   })
 
+  // Not blocking: the fees list renders without it, and a school without Kuickpay returns enabled:false.
+  const { data: kuickpayData } = useQuery({
+    queryKey: ['childKuickpayBill', studentId],
+    queryFn: () => parentsApi.getChildKuickpayBill(studentId),
+    enabled: !!studentId,
+  })
+
   const fees = feesData?.data
   const payments = fees?.payments || fees?.records || (Array.isArray(fees) ? fees : [])
   const summary = fees?.summary || {}
@@ -154,6 +162,8 @@ export default function ChildFees() {
             ))}
           </select>
 </>} />
+
+      <KuickpayBillCard summary={kuickpayData?.data} />
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">

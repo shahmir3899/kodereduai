@@ -6,7 +6,7 @@ from decimal import Decimal
 
 from rest_framework import serializers
 from core.mixins import ensure_tenant_school_id
-from core.permissions import _is_data_restricted_user
+from core.permissions import ADMIN_ROLES, _is_data_restricted_user, get_effective_role
 from academic_sessions.roster import current_placement, placement_class_id, placement_label, placement_roll
 from .class_resolution import resolve_unambiguous_session_class
 from .models import (
@@ -25,12 +25,16 @@ def _serializer_school_id(serializer_instance):
     return ensure_tenant_school_id(request)
 
 
+BANK_DETAIL_ROLES = (*ADMIN_ROLES, 'ACCOUNTANT')
+
+
 class AccountSerializer(serializers.ModelSerializer):
     class Meta:
         model = Account
         fields = [
             'id', 'school', 'name', 'account_type',
             'opening_balance', 'is_active', 'staff_visible',
+            'bank_name', 'account_title', 'account_number', 'iban',
             'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
@@ -40,13 +44,18 @@ class AccountSerializer(serializers.ModelSerializer):
         request = self.context.get('request')
         if request and hasattr(request.user, 'is_staff_member') and request.user.is_staff_member:
             fields.pop('staff_visible', None)
+        # The title, number and IBAN are for the people who run the books; a teacher or driver who can
+        # list accounts must not read them. The bank's name alone is harmless, so it stays.
+        if request and get_effective_role(request) not in BANK_DETAIL_ROLES:
+            for hidden in ('account_title', 'account_number', 'iban'):
+                fields.pop(hidden, None)
         return fields
 
 
 class AccountCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Account
-        fields = ['name', 'account_type', 'opening_balance']
+        fields = ['name', 'account_type', 'opening_balance', 'bank_name', 'account_title', 'account_number', 'iban']
 
 
 class TransferSerializer(serializers.ModelSerializer):
@@ -219,6 +228,18 @@ class FeePaymentSerializer(serializers.ModelSerializer):
         from finance.kuickpay.received import received_summary
         return received_summary(obj)
 
+    # The consumer number a payer quotes at the bank, on the one monthly row it was issued for. Read
+    # from a list prefetch only: other callers without it get null rather than a query per row.
+    kuickpay_consumer_number = serializers.SerializerMethodField()
+
+    def get_kuickpay_consumer_number(self, obj):
+        if obj.fee_type != 'MONTHLY' or not obj.student_id:
+            return None
+        for bill in getattr(obj.student, 'prefetched_kuickpay_bills', ()):
+            if (bill.year, bill.month) == (obj.year, obj.month):
+                return bill.consumer_number
+        return None
+
     def _get_active_enrollment(self, obj):
         if not obj.student or not obj.academic_year:
             return None
@@ -332,7 +353,7 @@ class FeePaymentSerializer(serializers.ModelSerializer):
             'receipt_number', 'notes',
             'collected_by', 'collected_by_name',
             'account', 'account_name',
-            'kuickpay',
+            'kuickpay', 'kuickpay_consumer_number',
             'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'status', 'created_at', 'updated_at']

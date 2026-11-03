@@ -15,7 +15,7 @@ import KuickpayReceivedLabel from '../finance/KuickpayReceivedLabel';
 import { Colors, FontSize, Spacing } from '../../constants/colors';
 
 // The student's own fee ledger. Paying happens at school: no payment gateway is live.
-export function FeesView({ query }: { query: Q<PortalFee[]> }) {
+export function FeesView({ query, header }: { query: Q<PortalFee[]>; header?: React.ReactNode }) {
   const refreshControl = useRefreshControl(query.refetch);
   const all = useMemo(() => sortFees(query.data ?? []), [query.data]);
   const years = useMemo(() => feeYears(all), [all]);
@@ -34,21 +34,26 @@ export function FeesView({ query }: { query: Q<PortalFee[]> }) {
       data={rows}
       keyExtractor={(f) => String(f.id)}
       refreshControl={refreshControl}
-      ListHeaderComponent={all.length > 0 ? (
+      ListHeaderComponent={header || all.length > 0 ? (
         <View>
-          {years.length > 1 ? (
-            <SegmentedTabs<string> scrollable value={String(year)} onChange={(v) => setPicked(v === 'ALL' ? 'ALL' : Number(v))}
-              tabs={[{ value: 'ALL', label: 'All' }, ...years.map((y) => ({ value: String(y), label: String(y) }))]} />
+          {header}
+          {all.length > 0 ? (
+            <>
+              {years.length > 1 ? (
+                <SegmentedTabs<string> scrollable value={String(year)} onChange={(v) => setPicked(v === 'ALL' ? 'ALL' : Number(v))}
+                  tabs={[{ value: 'ALL', label: 'All' }, ...years.map((y) => ({ value: String(y), label: String(y) }))]} />
+              ) : null}
+              <View style={styles.tiles}>
+                <Card style={styles.tile}><Text style={styles.label}>Total due</Text><Text style={styles.tileValue}>{formatMoney(totals.due)}</Text></Card>
+                <Card style={styles.tile}><Text style={styles.label}>Total paid</Text><Text style={[styles.tileValue, { color: Colors.success }]}>{formatMoney(totals.paid)}</Text></Card>
+                <Card style={styles.tile}>
+                  <Text style={styles.label}>Outstanding</Text>
+                  <Text style={[styles.tileValue, { color: totals.pending > 0 ? Colors.error : Colors.success }]}>{formatMoney(totals.pending)}</Text>
+                </Card>
+              </View>
+              {totals.pending > 0 && !header ? <Text style={styles.note}>Fees are paid at the school office.</Text> : null}
+            </>
           ) : null}
-          <View style={styles.tiles}>
-            <Card style={styles.tile}><Text style={styles.label}>Total due</Text><Text style={styles.tileValue}>{formatMoney(totals.due)}</Text></Card>
-            <Card style={styles.tile}><Text style={styles.label}>Total paid</Text><Text style={[styles.tileValue, { color: Colors.success }]}>{formatMoney(totals.paid)}</Text></Card>
-            <Card style={styles.tile}>
-              <Text style={styles.label}>Outstanding</Text>
-              <Text style={[styles.tileValue, { color: totals.pending > 0 ? Colors.error : Colors.success }]}>{formatMoney(totals.pending)}</Text>
-            </Card>
-          </View>
-          {totals.pending > 0 ? <Text style={styles.note}>Fees are paid at the school office.</Text> : null}
         </View>
       ) : null}
       ListEmptyComponent={<EmptyState title="No fee records" message="Nothing has been billed yet." />}

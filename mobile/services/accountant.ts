@@ -21,6 +21,8 @@ export interface RecentEntry {
   amount: number | string;
   date?: string | null;
   account_name?: string | null;
+  recorded_by?: string | null;
+  fee_type_label?: string | null;
 }
 
 export interface FeeMonthSummary {
@@ -238,4 +240,20 @@ export function categoryShares(categories: ExpenseCategory[], total: number | st
     count: c.count,
     pct: t > 0 ? Math.round((num(c.total_amount) / t) * 100) : 0,
   }));
+}
+
+// ── Other income: who may delete an entry ────────────────────────────────────
+// The server's rule (can_edit_finance_entry): an admin, or the person who recorded it. The phone hides
+// the button for anyone else; the server still decides.
+export interface IncomeRow { id: number; category_name?: string | null; description?: string; amount: number | string; date: string; account_name?: string | null; recorded_by?: number | null; recorded_by_name?: string | null }
+
+export function canDeleteIncome(row: Pick<IncomeRow, 'recorded_by'>, userId: number | null | undefined, isAdmin: boolean): boolean {
+  if (isAdmin) return true;
+  return userId != null && row.recorded_by != null && row.recorded_by === userId;
+}
+
+// "Donation, PKR 5,000 on 2026-11-02" for the confirmation.
+export function incomeDescription(row: Pick<IncomeRow, 'category_name' | 'description' | 'amount' | 'date'>): string {
+  const what = row.category_name || row.description || 'Income';
+  return `${what}, ${formatMoney(num(row.amount))} on ${row.date}`;
 }

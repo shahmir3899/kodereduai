@@ -93,6 +93,32 @@ class TestLabelContent(LabelBase):
         self.assertEqual(money(Decimal('1234567')), 'PKR 1,234,567')
 
 
+class TestConsumerNumberColumn(LabelBase):
+    def test_the_open_bills_month_shows_its_consumer_number(self):
+        self.gen(1)
+        row = self.row_for(self.staff_rows(), self.student, 1)
+        self.assertEqual(row['kuickpay_consumer_number'], self.bill(1).consumer_number)
+
+    def test_an_older_month_the_bill_no_longer_covers_shows_none(self):
+        self.gen(1)
+        self.gen(2)
+        rows = self.staff_rows()
+        self.assertIsNone(self.row_for(rows, self.student, 1)['kuickpay_consumer_number'])
+        self.assertEqual(self.row_for(rows, self.student, 2)['kuickpay_consumer_number'], self.bill(2).consumer_number)
+
+    def test_a_suspended_bill_shows_no_number(self):
+        self.gen(1)
+        KuickpayBill.objects.filter(pk=self.bill(1).pk).update(status=KuickpayBill.Status.SUSPENDED)
+        self.assertIsNone(self.row_for(self.staff_rows(), self.student, 1)['kuickpay_consumer_number'])
+
+    def test_the_number_costs_one_query_for_a_whole_page_of_rows(self):
+        self.gen(1)
+        with CaptureQueriesContext(connection) as page:
+            self.staff_rows()
+        numbered = [q for q in page.captured_queries if 'finance_kuickpaybill' in q['sql']]
+        self.assertEqual(len(numbered), 1)
+
+
 class TestEveryRoleSeesIt(LabelBase):
     def setUp(self):
         super().setUp()

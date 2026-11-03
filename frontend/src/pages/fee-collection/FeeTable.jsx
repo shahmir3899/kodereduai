@@ -1,5 +1,6 @@
 import { getSchoolTimeZone } from '../../utils/schoolTime'
 import KuickpayReceived from '../../components/KuickpayReceived'
+import CopyableNumber from '../../components/CopyableNumber'
 import { Fragment, useRef, useMemo } from 'react'
 import { TONE } from '../../components/ui/statusTones'
 import { MONTHS } from './FeeFilters'
@@ -143,7 +144,10 @@ export default function FeeTable({
     ((isAnnual || isAllTypes) ? 1 : 0) + // category
     (showPrevBal ? 1 : 0) // prev balance
 
-  const footerTrailingColSpan = 4 + (onToggleSelect ? 1 : 0)
+  // The column exists only where some row carries a number, so a school without Kuickpay sees no new column.
+  const showKuickpayNo = sortedList.some((p) => p.kuickpay_consumer_number)
+
+  const footerTrailingColSpan = 4 + (onToggleSelect ? 1 : 0) + (showKuickpayNo ? 1 : 0)
 
   if (isLoading) {
     return <div className="card"><LoadingState /></div>
@@ -499,6 +503,11 @@ export default function FeeTable({
               )}
               <div className="mt-2 pt-2 border-t border-gray-100 space-y-1">
                 <p className="text-xs text-gray-600">Account: {payment.account_name || '-'}</p>
+                {payment.kuickpay_consumer_number && (
+                  <p className="text-xs text-gray-600">
+                    Kuickpay No.: <CopyableNumber value={payment.kuickpay_consumer_number} />
+                  </p>
+                )}
                 <div className="flex items-center justify-between text-xs text-gray-500">
                   <span>Collected by: {payment.collected_by_name || '-'}</span>
                   <span>{payment.created_at ? new Date(payment.created_at).toLocaleDateString() : '-'}</span>
@@ -559,6 +568,7 @@ export default function FeeTable({
               <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Account</th>
               <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Collected By</th>
               <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Collected At</th>
+              {showKuickpayNo && <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Kuickpay No.</th>}
               {canWrite && <th className="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase">Action</th>}
             </tr>
           </thead>
@@ -693,6 +703,12 @@ export default function FeeTable({
                         month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: getSchoolTimeZone()
                       }) : '-'}
                     </td>
+                    {showKuickpayNo && (
+                      <td className="px-3 py-2 text-xs text-gray-700 whitespace-nowrap">
+                        <CopyableNumber value={payment.kuickpay_consumer_number} />
+                        {!payment.kuickpay_consumer_number && '-'}
+                      </td>
+                    )}
                     {canWrite && (
                       <td className="px-3 py-2 text-center">
                         <div className="flex items-center justify-center gap-1">

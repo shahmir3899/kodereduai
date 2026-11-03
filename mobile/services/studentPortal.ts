@@ -49,7 +49,7 @@ export function rateTone(rate: number): 'success' | 'warning' | 'error' {
 
 export interface CalendarCell { day: number | null; status: AttendanceCode | null; off?: boolean }
 
-export type DayStatusMap = Record<string, { is_off_day?: boolean } | null | undefined>;
+export type DayStatusMap = Record<string, { is_off_day?: boolean; off_day_types?: string[] } | null | undefined>;
 
 // Attendance % for a tile: an off day reads N/A (as on the web), as does a student with no days yet.
 export function attendanceTile(att: { total_days: number; rate: number } | null | undefined, isOffDay: boolean): string {
@@ -354,4 +354,36 @@ export interface PortalTransport {
   route: { name: string; start_location?: string; end_location?: string; distance_km?: string | null; estimated_duration_minutes?: number | null };
   stop: { name: string; address?: string; stop_order?: number; pickup_time?: string; drop_time?: string };
   vehicle: { vehicle_number?: string; vehicle_type?: string; driver_name?: string; driver_phone?: string };
+}
+
+// 'OFF day (Holiday, Weekend)' under the attendance tile; '' on a school day.
+export function offDayNote(day: { is_off_day?: boolean; off_day_types?: string[] } | null | undefined): string {
+  if (!day?.is_off_day) return '';
+  const types = (day.off_day_types ?? []).filter(Boolean);
+  return types.length ? `OFF day (${types.join(', ')})` : 'OFF day';
+}
+
+// True while `now` (HH:MM) is inside the period. A period with no start or end time is never current.
+export function isCurrentPeriod(start: string | null | undefined, end: string | null | undefined, now: string): boolean {
+  if (!start || !end) return false;
+  return now >= start.slice(0, 5) && now < end.slice(0, 5);
+}
+
+// Colour of the assignment type badge, as on the web (homework blue, project purple, test red).
+export function assignmentTypeTone(type: string | null | undefined): 'info' | 'warning' | 'error' | 'neutral' {
+  switch ((type ?? '').toUpperCase()) {
+    case 'HOMEWORK': return 'info';
+    case 'PROJECT': return 'warning';
+    case 'TEST': return 'error';
+    default: return 'neutral';
+  }
+}
+
+// Latest exam percentage for the Last Exam tile (results arrive newest first); null when none is marked.
+export function lastExamPct(exams: PortalResultExam[] | undefined): number | null {
+  for (const e of exams ?? []) {
+    const p = examPercentage(e);
+    if (p != null) return p;
+  }
+  return null;
 }

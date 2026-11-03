@@ -1,6 +1,12 @@
 import React, { useMemo, useState } from 'react';
-import { View, Text, FlatList, ActivityIndicator, StyleSheet, type RefreshControlProps } from 'react-native';
+import { View, Text, FlatList, ActivityIndicator, StyleSheet, TouchableOpacity, type RefreshControlProps } from 'react-native';
 import { financeApi } from '../../services/api';
+import { useAuth } from '../../contexts/AuthContext';
+import { canDeleteIncome, incomeDescription } from '../../services/accountant';
+import { useDeleteOtherIncome } from '../../hooks/useAccountant';
+import { confirm } from '../ui/confirm';
+import { useToast } from '../ui/Toast';
+import { staffLeaveErrorMessage } from '../../services/staffLeave';
 import { balanceOf, formatMoney, type FeePayment, type FeeStatus } from '../../services/feeCollect';
 import { useExpenseCategories, useFinanceList } from '../../hooks/useAccountant';
 import { categoryShares, monthRange } from '../../services/accountant';
@@ -26,6 +32,8 @@ interface LedgerRow {
   amount: number | string;
   date: string;
   account_name?: string | null;
+  recorded_by?: number | null;
+  recorded_by_name?: string | null;
 }
 
 type StatusTab = 'UNPAID' | 'PARTIAL' | 'PAID' | 'ALL';
@@ -104,7 +112,25 @@ function FeesList() {
   );
 }
 
-function LedgerList({ kind }: { kind: 'expenses' | 'income' }) {
+// Other income with a Delete control on the entries the person may remove (an admin any, others their own).
+// Used by the admin's income screen; the accountant's list above stays read only.
+export function OtherIncomeHistory() {
+  return <LedgerList kind="income" deletable />;
+}
+
+function LedgerList({ kind, deletable = false }: { kind: 'expenses' | 'income'; deletable?: boolean }) {
+  const toast = useToast();
+  const { user, isSchoolAdmin } = useAuth();
+  const remove = useDeleteOtherIncome();
+  const removeEntry = async (r: LedgerRow) => {
+    if (!(await confirm({ title: 'Delete this income entry?', message: `${incomeDescription(r)}. It is taken out of the account balance. This cannot be undone.`, confirmLabel: 'Delete', destructive: true }))) return;
+    try {
+      await remove.mutateAsync(r.id);
+      toast.success('Income entry deleted.');
+    } catch (e) {
+      toast.error(staffLeaveErrorMessage(e, 'Could not delete the income entry.'));
+    }
+  };
   const isExpense = kind === 'expenses';
   const [search, setSearch] = useState('');
   const [ym, setYm] = useState<YearMonth | null>(null);
@@ -151,9 +177,17 @@ function LedgerList({ kind }: { kind: 'expenses' | 'income' }) {
               {[r.date, r.account_name, r.description].filter(Boolean).join('  ·  ')}
             </Text>
           </View>
-          <Text style={[styles.amount, { color: isExpense ? Colors.error : Colors.success }]}>
-            {isExpense ? '-' : '+'}{formatMoney(Number(r.amount) || 0)}
-          </Text>
+          <View style={styles.right}>
+            <Text style={[styles.amount, { color: isExpense ? Colors.error : Colors.success }]}>
+              {isExpense ? '-' : '+'}{formatMoney(Number(r.amount) || 0)}
+            </Text>
+            {deletable && !isExpense && canDeleteIncome(r, user?.id, isSchoolAdmin) ? (
+              <TouchableOpacity accessibilityRole="button" accessibilityLabel={`Delete income: ${incomeDescription(r)}`} hitSlop={8} style={styles.del}
+                disabled={remove.isPending} onPress={() => removeEntry(r)}>
+                <Text style={styles.delText}>Delete</Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
         </View>
       )}
     />
@@ -207,4 +241,6 @@ const styles = StyleSheet.create({
   title: { fontSize: FontSize.md, fontWeight: '600', color: Colors.text },
   sub: { fontSize: FontSize.sm, color: Colors.textSecondary, marginTop: 2 },
   amount: { fontSize: FontSize.md, fontWeight: '700', color: Colors.text },
+  del: { minHeight: 44, justifyContent: 'center' },
+  delText: { fontSize: FontSize.sm, fontWeight: '700', color: Colors.error },
 });

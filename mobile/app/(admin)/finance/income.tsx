@@ -16,6 +16,8 @@ import { useToast } from '../../../components/ui/Toast';
 import { saveFailureMessage } from '../../../services/errorKind';
 import Card from '../../../components/ui/Card';
 import Button from '../../../components/ui/Button';
+import SegmentedTabs from '../../../components/ui/SegmentedTabs';
+import { OtherIncomeHistory } from '../../../components/finance/FinanceListScreen';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../../constants/colors';
 
 const INCOME_SOURCES = [
@@ -28,7 +30,20 @@ const INCOME_SOURCES = [
   'Other',
 ];
 
-export default function RecordIncome() {
+// Record new income, or look back at what was recorded and remove an entry (an admin any; others their own).
+export default function IncomeScreen() {
+  const [tab, setTab] = useState<'record' | 'history'>('record');
+  return (
+    <View style={styles.flex}>
+      <View style={styles.tabBar}>
+        <SegmentedTabs tabs={[{ value: 'record', label: 'Record' }, { value: 'history', label: 'History' }]} value={tab} onChange={setTab} />
+      </View>
+      {tab === 'record' ? <RecordIncome /> : <OtherIncomeHistory />}
+    </View>
+  );
+}
+
+function RecordIncome() {
   const [source, setSource] = useState('');
   const [amount, setAmount] = useState('');
   const [description, setDescription] = useState('');
@@ -165,6 +180,7 @@ export default function RecordIncome() {
 }
 
 const styles = StyleSheet.create({
+  tabBar: { paddingHorizontal: Spacing.lg, paddingTop: Spacing.lg, backgroundColor: Colors.background },
   flex: {
     flex: 1,
   },

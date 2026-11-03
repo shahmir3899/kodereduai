@@ -37,6 +37,7 @@ from .models import (
     Book, Chapter, Topic, TopicSchedule, SubTopic, ContentBlock, Tag, ContentBlockTag, QuestionTag, LessonPlan, LearningObjective, LessonPlanObjective, CurriculumStandard, StandardObjective, TopicStandardAlignment, Assignment,
     AssignmentSubmission, TOCImportJob,
 )
+from .coverage import annotate_coverage, filter_by_coverage_status, taught_plan_q
 from .content_retrieval import retrieve_topics_for_ai, build_prompt, extract_text_from_blocks
 from .serializers import (
     BookReadSerializer, BookCreateSerializer,
@@ -702,9 +703,7 @@ class BookViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet)
         for book in books:
             topics = Topic.objects.filter(chapter__book=book, is_active=True)
             book_total = topics.count()
-            book_covered = topics.filter(
-                lesson_plans__status='PUBLISHED',
-            ).distinct().count()
+            book_covered = topics.filter(taught_plan_q('lesson_plans__')).distinct().count()
             total_topics += book_total
             covered_topics += book_covered
             book_progress.append({
@@ -901,23 +900,36 @@ class TopicViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet
         
         # Filter by coverage status
         coverage = self.request.query_params.get('coverage')
+        # "Taught" = published, already-dated plan (lms.coverage), matching
+        # Topic.is_covered; scoped to the year when one is given.
+        taught_q = taught_plan_q('lesson_plans__', academic_year_id)
         if coverage == 'taught_only':
-            # Topics with lesson plans
-            queryset = queryset.filter(lesson_plans__is_active=True).distinct()
+            queryset = queryset.filter(taught_q).distinct()
         elif coverage == 'tested_only':
             # Topics with questions
             queryset = queryset.filter(test_questions__is_active=True).distinct()
         elif coverage == 'both':
-            # Topics with both lesson plans and questions
             queryset = queryset.filter(
-                lesson_plans__is_active=True,
-                test_questions__is_active=True
+                taught_q,
+                test_questions__is_active=True,
             ).distinct()
         elif coverage == 'uncovered':
-            # Topics with neither lesson plans nor questions
+            # Topics neither taught nor tested
+            taught_ids = Topic.objects.filter(taught_q).values('pk')
             queryset = queryset.exclude(
-                Q(lesson_plans__is_active=True) | Q(test_questions__is_active=True)
+                Q(pk__in=taught_ids) | Q(test_questions__is_active=True)
             ).distinct()
+
+        # Planned-vs-taught annotations + filter, only for the detailed
+        # (coverage page) profile -- the other profiles don't serialize them.
+        if (
+            self.action in ('list', 'retrieve')
+            and self.request.query_params.get('view') not in ('lesson_plan', 'exam_exercises')
+        ):
+            queryset = annotate_coverage(queryset, academic_year_id)
+            coverage_status = self.request.query_params.get('coverage_status')
+            if coverage_status and academic_year_id:
+                queryset = filter_by_coverage_status(queryset, coverage_status)
 
         # Controlled profile for exam-focused topic selection.
         if self.request.query_params.get('view') == 'exam_exercises':

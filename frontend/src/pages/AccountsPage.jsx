@@ -15,6 +15,10 @@ import { Skeleton, SkeletonTable } from '../components/ui/Skeleton'
 import { useEscapeKey } from '../hooks/useEscapeKey'
 import Button from '../components/ui/Button'
 import LoadingState from '../components/ui/LoadingState'
+import CopyableNumber from '../components/CopyableNumber'
+import { bankSummary } from '../utils/bankDetails'
+
+const NO_BANK = { bank_name: '', account_title: '', account_number: '', iban: '' }
 
 const ACCOUNT_TYPES = [
   { value: 'CASH', label: 'Cash' },
@@ -48,7 +52,7 @@ export default function AccountsPage() {
   const [showAccountModal, setShowAccountModal] = useState(false)
   const [editingAccount, setEditingAccount] = useState(null)
   const [accountForm, setAccountForm] = useState({
-    name: '', account_type: 'CASH', opening_balance: '', staff_visible: true
+    name: '', account_type: 'CASH', opening_balance: '', staff_visible: true, ...NO_BANK
   })
 
   // Transfer modal
@@ -208,7 +212,7 @@ export default function AccountsPage() {
   const closeAccountModal = () => {
     setShowAccountModal(false)
     setEditingAccount(null)
-    setAccountForm({ name: '', account_type: 'CASH', opening_balance: '', staff_visible: true })
+    setAccountForm({ name: '', account_type: 'CASH', opening_balance: '', staff_visible: true, ...NO_BANK })
   }
 
   const closeTransferModal = () => {
@@ -228,6 +232,10 @@ export default function AccountsPage() {
       account_type: account.account_type,
       opening_balance: account.opening_balance,
       staff_visible: account.staff_visible !== false,
+      bank_name: account.bank_name || '',
+      account_title: account.account_title || '',
+      account_number: account.account_number || '',
+      iban: account.iban || '',
     })
     setShowAccountModal(true)
   }
@@ -238,6 +246,8 @@ export default function AccountsPage() {
       ...accountForm,
       opening_balance: parseFloat(accountForm.opening_balance || 0),
       staff_visible: accountForm.staff_visible,
+      // Switching an account away from Bank clears its bank details rather than leaving them behind.
+      ...(accountForm.account_type !== 'BANK' && NO_BANK),
     }
     if (editingAccount) {
       updateAccountMutation.mutate({ id: editingAccount.id, data })
@@ -496,7 +506,10 @@ export default function AccountsPage() {
                 {accountList.map((account) => (
                   <div key={account.id} className="border rounded-lg p-3">
                     <div className="flex items-center justify-between mb-2">
-                      <span className="font-medium text-gray-900">{account.name}</span>
+                      <span className="font-medium text-gray-900">
+                        {account.name}
+                        {bankSummary(account) && <span className="block text-xs font-normal text-gray-500">{bankSummary(account)}</span>}
+                      </span>
                       <div className="flex items-center gap-1">
                         {canManageAccounts && !account.staff_visible && (
                           <Badge tone="warning">Hidden</Badge>
@@ -534,7 +547,10 @@ export default function AccountsPage() {
                   <tbody className="divide-y divide-gray-100">
                     {accountList.map((account) => (
                       <tr key={account.id}>
-                        <td className="px-4 py-3 text-sm font-medium text-gray-900">{account.name}</td>
+                        <td className="px-4 py-3 text-sm font-medium text-gray-900">
+                          {account.name}
+                          {bankSummary(account) && <span className="block text-xs font-normal text-gray-500">{bankSummary(account)}</span>}
+                        </td>
                         <td className="px-4 py-3">
                           <span className={`px-2 py-0.5 rounded text-xs font-medium ${typeColors[account.account_type]}`}>
                             {account.account_type}
@@ -772,6 +788,53 @@ export default function AccountsPage() {
                     {ACCOUNT_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
                   </select>
 </Field>
+                {accountForm.account_type === 'BANK' && (
+                  <>
+                    <Field label="Bank Name">
+                      <input
+                        type="text"
+                        value={accountForm.bank_name}
+                        onChange={(e) => setAccountForm(f => ({ ...f, bank_name: e.target.value }))}
+                        className="input-field"
+                        maxLength={100}
+                        placeholder="e.g. HBL"
+                      />
+                    </Field>
+                    <Field label="Account Title">
+                      <input
+                        type="text"
+                        value={accountForm.account_title}
+                        onChange={(e) => setAccountForm(f => ({ ...f, account_title: e.target.value }))}
+                        className="input-field"
+                        maxLength={100}
+                        placeholder="Name the account is held in"
+                      />
+                    </Field>
+                    <Field label="Account Number">
+                      <input
+                        type="text"
+                        value={accountForm.account_number}
+                        onChange={(e) => setAccountForm(f => ({ ...f, account_number: e.target.value }))}
+                        className="input-field"
+                        maxLength={34}
+                        placeholder="Letters, digits, spaces and hyphens"
+                      />
+                    </Field>
+                    {editingAccount?.account_number && (
+                      <div className="-mt-2"><CopyableNumber value={editingAccount.account_number} textClassName="text-xs" /></div>
+                    )}
+                    <Field label="IBAN (optional)">
+                      <input
+                        type="text"
+                        value={accountForm.iban}
+                        onChange={(e) => setAccountForm(f => ({ ...f, iban: e.target.value }))}
+                        className="input-field"
+                        maxLength={34}
+                        placeholder="e.g. PK36 HABB 0000 0123 4567 8901"
+                      />
+                    </Field>
+                  </>
+                )}
                 <Field label="Opening Balance (BBF)">
 <input
                     type="number"

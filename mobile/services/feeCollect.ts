@@ -41,6 +41,8 @@ export interface FeePayment {
   account_name?: string | null;
   collected_by_name?: string | null;
   kuickpay?: KuickpayReceived | null;
+  // The Kuickpay consumer number to quote when paying this month's fee; null where none applies.
+  kuickpay_consumer_number?: string | null;
 }
 
 export const PAYMENT_METHODS = [
@@ -221,4 +223,59 @@ export function kuickpayNote(f: { kuickpay?: KuickpayReceived | null }): { label
     reference += `  ·  ${d} ${MONTH_NAMES[m - 1].slice(0, 3)} ${y}`;
   }
   return { label: k.label, reference, tone: k.coverage === 'FULL' ? 'success' : 'info' };
+}
+
+// ── Bulk actions (admin and principal) ───────────────────────────────────────
+// The web can also set one paid amount for every selected record; that is left off the phone,
+// where one wrong number would change many records. "Pay in full" and "Delete" are the two bulk actions.
+
+// Records a bulk "pay in full" may touch: still owing something. A paid record is left alone, so its
+// original account, method and collector are not overwritten.
+export const payableIds = (rows: FeePayment[], selected: number[]): number[] =>
+  rows.filter((r) => selected.includes(r.id) && canRecordPayment(r) && balanceOf(r) > 0).map((r) => r.id);
+
+// The server deletes whatever it is given (it refuses only a closed month or a Kuickpay payment), so
+// the phone sends only records with nothing paid, as the single delete does.
+export const deletableIds = (rows: FeePayment[], selected: number[]): number[] =>
+  rows.filter((r) => selected.includes(r.id) && canDeleteFee(r)).map((r) => r.id);
+
+export function bulkPayTotal(rows: FeePayment[], ids: number[]): number {
+  return rows.filter((r) => ids.includes(r.id)).reduce((sum, r) => sum + balanceOf(r), 0);
+}
+
+export function validateBulkPay(account: number | null, ids: number[]): string | null {
+  if (ids.length === 0) return 'Nothing selected can be paid: those records are already paid.';
+  if (!account) return 'Choose the account the money goes into.';
+  return null;
+}
+
+export function bulkPayPayload(ids: number[], account: number, method: string) {
+  return { pay_full: true, ids, account, payment_method: method };
+}
+
+const records = (n: number) => `${n} fee record${n === 1 ? '' : 's'}`;
+
+export const bulkPayText = (count: number, total: number, accountName: string, methodLabel: string) =>
+  `${records(count)} will be marked as fully paid, ${formatMoney(total)} in all, by ${methodLabel} into ${accountName}.`;
+
+export const bulkDeleteFeesText = (count: number) => `${records(count)} with nothing paid will be deleted. This cannot be undone.`;
+
+// What was left out of a bulk action because it did not qualify.
+export const skippedNote = (selected: number, acted: number): string => {
+  const left = selected - acted;
+  return left > 0 ? ` ${left} left out.` : '';
+};
+
+export function bulkPayResultText(data: unknown): string {
+  const d = data as { updated?: number; errors?: string[] } | null;
+  const n = d?.updated ?? 0;
+  const errs = d?.errors ?? [];
+  return errs.length ? `${records(n)} marked as paid. ${errs.length} could not be: ${errs[0]}` : `${records(n)} marked as paid.`;
+}
+
+export function bulkDeleteFeesResultText(data: unknown): string {
+  const d = data as { deleted?: number; errors?: string[] } | null;
+  const n = d?.deleted ?? 0;
+  const errs = d?.errors ?? [];
+  return errs.length ? `${records(n)} deleted. ${errs.length} could not be: ${errs[0]}` : `${records(n)} deleted.`;
 }

@@ -1210,6 +1210,132 @@ class TestSyllabusProgress:
         resp = api.get("/api/lms/books/syllabus_progress/", token, sid)
         assert resp.status_code == 400
 
+    def test_draft_and_future_plans_not_counted(self, seed_data, api, lms_book):
+        from lms.models import LessonPlan
+        token = seed_data["tokens"]["admin"]
+        sid = seed_data["SID_A"]
+        common = dict(
+            school=seed_data["school_a"], class_obj=seed_data["classes"][0],
+            subject=lms_book["subject"], teacher=seed_data["staff"][0],
+            description="test",
+        )
+        draft = LessonPlan.objects.create(
+            title=f"{P16}Draft", lesson_date=date.today(), status="DRAFT", **common)
+        future = LessonPlan.objects.create(
+            title=f"{P16}Future", lesson_date=date.today() + timedelta(days=5),
+            status="PUBLISHED", **common)
+        draft.planned_topics.add(lms_book["topics"][0])
+        future.planned_topics.add(lms_book["topics"][1])
+
+        cls_id = seed_data["classes"][0].id
+        subj_id = lms_book["subject"].id
+        resp = api.get(
+            f"/api/lms/books/syllabus_progress/?class_id={cls_id}&subject_id={subj_id}",
+            token, sid,
+        )
+        assert resp.json()["covered_topics"] == 0
+
+        draft.delete()
+        future.delete()
+
+
+class TestCoverageStatus:
+    """Planned-vs-taught status (lms.coverage) -- pure rules."""
+
+    def test_status_rules(self):
+        from lms.coverage import compute_coverage_status as cs
+        today = date(2026, 11, 3)
+        planned = date(2026, 11, 1)
+        assert cs(None, None, today) == ("not_planned", 0)
+        assert cs(None, date(2026, 11, 3), today) == ("upcoming", 0)
+        assert cs(None, planned, today) == ("overdue", 2)
+        assert cs(date(2026, 11, 1), planned, today) == ("on_time", 0)
+        assert cs(date(2026, 10, 30), planned, today) == ("on_time", 0)
+        assert cs(date(2026, 11, 2), planned, today) == ("late", 1)
+        assert cs(date(2026, 11, 2), None, today) == ("unscheduled", 0)
+
+
+@pytest.mark.phase16
+@pytest.mark.django_db
+class TestCoverageStatusApi:
+
+    def _plan(self, seed_data, lms_book, topic, lesson_date, status="PUBLISHED"):
+        from lms.models import LessonPlan
+        lp = LessonPlan.objects.create(
+            school=seed_data["school_a"], class_obj=seed_data["classes"][0],
+            subject=lms_book["subject"], teacher=seed_data["staff"][0],
+            title=f"{P16}Cov", description="test", lesson_date=lesson_date,
+            status=status, academic_year=seed_data["academic_year"],
+        )
+        lp.planned_topics.add(topic)
+        return lp
+
+    def _plan_date(self, seed_data, topic, planned):
+        from lms.models import TopicSchedule
+        TopicSchedule.objects.update_or_create(
+            topic=topic, academic_year=seed_data["academic_year"],
+            defaults={"planned_date": planned},
+        )
+
+    def _by_id(self, resp):
+        return {t["id"]: t for t in _results(resp)}
+
+    def test_statuses_and_filter(self, seed_data, api, lms_book):
+        token = seed_data["tokens"]["admin"]
+        sid = seed_data["SID_A"]
+        ay = seed_data["academic_year"].id
+        t_late, t_ok, t_overdue, t_none = lms_book["topics"]
+        today = date.today()
+
+        self._plan_date(seed_data, t_late, today - timedelta(days=5))
+        late_plan = self._plan(seed_data, lms_book, t_late, today - timedelta(days=2))
+        self._plan_date(seed_data, t_ok, today - timedelta(days=5))
+        ok_plan = self._plan(seed_data, lms_book, t_ok, today - timedelta(days=6))
+        self._plan_date(seed_data, t_overdue, today - timedelta(days=3))
+
+        url = f"/api/lms/topics/?book_id={lms_book['book'].id}&academic_year={ay}&page_size=50"
+        by_id = self._by_id(api.get(url, token, sid))
+        assert by_id[t_late.id]["coverage_status"] == "late"
+        assert by_id[t_late.id]["coverage_days"] == 3
+        assert by_id[t_ok.id]["coverage_status"] == "on_time"
+        assert by_id[t_overdue.id]["coverage_status"] == "overdue"
+        assert by_id[t_overdue.id]["coverage_days"] == 3
+        assert by_id[t_none.id]["coverage_status"] == "not_planned"
+        assert by_id[t_late.id]["is_covered"] is True
+        assert by_id[t_overdue.id]["is_covered"] is False
+
+        for wanted, expected in (
+            ("late", {t_late.id}), ("on_time", {t_ok.id}),
+            ("overdue", {t_overdue.id}), ("not_planned", {t_none.id}),
+        ):
+            resp = api.get(f"{url}&coverage_status={wanted}", token, sid)
+            assert {t["id"] for t in _results(resp)} == expected, wanted
+
+        late_plan.delete()
+        ok_plan.delete()
+
+    def test_draft_plan_is_not_taught(self, seed_data, api, lms_book):
+        token = seed_data["tokens"]["admin"]
+        sid = seed_data["SID_A"]
+        ay = seed_data["academic_year"].id
+        topic = lms_book["topics"][0]
+        lp = self._plan(seed_data, lms_book, topic, date.today(), status="DRAFT")
+
+        resp = api.get(
+            f"/api/lms/topics/{topic.id}/?academic_year={ay}", token, sid)
+        body = resp.json()
+        assert body["is_covered"] is False
+        assert body["taught_date"] is None
+
+        lp.delete()
+
+    def test_no_status_without_year(self, seed_data, api, lms_book):
+        token = seed_data["tokens"]["admin"]
+        sid = seed_data["SID_A"]
+        topic = lms_book["topics"][0]
+        resp = api.get(f"/api/lms/topics/{topic.id}/", token, sid)
+        assert resp.json()["coverage_status"] is None
+
 
 # ==========================================================================
 # LEVEL I: PERMISSIONS & MULTI-TENANT ISOLATION

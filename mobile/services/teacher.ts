@@ -39,6 +39,7 @@ export interface TimetableEntry {
   slot_start_time?: string | null;
   slot_end_time?: string | null;
   subject_name?: string | null;
+  room?: string | null;
   class_name?: string;
   class_obj?: number;
   session_class?: number | null;

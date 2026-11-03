@@ -61,7 +61,8 @@ api.interceptors.request.use(
       config.headers.Authorization = `Bearer ${token}`;
     }
     const schoolId = await getActiveSchoolId();
-    if (schoolId) {
+    // A call can name its own school (another branch's ledger); otherwise it is the active one.
+    if (schoolId && !config.headers['X-School-ID']) {
       config.headers['X-School-ID'] = schoolId;
     }
     return config;
@@ -200,6 +201,14 @@ export const lmsApi = {
   createLessonPlan: (data: object) => api.post('/api/lms/lesson-plans/', data),
   updateLessonPlan: (id: number, data: object) => api.patch(`/api/lms/lesson-plans/${id}/`, data),
   deleteLessonPlan: (id: number) => api.delete(`/api/lms/lesson-plans/${id}/`),
+  // The learning objectives the curriculum lists for a topic, to add to a lesson plan.
+  getTopicObjectives: (topicId: number) => api.get(`/api/lms/topics/${topicId}/objectives/`),
+  linkLessonPlanObjectives: (id: number, objectiveIds: number[]) =>
+    api.post(`/api/lms/lesson-plans/${id}/link_objectives/`, { objective_ids: objectiveIds }),
+  publishLessonPlan: (id: number) => api.post(`/api/lms/lesson-plans/${id}/publish/`),
+  // Both skip what is not theirs to change and say how many they did.
+  bulkPublishLessonPlans: (ids: number[]) => api.post('/api/lms/lesson-plans/bulk_publish/', { ids }),
+  bulkDeleteLessonPlans: (ids: number[]) => api.post('/api/lms/lesson-plans/bulk_delete/', { ids }),
   // Curriculum authoring: admin, principal, teacher and manager (CanEditCurriculum).
   createBook: (data: object) => api.post('/api/lms/books/', data),
   updateBook: (id: number, data: object) => api.patch(`/api/lms/books/${id}/`, data),
@@ -291,8 +300,12 @@ export const sessionsApi = {
   importTermsApply: (data: object) => api.post('/api/sessions/terms/import-apply/', data),
   getCalendarMonthView: (params?: Record<string, unknown>) =>
     api.get('/api/sessions/calendar-entries/month-view/', { params }),
+  // Preview (changes nothing) or apply new roll numbers for one section's students. Admin and principal only.
+  renumberSection: (sessionClassId: number, data: object) => api.post(`/api/sessions/session-classes/${sessionClassId}/renumber/`, data),
   getCalendarDayStatus: (params?: Record<string, unknown>) =>
     api.get('/api/sessions/calendar-entries/day-status/', { params }),
+  // Retention, attendance, fee collection and pass rate for a year, with a rule-based summary.
+  getSessionHealth: (params?: Record<string, unknown>) => api.get('/api/sessions/health/', { params }),
 };
 
 // ─── Bootstrap API (one-request dashboards) ─────────────────────────────────
@@ -334,6 +347,10 @@ export const studentsApi = {
   // Status and history (admin and principal): which outcomes are allowed, Graduated or Repeat, enrollment history.
   getRemovalPreview: (id: number) => api.get(`/api/students/${id}/removal-preview/`),
   setOutcome: (id: number, data: Record<string, unknown>) => api.post(`/api/students/${id}/outcome/`, data),
+  // A portal login for the student (admin and principal). 400 with { error } for a taken username or an existing login.
+  // Logins for several students with one shared starting password; answers with created, skipped and errors.
+  bulkCreateAccounts: (data: Record<string, unknown>) => api.post('/api/students/bulk-create-accounts/', data),
+  createUserAccount: (id: number, data: Record<string, unknown>) => api.post(`/api/students/${id}/create-user-account/`, data),
   getEnrollmentHistory: (id: number) => api.get(`/api/students/${id}/enrollment_history/`),
   uploadPhoto: (id: number, form: FormData) =>
     api.post(`/api/students/${id}/upload_photo/`, form, { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 60000 }),
@@ -343,6 +360,10 @@ export const studentsApi = {
     api.get('/api/students/by_class/', { params }),
   getProfileSummary: (id: number) =>
     api.get(`/api/students/${id}/profile_summary/`),
+  // The risk profile the server works out for one student (fee detail left out for roles that cannot see fees).
+  getAIProfile: (id: number) => api.get(`/api/students/${id}/ai-profile/`),
+  // Skills and behaviour ratings recorded at an earlier branch (read-only); an empty list for a student who never moved.
+  getEarlierAssessments: (id: number) => api.get(`/api/students/${id}/earlier_assessments/`),
   getAttendanceHistory: (id: number, params?: Record<string, unknown>) =>
     api.get(`/api/students/${id}/attendance_history/`, { params }),
   getFeeLedger: (id: number) =>
@@ -372,6 +393,9 @@ export const financeApi = {
     api.get('/api/finance/fee-payments/', { params }),
   // Permanent delete of one fee record. The phone offers it only for a record with nothing paid.
   deleteFeePayment: (id: number) => api.delete(`/api/finance/fee-payments/${id}/`),
+  // Many records at once. Both answer with how many they changed and any records they could not.
+  bulkUpdatePayments: (data: object) => api.post('/api/finance/fee-payments/bulk_update/', data),
+  bulkDeletePayments: (data: object) => api.post('/api/finance/fee-payments/bulk_delete/', data),
   recordPayment: (id: number, data: Record<string, unknown>) =>
     api.patch(`/api/finance/fee-payments/${id}/`, data),
   createPayment: (data: Record<string, unknown>) =>
@@ -403,6 +427,9 @@ export const financeApi = {
   getFeeSummary: (params?: Record<string, unknown>) => api.get('/api/finance/fee-payments/fee_summary/', { params }),
   getMonthlySummary: (params?: Record<string, unknown>) =>
     api.get('/api/finance/fee-payments/monthly_summary/', { params }),
+  // Admins with several schools: every school plus a combined `grand` total.
+  getMonthlySummaryAll: (params?: Record<string, unknown>) =>
+    api.get('/api/finance/fee-payments/monthly_summary_all/', { params }),
   getStudentLedger: (params?: Record<string, unknown>) =>
     api.get('/api/finance/fee-payments/student_ledger/', { params }),
   // Fee record generation (admin and principal): preview first, then create real fee rows.
@@ -411,6 +438,8 @@ export const financeApi = {
   generateMonthly: (data: object) => api.post('/api/finance/fee-payments/generate_monthly/', data),
   generateAnnualFees: (data: object) => api.post('/api/finance/fee-payments/generate_annual_fees/', data),
   generateSingleFee: (data: object) => api.post('/api/finance/fee-payments/generate_single/', data),
+  // What the fee structure gives a student for a fee type and category: { amount, source }.
+  resolveFeeAmount: (params?: Record<string, unknown>) => api.get('/api/finance/fee-payments/resolve_amount/', { params }),
   // Fee structure (admin and principal write; the server replaces a class's charge per category)
   getFeeStructures: (params?: Record<string, unknown>) =>
     api.get('/api/finance/fee-structures/', { params }),
@@ -427,10 +456,13 @@ export const financeApi = {
     api.get('/api/finance/annual-categories/', { params }),
   createAnnualCategory: (data: object) =>
     api.post('/api/finance/annual-categories/', data),
-  getAccountLedger: (params?: Record<string, unknown>) =>
-    api.get('/api/finance/accounts/ledger/', { params }),
+  getAccountLedger: (params?: Record<string, unknown>, schoolId?: number | null) =>
+    api.get('/api/finance/accounts/ledger/', { params, ...(schoolId ? { headers: { 'X-School-ID': String(schoolId) } } : {}) }),
   getAccountBalances: (params?: Record<string, unknown>) =>
     api.get('/api/finance/accounts/balances/', { params }),
+  // Admins with several schools: balances grouped per school plus the organisation's shared accounts.
+  getAccountBalancesAll: (params?: Record<string, unknown>) =>
+    api.get('/api/finance/accounts/balances_all/', { params }),
   // Transfers between accounts and month closing (admin and principal; accountants are read-only).
   getTransfers: (params?: Record<string, unknown>) =>
     api.get('/api/finance/transfers/', { params }),
@@ -458,6 +490,8 @@ export const financeApi = {
     api.get('/api/finance/other-income/', { params }),
   createOtherIncome: (data: Record<string, unknown>) =>
     api.post('/api/finance/other-income/', data),
+  // The server lets only an admin or the person who recorded the entry delete it, and refuses a closed month.
+  deleteOtherIncome: (id: number) => api.delete(`/api/finance/other-income/${id}/`),
 
   // Reports
   getFinanceSummary: (params?: Record<string, unknown>) =>
@@ -914,6 +948,8 @@ export const parentsApi = {
     api.get(`/api/parents/children/${studentId}/attendance/`, { params }),
   getChildFees: (studentId: number, params?: Record<string, unknown>) =>
     api.get(`/api/parents/children/${studentId}/fees/`, { params }),
+  getChildKuickpayBill: (studentId: number) =>
+    api.get(`/api/parents/children/${studentId}/kuickpay-bill/`),
   getChildTimetable: (studentId: number) =>
     api.get(`/api/parents/children/${studentId}/timetable/`),
   getChildLibrary: (studentId: number) =>
@@ -1073,4 +1109,26 @@ export const messagingApi = {
     api.post(`/api/messaging/threads/${id}/reply/`, { message }),
   getRecipients: () => api.get('/api/messaging/recipients/'),
   getUnreadCount: () => api.get('/api/messaging/unread-count/'),
+};
+
+// ─── Student exits: leaving, transfer and re-admission (admin and principal) ───
+// A case is started, its clearance checklist worked, then it is finalized or cancelled. Finalize does a
+// lot of work on the server (about half a minute against the remote database), so it waits longer.
+
+export const studentExitsApi = {
+  getExits: (params?: Record<string, unknown>) => api.get('/api/student-exits/', { params }),
+  getExit: (id: number) => api.get(`/api/student-exits/${id}/`),
+  startExit: (data: object) => api.post('/api/student-exits/', data),
+  updateExit: (id: number, data: object) => api.patch(`/api/student-exits/${id}/`, data),
+  refreshExit: (id: number) => api.post(`/api/student-exits/${id}/refresh/`),
+  waiveItem: (id: number, kind: string, data: object) => api.post(`/api/student-exits/${id}/items/${kind}/waive/`, data),
+  unwaiveItem: (id: number, kind: string) => api.post(`/api/student-exits/${id}/items/${kind}/unwaive/`),
+  carryItem: (id: number, kind: string) => api.post(`/api/student-exits/${id}/items/${kind}/carry/`),
+  finalizeExit: (id: number) => api.post(`/api/student-exits/${id}/finalize/`, {}, { timeout: 120000 }),
+  cancelExit: (id: number, data: object) => api.post(`/api/student-exits/${id}/cancel/`, data),
+  // Other active branches of this school's organization: where a student can transfer to.
+  getDestinations: () => api.get('/api/student-exits/destinations/'),
+  // Classes of a branch for the academic year covering the leaving date, with the rolls already taken in each.
+  getDestinationClasses: (params: { school: number; leaving_date: string }) => api.get('/api/student-exits/destination-classes/', { params }),
+  readmit: (data: object) => api.post('/api/student-exits/readmit/', data),
 };

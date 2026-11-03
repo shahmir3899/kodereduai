@@ -2,12 +2,14 @@ import React, { useMemo, useState } from 'react';
 import { View, Text, FlatList, TextInput, TouchableOpacity, ScrollView, StyleSheet } from 'react-native';
 import { todayString, type ClassOption } from '../../services/attendanceEntry';
 import {
-  MONTH_NAMES, PAYMENT_METHODS, STATUS_TABS, balanceOf, buildPaymentPatch, canDeleteFee, canRecordPayment, categoryOptions, emptyPaymentForm,
+  MONTH_NAMES, PAYMENT_METHODS, STATUS_TABS, balanceOf, bulkDeleteFeesResultText, bulkDeleteFeesText, bulkPayPayload, bulkPayResultText, bulkPayText, bulkPayTotal, deletableIds, payableIds, skippedNote, validateBulkPay, buildPaymentPatch, canDeleteFee, canRecordPayment, categoryOptions, emptyPaymentForm,
   feeDescription, feeLabel, filterPayments, formatMoney, sortPayments, statusTone, stepFeeMonth, summarize, validatePayment,
   type FeePayment, type FeeTypeTab, type PaymentForm, type StatusTab,
 } from '../../services/feeCollect';
 import { useAttendanceClassOptions } from '../../hooks/useAcademicYear';
-import { useAccounts, useDeleteFeePayment, useFeePayments, useRecordPayment } from '../../hooks/useFees';
+import { useAccounts, useBulkDeleteFees, useBulkPayFull, useDeleteFeePayment, useFeePayments, useRecordPayment } from '../../hooks/useFees';
+import { selectedAll, toggleAll, toggleId } from '../../services/questionExtras';
+import { confirm } from '../ui/confirm';
 import { useAcademicYear } from '../../hooks/useAcademicYear';
 import { reportsApi } from '../../services/api';
 import { shareReportFile } from '../../services/reportShare';
@@ -26,6 +28,7 @@ import ErrorState from '../ui/ErrorState';
 import EmptyState from '../ui/EmptyState';
 import StatusPill from '../ui/StatusPill';
 import KuickpayReceivedLabel from './KuickpayReceivedLabel';
+import CopyableNumber from '../ui/CopyableNumber';
 import { useToast } from '../ui/Toast';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
 
@@ -70,6 +73,8 @@ export default function FeeCollectScreen({ classOptions, canRecord = true, canMa
   const accounts = useAccounts();
   const record = useRecordPayment();
   const remove = useDeleteFeePayment();
+  const bulkPay = useBulkPayFull();
+  const bulkDelete = useBulkDeleteFees();
   const academicYear = useAcademicYear({ lockToCurrent: true });
   const refreshControl = useRefreshControl(query.refetch, accounts.refetch);
   const today = todayString();
@@ -84,6 +89,58 @@ export default function FeeCollectScreen({ classOptions, canRecord = true, canMa
   const categories = useMemo(() => categoryOptions(query.data ?? []), [query.data]);
   const totals = useMemo(() => summarize(shown), [shown]);
   const activeAccounts = (accounts.data ?? []).filter((a) => a.is_active !== false);
+
+  // Bulk actions (admin and principal). Choosing is page-scoped: ids from a list no longer on screen must not ride along.
+  const [selecting, setSelecting] = useState(false);
+  const [selected, setSelected] = useState<number[]>([]);
+  const [bulkPaying, setBulkPaying] = useState(false);
+  const [bulkAccount, setBulkAccount] = useState<number | null>(null);
+  const [bulkMethod, setBulkMethod] = useState<string>('CASH');
+  const [bulkError, setBulkError] = useState<string | null>(null);
+  const listKey = `${feeType}|${ym.month}|${ym.year}|${effectiveClassId}|${status}|${category}|${search}`;
+  React.useEffect(() => { setSelected([]); }, [listKey]);
+  const shownIds = shown.map((p) => p.id);
+  const payIds = payableIds(shown, selected);
+  const delIds = deletableIds(shown, selected);
+
+  const openBulkPay = () => {
+    setBulkAccount(activeAccounts.length === 1 ? activeAccounts[0].id : null);
+    setBulkMethod('CASH');
+    setBulkError(null);
+    setBulkPaying(true);
+  };
+
+  const confirmBulkPay = async () => {
+    const problem = validateBulkPay(bulkAccount, payIds);
+    if (problem) return setBulkError(problem);
+    const account = activeAccounts.find((a) => a.id === bulkAccount);
+    const method = PAYMENT_METHODS.find((m) => m.value === bulkMethod)?.label ?? bulkMethod;
+    const ok = await confirm({
+      title: 'Mark as fully paid?',
+      message: bulkPayText(payIds.length, bulkPayTotal(shown, payIds), account?.name ?? 'the account', method) + skippedNote(selected.length, payIds.length),
+      confirmLabel: 'Mark as paid',
+    });
+    if (!ok) return;
+    try {
+      const res = await bulkPay.mutateAsync(bulkPayPayload(payIds, bulkAccount as number, bulkMethod));
+      toast.success(bulkPayResultText(res.data));
+      setBulkPaying(false);
+      setSelected([]);
+      setSelecting(false);
+    } catch (e) { setBulkError(staffLeaveErrorMessage(e, 'Could not record the payments.')); }
+  };
+
+  const removeSelected = async () => {
+    if (delIds.length === 0) return;
+    const ok = await confirm({ title: 'Delete selected fee records?', message: bulkDeleteFeesText(delIds.length) + skippedNote(selected.length, delIds.length), confirmLabel: 'Delete', destructive: true });
+    if (!ok) return;
+    try {
+      const res = await bulkDelete.mutateAsync(delIds);
+      toast.success(bulkDeleteFeesResultText(res.data));
+      setSelected([]);
+      setSelecting(false);
+    } catch (e) { toast.error(staffLeaveErrorMessage(e, 'Could not delete the fee records.')); }
+  };
 
   const confirmDelete = async () => {
     if (!deleting) return;
@@ -155,6 +212,18 @@ export default function FeeCollectScreen({ classOptions, canRecord = true, canMa
           options={[{ value: ALL_CATEGORIES, label: 'All categories' }, ...categories.map((c) => ({ value: c, label: c }))]} />
       ) : null}
       <SearchBar value={search} onChangeText={setSearch} placeholder="Search by name or roll number..." />
+      {canManage ? (
+        <View style={styles.bulkRow}>
+          <Button title={selecting ? 'Done selecting' : 'Select'} size="sm" variant="outline" onPress={() => { setSelecting((v) => !v); setSelected([]); }} />
+          {selecting ? <Button title={selectedAll(shownIds, selected) ? 'Clear page' : 'Select page'} size="sm" variant="ghost" onPress={() => setSelected((s) => toggleAll(shownIds, s))} /> : null}
+        </View>
+      ) : null}
+      {canManage && selecting ? (
+        <View style={styles.bulkRow}>
+          <Button title={`Pay in full (${payIds.length})`} size="sm" variant="outline" disabled={payIds.length === 0 || bulkPay.isPending || bulkDelete.isPending} onPress={openBulkPay} />
+          <Button title={`Delete (${delIds.length})`} size="sm" variant="danger" disabled={delIds.length === 0 || bulkPay.isPending || bulkDelete.isPending} onPress={removeSelected} />
+        </View>
+      ) : null}
       {canManage && feeType !== 'ANNUAL' ? (
         <Button title={`${MONTH_NAMES[ym.month - 1]} report (PDF, whole school)`} size="sm" variant="outline" onPress={shareMonthReport} loading={reporting} disabled={reporting} style={styles.reportBtn} />
       ) : null}
@@ -180,12 +249,15 @@ export default function FeeCollectScreen({ classOptions, canRecord = true, canMa
         keyboardShouldPersistTaps="handled"
         refreshControl={refreshControl}
         ListHeaderComponent={header}
-        ListEmptyComponent={<EmptyState title="No fees" message="No fee records match. Fees are generated on the web app." />}
+        ListEmptyComponent={<EmptyState title="No fees" message="No fee records match. Fees can be generated from Generate Fee Records." />}
         renderItem={({ item: p }) => {
           const balance = balanceOf(p);
           return (
             <View style={styles.card}>
+              <TouchableOpacity accessibilityRole={selecting ? 'checkbox' : 'text'} accessibilityState={selecting ? { checked: selected.includes(p.id) } : undefined} activeOpacity={selecting ? 0.6 : 1}
+                disabled={!selecting} onPress={() => setSelected((s) => toggleId(s, p.id))}>
               <View style={styles.top}>
+                {selecting ? <Text style={styles.check}>{selected.includes(p.id) ? '☑' : '☐'}</Text> : null}
                 <View style={{ flex: 1 }}>
                   <Text style={styles.name} numberOfLines={1}>{p.student_name}</Text>
                   <Text style={styles.sub} numberOfLines={1}>
@@ -194,6 +266,7 @@ export default function FeeCollectScreen({ classOptions, canRecord = true, canMa
                 </View>
                 <StatusPill label={p.status} tone={statusTone(p.status)} />
               </View>
+              </TouchableOpacity>
               <Text style={styles.fee}>{feeLabel(p)}</Text>
               <View style={styles.amounts}>
                 <Amount label="Due" value={formatMoney(Number(p.amount_due))} />
@@ -201,13 +274,19 @@ export default function FeeCollectScreen({ classOptions, canRecord = true, canMa
                 <Amount label="Balance" value={formatMoney(balance)} color={balance > 0 ? Colors.error : Colors.textSecondary} />
               </View>
               <KuickpayReceivedLabel kuickpay={p.kuickpay} />
+              {p.kuickpay_consumer_number ? (
+                <View style={styles.consumerRow}>
+                  <Text style={styles.consumerLabel}>Kuickpay No.</Text>
+                  <CopyableNumber value={p.kuickpay_consumer_number} textStyle={styles.consumerNumber} />
+                </View>
+              ) : null}
               {Number(p.previous_balance) > 0 ? <Text style={styles.carry}>Includes {formatMoney(Number(p.previous_balance))} carried forward</Text> : null}
-              {canManage && canDeleteFee(p) ? (
+              {!selecting && canManage && canDeleteFee(p) ? (
                 <TouchableOpacity accessibilityRole="button" accessibilityLabel={`Delete fee: ${feeDescription(p)}`} style={styles.delete} onPress={() => { setDeleteError(null); setDeleting(p); }}>
                   <Text style={styles.deleteText}>Delete this record</Text>
                 </TouchableOpacity>
               ) : null}
-              {canRecord && canRecordPayment(p) ? (
+              {!selecting && canRecord && canRecordPayment(p) ? (
                 <TouchableOpacity accessibilityRole="button" style={styles.record} onPress={() => open(p)}>
                   <Text style={styles.recordText}>Record payment</Text>
                 </TouchableOpacity>
@@ -220,6 +299,13 @@ export default function FeeCollectScreen({ classOptions, canRecord = true, canMa
       <FormSheet visible={deleting !== null} title="Delete this fee record?" onClose={() => setDeleting(null)} onSubmit={confirmDelete} submitLabel="Delete" busy={remove.isPending} error={deleteError}>
         {deleting ? <Text style={styles.sheetWho}>{feeDescription(deleting)}</Text> : null}
         <Text style={styles.sheetSub}>Nothing has been paid on it. Deleting it cannot be undone.</Text>
+      </FormSheet>
+
+      <FormSheet visible={bulkPaying} title="Mark selected as fully paid" onClose={() => setBulkPaying(false)} onSubmit={confirmBulkPay} submitLabel="Continue" busy={bulkPay.isPending} error={bulkError}>
+        <Text style={styles.sheetSub}>{payIds.length} fee record{payIds.length === 1 ? '' : 's'}, {formatMoney(bulkPayTotal(shown, payIds))} still owing.{skippedNote(selected.length, payIds.length)} Each is paid for its full balance, dated today.</Text>
+        <Select label="Account *" value={bulkAccount} options={activeAccounts.map((a) => ({ value: a.id, label: a.name }))} onChange={(v) => { setBulkAccount(v); setBulkError(null); }}
+          placeholder={accounts.isLoading ? 'Loading...' : 'Select account'} />
+        <Select label="Method" value={bulkMethod} options={PAYMENT_METHODS.map((m) => ({ value: m.value, label: m.label }))} onChange={(v) => setBulkMethod(String(v))} />
       </FormSheet>
 
       <BottomSheet visible={!!paying && !!form} onClose={() => setPaying(null)} title="Record payment">
@@ -290,9 +376,14 @@ const styles = StyleSheet.create({
   amountLabel: { fontSize: 10, color: Colors.textSecondary },
   amountValue: { fontSize: FontSize.sm, fontWeight: '700' },
   reportBtn: { alignSelf: 'flex-start', marginBottom: Spacing.md },
+  bulkRow: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm, marginVertical: Spacing.xs },
+  check: { fontSize: 22, color: Colors.primary, marginRight: Spacing.sm },
   delete: { marginTop: Spacing.sm, borderWidth: 1, borderColor: Colors.error, borderRadius: BorderRadius.md, paddingVertical: Spacing.sm, alignItems: 'center' },
   deleteText: { color: Colors.error, fontWeight: '700', fontSize: FontSize.sm },
   carry: { fontSize: FontSize.xs, color: Colors.warning, marginTop: Spacing.xs },
+  consumerRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: Spacing.sm, marginTop: Spacing.xs },
+  consumerLabel: { fontSize: FontSize.xs, color: Colors.textSecondary },
+  consumerNumber: { fontSize: FontSize.sm },
   record: { marginTop: Spacing.sm, backgroundColor: Colors.primary, borderRadius: BorderRadius.md, paddingVertical: Spacing.sm, alignItems: 'center' },
   recordText: { color: Colors.textInverse, fontWeight: '700', fontSize: FontSize.sm },
   sheet: { padding: Spacing.lg, paddingBottom: Spacing.xxxl },

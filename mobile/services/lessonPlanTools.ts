@@ -4,6 +4,7 @@
 // generate_lesson_plan_ai).
 
 import type { LessonPlanForm } from './lessonPlans';
+import { rowsFromText } from './lessonPlanObjectives';
 
 export interface TopicChoice { id: number; title: string; topic_number?: number | null; content_kind?: string }
 export interface ChapterChoice { id: number; title: string; chapter_number?: number | null; topics: TopicChoice[] }
@@ -50,6 +51,11 @@ export function topicSummary(books: BookChoice[], ids: number[]): string {
   return parts.join('\n');
 }
 
+// The titles of the picked topics, in book order.
+export function topicNames(books: BookChoice[], ids: number[]): string[] {
+  return books.flatMap((b) => b.chapters).flatMap((c) => c.topics).filter((t) => ids.includes(t.id)).map((t) => t.title);
+}
+
 export function chapterIdsFor(books: BookChoice[], topicIds: number[]): number[] {
   return books.flatMap((b) => b.chapters).filter((c) => c.topics.some((t) => topicIds.includes(t.id))).map((c) => c.id);
 }
@@ -80,6 +86,8 @@ export function applyAiDraft(f: LessonPlanForm, r: AiResult): LessonPlanForm {
     ...f,
     title: r.title?.trim() || f.title,
     objectives: r.objectives ?? f.objectives,
+    // The draft's lines become rows, so they can be edited one by one and given a Bloom level.
+    objectiveRows: r.objectives ? (rowsFromText(r.objectives).length ? rowsFromText(r.objectives) : f.objectiveRows) : f.objectiveRows,
     description: r.description ?? f.description,
     methods: r.teaching_methods ?? f.methods,
     materials: r.materials_needed ?? f.materials,

@@ -11,7 +11,7 @@ import { useRefreshControl } from '../../hooks/useRefreshControl';
 import { dayCodeFor, entriesForDay, formatSlotTime } from '../../services/teacher';
 import {
   assignmentLabel, attendanceClassId, buildTeacherAttention, examsAwaitingMarks, findPeriod, isPending,
-  matchAssignment, minutesLabel, planIsDone, studentsAtRiskCount, upcomingExams, weekPlanStats, type WeekPlan,
+  badgeLabel, matchAssignment, minutesLabel, periodSubtitle, planIsDone, shortDate, studentsAtRiskCount, upcomingExams, weekPlanStats, type WeekPlan,
 } from '../../services/teacherDashboard';
 import Card from '../../components/ui/Card';
 import Skeleton from '../../components/ui/Skeleton';
@@ -95,7 +95,7 @@ export default function TeacherDashboard() {
         tone={period.state === 'now' ? 'blue' : 'gray'}
         eyebrow={period.state === 'now' ? `Now · ${period.minutes} min left` : `Next · starts in ${minutesLabel(period.minutes)}`}
         title={`${heroEntry.subject_name || 'Free period'} — ${heroEntry.class_name ?? ''}`}
-        subtitle={`${formatSlotTime(heroEntry.slot_start_time)} – ${formatSlotTime(heroEntry.slot_end_time)}`}
+        subtitle={`${formatSlotTime(heroEntry.slot_start_time)} – ${formatSlotTime(heroEntry.slot_end_time)}${heroEntry.room ? ` · Room ${heroEntry.room}` : ''}`}
         action={attendanceOn && heroAssignment && attendanceRoute
           ? { label: unmarked ? 'Mark attendance' : 'View attendance', onPress: () => go(attendanceRoute, { class: attendanceClassId(heroAssignment) }) }
           : undefined}
@@ -104,12 +104,14 @@ export default function TeacherDashboard() {
   }
 
   const quick = [
-    { label: 'Attendance', icon: '✅', route: attendanceRoute, show: attendanceOn },
-    { label: 'Timetable', icon: '📅', route: routeFor('teacher', '/academics/timetable'), show: true },
-    { label: 'Marks', icon: '📝', route: routeFor('teacher', '/academics/marks-entry'), show: examsOn },
-    { label: 'Assignments', icon: '📚', route: routeFor('teacher', '/academics/assignments'), show: academicsOn },
-    { label: 'Collect Fees', icon: '💰', route: routeFor('teacher', '/finance/fees/collect'), show: isModuleEnabled('finance') },
-    { label: 'My Leave', icon: '🗓️', route: routeFor('teacher', '/hr/leave'), show: isModuleEnabled('hr') },
+    { label: 'Attendance', icon: '✅', route: attendanceRoute, show: attendanceOn, badge: off.isOffDay ? 0 : rows.filter(isPending).length },
+    { label: 'Timetable', icon: '📅', route: routeFor('teacher', '/academics/timetable'), show: true, badge: 0 },
+    { label: 'Lesson Plans', icon: '📖', route: routeFor('teacher', '/academics/lesson-plans'), show: academicsOn, badge: 0 },
+    { label: 'Marks', icon: '📝', route: routeFor('teacher', '/academics/marks-entry'), show: examsOn, badge: examsAwaitingMarks(allExams) },
+    { label: 'Assignments', icon: '📚', route: routeFor('teacher', '/academics/assignments'), show: academicsOn, badge: submissions.data?.count ?? 0 },
+    { label: 'Collect Fees', icon: '💰', route: routeFor('teacher', '/finance/fees/collect'), show: isModuleEnabled('finance'), badge: 0 },
+    { label: 'My Leave', icon: '🗓️', route: routeFor('teacher', '/hr/leave'), show: isModuleEnabled('hr'), badge: 0 },
+    { label: 'Notifications', icon: '🔔', route: routeFor('teacher', '/notifications'), show: isModuleEnabled('notifications'), badge: 0 },
   ].filter((a) => a.show);
 
   return (
@@ -150,8 +152,9 @@ export default function TeacherDashboard() {
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.subject} numberOfLines={1}>{e.subject_name || e.slot_name || 'Period'}</Text>
-                <Text style={styles.cls} numberOfLines={1}>{e.class_name}</Text>
+                <Text style={styles.cls} numberOfLines={1}>{periodSubtitle(e)}</Text>
               </View>
+              {e.slot_name ? <Text style={styles.slot}>{e.slot_name}</Text> : null}
             </Card>
           );
         })
@@ -188,7 +191,7 @@ export default function TeacherDashboard() {
           <Card style={styles.list}>
             {submissions.data!.items.slice(0, 5).map((s) => (
               <Text key={s.id} style={styles.listRow} numberOfLines={1}>
-                {s.student_name || 'Student'}{s.assignment_title ? `  ·  ${s.assignment_title}` : ''}
+                {s.student_name || 'Student'}{s.assignment_title ? `  ·  ${s.assignment_title}` : ''}{shortDate(s.submitted_at) ? `  ·  ${shortDate(s.submitted_at)}` : ''}
               </Text>
             ))}
             {(submissions.data!.count ?? 0) > 5 ? <Text style={styles.muted}>+ {(submissions.data!.count ?? 0) - 5} more</Text> : null}
@@ -206,6 +209,12 @@ export default function TeacherDashboard() {
                 <Text style={styles.cls} numberOfLines={1}>{e.class_name}{e.start_date ? `  ·  ${e.start_date}` : ''}</Text>
               </View>
               <StatusPill label={e.status} tone={e.status === 'PUBLISHED' ? 'success' : 'info'} />
+              {e.status === 'PUBLISHED' && examsOn && routeFor('teacher', '/academics/marks-entry') ? (
+                <TouchableOpacity accessibilityRole="button" accessibilityLabel={`Enter marks for ${e.name}`} hitSlop={8} style={styles.enter}
+                  onPress={() => go(routeFor('teacher', '/academics/marks-entry'), { exam: e.id })}>
+                  <Text style={styles.link}>Enter marks</Text>
+                </TouchableOpacity>
+              ) : null}
             </Card>
           ))}
         </>
@@ -245,6 +254,7 @@ export default function TeacherDashboard() {
           <TouchableOpacity accessibilityRole="button" key={a.label} style={[styles.quick, !a.route && styles.quickOff]} disabled={!a.route} onPress={() => go(a.route)}>
             <Text style={styles.quickIcon}>{a.icon}</Text>
             <Text style={styles.quickLabel}>{a.label}</Text>
+            {badgeLabel(a.badge) ? <View style={styles.badge}><Text style={styles.badgeText}>{badgeLabel(a.badge)}</Text></View> : null}
           </TouchableOpacity>
         ))}
       </View>
@@ -319,6 +329,10 @@ const styles = StyleSheet.create({
   actions: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.md },
   quick: { width: '22%', minWidth: 72, alignItems: 'center', backgroundColor: Colors.surface, borderRadius: BorderRadius.md, paddingVertical: Spacing.md },
   quickOff: { opacity: 0.4 },
+  slot: { fontSize: FontSize.xs, color: Colors.textTertiary, marginLeft: Spacing.sm },
+  enter: { marginLeft: Spacing.sm, minHeight: 44, justifyContent: 'center' },
+  badge: { position: 'absolute', top: 4, right: 6, minWidth: 18, height: 18, borderRadius: 9, backgroundColor: Colors.error, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4 },
+  badgeText: { fontSize: 10, fontWeight: '700', color: Colors.surface },
   quickIcon: { fontSize: 22 },
   quickLabel: { fontSize: FontSize.xs, color: Colors.text, marginTop: 4, textAlign: 'center' },
 });

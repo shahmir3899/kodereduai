@@ -9,6 +9,7 @@ import {
   reportPeriodParams, studentReportFileName, validateOutcome, webOnlyOutcomes, type ReportPeriod,
 } from '../../services/studentLifecycle';
 import { saveFailureMessage } from '../../services/errorKind';
+import { accountErrorText, accountProblem, buildAccountPayload, emptyAccountForm, PASSWORD_MIN_LENGTH, type AccountForm } from '../../services/studentAccount';
 import { staffLeaveErrorMessage } from '../../services/staffLeave';
 import { useRemovalPreview } from '../../hooks/useStudents';
 import { useAcademicYear } from '../../hooks/useAcademicYear';
@@ -25,7 +26,7 @@ interface Props {
   student: { id: number; name: string; status?: string | null; has_user_account?: boolean; sectionId?: number | null };
 }
 
-type Open = 'status' | 'invite' | 'report' | 'move' | 'remove' | null;
+type Open = 'status' | 'invite' | 'report' | 'move' | 'remove' | 'account' | null;
 
 // Admin and principal actions on one student: mark Graduated or Repeat, make a parent invite code,
 // and make the student report PDF. Leaving, transfer and re-admission go through a checklist that
@@ -54,6 +55,16 @@ export default function StudentAdminActions({ student }: Props) {
   const [code, setCode] = useState<string | null>(null);
   const invite = useMutation({ mutationFn: async () => (await parentsApi.generateInvite(buildInvitePayload(student.id, relation, phone))).data as { invite_code?: string } });
 
+  // login for the student
+  const [account, setAccount] = useState<AccountForm>(emptyAccountForm(student.name));
+  const setAcc = <K extends keyof AccountForm>(k: K, v: AccountForm[K]) => setAccount((a) => ({ ...a, [k]: v }));
+  const createAccount = useMutation({
+    mutationFn: () => studentsApi.createUserAccount(student.id, buildAccountPayload(account)),
+    onSuccess: () => {
+      qc.invalidateQueries({ predicate: (q) => ['students', 'student', 'student-edit', 'studentProfileSummary'].includes(q.queryKey[0] as string) });
+    },
+  });
+
   // report
   const [period, setPeriod] = useState<ReportPeriod>('this_month');
   const [custom, setCustom] = useState({ from: '', to: '' });
@@ -66,6 +77,7 @@ export default function StudentAdminActions({ student }: Props) {
     if (which === 'status') { setOutcome(''); setReason(''); }
     if (which === 'invite') { setRelation('FATHER'); setPhone(''); setCode(null); }
     if (which === 'report') { setPeriod('this_month'); setCustom({ from: '', to: '' }); }
+    if (which === 'account') setAccount(emptyAccountForm(student.name));
     setOpen(which);
   };
 
@@ -78,6 +90,17 @@ export default function StudentAdminActions({ student }: Props) {
       toast.success(outcome === 'GRADUATED' ? 'Marked as graduated.' : 'Marked as repeating.');
       close();
     } catch (e) { setError(staffLeaveErrorMessage(e, 'Could not change the status.')); }
+  };
+
+  const saveAccount = async () => {
+    const problem = accountProblem(account);
+    if (problem) return setError(problem);
+    setError(null);
+    try {
+      await createAccount.mutateAsync();
+      toast.success(`Login created for ${student.name}. Username: ${account.username.trim()}`);
+      close();
+    } catch (e) { setError(accountErrorText(e)); }
   };
 
   const makeInvite = async () => {
@@ -117,6 +140,7 @@ export default function StudentAdminActions({ student }: Props) {
         <Button title="Change status" size="sm" variant="outline" onPress={() => openSheet('status')} />
         <Button title="Student report" size="sm" variant="outline" onPress={() => openSheet('report')} />
         {!student.has_user_account ? <Button title="Parent invite" size="sm" variant="outline" onPress={() => openSheet('invite')} /> : null}
+        {!student.has_user_account ? <Button title="Create login" size="sm" variant="outline" onPress={() => openSheet('account')} /> : null}
         <Button title="Change class" size="sm" variant="outline" onPress={() => openSheet('move')} />
         <Button title="Remove" size="sm" variant="danger" onPress={() => openSheet('remove')} />
       </View>
@@ -156,8 +180,16 @@ export default function StudentAdminActions({ student }: Props) {
         )}
       </FormSheet>
 
+      <FormSheet visible={open === 'account'} title="Create login" onClose={close} onSubmit={saveAccount} submitLabel="Create login" busy={createAccount.isPending} error={error}>
+        <Text style={styles.hint}>A login for {student.name} to use the student app. Give them the username and password yourself; the password is not shown again.</Text>
+        <Input label="Username *" value={account.username} onChangeText={(v) => setAcc('username', v)} autoCapitalize="none" autoCorrect={false} />
+        <Input label="Email (optional)" value={account.email} onChangeText={(v) => setAcc('email', v)} keyboardType="email-address" autoCapitalize="none" autoCorrect={false} />
+        <Input label="Password *" value={account.password} onChangeText={(v) => setAcc('password', v)} secureTextEntry autoCapitalize="none" placeholder={`At least ${PASSWORD_MIN_LENGTH} characters`} />
+        <Input label="Confirm password *" value={account.confirm} onChangeText={(v) => setAcc('confirm', v)} secureTextEntry autoCapitalize="none" />
+      </FormSheet>
+
       <FormSheet visible={open === 'report'} title="Student report" onClose={close} onSubmit={makeReport} submitLabel="Make PDF" busy={reporting} error={error}>
-        <Text style={styles.hint}>A PDF with attendance, fees and exam results for the period. It opens in the share sheet.</Text>
+        <Text style={styles.hint}>A PDF with attendance, learning progress, skills, outstanding fees and remarks for the period. It opens in the share sheet.</Text>
         <Select label="Period" value={period} options={REPORT_PERIODS} onChange={(v) => setPeriod(v as ReportPeriod)} />
         {period === 'custom' ? (
           <>

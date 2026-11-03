@@ -12,6 +12,8 @@ export interface StudentRow {
   status?: string | null;
   parent_name?: string | null;
   parent_phone?: string | null;
+  // Whether the student already has a login (the server leaves such students out of a bulk create).
+  has_user_account?: boolean;
 }
 
 // Query params for the students list: a section (session class) when the year has them, else the
@@ -71,6 +73,9 @@ export interface ProfileSummary {
   exam_average_label?: string | null;
   // Only admin roles receive it; see exitBanner in studentLifecycle.ts.
   latest_exit?: import('./studentLifecycle').ExitCase | null;
+  // A student who was at another branch too: those records are included in the figures, read-only.
+  has_earlier_branch_data?: boolean;
+  earlier_branches?: string[];
 }
 
 export interface StatCardData { label: string; value: string; tone: 'success' | 'warning' | 'error' | 'neutral' }
@@ -182,4 +187,29 @@ export function sectionRows(sessionClasses: SessionClassDto[], allowedMasterIds:
       };
     })
     .sort((a, b) => a.grade - b.grade || a.label.localeCompare(b.label));
+}
+
+// ── Summary tiles above the list (admin and principal) ───────────────────────
+// The web's Total, Current, Left and Classes. A count is a number the server gave, or null while it is
+// not known (never a made-up 0).
+
+export interface StudentCounts { total: number | null; current: number | null; left: number | null }
+export interface SummaryTile { label: string; value: string; tone: 'success' | 'neutral' | 'warning' | 'info' }
+
+// How many students a list response holds: the server's count, or the length of a plain array.
+export function countOfList(data: unknown): number | null {
+  if (Array.isArray(data)) return data.length;
+  const n = (data as { count?: unknown } | null | undefined)?.count;
+  return typeof n === 'number' && Number.isFinite(n) ? n : null;
+}
+
+const show = (n: number | null) => (n == null ? '—' : n.toLocaleString());
+
+export function summaryTiles(counts: StudentCounts, classCount: number | null): SummaryTile[] {
+  return [
+    { label: 'Total students', value: show(counts.total), tone: 'neutral' },
+    { label: 'Current', value: show(counts.current), tone: 'success' },
+    { label: 'Left', value: show(counts.left), tone: 'neutral' },
+    { label: 'Classes', value: classCount == null || classCount <= 0 ? '—' : String(classCount), tone: 'info' },
+  ];
 }

@@ -395,3 +395,86 @@ class TestCrossCuttingAndSecurity:
         data = resp.json() if resp.status_code == 200 else []
         assert resp.status_code == 200, f"Expected 200, got {resp.status_code}"
         assert len(data) >= 1, f"Expected at least 1 report for School B, got {len(data)}"
+
+
+# =====================================================================
+# STUDENT COMPREHENSIVE REPORT: lessons, fees, summary, class teacher
+# =====================================================================
+
+
+@pytest.mark.django_db
+@pytest.mark.phase11
+class TestStudentReportSections:
+    """Sections of the student report that depend on lessons, fees and class teacher."""
+
+    LESSON_DATE = date(2025, 9, 10)
+
+    def _generator(self, seed_data, student):
+        from reports.generators.student import StudentComprehensiveReportGenerator
+
+        return StudentComprehensiveReportGenerator(seed_data['school_a'], {
+            'student_id': student.id,
+            'academic_year': seed_data['academic_year'].id,
+            'date_from': '2025-09-01',
+            'date_to': '2025-09-30',
+        })
+
+    def _lesson(self, seed_data, seed_sections, status):
+        from lms.models import LessonPlan
+
+        return LessonPlan.objects.create(
+            school=seed_data['school_a'], academic_year=seed_data['academic_year'],
+            class_obj=seed_sections['master'], session_class=seed_sections['section_a'],
+            subject=seed_data['subjects'][0], teacher=seed_data['staff'][0],
+            title='Counting to ten', description='d', lesson_date=self.LESSON_DATE, status=status,
+        )
+
+    def test_draft_only_lessons_are_counted_not_shown(self, seed_data, seed_sections):
+        self._lesson(seed_data, seed_sections, 'DRAFT')
+        gen = self._generator(seed_data, seed_sections['a_students'][0])
+        data = gen.get_data()
+        assert not data['lessons_by_subject']
+        assert data['draft_lesson_count'] == 1
+        assert gen.render_pdf(data).startswith(b'%PDF')
+
+    def test_published_lessons_group_by_subject(self, seed_data, seed_sections):
+        self._lesson(seed_data, seed_sections, 'PUBLISHED')
+        data = self._generator(seed_data, seed_sections['a_students'][0]).get_data()
+        assert data['lessons_by_subject'] == {seed_data['subjects'][0].name: ['Counting to ten']}
+        assert data['draft_lesson_count'] == 0
+
+    def test_fees_cleared_when_nothing_owed(self, seed_data, seed_sections):
+        gen = self._generator(seed_data, seed_sections['a_students'][0])
+        data = gen.get_data()
+        assert data['fee_items'] == []
+        assert data['fee_outstanding'] == 0
+        assert gen.render_pdf(data).startswith(b'%PDF')
+
+    def test_outstanding_fee_listed(self, seed_data, seed_sections):
+        from finance.models import FeePayment
+
+        student = seed_sections['a_students'][0]
+        FeePayment.objects.create(
+            school=seed_data['school_a'], student=student, academic_year=seed_data['academic_year'],
+            month=9, year=2025, amount_due=1500, amount_paid=0,
+        )
+        gen = self._generator(seed_data, student)
+        data = gen.get_data()
+        assert len(data['fee_items']) == 1
+        assert data["fee_outstanding"] == 1500
+        assert gen.render_pdf(data).startswith(b'%PDF')
+
+    def test_class_teacher_in_profile(self, seed_data, seed_sections):
+        from academics.models import ClassTeacherAssignment
+
+        teacher = seed_data['staff'][0]
+        ClassTeacherAssignment.objects.create(
+            school=seed_data['school_a'], academic_year=seed_data['academic_year'],
+            session_class=seed_sections['section_a'], class_obj=seed_sections['master'], teacher=teacher,
+        )
+        data = self._generator(seed_data, seed_sections['a_students'][0]).get_data()
+        assert ('Class Teacher', teacher.full_name) in data['student_info_rows']
+
+    def test_no_class_teacher_row_when_unassigned(self, seed_data, seed_sections):
+        data = self._generator(seed_data, seed_sections['a_students'][0]).get_data()
+        assert not any(label == 'Class Teacher' for label, _ in data['student_info_rows'])

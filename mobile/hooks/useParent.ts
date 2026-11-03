@@ -3,6 +3,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { scopedKey } from '../services/queryRules';
 import { parentsApi, transportApi } from '../services/api';
 import { listOf } from '../services/academicYear';
+import type { KuickpayBillSummary } from '../services/kuickpayBill';
 import type {
   ChildAttendanceRow, ChildLeave, ChildLink, ChildOverview, ChildTimetableRow, TrackResponse,
 } from '../services/parentPortal';
@@ -46,6 +47,12 @@ export function useChildAttendance(studentId: number, year: number, month: numbe
 export function useChildFees(studentId: number) {
   return useScopedQuery('feeSummary', ['child', studentId], async () =>
     listOf<PortalFee>((await parentsApi.getChildFees(studentId)).data));
+}
+
+// Root 'childFees' so it is a money query: never served from a cache and cleared with the fees.
+export function useChildKuickpayBill(studentId: number) {
+  return useScopedQuery('childFees', ['kuickpayBill', studentId], async () =>
+    (await parentsApi.getChildKuickpayBill(studentId)).data as KuickpayBillSummary);
 }
 
 export function useChildTimetable(studentId: number) {

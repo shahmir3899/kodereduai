@@ -55,3 +55,28 @@ export function useDeleteFeePayment() {
     },
   });
 }
+
+// Money roots are refreshed after any change, so no screen shows a balance from before it.
+const refreshMoney = (queryClient: ReturnType<typeof useQueryClient>) => {
+  queryClient.invalidateQueries({ queryKey: ['feePayments'] });
+  queryClient.invalidateQueries({ queryKey: ['feeSummary'] });
+  queryClient.invalidateQueries({ queryKey: ['accounts'] });
+  queryClient.invalidateQueries({ queryKey: ['finance'] });
+  queryClient.invalidateQueries({ queryKey: ['adminDashboard'] });
+};
+
+export function useBulkPayFull() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: object) => financeApi.bulkUpdatePayments(data),
+    onSuccess: () => refreshMoney(queryClient),
+  });
+}
+
+export function useBulkDeleteFees() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (ids: number[]) => financeApi.bulkDeletePayments({ ids }),
+    onSuccess: () => refreshMoney(queryClient),
+  });
+}

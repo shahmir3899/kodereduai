@@ -8,9 +8,8 @@ import { useAcademicYear } from '../../hooks/useAcademicYear';
 import { useExpenseCategories, useFinanceSummary, useMonthlyTrend } from '../../hooks/useAccountant';
 import { useRefreshControl } from '../../hooks/useRefreshControl';
 import {
-  categoryShares, PERIOD_LABELS, rangeFor, trendBars, type DateRange, type Period,
+  PERIOD_LABELS, rangeFor, type DateRange, type Period,
 } from '../../services/accountant';
-import { formatMoney } from '../../services/feeCollect';
 import {
   exportErrorMessage, feeReportFileName, feeReportRequest, financeSummaryFileName, financeSummaryRequest,
 } from '../../services/reports';
@@ -18,8 +17,9 @@ import { shareReportFile } from '../../services/reportShare';
 import SegmentedTabs from '../ui/SegmentedTabs';
 import DateField from '../ui/DateField';
 import Button from '../ui/Button';
-import Card from '../ui/Card';
 import IncomeExpenseCard from './IncomeExpenseCard';
+import TrendCard from './TrendCard';
+import ExpenseBreakdownCard from './ExpenseBreakdownCard';
 import Skeleton from '../ui/Skeleton';
 import ErrorState from '../ui/ErrorState';
 import { useToast } from '../ui/Toast';
@@ -53,8 +53,6 @@ export default function FinanceReportsScreen() {
 
   const income = Number(summary.data?.total_income ?? 0) || 0;
   const expenses = Number(summary.data?.total_expenses ?? 0) || 0;
-  const bars = trendBars(trend.data ?? []);
-  const shares = categoryShares(cats.data?.categories ?? [], cats.data?.total ?? 0);
 
   const links = [
     { label: 'Account balances', route: routeFor(persona, '/finance/accounts') },
@@ -97,44 +95,12 @@ export default function FinanceReportsScreen() {
       ) : null}
 
       <Text style={styles.section}>Monthly trend (last 6 months)</Text>
-      <Card>
-        {trend.isLoading ? <Text style={styles.muted}>Loading…</Text> : bars.length === 0 ? <Text style={styles.muted}>No data yet.</Text> : (
-          <>
-            {bars.map((b) => (
-              <View key={b.label} style={styles.trendRow} accessible accessibilityLabel={`${b.label}: income ${formatMoney(b.income)}, expenses ${formatMoney(b.expenses)}`}>
-                <Text style={styles.trendLabel}>{b.label}</Text>
-                <View style={styles.trendBars}>
-                  <View style={[styles.trendBar, { width: `${b.incomePct}%`, backgroundColor: Colors.success }]} />
-                  <View style={[styles.trendBar, { width: `${b.expensePct}%`, backgroundColor: Colors.error }]} />
-                </View>
-                <Text style={styles.trendValue}>{formatMoney(b.income - b.expenses)}</Text>
-              </View>
-            ))}
-            <View style={styles.legend}>
-              <Text style={[styles.legendText, { color: Colors.success }]}>■ Income</Text>
-              <Text style={[styles.legendText, { color: Colors.error }]}>■ Expenses</Text>
-              <Text style={styles.legendText}>Right: net</Text>
-            </View>
-          </>
-        )}
-      </Card>
+      <TrendCard trend={trend.data} loading={trend.isLoading} />
 
       {range ? (
         <>
           <Text style={styles.section}>Expense breakdown</Text>
-          <Card>
-            {cats.isLoading ? <Text style={styles.muted}>Loading…</Text> : shares.length === 0 ? <Text style={styles.muted}>No expenses in this period.</Text> : (
-              shares.map((c) => (
-                <View key={c.name} style={styles.catRow}>
-                  <View style={styles.catHead}>
-                    <Text style={styles.catName} numberOfLines={1}>{c.name}</Text>
-                    <Text style={styles.catAmount}>{formatMoney(c.amount)} · {c.pct}%</Text>
-                  </View>
-                  <View style={styles.track}><View style={[styles.fill, { width: `${c.pct}%`, backgroundColor: Colors.error }]} /></View>
-                </View>
-              ))
-            )}
-          </Card>
+          <ExpenseBreakdownCard categories={cats.data?.categories} total={cats.data?.total} loading={cats.isLoading} />
         </>
       ) : null}
 

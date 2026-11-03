@@ -1,17 +1,22 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
 import { useRouter, type Href } from 'expo-router';
 import { useAuth } from '../../contexts/AuthContext';
 import { routeFor } from '../../navigation/routes';
 import {
-  useAccountBalances, useFinanceSummary, useMonthFeeSummary, useOverdueFees, useRecentEntries,
+  useAccountBalances, useFinanceSummary, useMonthFeeSummary, useMonthlyTrend, useOverdueFees, useRecentEntries, useRecentTransfers,
 } from '../../hooks/useAccountant';
 import { useUnreadMessages } from '../../hooks/useMessaging';
 import { useRefreshControl } from '../../hooks/useRefreshControl';
-import { entryAmount, entrySign, periodRange, rateTone, totalBalance } from '../../services/accountant';
+import { entryAmount, entrySign, PERIOD_LABELS, rangeFor, rateTone, totalBalance, type DateRange, type Period } from '../../services/accountant';
+import { accountTypeTone, entryBadge } from '../../services/financeDashboard';
 import { balanceOf, formatMoney } from '../../services/feeCollect';
 import Card from '../ui/Card';
 import IncomeExpenseCard from './IncomeExpenseCard';
+import TrendCard from './TrendCard';
+import { RecentTransfersCard } from './RecentActivityCards';
+import SegmentedTabs from '../ui/SegmentedTabs';
+import DateField from '../ui/DateField';
 import StatusPill from '../ui/StatusPill';
 import SchoolSwitcher from '../nav/SchoolSwitcher';
 import StatTiles from '../dashboard/StatTiles';
@@ -26,10 +31,15 @@ export default function AccountantHome() {
   const balances = useAccountBalances();
   const fees = useMonthFeeSummary();
   const recent = useRecentEntries(8);
-  const month = useFinanceSummary(periodRange('MONTH'));
+  const [period, setPeriod] = useState<Period>('MONTH');
+  const [custom, setCustom] = useState<DateRange>({ from: '', to: '' });
+  const range = rangeFor(period, custom);
+  const month = useFinanceSummary(range);
+  const trend = useMonthlyTrend(6);
+  const transfers = useRecentTransfers(5);
   const overdue = useOverdueFees(6);
   const unread = useUnreadMessages();
-  const refreshControl = useRefreshControl(balances.refetch, fees.refetch, recent.refetch, overdue.refetch, month.refetch);
+  const refreshControl = useRefreshControl(balances.refetch, fees.refetch, recent.refetch, overdue.refetch, month.refetch, trend.refetch, transfers.refetch);
 
   const go = (route?: string) => route && router.push(route as Href);
   const name = [user?.first_name, user?.last_name].filter(Boolean).join(' ') || user?.username;
@@ -84,8 +94,15 @@ export default function AccountantHome() {
         </>
       ) : null}
 
-      <Text style={styles.section}>Income vs expense, this month</Text>
-      {month.data ? (
+      <Text style={styles.section}>Income vs expense, {PERIOD_LABELS[period].toLowerCase()}</Text>
+      <SegmentedTabs tabs={PERIODS} value={period} onChange={setPeriod} />
+      {period === 'CUSTOM' ? (
+        <View style={styles.dates}>
+          <View style={styles.date}><DateField label="From" value={custom.from} onChange={(v) => setCustom((c) => ({ ...c, from: v }))} /></View>
+          <View style={styles.date}><DateField label="To" value={custom.to} onChange={(v) => setCustom((c) => ({ ...c, to: v }))} /></View>
+        </View>
+      ) : null}
+      {!range ? <Card style={styles.list}><Text style={styles.muted}>Pick both dates (From must not be after To).</Text></Card> : month.data ? (
         <IncomeExpenseCard income={Number(month.data.total_income ?? 0) || 0} expenses={Number(month.data.total_expenses ?? 0) || 0} />
       ) : <Card style={styles.list}><Text style={styles.muted}>{month.isLoading ? 'Loading…' : 'Could not load.'}</Text></Card>}
 
@@ -100,11 +117,18 @@ export default function AccountantHome() {
           <Text style={styles.muted}>{balances.isLoading ? 'Loading…' : 'No accounts yet.'}</Text>
         ) : accounts.map((a) => (
           <View key={a.id} style={styles.line}>
+            {a.account_type ? <StatusPill label={a.account_type} tone={accountTypeTone(a.account_type)} /> : null}
             <Text style={[styles.lineTitle, styles.lineBody]} numberOfLines={1}>{a.name}</Text>
             <Text style={styles.lineAmount}>{formatMoney(Number(a.net_balance ?? a.balance) || 0)}</Text>
           </View>
         ))}
       </Card>
+
+      <Text style={styles.section}>Monthly trend (last 6 months)</Text>
+      <TrendCard trend={trend.data} loading={trend.isLoading} />
+
+      <View style={styles.gap} />
+      <RecentTransfersCard transfers={transfers.data} loading={transfers.isLoading} onAll={() => go('/(accountant)/transfers')} />
 
       <Text style={styles.section}>Recent transactions</Text>
       <Card style={styles.list}>
@@ -115,7 +139,7 @@ export default function AccountantHome() {
             <View key={`${e.type}-${e.id}`} style={styles.line}>
               <View style={styles.lineBody}>
                 <Text style={styles.lineTitle} numberOfLines={1}>{e.description || 'Transaction'}</Text>
-                <Text style={styles.lineSub}>{e.date ?? ''}</Text>
+                <Text style={styles.lineSub} numberOfLines={1}>{[entryBadge(e).label, e.date, e.recorded_by ? `by ${e.recorded_by}` : ''].filter(Boolean).join('  ·  ')}</Text>
               </View>
               <Text style={[styles.lineAmount, { color: entrySign(e.type) === '-' ? Colors.error : entrySign(e.type) === '+' ? Colors.success : Colors.text }]}>
                 {entryAmount(e)}
@@ -146,7 +170,18 @@ export default function AccountantHome() {
   );
 }
 
+const PERIODS: Array<{ value: Period; label: string }> = [
+  { value: 'MONTH', label: 'Month' },
+  { value: 'LAST_MONTH', label: 'Last' },
+  { value: 'QUARTER', label: 'Quarter' },
+  { value: 'YEAR', label: 'Year' },
+  { value: 'CUSTOM', label: 'Custom' },
+];
+
 const styles = StyleSheet.create({
+  dates: { flexDirection: 'row', gap: Spacing.md },
+  date: { flex: 1 },
+  gap: { height: Spacing.lg },
   sectionRow: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between' },
   linkBox: { minHeight: 44, minWidth: 44, justifyContent: 'center', alignItems: 'flex-end' },
   link: { fontSize: FontSize.sm, color: Colors.primary, fontWeight: '600' },

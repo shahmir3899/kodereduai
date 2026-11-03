@@ -150,3 +150,22 @@ export function weekPlanStats(plans: WeekPlan[]) {
   const published = plans.filter((p) => !planIsDone(p) && p.status === 'PUBLISHED').length;
   return { total: plans.length, done, published, draft: plans.length - done - published };
 }
+
+// Count shown on a quick-action tile: nothing at zero, capped so it fits the corner.
+export function badgeLabel(n: number | null | undefined): string {
+  const v = Number(n) || 0;
+  return v <= 0 ? '' : v > 99 ? '99+' : String(v);
+}
+
+// 'Room 4' under the class, as the web writes it; both parts are optional.
+export function periodSubtitle(entry: { class_name?: string; room?: string | null }): string {
+  return [entry.class_name, entry.room ? `Room ${entry.room}` : ''].filter(Boolean).join('  ·  ');
+}
+
+// A submission's date as 'Mar 5'; '' when it has none or it cannot be read.
+export function shortDate(iso?: string | null): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}

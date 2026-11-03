@@ -10,9 +10,9 @@ from .models import (
 
 @admin.register(Account)
 class AccountAdmin(admin.ModelAdmin):
-    list_display = ['school', 'name', 'account_type', 'opening_balance', 'is_active']
+    list_display = ['school', 'name', 'account_type', 'bank_name', 'opening_balance', 'is_active']
     list_filter = ['school', 'account_type', 'is_active']
-    search_fields = ['name']
+    search_fields = ['name', 'bank_name', 'account_title']
 
 
 @admin.register(Transfer)

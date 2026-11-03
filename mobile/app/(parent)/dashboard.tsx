@@ -3,7 +3,7 @@ import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-nati
 import { useRouter, type Href } from 'expo-router';
 import { useAuth } from '../../contexts/AuthContext';
 import { useChildOverviews, useChildren, useLeaveRequests } from '../../hooks/useParent';
-import { attentionItems } from '../../services/parentPortal';
+import { attentionItems, childrenLinked } from '../../services/parentPortal';
 import AttentionStrip from '../../components/parent/AttentionStrip';
 import { useRecentNotifications } from '../../hooks/useManager';
 import { useThreads } from '../../hooks/useMessaging';
@@ -39,6 +39,7 @@ export default function ParentDashboard() {
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content} refreshControl={refreshControl}>
       <Text style={styles.greeting}>Welcome, {name}</Text>
+      {kids.length > 0 ? <Text style={styles.linked}>{childrenLinked(kids.length)}</Text> : null}
       <SchoolSwitcher />
       <AttentionStrip items={attentionItems(kids.map((k, i) => ({ studentId: k.student, overview: overviews[i]?.data })), { unreadMessages: unread })} />
 
@@ -58,7 +59,17 @@ export default function ParentDashboard() {
         </TouchableOpacity>
         <TouchableOpacity accessibilityRole="button" style={styles.quick} onPress={() => go('/(parent)/leave')}>
           <Text style={styles.quickIcon}>🗓️</Text>
-          <Text style={styles.quickLabel}>{pendingLeave > 0 ? `Leave (${pendingLeave} pending)` : 'Leave'}</Text>
+          <Text style={styles.quickLabel}>{pendingLeave > 0 ? `Leave (${pendingLeave} pending)` : 'Apply leave'}</Text>
+        </TouchableOpacity>
+        {kids.length === 1 ? (
+          <TouchableOpacity accessibilityRole="button" style={styles.quick} onPress={() => go(`/(parent)/children/${kids[0].student}/fees`)}>
+            <Text style={styles.quickIcon}>💰</Text>
+            <Text style={styles.quickLabel}>Fees</Text>
+          </TouchableOpacity>
+        ) : null}
+        <TouchableOpacity accessibilityRole="button" style={styles.quick} onPress={() => go('/(parent)/my-profile')}>
+          <Text style={styles.quickIcon}>👤</Text>
+          <Text style={styles.quickLabel}>My profile</Text>
         </TouchableOpacity>
       </View>
 
@@ -88,11 +99,12 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
   content: { padding: Spacing.lg, paddingBottom: Spacing.xxxl },
   greeting: { fontSize: FontSize.xl, fontWeight: '700', color: Colors.text },
+  linked: { fontSize: FontSize.sm, color: Colors.textSecondary },
   section: { fontSize: FontSize.lg, fontWeight: '600', color: Colors.text, marginTop: Spacing.xl, marginBottom: Spacing.md },
   sectionRow: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between' },
   link: { fontSize: FontSize.sm, color: Colors.primary, fontWeight: '600', marginBottom: Spacing.md },
-  actions: { flexDirection: 'row', gap: Spacing.md, marginTop: Spacing.sm },
-  quick: { flex: 1, alignItems: 'center', backgroundColor: Colors.surface, borderRadius: BorderRadius.md, paddingVertical: Spacing.md },
+  actions: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.md, marginTop: Spacing.sm },
+  quick: { flexGrow: 1, flexBasis: '30%', alignItems: 'center', backgroundColor: Colors.surface, borderRadius: BorderRadius.md, paddingVertical: Spacing.md },
   quickIcon: { fontSize: 22 },
   quickLabel: { fontSize: FontSize.sm, color: Colors.text, marginTop: 4, textAlign: 'center' },
   list: { padding: Spacing.md },

@@ -29,7 +29,7 @@ from students.models import Student, Class
 from students.status_groups import ENROLLED_STATUSES
 from django.utils import timezone
 from .models import (
-    KuickpayPaymentAllocation,
+    KuickpayBill, KuickpayPaymentAllocation,
     Account, Transfer, FeeStructure, FeePayment, Expense, OtherIncome,
     ExpenseCategory, IncomeCategory, AnnualFeeCategory, MonthlyFeeCategory,
     DEFAULT_EXPENSE_CATEGORIES, DEFAULT_INCOME_CATEGORIES, SUGGESTED_ANNUAL_CATEGORIES, SUGGESTED_MONTHLY_CATEGORIES,
@@ -453,6 +453,13 @@ class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
             Prefetch(
                 'kuickpay_allocations',
                 queryset=KuickpayPaymentAllocation.objects.select_related('transaction'),
+            ),
+            # The payable consumer number column: one query for the page. A suspended or replaced bill
+            # is not payable, so it never shows a number.
+            Prefetch(
+                'student__kuickpay_bills',
+                queryset=KuickpayBill.objects.filter(status=KuickpayBill.Status.ACTIVE),
+                to_attr='prefetched_kuickpay_bills',
             ),
         )
 

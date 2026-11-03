@@ -5,6 +5,10 @@ from django.db.models import Q, Sum
 from django.utils import timezone
 
 
+# Bank account numbers and IBANs: letters, digits, spaces and hyphens only (no markup, no symbols).
+BANK_REF_VALIDATOR = RegexValidator(r'^[A-Za-z0-9 -]*$', 'Letters, digits, spaces and hyphens only.')
+
+
 class FeeType(models.TextChoices):
     MONTHLY = 'MONTHLY', 'Monthly'
     ANNUAL = 'ANNUAL', 'Annual'
@@ -89,6 +93,12 @@ class Account(models.Model):
         default=True,
         help_text="Whether staff members can see this account and its transactions"
     )
+    # Where the money really sits. Optional bookkeeping text for Bank accounts; nothing reads these
+    # to move money. The number and IBAN are hidden from non-finance roles (see AccountSerializer).
+    bank_name = models.CharField(max_length=100, blank=True, default='')
+    account_title = models.CharField(max_length=100, blank=True, default='')
+    account_number = models.CharField(max_length=34, blank=True, default='', validators=[BANK_REF_VALIDATOR])
+    iban = models.CharField(max_length=34, blank=True, default='', validators=[BANK_REF_VALIDATOR])
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -111,6 +121,19 @@ class Account(models.Model):
                 name='unique_account_name_per_org',
             ),
         ]
+
+    BANK_DETAIL_FIELDS = ('bank_name', 'account_title', 'account_number', 'iban')
+
+    def save(self, *args, **kwargs):
+        # Only a Bank account holds bank details: whatever a client sends for a cash or person
+        # account (or what is left when an account is switched away from Bank) is cleared here.
+        if self.account_type != self.AccountType.BANK:
+            for field in self.BANK_DETAIL_FIELDS:
+                setattr(self, field, '')
+            update_fields = kwargs.get('update_fields')
+            if update_fields is not None:
+                kwargs['update_fields'] = {*update_fields, *self.BANK_DETAIL_FIELDS}
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return f"{self.name} ({self.get_account_type_display()})"

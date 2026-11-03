@@ -2,10 +2,10 @@
 Premium comprehensive student progress report — A4, dynamically built from
 database records. Section-based layout: header/letterhead, student profile
 card, attendance (colored month-grid + legend + stat cards), learning
-progress (lessons grouped by subject), skills/behaviour assessment, exam
-results (when present), fee summary (table + stat cards + chart), teacher/
-principal remarks, and a signature block. Page 1 covers header/profile/
-attendance; page 2 covers everything else.
+progress (published lessons by subject), skills/behaviour assessment,
+outstanding fees (only when something is owed), teacher/principal remarks,
+and a signature block. A summary strip under the profile card gives the key
+figures at a glance; content flows across pages rather than a fixed break.
 """
 
 from django.utils import timezone
@@ -15,10 +15,8 @@ import math
 import re
 from collections import OrderedDict
 from datetime import date, datetime, timedelta
-from decimal import Decimal
 
-from django.db.models import F, Q, Sum
-from django.db.models.functions import Coalesce
+from django.db.models import Q
 from reportlab.lib.units import inch
 
 from .base import BaseReportGenerator
@@ -359,108 +357,6 @@ def build_month_grid_flowables(year, month, attendance_by_date, holiday_dates=No
     return [Paragraph(f"<b>{month_label}</b>", month_style), table]
 
 
-# Fee chart palette — a validated categorical pair (blue/green, CVD-safe adjacent
-# ΔE well above the safety floor on a white surface), plus muted chart chrome.
-FEE_DUE_COLOR = '#2a78d6'
-FEE_PAID_COLOR = '#008300'
-CHART_GRIDLINE = '#e1e0d9'
-CHART_BASELINE = '#c3c2b7'
-CHART_MUTED_INK = '#898781'
-CHART_INK = '#0b0b0b'
-
-
-def _nice_axis_max(value):
-    """Round a raw max up to a clean tick value (1/2/2.5/5/10 x a power of ten)."""
-    if value <= 0:
-        return 100
-    magnitude = 10 ** math.floor(math.log10(value))
-    for mult in (1, 2, 2.5, 5, 10):
-        candidate = magnitude * mult
-        if candidate >= value:
-            return candidate
-    return magnitude * 10
-
-
-def _draw_rounded_top_bar(drawing, x, y_base, width, height, radius, fill_hex):
-    """Bar with a rounded top edge, square at the baseline — never a plain rectangle."""
-    from reportlab.graphics.shapes import Rect
-    from reportlab.lib import colors
-
-    if height <= 0:
-        return
-    r = min(radius, width / 2, height)
-    fill = colors.HexColor(fill_hex)
-    drawing.add(Rect(x, y_base, width, height, rx=r, ry=r, fillColor=fill, strokeColor=None))
-    if r > 0:
-        # Square off the bottom so only the top edge reads as rounded.
-        drawing.add(Rect(x, y_base, width, r, fillColor=fill, strokeColor=None))
-
-
-def build_fee_chart(fee_rows):
-    """
-    Grouped bar chart (Due vs Paid per month), hand-drawn for a modern look:
-    thin rounded-top bars anchored to a single baseline, hairline gridlines,
-    a direct-labeled inline legend, and no chart-junk borders/boxes.
-    """
-    from reportlab.graphics.shapes import Drawing, Line, Rect, String
-    from reportlab.lib import colors
-    from reportlab.pdfbase.pdfmetrics import stringWidth
-
-    labels = [calendar.month_abbr[r['month']] for r in fee_rows]
-    due_values = [float(r['due']) for r in fee_rows]
-    paid_values = [float(r['paid']) for r in fee_rows]
-
-    width, height = 480, 220
-    plot_x0, plot_x1 = 46, width - 12
-    plot_y0, plot_y1 = 30, height - 34
-    plot_width = plot_x1 - plot_x0
-    plot_height = plot_y1 - plot_y0
-
-    drawing = Drawing(width, height)
-
-    axis_max = _nice_axis_max(max(due_values + paid_values))
-    tick_count = 4
-    for i in range(tick_count + 1):
-        tick_value = axis_max * i / tick_count
-        y = plot_y0 + plot_height * i / tick_count
-        drawing.add(Line(plot_x0, y, plot_x1, y, strokeColor=colors.HexColor(CHART_GRIDLINE), strokeWidth=0.5))
-        drawing.add(String(
-            plot_x0 - 6, y - 3, f"{tick_value:,.0f}",
-            fontSize=7, fillColor=colors.HexColor(CHART_MUTED_INK), textAnchor='end',
-        ))
-    drawing.add(Line(plot_x0, plot_y0, plot_x1, plot_y0, strokeColor=colors.HexColor(CHART_BASELINE), strokeWidth=0.75))
-
-    n = len(fee_rows)
-    band_width = plot_width / n
-    bar_width = min(11, (band_width - 6) / 2)
-    gap = 2
-    group_width = bar_width * 2 + gap
-
-    for i, (label, due, paid) in enumerate(zip(labels, due_values, paid_values)):
-        band_x = plot_x0 + i * band_width
-        group_x = band_x + (band_width - group_width) / 2
-        due_h = (due / axis_max) * plot_height
-        paid_h = (paid / axis_max) * plot_height
-        _draw_rounded_top_bar(drawing, group_x, plot_y0, bar_width, due_h, 3, FEE_DUE_COLOR)
-        _draw_rounded_top_bar(drawing, group_x + bar_width + gap, plot_y0, bar_width, paid_h, 3, FEE_PAID_COLOR)
-        drawing.add(String(
-            band_x + band_width / 2, plot_y0 - 12, label,
-            fontSize=7, fillColor=colors.HexColor(CHART_MUTED_INK), textAnchor='middle',
-        ))
-
-    # Inline legend — identity always rides beside color, never color alone.
-    legend_y = height - 14
-    legend_x = plot_x1
-    for color_hex, text in reversed([(FEE_DUE_COLOR, 'Due'), (FEE_PAID_COLOR, 'Paid')]):
-        legend_x -= stringWidth(text, 'Helvetica', 7)
-        drawing.add(String(legend_x, legend_y, text, fontSize=7, fillColor=colors.HexColor(CHART_INK)))
-        legend_x -= 14
-        drawing.add(Rect(legend_x, legend_y - 1, 8, 8, fillColor=colors.HexColor(color_hex), strokeColor=None))
-        legend_x -= 10
-
-    return drawing
-
-
 def build_table(headers, rows):
     """Styled reportlab Table, matching the visual language used elsewhere in reports."""
     from reportlab.lib import colors
@@ -724,123 +620,37 @@ class StudentComprehensiveReportGenerator(BaseReportGenerator):
         ]
         holiday_dates = self._resolve_holiday_dates(attendance_months, placement_class)
 
-        # --- Fees: always a fixed 12-month view of the academic year, independent of
-        # the report's date_from/date_to — a partial-period chart isn't useful for
-        # spotting collection trends, so this always plots the whole year.
-        from finance.models import FeePayment
+        # --- Fees: only what is still owed. student_pending_fees already rolls each
+        # category's carried-forward balance into its latest row, so summing its items
+        # never double-counts an unpaid earlier month the way per-month balances would.
+        from finance.student_balance import student_pending_fees
+        pending = student_pending_fees(student)
+        fee_outstanding = pending['total']
+        fee_items = sorted(pending['items'], key=lambda i: (i['year'] or 0, i['month'] or 0))
 
-        if academic_year_obj:
-            months_list = self._twelve_months_from(academic_year_obj.start_date)
-        else:
-            today = timezone.localdate()
-            months_list = self._twelve_months_from(date(today.year, today.month, 1))
-
-        fee_rows_qs = FeePayment.objects.filter(student=student, month__gte=1)
-        if has_history:
-            # Both ledgers. The carried row is the same debt as the earlier branch's last row,
-            # so it is left out of the chart rather than counted twice.
-            fee_rows_qs = FeePayment.objects.filter(
-                timeline.fees_q(segments), month__gte=1, carried_from_exit__isnull=True,
-            )
-        fee_by_month = {
-            (r['year'], r['month']): r
-            for r in fee_rows_qs
-                .values('year', 'month')
-                .annotate(
-                    total_due=Sum('amount_due'),
-                    total_paid=Sum('amount_paid'),
-                    # amount_due = previous_balance (carried-forward from an unpaid prior
-                    # month) + base_monthly_fee (this month's own charge) — summing
-                    # amount_due across months double-counts any rolled-over balance, so
-                    # the "fresh charge" total needs base_monthly_fee instead. Falls back
-                    # to amount_due - previous_balance for pre-migration rows where
-                    # base_monthly_fee was never backfilled.
-                    total_base=Sum(Coalesce('base_monthly_fee', F('amount_due') - F('previous_balance'))),
-                )
-        }
-        fee_rows = [
-            {
-                'year': y, 'month': m,
-                'due': fee_by_month.get((y, m), {}).get('total_due') or Decimal('0'),
-                'paid': fee_by_month.get((y, m), {}).get('total_paid') or Decimal('0'),
-                'base': fee_by_month.get((y, m), {}).get('total_base') or Decimal('0'),
-            }
-            for y, m in months_list
-        ]
-        fee_due = sum((r['base'] for r in fee_rows), Decimal('0'))
-        fee_paid = sum((r['paid'] for r in fee_rows), Decimal('0'))
-
-        # Outstanding balance is whatever the most recent month with actual fee
-        # records shows as due-minus-paid — that figure already has every prior
-        # unpaid month rolled into it, so summing per-month balances would count
-        # old shortfalls again for every month they remained unpaid.
-        months_with_data = [(y, m) for y, m in months_list if (y, m) in fee_by_month]
-        if has_history:
-            # Owed today is only this branch's (the balance was carried here, once).
-            from finance.student_balance import student_pending_fees
-            fee_outstanding = student_pending_fees(student)['total']
-        elif months_with_data:
-            latest_row = fee_by_month[months_with_data[-1]]
-            fee_outstanding = (latest_row.get('total_due') or Decimal('0')) - (latest_row.get('total_paid') or Decimal('0'))
-        else:
-            fee_outstanding = Decimal('0')
-
-        # --- Exams (separate, conditional section) ---
-        exam_rows = []
-        exam_pct_values = []
-        try:
-            from examinations.models import StudentMark
-            marks = StudentMark.objects.filter(student=student)
-            if has_history:
-                marks = StudentMark.objects.filter(timeline.marks_q(segments))
-                if date_from and date_to:
-                    marks = marks.filter(exam_subject__exam__start_date__range=(date_from, date_to))
-                elif academic_year_obj:
-                    marks = marks.filter(exam_subject__exam__start_date__range=(
-                        academic_year_obj.start_date, academic_year_obj.end_date))
-            elif date_from and date_to:
-                marks = marks.filter(exam_subject__exam__start_date__range=(date_from, date_to))
-            elif academic_year_id:
-                marks = marks.filter(enrollment__academic_year_id=academic_year_id)
-            marks = marks.select_related('exam_subject__exam', 'exam_subject__subject')
-            for m in marks:
-                obtained = float(m.marks_obtained or 0)
-                total = float(m.exam_subject.total_marks or 0)
-                pct = round(obtained / total * 100, 1) if total > 0 else 0
-                exam_pct_values.append(pct)
-                branch = timeline.branch_tag(segments, m.student_id, m.school_id) if has_history else None
-                exam_rows.append([
-                    f"{m.exam_subject.exam.name} ({branch})" if branch else m.exam_subject.exam.name,
-                    m.exam_subject.subject.name,
-                    f"{obtained:.0f}/{total:.0f}",
-                    f"{pct}%",
-                ])
-        except Exception:
-            pass
-        exam_avg_pct = round(sum(exam_pct_values) / len(exam_pct_values), 1) if exam_pct_values else None
-
-        # --- Learning progress: lessons taught, grouped by subject ---
+        # --- Learning progress: published lessons taught, grouped by subject ---
+        # Drafts are never shown to parents, but they are counted so the report can say
+        # "still drafts" instead of claiming nothing was taught.
+        from lms.models import LessonPlan
         lessons_by_subject = OrderedDict()
-        try:
-            from lms.models import LessonPlan
-            # Whole-class plans plus the student's own section, never a sibling's.
-            section_q = Q(session_class__isnull=True)
-            if placement is not None and placement.session_class_id:
-                section_q |= Q(session_class_id=placement.session_class_id)
-            lessons = LessonPlan.objects.filter(
-                section_q,
-                class_obj_id=placement_class,
-                status=LessonPlan.Status.PUBLISHED,
-            ).select_related('subject')
-            if date_from and date_to:
-                lessons = lessons.filter(lesson_date__range=(date_from, date_to))
-            elif academic_year_id:
-                lessons = lessons.filter(academic_year_id=academic_year_id)
-            for lp in lessons.order_by('lesson_date'):
-                topic = lp.display_text.strip() if lp.display_text else lp.title
-                lessons_by_subject.setdefault(lp.subject.name, []).append(topic)
-        except Exception:
-            pass
+        # Whole-class plans plus the student's own section, never a sibling's.
+        section_q = Q(session_class__isnull=True)
+        if placement is not None and placement.session_class_id:
+            section_q |= Q(session_class_id=placement.session_class_id)
+        lesson_qs = LessonPlan.objects.filter(
+            section_q, class_obj_id=placement_class, is_active=True,
+        )
+        if date_from and date_to:
+            lesson_qs = lesson_qs.filter(lesson_date__range=(date_from, date_to))
+        elif academic_year_id:
+            lesson_qs = lesson_qs.filter(academic_year_id=academic_year_id)
+        draft_lesson_count = lesson_qs.filter(status=LessonPlan.Status.DRAFT).count()
+        published = lesson_qs.filter(status=LessonPlan.Status.PUBLISHED).select_related('subject')
+        for lp in published.order_by('lesson_date'):
+            # display_text is multi-line (chapter / topic / subtopic); one line per lesson
+            # reads better in a bullet list than collapsed whitespace.
+            topic = ' - '.join(ln.strip() for ln in lp.display_text.splitlines() if ln.strip()) or lp.title
+            lessons_by_subject.setdefault(lp.subject.name, []).append(topic)
 
         # --- Skills / behaviour assessment + remarks (teacher-entered, StudentTermAssessment) ---
         skills_ratings = []
@@ -937,11 +747,29 @@ class StudentComprehensiveReportGenerator(BaseReportGenerator):
         parent_contact = student.parent_phone or student.guardian_phone
         academic_session_display = academic_year_obj.name if academic_year_obj else 'N/A'
 
+        # Class teacher(s) of the student's section for the report's year.
+        from academics.models import ClassTeacherAssignment
+        teacher_qs = ClassTeacherAssignment.objects.filter(school=self.school, is_active=True)
+        if academic_year_obj:
+            teacher_qs = teacher_qs.filter(Q(academic_year=academic_year_obj) | Q(academic_year__isnull=True))
+        if placement is not None and placement.session_class_id:
+            teacher_qs = teacher_qs.filter(session_class_id=placement.session_class_id)
+        else:
+            teacher_qs = teacher_qs.filter(class_obj_id=placement_class, session_class__isnull=True)
+        class_teacher_name = ', '.join(
+            a.teacher.full_name for a in teacher_qs.select_related('teacher')
+        )
+
+        all_ratings = [r for _label, r in skills_ratings + behaviour_ratings if r]
+        skills_avg = round(sum(all_ratings) / len(all_ratings), 1) if all_ratings else None
+
         student_info_rows = [
             ('Name', student.name),
             ('Class', class_name),
             ('Roll #', str(roll_number)),
         ]
+        if class_teacher_name:
+            student_info_rows.append(('Class Teacher', class_teacher_name))
         if student.admission_number:
             student_info_rows.append(('Admission #', student.admission_number))
         if dob_display:
@@ -970,13 +798,11 @@ class StudentComprehensiveReportGenerator(BaseReportGenerator):
             'leave_count': leave,
             'working_days': total_days,
             'attendance_rate': att_rate,
-            'fee_rows': fee_rows,
-            'fee_due': fee_due,
-            'fee_paid': fee_paid,
+            'fee_items': fee_items,
             'fee_outstanding': fee_outstanding,
             'lessons_by_subject': lessons_by_subject,
-            'exam_rows': exam_rows,
-            'exam_avg_pct': exam_avg_pct,
+            'draft_lesson_count': draft_lesson_count,
+            'skills_avg': skills_avg,
             'skills_ratings': skills_ratings,
             'behaviour_ratings': behaviour_ratings,
             'assessment_exists': assessment_exists,
@@ -990,7 +816,7 @@ class StudentComprehensiveReportGenerator(BaseReportGenerator):
         from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
         from reportlab.lib.units import inch
         from reportlab.platypus import (
-            HRFlowable, Image, KeepTogether, PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle,
+            HRFlowable, Image, KeepTogether, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle,
         )
 
         buffer = io.BytesIO()
@@ -1109,6 +935,24 @@ class StudentComprehensiveReportGenerator(BaseReportGenerator):
             ('RIGHTPADDING', (0, 0), (-1, -1), 14),
         ]))
         elements.append(info_card)
+        elements.append(Spacer(1, 12))
+
+        # ============================================================
+        # SUMMARY STRIP
+        # ============================================================
+        summary_cards = [
+            (f"{data['attendance_rate']}%" if data['working_days'] else '-', 'Attendance %', INFO_BG, INFO_TEXT),
+            (str(data['absent_count']), 'Days Absent', ABSENT_BG, ABSENT_TEXT),
+        ]
+        if data.get('skills_avg') is not None:
+            summary_cards.append((f"{data['skills_avg']}/5", 'Skills & Behaviour', LEAVE_BG, LEAVE_TEXT))
+        owes = data['fee_outstanding'] > 0
+        summary_cards.append((
+            f"{data['fee_outstanding']:,.0f}" if owes else 'Clear',
+            'Fees Outstanding (PKR)' if owes else 'Fees',
+            ABSENT_BG if owes else PRESENT_BG, ABSENT_TEXT if owes else PRESENT_TEXT,
+        ))
+        elements.append(build_stat_cards(summary_cards))
         elements.append(Spacer(1, 14))
 
         # ============================================================
@@ -1140,33 +984,26 @@ class StudentComprehensiveReportGenerator(BaseReportGenerator):
         else:
             elements.append(Paragraph('No attendance records for this period.', empty_state_style))
 
-        # ============================================================
-        # PAGE 2
-        # ============================================================
-        elements.append(PageBreak())
-
         # --- Learning Progress ---
-        elements.append(section_heading('Learning Progress', styles))
-        elements.append(Spacer(1, 8))
+        learning = [section_heading('Learning Progress', styles), Spacer(1, 8)]
         lessons_by_subject = data.get('lessons_by_subject') or {}
         if lessons_by_subject:
             for subject, topics in lessons_by_subject.items():
-                elements.append(Paragraph(f"<b>{subject}</b>", body_style))
-                bullet_html = '<br/>'.join(f'• {t}' for t in topics)
-                elements.append(Paragraph(bullet_html, body_style))
-                elements.append(Spacer(1, 8))
+                learning.append(Paragraph(f"<b>{subject}</b>", body_style))
+                learning.append(Paragraph('<br/>'.join(f'• {t}' for t in topics), body_style))
+                learning.append(Spacer(1, 8))
+        elif data.get('draft_lesson_count'):
+            n = data['draft_lesson_count']
+            learning.append(Paragraph(
+                f"{n} lesson plan{'s' if n != 1 else ''} for this period "
+                f"{'are' if n != 1 else 'is'} still in draft and not yet published by the teacher.",
+                empty_state_style,
+            ))
         else:
-            elements.append(Paragraph('No learning records available.', empty_state_style))
-        elements.append(Spacer(1, 6))
-
-        # --- Exam Results (only if present in this duration) ---
-        if data['exam_rows']:
-            elements.append(section_heading('Exam Results', styles))
-            elements.append(Spacer(1, 8))
-            elements.append(Paragraph(f"Average: {data['exam_avg_pct']}%", body_style))
-            elements.append(Spacer(1, 4))
-            elements.append(build_table(['Exam', 'Subject', 'Marks', 'Percentage'], data['exam_rows']))
-            elements.append(Spacer(1, 14))
+            learning.append(Paragraph('No lessons recorded for this period.', empty_state_style))
+        learning.append(Spacer(1, 14))
+        elements.append(KeepTogether(learning[:3]))
+        elements.extend(learning[3:])
 
         # --- Skills Assessment ---
         elements.append(section_heading('Skills Assessment', styles))
@@ -1186,33 +1023,24 @@ class StudentComprehensiveReportGenerator(BaseReportGenerator):
             elements.append(Paragraph('Not yet assessed.', empty_state_style))
         elements.append(Spacer(1, 14))
 
-        # --- Fee Summary ---
-        elements.append(section_heading('Fee Summary', styles))
+        # --- Fees: shown only while something is outstanding ---
+        elements.append(section_heading('Fees', styles))
         elements.append(Spacer(1, 8))
-        if data['fee_rows']:
+        if data['fee_items']:
             fee_table_rows = [
                 [
-                    date(r['year'], r['month'], 1).strftime('%b %Y'),
-                    f"{r['due']:,.0f}", f"{r['paid']:,.0f}", f"{(r['due'] - r['paid']):,.0f}",
+                    i['label'],
+                    date(i['year'], i['month'], 1).strftime('%b %Y') if i['year'] and i['month'] else '-',
+                    f"{i['amount_due']:,.0f}", f"{i['amount_paid']:,.0f}", f"{i['balance']:,.0f}",
                 ]
-                for r in data['fee_rows']
+                for i in data['fee_items']
             ]
-            half = (len(fee_table_rows) + 1) // 2
-            fee_headers = ['Month', 'Fee', 'Paid', 'Balance']
-            left_table = build_table(fee_headers, fee_table_rows[:half])
-            right_rows = fee_table_rows[half:]
-            right_table = build_table(fee_headers, right_rows) if right_rows else None
-            elements.append(build_two_column_row(left_table, right_table))
-            elements.append(Spacer(1, 10))
-            elements.append(build_stat_cards([
-                (f"{data['fee_due']:,.0f}", 'Total Fee (PKR)', NEUTRAL_BG, NEUTRAL_TEXT),
-                (f"{data['fee_paid']:,.0f}", 'Total Paid (PKR)', PRESENT_BG, PRESENT_TEXT),
-                (f"{data['fee_outstanding']:,.0f}", 'Outstanding (PKR)', ABSENT_BG, ABSENT_TEXT),
-            ]))
-            elements.append(Spacer(1, 10))
-            elements.append(build_fee_chart(data['fee_rows']))
+            fee_table_rows.append(['Total outstanding', '', '', '', f"{data['fee_outstanding']:,.0f}"])
+            fee_table = build_table(['Fee', 'Month', 'Due', 'Paid', 'Balance'], fee_table_rows)
+            fee_table.setStyle(TableStyle([('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold')]))
+            elements.append(fee_table)
         else:
-            elements.append(Paragraph('No fee records available.', empty_state_style))
+            elements.append(Paragraph('All fees are cleared. Nothing outstanding.', empty_state_style))
         elements.append(Spacer(1, 14))
 
         # --- Remarks ---

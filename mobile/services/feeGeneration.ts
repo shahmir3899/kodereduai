@@ -114,17 +114,50 @@ export interface SingleForm {
   year: number;
   category: number | null;
   conflict: Conflict;
+  // Money received when the record is made (optional), as on the web's Create Fee Record form.
+  received: string;
+  account: number | null;
+  method: string;
+  paidDate: string;
+  notes: string;
 }
+
+const isoDay = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
 export const emptySingleForm = (now = new Date()): SingleForm => ({
   student: null, kind: 'MONTHLY', month: now.getMonth() + 1, year: now.getFullYear(), category: null, conflict: 'skip',
+  received: '', account: null, method: 'CASH', paidDate: isoDay(now), notes: '',
 });
 
-export function validateSingle(f: SingleForm): string | null {
+// The amount typed as received: blank means nothing received.
+export const receivedAmount = (f: Pick<SingleForm, 'received'>): number => {
+  const t = f.received.trim();
+  return t === '' ? 0 : Number(t);
+};
+
+// `structureAmount` is what the fee structure gives this student for the category: a number, null when
+// no fee is set (the server refuses the record), or undefined while it is still loading.
+export function validateSingle(f: SingleForm, structureAmount?: number | null): string | null {
   if (!f.student) return 'Choose the student.';
   if (!f.category) return f.kind === 'MONTHLY' ? 'Choose the monthly category.' : 'Choose the annual category.';
   if (f.year < 2020 || f.year > 2100) return 'Choose a year.';
+  if (structureAmount === null) return 'No fee is set for this student and category. Set it in Fee setup first.';
+  const paid = receivedAmount(f);
+  if (!Number.isFinite(paid) || paid < 0) return 'Enter the amount received as a number, or leave it empty.';
+  if (paid > 0) {
+    if (!f.account) return 'Choose the account the money goes into.';
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(f.paidDate)) return 'Choose the payment date.';
+    // An annual fee is exactly the structure amount; a monthly one can also carry a balance from before.
+    if (f.kind === 'ANNUAL' && structureAmount != null && paid > structureAmount) return 'The amount received is more than the fee.';
+  }
   return null;
+}
+
+// 'PKR 3,000 · this student's own fee' / 'PKR 3,000 · the class's fee'.
+export function structureText(amount: number | null | undefined, source: string | null | undefined): string {
+  if (amount == null) return 'No fee is set for this student and category.';
+  const who = source === 'student_override' ? "this student's own fee" : "the class's fee";
+  return `PKR ${Math.round(amount).toLocaleString()} · ${who}`;
 }
 
 // The server wants the matching category field only: monthly with a month, annual with month 0.
@@ -137,5 +170,18 @@ export function buildSinglePayload(f: SingleForm, academicYearId?: number | null
     ...(f.kind === 'MONTHLY' ? { monthly_category: f.category } : { annual_category: f.category }),
     ...(academicYearId ? { academic_year: academicYearId } : {}),
     conflict_strategy: f.conflict,
+    ...(f.notes.trim() ? { notes: f.notes.trim() } : {}),
+    ...(receivedAmount(f) > 0
+      ? { amount_paid: receivedAmount(f), account: f.account, payment_method: f.method, payment_date: f.paidDate }
+      : {}),
   };
+}
+
+// What the server did for one record. It answers 200 or 201 with created, updated or skipped and its own
+// words, so "already exists" is never reported as a new record.
+export function singleResultText(data: { created?: boolean; updated?: boolean; skipped?: boolean; message?: string } | undefined, receivedNow = 0): string {
+  if (data?.created) return receivedNow > 0 ? `Fee record created, with PKR ${Math.round(receivedNow).toLocaleString()} received.` : 'Fee record created.';
+  if (data?.updated) return data.message ?? 'Existing fee record updated.';
+  if (data?.skipped) return data.message ?? 'A record already exists, so nothing was changed.';
+  return data?.message ?? 'Done.';
 }

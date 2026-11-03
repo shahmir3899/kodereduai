@@ -2,12 +2,14 @@ import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { useRouter, type Href } from 'expo-router';
 import { useAuth } from '../../contexts/AuthContext';
-import { bootstrapApi } from '../../services/api';
+import { bootstrapApi, examinationsApi, sessionsApi, tasksApi } from '../../services/api';
 import {
-  attendanceRate, buildAttentionItems, staffPresentPct, stepDate,
+  attendanceRate, buildAttentionItems, buildModuleCards, collectionRate, currentTermName, staffPresentPct, stepDate,
   type DashboardData,
 } from '../../services/adminDashboard';
 import { todayString } from '../../services/attendanceEntry';
+import { listOf } from '../../services/academicYear';
+import { insightList } from '../../services/aiInsights';
 import { routeFor } from '../../navigation/routes';
 import { useAcademicYear } from '../../hooks/useAcademicYear';
 import { useScopedQuery } from '../../hooks/useScopedQuery';
@@ -18,6 +20,9 @@ import AttendanceBreakdown from '../../components/dashboard/AttendanceBreakdown'
 import MonthlyFeeCard from '../../components/dashboard/MonthlyFeeCard';
 import LeadershipInsights from '../../components/dashboard/LeadershipInsights';
 import AIInsightsCard from '../../components/dashboard/AIInsightsCard';
+import ModuleOverview from '../../components/dashboard/ModuleOverview';
+import SessionHealthCard from '../../components/dashboard/SessionHealthCard';
+import PredictorsCard from '../../components/dashboard/PredictorsCard';
 import Icon, { type IconName } from '../../components/ui/Icon';
 import RecentNotifications from '../../components/dashboard/RecentNotifications';
 import { dayHero } from '../../services/dashboardView';
@@ -44,9 +49,21 @@ export default function AdminDashboard() {
     (await bootstrapApi.getAdminDashboard({
       date,
       academic_year: year.current?.id,
-      sections: 'attendance,hr,finance,admissions',
+      // The module sections are only built for the modules the school has on.
+      sections: 'attendance,hr,finance,admissions,transport,library,hostel,inventory',
     })).data,
   { enabled: !year.isLoading });
+  // The dashboard bundle has no exam count, so it is one small call of its own.
+  const exams = useScopedQuery<number>('upcomingExams', [year.current?.id ?? null], async () =>
+    Number((await examinationsApi.getExams({ status: 'SCHEDULED', page_size: 1, academic_year: year.current?.id })).data?.count ?? 0),
+  { enabled: !year.isLoading && isModuleEnabled('examinations'), staleTime: 60_000, retry: false });
+  const terms = useScopedQuery('academicTerms', [year.current?.id ?? null], async () =>
+    listOf<{ name?: string; start_date?: string; end_date?: string }>((await sessionsApi.getTerms({ academic_year: year.current?.id, page_size: 100 })).data),
+  { enabled: !!year.current?.id, staleTime: 5 * 60_000, retry: false });
+  // Same key as the AI insights card, so the two share one request.
+  const ai = useScopedQuery('aiInsights', [], async () => insightList((await tasksApi.getAIInsights()).data),
+    { staleTime: 5 * 60_000, retry: false });
+  const term = currentTermName(terms.data ?? [], today);
   const refreshControl = useRefreshControl(query.refetch);
 
   const data = query.data;
@@ -59,13 +76,17 @@ export default function AdminDashboard() {
   const offDay = !!att?.is_off_day;
   const rate = attendanceRate(att);
   const staffPct = staffPresentPct(hr, offDay);
+  const feeRate = collectionRate(fee);
 
   const go = (route?: string) => route && router.push(route as Href);
   const attention = buildAttentionItems({
     isModuleEnabled,
     data: data ?? {},
     isToday,
+    aiAlerts: (ai.data ?? []).filter((i) => i.type === 'alert').length,
     routes: {
+      library: routeFor('admin', '/library/issues'),
+      inventory: routeFor('admin', '/inventory'),
       attendance: routeFor('admin', '/attendance/manual-entry'),
       unpaid: routeFor('admin', '/finance/fees/collect'),
       leave: routeFor('admin', '/hr/leave'),
@@ -75,14 +96,33 @@ export default function AdminDashboard() {
     },
   });
 
+  const cards = buildModuleCards({
+    isModuleEnabled,
+    data: data ?? {},
+    upcomingExams: exams.data ?? null,
+    routes: {
+      attendance: routeFor('admin', '/attendance/register'),
+      finance: routeFor('admin', '/finance'),
+      hr: routeFor('admin', '/hr'),
+      exams: routeFor('admin', '/academics/exams'),
+      admissions: routeFor('admin', '/admissions'),
+      transport: routeFor('admin', '/transport'),
+      library: routeFor('admin', '/library/issues'),
+      hostel: routeFor('admin', '/hostel/gate-passes'),
+      inventory: routeFor('admin', '/inventory'),
+    },
+  });
+
   const quick: Array<{ label: string; icon: IconName; route?: string; show: boolean }> = [
     { label: 'Attendance', icon: 'checkmark-done-outline' as IconName, route: routeFor('admin', '/attendance/manual-entry'), show: isModuleEnabled('attendance') },
     { label: 'Collect Fee', icon: 'cash-outline' as IconName, route: routeFor('admin', '/finance/fees/collect'), show: isModuleEnabled('finance') },
     { label: 'Students', icon: 'people-outline' as IconName, route: routeFor('admin', '/students'), show: isModuleEnabled('students') },
+    { label: 'Enquiries', icon: 'person-add-outline' as IconName, route: routeFor('admin', '/admissions'), show: isModuleEnabled('admissions') },
     { label: 'Staff', icon: 'briefcase-outline' as IconName, route: routeFor('admin', '/hr/staff'), show: isModuleEnabled('hr') },
     { label: 'Send Alert', icon: 'megaphone-outline' as IconName, route: '/(admin)/notifications/send', show: isModuleEnabled('notifications') },
     { label: 'Timetable', icon: 'calendar-outline' as IconName, route: routeFor('admin', '/academics/timetable'), show: isModuleEnabled('academics') },
     { label: 'Results', icon: 'bar-chart-outline' as IconName, route: routeFor('admin', '/academics/results'), show: isModuleEnabled('examinations') },
+    { label: 'School Setup', icon: 'settings-outline' as IconName, route: routeFor('admin', '/school-setup'), show: true },
     { label: 'AI Chat', icon: 'chatbubbles-outline' as IconName, route: '/(admin)/ai-assistant', show: true },
   ].filter((a) => a.show);
 
@@ -90,12 +130,15 @@ export default function AdminDashboard() {
     <ScrollView style={styles.container} contentContainerStyle={styles.content} refreshControl={refreshControl}>
       <Text style={styles.greeting}>Welcome, {user?.first_name || user?.username || 'Admin'}</Text>
       <SchoolSwitcher />
-      {year.current ? <Text style={styles.year}>{year.current.name}</Text> : null}
+      {year.current ? <Text style={styles.year}>{year.current.name}{term ? `  |  ${term}` : ''}</Text> : null}
 
       {!year.current ? (
         <View style={styles.warn}>
           <Text style={styles.warnTitle}>No academic session set</Text>
-          <Text style={styles.warnText}>Create an academic year and mark it current on the web app to enable session-aware features.</Text>
+          <Text style={styles.warnText}>Create an academic year and mark it current to enable session-aware features.</Text>
+          <TouchableOpacity accessibilityRole="button" style={styles.warnBtn} onPress={() => go(routeFor('admin', '/academics/sessions'))}>
+            <Text style={styles.warnBtnText}>Set up now</Text>
+          </TouchableOpacity>
         </View>
       ) : null}
 
@@ -146,7 +189,18 @@ export default function AdminDashboard() {
         {isModuleEnabled('hr') ? (
           <StatCard title="Staff present" value={hr ? (staffPct != null ? `${staffPct}%` : offDay ? 'N/A' : '—') : '—'} subtitle={hr ? `${hr.staff_on_leave_today} on leave · ${hr.active_staff} active` : undefined} color={Colors.success} />
         ) : null}
+        {isModuleEnabled('finance') ? (
+          <StatCard title="Fee collection" value={feeRate != null ? `${feeRate}%` : '—'} subtitle={fee ? `Monthly fees · PKR ${Number(fee.total_pending || 0).toLocaleString()} pending` : undefined}
+            color={feeRate == null ? Colors.textTertiary : feeRate >= 80 ? Colors.success : feeRate >= 50 ? Colors.warning : Colors.error} />
+        ) : null}
       </View>
+
+      {cards.length > 0 ? (
+        <>
+          <Text style={styles.section}>Module overview</Text>
+          <ModuleOverview cards={cards} onOpen={go} />
+        </>
+      ) : null}
 
       {isModuleEnabled('finance') && fee ? (
         <View style={styles.gap}>
@@ -179,6 +233,10 @@ export default function AdminDashboard() {
         ))}
       </View>
 
+      <SessionHealthCard yearId={year.current?.id} yearName={year.current?.name} />
+
+      <PredictorsCard />
+
       <AIInsightsCard />
 
       <LeadershipInsights />
@@ -196,6 +254,8 @@ const styles = StyleSheet.create({
   warn: { backgroundColor: Colors.warningLight, borderRadius: BorderRadius.md, padding: Spacing.md, marginTop: Spacing.md },
   warnTitle: { fontSize: FontSize.sm, fontWeight: '700', color: Colors.warning },
   warnText: { fontSize: FontSize.xs, color: Colors.warning, marginTop: 2 },
+  warnBtn: { alignSelf: 'flex-start', marginTop: Spacing.sm, paddingVertical: 4 },
+  warnBtnText: { fontSize: FontSize.sm, fontWeight: '700', color: Colors.warning, textDecorationLine: 'underline' },
   stepper: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing.xl, marginTop: Spacing.lg },
   stepBtn: { fontSize: 28, color: Colors.primary, paddingHorizontal: Spacing.sm },
   stepDisabled: { color: Colors.border },

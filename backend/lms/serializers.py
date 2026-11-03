@@ -118,8 +118,7 @@ class TopicSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'created_at', 'updated_at']
 
     def get_is_covered(self, obj):
-        """Check if this topic has been used in any published lesson plan."""
-        return obj.lesson_plans.filter(status='PUBLISHED').exists()
+        return obj.is_covered
 
     def validate(self, attrs):
         instance = getattr(self, 'instance', None)
@@ -136,7 +135,9 @@ class TopicDetailedSerializer(serializers.ModelSerializer):
 
     subtopics = SubTopicSerializer(many=True, read_only=True)
 
-    is_covered = serializers.BooleanField(read_only=True)
+    # Year-scoped when ?academic_year= is given (see get_taught_date), so a
+    # topic taught last year doesn't read as taught this year.
+    is_covered = serializers.SerializerMethodField()
     is_tested = serializers.BooleanField(read_only=True)
     test_question_count = serializers.IntegerField(read_only=True)
     lesson_plan_count = serializers.IntegerField(read_only=True)
@@ -147,6 +148,8 @@ class TopicDetailedSerializer(serializers.ModelSerializer):
     # See TopicSchedule for why planned_date isn't just a field on Topic.
     planned_date = serializers.SerializerMethodField()
     taught_date = serializers.SerializerMethodField()
+    coverage_status = serializers.SerializerMethodField()
+    coverage_days = serializers.SerializerMethodField()
 
     # Linked resources
     lesson_plans = serializers.SerializerMethodField()
@@ -166,14 +169,34 @@ class TopicDetailedSerializer(serializers.ModelSerializer):
         return schedule.planned_date if schedule else None
 
     def get_taught_date(self, obj):
-        """Earliest lesson_date among this year's active lesson plans that
-        cover the topic -- i.e. when it was first actually taught."""
-        academic_year_id = self.context.get('academic_year_id')
-        lesson_plans = obj.lesson_plans.filter(is_active=True)
-        if academic_year_id:
-            lesson_plans = lesson_plans.filter(academic_year_id=academic_year_id)
-        earliest = lesson_plans.order_by('lesson_date').first()
+        """Earliest lesson_date among this year's published, already-dated
+        lesson plans covering the topic -- i.e. when it was first taught.
+        Uses the view's `_taught_date` annotation when present (no N+1)."""
+        if hasattr(obj, '_taught_date'):
+            return obj._taught_date
+        from .coverage import taught_plan_q
+        earliest = obj.lesson_plans.filter(
+            taught_plan_q(academic_year_id=self.context.get('academic_year_id'))
+        ).order_by('lesson_date').first()
         return earliest.lesson_date if earliest else None
+
+    def get_is_covered(self, obj):
+        return self.get_taught_date(obj) is not None
+
+    def _coverage(self, obj):
+        # None without a year: "late" is meaningless without a planned date
+        # for a specific year.
+        if not self.context.get('academic_year_id'):
+            return None, 0
+        from .coverage import compute_coverage_status
+        return compute_coverage_status(self.get_taught_date(obj), self.get_planned_date(obj))
+
+    def get_coverage_status(self, obj):
+        return self._coverage(obj)[0]
+
+    def get_coverage_days(self, obj):
+        """Days late (status late) or days overdue (status overdue)."""
+        return self._coverage(obj)[1]
 
     def get_lesson_plans(self, obj):
         """Simplified lesson plan list."""
@@ -208,6 +231,8 @@ class TopicDetailedSerializer(serializers.ModelSerializer):
             'lesson_plan_count',   # NEW
             'planned_date',
             'taught_date',
+            'coverage_status',
+            'coverage_days',
             'lesson_plans',        # NEW
             'test_questions',      # NEW
             'created_at', 'updated_at'
@@ -215,6 +240,7 @@ class TopicDetailedSerializer(serializers.ModelSerializer):
         read_only_fields = [
             'id', 'is_covered', 'is_tested', 'test_question_count',
             'lesson_plan_count', 'planned_date', 'taught_date',
+            'coverage_status', 'coverage_days',
             'lesson_plans', 'test_questions',
             'created_at', 'updated_at'
         ]

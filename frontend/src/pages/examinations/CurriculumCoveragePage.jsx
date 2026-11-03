@@ -5,6 +5,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { lmsApi } from '../../services/api'
 import ClassSelector from '../../components/ClassSelector'
 import TopicStatusBadge from './TopicStatusBadge'
+import ScheduleStatusBadge from './ScheduleStatusBadge'
 import CurriculumTimeline from './CurriculumTimeline'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
 import { useAuth } from '../../contexts/AuthContext'
@@ -27,6 +28,7 @@ export default function CurriculumCoveragePage() {
   const [classId, setClassId] = useState('')
   const [subjectId, setSubjectId] = useState('')
   const [coverage, setCoverage] = useState('')
+  const [scheduleStatus, setScheduleStatus] = useState('')
   const { sessionClasses } = useSessionClasses(activeAcademicYear?.id)
   const classSelectorScope = getClassSelectorScope(activeAcademicYear?.id)
   const resolvedClassId = getResolvedMasterClassId(classId, activeAcademicYear?.id, sessionClasses)
@@ -42,7 +44,7 @@ export default function CurriculumCoveragePage() {
     queryKey: 'teacherCurriculumCoverageClasses',
   })
 
-  const topicsQueryKey = ['curriculumCoverageTopics', resolvedClassId, subjectId, coverage, activeAcademicYear?.id]
+  const topicsQueryKey = ['curriculumCoverageTopics', resolvedClassId, subjectId, coverage, scheduleStatus, activeAcademicYear?.id]
   const { data, isLoading } = useQuery({
     queryKey: topicsQueryKey,
     queryFn: () =>
@@ -51,6 +53,7 @@ export default function CurriculumCoveragePage() {
         ...(resolvedClassId && { class_id: resolvedClassId }),
         ...(subjectId && { subject_id: subjectId }),
         ...(coverage && { coverage }),
+        ...(scheduleStatus && { coverage_status: scheduleStatus }),
         ...(activeAcademicYear?.id && { academic_year: activeAcademicYear.id }),
       }),
     enabled: Boolean(resolvedClassId && subjectId),
@@ -59,6 +62,8 @@ export default function CurriculumCoveragePage() {
   const topics = data?.data?.results || data?.data || []
   const taughtCount = topics.filter((t) => t.is_covered).length
   const testedCount = topics.filter((t) => t.is_tested).length
+  const lateCount = topics.filter((t) => t.coverage_status === 'late').length
+  const overdueCount = topics.filter((t) => t.coverage_status === 'overdue').length
 
   const plannedDateMutation = useMutation({
     mutationFn: ({ topicId, plannedDate }) =>
@@ -79,7 +84,7 @@ export default function CurriculumCoveragePage() {
       <PageHeader title="Curriculum Coverage" subtitle="Track taught vs tested topics by class and subject." />
 
       <div className="card">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
           <div>
             <label className="label">Class</label>
             <ClassSelector
@@ -124,11 +129,27 @@ export default function CurriculumCoveragePage() {
               <option value="uncovered">Uncovered</option>
             </select>
 </Field>
+          <Field label="Schedule Filter">
+<select
+              className="input"
+              value={scheduleStatus}
+              onChange={(e) => setScheduleStatus(e.target.value)}
+              disabled={!activeAcademicYear?.id}
+            >
+              <option value="">All schedules</option>
+              <option value="overdue">Overdue</option>
+              <option value="late">Taught late</option>
+              <option value="on_time">Taught on time</option>
+              <option value="upcoming">Upcoming</option>
+              <option value="not_planned">Not planned</option>
+              <option value="unscheduled">Taught, no plan date</option>
+            </select>
+</Field>
         </div>
       </div>
 
       {classId && subjectId && (
-        <div className="grid grid-cols-3 gap-2 md:gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-2 md:gap-4">
           <div className="bg-white border border-gray-200 rounded-lg p-4">
             <p className="text-sm text-gray-500">Total Topics</p>
             <p className="text-2xl font-bold text-gray-900">{topics.length}</p>
@@ -140,6 +161,14 @@ export default function CurriculumCoveragePage() {
           <div className="bg-white border border-gray-200 rounded-lg p-4">
             <p className="text-sm text-gray-500">Tested</p>
             <p className="text-2xl font-bold text-blue-700">{testedCount}</p>
+          </div>
+          <div className="bg-white border border-gray-200 rounded-lg p-4">
+            <p className="text-sm text-gray-500">Taught Late</p>
+            <p className="text-2xl font-bold text-amber-700">{lateCount}</p>
+          </div>
+          <div className="bg-white border border-gray-200 rounded-lg p-4">
+            <p className="text-sm text-gray-500">Overdue</p>
+            <p className="text-2xl font-bold text-red-700">{overdueCount}</p>
           </div>
         </div>
       )}
@@ -187,6 +216,7 @@ export default function CurriculumCoveragePage() {
                     { label: 'Questions', value: topic.test_question_count || 0 },
                     { label: 'Planned Date', value: topic.planned_date || 'Not set' },
                     { label: 'Taught Date', value: topic.taught_date || 'Not yet' },
+                    { label: 'Schedule', value: <ScheduleStatusBadge topic={topic} /> },
                   ]}
                 />
               ))}
@@ -200,6 +230,7 @@ export default function CurriculumCoveragePage() {
                   <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
                   <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Planned Date</th>
                   <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Taught Date</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Schedule</th>
                   <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Lesson Plans</th>
                   <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Questions</th>
                 </tr>
@@ -225,6 +256,7 @@ export default function CurriculumCoveragePage() {
                       />
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-700">{topic.taught_date || <span className="text-gray-400">Not yet</span>}</td>
+                    <td className="px-4 py-3 text-sm"><ScheduleStatusBadge topic={topic} /></td>
                     <td className="px-4 py-3 text-sm text-gray-700">{topic.lesson_plan_count || 0}</td>
                     <td className="px-4 py-3 text-sm text-gray-700">{topic.test_question_count || 0}</td>
                   </tr>

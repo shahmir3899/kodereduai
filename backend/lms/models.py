@@ -207,8 +207,10 @@ class Topic(models.Model):
 
     @property
     def is_covered(self):
-        """Check if this topic has any lesson plans linked."""
-        return self.lesson_plans.filter(is_active=True).exists()
+        """Taught = a published, already-dated lesson plan covers it.
+        Definition lives in lms.coverage so every report agrees."""
+        from .coverage import taught_plan_q
+        return self.lesson_plans.filter(taught_plan_q()).exists()
     
     @property
     def is_tested(self):

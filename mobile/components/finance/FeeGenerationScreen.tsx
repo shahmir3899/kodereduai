@@ -2,10 +2,12 @@ import React, { useState } from 'react';
 import { View, Text, ScrollView, StyleSheet } from 'react-native';
 import { useAcademicYear, useAttendanceClassOptions } from '../../hooks/useAcademicYear';
 import { useFeeCategories } from '../../hooks/useFeeStructure';
-import { useGenerationActions, useGenerationPreview } from '../../hooks/useFeeGeneration';
+import { useGenerationActions, useGenerationPreview, useResolvedFee } from '../../hooks/useFeeGeneration';
+import { useAccounts } from '../../hooks/useFees';
+import { PAYMENT_METHODS } from '../../services/feeCollect';
 import {
   buildBulkPayload, buildSinglePayload, CONFLICTS, confirmText, emptyBulkForm, emptySingleForm, MONTH_NAMES, previewParams,
-  previewText, resultText, validateBulk, validateSingle, yearOptions, type BulkForm, type SingleForm,
+  previewText, receivedAmount, resultText, singleResultText, structureText, validateBulk, validateSingle, yearOptions, type BulkForm, type SingleForm,
 } from '../../services/feeGeneration';
 import { inventoryErrorMessage } from '../../services/inventory';
 import SegmentedTabs from '../ui/SegmentedTabs';
@@ -17,6 +19,8 @@ import EmptyState from '../ui/EmptyState';
 import { useToast } from '../ui/Toast';
 import { confirm } from '../ui/confirm';
 import StudentPicker from './StudentPicker';
+import DateField from '../ui/DateField';
+import Input from '../ui/Input';
 import { Colors, FontSize, Spacing } from '../../constants/colors';
 
 type Mode = 'bulk' | 'single';
@@ -101,16 +105,25 @@ function Single({ academicYearId }: { academicYearId: number }) {
   const categories = useFeeCategories(f.kind);
   const [error, setError] = useState<string | null>(null);
   const set = <K extends keyof SingleForm>(k: K, v: SingleForm[K]) => setF((x) => ({ ...x, [k]: v }));
+  const resolved = useResolvedFee(f.student, f.kind, f.category, academicYearId);
+  const accounts = useAccounts();
+  const activeAccounts = (accounts.data ?? []).filter((a) => a.is_active !== false);
+  // undefined while loading, null when the structure has no fee, else the amount.
+  const structureAmount = resolved.data ? resolved.data.amount : undefined;
+  const received = receivedAmount(f);
 
   const run = async () => {
-    const problem = validateSingle(f);
+    const problem = validateSingle(f, structureAmount);
     if (problem) return setError(problem);
     setError(null);
     try {
-      await actions.single.mutateAsync(buildSinglePayload(f, academicYearId));
-      toast.success('Fee record generated.');
+      const res = await actions.single.mutateAsync(buildSinglePayload(f, academicYearId));
+      toast.success(singleResultText(res.data, received));
+      if (res.data?.created) setF((x) => ({ ...x, received: '', notes: '' }));
     } catch (e) {
-      setError(inventoryErrorMessage(e, 'Could not generate the record. Check the student has a fee set for this category.'));
+      // A protected conflict (409) comes with the server's own explanation, which is the useful part.
+      const serverMessage = (e as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      setError(serverMessage ?? inventoryErrorMessage(e, 'Could not generate the record. Check the student has a fee set for this category.'));
     }
   };
 
@@ -123,9 +136,27 @@ function Single({ academicYearId }: { academicYearId: number }) {
       ) : null}
       <Select label="Year" value={f.year} onChange={(v) => set('year', v)} options={yearOptions().map((y) => ({ value: y, label: String(y) }))} />
       <Select label="Category" value={f.category} onChange={(v) => set('category', v)} placeholder="Choose a category" options={(categories.data ?? []).map((c) => ({ value: c.id, label: c.name }))} />
+      {f.student && f.category ? (
+        <Card>
+          <Text style={styles.title}>Fee from the fee structure</Text>
+          <Text style={styles.body}>{resolved.isLoading ? 'Checking…' : resolved.isError ? 'Could not check the fee.' : resolved.data ? structureText(resolved.data.amount, resolved.data.source) : ''}</Text>
+          {f.kind === 'MONTHLY' ? <Text style={styles.hint}>A monthly record also adds any balance carried from the month before.</Text> : null}
+        </Card>
+      ) : null}
       <Select label="If a record already exists" value={f.conflict} onChange={(v) => set('conflict', v)} options={CONFLICTS.map((c) => ({ value: c.value, label: c.label }))} />
+      <Text style={styles.hint}>{CONFLICTS.find((c) => c.value === f.conflict)?.hint}</Text>
+      <Input label="Amount received now (optional)" value={f.received} onChangeText={(v) => set('received', v)} keyboardType="decimal-pad" placeholder="0" />
+      {received > 0 ? (
+        <>
+          <Select label="Account *" value={f.account} onChange={(v) => set('account', v)} placeholder={accounts.isLoading ? 'Loading...' : 'Select account'}
+            options={activeAccounts.map((a) => ({ value: a.id, label: a.name }))} />
+          <Select label="Method" value={f.method} onChange={(v) => set('method', String(v))} options={PAYMENT_METHODS.map((m) => ({ value: m.value, label: m.label }))} />
+          <DateField label="Payment date *" value={f.paidDate} onChange={(v) => set('paidDate', v)} maximumDate={new Date()} />
+        </>
+      ) : null}
+      <Input label="Notes (optional)" value={f.notes} onChangeText={(v) => set('notes', v)} multiline />
       {error ? <Text style={styles.error} accessibilityRole="alert">{error}</Text> : null}
-      <Button title="Generate record" onPress={run} loading={actions.single.isPending} disabled={actions.single.isPending} />
+      <Button title="Generate record" onPress={run} loading={actions.single.isPending} disabled={actions.single.isPending || (!!f.student && !!f.category && resolved.isLoading)} />
     </View>
   );
 }

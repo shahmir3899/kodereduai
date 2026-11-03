@@ -113,7 +113,7 @@ export function usePendingSubmissions(enabled: boolean) {
     const data = (await lmsApi.getSubmissions({ status: 'SUBMITTED', page_size: 10 })).data;
     return {
       count: countOf(data),
-      items: listOf<{ id: number; student_name?: string; assignment_title?: string }>(data),
+      items: listOf<{ id: number; student_name?: string; assignment_title?: string; submitted_at?: string | null }>(data),
     };
   }, { enabled, staleTime: 0 });
 }

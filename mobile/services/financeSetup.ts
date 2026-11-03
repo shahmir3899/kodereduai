@@ -15,6 +15,11 @@ export interface ManagedAccount {
   opening_balance: number | string;
   is_active: boolean;
   staff_visible?: boolean;
+  bank_name?: string;
+  // Hidden by the server from roles that do not run the books.
+  account_title?: string;
+  account_number?: string;
+  iban?: string;
 }
 
 export interface AccountForm {
@@ -23,9 +28,15 @@ export interface AccountForm {
   openingBalance: string;
   isActive: boolean;
   staffVisible: boolean;
+  bankName: string;
+  accountTitle: string;
+  accountNumber: string;
+  iban: string;
 }
 
-export const emptyAccountForm = (): AccountForm => ({ name: '', accountType: 'CASH', openingBalance: '', isActive: true, staffVisible: true });
+export const emptyAccountForm = (): AccountForm => ({
+  name: '', accountType: 'CASH', openingBalance: '', isActive: true, staffVisible: true, bankName: '', accountTitle: '', accountNumber: '', iban: '',
+});
 
 export const accountToForm = (a: ManagedAccount): AccountForm => ({
   name: a.name,
@@ -33,23 +44,50 @@ export const accountToForm = (a: ManagedAccount): AccountForm => ({
   openingBalance: a.opening_balance == null ? '' : String(a.opening_balance),
   isActive: a.is_active !== false,
   staffVisible: a.staff_visible !== false,
+  bankName: a.bank_name ?? '',
+  accountTitle: a.account_title ?? '',
+  accountNumber: a.account_number ?? '',
+  iban: a.iban ?? '',
 });
+
+// The server's rule for an account number or IBAN: no symbols, no markup.
+const BANK_REF = /^[A-Za-z0-9 -]*$/;
 
 export function validateAccount(f: AccountForm): string | null {
   if (!f.name.trim()) return 'Enter the account name.';
   if (f.openingBalance.trim() && !Number.isFinite(Number(f.openingBalance))) return 'The opening balance must be a number.';
+  if (f.accountType === 'BANK') {
+    if (!BANK_REF.test(f.accountNumber)) return 'The account number can have letters, digits, spaces and hyphens only.';
+    if (!BANK_REF.test(f.iban)) return 'The IBAN can have letters, digits, spaces and hyphens only.';
+  }
   return null;
 }
 
-// The web sends opening_balance 0 when the box is empty; is_active is only sent on edit.
+// The web sends opening_balance 0 when the box is empty; is_active is only sent on edit. Bank details go
+// with a Bank account; an account switched away from Bank has them cleared rather than left behind.
 export function buildAccountPayload(f: AccountForm, editing: boolean): Record<string, unknown> {
+  const bank = f.accountType === 'BANK'
+    ? { bank_name: f.bankName.trim(), account_title: f.accountTitle.trim(), account_number: f.accountNumber.trim(), iban: f.iban.trim() }
+    : editing ? { bank_name: '', account_title: '', account_number: '', iban: '' } : {};
   return {
     name: f.name.trim(),
     account_type: f.accountType,
     opening_balance: f.openingBalance.trim() ? Number(f.openingBalance) : 0,
     staff_visible: f.staffVisible,
+    ...bank,
     ...(editing ? { is_active: f.isActive } : {}),
   };
+}
+
+// "••••8901": which account, without printing the whole number in a list.
+export function maskAccountNumber(number?: string | null): string {
+  const kept = String(number ?? '').replace(/[^A-Za-z0-9]/g, '');
+  return kept ? `••••${kept.slice(-4)}` : '';
+}
+
+// "HBL ••••8901"; either part may be missing (the server hides the number from some roles), '' for none.
+export function bankSummary(a: Pick<ManagedAccount, 'bank_name' | 'account_number'>): string {
+  return [a.bank_name, maskAccountNumber(a.account_number)].filter(Boolean).join(' ');
 }
 
 // ─── Categories ────────────────────────────────────────────────────────────────────────────

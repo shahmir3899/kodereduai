@@ -1,7 +1,7 @@
 # Mobile app and web API coverage
 
-Generated 2026-11-02 by `python scripts/mobile_api_gap.py` (rerun it after each batch).
-The web calls **768** distinct endpoints. The mobile app calls **485** of them (**283 not called**). Mobile-only endpoints (the web never calls them): **2**.
+Generated 2026-11-03 by `python scripts/mobile_api_gap.py` (rerun it after each batch).
+The web calls **768** distinct endpoints. The mobile app calls **493** of them (**275 not called**). Mobile-only endpoints (the web never calls them): **2**.
 
 A call whose URL is a bare variable is not seen (none exist today, checked 2026-11-02); nested template strings are handled. This file is a reference; the plan is `MOBILE_CHANGE_LIST.md`.
 
@@ -25,7 +25,7 @@ Each row groups related endpoints. "Used" is how many of the web's endpoints for
 | Academic sessions | Enrollments and promotion | 1 of 15 | Partly used | Web only (promotion) |
 | Academic sessions | Risk scores | 2 of 2 | Fully used |  |
 | Academic sessions | Sections | 5 of 7 | Mostly used |  |
-| Academic sessions | Session health | 0 of 2 | Not used | Version 2 |
+| Academic sessions | Session health | 1 of 2 | Partly used | Version 2 |
 | Academic sessions | Setup wizard | 0 of 1 | Not used | Web only |
 | Academic sessions | Terms | 6 of 7 | Mostly used | Web only |
 | Academics | AI analytics | 0 of 2 | Not used | Version 2 |
@@ -43,9 +43,9 @@ Each row groups related endpoints. "Used" is how many of the web's endpoints for
 | Attendance | Face attendance | 11 of 16 | Mostly used | Capture and review built; devices and live feed are version 2 |
 | Attendance | Photo register (OCR, parked) | 9 of 10 | Mostly used | Parked (OCR switched off) |
 | Content | Assignments | 10 of 11 | Mostly used |  |
-| Content | Curriculum | 22 of 30 | Mostly used |  |
+| Content | Curriculum | 23 of 30 | Mostly used |  |
 | Content | Curriculum content blocks | 10 of 11 | Mostly used | Version 2 |
-| Content | Lesson plans | 6 of 12 | Partly used |  |
+| Content | Lesson plans | 10 of 12 | Mostly used |  |
 | Dashboard | Admin dashboard | 1 of 1 | Fully used |  |
 | Dashboard | Leadership insights | 1 of 1 | Fully used |  |
 | Exams | Academic risk | 1 of 1 | Fully used |  |
@@ -64,12 +64,12 @@ Each row groups related endpoints. "Used" is how many of the web's endpoints for
 | Exams | Worksheets | 10 of 13 | Mostly used | Version 2 |
 | Finance | AI assistant | 3 of 3 | Fully used |  |
 | Finance | AI fee predictor | 0 of 1 | Not used | Web only |
-| Finance | Accounts and ledger | 11 of 13 | Mostly used |  |
+| Finance | Accounts and ledger | 12 of 13 | Mostly used |  |
 | Finance | Discounts and scholarships | 12 of 12 | Fully used |  |
 | Finance | Expense and income categories | 8 of 8 | Fully used |  |
 | Finance | Expenses | 5 of 5 | Fully used |  |
 | Finance | Fee categories | 10 of 10 | Fully used |  |
-| Finance | Fee collection | 11 of 16 | Mostly used |  |
+| Finance | Fee collection | 12 of 16 | Mostly used |  |
 | Finance | Fee setup | 3 of 6 | Partly used |  |
 | Finance | Fees of one student | 0 of 2 | Not used |  |
 | Finance | Financial reports | 1 of 1 | Fully used |  |
@@ -186,9 +186,8 @@ Each row groups related endpoints. "Used" is how many of the web's endpoints for
 - `POST /api/sessions/session-classes/{}/assign-unassigned/`
 - `POST /api/sessions/session-classes/{}/renumber/`
 
-### Academic sessions: Session health (2)
+### Academic sessions: Session health (1)
 
-- `GET /api/sessions/health/`
 - `GET /api/sessions/health/ai-summary/`
 
 ### Academic sessions: Setup wizard (1)
@@ -262,13 +261,12 @@ Each row groups related endpoints. "Used" is how many of the web's endpoints for
 
 - `GET /api/lms/submissions/{}/`
 
-### Content: Curriculum (8)
+### Content: Curriculum (7)
 
 - `DELETE /api/lms/subtopics/{}/`
 - `GET /api/lms/books/{}/`
 - `GET /api/lms/chapters/`
 - `GET /api/lms/subtopics/`
-- `GET /api/lms/topics/{}/objectives/`
 - `GET /api/lms/topics/{}/standards/`
 - `POST /api/lms/books/{}/bulk_toc/`
 - `POST /api/lms/subtopics/`
@@ -277,14 +275,10 @@ Each row groups related endpoints. "Used" is how many of the web's endpoints for
 
 - `GET /api/lms/content-blocks/{}/`
 
-### Content: Lesson plans (6)
+### Content: Lesson plans (2)
 
 - `GET /api/lms/lesson-plans/my_classes/`
 - `GET /api/lms/lesson-plans/{}/`
-- `POST /api/lms/lesson-plans/bulk_delete/`
-- `POST /api/lms/lesson-plans/bulk_publish/`
-- `POST /api/lms/lesson-plans/{}/link_objectives/`
-- `POST /api/lms/lesson-plans/{}/publish/`
 
 ### Exams: Exam groups and date sheets (4)
 
@@ -355,14 +349,12 @@ Each row groups related endpoints. "Used" is how many of the web's endpoints for
 
 - `GET /api/finance/fee-predictor/`
 
-### Finance: Accounts and ledger (2)
+### Finance: Accounts and ledger (1)
 
 - `DELETE /api/finance/accounts/{}/reopen/`
-- `GET /api/finance/accounts/balances_all/`
 
-### Finance: Fee collection (5)
+### Finance: Fee collection (4)
 
-- `GET /api/finance/fee-payments/monthly_summary_all/`
 - `GET /api/finance/fee-payments/resolve_amount/`
 - `POST /api/finance/fee-payments/bulk_delete/`
 - `POST /api/finance/fee-payments/bulk_update/`

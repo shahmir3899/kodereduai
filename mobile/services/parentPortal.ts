@@ -245,3 +245,41 @@ export function apiErrorMessage(data: unknown, fallback: string): string {
   const first = Object.values(d).flat()[0];
   return typeof first === 'string' ? first : fallback;
 }
+
+// Change in the last exam against the one before it, in points, as the web card shows (up 4 / down 2).
+// null when either percentage is missing; 0 is returned as 0 so the caller can hide it.
+export function examDelta(latest: Pick<ExamBlock, 'percentage'> | null | undefined, previous: Pick<ExamBlock, 'percentage'> | null | undefined): number | null {
+  if (!latest || !previous) return null;
+  const a = Number(latest.percentage);
+  const b = Number(previous.percentage);
+  if (!Number.isFinite(a) || !Number.isFinite(b)) return null;
+  return Math.round((a - b) * 10) / 10;
+}
+
+// 'Today · 5 Nov', 'Tomorrow · 6 Nov', 'In 4 days · 7 Nov', or just the date once it has passed.
+export function nextExamWhen(iso: string, now: Date = new Date()): string {
+  const days = daysUntil(iso, now);
+  const [y, m, d] = iso.split('-').map(Number);
+  const pretty = y && m && d ? new Date(y, m - 1, d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : iso;
+  if (days === 0) return `Today · ${pretty}`;
+  if (days === 1) return `Tomorrow · ${pretty}`;
+  return days != null && days > 0 ? `In ${days} days · ${pretty}` : pretty;
+}
+
+// Second line under the fees figure: how much of it is from earlier months, or that nothing is due.
+export function feeNote(outstanding: number, overdue: number): string {
+  if (!(outstanding > 0)) return 'Nothing due';
+  return overdue > 0 ? `${formatMoney(overdue)} from earlier months` : 'outstanding';
+}
+
+// 'N children linked' for the Home subtitle; '' with none.
+export function childrenLinked(count: number): string {
+  return count > 0 ? `${count} ${count === 1 ? 'child' : 'children'} linked` : '';
+}
+
+// The pages a parent can open for one child, in the order the web shows its link chips.
+export const CHILD_LINKS: Array<{ path: string; label: string }> = [
+  { path: '', label: 'Overview' }, { path: 'attendance', label: 'Attendance' }, { path: 'fees', label: 'Fees' },
+  { path: 'results', label: 'Results' }, { path: 'timetable', label: 'Timetable' }, { path: 'exam-schedule', label: 'Exam schedule' },
+  { path: 'library', label: 'Library' }, { path: 'transport', label: 'Transport' },
+];

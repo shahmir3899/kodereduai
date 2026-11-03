@@ -1,6 +1,6 @@
 import { studentsApi } from '../services/api';
 import { listOf } from '../services/academicYear';
-import { studentListParams, type MonthAttendance, type ProfileSummary, type StatusScope, type StudentRow } from '../services/students';
+import { countOfList, studentListParams, type MonthAttendance, type ProfileSummary, type StatusScope, type StudentCounts, type StudentRow } from '../services/students';
 import type { ClassOption } from '../services/attendanceEntry';
 import { enrollmentRows, type RemovalPreview } from '../services/studentLifecycle';
 import type { DeletedStudent, MovePreview, StudentDocumentRow, RecordCounts } from '../services/studentMove';
@@ -79,4 +79,23 @@ export function useMovePreview(id: number | null, params: Record<string, unknown
 export function useStudentDocuments(id: number | null) {
   return useScopedQuery('studentDocuments', [id], async () =>
     listOf<StudentDocumentRow>((await studentsApi.getDocuments(id!)).data), { enabled: !!id, staleTime: 0 });
+}
+
+// How many students are current and how many have left, for the year being viewed; the total is the two
+// added up. (The server's own "All" list counts only students enrolled this year, so it can be smaller than
+// Current and would not add up.) One tiny request each (a page of one student). Not for every role, so it
+// runs only when asked.
+export function useStudentCounts(enabled: boolean): StudentCounts {
+  const year = useAcademicYear();
+  const yearId = year.current?.id ?? null;
+  const on = enabled && !year.isLoading;
+  const count = (scope: StatusScope) =>
+    useScopedQuery<number | null>('students', ['count', scope, yearId], async () =>
+      countOfList((await studentsApi.getStudents(studentListParams({ term: '', option: null, academicYearId: yearId, page: 1, pageSize: 1, statusScope: scope }))).data),
+    { enabled: on, staleTime: 60_000, retry: false });
+  const current = count('current');
+  const left = count('left');
+  const c = current.data ?? null;
+  const l = left.data ?? null;
+  return { total: c != null && l != null ? c + l : null, current: c, left: l };
 }

@@ -20,6 +20,8 @@ import BottomSheet from '../ui/BottomSheet';
 import StudentAdminActions from './StudentAdminActions';
 import StudentHistoryTab from './StudentHistoryTab';
 import StudentDocumentsTab from './StudentDocumentsTab';
+import { EarlierAssessments, RiskProfile } from './StudentInsights';
+import { earlierBranchNote } from '../../services/studentInsights';
 import Button from '../ui/Button';
 import { useToast } from '../ui/Toast';
 import { confirm } from '../ui/confirm';
@@ -32,7 +34,7 @@ import StatusPill from '../ui/StatusPill';
 import KuickpayReceivedLabel from '../finance/KuickpayReceivedLabel';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
 
-type Tab = 'info' | 'attendance' | 'results' | 'fees' | 'history' | 'documents';
+type Tab = 'info' | 'attendance' | 'results' | 'fees' | 'history' | 'documents' | 'assessment';
 const TONE_COLOR = { success: Colors.success, warning: Colors.warning, error: Colors.error, neutral: Colors.text } as const;
 
 interface Props {
@@ -73,6 +75,7 @@ export default function StudentProfileScreen({ canEdit }: Props) {
   const banner = exitBanner(summary.data?.latest_exit, s.status as string | null | undefined);
   const away = ((s as { away_periods?: AwayPeriod[] }).away_periods ?? []) as AwayPeriod[];
   const sections = infoSections(s);
+  const earlierNote = earlierBranchNote(summary.data);
 
   const refreshStudent = () => qc.invalidateQueries({ predicate: (q) => ['students', 'student', 'student-edit'].includes(q.queryKey[0] as string) });
 
@@ -150,8 +153,13 @@ export default function StudentProfileScreen({ canEdit }: Props) {
         </View>
       ) : null}
 
+      {earlierNote ? <Text style={styles.earlierNote} accessibilityRole="text">{earlierNote}</Text> : null}
+
       <SegmentedTabs<Tab> value={tab} onChange={setTab}
-        tabs={[{ value: 'info', label: 'Info' }, { value: 'attendance', label: 'Attendance' }, { value: 'results', label: 'Results' }, { value: 'fees', label: 'Fees' }, { value: 'history', label: 'History' }, { value: 'documents', label: 'Documents' }]} scrollable />
+        tabs={[{ value: 'info', label: 'Info' }, { value: 'attendance', label: 'Attendance' }, { value: 'results', label: 'Results' }, { value: 'fees', label: 'Fees' }, { value: 'history', label: 'History' }, { value: 'documents', label: 'Documents' }, ...(summary.data?.has_earlier_branch_data ? [{ value: 'assessment' as const, label: 'Earlier' }] : [])]} scrollable />
+
+      {tab === 'info' && studentId ? <RiskProfile studentId={studentId} /> : null}
+      {tab === 'assessment' && studentId ? <EarlierAssessments studentId={studentId} /> : null}
 
       {tab === 'info' ? (
         sections.length === 0 ? <EmptyState title="No details" /> : (
@@ -248,6 +256,7 @@ export default function StudentProfileScreen({ canEdit }: Props) {
 }
 
 const styles = StyleSheet.create({
+  earlierNote: { fontSize: FontSize.xs, color: Colors.infoText, backgroundColor: Colors.infoLight, borderRadius: BorderRadius.md, padding: Spacing.sm, marginBottom: Spacing.sm },
   container: { flex: 1, backgroundColor: Colors.background },
   content: { padding: Spacing.lg, paddingBottom: Spacing.xxxl },
   head: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md, marginBottom: Spacing.lg },

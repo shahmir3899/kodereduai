@@ -2,9 +2,9 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, FlatList, ActivityIndicator, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
 import { useLocalSearchParams, useRouter, type Href } from 'expo-router';
 import type { ClassOption } from '../../services/attendanceEntry';
-import { STATUS_SCOPES, statusLabel, statusTone, type StatusScope } from '../../services/students';
+import { STATUS_SCOPES, statusLabel, statusTone, summaryTiles, type StatusScope } from '../../services/students';
 import { useAttendanceClassOptions } from '../../hooks/useAcademicYear';
-import { useStudentsPaged } from '../../hooks/useStudents';
+import { useStudentCounts, useStudentsPaged } from '../../hooks/useStudents';
 import { useDebouncedValue } from '../../hooks/useDebouncedValue';
 import { useRefreshControl } from '../../hooks/useRefreshControl';
 import { usePersonaBase } from '../../hooks/usePersonaBase';
@@ -15,6 +15,11 @@ import Skeleton from '../ui/Skeleton';
 import ErrorState from '../ui/ErrorState';
 import EmptyState from '../ui/EmptyState';
 import Button from '../ui/Button';
+import { selectedAll, toggleAll, toggleId } from '../../services/questionExtras';
+import { accountableIds } from '../../services/studentBulk';
+import type { BulkStudent } from '../../services/bulkReportCards';
+import { BulkAccountsSheet, BulkReportsSheet } from './BulkStudentSheets';
+import RenumberSectionSheet from './RenumberSectionSheet';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
 
 const ALL = 0;
@@ -48,9 +53,33 @@ export default function StudentsListScreen({ classOptions, canAdd }: Props) {
   const refreshControl = useRefreshControl(query.refetch);
   const students = useMemo(() => query.data?.pages.flatMap((p) => p.results) ?? [], [query.data]);
   const total = query.data?.pages[0]?.count ?? 0;
+  const counts = useStudentCounts(!!canAdd);
+  const tiles = summaryTiles(counts, options.length);
+
+  // Choosing students is page-scoped (admin and principal): ids from a list no longer on screen must not ride along.
+  const [selecting, setSelecting] = useState(false);
+  const [selected, setSelected] = useState<number[]>([]);
+  const [sheet, setSheet] = useState<'accounts' | 'reports' | 'renumber' | null>(null);
+  // Only one section at a time, and only a section (a class with no sections has no roll to re-number).
+  const renumberSection = canAdd && option?.isSession ? { id: option.id, label: option.label } : null;
+  const listKey = `${term}|${classId}|${scope}`;
+  useEffect(() => { setSelected([]); }, [listKey]);
+  const shownIds = students.map((s) => s.id);
+  const loginIds = accountableIds(students, selected);
+  const picked: BulkStudent[] = students.filter((s) => selected.includes(s.id)).map((s) => ({ studentId: s.id, enrollmentId: null, name: s.name, roll: s.roll_number }));
 
   const header = (
     <View>
+      {canAdd ? (
+        <View style={styles.tiles}>
+          {tiles.map((t) => (
+            <View key={t.label} style={styles.tile} accessible accessibilityLabel={`${t.label}: ${t.value}`}>
+              <Text style={[styles.tileValue, { color: t.tone === 'success' ? Colors.success : t.tone === 'info' ? Colors.primary : Colors.text }]}>{t.value}</Text>
+              <Text style={styles.tileLabel}>{t.label}</Text>
+            </View>
+          ))}
+        </View>
+      ) : null}
       {canAdd ? <Button title="Add student" size="sm" onPress={() => router.push(`${base}/students/new` as Href)} style={styles.add} /> : null}
       <Select label="Class" value={classId} onChange={setClassId}
         options={[{ value: ALL, label: classOptions ? 'All my classes' : 'All classes' }, ...options.map((o) => ({ value: o.id, label: o.label }))]} />
@@ -66,6 +95,23 @@ export default function StudentsListScreen({ classOptions, canAdd }: Props) {
         </ScrollView>
       ) : null}
       {query.data ? <Text style={styles.count}>{total} student{total === 1 ? '' : 's'}</Text> : null}
+      {renumberSection ? (
+        <View style={styles.bulkRow}>
+          <Button title="Re-number section" size="sm" variant="outline" onPress={() => setSheet('renumber')} />
+        </View>
+      ) : null}
+      {canAdd ? (
+        <View style={styles.bulkRow}>
+          <Button title={selecting ? 'Done selecting' : 'Select'} size="sm" variant="outline" onPress={() => { setSelecting((v) => !v); setSelected([]); }} />
+          {selecting ? <Button title={selectedAll(shownIds, selected) ? 'Clear page' : 'Select page'} size="sm" variant="ghost" onPress={() => setSelected((s) => toggleAll(shownIds, s))} /> : null}
+        </View>
+      ) : null}
+      {canAdd && selecting ? (
+        <View style={styles.bulkRow}>
+          <Button title={`Create logins (${loginIds.length})`} size="sm" variant="outline" disabled={loginIds.length === 0} onPress={() => setSheet('accounts')} />
+          <Button title={`Reports (${selected.length})`} size="sm" variant="outline" disabled={selected.length === 0} onPress={() => setSheet('reports')} />
+        </View>
+      ) : null}
     </View>
   );
 
@@ -73,6 +119,7 @@ export default function StudentsListScreen({ classOptions, canAdd }: Props) {
   if (query.isError && !query.data) return <ErrorState error={query.error} onRetry={() => query.refetch()} />;
 
   return (
+    <View style={styles.container}>
     <FlatList
       style={styles.container}
       contentContainerStyle={styles.content}
@@ -86,6 +133,9 @@ export default function StudentsListScreen({ classOptions, canAdd }: Props) {
       ListEmptyComponent={<EmptyState title="No students" message={term ? 'No students match your search.' : 'No students found.'} />}
       ListFooterComponent={query.isFetchingNextPage ? <ActivityIndicator color={Colors.primary} style={{ margin: Spacing.lg }} /> : null}
       renderItem={({ item: s }) => (
+        <View style={selecting ? styles.pickRow : undefined}>
+          {selecting ? <Text accessibilityRole="checkbox" accessibilityState={{ checked: selected.includes(s.id) }} style={styles.check} onPress={() => setSelected((x) => toggleId(x, s.id))}>{selected.includes(s.id) ? '☑' : '☐'}</Text> : null}
+          <View style={selecting ? styles.pickCard : undefined}>
         <RecordCard
           title={s.name}
           subtitle={`${s.roll_number ? `Roll ${s.roll_number}  ·  ` : ''}${s.class_name || ''}`}
@@ -93,17 +143,32 @@ export default function StudentsListScreen({ classOptions, canAdd }: Props) {
           avatarName={s.name}
           avatarUri={s.photo_url}
           status={s.status && s.status !== 'ACTIVE' ? { label: statusLabel(s.status), tone: statusTone(s.status) } : undefined}
-          onPress={() => router.push(`${base}/students/${s.id}` as Href)}
+          onPress={() => (selecting ? setSelected((x) => toggleId(x, s.id)) : router.push(`${base}/students/${s.id}` as Href))}
         />
+          </View>
+        </View>
       )}
     />
+      <BulkAccountsSheet visible={sheet === 'accounts'} onClose={() => setSheet(null)} ids={loginIds} skipped={selected.length - loginIds.length}
+        onDone={() => { setSelected([]); setSelecting(false); }} />
+      {renumberSection ? <RenumberSectionSheet visible={sheet === 'renumber'} onClose={() => setSheet(null)} section={renumberSection} /> : null}
+      <BulkReportsSheet visible={sheet === 'reports'} onClose={() => setSheet(null)} students={picked} />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
   content: { padding: Spacing.lg },
+  tiles: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm, marginBottom: Spacing.md },
+  tile: { width: '48%', backgroundColor: Colors.surface, borderRadius: BorderRadius.md, padding: Spacing.md },
+  tileValue: { fontSize: FontSize.xl, fontWeight: '700' },
+  tileLabel: { fontSize: FontSize.xs, color: Colors.textSecondary, marginTop: 2 },
   add: { alignSelf: 'flex-end', marginBottom: Spacing.md },
+  bulkRow: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm, marginBottom: Spacing.sm },
+  pickRow: { flexDirection: 'row', alignItems: 'center' },
+  pickCard: { flex: 1 },
+  check: { fontSize: 24, color: Colors.primary, paddingRight: Spacing.sm, minWidth: 36, textAlign: 'center' },
   count: { fontSize: FontSize.xs, color: Colors.textSecondary, marginBottom: Spacing.md },
   chips: { marginBottom: Spacing.md },
   chipsRow: { gap: Spacing.sm },
