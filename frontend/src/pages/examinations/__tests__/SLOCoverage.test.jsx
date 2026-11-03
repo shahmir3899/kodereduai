@@ -20,6 +20,10 @@ vi.mock('../../../contexts/AuthContext', () => ({
   useAuth: () => ({ activeSchool: { id: 1 }, user: { id: 1, role: 'SCHOOL_ADMIN' } }),
 }))
 
+vi.mock('../../../components/Toast', () => ({
+  useToast: () => ({ showError: vi.fn(), showSuccess: vi.fn() }),
+}))
+
 vi.mock('../../../contexts/AcademicYearContext', () => ({
   useAcademicYear: () => ({ activeAcademicYear: { id: 1, name: '2025-2026' } }),
 }))

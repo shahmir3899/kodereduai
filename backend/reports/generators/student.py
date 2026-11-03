@@ -3,7 +3,7 @@ Premium comprehensive student progress report — A4, dynamically built from
 database records. Section-based layout: header/letterhead, student profile
 card, attendance (colored month-grid + legend + stat cards), learning
 progress (published lessons by subject), skills/behaviour assessment,
-outstanding fees (only when something is owed), teacher/principal remarks,
+the last month's outstanding fee (or an all-cleared banner), teacher/principal remarks,
 and a signature block. A summary strip under the profile card gives the key
 figures at a glance; content flows across pages rather than a fixed break.
 """
@@ -620,13 +620,31 @@ class StudentComprehensiveReportGenerator(BaseReportGenerator):
         ]
         holiday_dates = self._resolve_holiday_dates(attendance_months, placement_class)
 
-        # --- Fees: only what is still owed. student_pending_fees already rolls each
-        # category's carried-forward balance into its latest row, so summing its items
-        # never double-counts an unpaid earlier month the way per-month balances would.
-        from finance.student_balance import student_pending_fees
-        pending = student_pending_fees(student)
-        fee_outstanding = pending['total']
-        fee_items = sorted(pending['items'], key=lambda i: (i['year'] or 0, i['month'] or 0))
+        # --- Fees: one figure — what is still owed for the LAST month of the period. A
+        # monthly row already carries every earlier unpaid month in its amount_due, so
+        # reading one month never double-counts, and a 6-month report reads only its
+        # final month. With no period the month is today's, capped at the year's end.
+        from finance.models import FeePayment
+        if date_to:
+            fee_month_date = date_to
+        else:
+            fee_month_date = timezone.localdate()
+            if academic_year_obj and academic_year_obj.end_date < fee_month_date:
+                fee_month_date = academic_year_obj.end_date
+        fee_rows_qs = FeePayment.objects.filter(
+            student=student, year=fee_month_date.year, month=fee_month_date.month,
+            handed_over_to_exit__isnull=True,
+        )
+        if has_history:
+            fee_rows_qs = FeePayment.objects.filter(
+                timeline.fees_q(segments), year=fee_month_date.year, month=fee_month_date.month,
+                handed_over_to_exit__isnull=True,
+            )
+        # Credits (paid above due) never offset another row's balance.
+        fee_outstanding = sum(
+            (max((r.amount_due or 0) - (r.amount_paid or 0), 0) for r in fee_rows_qs), 0,
+        )
+        fee_month_label = fee_month_date.strftime('%b %Y')
 
         # --- Learning progress: published lessons taught, grouped by subject ---
         # Drafts are never shown to parents, but they are counted so the report can say
@@ -798,7 +816,7 @@ class StudentComprehensiveReportGenerator(BaseReportGenerator):
             'leave_count': leave,
             'working_days': total_days,
             'attendance_rate': att_rate,
-            'fee_items': fee_items,
+            'fee_month_label': fee_month_label,
             'fee_outstanding': fee_outstanding,
             'lessons_by_subject': lessons_by_subject,
             'draft_lesson_count': draft_lesson_count,
@@ -949,7 +967,7 @@ class StudentComprehensiveReportGenerator(BaseReportGenerator):
         owes = data['fee_outstanding'] > 0
         summary_cards.append((
             f"{data['fee_outstanding']:,.0f}" if owes else 'Clear',
-            'Fees Outstanding (PKR)' if owes else 'Fees',
+            f"Outstanding {data['fee_month_label']} (PKR)" if owes else f"Fees {data['fee_month_label']}",
             ABSENT_BG if owes else PRESENT_BG, ABSENT_TEXT if owes else PRESENT_TEXT,
         ))
         elements.append(build_stat_cards(summary_cards))
@@ -1023,24 +1041,29 @@ class StudentComprehensiveReportGenerator(BaseReportGenerator):
             elements.append(Paragraph('Not yet assessed.', empty_state_style))
         elements.append(Spacer(1, 14))
 
-        # --- Fees: shown only while something is outstanding ---
+        # --- Fees: a single figure for the period's last month, or a cleared banner ---
         elements.append(section_heading('Fees', styles))
         elements.append(Spacer(1, 8))
-        if data['fee_items']:
-            fee_table_rows = [
-                [
-                    i['label'],
-                    date(i['year'], i['month'], 1).strftime('%b %Y') if i['year'] and i['month'] else '-',
-                    f"{i['amount_due']:,.0f}", f"{i['amount_paid']:,.0f}", f"{i['balance']:,.0f}",
-                ]
-                for i in data['fee_items']
-            ]
-            fee_table_rows.append(['Total outstanding', '', '', '', f"{data['fee_outstanding']:,.0f}"])
-            fee_table = build_table(['Fee', 'Month', 'Due', 'Paid', 'Balance'], fee_table_rows)
-            fee_table.setStyle(TableStyle([('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold')]))
-            elements.append(fee_table)
+        if data['fee_outstanding'] > 0:
+            elements.append(build_stat_cards([
+                (f"{data['fee_outstanding']:,.0f}", f"Outstanding for {data['fee_month_label']} (PKR)", ABSENT_BG, ABSENT_TEXT),
+            ]))
         else:
-            elements.append(Paragraph('All fees are cleared. Nothing outstanding.', empty_state_style))
+            banner_style = ParagraphStyle(
+                'FeesClearedBanner', parent=styles['Normal'], fontSize=10.5,
+                textColor=colors.HexColor(PRESENT_TEXT), alignment=1,
+            )
+            banner = Table(
+                [[Paragraph(f"<b>All dues cleared for {data['fee_month_label']}</b>", banner_style)]],
+                colWidths=[6.4 * inch],
+            )
+            banner.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor(PRESENT_BG)),
+                ('ROUNDEDCORNERS', [6, 6, 6, 6]),
+                ('TOPPADDING', (0, 0), (-1, -1), 10),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 10),
+            ]))
+            elements.append(banner)
         elements.append(Spacer(1, 14))
 
         # --- Remarks ---

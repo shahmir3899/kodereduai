@@ -446,23 +446,32 @@ class TestStudentReportSections:
     def test_fees_cleared_when_nothing_owed(self, seed_data, seed_sections):
         gen = self._generator(seed_data, seed_sections['a_students'][0])
         data = gen.get_data()
-        assert data['fee_items'] == []
         assert data['fee_outstanding'] == 0
+        assert data['fee_month_label'] == 'Sep 2025'
         assert gen.render_pdf(data).startswith(b'%PDF')
 
-    def test_outstanding_fee_listed(self, seed_data, seed_sections):
+    def _fee(self, seed_data, student, month, due):
         from finance.models import FeePayment
 
-        student = seed_sections['a_students'][0]
-        FeePayment.objects.create(
+        return FeePayment.objects.create(
             school=seed_data['school_a'], student=student, academic_year=seed_data['academic_year'],
-            month=9, year=2025, amount_due=1500, amount_paid=0,
+            month=month, year=2025, amount_due=due, amount_paid=0,
         )
+
+    def test_outstanding_is_last_month_of_period_only(self, seed_data, seed_sections):
+        student = seed_sections['a_students'][0]
+        self._fee(seed_data, student, 4, 900)   # earlier month in a wide period: ignored
+        self._fee(seed_data, student, 9, 1500)  # last month of the period: the figure
         gen = self._generator(seed_data, student)
+        gen.parameters['date_from'] = '2025-04-01'
         data = gen.get_data()
-        assert len(data['fee_items']) == 1
-        assert data["fee_outstanding"] == 1500
+        assert data['fee_outstanding'] == 1500
         assert gen.render_pdf(data).startswith(b'%PDF')
+
+    def test_earlier_month_owed_but_last_month_clear_shows_cleared(self, seed_data, seed_sections):
+        self._fee(seed_data, seed_sections['a_students'][0], 4, 900)
+        data = self._generator(seed_data, seed_sections['a_students'][0]).get_data()
+        assert data['fee_outstanding'] == 0
 
     def test_class_teacher_in_profile(self, seed_data, seed_sections):
         from academics.models import ClassTeacherAssignment

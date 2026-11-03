@@ -1,13 +1,13 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { lmsApi } from '../services/api';
 import { listOf } from '../services/academicYear';
-import { plannedDateBody, topicParams, type CoverageFilter, type CoverageTopic } from '../services/curriculumCoverage';
+import { plannedDateBody, topicParams, type CoverageFilter, type CoverageTopic, type ScheduleFilter } from '../services/curriculumCoverage';
 import { useScopedQuery } from './useScopedQuery';
 
 // Topics of one class and subject with their taught, tested and planned-date state.
-export function useCoverageTopics(masterClassId: number | null, subjectId: number | null, coverage: CoverageFilter, yearId: number | null) {
-  return useScopedQuery('curriculumCoverage', [masterClassId, subjectId, coverage, yearId], async () =>
-    listOf<CoverageTopic>((await lmsApi.getTopics(topicParams({ masterClassId: masterClassId!, subjectId: subjectId!, coverage, academicYearId: yearId }))).data),
+export function useCoverageTopics(masterClassId: number | null, subjectId: number | null, coverage: CoverageFilter, yearId: number | null, schedule: ScheduleFilter = '') {
+  return useScopedQuery('curriculumCoverage', [masterClassId, subjectId, coverage, yearId, schedule], async () =>
+    listOf<CoverageTopic>((await lmsApi.getTopics(topicParams({ masterClassId: masterClassId!, subjectId: subjectId!, coverage, schedule, academicYearId: yearId }))).data),
   { enabled: !!masterClassId && !!subjectId, staleTime: 30_000 });
 }
 
