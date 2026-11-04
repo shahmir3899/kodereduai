@@ -166,8 +166,9 @@ class TestBillInquiry(ApiBase):
     def test_only_minimal_data_leaves_the_system(self):
         self.gen(1)
         body = self.inquire(self.bill(1).consumer_number).json()
-        self.assertEqual(body['consumer_Detail'], 'S****** O** | Regression Schoo')
+        self.assertEqual(body['consumer_Detail'], 'S O Regression School')
         self.assertLessEqual(len(body['consumer_Detail']), 30)
+        self.assertRegex(body['consumer_Detail'], r'^[A-Za-z0-9 ]+$')       # no special characters (Kuickpay)
         self.assertNotIn('Student', str(body))
         self.assertEqual(body['email_address'], 'office@school.pk')           # the school's, not a parent's
         self.assertEqual(body['contact_number'], '03001234567')
@@ -567,10 +568,30 @@ class TestContractHelpers(ApiBase):
     def test_receipt_id_is_20_digits(self):
         self.assertEqual(contract.receipt_id(226), '00000000000000000226')
 
-    def test_names_are_masked(self):
-        self.assertEqual(contract.mask_name('Muhammad Affan'), 'M******* A****')
-        self.assertEqual(contract.consumer_detail('Muhammad Affan', 'Early Bird Coder Kids'), 'M******* A**** | Early Bird Co')
+    def test_names_are_masked_to_initials(self):
+        self.assertEqual(contract.mask_name('Muhammad Affan'), 'M A')
+        self.assertEqual(contract.consumer_detail('Muhammad Affan', 'Early Bird Coder Kids'), 'M A Early Bird Coder Kids')
         self.assertLessEqual(len(contract.consumer_detail('A' * 40, 'School')), 30)
+
+    def test_consumer_detail_has_only_letters_digits_and_single_spaces(self):
+        # Kuickpay's testing flagged special characters here: the old asterisk mask, the ' | ' separator
+        # and symbols inside school names.
+        detail = contract.consumer_detail("Ali-Raza O'Neil", 'The Focus Montessori & School - Branch #2 (Main)')
+        self.assertRegex(detail, r'^[A-Za-z0-9]+( [A-Za-z0-9]+)*$')
+        self.assertEqual(contract.consumer_detail('Ali Raza', 'The Focus School - Branch 2'), 'A R The Focus School Branch 2')
+        for name, school in (('Ali', 'A.B.C. School'), ('Zoya Khan', "St. Mary's / Girls"), ('Müller Bey', 'Café School')):
+            self.assertRegex(contract.consumer_detail(name, school), r'^[A-Za-z0-9]+( [A-Za-z0-9]+)*$')
+
+    def test_consumer_detail_never_exceeds_30_characters_and_never_ends_in_a_space(self):
+        detail = contract.consumer_detail('Muhammad Affan Ahmed Khan', 'The Focus Montessori and School Branch 2')
+        self.assertLessEqual(len(detail), 30)
+        self.assertEqual(detail, detail.strip())
+        self.assertEqual(detail, 'M A A K The Focus Montessori')          # whole words only, no "and S" fragment
+
+    def test_a_name_with_no_ascii_letters_falls_back_to_the_school(self):
+        self.assertEqual(contract.consumer_detail('علی رضا', 'Focus School'), 'Focus School')
+        self.assertEqual(contract.consumer_detail('', ''), '')
+        self.assertEqual(contract.consumer_detail('Ali Raza', ''), 'A R')
 
     def test_contact_number_must_start_92_or_03(self):
         self.assertEqual(contract.contact_number('0300-1234567'), '03001234567')

@@ -167,19 +167,31 @@ def receipt_id(transaction_pk):
     return str(transaction_pk).zfill(20)
 
 
+def _alphanumeric_words(text):
+    """Words made of ASCII letters and digits only: Kuickpay's consumer_Detail takes no symbols."""
+    cleaned = ''.join(ch if ch.isascii() and ch.isalnum() else ' ' for ch in (text or ''))
+    return cleaned.split()
+
+
 def mask_name(name):
-    """'Muhammad Affan' -> 'M******* A*****' (each word keeps only its first letter)."""
-    words = [w for w in (name or '').split() if w]
-    return ' '.join(w[0].upper() + '*' * (len(w) - 1) for w in words)
+    """'Muhammad Affan' -> 'M A' (initials only: no symbols, and the child's name is not printed)."""
+    return ' '.join(w[0].upper() for w in _alphanumeric_words(name))
 
 
 def consumer_detail(student_name, school_name):
-    """Masked student name plus the school name, within the 30-character field."""
-    masked = mask_name(student_name)[:CONSUMER_DETAIL_MAX]
-    room = CONSUMER_DETAIL_MAX - len(masked) - 3
-    if room >= 4 and school_name:
-        return f'{masked} | {school_name.strip()[:room]}'
-    return masked
+    """Student initials plus the school name: letters, digits and single spaces, within 30 characters.
+
+    Kuickpay's own testing flagged special characters here (the old asterisk mask and ' | '
+    separator, and symbols inside school names such as 'School - Branch 2').
+    """
+    initials = mask_name(student_name)
+    school = ' '.join(_alphanumeric_words(school_name))
+    text = f'{initials} {school}' if initials and school else initials or school
+    cut = text[:CONSUMER_DETAIL_MAX]
+    # Drop a word the limit would cut in half ("Montessori and S") rather than print a fragment.
+    if len(text) > CONSUMER_DETAIL_MAX and text[CONSUMER_DETAIL_MAX] != ' ' and ' ' in cut:
+        cut = cut.rsplit(' ', 1)[0]
+    return cut.rstrip()
 
 
 def contact_number(raw_phone):
