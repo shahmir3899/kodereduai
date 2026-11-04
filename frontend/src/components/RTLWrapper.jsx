@@ -3,11 +3,10 @@
  * Used for Urdu, Arabic, Sindhi, Pashto book content.
  */
 
-const RTL_LANGUAGES = new Set(['ur', 'ar', 'sd', 'ps'])
+// One definition shared with the question-text editor (richEditorCore.js), which the mobile app also runs.
+import { isRTLLanguage } from './richEditorCore'
 
-export function isRTLLanguage(langCode) {
-  return RTL_LANGUAGES.has(langCode)
-}
+export { isRTLLanguage }
 
 export default function RTLWrapper({ language, children, className = '' }) {
   const rtl = isRTLLanguage(language)

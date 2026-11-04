@@ -197,7 +197,7 @@ def link_for(path):
 
 # --- Video slots -----------------------------------------------------------
 # Every section with at least VIDEO_MIN_STEPS steps gets a video slot in the
-# guide; its tutorial is "ready" once files exist in frontend/public/videos and
+# guide; its tutorial is "ready" once files exist in media/guide and
 # the entry in guideVideos.json says so, otherwise "planned" (shown to admins
 # as a placeholder). VIDEO_EXCLUDE lists sections that should never get a slot.
 VIDEO_MIN_STEPS = 3

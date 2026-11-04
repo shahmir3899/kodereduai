@@ -1,43 +1,8 @@
 import { useEditor, EditorContent } from '@tiptap/react'
-import StarterKit from '@tiptap/starter-kit'
-import Subscript from '@tiptap/extension-subscript'
-import Superscript from '@tiptap/extension-superscript'
-import Table from '@tiptap/extension-table'
-import TableRow from '@tiptap/extension-table-row'
-import TableHeader from '@tiptap/extension-table-header'
-import TableCell from '@tiptap/extension-table-cell'
-import MathExtension from '@aarkue/tiptap-math-extension'
 import { useState } from 'react'
-import { isRTLLanguage } from './RTLWrapper'
+import { createExtensions, isRTLLanguage, LANGUAGE_OPTIONS, unwrapLanguage, wrapLanguage } from './richEditorCore'
 import DiagramCanvas from './DiagramCanvas'
 import 'katex/dist/katex.min.css'
-
-// Question text is saved as a single HTML string (see question_text in QuestionSlotEditor),
-// so language/direction has to travel inside that string rather than as a separate field.
-// We wrap it in a `<div dir=".." lang="..">` shell on save and unwrap it again on load —
-// this keeps the wrapper in sync with the same dir/font-rtl convention RTLWrapper.jsx uses
-// elsewhere, so preview (dangerouslySetInnerHTML) and printed papers render it correctly too.
-const LANGUAGE_OPTIONS = [
-  { code: 'en', label: 'English' },
-  { code: 'ur', label: 'اردو (Urdu)' },
-  { code: 'ar', label: 'العربية (Arabic)' },
-  { code: 'ps', label: 'پښتو (Pashto)' },
-  { code: 'sd', label: 'سنڌي (Sindhi)' },
-]
-
-const WRAPPER_RE = /^<div dir="(ltr|rtl)"(?: lang="([a-z]{2})")?[^>]*>([\s\S]*)<\/div>$/i
-
-function unwrapLanguage(html) {
-  if (!html) return { language: 'en', inner: '' }
-  const match = html.match(WRAPPER_RE)
-  if (match) return { language: match[2] || (match[1] === 'rtl' ? 'ur' : 'en'), inner: match[3] }
-  return { language: 'en', inner: html }
-}
-
-function wrapLanguage(innerHtml, language) {
-  const rtl = isRTLLanguage(language)
-  return `<div dir="${rtl ? 'rtl' : 'ltr'}" lang="${language}" class="${rtl ? 'font-rtl' : ''}">${innerHtml}</div>`
-}
 
 /**
  * RichTextEditor component using TipTap
@@ -59,16 +24,7 @@ export default function RichTextEditor({ value, onChange, placeholder = 'Enter t
   const rtl = isRTLLanguage(currentLanguage)
 
   const editor = useEditor({
-    extensions: [
-      StarterKit,
-      Subscript,
-      Superscript,
-      Table.configure({ resizable: true }),
-      TableRow,
-      TableHeader,
-      TableCell,
-      MathExtension.configure({ evaluation: false }),
-    ],
+    extensions: createExtensions(),
     content: initialInner || '',
     onUpdate: ({ editor }) => {
       onChange(wrapLanguage(editor.getHTML(), currentLanguage))
@@ -154,6 +110,15 @@ export default function RichTextEditor({ value, onChange, placeholder = 'Enter t
           aria-label="Strikethrough"
         >
           S
+        </button>
+        <button
+          type="button"
+          onClick={() => editor.chain().focus().toggleUnderline().run()}
+          className={`px-3 py-1 rounded underline ${editor.isActive('underline') ? 'bg-primary-600 text-white' : 'bg-white border border-gray-300'}`}
+          title="Underline (Ctrl+U)"
+          aria-label="Underline"
+        >
+          U
         </button>
 
         <button

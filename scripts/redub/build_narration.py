@@ -4,7 +4,7 @@ so only the wording is written by hand. Usage: build_narration.py texts_en.json"
 import json, re, sys
 from pathlib import Path
 
-VIDEOS = Path(__file__).resolve().parents[2] / "frontend/public/videos"
+VIDEOS = Path(__file__).resolve().parents[2] / "media/guide"
 OUT = Path(__file__).resolve().parent / "narration"
 VOICES = {"en": "en-US-AriaNeural", "ur": "ur-PK-UzmaNeural"}
 

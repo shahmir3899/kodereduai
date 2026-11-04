@@ -6,6 +6,7 @@ import RichTextEditor from '../../components/RichTextEditor'
 import DiagramCanvas from '../../components/DiagramCanvas'
 import QuestionBankPicker, { QUESTION_TYPES, getQuestionReuseCount, toDraftQuestionFromBank } from './QuestionBankPicker'
 import { questionPaperApi } from '../../services/api'
+import { matchingFromComposer, matchingProblem, matchingToComposer } from './matchingData'
 
 // Maps the composer's option letters to the backend's diagram slot names / model
 // fields (see QuestionViewSet.DIAGRAM_SLOT_FIELDS and Question.option_a_image_url
@@ -135,7 +136,10 @@ export default function QuestionSlotEditor({
       ...EMPTY_QUESTION,
       ...question,
       marks: Number(question.marks) || 1,
-      type_data: question.type_data || {},
+      // Matching is edited as text pairs and saved in the server's shape (matchingData.js).
+      type_data: question.question_type === 'MATCHING' ? matchingToComposer(question.type_data) : (question.type_data || {}),
+      // Older drafts hold lowercase true/false; the saved form is TRUE / FALSE.
+      correct_answer: question.question_type === 'TRUE_FALSE' ? String(question.correct_answer || '').toUpperCase() : question.correct_answer,
       options: question.options || {
         A: question.option_a || '',
         B: question.option_b || '',
@@ -184,6 +188,8 @@ export default function QuestionSlotEditor({
       const items = (question.type_data?.items || []).filter((value) => String(value || '').trim())
       payload.type_data = { ...payload.type_data, items, accepted_answers: items }
     }
+    if (question.question_type === 'MATCHING') payload.type_data = matchingFromComposer(question.type_data)
+    if (question.question_type === 'TRUE_FALSE') payload.correct_answer = String(question.correct_answer || '').toUpperCase()
     return payload
   }
 
@@ -301,10 +307,9 @@ export default function QuestionSlotEditor({
     // the question bank side (QuestionsPage.jsx).
 
     if (currentQuestion.question_type === 'MATCHING') {
-      const pairs = (currentQuestion.type_data?.pairs || []).filter(
-        (pair) => String(pair?.left || '').trim() && String(pair?.right || '').trim(),
-      )
-      if (pairs.length === 0) newErrors.type_data = 'Add at least one complete pair.'
+      // The server needs two or more complete pairs.
+      const problem = matchingProblem(currentQuestion.type_data)
+      if (problem) newErrors.type_data = problem
     }
 
     if (currentQuestion.question_type === 'TRUE_FALSE') {
@@ -333,6 +338,14 @@ export default function QuestionSlotEditor({
     if (questionRecord.question_type === 'FILL_BLANK') {
       const items = (questionRecord.type_data?.items || []).filter((value) => String(value || '').trim())
       questionRecord.type_data = { ...questionRecord.type_data, items, accepted_answers: items }
+    }
+    // The server takes matching as left_items / right_items / index pairs, never as text pairs.
+    if (questionRecord.question_type === 'MATCHING') {
+      questionRecord.type_data = matchingFromComposer(questionRecord.type_data)
+    }
+    // True/false is stored as TRUE / FALSE everywhere else (question bank, mobile, the server's own messages).
+    if (questionRecord.question_type === 'TRUE_FALSE') {
+      questionRecord.correct_answer = String(questionRecord.correct_answer || '').toUpperCase()
     }
 
     const nextQuestions = [...questions]
@@ -607,15 +620,15 @@ export default function QuestionSlotEditor({
         <div className="space-y-2 mb-4 bg-white p-4 rounded border border-gray-200">
           <p className="text-sm font-semibold text-gray-700">Correct Answer</p>
           <div className="flex gap-4">
-            {['true', 'false'].map((value) => (
-              <label key={value} className="flex items-center gap-2 text-sm text-gray-700 capitalize">
+            {['TRUE', 'FALSE'].map((value) => (
+              <label key={value} className="flex items-center gap-2 text-sm text-gray-700">
                 <input
                   type="radio"
                   name="true_false_answer"
-                  checked={String(currentQuestion.correct_answer || '').toLowerCase() === value}
+                  checked={String(currentQuestion.correct_answer || '').toUpperCase() === value}
                   onChange={() => setCurrentQuestion({ ...currentQuestion, correct_answer: value })}
                 />
-                {value}
+                {value === 'TRUE' ? 'True' : 'False'}
               </label>
             ))}
           </div>

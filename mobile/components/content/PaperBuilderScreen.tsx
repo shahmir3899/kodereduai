@@ -1,21 +1,23 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, ScrollView, FlatList, Switch, TouchableOpacity, StyleSheet } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter, type Href } from 'expo-router';
 import { examinationsApi } from '../../services/api';
 import { bankQuestionPayload, confirmPayload, emptyCapture, type CaptureState, type ReviewQuestion } from '../../services/paperCapture';
 import { useMasterClasses } from '../../hooks/useAcademicYear';
+import { usePersonaBase } from '../../hooks/usePersonaBase';
 import { usePaper, usePaperActions, usePaperCoverage, usePaperExams, usePaperLessons } from '../../hooks/usePapers';
 import { useAcademicYear } from '../../hooks/useAcademicYear';
 import { useQuestionActions, useQuestionsPaged } from '../../hooks/useQuestionBank';
 import { useSubjectsList } from '../../hooks/useManager';
 import { useDebouncedValue } from '../../hooks/useDebouncedValue';
 import {
-  addQuestion, assignSection, buildAutosavePayload, buildEnsurePayload, countIn, dropSection,
-  emptyPaperForm, hydrateStructure, marksOf, moveQuestion, PAPER_STATUSES, pickedFromQuestion,
+  addQuestion, addToSection, assignSection, buildAutosavePayload, buildEnsurePayload, countIn, dropSection,
+  allocatedMarks, applyOverused, emptyPaperForm, isLockedStatus, hydrateStructure, isFull, reuseLine, structureMismatch, marksOf, moveInSection, slotLine, PAPER_STATUSES, pickedFromQuestion,
   paperFileName, paperToForm, paperTotal, pickedFromPaperRow, reconcileNote, removeQuestion, 
-  statusSteps, validatePaper, type PaperForm, type PickedQuestion, type Section,
+  statusSteps, validatePaper, validateSetup, type PaperForm, type PickedQuestion, type Section,
 } from '../../services/paperBuilder';
 import { typeLabel, type Question } from '../../services/questionBank';
+import { plainText } from '../../services/richText';
 import {
   autoPaperTitle, BLOOM_ORDER, bloomMix, coverageView, examOptionLabel, lessonLine, sameIds, sloText, toggleId, topicsOfLessons,
 } from '../../services/questionExtras';
@@ -44,6 +46,7 @@ export default function PaperBuilderScreen() {
   const { id } = useLocalSearchParams<{ id?: string }>();
   const routeId = id ? Number(id) : null;
   const router = useRouter();
+  const base = usePersonaBase();
   const toast = useToast();
   const actions = usePaperActions();
   const questions = useQuestionActions();
@@ -60,6 +63,10 @@ export default function PaperBuilderScreen() {
   const [busy, setBusy] = useState(false);
   const [loaded, setLoaded] = useState(!routeId);
   const [quick, setQuick] = useState(false);
+  // The section the open question sheet or bank picker is filling (null = a free add, with no sections).
+  const [target, setTarget] = useState<Section | null>(null);
+  // Setup -> Structure -> Add Questions, as on the web; a saved paper opens at step 3.
+  const [step, setStep] = useState<1 | 2 | 3>(routeId ? 3 : 1);
   // Capture from photos: the capture lives here so closing its sheet keeps it. Accepting creates the reviewed questions in
   // the bank, adds them with their sections, and remembers the pages to confirm once the paper is saved.
   const [capture, setCapture] = useState<CaptureState>(emptyCapture());
@@ -96,7 +103,7 @@ export default function PaperBuilderScreen() {
       setTitleAuto(!saved.data.paper_title?.trim());
       setSavedStatus(saved.data.status);
       setSections(hydrateStructure(saved.data.structure));
-      setPicked([...(saved.data.paper_questions ?? [])].sort((a, b) => a.question_order - b.question_order).map(pickedFromPaperRow));
+      setPicked(applyOverused([...(saved.data.paper_questions ?? [])].sort((a, b) => a.question_order - b.question_order).map(pickedFromPaperRow), saved.data.overused_questions));
       setLoaded(true);
     }
   }, [routeId, saved.data, loaded]);
@@ -136,7 +143,7 @@ export default function PaperBuilderScreen() {
     const problem = validatePaper(form, picked, sections);
     if (problem) return setError(problem);
     setError(null);
-    const note = reconcileNote(picked, sections);
+    const note = reconcileNote(picked, sections, form.totalMarks);
     if (note && !(await confirm({ title: 'The marks do not match', message: `${note}\nThe paper total will be ${total}.`, confirmLabel: 'Save anyway' }))) return;
     setBusy(true);
     try {
@@ -160,7 +167,8 @@ export default function PaperBuilderScreen() {
       }
       toast.success('Paper saved.');
       if (stay) await coverage.refetch();
-      else router.back();
+      // router.back() landed on Home when the builder was opened from More; the saved paper shows in the list.
+      else router.replace(`${base}/papers` as Href);
     } catch (e) {
       setError(inventoryErrorMessage(e));
     } finally {
@@ -180,11 +188,71 @@ export default function PaperBuilderScreen() {
     }
   };
 
+  // Only a draft can be edited, as on the web. A ready or published paper opens locked; "Reopen as draft" is a deliberate step
+  // (it used to be put back to draft and restored silently on every save).
+  const locked = isLockedStatus(savedStatus);
+  const reopen = async () => {
+    if (!paperId) return;
+    setBusy(true);
+    try {
+      await actions.update.mutateAsync({ id: paperId, data: { status: 'DRAFT' } });
+      setSavedStatus('DRAFT');
+      set('status', 'DRAFT');
+      toast.success('Paper reopened as a draft.');
+    } catch (e) {
+      toast.error(inventoryErrorMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // Structure -> Add Questions: warn (never block) when the sections and the typed Total Marks disagree, as the web does.
+  const goToQuestions = async () => {
+    const note = structureMismatch(sections, form.totalMarks);
+    if (note && !(await confirm({ title: 'Marks mismatch', message: note, confirmLabel: 'Continue' }))) return;
+    setStep(3);
+  };
+
+  // One question row: where it sits, its marks (a change applies to this paper only), and move / remove.
+  const renderPicked = (p: PickedQuestion) => (
+    <View key={p.question} style={styles.q}>
+      <Text style={styles.qText} numberOfLines={3}>{picked.indexOf(p) + 1}. {plainText(p.text)}</Text>
+      <Text style={styles.sub}>{typeLabel(p.type)} · {marksOf(p)} mark{marksOf(p) === 1 ? '' : 's'}{p.override.trim() ? ` (bank: ${p.bankMarks})` : ''}</Text>
+      {reuseLine(p.useCount) ? <Text style={styles.warn}>{reuseLine(p.useCount)}</Text> : null}
+      {groups.length > 0 ? (
+        <Select hiddenLabel={`Section of question ${picked.indexOf(p) + 1}`} value={p.sectionKey} placeholder="Section" onChange={(v) => setPicked((ps) => assignSection(ps, p.question, v))}
+          options={[{ value: '', label: 'No section' }, ...groups.map((g) => ({ value: g.key, label: g.title || 'Section' }))]} />
+      ) : null}
+      <View style={styles.qActions}>
+        <View style={styles.col}>
+          <Input value={p.override} onChangeText={(v) => setPicked((ps) => ps.map((x) => (x.question === p.question ? { ...x, override: v } : x)))} placeholder={`Marks ${p.bankMarks}`} keyboardType="decimal-pad" />
+        </View>
+        <TouchableOpacity accessibilityRole="button" accessibilityLabel="Move up" style={styles.btn} onPress={() => setPicked((ps) => moveInSection(ps, p.question, -1))}><Text style={styles.btnText}>↑</Text></TouchableOpacity>
+        <TouchableOpacity accessibilityRole="button" accessibilityLabel="Move down" style={styles.btn} onPress={() => setPicked((ps) => moveInSection(ps, p.question, 1))}><Text style={styles.btnText}>↓</Text></TouchableOpacity>
+        <TouchableOpacity accessibilityRole="button" accessibilityLabel="Remove question" style={styles.btn} onPress={() => setPicked((ps) => removeQuestion(ps, p.question))}><Text style={[styles.btnText, { color: Colors.error }]}>✕</Text></TouchableOpacity>
+      </View>
+    </View>
+  );
+
   if (routeId && saved.isLoading) return <Skeleton />;
   if (routeId && saved.isError && !saved.data) return <ErrorState error={saved.error} onRetry={() => saved.refetch()} />;
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+      {locked ? (
+        <View style={styles.lockBanner}>
+          <Text style={styles.name}>This paper is {PAPER_STATUSES.find((x) => x.value === savedStatus)?.label ?? savedStatus}, so it cannot be edited.</Text>
+          <Text style={styles.sub}>Reopen it as a draft to change it. You can still share the PDF.</Text>
+          <View style={styles.row}>
+            <View style={styles.col}><Button title="Reopen as draft" onPress={reopen} loading={busy} disabled={busy} /></View>
+            <View style={styles.col}><Button title="Share PDF" variant="outline" onPress={share} disabled={busy} /></View>
+          </View>
+        </View>
+      ) : null}
+      <View pointerEvents={locked ? 'none' : 'auto'} style={locked ? styles.lockedBody : styles.body}>
+      <StepBar step={step} onGo={(n) => { if (n !== 1 && validateSetup(form)) setError(validateSetup(form)); else { setError(null); if (n === 3) goToQuestions(); else setStep(n); } }} />
+      {step === 1 ? (
+        <>
       <Input label="Paper title" value={form.title} onChangeText={(v) => { setTitleAuto(v.trim() === ''); set('title', v); }} />
       {titleAuto && suggested ? <Text style={styles.sub}>Made from the exam, class and subject. Type your own any time.</Text> : null}
       <Select label="Class" searchable value={form.classObj} onChange={(v) => set('classObj', v)} placeholder="Choose a class"
@@ -195,13 +263,36 @@ export default function PaperBuilderScreen() {
         <Select label="Exam (optional)" value={form.exam ?? -1} onChange={(v) => set('exam', v === -1 ? null : Number(v))} placeholder="Choose an exam"
           options={[{ value: -1, label: exams.isLoading ? 'Loading exams…' : (exams.data ?? []).length ? 'No exam' : 'No exams for this class this year' }, ...(exams.data ?? []).map((e) => ({ value: e.id, label: examOptionLabel(e) }))]} />
       ) : null}
+      <Input label="Total marks" value={form.totalMarks} onChangeText={(v) => set('totalMarks', v)} keyboardType="decimal-pad" />
       <Input label="Duration (minutes)" value={form.duration} onChangeText={(v) => set('duration', v)} keyboardType="number-pad" />
       <Input label="Instructions for students" value={form.instructions} onChangeText={(v) => set('instructions', v)} multiline />
       <View style={styles.row}>
         <Text style={[styles.sub, styles.col]}>Print ruled answer lines under each answer</Text>
         <Switch value={form.answerLines} onValueChange={(on) => set('answerLines', on)} accessibilityLabel="Print answer lines" />
       </View>
+          {error ? <Text style={styles.error} accessibilityRole="alert">{error}</Text> : null}
+          <Button title="Next: Paper structure" onPress={() => { const p = validateSetup(form); setError(p); if (!p) setStep(2); }} />
+        </>
+      ) : null}
 
+      {step === 2 ? (
+        <>
+      <SectionsEditor
+        sections={sections} onChange={setSections} noun="paper" standardTotal={Number(form.totalMarks) > 0 ? Number(form.totalMarks) : 100}
+        placed={(key) => countIn(picked, key)}
+        onRemove={(key) => { const r = dropSection(sections, picked, key); setSections(r.sections); setPicked(r.picked); }}
+      />
+          <Text style={styles.sub}>Sections add up to {allocatedMarks(sections)} of {form.totalMarks || 100} total marks.</Text>
+          <View style={styles.row}>
+            <View style={styles.col}><Button title="Back: Setup" variant="outline" onPress={() => setStep(1)} /></View>
+            <View style={styles.col}><Button title="Next: Add questions" onPress={goToQuestions} /></View>
+          </View>
+        </>
+      ) : null}
+
+      {step === 3 ? (
+        <>
+          {sections.length === 0 ? <Text style={styles.sub}>No sections yet: define them in step 2, or add questions freely.</Text> : null}
       {form.classObj && form.subject ? (
         <View style={styles.q}>
           <Text style={styles.name}>Narrow by lesson plans (optional)</Text>
@@ -224,33 +315,36 @@ export default function PaperBuilderScreen() {
         </View>
       ) : null}
 
-      <SectionsEditor
-        sections={sections} onChange={setSections} noun="paper" standardTotal={form.title ? total || 100 : 100}
-        placed={(key) => countIn(picked, key)}
-        onRemove={(key) => { const r = dropSection(sections, picked, key); setSections(r.sections); setPicked(r.picked); }}
-      />
-
       <Text style={styles.section}>Questions · {picked.length} · {total} marks</Text>
-      {picked.map((p, i) => (
-        <View key={p.question} style={styles.q}>
-          <Text style={styles.qText} numberOfLines={3}>{i + 1}. {p.text}</Text>
-          <Text style={styles.sub}>{typeLabel(p.type)} · {marksOf(p)} mark{marksOf(p) === 1 ? '' : 's'}{p.override.trim() ? ` (bank: ${p.bankMarks})` : ''}</Text>
-          {groups.length > 0 ? (
-            <Select value={p.sectionKey} placeholder="Section" onChange={(v) => setPicked((ps) => assignSection(ps, p.question, v))}
-              options={[{ value: '', label: 'No section' }, ...groups.map((g) => ({ value: g.key, label: g.title || 'Section' }))]} />
-          ) : null}
-          <View style={styles.qActions}>
-            <View style={styles.col}>
-              <Input value={p.override} onChangeText={(v) => setPicked((ps) => ps.map((x) => (x.question === p.question ? { ...x, override: v } : x)))} placeholder={`Marks ${p.bankMarks}`} keyboardType="decimal-pad" />
+      {groups.length > 0 ? sections.map((sec) => (sec.type === 'divider' ? (
+        <Text key={sec.key} style={styles.divider}>{sec.title}</Text>
+      ) : (
+        <View key={sec.key} style={styles.slotBlock}>
+          <Text style={styles.name}>{sec.title} · {typeLabel(sec.question_type)}</Text>
+          {sec.instruction.trim() ? <Text style={styles.sub}>{sec.instruction}</Text> : null}
+          <Text style={styles.sub}>{slotLine(sec, picked)}</Text>
+          {picked.filter((p) => p.sectionKey === sec.key).map(renderPicked)}
+          {isFull(sec, picked) ? <Text style={styles.sub}>This section is full. Raise the number shown in step 2 to add more.</Text> : (
+            <View style={styles.row}>
+              <View style={styles.col}><Button title="+ Write" variant="outline" onPress={() => { setTarget(sec); setQuick(true); }} disabled={!form.subject} /></View>
+              <View style={styles.col}><Button title="+ From bank" variant="outline" onPress={() => { setTarget(sec); setPicker(true); }} /></View>
             </View>
-            <TouchableOpacity accessibilityRole="button" accessibilityLabel="Move up" style={styles.btn} onPress={() => setPicked((ps) => moveQuestion(ps, i, -1))}><Text style={styles.btnText}>↑</Text></TouchableOpacity>
-            <TouchableOpacity accessibilityRole="button" accessibilityLabel="Move down" style={styles.btn} onPress={() => setPicked((ps) => moveQuestion(ps, i, 1))}><Text style={styles.btnText}>↓</Text></TouchableOpacity>
-            <TouchableOpacity accessibilityRole="button" accessibilityLabel="Remove question" style={styles.btn} onPress={() => setPicked((ps) => removeQuestion(ps, p.question))}><Text style={[styles.btnText, { color: Colors.error }]}>✕</Text></TouchableOpacity>
-          </View>
+          )}
         </View>
-      ))}
-      <Button title="+ Add questions from the bank" variant="outline" onPress={() => setPicker(true)} />
-      <Button title="+ Write a new question" variant="outline" onPress={() => setQuick(true)} disabled={!form.subject} />
+      ))) : null}
+      {groups.length > 0 && picked.some((p) => !groups.some((g) => g.key === p.sectionKey)) ? (
+        <View style={styles.slotBlock}>
+          <Text style={styles.name}>Not in a section</Text>
+          {picked.filter((p) => !groups.some((g) => g.key === p.sectionKey)).map(renderPicked)}
+        </View>
+      ) : null}
+      {groups.length === 0 ? picked.map(renderPicked) : null}
+      {groups.length === 0 ? (
+        <>
+          <Button title="+ Add questions from the bank" variant="outline" onPress={() => { setTarget(null); setPicker(true); }} />
+          <Button title="+ Write a new question" variant="outline" onPress={() => { setTarget(null); setQuick(true); }} disabled={!form.subject} />
+        </>
+      ) : null}
       <Button title={capture.pages.length ? `Capture from photos (${capture.pages.length} page${capture.pages.length === 1 ? '' : 's'} in progress)` : 'Capture from photos'} variant="outline"
         onPress={() => setCaptureOpen(true)} disabled={!form.classObj || !form.subject} />
       {!form.classObj || !form.subject ? <Text style={styles.sub}>Choose the class and subject to capture a printed paper from photos.</Text> : null}
@@ -268,7 +362,7 @@ export default function PaperBuilderScreen() {
           <Text style={styles.name}>Curriculum coverage</Text>
           {coverage.isLoading ? <Text style={styles.sub}>Loading coverage…</Text> : coverage.isError ? <Text style={styles.error}>Could not load coverage.</Text> : (
             <>
-              {reconcileNote(picked, sections) ? <Text style={styles.warn}>Allocated marks (sections) do not match the total marks of the paper.</Text> : null}
+              {reconcileNote(picked, sections, form.totalMarks) ? <Text style={styles.warn}>Allocated marks (sections) do not match the total marks of the paper.</Text> : null}
               <Text style={styles.sub}>{cov.total} learning objectives in the linked lesson plans · {cov.coveredCount} covered ({cov.percent}%)</Text>
               <View style={styles.track}><View style={[styles.fill, { width: `${cov.percent}%` }]} /></View>
               {cov.total === 0 ? <Text style={styles.sub}>Link lesson plans above, then save, to see which objectives the questions reach.</Text> : (
@@ -284,41 +378,64 @@ export default function PaperBuilderScreen() {
         </View>
       ) : <Text style={styles.sub}>Save the paper to see curriculum coverage.</Text>}
 
-      <Select label="Status" value={form.status} onChange={(v) => set('status', v)} options={PAPER_STATUSES.map((s) => ({ value: s.value as string, label: s.label }))} />
-      {error ? <Text style={styles.error} accessibilityRole="alert">{error}</Text> : null}
-      <Button title="Save paper" onPress={() => save(false)} loading={busy} disabled={busy} />
-      <Button title="Save and check coverage" variant="outline" onPress={() => save(true)} disabled={busy} />
-      {paperId ? <Button title="Share PDF" variant="outline" onPress={share} disabled={busy} /> : null}
+      {!locked ? (
+        <>
+          <Select label="Status" value={form.status} onChange={(v) => set('status', v)} options={PAPER_STATUSES.map((s) => ({ value: s.value as string, label: s.label }))} />
+          {error ? <Text style={styles.error} accessibilityRole="alert">{error}</Text> : null}
+          <Button title="Save paper" onPress={() => save(false)} loading={busy} disabled={busy} />
+          <Button title="Save and check coverage" variant="outline" onPress={() => save(true)} disabled={busy} />
+        </>
+      ) : null}
+      {paperId && !locked ? <Button title="Share PDF" variant="outline" onPress={share} disabled={busy} /> : null}
+          <Button title="Back: Paper structure" variant="ghost" onPress={() => setStep(2)} />
+        </>
+      ) : null}
+
+      </View>
 
       <PaperCaptureSheet kind="paper" visible={captureOpen} onClose={() => setCaptureOpen(false)} classId={form.classObj} subjectId={form.subject}
         capture={capture} setCapture={setCapture} onAccept={acceptCapture} />
       <QuickQuestionSheet
         visible={quick} subject={form.subject} onClose={() => setQuick(false)}
-        onCreated={(q) => setPicked((ps) => { const next = addQuestion(ps, q); return groups.length === 1 ? assignSection(next, q.id, groups[0].key) : next; })}
+        section={target ? { title: target.title, question_type: target.question_type, marksPerQuestion: target.marksPerQuestion } : null}
+        slotsLeft={target ? Math.max(0, target.slotsShown - countIn(picked, target.key)) : undefined}
+        onCreated={(q) => setPicked((ps) => (target ? addToSection(ps, q, target) : addQuestion(ps, q)))}
       />
       <QuestionPicker
-        visible={picker} subject={form.subject} topicIds={narrowedTopics.map((t) => t.id)} chosen={picked} onClose={() => setPicker(false)}
+        visible={picker} subject={form.subject} type={target?.question_type ?? ''} topicIds={narrowedTopics.map((t) => t.id)} chosen={picked} onClose={() => setPicker(false)}
+        slotsLeft={target ? Math.max(0, target.slotsShown - countIn(picked, target.key)) : undefined}
         onToggle={(q, on) => setPicked((ps) => {
           if (!on) return removeQuestion(ps, q.id);
-          const next = addQuestion(ps, q);
-          // With exactly one section, new questions go straight into it.
-          return groups.length === 1 ? assignSection(next, q.id, groups[0].key) : next;
+          return target ? (isFull(target, ps) ? ps : addToSection(ps, q, target)) : addQuestion(ps, q);
         })}
       />
     </ScrollView>
   );
 }
 
-function QuestionPicker({ visible, subject, topicIds, chosen, onClose, onToggle }: {
-  visible: boolean; subject: number | null; topicIds: number[]; chosen: PickedQuestion[]; onClose: () => void; onToggle: (q: Question, on: boolean) => void;
+function StepBar({ step, onGo }: { step: 1 | 2 | 3; onGo: (n: 1 | 2 | 3) => void }) {
+  const steps: Array<[1 | 2 | 3, string]> = [[1, 'Setup'], [2, 'Structure'], [3, 'Add questions']];
+  return (
+    <View style={styles.steps}>
+      {steps.map(([n, label]) => (
+        <TouchableOpacity key={n} accessibilityRole="button" accessibilityLabel={`Step ${n}: ${label}`} accessibilityState={{ selected: step === n }} style={[styles.step, step === n && styles.stepOn]} onPress={() => onGo(n)}>
+          <Text style={[styles.stepText, step === n && styles.stepTextOn]}>{n}. {label}</Text>
+        </TouchableOpacity>
+      ))}
+    </View>
+  );
+}
+
+function QuestionPicker({ visible, subject, type, slotsLeft, topicIds, chosen, onClose, onToggle }: {
+  visible: boolean; subject: number | null; type: string; slotsLeft?: number; topicIds: number[]; chosen: PickedQuestion[]; onClose: () => void; onToggle: (q: Question, on: boolean) => void;
 }) {
   const [search, setSearch] = useState('');
   const term = useDebouncedValue(search.trim(), 400);
-  const query = useQuestionsPaged(term, subject, '', '', '', null, topicIds);
+  const query = useQuestionsPaged(term, subject, type, '', '', null, topicIds);
   const rows = useMemo(() => query.data?.pages.flatMap((p) => p.results) ?? [], [query.data]);
   const ids = new Set(chosen.map((c) => c.question));
   return (
-    <BottomSheet visible={visible} onClose={onClose} title={topicIds.length ? `Add questions (${topicIds.length} topic${topicIds.length === 1 ? '' : 's'})` : subject ? 'Add questions (this subject)' : 'Add questions'}>
+    <BottomSheet visible={visible} onClose={onClose} title={`${topicIds.length ? `Add questions (${topicIds.length} topic${topicIds.length === 1 ? '' : 's'})` : subject ? 'Add questions (this subject)' : 'Add questions'}${slotsLeft !== undefined ? ` · ${slotsLeft} slot${slotsLeft === 1 ? '' : 's'} left` : ''}`}>
       <View style={styles.pickerBody}>
         <SearchBar value={search} onChangeText={setSearch} placeholder="Search questions..." />
         <FlatList
@@ -329,8 +446,9 @@ function QuestionPicker({ visible, subject, topicIds, chosen, onClose, onToggle 
             const on = ids.has(q.id);
             return (
               <TouchableOpacity accessibilityRole="button" accessibilityState={{ selected: on }} style={[styles.pick, on && styles.picked]} onPress={() => onToggle(q, !on)}>
-                <Text style={styles.qText} numberOfLines={2}>{on ? '✓ ' : ''}{q.question_text}</Text>
+                <Text style={styles.qText} numberOfLines={2}>{on ? '✓ ' : ''}{plainText(q.question_text)}</Text>
                 <Text style={styles.sub}>{typeLabel(q.question_type)} · {Number(q.marks)} marks</Text>
+                {reuseLine(q.paper_use_count) ? <Text style={styles.warn}>{reuseLine(q.paper_use_count)}</Text> : null}
               </TouchableOpacity>
             );
           }}
@@ -362,4 +480,14 @@ const styles = StyleSheet.create({
   pickerList: { maxHeight: 380 },
   pick: { backgroundColor: Colors.surfaceSecondary, borderRadius: BorderRadius.sm, padding: Spacing.sm, marginBottom: Spacing.xs, minHeight: 44 },
   picked: { borderWidth: 2, borderColor: Colors.primary },
+  body: { gap: Spacing.sm },
+  lockedBody: { gap: Spacing.sm, opacity: 0.55 },
+  lockBanner: { backgroundColor: Colors.surfaceSecondary, borderRadius: BorderRadius.md, padding: Spacing.md, gap: Spacing.sm, borderWidth: 1, borderColor: Colors.border },
+  divider: { fontSize: FontSize.md, fontWeight: '600', color: Colors.textSecondary, textAlign: 'center', marginTop: Spacing.sm },
+  slotBlock: { backgroundColor: Colors.surfaceSecondary, borderRadius: BorderRadius.md, padding: Spacing.sm, gap: Spacing.sm },
+  steps: { flexDirection: 'row', gap: Spacing.xs },
+  step: { flex: 1, minHeight: 44, alignItems: 'center', justifyContent: 'center', borderRadius: BorderRadius.sm, backgroundColor: Colors.surfaceSecondary },
+  stepOn: { backgroundColor: Colors.infoLight, borderWidth: 1, borderColor: Colors.primary },
+  stepText: { fontSize: FontSize.xs, color: Colors.textSecondary, textAlign: 'center' },
+  stepTextOn: { color: Colors.primary, fontWeight: '600' },
 });

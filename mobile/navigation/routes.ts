@@ -193,3 +193,11 @@ export function routeFor(persona: Persona, webPath: string): string | undefined 
   if (webPath === '/dashboard') return `/(${persona})/dashboard`;
   return ROUTES[persona]?.[webPath];
 }
+
+// A pasted or reloaded URL like "/paper-builder" names no group, so the router may open another persona's
+// copy of the screen; this finds the signed-in persona's own screen for that path, if it has one.
+export function ownRouteForPath(persona: Persona, pathname: string): string | undefined {
+  const candidate = `/(${persona})${pathname}`;
+  if (pathname === '/dashboard') return candidate;
+  return Object.values(ROUTES[persona] ?? {}).includes(candidate) ? candidate : undefined;
+}

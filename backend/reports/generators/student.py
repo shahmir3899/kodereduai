@@ -45,6 +45,12 @@ ATTENDANCE_STATUS_COLORS = {
 }
 DEFAULT_STATUS_COLOR = (NEUTRAL_BG, NEUTRAL_TEXT)
 
+# Printable width of the A4 frame: page minus the 0.55in side margins set in render_pdf and
+# the 6pt left/right padding reportlab's default frame adds inside them.
+# Everything full-width — profile card, month grid, stat cards, rating tables, remark boxes —
+# uses this so they all start under the section-heading bar and end on the same right edge.
+CONTENT_WIDTH = 595.2756 - 2 * 0.55 * inch - 12
+
 
 def _make_footer_canvas(doc, school_name):
     """
@@ -209,6 +215,9 @@ def build_stat_cards(cards):
     from reportlab.platypus import Paragraph, Table, TableStyle
 
     styles = getSampleStyleSheet()
+    n = len(cards)
+    gap = 6
+    card_width = (CONTENT_WIDTH - gap * (n - 1)) / n
     card_tables = []
     for value, label, bg_hex, text_hex in cards:
         value_style = ParagraphStyle(
@@ -221,7 +230,7 @@ def build_stat_cards(cards):
         )
         card = Table(
             [[Paragraph(f"<b>{value}</b>", value_style)], [Paragraph(label, label_style)]],
-            colWidths=[112],
+            colWidths=[card_width],
         )
         card.setStyle(TableStyle([
             ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor(bg_hex)),
@@ -235,11 +244,12 @@ def build_stat_cards(cards):
         ]))
         card_tables.append(card)
 
-    outer = Table([card_tables], colWidths=[120] * len(card_tables))
+    outer = Table([card_tables], colWidths=[card_width + gap] * (n - 1) + [card_width], hAlign='LEFT')
     outer.setStyle(TableStyle([
         ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-        ('LEFTPADDING', (0, 0), (-1, -1), 3),
-        ('RIGHTPADDING', (0, 0), (-1, -1), 3),
+        ('LEFTPADDING', (0, 0), (-1, -1), 0),
+        ('RIGHTPADDING', (0, 0), (-2, -1), gap),
+        ('RIGHTPADDING', (-1, 0), (-1, -1), 0),
         ('TOPPADDING', (0, 0), (-1, -1), 0),
         ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
     ]))
@@ -260,7 +270,7 @@ def build_legend(items):
         col_widths.append(10)
         cells.append(Paragraph(label, label_style))
         col_widths.append(56)
-    table = Table([cells], colWidths=col_widths, rowHeights=[12])
+    table = Table([cells], colWidths=col_widths, rowHeights=[12], hAlign='LEFT')
     style_cmds = [
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
         ('LEFTPADDING', (0, 0), (-1, -1), 2),
@@ -317,11 +327,9 @@ def build_month_grid_flowables(year, month, attendance_by_date, holiday_dates=No
         [str(day) if day else '' for day in week] for week in weeks
     ]
 
-    # 6.4in matches the content width used elsewhere in this report (profile
-    # card, remark boxes) so the grid reads as full-width rather than an
-    # island in the middle of the page.
-    col_width = 6.4 * inch / 7
-    table = Table(table_data, colWidths=[col_width] * 7)
+    # Full content width, so the grid lines up with the stat cards and section headings.
+    col_width = CONTENT_WIDTH / 7
+    table = Table(table_data, colWidths=[col_width] * 7, hAlign='LEFT')
     style_cmds = [
         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor(BLUE)),
         ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
@@ -397,7 +405,7 @@ def build_ratings_table(rating_pairs, col_widths=(2.5 * inch, 1.25 * inch)):
     return table
 
 
-def build_two_column_row(left, right, col_width=3.1 * inch, gap=0.2 * inch):
+def build_two_column_row(left, right, col_width=(CONTENT_WIDTH - 0.2 * inch) / 2, gap=0.2 * inch):
     """
     Lay two flowables side by side — the compact layout already used for the
     fee table, reused for the skills/behaviour rating tables.
@@ -416,7 +424,7 @@ def build_two_column_row(left, right, col_width=3.1 * inch, gap=0.2 * inch):
     return row_table
 
 
-def build_two_column_ratings(rating_pairs, col_width=3.1 * inch, gap=0.2 * inch):
+def build_two_column_ratings(rating_pairs, col_width=(CONTENT_WIDTH - 0.2 * inch) / 2, gap=0.2 * inch):
     """Split a ratings list in half and lay the two halves side by side (see build_two_column_row)."""
     half = (len(rating_pairs) + 1) // 2
     col_widths = (col_width * 0.66, col_width * 0.34)
@@ -676,7 +684,9 @@ class StudentComprehensiveReportGenerator(BaseReportGenerator):
         teacher_remark = ''
         principal_remark = ''
         assessment_exists = False
+        assessment_fallback = False
         selected_assessment = None
+        assessment_label = ''
         if academic_year_obj:
             try:
                 from examinations.models import StudentTermAssessment
@@ -686,11 +696,20 @@ class StudentComprehensiveReportGenerator(BaseReportGenerator):
                 )
 
                 order_map = self._academic_year_month_order(academic_year_obj)
+                year_assessments = assessments
                 if date_from and date_to:
                     month_sequence = [month for _year, month in self._month_sequence(date_from, date_to)]
                     allowed_months = [month for month in month_sequence if month in order_map]
                     if allowed_months:
                         assessments = assessments.filter(month__in=allowed_months)
+                    # Nothing entered inside the period: fall back to the latest earlier
+                    # assessment of the year (never a later one) rather than a blank section,
+                    # and label its month so it isn't mistaken for the period's own.
+                    if not assessments.exists() and date_to.month in order_map:
+                        earlier = [a for a in year_assessments if order_map.get(a.month, 99) <= order_map[date_to.month]]
+                        if earlier:
+                            assessments = year_assessments.filter(id__in=[a.id for a in earlier])
+                            assessment_fallback = True
 
                 if assessments.exists():
                     selected_assessment = max(
@@ -704,6 +723,9 @@ class StudentComprehensiveReportGenerator(BaseReportGenerator):
 
                 if selected_assessment:
                     assessment_exists = True
+                    if assessment_fallback:
+                        month_year = dict((m, y) for y, m in self._twelve_months_from(academic_year_obj.start_date))
+                        assessment_label = date(month_year[selected_assessment.month], selected_assessment.month, 1).strftime('%b %Y')
                     skills_ratings = [
                         ('Listening', selected_assessment.listening), ('Speaking', selected_assessment.speaking),
                         ('Writing', selected_assessment.writing), ('Reading', selected_assessment.reading),
@@ -824,6 +846,7 @@ class StudentComprehensiveReportGenerator(BaseReportGenerator):
             'skills_ratings': skills_ratings,
             'behaviour_ratings': behaviour_ratings,
             'assessment_exists': assessment_exists,
+            'assessment_label': assessment_label,
             'teacher_remark': teacher_remark,
             'principal_remark': principal_remark,
         }
@@ -918,7 +941,7 @@ class StudentComprehensiveReportGenerator(BaseReportGenerator):
             if len(pair) == 1:
                 row.append('')
             info_table_data.append(row)
-        info_grid = Table(info_table_data, colWidths=[2.15 * inch, 2.15 * inch])
+        info_grid = Table(info_table_data, colWidths=[2.55 * inch, 2.55 * inch])
         info_grid.setStyle(TableStyle([
             ('VALIGN', (0, 0), (-1, -1), 'TOP'),
             ('LEFTPADDING', (0, 0), (-1, -1), 0),
@@ -942,7 +965,7 @@ class StudentComprehensiveReportGenerator(BaseReportGenerator):
             ('LEFTPADDING', (0, 0), (-1, -1), 0),
             ('RIGHTPADDING', (0, 0), (-1, -1), 0),
         ]))
-        info_card = Table([[info_card_inner]], colWidths=[6.4 * inch])
+        info_card = Table([[info_card_inner]], colWidths=[CONTENT_WIDTH])
         info_card.setStyle(TableStyle([
             ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor(CARD_BG)),
             ('BOX', (0, 0), (-1, -1), 1, colors.HexColor(GRAY_BORDER)),
@@ -999,6 +1022,7 @@ class StudentComprehensiveReportGenerator(BaseReportGenerator):
             ]))
             elements.append(Spacer(1, 6))
             elements.append(Paragraph(f"Report Period: {data['report_period_label']}", muted_style))
+            elements.append(Spacer(1, 12))
         else:
             elements.append(Paragraph('No attendance records for this period.', empty_state_style))
 
@@ -1007,9 +1031,11 @@ class StudentComprehensiveReportGenerator(BaseReportGenerator):
         lessons_by_subject = data.get('lessons_by_subject') or {}
         if lessons_by_subject:
             for subject, topics in lessons_by_subject.items():
-                learning.append(Paragraph(f"<b>{subject}</b>", body_style))
-                learning.append(Paragraph('<br/>'.join(f'• {t}' for t in topics), body_style))
-                learning.append(Spacer(1, 8))
+                learning.append(KeepTogether([
+                    Paragraph(f"<b>{subject}</b>", body_style),
+                    Paragraph('<br/>'.join(f'• {t}' for t in topics), body_style),
+                    Spacer(1, 8),
+                ]))
         elif data.get('draft_lesson_count'):
             n = data['draft_lesson_count']
             learning.append(Paragraph(
@@ -1026,6 +1052,9 @@ class StudentComprehensiveReportGenerator(BaseReportGenerator):
         # --- Skills Assessment ---
         elements.append(section_heading('Skills Assessment', styles))
         elements.append(Spacer(1, 8))
+        if data.get('assessment_label'):
+            elements.append(Paragraph(f"Latest assessment on record: {data['assessment_label']}", empty_state_style))
+            elements.append(Spacer(1, 4))
         if data['assessment_exists']:
             elements.append(build_two_column_ratings(data['skills_ratings']))
         else:
@@ -1035,6 +1064,9 @@ class StudentComprehensiveReportGenerator(BaseReportGenerator):
         # --- Behaviour Evaluation ---
         elements.append(section_heading('Behaviour Evaluation', styles))
         elements.append(Spacer(1, 8))
+        if data.get('assessment_label'):
+            elements.append(Paragraph(f"Latest assessment on record: {data['assessment_label']}", empty_state_style))
+            elements.append(Spacer(1, 4))
         if data['assessment_exists']:
             elements.append(build_two_column_ratings(data['behaviour_ratings']))
         else:
@@ -1055,7 +1087,7 @@ class StudentComprehensiveReportGenerator(BaseReportGenerator):
             )
             banner = Table(
                 [[Paragraph(f"<b>All dues cleared for {data['fee_month_label']}</b>", banner_style)]],
-                colWidths=[6.4 * inch],
+                colWidths=[CONTENT_WIDTH],
             )
             banner.setStyle(TableStyle([
                 ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor(PRESENT_BG)),
@@ -1079,20 +1111,20 @@ class StudentComprehensiveReportGenerator(BaseReportGenerator):
 
         elements.append(section_heading('Teacher Remarks', styles))
         elements.append(Spacer(1, 8))
-        teacher_remark_raw = data['teacher_remark'].strip() if data['teacher_remark'] else ''
+        teacher_remark_raw = data['teacher_remark'].replace('‑', '-').strip() if data['teacher_remark'] else ''
         teacher_remark_text = teacher_remark_raw or 'No remarks provided.'
         teacher_remark_style = body_style if teacher_remark_raw else empty_state_style
-        teacher_box = Table([[Paragraph(teacher_remark_text, teacher_remark_style)]], colWidths=[6.4 * inch])
+        teacher_box = Table([[Paragraph(teacher_remark_text, teacher_remark_style)]], colWidths=[CONTENT_WIDTH])
         teacher_box.setStyle(remark_box_style)
         elements.append(teacher_box)
         elements.append(Spacer(1, 14))
 
         elements.append(section_heading('Principal Remarks', styles))
         elements.append(Spacer(1, 8))
-        principal_remark_raw = data['principal_remark'].strip() if data['principal_remark'] else ''
+        principal_remark_raw = data['principal_remark'].replace('‑', '-').strip() if data['principal_remark'] else ''
         principal_remark_text = principal_remark_raw or 'No remarks provided.'
         principal_remark_style = body_style if principal_remark_raw else empty_state_style
-        principal_box = Table([[Paragraph(principal_remark_text, principal_remark_style)]], colWidths=[6.4 * inch])
+        principal_box = Table([[Paragraph(principal_remark_text, principal_remark_style)]], colWidths=[CONTENT_WIDTH])
         principal_box.setStyle(remark_box_style)
         elements.append(principal_box)
         elements.append(Spacer(1, 36))
@@ -1104,7 +1136,7 @@ class StudentComprehensiveReportGenerator(BaseReportGenerator):
                 ['_________________________', '_________________________', '_________________________'],
                 [Paragraph('Teacher Signature', sig_label_style), Paragraph('Principal Signature', sig_label_style), Paragraph('Date', sig_label_style)],
             ],
-            colWidths=[2.1 * inch, 2.1 * inch, 2.1 * inch],
+            colWidths=[CONTENT_WIDTH / 3] * 3,
         )
         sig_table.setStyle(TableStyle([
             ('ALIGN', (0, 0), (-1, -1), 'CENTER'),

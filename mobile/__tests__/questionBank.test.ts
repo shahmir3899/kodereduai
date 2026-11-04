@@ -68,11 +68,16 @@ describe('matching, fill in the blank, topics and pictures', () => {
     const q: Question = { id: 1, subject: 4, question_text: 'Q', question_type: 'MATCHING', difficulty_level: 'EASY', marks: 2, type_data: { left_items: ['A', 'B'], right_items: ['x', 'y'], pairs: [{ left: 0, right: 1 }, { left: 1, right: 0 }] } };
     expect(questionToForm(q)).toMatchObject({ left: ['A', 'B'], right: ['x', 'y'], pairs: [1, 0] });
   });
-  it('fill in the blank keeps accepted answers in type_data, comma separated', () => {
-    const p = buildQuestionPayload({ ...base, type: 'FILL_BLANK', answer: 'Lahore, lahore ,' });
-    expect(p).toMatchObject({ type_data: { accepted_answers: ['Lahore', 'lahore'] }, correct_answer: '' });
-    const q: Question = { id: 1, subject: 4, question_text: 'Q', question_type: 'FILL_BLANK', difficulty_level: 'EASY', marks: 1, type_data: { accepted_answers: ['a', 'b'] } };
-    expect(questionToForm(q).answer).toBe('a, b');
+  it('fill in the blank saves one entry per blank, as the web does', () => {
+    const p = buildQuestionPayload({ ...base, type: 'FILL_BLANK', blanks: ['Lahore', ' ', ' Karachi '], answer: 'ignored', correct: 'ignored' });
+    expect(p).toMatchObject({ type_data: { items: ['Lahore', 'Karachi'], accepted_answers: ['Lahore', 'Karachi'] }, correct_answer: '', answer_text: '' });
+    // A question with no answers yet is allowed (grading just cannot check it).
+    expect(buildQuestionPayload({ ...base, type: 'FILL_BLANK', blanks: [''] })).toMatchObject({ type_data: { items: [], accepted_answers: [] } });
+    const q: Question = { id: 1, subject: 4, question_text: 'Q', question_type: 'FILL_BLANK', difficulty_level: 'EASY', marks: 1, type_data: { items: ['a', 'b'], accepted_answers: ['a', 'b'] } };
+    expect(questionToForm(q).blanks).toEqual(['a', 'b']);
+    // Older questions saved only accepted_answers; they still open as blanks.
+    expect(questionToForm({ ...q, type_data: { accepted_answers: ['x'] } }).blanks).toEqual(['x']);
+    expect(questionToForm({ ...q, type_data: {} }).blanks).toEqual(['']);
   });
   it('sends and reads topic tags as ids', () => {
     expect(buildQuestionPayload({ ...base, topics: [3, 5] }).tested_topics).toEqual([3, 5]);

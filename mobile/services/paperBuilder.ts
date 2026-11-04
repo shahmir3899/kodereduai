@@ -20,6 +20,9 @@ export interface PaperQuestionRow {
   question_snapshot?: { bloom_level?: string | null } | null;
 }
 
+// Questions used in several papers already, as the paper detail lists them.
+export interface OverusedRow { question_id: number; paper_use_count: number }
+
 export interface Paper {
   id: number;
   paper_title: string;
@@ -35,10 +38,14 @@ export interface Paper {
   structure?: Array<Record<string, unknown>>;
   exam?: number | null;
   render_options?: { answer_lines?: boolean } | null;
+  overused_questions?: OverusedRow[];
   created_at?: string;
 }
 
 export const PAPER_STATUSES = [{ value: 'DRAFT', label: 'Draft' }, { value: 'READY', label: 'Ready' }, { value: 'PUBLISHED', label: 'Published' }] as const;
+
+// Only a draft can be edited (as on the web); a ready or published paper opens locked until it is reopened as a draft.
+export const isLockedStatus = (status: string | null | undefined): boolean => !!status && status !== 'DRAFT';
 
 export const paperTone = (s: string): 'neutral' | 'info' | 'success' => (s === 'PUBLISHED' ? 'success' : s === 'READY' ? 'info' : 'neutral');
 
@@ -51,12 +58,15 @@ export interface PickedQuestion {
   override: string;
   // The section (structure key) this question sits in; '' = not in a section.
   sectionKey: string;
+  // Papers that already use this question; shown as a warning from OVERUSED_AT.
+  useCount?: number;
   // Thinking level, for the paper's mix chart (a paper loaded from the server only has it when the server sends it).
   bloom?: string | null;
 }
 
 export const pickedFromQuestion = (q: Question): PickedQuestion => ({
   question: q.id, text: q.question_text, type: q.question_type, bankMarks: Number(q.marks) || 0, override: '', sectionKey: '', bloom: q.bloom_level ?? null,
+  useCount: Number(q.paper_use_count) || 0,
 });
 
 export const pickedFromPaperRow = (r: PaperQuestionRow): PickedQuestion => ({
@@ -65,6 +75,17 @@ export const pickedFromPaperRow = (r: PaperQuestionRow): PickedQuestion => ({
   sectionKey: r.section_key ?? '',
   bloom: r.bloom_level ?? r.question_snapshot?.bloom_level ?? null,
 });
+
+// The web warns from the third paper on.
+export const OVERUSED_AT = 3;
+export const reuseLine = (count: number | undefined): string | null => (count !== undefined && count >= OVERUSED_AT ? `Used in ${count} papers already` : null);
+
+// A saved paper lists how often its questions were used; put those counts on the rows.
+export const applyOverused = (picked: PickedQuestion[], rows: OverusedRow[] | undefined): PickedQuestion[] => {
+  if (!rows?.length) return picked;
+  const counts = new Map(rows.map((r) => [Number(r.question_id), Number(r.paper_use_count)]));
+  return picked.map((p) => (counts.has(p.question) ? { ...p, useCount: counts.get(p.question) } : p));
+};
 
 export const marksOf = (p: Pick<PickedQuestion, 'bankMarks' | 'override'>): number =>
   p.override.trim() !== '' && Number(p.override) >= 0 ? Number(p.override) : p.bankMarks;
@@ -84,6 +105,37 @@ export function moveQuestion(picked: PickedQuestion[], index: number, delta: -1 
   return next;
 }
 
+// ─── Adding into a section (slot by slot, as the web does) ─────────────────────────────────
+
+export const isFull = (s: Section, picked: PickedQuestion[]): boolean => s.type !== 'divider' && countIn(picked, s.key) >= s.slotsShown;
+
+// A question put into a section takes the section's marks, as the web's slot does.
+export function addToSection(picked: PickedQuestion[], q: Question, s: Section): PickedQuestion[] {
+  const next = addQuestion(picked, q);
+  const row = pickedFromQuestion(q);
+  return next.map((p) => (p.question === q.id
+    ? { ...p, sectionKey: s.key, override: Number(row.bankMarks) === s.marksPerQuestion ? '' : String(s.marksPerQuestion) }
+    : p));
+}
+
+// Moves a question up or down among the questions of its own section (a global swap would hop over other sections' rows).
+export function moveInSection(picked: PickedQuestion[], id: number, delta: -1 | 1): PickedQuestion[] {
+  const from = picked.findIndex((p) => p.question === id);
+  if (from < 0) return picked;
+  let to = from + delta;
+  while (to >= 0 && to < picked.length && picked[to].sectionKey !== picked[from].sectionKey) to += delta;
+  if (to < 0 || to >= picked.length) return picked;
+  const next = [...picked];
+  [next[from], next[to]] = [next[to], next[from]];
+  return next;
+}
+
+export function slotLine(s: Section, picked: PickedQuestion[]): string {
+  const marks = `${s.marksPerQuestion} mark${s.marksPerQuestion === 1 ? '' : 's'} each`;
+  const choice = s.slotsCounted !== s.slotsShown ? ` · attempt any ${s.slotsCounted}` : '';
+  return `${marks} · ${countIn(picked, s.key)} of ${s.slotsShown}${choice}`;
+}
+
 export interface PaperForm {
   title: string;
   classObj: number | null;
@@ -94,13 +146,16 @@ export interface PaperForm {
   // The exam this paper belongs to (optional) and the print option that draws ruled lines under answers.
   exam: number | null;
   answerLines: boolean;
+  // The Total Marks typed in Setup (as on the web, default 100); the sections and questions are checked against it.
+  totalMarks: string;
 }
 
-export const emptyPaperForm = (): PaperForm => ({ title: '', classObj: null, subject: null, duration: '60', instructions: '', status: 'DRAFT', exam: null, answerLines: false });
+export const emptyPaperForm = (): PaperForm => ({ title: '', classObj: null, subject: null, duration: '60', instructions: '', status: 'DRAFT', exam: null, answerLines: false, totalMarks: '100' });
 
 export const paperToForm = (p: Paper): PaperForm => ({
   title: p.paper_title, classObj: p.class_obj, subject: p.subject, duration: p.duration_minutes != null ? String(p.duration_minutes) : '', instructions: p.instructions ?? '', status: p.status,
   exam: p.exam ?? null, answerLines: !!p.render_options?.answer_lines,
+  totalMarks: p.total_marks != null && Number(p.total_marks) > 0 ? String(Number(p.total_marks)) : '100',
 });
 
 export function paperFileName(title: string): string {
@@ -246,11 +301,19 @@ export function orderForSave(picked: PickedQuestion[], sections: Section[]): Pic
 export const paperTotal = (picked: PickedQuestion[], sections: Section[]): number =>
   groups(sections).length > 0 ? allocatedMarks(sections) : totalMarks(picked);
 
-export function validatePaper(f: PaperForm, picked: PickedQuestion[], sections: Section[] = []): string | null {
+// Step 1 (Setup) on its own, so the wizard can stop there before the structure.
+export function validateSetup(f: PaperForm): string | null {
   if (!f.title.trim()) return 'Enter the paper title.';
   if (!f.classObj) return 'Choose the class.';
   if (!f.subject) return 'Choose the subject.';
   if (f.duration.trim() && (!/^\d+$/.test(f.duration.trim()) || Number(f.duration) < 1)) return 'Duration must be a whole number of minutes.';
+  if (f.totalMarks.trim() && !(Number(f.totalMarks) > 0)) return 'Total marks must be a number above zero.';
+  return null;
+}
+
+export function validatePaper(f: PaperForm, picked: PickedQuestion[], sections: Section[] = []): string | null {
+  const setup = validateSetup(f);
+  if (setup) return setup;
   if (picked.length === 0) return 'Add at least one question.';
   if (picked.some((p) => p.override.trim() !== '' && !(Number(p.override) >= 0))) return 'A marks change must be a number, zero or more.';
   for (const sec of groups(sections)) {
@@ -265,17 +328,19 @@ export function validatePaper(f: PaperForm, picked: PickedQuestion[], sections: 
   return null;
 }
 
-// Step 1 of saving: create or refresh the draft paper (details and structure).
-export function buildEnsurePayload(f: PaperForm, picked: PickedQuestion[], sections: Section[]) {
+// Step 1 of saving: create or refresh the draft paper (details and structure), field for field as the web sends it.
+// Total marks is the typed Total Marks (the web omits it when blank or not above zero).
+export function buildEnsurePayload(f: PaperForm, _picked: PickedQuestion[], sections: Section[]) {
+  const total = Number(f.totalMarks);
   return {
     paper_title: f.title.trim(),
     class_obj: f.classObj,
     subject: f.subject,
     ...(f.exam ? { exam: f.exam } : {}),
-    instructions: f.instructions.trim(),
+    instructions: f.instructions,
     render_options: { answer_lines: f.answerLines },
     ...(f.duration.trim() ? { duration_minutes: Number(f.duration) } : {}),
-    total_marks: paperTotal(picked, sections),
+    ...(Number.isFinite(total) && total > 0 ? { total_marks: total } : {}),
     structure: serializeStructure(sections),
   };
 }
@@ -288,7 +353,8 @@ export function buildAutosavePayload(f: PaperForm, picked: PickedQuestion[], sec
       question_id: p.question,
       question_order: i + 1,
       section_key: p.sectionKey,
-      marks_override: p.override.trim() !== '' ? Number(p.override) : null,
+      // The web always sends the question's marks for this paper (its own, or the changed ones).
+      marks_override: marksOf(p),
     })),
   };
 }
@@ -299,10 +365,24 @@ export function statusSteps(current: string | null, target: string): { first: bo
   return { first: !!current && current !== 'DRAFT', last: target !== 'DRAFT' };
 }
 
-// Warning shown before saving when the sections add up to a different total than the questions do.
-export function reconcileNote(picked: PickedQuestion[], sections: Section[]): string | null {
+// Asked before moving from Structure to Add Questions, as on the web: the sections add up to a different total than the
+// typed Total Marks. Advisory only (the web never blocks); with no sections there is nothing to compare.
+export function structureMismatch(sections: Section[], typedTotal: string): string | null {
   if (groups(sections).length === 0) return null;
-  const chosen = totalMarks(picked);
-  const planned = allocatedMarks(sections);
-  return chosen !== planned ? `The sections add up to ${planned} marks; the questions chosen add up to ${chosen}.` : null;
+  const total = Number(typedTotal) || 0;
+  const allocated = allocatedMarks(sections);
+  return total > 0 && allocated !== total ? `Allocated marks (${allocated}) don't match the paper's total marks (${total}). Continue to Add Questions anyway?` : null;
+}
+
+// Warning shown before saving when the sections, the chosen questions and the typed Total Marks do not agree.
+export function reconcileNote(picked: PickedQuestion[], sections: Section[], typedTotal?: string): string | null {
+  const notes: string[] = [];
+  const typed = Number(typedTotal);
+  if (groups(sections).length > 0) {
+    const chosen = totalMarks(picked);
+    const planned = allocatedMarks(sections);
+    if (chosen !== planned) notes.push(`The sections add up to ${planned} marks; the questions chosen add up to ${chosen}.`);
+    if (typedTotal !== undefined && Number.isFinite(typed) && typed > 0 && typed !== planned) notes.push(`Total Marks says ${typed}; the sections add up to ${planned}.`);
+  }
+  return notes.length ? notes.join('\n') : null;
 }

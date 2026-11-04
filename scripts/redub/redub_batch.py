@@ -6,7 +6,7 @@ import re, shutil, subprocess, sys, tempfile
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-VIDEOS = HERE.parents[1] / "frontend/public/videos"
+VIDEOS = HERE.parents[1] / "media/guide"
 
 
 def probe(f, entry):

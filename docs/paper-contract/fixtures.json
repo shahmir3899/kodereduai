@@ -1,0 +1,1195 @@
+{
+ "version": 1,
+ "about": "Inputs are the web builder state; expected is what web sends. Mobile must send the same ensure + manual_questions for the same paper.",
+ "fixtures": [
+  {
+   "name": "fill-and-mcq",
+   "note": "5 fill in the blank + 5 MCQ, one mark each, two sections",
+   "setup": {
+    "class_obj": 1,
+    "subject": 2,
+    "exam": null,
+    "paper_title": "Quick Quiz",
+    "instructions": "",
+    "total_marks": "10",
+    "duration_minutes": "60",
+    "render_options": {
+     "answer_lines": false
+    }
+   },
+   "structure": [
+    {
+     "local_id": "sec_s1_0",
+     "key": "s1",
+     "type": "question_group",
+     "title": "Question # 1",
+     "instruction": "",
+     "question_type": "FILL_BLANK",
+     "slots_shown": 5,
+     "slots_counted": 5,
+     "marks_per_question": 1,
+     "is_choice": false
+    },
+    {
+     "local_id": "sec_s2_0",
+     "key": "s2",
+     "type": "question_group",
+     "title": "Question # 2",
+     "instruction": "",
+     "question_type": "MCQ",
+     "slots_shown": 5,
+     "slots_counted": 5,
+     "marks_per_question": 1,
+     "is_choice": false
+    }
+   ],
+   "questions": [
+    {
+     "local_id": "f0",
+     "section_key": "s1",
+     "question_text": "5+3=____",
+     "question_type": "FILL_BLANK",
+     "difficulty_level": "MEDIUM",
+     "marks": 1,
+     "correct_answer": "",
+     "answer_text": "",
+     "options": {
+      "A": "",
+      "B": "",
+      "C": "",
+      "D": ""
+     },
+     "type_data": {
+      "items": [
+       "8"
+      ],
+      "accepted_answers": [
+       "8"
+      ]
+     },
+     "tested_topics": []
+    },
+    {
+     "local_id": "f1",
+     "section_key": "s1",
+     "question_text": "9-4=____",
+     "question_type": "FILL_BLANK",
+     "difficulty_level": "MEDIUM",
+     "marks": 1,
+     "correct_answer": "",
+     "answer_text": "",
+     "options": {
+      "A": "",
+      "B": "",
+      "C": "",
+      "D": ""
+     },
+     "type_data": {
+      "items": [
+       "5"
+      ],
+      "accepted_answers": [
+       "5"
+      ]
+     },
+     "tested_topics": []
+    },
+    {
+     "local_id": "f2",
+     "section_key": "s1",
+     "question_text": "2+6=____",
+     "question_type": "FILL_BLANK",
+     "difficulty_level": "MEDIUM",
+     "marks": 1,
+     "correct_answer": "",
+     "answer_text": "",
+     "options": {
+      "A": "",
+      "B": "",
+      "C": "",
+      "D": ""
+     },
+     "type_data": {
+      "items": [
+       "8"
+      ],
+      "accepted_answers": [
+       "8"
+      ]
+     },
+     "tested_topics": []
+    },
+    {
+     "local_id": "f3",
+     "section_key": "s1",
+     "question_text": "10-7=____",
+     "question_type": "FILL_BLANK",
+     "difficulty_level": "MEDIUM",
+     "marks": 1,
+     "correct_answer": "",
+     "answer_text": "",
+     "options": {
+      "A": "",
+      "B": "",
+      "C": "",
+      "D": ""
+     },
+     "type_data": {
+      "items": [
+       "3"
+      ],
+      "accepted_answers": [
+       "3"
+      ]
+     },
+     "tested_topics": []
+    },
+    {
+     "local_id": "f4",
+     "section_key": "s1",
+     "question_text": "4+4=____",
+     "question_type": "FILL_BLANK",
+     "difficulty_level": "MEDIUM",
+     "marks": 1,
+     "correct_answer": "",
+     "answer_text": "",
+     "options": {
+      "A": "",
+      "B": "",
+      "C": "",
+      "D": ""
+     },
+     "type_data": {
+      "items": [
+       "8"
+      ],
+      "accepted_answers": [
+       "8"
+      ]
+     },
+     "tested_topics": []
+    },
+    {
+     "local_id": "m0",
+     "section_key": "s2",
+     "question_text": "6+2=?",
+     "question_type": "MCQ",
+     "difficulty_level": "MEDIUM",
+     "marks": 1,
+     "correct_answer": "B",
+     "answer_text": "",
+     "options": {
+      "A": "7",
+      "B": "8",
+      "C": "9",
+      "D": ""
+     },
+     "type_data": {},
+     "tested_topics": []
+    },
+    {
+     "local_id": "m1",
+     "section_key": "s2",
+     "question_text": "9-3=?",
+     "question_type": "MCQ",
+     "difficulty_level": "MEDIUM",
+     "marks": 1,
+     "correct_answer": "C",
+     "answer_text": "",
+     "options": {
+      "A": "5",
+      "B": "7",
+      "C": "6",
+      "D": ""
+     },
+     "type_data": {},
+     "tested_topics": []
+    },
+    {
+     "local_id": "m2",
+     "section_key": "s2",
+     "question_text": "4+5=?",
+     "question_type": "MCQ",
+     "difficulty_level": "MEDIUM",
+     "marks": 1,
+     "correct_answer": "A",
+     "answer_text": "",
+     "options": {
+      "A": "9",
+      "B": "8",
+      "C": "10",
+      "D": ""
+     },
+     "type_data": {},
+     "tested_topics": []
+    },
+    {
+     "local_id": "m3",
+     "section_key": "s2",
+     "question_text": "10-6=?",
+     "question_type": "MCQ",
+     "difficulty_level": "MEDIUM",
+     "marks": 1,
+     "correct_answer": "B",
+     "answer_text": "",
+     "options": {
+      "A": "3",
+      "B": "4",
+      "C": "5",
+      "D": ""
+     },
+     "type_data": {},
+     "tested_topics": []
+    },
+    {
+     "local_id": "m4",
+     "section_key": "s2",
+     "question_text": "7+2=?",
+     "question_type": "MCQ",
+     "difficulty_level": "MEDIUM",
+     "marks": 1,
+     "correct_answer": "C",
+     "answer_text": "",
+     "options": {
+      "A": "8",
+      "B": "10",
+      "C": "9",
+      "D": ""
+     },
+     "type_data": {},
+     "tested_topics": []
+    }
+   ],
+   "expected": {
+    "ensure": {
+     "class_obj": 1,
+     "subject": 2,
+     "paper_title": "Quick Quiz",
+     "instructions": "",
+     "structure": [
+      {
+       "key": "s1",
+       "type": "question_group",
+       "title": "Question # 1",
+       "instruction": "",
+       "question_type": "FILL_BLANK",
+       "slots_shown": 5,
+       "slots_counted": 5,
+       "marks_per_question": 1
+      },
+      {
+       "key": "s2",
+       "type": "question_group",
+       "title": "Question # 2",
+       "instruction": "",
+       "question_type": "MCQ",
+       "slots_shown": 5,
+       "slots_counted": 5,
+       "marks_per_question": 1
+      }
+     ],
+     "render_options": {
+      "answer_lines": false
+     },
+     "total_marks": 10,
+     "duration_minutes": 60
+    },
+    "manual_questions": [
+     {
+      "question_order": 1,
+      "section_key": "s1",
+      "marks_override": 1,
+      "question_text": "5+3=____",
+      "question_type": "FILL_BLANK",
+      "difficulty_level": "MEDIUM",
+      "marks": 1,
+      "option_a": "",
+      "option_b": "",
+      "option_c": "",
+      "option_d": "",
+      "correct_answer": "",
+      "answer_text": "",
+      "type_data": {
+       "items": [
+        "8"
+       ],
+       "accepted_answers": [
+        "8"
+       ]
+      },
+      "tested_topics": [],
+      "local_id": "f0"
+     },
+     {
+      "question_order": 2,
+      "section_key": "s1",
+      "marks_override": 1,
+      "question_text": "9-4=____",
+      "question_type": "FILL_BLANK",
+      "difficulty_level": "MEDIUM",
+      "marks": 1,
+      "option_a": "",
+      "option_b": "",
+      "option_c": "",
+      "option_d": "",
+      "correct_answer": "",
+      "answer_text": "",
+      "type_data": {
+       "items": [
+        "5"
+       ],
+       "accepted_answers": [
+        "5"
+       ]
+      },
+      "tested_topics": [],
+      "local_id": "f1"
+     },
+     {
+      "question_order": 3,
+      "section_key": "s1",
+      "marks_override": 1,
+      "question_text": "2+6=____",
+      "question_type": "FILL_BLANK",
+      "difficulty_level": "MEDIUM",
+      "marks": 1,
+      "option_a": "",
+      "option_b": "",
+      "option_c": "",
+      "option_d": "",
+      "correct_answer": "",
+      "answer_text": "",
+      "type_data": {
+       "items": [
+        "8"
+       ],
+       "accepted_answers": [
+        "8"
+       ]
+      },
+      "tested_topics": [],
+      "local_id": "f2"
+     },
+     {
+      "question_order": 4,
+      "section_key": "s1",
+      "marks_override": 1,
+      "question_text": "10-7=____",
+      "question_type": "FILL_BLANK",
+      "difficulty_level": "MEDIUM",
+      "marks": 1,
+      "option_a": "",
+      "option_b": "",
+      "option_c": "",
+      "option_d": "",
+      "correct_answer": "",
+      "answer_text": "",
+      "type_data": {
+       "items": [
+        "3"
+       ],
+       "accepted_answers": [
+        "3"
+       ]
+      },
+      "tested_topics": [],
+      "local_id": "f3"
+     },
+     {
+      "question_order": 5,
+      "section_key": "s1",
+      "marks_override": 1,
+      "question_text": "4+4=____",
+      "question_type": "FILL_BLANK",
+      "difficulty_level": "MEDIUM",
+      "marks": 1,
+      "option_a": "",
+      "option_b": "",
+      "option_c": "",
+      "option_d": "",
+      "correct_answer": "",
+      "answer_text": "",
+      "type_data": {
+       "items": [
+        "8"
+       ],
+       "accepted_answers": [
+        "8"
+       ]
+      },
+      "tested_topics": [],
+      "local_id": "f4"
+     },
+     {
+      "question_order": 6,
+      "section_key": "s2",
+      "marks_override": 1,
+      "question_text": "6+2=?",
+      "question_type": "MCQ",
+      "difficulty_level": "MEDIUM",
+      "marks": 1,
+      "option_a": "7",
+      "option_b": "8",
+      "option_c": "9",
+      "option_d": "",
+      "correct_answer": "B",
+      "answer_text": "",
+      "type_data": {},
+      "tested_topics": [],
+      "local_id": "m0"
+     },
+     {
+      "question_order": 7,
+      "section_key": "s2",
+      "marks_override": 1,
+      "question_text": "9-3=?",
+      "question_type": "MCQ",
+      "difficulty_level": "MEDIUM",
+      "marks": 1,
+      "option_a": "5",
+      "option_b": "7",
+      "option_c": "6",
+      "option_d": "",
+      "correct_answer": "C",
+      "answer_text": "",
+      "type_data": {},
+      "tested_topics": [],
+      "local_id": "m1"
+     },
+     {
+      "question_order": 8,
+      "section_key": "s2",
+      "marks_override": 1,
+      "question_text": "4+5=?",
+      "question_type": "MCQ",
+      "difficulty_level": "MEDIUM",
+      "marks": 1,
+      "option_a": "9",
+      "option_b": "8",
+      "option_c": "10",
+      "option_d": "",
+      "correct_answer": "A",
+      "answer_text": "",
+      "type_data": {},
+      "tested_topics": [],
+      "local_id": "m2"
+     },
+     {
+      "question_order": 9,
+      "section_key": "s2",
+      "marks_override": 1,
+      "question_text": "10-6=?",
+      "question_type": "MCQ",
+      "difficulty_level": "MEDIUM",
+      "marks": 1,
+      "option_a": "3",
+      "option_b": "4",
+      "option_c": "5",
+      "option_d": "",
+      "correct_answer": "B",
+      "answer_text": "",
+      "type_data": {},
+      "tested_topics": [],
+      "local_id": "m3"
+     },
+     {
+      "question_order": 10,
+      "section_key": "s2",
+      "marks_override": 1,
+      "question_text": "7+2=?",
+      "question_type": "MCQ",
+      "difficulty_level": "MEDIUM",
+      "marks": 1,
+      "option_a": "8",
+      "option_b": "10",
+      "option_c": "9",
+      "option_d": "",
+      "correct_answer": "C",
+      "answer_text": "",
+      "type_data": {},
+      "tested_topics": [],
+      "local_id": "m4"
+     }
+    ]
+   }
+  },
+  {
+   "name": "fill-several-blanks",
+   "note": "one question with three blanks",
+   "setup": {
+    "class_obj": 1,
+    "subject": 2,
+    "exam": null,
+    "paper_title": "Quick Quiz",
+    "instructions": "",
+    "total_marks": "3",
+    "duration_minutes": "60",
+    "render_options": {
+     "answer_lines": false
+    }
+   },
+   "structure": [
+    {
+     "local_id": "sec_s1_0",
+     "key": "s1",
+     "type": "question_group",
+     "title": "Question # 1",
+     "instruction": "",
+     "question_type": "FILL_BLANK",
+     "slots_shown": 1,
+     "slots_counted": 1,
+     "marks_per_question": 3,
+     "is_choice": false
+    }
+   ],
+   "questions": [
+    {
+     "local_id": "f0",
+     "section_key": "s1",
+     "question_text": "The ____ is the ____ of the ____.",
+     "question_type": "FILL_BLANK",
+     "difficulty_level": "MEDIUM",
+     "marks": 3,
+     "correct_answer": "",
+     "answer_text": "",
+     "options": {
+      "A": "",
+      "B": "",
+      "C": "",
+      "D": ""
+     },
+     "type_data": {
+      "items": [
+       "sun",
+       "star",
+       "sky"
+      ],
+      "accepted_answers": [
+       "sun",
+       "star",
+       "sky"
+      ]
+     },
+     "tested_topics": []
+    }
+   ],
+   "expected": {
+    "ensure": {
+     "class_obj": 1,
+     "subject": 2,
+     "paper_title": "Quick Quiz",
+     "instructions": "",
+     "structure": [
+      {
+       "key": "s1",
+       "type": "question_group",
+       "title": "Question # 1",
+       "instruction": "",
+       "question_type": "FILL_BLANK",
+       "slots_shown": 1,
+       "slots_counted": 1,
+       "marks_per_question": 3
+      }
+     ],
+     "render_options": {
+      "answer_lines": false
+     },
+     "total_marks": 3,
+     "duration_minutes": 60
+    },
+    "manual_questions": [
+     {
+      "question_order": 1,
+      "section_key": "s1",
+      "marks_override": 3,
+      "question_text": "The ____ is the ____ of the ____.",
+      "question_type": "FILL_BLANK",
+      "difficulty_level": "MEDIUM",
+      "marks": 3,
+      "option_a": "",
+      "option_b": "",
+      "option_c": "",
+      "option_d": "",
+      "correct_answer": "",
+      "answer_text": "",
+      "type_data": {
+       "items": [
+        "sun",
+        "star",
+        "sky"
+       ],
+       "accepted_answers": [
+        "sun",
+        "star",
+        "sky"
+       ]
+      },
+      "tested_topics": [],
+      "local_id": "f0"
+     }
+    ]
+   }
+  },
+  {
+   "name": "matching",
+   "note": "one matching question with three pairs, in the format the server validates (left_items, right_items, index pairs)",
+   "setup": {
+    "class_obj": 1,
+    "subject": 2,
+    "exam": null,
+    "paper_title": "Quick Quiz",
+    "instructions": "",
+    "total_marks": "3",
+    "duration_minutes": "60",
+    "render_options": {
+     "answer_lines": false
+    }
+   },
+   "structure": [
+    {
+     "local_id": "sec_s1_0",
+     "key": "s1",
+     "type": "question_group",
+     "title": "Question # 1",
+     "instruction": "",
+     "question_type": "MATCHING",
+     "slots_shown": 1,
+     "slots_counted": 1,
+     "marks_per_question": 3,
+     "is_choice": false
+    }
+   ],
+   "questions": [
+    {
+     "local_id": "x0",
+     "section_key": "s1",
+     "question_text": "Match the animals to their homes.",
+     "question_type": "MATCHING",
+     "difficulty_level": "MEDIUM",
+     "marks": 3,
+     "correct_answer": "",
+     "answer_text": "",
+     "options": {
+      "A": "",
+      "B": "",
+      "C": "",
+      "D": ""
+     },
+     "type_data": {
+      "left_items": [
+       "Fish",
+       "Bird",
+       "Bee"
+      ],
+      "right_items": [
+       "Water",
+       "Nest",
+       "Hive"
+      ],
+      "pairs": [
+       {
+        "left": 0,
+        "right": 0
+       },
+       {
+        "left": 1,
+        "right": 1
+       },
+       {
+        "left": 2,
+        "right": 2
+       }
+      ]
+     },
+     "tested_topics": []
+    }
+   ],
+   "expected": {
+    "ensure": {
+     "class_obj": 1,
+     "subject": 2,
+     "paper_title": "Quick Quiz",
+     "instructions": "",
+     "structure": [
+      {
+       "key": "s1",
+       "type": "question_group",
+       "title": "Question # 1",
+       "instruction": "",
+       "question_type": "MATCHING",
+       "slots_shown": 1,
+       "slots_counted": 1,
+       "marks_per_question": 3
+      }
+     ],
+     "render_options": {
+      "answer_lines": false
+     },
+     "total_marks": 3,
+     "duration_minutes": 60
+    },
+    "manual_questions": [
+     {
+      "question_order": 1,
+      "section_key": "s1",
+      "marks_override": 3,
+      "question_text": "Match the animals to their homes.",
+      "question_type": "MATCHING",
+      "difficulty_level": "MEDIUM",
+      "marks": 3,
+      "option_a": "",
+      "option_b": "",
+      "option_c": "",
+      "option_d": "",
+      "correct_answer": "",
+      "answer_text": "",
+      "type_data": {
+       "left_items": [
+        "Fish",
+        "Bird",
+        "Bee"
+       ],
+       "right_items": [
+        "Water",
+        "Nest",
+        "Hive"
+       ],
+       "pairs": [
+        {
+         "left": 0,
+         "right": 0
+        },
+        {
+         "left": 1,
+         "right": 1
+        },
+        {
+         "left": 2,
+         "right": 2
+        }
+       ]
+      },
+      "tested_topics": [],
+      "local_id": "x0"
+     }
+    ]
+   }
+  },
+  {
+   "name": "choice-and-divider",
+   "note": "attempt any 2 of 3 short questions after a divider",
+   "setup": {
+    "class_obj": 1,
+    "subject": 2,
+    "exam": null,
+    "paper_title": "Quick Quiz",
+    "instructions": "Write neatly.",
+    "total_marks": "8",
+    "duration_minutes": "60",
+    "render_options": {
+     "answer_lines": true
+    }
+   },
+   "structure": [
+    {
+     "local_id": "sec_d1_0",
+     "key": "d1",
+     "type": "divider",
+     "title": "Section B"
+    },
+    {
+     "local_id": "sec_s1_0",
+     "key": "s1",
+     "type": "question_group",
+     "title": "Question # 1",
+     "instruction": "Attempt any 2 questions.",
+     "question_type": "SHORT",
+     "slots_shown": 3,
+     "slots_counted": 2,
+     "marks_per_question": 4,
+     "is_choice": true
+    }
+   ],
+   "questions": [
+    {
+     "local_id": "a",
+     "section_key": "s1",
+     "question_text": "Name a fruit.",
+     "question_type": "SHORT",
+     "difficulty_level": "MEDIUM",
+     "marks": 4,
+     "correct_answer": "",
+     "answer_text": "Apple",
+     "options": {
+      "A": "",
+      "B": "",
+      "C": "",
+      "D": ""
+     },
+     "type_data": {},
+     "tested_topics": []
+    },
+    {
+     "local_id": "b",
+     "section_key": "s1",
+     "question_text": "Name a colour.",
+     "question_type": "SHORT",
+     "difficulty_level": "MEDIUM",
+     "marks": 4,
+     "correct_answer": "",
+     "answer_text": "Red",
+     "options": {
+      "A": "",
+      "B": "",
+      "C": "",
+      "D": ""
+     },
+     "type_data": {},
+     "tested_topics": []
+    },
+    {
+     "local_id": "c",
+     "section_key": "s1",
+     "question_text": "Name a day.",
+     "question_type": "SHORT",
+     "difficulty_level": "MEDIUM",
+     "marks": 4,
+     "correct_answer": "",
+     "answer_text": "Monday",
+     "options": {
+      "A": "",
+      "B": "",
+      "C": "",
+      "D": ""
+     },
+     "type_data": {},
+     "tested_topics": []
+    }
+   ],
+   "expected": {
+    "ensure": {
+     "class_obj": 1,
+     "subject": 2,
+     "paper_title": "Quick Quiz",
+     "instructions": "Write neatly.",
+     "structure": [
+      {
+       "key": "d1",
+       "type": "divider",
+       "title": "Section B"
+      },
+      {
+       "key": "s1",
+       "type": "question_group",
+       "title": "Question # 1",
+       "instruction": "Attempt any 2 questions.",
+       "question_type": "SHORT",
+       "slots_shown": 3,
+       "slots_counted": 2,
+       "marks_per_question": 4
+      }
+     ],
+     "render_options": {
+      "answer_lines": true
+     },
+     "total_marks": 8,
+     "duration_minutes": 60
+    },
+    "manual_questions": [
+     {
+      "question_order": 1,
+      "section_key": "s1",
+      "marks_override": 4,
+      "question_text": "Name a fruit.",
+      "question_type": "SHORT",
+      "difficulty_level": "MEDIUM",
+      "marks": 4,
+      "option_a": "",
+      "option_b": "",
+      "option_c": "",
+      "option_d": "",
+      "correct_answer": "",
+      "answer_text": "Apple",
+      "type_data": {},
+      "tested_topics": [],
+      "local_id": "a"
+     },
+     {
+      "question_order": 2,
+      "section_key": "s1",
+      "marks_override": 4,
+      "question_text": "Name a colour.",
+      "question_type": "SHORT",
+      "difficulty_level": "MEDIUM",
+      "marks": 4,
+      "option_a": "",
+      "option_b": "",
+      "option_c": "",
+      "option_d": "",
+      "correct_answer": "",
+      "answer_text": "Red",
+      "type_data": {},
+      "tested_topics": [],
+      "local_id": "b"
+     },
+     {
+      "question_order": 3,
+      "section_key": "s1",
+      "marks_override": 4,
+      "question_text": "Name a day.",
+      "question_type": "SHORT",
+      "difficulty_level": "MEDIUM",
+      "marks": 4,
+      "option_a": "",
+      "option_b": "",
+      "option_c": "",
+      "option_d": "",
+      "correct_answer": "",
+      "answer_text": "Monday",
+      "type_data": {},
+      "tested_topics": [],
+      "local_id": "c"
+     }
+    ]
+   }
+  },
+  {
+   "name": "rich-html-rtl",
+   "note": "HTML text with sub/sup, math, table, an Urdu wrapper and a diagram url",
+   "setup": {
+    "class_obj": 1,
+    "subject": 2,
+    "exam": null,
+    "paper_title": "Science",
+    "instructions": "",
+    "total_marks": "5",
+    "duration_minutes": "60",
+    "render_options": {
+     "answer_lines": false
+    }
+   },
+   "structure": [
+    {
+     "local_id": "sec_s1_0",
+     "key": "s1",
+     "type": "question_group",
+     "title": "Question # 1",
+     "instruction": "",
+     "question_type": "LONG",
+     "slots_shown": 2,
+     "slots_counted": 2,
+     "marks_per_question": 2,
+     "is_choice": false
+    }
+   ],
+   "questions": [
+    {
+     "local_id": "r0",
+     "section_key": "s1",
+     "question_text": "<div dir=\"ltr\" lang=\"en\" class=\"\"><p>Water is H<sub>2</sub>O; area is x<sup>2</sup>. <span data-type=\"inlineMath\" data-latex=\"x^2\"></span></p><table><tbody><tr><th>A</th><td>1</td></tr></tbody></table></div>",
+     "question_type": "LONG",
+     "difficulty_level": "MEDIUM",
+     "marks": 2,
+     "correct_answer": "",
+     "answer_text": "See notes",
+     "options": {
+      "A": "",
+      "B": "",
+      "C": "",
+      "D": ""
+     },
+     "type_data": {},
+     "tested_topics": []
+    },
+    {
+     "local_id": "r1",
+     "section_key": "s1",
+     "question_text": "<div dir=\"rtl\" lang=\"ur\" class=\"font-rtl\"><p>پانی کا فارمولا لکھیں۔</p></div>",
+     "question_type": "LONG",
+     "difficulty_level": "MEDIUM",
+     "marks": 3,
+     "correct_answer": "",
+     "answer_text": "H2O",
+     "options": {
+      "A": "",
+      "B": "",
+      "C": "",
+      "D": ""
+     },
+     "type_data": {},
+     "tested_topics": []
+    }
+   ],
+   "expected": {
+    "ensure": {
+     "class_obj": 1,
+     "subject": 2,
+     "paper_title": "Science",
+     "instructions": "",
+     "structure": [
+      {
+       "key": "s1",
+       "type": "question_group",
+       "title": "Question # 1",
+       "instruction": "",
+       "question_type": "LONG",
+       "slots_shown": 2,
+       "slots_counted": 2,
+       "marks_per_question": 2
+      }
+     ],
+     "render_options": {
+      "answer_lines": false
+     },
+     "total_marks": 5,
+     "duration_minutes": 60
+    },
+    "manual_questions": [
+     {
+      "question_order": 1,
+      "section_key": "s1",
+      "marks_override": 2,
+      "question_text": "<div dir=\"ltr\" lang=\"en\" class=\"\"><p>Water is H<sub>2</sub>O; area is x<sup>2</sup>. <span data-type=\"inlineMath\" data-latex=\"x^2\"></span></p><table><tbody><tr><th>A</th><td>1</td></tr></tbody></table></div>",
+      "question_type": "LONG",
+      "difficulty_level": "MEDIUM",
+      "marks": 2,
+      "option_a": "",
+      "option_b": "",
+      "option_c": "",
+      "option_d": "",
+      "correct_answer": "",
+      "answer_text": "See notes",
+      "type_data": {},
+      "tested_topics": [],
+      "local_id": "r0"
+     },
+     {
+      "question_order": 2,
+      "section_key": "s1",
+      "marks_override": 3,
+      "question_text": "<div dir=\"rtl\" lang=\"ur\" class=\"font-rtl\"><p>پانی کا فارمولا لکھیں۔</p></div>",
+      "question_type": "LONG",
+      "difficulty_level": "MEDIUM",
+      "marks": 3,
+      "option_a": "",
+      "option_b": "",
+      "option_c": "",
+      "option_d": "",
+      "correct_answer": "",
+      "answer_text": "H2O",
+      "type_data": {},
+      "tested_topics": [],
+      "local_id": "r1"
+     }
+    ]
+   }
+  },
+  {
+   "name": "no-structure",
+   "note": "questions added freely, no sections",
+   "setup": {
+    "class_obj": 1,
+    "subject": 2,
+    "exam": null,
+    "paper_title": "Quick Quiz",
+    "instructions": "",
+    "total_marks": "2",
+    "duration_minutes": "60",
+    "render_options": {
+     "answer_lines": false
+    }
+   },
+   "structure": [],
+   "questions": [
+    {
+     "local_id": "u0",
+     "section_key": "",
+     "question_text": "True or false: 2 is even.",
+     "question_type": "TRUE_FALSE",
+     "difficulty_level": "MEDIUM",
+     "marks": 1,
+     "correct_answer": "TRUE",
+     "answer_text": "",
+     "options": {
+      "A": "",
+      "B": "",
+      "C": "",
+      "D": ""
+     },
+     "type_data": {},
+     "tested_topics": []
+    },
+    {
+     "local_id": "u1",
+     "section_key": "",
+     "question_text": "Say hello.",
+     "question_type": "SHORT",
+     "difficulty_level": "MEDIUM",
+     "marks": 1,
+     "correct_answer": "",
+     "answer_text": "Hello",
+     "options": {
+      "A": "",
+      "B": "",
+      "C": "",
+      "D": ""
+     },
+     "type_data": {},
+     "tested_topics": []
+    }
+   ],
+   "expected": {
+    "ensure": {
+     "class_obj": 1,
+     "subject": 2,
+     "paper_title": "Quick Quiz",
+     "instructions": "",
+     "structure": [],
+     "render_options": {
+      "answer_lines": false
+     },
+     "total_marks": 2,
+     "duration_minutes": 60
+    },
+    "manual_questions": [
+     {
+      "question_order": 1,
+      "section_key": "",
+      "marks_override": 1,
+      "question_text": "True or false: 2 is even.",
+      "question_type": "TRUE_FALSE",
+      "difficulty_level": "MEDIUM",
+      "marks": 1,
+      "option_a": "",
+      "option_b": "",
+      "option_c": "",
+      "option_d": "",
+      "correct_answer": "TRUE",
+      "answer_text": "",
+      "type_data": {},
+      "tested_topics": [],
+      "local_id": "u0"
+     },
+     {
+      "question_order": 2,
+      "section_key": "",
+      "marks_override": 1,
+      "question_text": "Say hello.",
+      "question_type": "SHORT",
+      "difficulty_level": "MEDIUM",
+      "marks": 1,
+      "option_a": "",
+      "option_b": "",
+      "option_c": "",
+      "option_d": "",
+      "correct_answer": "",
+      "answer_text": "Hello",
+      "type_data": {},
+      "tested_topics": [],
+      "local_id": "u1"
+     }
+    ]
+   }
+  }
+ ]
+}

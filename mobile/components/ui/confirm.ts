@@ -1,4 +1,4 @@
-import { Alert } from 'react-native';
+import { Alert, Platform } from 'react-native';
 
 interface ConfirmOptions {
   title: string;
@@ -9,6 +9,8 @@ interface ConfirmOptions {
 }
 
 // Promise wrapper around Alert so screens can `if (!(await confirm({...}))) return;`.
+// react-native-web's Alert.alert does nothing, so in a browser (the Expo web preview) the page's own confirm box is used;
+// without it the promise would never settle and the screen would stall.
 export function confirm({
   title,
   message,
@@ -16,6 +18,11 @@ export function confirm({
   cancelLabel = 'Cancel',
   destructive = false,
 }: ConfirmOptions): Promise<boolean> {
+  if (Platform.OS === 'web') {
+    return Promise.resolve(typeof window !== 'undefined' && typeof window.confirm === 'function'
+      ? window.confirm(message ? `${title}\n\n${message}` : title)
+      : false);
+  }
   return new Promise((resolve) => {
     Alert.alert(
       title,

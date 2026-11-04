@@ -67,15 +67,16 @@ export default function NavGroupList({ groups, onNavigate, pinned, onTogglePin, 
             const here = !!it.href && it.href === active;
             const tone = !it.href ? Colors.textTertiary : here ? Colors.primary : Colors.textSecondary;
             return (
-            <TouchableOpacity accessibilityRole="button"
-              key={`${group.name}:${it.webPath}`}
-              style={[styles.row, here && styles.rowHere]}
-              disabled={!it.href}
-              onPress={() => { if (!it.href) return; onNavigate?.(it); router.push(it.href as Href); }}
-            >
-              <Icon name={itemIcon(it.webPath)} size={20} color={tone} />
-              <Text style={[styles.rowText, styles.rowName, here && styles.rowTextHere, !it.href && styles.disabled]}>{it.name}</Text>
-              {!it.href && <Text style={styles.soon}>Soon</Text>}
+            // The star is a sibling of the row button: a button inside a button is invalid HTML on web.
+            <View key={`${group.name}:${it.webPath}`} style={[styles.row, here && styles.rowHere]}>
+              <TouchableOpacity accessibilityRole="button" style={styles.rowMain}
+                disabled={!it.href}
+                onPress={() => { if (!it.href) return; onNavigate?.(it); router.push(it.href as Href); }}
+              >
+                <Icon name={itemIcon(it.webPath)} size={20} color={tone} />
+                <Text style={[styles.rowText, styles.rowName, here && styles.rowTextHere, !it.href && styles.disabled]}>{it.name}</Text>
+                {!it.href && <Text style={styles.soon}>Soon</Text>}
+              </TouchableOpacity>
               {it.href && onTogglePin ? (
                 <TouchableOpacity accessibilityRole="button" hitSlop={8} style={styles.star}
                   accessibilityLabel={pinned?.includes(it.webPath) ? `Unpin ${it.name}` : `Pin ${it.name}`}
@@ -83,7 +84,7 @@ export default function NavGroupList({ groups, onNavigate, pinned, onTogglePin, 
                   <Icon name={pinned?.includes(it.webPath) ? 'star' : 'star-outline'} size={20} color={pinned?.includes(it.webPath) ? Colors.warning : Colors.textTertiary} />
                 </TouchableOpacity>
               ) : null}
-            </TouchableOpacity>
+            </View>
             );
           }) : null}
         </View>
@@ -99,7 +100,8 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', minHeight: 44, paddingHorizontal: Spacing.md },
   headerLeft: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
   headerTitle: { fontSize: FontSize.xs, fontWeight: '600', color: Colors.textSecondary, textTransform: 'uppercase' },
-  row: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md, paddingHorizontal: Spacing.md, paddingVertical: Spacing.md },
+  row: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md, paddingHorizontal: Spacing.md },
+  rowMain: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: Spacing.md, paddingVertical: Spacing.md },
   rowHere: { backgroundColor: Colors.infoLight },
   rowText: { fontSize: FontSize.md, color: Colors.text },
   rowTextHere: { color: Colors.primary, fontWeight: '600' },

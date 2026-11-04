@@ -14,6 +14,8 @@ export interface SelectOption<V extends string | number = string | number> {
 
 interface SelectProps<V extends string | number> {
   label?: string;
+  // Read out by screen readers when the field has no visible label ("Partner of left item 2: Water").
+  hiddenLabel?: string;
   value: V | null | undefined;
   options: SelectOption<V>[];
   onChange: (value: V) => void;
@@ -29,6 +31,7 @@ interface SelectProps<V extends string | number> {
 // student lists scroll and look the same on every device.
 export default function Select<V extends string | number>({
   label,
+  hiddenLabel,
   value,
   options,
   onChange,
@@ -53,7 +56,7 @@ export default function Select<V extends string | number>({
         disabled={disabled}
         onPress={() => setOpen(true)}
         accessibilityRole="button"
-        accessibilityLabel={`${label ?? 'Select'}: ${selected ? selected.label : placeholder}`}
+        accessibilityLabel={`${label ?? hiddenLabel ?? 'Select'}: ${selected ? selected.label : placeholder}`}
         accessibilityHint="Opens a list to choose from"
         accessibilityState={{ disabled: !!disabled }}
       >

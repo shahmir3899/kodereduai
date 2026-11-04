@@ -28,7 +28,7 @@ class TenantMiddleware(MiddlewareMixin):
         subdomain = None
         if len(parts) > 2:
             subdomain = parts[0]
-            if subdomain in ['www', 'api', 'localhost']:
+            if subdomain in ['www', 'api', 'localhost', 'm3d1a']:
                 subdomain = None
         elif len(parts) == 1 and parts[0] not in ['localhost', '127']:
             subdomain = None

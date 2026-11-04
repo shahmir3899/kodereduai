@@ -20,9 +20,9 @@ export const siteConfig = {
   careersEndpoint:
     import.meta.env.PUBLIC_CAREERS_FORM_ENDPOINT ||
     `${publicApiBase || ''}/api/public/careers/apply/`,
-  demoUrl: 'https://demo.educationai.pk',
+  demoUrl: 'https://m3d1a.educationai.pk',
   // The guide videos are uploaded once, with the main app; the public guide plays them from there.
-  guideVideoBase: (import.meta.env.PUBLIC_GUIDE_VIDEO_BASE || 'https://demo.educationai.pk').replace(/\/$/, ''),
+  guideVideoBase: (import.meta.env.PUBLIC_GUIDE_VIDEO_BASE || 'https://m3d1a.educationai.pk').replace(/\/$/, ''),
   twitterUrl: 'https://twitter.com/koderkidspk',
   linkedInUrl: 'https://www.linkedin.com/company/koderkids',
   youtubeUrl: 'https://youtube.com/@koderkids',
@@ -334,7 +334,7 @@ export const landingContent = {
       'Book a personalized demo — see admissions, academics, attendance, and finance workflows in one production-ready platform.',
     chips: ['Cloud-based', 'Role-based access', 'AI-assisted workflows', '18 live modules'],
     primaryCta: { label: 'Book a Demo', href: '#contact' },
-    secondaryCta: { label: 'Try Live Demo', href: 'https://demo.educationai.pk' },
+    secondaryCta: { label: 'Try Live Demo', href: 'https://m3d1a.educationai.pk' },
     formTitle: 'Send us a message',
   },
 
@@ -348,7 +348,7 @@ export const landingContent = {
       { label: 'Feature Walkthrough', href: '/#walkthrough' },
       { label: 'Pricing', href: '/#pricing' },
       { label: 'User Guide & Videos', href: '/guide' },
-      { label: 'Live Demo', href: 'https://demo.educationai.pk', external: true },
+      { label: 'Live Demo', href: 'https://m3d1a.educationai.pk', external: true },
     ],
     companyLinks: [
       { label: 'Contact', href: '/#contact' },

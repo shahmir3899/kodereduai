@@ -13,13 +13,15 @@ interface BottomSheetProps {
 export default function BottomSheet({ visible, onClose, title, children }: BottomSheetProps) {
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose} accessibilityViewIsModal>
-      <Pressable style={styles.backdrop} onPress={onClose} accessibilityRole="button" accessibilityLabel="Close">
-        <Pressable style={styles.sheet} accessible={false}>
+      {/* The close tap-area is a sibling of the sheet: wrapped around it, every button in the sheet sat inside a button on web. */}
+      <View style={styles.backdrop}>
+        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityRole="button" accessibilityLabel="Close" />
+        <View style={styles.sheet}>
           <View style={styles.handle} />
           {title ? <Text style={styles.title}>{title}</Text> : null}
           {children}
-        </Pressable>
-      </Pressable>
+        </View>
+      </View>
     </Modal>
   );
 }

@@ -1,13 +1,44 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { resolve } from 'path'
+import fs from 'fs'
+
+// Guide videos live outside the app (repo media/guide, hosted on the media subdomain in production) so they never
+// bloat the build. In dev, serve that folder at /guide so recording and previewing work with no env set up.
+const MEDIA_DIR = resolve(__dirname, '../media/guide')
+const TYPES = { '.mp4': 'video/mp4', '.vtt': 'text/vtt', '.jpg': 'image/jpeg' }
+const serveGuideMedia = () => ({
+  name: 'serve-guide-media',
+  configureServer(server) {
+    server.middlewares.use('/guide', (req, res, next) => {
+      const name = decodeURIComponent((req.url || '').split('?')[0]).replace(/^\/+/, '')
+      const file = resolve(MEDIA_DIR, name)
+      if (!file.startsWith(MEDIA_DIR) || !fs.existsSync(file) || !fs.statSync(file).isFile()) return next()
+      const size = fs.statSync(file).size
+      const ext = file.slice(file.lastIndexOf('.'))
+      res.setHeader('Content-Type', TYPES[ext] || 'application/octet-stream')
+      res.setHeader('Accept-Ranges', 'bytes')
+      const m = /bytes=(\d*)-(\d*)/.exec(req.headers.range || '')
+      if (!m) {
+        res.setHeader('Content-Length', size)
+        return fs.createReadStream(file).pipe(res)
+      }
+      const start = m[1] ? Number(m[1]) : size - Number(m[2])
+      const end = m[1] && m[2] ? Math.min(Number(m[2]), size - 1) : size - 1
+      res.statusCode = 206
+      res.setHeader('Content-Range', `bytes ${start}-${end}/${size}`)
+      res.setHeader('Content-Length', end - start + 1)
+      return fs.createReadStream(file, { start, end }).pipe(res)
+    })
+  },
+})
 
 // https://vite.dev/config/
 // Unified single-entry build that dynamically loads school/portal/static apps
 // The root index.html detects subdomain client-side and imports the appropriate app
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), serveGuideMedia()],
   build: {
     rollupOptions: {
       input: {

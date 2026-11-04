@@ -1,7 +1,7 @@
 import {
-  addQuestion, allocatedMarks, assignSection, autoDistribution, buildAutosavePayload, buildEnsurePayload, countIn, dropSection,
+  isLockedStatus, addQuestion, addToSection, applyOverused, OVERUSED_AT, pickedFromQuestion, reuseLine, structureMismatch, allocatedMarks, isFull, moveInSection, slotLine, assignSection, autoDistribution, buildAutosavePayload, buildEnsurePayload, countIn, dropSection,
   emptyPaperForm, hydrateStructure, isChoice, makeDivider, makeSection, marksOf, moveQuestion, moveSection, orderForSave,
-  paperFileName, paperTone, paperTotal, pickedFromPaperRow, reconcileNote, removeQuestion, serializeStructure, setChoice,
+  validateSetup, paperToForm, paperFileName, paperTone, paperTotal, pickedFromPaperRow, reconcileNote, removeQuestion, serializeStructure, setChoice,
   setSlotsCounted, setSlotsShown, sortPapers, statusSteps, totalMarks, validatePaper, type Paper, type PickedQuestion,
 } from '../services/paperBuilder';
 import type { Question } from '../services/questionBank';
@@ -98,6 +98,9 @@ describe('questions in sections', () => {
     expect(paperTotal([mk(1, '')], sections)).toBe(5);
     expect(reconcileNote([mk(1, '')], sections)).toBe('The sections add up to 5 marks; the questions chosen add up to 1.');
     expect(reconcileNote([mk(1, '')], [])).toBeNull();
+    // The typed Total Marks is checked against the sections too.
+    expect(reconcileNote([1, 2, 3, 4, 5].map((n) => mk(n, '')), sections, '100')).toBe('Total Marks says 100; the sections add up to 5.');
+    expect(reconcileNote([1, 2, 3, 4, 5].map((n) => mk(n, '')), sections, '5')).toBeNull();
     expect(reconcileNote([1, 2, 3, 4, 5].map((n) => mk(n, '')), sections)).toBeNull();
   });
 });
@@ -125,16 +128,19 @@ describe('validation and payloads', () => {
     expect(validatePaper(base, [{ ...picked[0], sectionKey: 'a' }, { ...picked[1], sectionKey: 'a' }, { ...picked[0], question: 9, sectionKey: 'a' }], [ok])).toMatch(/holds 3/);
     expect(validatePaper(base, picked, [makeDivider(0)])).toBeNull();
   });
-  it('builds the draft payload with structure and the total', () => {
-    const e = buildEnsurePayload({ ...base, instructions: ' Answer all ' }, picked, []);
-    expect(e).toEqual({ paper_title: 'Term 1', class_obj: 5, subject: 4, instructions: 'Answer all', render_options: { answer_lines: false }, duration_minutes: 60, total_marks: 6, structure: [] });
+  it('builds the draft payload with structure and the typed total, as the web does', () => {
+    // Instructions go as typed (the web does not trim) and total_marks is the typed Total Marks, not a sum.
+    const e = buildEnsurePayload({ ...base, instructions: ' Answer all ', totalMarks: '6' }, picked, []);
+    expect(e).toEqual({ paper_title: 'Term 1', class_obj: 5, subject: 4, instructions: ' Answer all ', render_options: { answer_lines: false }, duration_minutes: 60, total_marks: 6, structure: [] });
+    expect(buildEnsurePayload({ ...base, totalMarks: '' }, picked, [])).not.toHaveProperty('total_marks');
+    expect(buildEnsurePayload({ ...base, totalMarks: '0' }, picked, [])).not.toHaveProperty('total_marks');
     // The exam is optional; answer lines is a print option the web keeps in render_options.
     const withExam = buildEnsurePayload({ ...base, exam: 9, answerLines: true }, picked, []);
     expect(withExam).toMatchObject({ exam: 9, render_options: { answer_lines: true } });
     expect(e).not.toHaveProperty('exam');
     expect(buildEnsurePayload({ ...base, duration: '' }, picked, [])).not.toHaveProperty('duration_minutes');
     const withSections = buildEnsurePayload(base, picked, [makeSection(0, { key: 'a', slotsShown: 2, marksPerQuestion: 5 })]);
-    expect(withSections.total_marks).toBe(10);
+    expect(withSections.total_marks).toBe(100);
     expect(withSections.structure).toHaveLength(1);
   });
   it('autosaves questions in order with their section and marks change', () => {
@@ -142,7 +148,7 @@ describe('validation and payloads', () => {
     const p = buildAutosavePayload(base, [{ ...picked[0], sectionKey: '' }, { ...picked[1], sectionKey: 'a' }], sections);
     expect(p.manual_questions).toEqual([
       { question_id: 2, question_order: 1, section_key: 'a', marks_override: 4 },
-      { question_id: 1, question_order: 2, section_key: '', marks_override: null },
+      { question_id: 1, question_order: 2, section_key: '', marks_override: 2 },
     ]);
   });
   it('puts a non-draft paper back to draft for the edit and restores its status after', () => {
@@ -165,5 +171,76 @@ describe('saved papers', () => {
     expect(['DRAFT', 'READY', 'PUBLISHED'].map(paperTone)).toEqual(['neutral', 'info', 'success']);
     const p = (id: number, created: string): Paper => ({ id, paper_title: 'a', total_marks: 1, status: 'DRAFT', class_obj: 1, subject: 1, created_at: created });
     expect(sortPapers([p(1, '2026-01-01'), p(2, '2026-03-01')]).map((x) => x.id)).toEqual([2, 1]);
+  });
+
+  it('checks the Setup step on its own, including Total Marks', () => {
+    expect(validateSetup(base)).toBeNull();
+    expect(validateSetup({ ...base, title: ' ' })).toBe('Enter the paper title.');
+    expect(validateSetup({ ...base, classObj: null })).toBe('Choose the class.');
+    expect(validateSetup({ ...base, totalMarks: '0' })).toBe('Total marks must be a number above zero.');
+    expect(validateSetup({ ...base, totalMarks: 'abc' })).toBe('Total marks must be a number above zero.');
+    expect(validateSetup({ ...base, totalMarks: '' })).toBeNull();
+  });
+  it('reads the saved Total Marks back into the form, defaulting to 100', () => {
+    const p = { id: 1, paper_title: 'T', class_obj: 5, subject: 4, status: 'DRAFT', total_marks: 40 } as unknown as Parameters<typeof paperToForm>[0];
+    expect(paperToForm(p).totalMarks).toBe('40');
+    expect(paperToForm({ ...p, total_marks: null } as never).totalMarks).toBe('100');
+  });
+
+  it('puts a question into a section with that section marks and knows when it is full', () => {
+    const sec = makeSection(0, { key: 'a', slotsShown: 2, marksPerQuestion: 3 });
+    let picked: PickedQuestion[] = [];
+    picked = addToSection(picked, q(1, 3), sec);
+    expect(picked[0]).toMatchObject({ sectionKey: 'a', override: '' });
+    expect(isFull(sec, picked)).toBe(false);
+    picked = addToSection(picked, q(2, 1), sec);
+    expect(picked[1]).toMatchObject({ sectionKey: 'a', override: '3' });
+    expect(marksOf(picked[1])).toBe(3);
+    expect(isFull(sec, picked)).toBe(true);
+    expect(isFull(makeDivider(0), picked)).toBe(false);
+  });
+  it('moves a question only among the questions of its own section', () => {
+    const mkp = (id: number, sectionKey: string): PickedQuestion => ({ ...addQuestion([], q(id, 1))[0], sectionKey });
+    const picked = [mkp(1, 'a'), mkp(2, 'b'), mkp(3, 'a'), mkp(4, 'b')];
+    expect(moveInSection(picked, 3, -1).map((p) => p.question)).toEqual([3, 2, 1, 4]);
+    expect(moveInSection(picked, 1, -1)).toBe(picked);
+    expect(moveInSection(picked, 4, 1)).toBe(picked);
+    expect(moveInSection(picked, 99, 1)).toBe(picked);
+  });
+  it('describes the slots of a section', () => {
+    const sec = makeSection(0, { key: 'a', slotsShown: 5, slotsCounted: 3, marksPerQuestion: 1 });
+    expect(slotLine(sec, [])).toBe('1 mark each · 0 of 5 · attempt any 3');
+    expect(slotLine({ ...sec, slotsCounted: 5, marksPerQuestion: 2 }, [])).toBe('2 marks each · 0 of 5');
+  });
+
+  it('warns, without blocking, when the sections and the typed total disagree', () => {
+    const sections = [makeSection(0, { key: 'a', slotsShown: 5, marksPerQuestion: 1 })];
+    expect(structureMismatch(sections, '100')).toBe("Allocated marks (5) don't match the paper's total marks (100). Continue to Add Questions anyway?");
+    expect(structureMismatch(sections, '5')).toBeNull();
+    // Nothing to compare with no sections, and a blank or zero total never warns.
+    expect(structureMismatch([], '100')).toBeNull();
+    expect(structureMismatch(sections, '')).toBeNull();
+    expect(structureMismatch(sections, '0')).toBeNull();
+    expect(structureMismatch([makeDivider(0)], '100')).toBeNull();
+  });
+  it('flags questions used in several papers, from the bank list or from a saved paper', () => {
+    expect(OVERUSED_AT).toBe(3);
+    expect(reuseLine(2)).toBeNull();
+    expect(reuseLine(undefined)).toBeNull();
+    expect(reuseLine(3)).toBe('Used in 3 papers already');
+    expect(pickedFromQuestion({ ...q(1, 2), paper_use_count: 4 }).useCount).toBe(4);
+    expect(pickedFromQuestion(q(2, 2)).useCount).toBe(0);
+    const picked = [pickedFromQuestion(q(1, 2)), pickedFromQuestion(q(2, 2))];
+    expect(applyOverused(picked, [{ question_id: 2, paper_use_count: 5 }]).map((p) => p.useCount)).toEqual([0, 5]);
+    expect(applyOverused(picked, undefined)).toBe(picked);
+    expect(applyOverused(picked, [])).toBe(picked);
+  });
+
+  it('locks any paper that is not a draft, as the web does', () => {
+    expect(isLockedStatus('DRAFT')).toBe(false);
+    expect(isLockedStatus(null)).toBe(false);
+    expect(isLockedStatus(undefined)).toBe(false);
+    expect(isLockedStatus('READY')).toBe(true);
+    expect(isLockedStatus('PUBLISHED')).toBe(true);
   });
 });

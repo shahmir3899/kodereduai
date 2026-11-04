@@ -92,3 +92,6 @@ infra/waha/sessions/
 # web-demo-video scratch output
 .demo-out/
 scripts/demo-videos/audio/
+
+# zips built for uploading media/guide to the media host
+media/_upload/

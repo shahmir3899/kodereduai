@@ -1,3 +1,4 @@
+import { plainText } from '../../services/richText';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, ScrollView, FlatList, TouchableOpacity, StyleSheet } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
@@ -303,7 +304,7 @@ function BankPicker({ visible, subject, excluded, onClose, onAttach }: {
             const on = ids.has(q.id);
             return (
               <TouchableOpacity accessibilityRole="button" accessibilityState={{ selected: on }} style={[styles.pick, on && styles.picked]} onPress={() => setChosen((cs) => (on ? cs.filter((c) => c.id !== q.id) : [...cs, q]))}>
-                <Text style={styles.text} numberOfLines={2}>{on ? '✓ ' : ''}{q.question_text}</Text>
+                <Text style={styles.text} numberOfLines={2}>{on ? '✓ ' : ''}{plainText(q.question_text)}</Text>
                 <Text style={styles.sub}>{typeLabel(q.question_type)}</Text>
               </TouchableOpacity>
             );

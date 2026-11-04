@@ -1,0 +1,87 @@
+{
+ "about": "Inputs the question-text editor may be given and the HTML the web editor (richEditorCore.js) returns for them. The mobile editor bundle must return the same.",
+ "cases": [
+  {
+   "name": "plain",
+   "html": "<p>Hello world</p>",
+   "expected": "<p>Hello world</p>"
+  },
+  {
+   "name": "marks",
+   "html": "<p><strong>bold</strong> <em>italic</em> <s>strike</s> <u>underline</u> <code>code</code></p>",
+   "expected": "<p><strong>bold</strong> <em>italic</em> <s>strike</s> <u>underline</u> <code>code</code></p>"
+  },
+  {
+   "name": "lists",
+   "html": "<ul><li><p>one</p></li><li><p>two</p></li></ul><ol><li><p>a</p></li></ol>",
+   "expected": "<ul><li><p>one</p></li><li><p>two</p></li></ul><ol><li><p>a</p></li></ol>"
+  },
+  {
+   "name": "heading-quote",
+   "html": "<h2>Title</h2><blockquote><p>quoted</p></blockquote>",
+   "expected": "<h2>Title</h2><blockquote><p>quoted</p></blockquote>"
+  },
+  {
+   "name": "sub-sup",
+   "html": "<p>H<sub>2</sub>O and x<sup>2</sup></p>",
+   "expected": "<p>H<sub>2</sub>O and x<sup>2</sup></p>"
+  },
+  {
+   "name": "table",
+   "html": "<table><tbody><tr><th>A</th><th>B</th></tr><tr><td>1</td><td>2</td></tr></tbody></table>",
+   "expected": "<table style=\"min-width: 50px;\"><colgroup><col style=\"min-width: 25px;\"><col style=\"min-width: 25px;\"></colgroup><tbody><tr><th colspan=\"1\" rowspan=\"1\"><p>A</p></th><th colspan=\"1\" rowspan=\"1\"><p>B</p></th></tr><tr><td colspan=\"1\" rowspan=\"1\"><p>1</p></td><td colspan=\"1\" rowspan=\"1\"><p>2</p></td></tr></tbody></table>"
+  },
+  {
+   "name": "math",
+   "html": "<p>Area <span data-type=\"inlineMath\" data-latex=\"x^2\"></span> and $y$</p>",
+   "expected": "<p>Area <span data-latex=\"x^2\" data-evaluate=\"no\" data-display=\"no\" data-type=\"inlineMath\">$x^2$</span> and $y$</p>"
+  },
+  {
+   "name": "link",
+   "html": "<p><a href=\"https://example.com\">site</a></p>",
+   "expected": "<p><a target=\"_blank\" rel=\"noopener noreferrer nofollow\" href=\"https://example.com\">site</a></p>"
+  },
+  {
+   "name": "urdu",
+   "html": "<p>پانی کا فارمولا لکھیں۔</p>",
+   "expected": "<p>پانی کا فارمولا لکھیں۔</p>"
+  },
+  {
+   "name": "hardbreak",
+   "html": "<p>line one<br>line two</p>",
+   "expected": "<p>line one<br>line two</p>"
+  },
+  {
+   "name": "empty",
+   "html": "<p></p>",
+   "expected": "<p></p>"
+  },
+  {
+   "name": "code-block",
+   "html": "<pre><code>a = 1</code></pre>",
+   "expected": "<pre><code>a = 1</code></pre>"
+  },
+  {
+   "name": "underline-link-mixed",
+   "html": "<p><u>under</u> and <a href=\"https://example.com\">site</a> and <strong><u>both</u></strong></p>",
+   "expected": "<p><u>under</u> and <a target=\"_blank\" rel=\"noopener noreferrer nofollow\" href=\"https://example.com\">site</a> and <strong><u>both</u></strong></p>"
+  }
+ ],
+ "wrap": [
+  {
+   "inner": "<p>Hello</p>",
+   "language": "en",
+   "wrapped": "<div dir=\"ltr\" lang=\"en\" class=\"\"><p>Hello</p></div>"
+  },
+  {
+   "inner": "<p>پانی</p>",
+   "language": "ur",
+   "wrapped": "<div dir=\"rtl\" lang=\"ur\" class=\"font-rtl\"><p>پانی</p></div>"
+  },
+  {
+   "inner": "<p>x</p>",
+   "language": "ar",
+   "wrapped": "<div dir=\"rtl\" lang=\"ar\" class=\"font-rtl\"><p>x</p></div>"
+  }
+ ]
+}

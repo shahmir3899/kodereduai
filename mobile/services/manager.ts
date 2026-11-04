@@ -1,3 +1,4 @@
+import { plainText } from './richText';
 import type { NavGroup } from '../navigation/navConfig';
 import type { TimetableEntry } from './teacher';
 import { listOf } from './academicYear';
@@ -44,7 +45,7 @@ export interface QuestionDto {
 export function questionRow(q: QuestionDto): ContentRow {
   return {
     id: q.id,
-    title: clip(q.question_text) || 'Question',
+    title: clip(plainText(q.question_text)) || 'Question',
     subtitle: join(q.subject_name, label(q.question_type), q.marks != null ? `${q.marks} marks` : ''),
     pill: label(q.difficulty_level) || undefined,
   };

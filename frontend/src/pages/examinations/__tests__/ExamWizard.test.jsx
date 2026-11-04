@@ -47,11 +47,12 @@ vi.mock('../../../services/api', () => ({
 
 // Class 1 has 3 subjects, Class 2 has 1 — the max (3) drives the required
 // date-range length once both classes are selected.
+// In a year with sections the wizard keys subjects by session class, so each row carries both ids.
 const ALL_CLASS_SUBJECTS = [
-  { id: 1, class_obj: 1, subject: 201, subject_name: 'Mathematics', subject_code: 'MATH' },
-  { id: 2, class_obj: 1, subject: 202, subject_name: 'English', subject_code: 'ENG' },
-  { id: 3, class_obj: 1, subject: 203, subject_name: 'Science', subject_code: 'SCI' },
-  { id: 4, class_obj: 2, subject: 201, subject_name: 'Mathematics', subject_code: 'MATH' },
+  { id: 1, class_obj: 1, session_class: 1, subject: 201, subject_name: 'Mathematics', subject_code: 'MATH' },
+  { id: 2, class_obj: 1, session_class: 1, subject: 202, subject_name: 'English', subject_code: 'ENG' },
+  { id: 3, class_obj: 1, session_class: 1, subject: 203, subject_name: 'Science', subject_code: 'SCI' },
+  { id: 4, class_obj: 2, session_class: 2, subject: 201, subject_name: 'Mathematics', subject_code: 'MATH' },
 ]
 
 async function fillStep1(user, { startDate = '2026-05-01', endDate = '2026-05-01' } = {}) {
@@ -127,9 +128,10 @@ describe('ExamWizard', () => {
     mockGetExamTypes.mockResolvedValue({ data: [{ id: 5, name: 'Mid-Term', weight: 50 }] })
     mockGetAllClassSubjects.mockResolvedValue({ data: ALL_CLASS_SUBJECTS })
     mockUseSessionClasses.mockReturnValue({
+      // A year with sections lists session classes (one unit per section), labelled "<display_name> - <section>".
       sessionClasses: [
-        { id: 1, class_obj: 1 },
-        { id: 2, class_obj: 2 },
+        { id: 1, class_obj: 1, display_name: 'Class 1', section: 'A' },
+        { id: 2, class_obj: 2, display_name: 'Class 2', section: 'B' },
       ],
     })
     mockWizardCreateExamGroup.mockResolvedValue({
@@ -156,7 +158,7 @@ describe('ExamWizard', () => {
 
   describe('Step 2 — class list scoped to the selected academic year', () => {
     it('excludes a master class with no session class in the selected academic year', async () => {
-      mockUseSessionClasses.mockReturnValue({ sessionClasses: [{ id: 1, class_obj: 1 }] })
+      mockUseSessionClasses.mockReturnValue({ sessionClasses: [{ id: 1, class_obj: 1, display_name: 'Class 1', section: 'A' }] })
       const user = userEvent.setup()
       await advanceToStep2(user)
 
@@ -179,8 +181,8 @@ describe('ExamWizard', () => {
       // underlying master class's own `name` field.
       mockUseSessionClasses.mockReturnValue({
         sessionClasses: [
-          { id: 1, class_obj: 1, display_name: 'Junior 1' },
-          { id: 2, class_obj: 2 },
+          { id: 1, class_obj: 1, display_name: 'Junior 1', section: 'A' },
+          { id: 2, class_obj: 2, display_name: 'Class 2', section: 'B' },
         ],
       })
       const user = userEvent.setup()
@@ -418,15 +420,16 @@ describe('ExamWizard', () => {
         expect(mockWizardCreateExamGroup).toHaveBeenCalledTimes(1)
       })
       const payload = mockWizardCreateExamGroup.mock.calls[0][0]
+      // In a year with sections the units are session classes, so the payload is keyed by session_class_id.
       const subjectIdsByClass = Object.fromEntries(
-        payload.class_subjects.map(cs => [cs.class_id, [...cs.subject_ids].sort((a, b) => a - b)])
+        payload.class_subjects.map(cs => [cs.session_class_id, [...cs.subject_ids].sort((a, b) => a - b)])
       )
       expect(subjectIdsByClass).toEqual({ 1: [201, 202, 203], 2: [201] })
       expect(payload.date_sheet).toEqual(
         expect.arrayContaining([
-          expect.objectContaining({ class_id: 1, subject_id: 201, exam_date: '2026-05-01' }),
-          expect.objectContaining({ class_id: 1, subject_id: 202, exam_date: '2026-05-02' }),
-          expect.objectContaining({ class_id: 2, subject_id: 201, exam_date: '2026-05-01' }),
+          expect.objectContaining({ session_class_id: 1, subject_id: 201, exam_date: '2026-05-01' }),
+          expect.objectContaining({ session_class_id: 1, subject_id: 202, exam_date: '2026-05-02' }),
+          expect.objectContaining({ session_class_id: 2, subject_id: 201, exam_date: '2026-05-01' }),
         ]),
       )
       expect(payload.date_sheet).toHaveLength(3)

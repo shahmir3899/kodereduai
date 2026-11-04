@@ -4,6 +4,8 @@
 // (multiple choice, short, long, essay, true/false, fill in the blank, matching), curriculum topic
 // tags, and pictures on the question, the options and the answer.
 
+import { isBlankHtml } from './richText';
+
 export const QUESTION_TYPES = [
   { value: 'MCQ', label: 'Multiple choice' }, { value: 'SHORT', label: 'Short answer' }, { value: 'LONG', label: 'Long answer' },
   { value: 'ESSAY', label: 'Essay' }, { value: 'TRUE_FALSE', label: 'True / False' }, { value: 'FILL_BLANK', label: 'Fill in the blank' },
@@ -18,7 +20,7 @@ export const BLOOM_LEVELS = [
   { value: 'analyze', label: 'Analyze' }, { value: 'evaluate', label: 'Evaluate' }, { value: 'create', label: 'Create' },
 ] as const;
 
-export interface MatchingData { left_items?: string[]; right_items?: string[]; pairs?: Array<{ left: number; right: number }>; accepted_answers?: string[] }
+export interface MatchingData { items?: string[]; left_items?: string[]; right_items?: string[]; pairs?: Array<{ left: number; right: number }>; accepted_answers?: string[] }
 
 export interface Question {
   id: number;
@@ -38,6 +40,8 @@ export interface Question {
   answer_text?: string;
   type_data?: MatchingData;
   tested_topics?: Array<number | { id: number }>;
+  // How many papers already use this question (the server counts them).
+  paper_use_count?: number;
   question_image_url?: string | null;
   option_a_image_url?: string | null;
   option_b_image_url?: string | null;
@@ -62,6 +66,8 @@ export interface QuestionForm {
   d: string;
   correct: string;
   answer: string;
+  // Fill in the blank: one entry per blank, as the web's composer collects them.
+  blanks: string[];
   topics: number[];
   // Matching: two columns of items and, for each left item, the index of its right partner.
   left: string[];
@@ -70,7 +76,7 @@ export interface QuestionForm {
 }
 
 export const emptyQuestionForm = (): QuestionForm => ({
-  subject: null, type: 'SHORT', text: '', marks: '1', difficulty: 'MEDIUM', bloom: null, a: '', b: '', c: '', d: '', correct: '', answer: '',
+  subject: null, type: 'SHORT', text: '', marks: '1', difficulty: 'MEDIUM', bloom: null, a: '', b: '', c: '', d: '', correct: '', answer: '', blanks: [''],
   topics: [], left: ['', ''], right: ['', ''], pairs: [null, null],
 });
 
@@ -84,8 +90,8 @@ export function questionToForm(q: Question): QuestionForm {
     subject: q.subject, type: q.question_type, text: q.question_text, marks: String(Number(q.marks)), difficulty: q.difficulty_level,
     bloom: q.bloom_level ?? null, a: q.option_a ?? '', b: q.option_b ?? '', c: q.option_c ?? '', d: q.option_d ?? '',
     correct: q.correct_answer ?? '',
-    // Fill in the blank keeps its accepted answers in type_data, shown comma separated.
-    answer: q.question_type === 'FILL_BLANK' && td.accepted_answers?.length ? td.accepted_answers.join(', ') : q.answer_text ?? '',
+    answer: q.answer_text ?? '',
+    blanks: q.question_type === 'FILL_BLANK' ? (td.items?.length ? td.items : td.accepted_answers?.length ? td.accepted_answers : ['']) : [''],
     topics: (q.tested_topics ?? []).map(idOf),
     left, right: td.right_items?.length ? td.right_items : ['', ''], pairs,
   };
@@ -97,7 +103,7 @@ const filled = (items: string[]) => items.map((v, i) => ({ v: v.trim(), i })).fi
 
 export function validateQuestion(f: QuestionForm): string | null {
   if (!f.subject) return 'Choose the subject.';
-  if (!f.text.trim()) return 'Write the question.';
+  if (isBlankHtml(f.text)) return 'Write the question.';
   if (!(Number(f.marks) > 0) || !Number.isFinite(Number(f.marks))) return 'Marks must be a number above zero.';
   if (f.type === 'MCQ') {
     if (!f.a.trim() || !f.b.trim()) return 'A multiple choice question needs at least options A and B.';
@@ -151,7 +157,9 @@ export function buildQuestionPayload(f: QuestionForm) {
     return { ...base, type_data: { left_items: filled(f.left).map((x) => x.v), right_items: filled(f.right).map((x) => x.v), pairs: matchingPairs(f) } };
   }
   if (f.type === 'FILL_BLANK') {
-    return { ...base, correct_answer: '', type_data: { accepted_answers: f.answer.split(',').map((s) => s.trim()).filter(Boolean) } };
+    // As the web saves it: the blanks go in type_data twice (items = what is printed, accepted_answers = what grading reads).
+    const items = f.blanks.map((b) => b.trim()).filter(Boolean);
+    return { ...base, correct_answer: '', answer_text: '', type_data: { items, accepted_answers: items } };
   }
   return base;
 }

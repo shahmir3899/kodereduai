@@ -1,6 +1,7 @@
 import { render } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter } from 'react-router-dom'
+import * as ToastModule from '../components/Toast'
 
 // Minimal AuthContext mock
 import { createContext, useContext } from 'react'
@@ -23,6 +24,14 @@ function MockAuthProvider({ children, user }) {
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }
 
+// Pages call useToast(), which needs the real provider the app mounts at its root. Tests that replace the Toast module with
+// their own useToast mock have no provider to mount, so those get a plain pass-through.
+function ToastHost({ children }) {
+  let Provider = null
+  try { Provider = ToastModule.ToastProvider } catch { Provider = null }
+  return Provider ? <Provider>{children}</Provider> : <>{children}</>
+}
+
 export function useAuth() {
   return useContext(AuthContext)
 }
@@ -43,7 +52,8 @@ export function renderWithProviders(ui, { route = '/', user, queryClient } = {})
       <QueryClientProvider client={testQueryClient}>
         <MemoryRouter initialEntries={[route]}>
           <MockAuthProvider user={user}>
-            {children}
+            {/* Pages call useToast(); the real app provides it at the root. */}
+            <ToastHost>{children}</ToastHost>
           </MockAuthProvider>
         </MemoryRouter>
       </QueryClientProvider>

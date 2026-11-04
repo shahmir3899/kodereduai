@@ -487,3 +487,29 @@ class TestStudentReportSections:
     def test_no_class_teacher_row_when_unassigned(self, seed_data, seed_sections):
         data = self._generator(seed_data, seed_sections['a_students'][0]).get_data()
         assert not any(label == 'Class Teacher' for label, _ in data['student_info_rows'])
+
+    def _assessment(self, seed_data, student, month, remark):
+        from examinations.models import StudentTermAssessment
+
+        return StudentTermAssessment.objects.create(
+            school=seed_data['school_a'], student=student, academic_year=seed_data['academic_year'],
+            month=month, listening=4, teacher_remark=remark,
+        )
+
+    def test_assessment_falls_back_to_latest_earlier_month(self, seed_data, seed_sections):
+        student = seed_sections['a_students'][0]
+        self._assessment(seed_data, student, 7, 'July remark')
+        self._assessment(seed_data, student, 8, 'August remark')
+        self._assessment(seed_data, student, 11, 'November remark')  # later than the period: never used
+        data = self._generator(seed_data, student).get_data()  # period is September
+        assert data['assessment_exists']
+        assert data['teacher_remark'] == 'August remark'
+        assert data['assessment_label'] == 'Aug 2025'
+
+    def test_assessment_in_period_is_not_labelled(self, seed_data, seed_sections):
+        student = seed_sections['a_students'][0]
+        self._assessment(seed_data, student, 8, 'August remark')
+        self._assessment(seed_data, student, 9, 'September remark')
+        data = self._generator(seed_data, student).get_data()
+        assert data['teacher_remark'] == 'September remark'
+        assert data['assessment_label'] == ''

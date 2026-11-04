@@ -120,7 +120,8 @@ class SchoolCreateSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 "Subdomain can only contain letters, numbers, and hyphens."
             )
-        if value in ['www', 'api', 'admin', 'app', 'dashboard']:
+        # m3d1a is the static media host (guide videos), never a school.
+        if value in ['www', 'api', 'admin', 'app', 'dashboard', 'm3d1a']:
             raise serializers.ValidationError(
                 "This subdomain is reserved."
             )

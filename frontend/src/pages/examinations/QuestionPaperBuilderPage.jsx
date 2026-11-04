@@ -19,7 +19,13 @@ import { getClassSelectorScope, getResolvedMasterClassId } from '../../utils/cla
 import ImageCapturePaperTab from './ImageCapturePaperTab'
 import ManualEntryPaperTab from './ManualEntryPaperTab'
 import BankFillSource from './BankFillSource'
-import PaperStructureBuilder, { calculateAllocatedMarks } from './PaperStructureBuilder'
+import PaperStructureBuilder from './PaperStructureBuilder'
+import {
+  buildManualAutosaveQuestions,
+  buildPaperEnsurePayload,
+  hydrateStructure,
+  marksMismatch,
+} from './paperPayload'
 
 const RENDER_OPTIONS_DEFAULT = { answer_lines: false }
 
@@ -49,53 +55,6 @@ const WIZARD_STEPS = [
   { id: 2, label: 'Paper Structure' },
   { id: 3, label: 'Add Questions' },
 ]
-
-function hydrateStructure(structure) {
-  if (!Array.isArray(structure)) return []
-  return structure.map((section, index) => {
-    const localId = `sec_${section?.key || index}_${index}`
-    const key = section?.key || `sec_${Date.now()}_${index}`
-
-    if (section?.type === 'divider') {
-      return { local_id: localId, key, type: 'divider', title: section?.title || 'Section' }
-    }
-
-    const slotsShown = Number(section?.slots_shown ?? 0) || 0
-    const slotsCounted = Number(section?.slots_counted ?? slotsShown) || 0
-    const isChoice = slotsCounted !== slotsShown
-    return {
-      local_id: localId,
-      key,
-      type: 'question_group',
-      title: section?.title || `Q${index + 1}`,
-      instruction: section?.instruction || '',
-      instructionIsAuto: false,
-      question_type: section?.question_type || 'SHORT',
-      slots_shown: slotsShown,
-      slots_counted: slotsCounted,
-      marks_per_question: Number(section?.marks_per_question ?? 0) || 0,
-      is_choice: isChoice,
-    }
-  })
-}
-
-function serializeStructure(sections) {
-  return (sections || []).map((section) => {
-    if (section.type === 'divider') {
-      return { key: section.key, type: 'divider', title: section.title }
-    }
-    return {
-      key: section.key,
-      type: 'question_group',
-      title: section.title,
-      instruction: section.instruction,
-      question_type: section.question_type,
-      slots_shown: section.slots_shown,
-      slots_counted: section.slots_counted,
-      marks_per_question: section.marks_per_question,
-    }
-  })
-}
 
 const MANUAL_DRAFT_DEFAULT = {
   paper_title: '',
@@ -162,60 +121,6 @@ function toQuestionDraft(paperQuestion) {
       D: paperQuestion.option_d || '',
     },
   }
-}
-
-/**
- * Flattens draft questions into autosave order: sections in structure order first
- * (preserving each question's relative position within its section), then any
- * questions not linked to a section key.
- */
-function orderQuestionsForAutosave(questions, structure) {
-  const orderedKeys = (structure || [])
-    .filter((section) => section.type !== 'divider')
-    .map((section) => section.key)
-    .filter(Boolean)
-  const bySection = new Map()
-  const unassigned = []
-
-  ;(questions || []).forEach((question) => {
-    const sectionKey = question.section_key || ''
-    if (sectionKey && orderedKeys.includes(sectionKey)) {
-      if (!bySection.has(sectionKey)) bySection.set(sectionKey, [])
-      bySection.get(sectionKey).push(question)
-    } else {
-      unassigned.push(question)
-    }
-  })
-
-  const ordered = []
-  orderedKeys.forEach((key) => {
-    ordered.push(...(bySection.get(key) || []))
-  })
-  ordered.push(...unassigned)
-  return ordered
-}
-
-function buildManualAutosaveQuestions(questions, structure = []) {
-  return orderQuestionsForAutosave(questions, structure).map((question, index) => ({
-    question_id: question.question_id || undefined,
-    question_order: index + 1,
-    section_key: question.section_key || '',
-    marks_override: Number(question.marks_override ?? question.marks ?? 1) || 1,
-    question_text: question.question_text || '',
-    question_type: question.question_type || 'SHORT',
-    difficulty_level: question.difficulty_level || 'MEDIUM',
-    bloom_level: question.bloom_level || undefined,
-    marks: Number(question.marks ?? 1) || 1,
-    option_a: question.options?.A || '',
-    option_b: question.options?.B || '',
-    option_c: question.options?.C || '',
-    option_d: question.options?.D || '',
-    correct_answer: question.correct_answer || '',
-    answer_text: question.answer_text || '',
-    type_data: question.type_data || {},
-    tested_topics: Array.isArray(question.tested_topics) ? question.tested_topics : [],
-    local_id: question.local_id,
-  }))
 }
 
 /**
@@ -686,29 +591,21 @@ export default function QuestionPaperBuilderPage() {
     }
   }, [activeTab, draftId, recoveryKey, recoveryPayload])
 
-  const buildEnsurePayload = useCallback(() => {
-    const payload = {
-      class_obj: resolvedClassObj || undefined,
-      subject: paperMetadata.subject || undefined,
-      exam: paperMetadata.exam || undefined,
-      paper_title: (manualDraft.paper_title || '').trim() || undefined,
-      instructions: manualDraft.instructions || '',
-      structure: serializeStructure(structure),
-      render_options: renderOptions,
-    }
-
-    const parsedTotal = Number(manualDraft.total_marks)
-    if (!Number.isNaN(parsedTotal) && parsedTotal > 0) {
-      payload.total_marks = parsedTotal
-    }
-
-    const parsedDuration = parseInt(manualDraft.duration_minutes, 10)
-    if (!Number.isNaN(parsedDuration) && parsedDuration > 0) {
-      payload.duration_minutes = parsedDuration
-    }
-
-    return payload
-  }, [manualDraft.duration_minutes, manualDraft.instructions, manualDraft.paper_title, manualDraft.total_marks, paperMetadata.exam, paperMetadata.subject, renderOptions, resolvedClassObj, structure])
+  // Dependencies stay field by field (not the whole draft): the draft's questions change on every keystroke
+  // and this callback re-arms the ensure/autosave effects.
+  const buildEnsurePayload = useCallback(() => buildPaperEnsurePayload({
+    classObj: resolvedClassObj,
+    subject: paperMetadata.subject,
+    exam: paperMetadata.exam,
+    manualDraft: {
+      paper_title: manualDraft.paper_title,
+      instructions: manualDraft.instructions,
+      total_marks: manualDraft.total_marks,
+      duration_minutes: manualDraft.duration_minutes,
+    },
+    structure,
+    renderOptions,
+  }), [manualDraft.duration_minutes, manualDraft.instructions, manualDraft.paper_title, manualDraft.total_marks, paperMetadata.exam, paperMetadata.subject, renderOptions, resolvedClassObj, structure])
 
   const buildAutosavePayload = useCallback(() => {
     const payload = buildEnsurePayload()
@@ -797,14 +694,12 @@ export default function QuestionPaperBuilderPage() {
   // Marks mismatch is advisory only — never a hard block — but it should at least
   // interrupt the "Next" click with a confirmation instead of silently sailing past it.
   const handleGoToAddQuestions = useCallback(async () => {
-    const allocated = calculateAllocatedMarks(structure)
-    const total = Number(manualDraft.total_marks) || 0
-    const isMismatched = total > 0 && allocated !== total
+    const mismatch = marksMismatch(structure, manualDraft.total_marks)
 
-    if (isMismatched) {
+    if (mismatch) {
       const proceed = await confirm({
         title: 'Marks mismatch',
-        message: `Allocated marks (${allocated}) don't match the paper's total marks (${total}). Continue to Add Questions anyway?`,
+        message: `Allocated marks (${mismatch.allocated}) don't match the paper's total marks (${mismatch.total}). Continue to Add Questions anyway?`,
         variant: 'warning',
         confirmLabel: 'Continue',
       })

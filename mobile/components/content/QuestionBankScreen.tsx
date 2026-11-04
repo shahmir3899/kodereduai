@@ -1,6 +1,5 @@
 import React, { useMemo, useState } from 'react';
 import { View, Text, FlatList, ActivityIndicator, TouchableOpacity, StyleSheet, type RefreshControlProps } from 'react-native';
-import * as ImagePicker from 'expo-image-picker';
 import { useAuth } from '../../contexts/AuthContext';
 import { useMasterClasses } from '../../hooks/useAcademicYear';
 import { useSubjectTags } from '../../hooks/useCurriculum';
@@ -12,7 +11,7 @@ import { useSubjectsList } from '../../hooks/useManager';
 import { useDebouncedValue } from '../../hooks/useDebouncedValue';
 import { useRefreshControl } from '../../hooks/useRefreshControl';
 import {
-  BLOOM_LEVELS, buildQuestionPayload, hasPicture, pictureProblem, slotsFor, type PictureSlot, DIFFICULTIES, difficultyTone, emptyQuestionForm, isEditableType, QUESTION_TYPES,
+  BLOOM_LEVELS, buildQuestionPayload, DIFFICULTIES, difficultyTone, emptyQuestionForm, isEditableType, QUESTION_TYPES,
   questionToForm, typeLabel, validateQuestion, type Question, type QuestionForm,
 } from '../../services/questionBank';
 import {
@@ -22,6 +21,11 @@ import { inventoryErrorMessage } from '../../services/inventory';
 import SearchBar from '../ui/SearchBar';
 import SegmentedTabs from '../ui/SegmentedTabs';
 import Select from '../ui/Select';
+import BlankFields from './BlankFields';
+import MatchingFields from './MatchingFields';
+import RichTextField from './RichTextField';
+import QuestionPictures from './QuestionPictures';
+import { plainText } from '../../services/richText';
 import Input from '../ui/Input';
 import Button from '../ui/Button';
 import Skeleton from '../ui/Skeleton';
@@ -72,7 +76,6 @@ export default function QuestionBankScreen() {
   const [topicClass, setTopicClass] = useState<number | null>(null);
   const books = useBooksForClassSubject(topicClass, form.subject);
   const [topicPicker, setTopicPicker] = useState(false);
-  const [pictureBusy, setPictureBusy] = useState<string | null>(null);
   const [tagIds, setTagIds] = useState<number[]>([]);
   const [tagSearch, setTagSearch] = useState('');
   const [verifying, setVerifying] = useState<number | null>(null);
@@ -112,46 +115,6 @@ export default function QuestionBankScreen() {
       setEditing(null);
     } catch (e) {
       setError(inventoryErrorMessage(e));
-    }
-  };
-
-  const addPicture = async (slot: PictureSlot) => {
-    if (!current) return;
-    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!perm.granted) return toast.error('Allow photo access in your phone settings.');
-    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.8 });
-    if (result.canceled || !result.assets?.[0]) return;
-    const asset = result.assets[0];
-    const problem = pictureProblem(asset.mimeType ?? 'image/jpeg', asset.fileSize);
-    if (problem) return toast.error(problem);
-    setPictureBusy(slot);
-    try {
-      const form = new FormData();
-      form.append('slot', slot);
-      form.append('file', { uri: asset.uri, name: asset.fileName ?? `${slot}.jpg`, type: asset.mimeType ?? 'image/jpeg' } as unknown as Blob);
-      const res = (await actions.uploadPicture.mutateAsync({ id: current.id, form })).data as Record<string, string>;
-      const field = Object.keys(res).find((k) => k.endsWith('_image_url'));
-      if (field) setEditing({ ...current, [field]: res[field] });
-      toast.success('Picture added.');
-    } catch (e) {
-      toast.error(inventoryErrorMessage(e, 'Could not upload the picture.'));
-    } finally {
-      setPictureBusy(null);
-    }
-  };
-
-  const dropPicture = async (slot: PictureSlot) => {
-    if (!current) return;
-    setPictureBusy(slot);
-    try {
-      await actions.removePicture.mutateAsync({ id: current.id, slot });
-      const field = slotsFor(current.question_type).find((x) => x.slot === slot)?.field;
-      if (field) setEditing({ ...current, [field]: null });
-      toast.success('Picture removed.');
-    } catch (e) {
-      toast.error(inventoryErrorMessage(e, 'Could not remove the picture.'));
-    } finally {
-      setPictureBusy(null);
     }
   };
 
@@ -248,7 +211,7 @@ export default function QuestionBankScreen() {
           const hit = useHits ? (q as unknown as { book_title?: string; chapter_title?: string; topic_title?: string }) : null;
           return (
           <TouchableOpacity accessibilityRole="button" style={styles.row} onPress={() => (useHits ? undefined : open(q))} disabled={useHits}>
-            <Text style={styles.text} numberOfLines={3}>{q.question_text}</Text>
+            <Text style={styles.text} numberOfLines={3}>{plainText(q.question_text)}</Text>
             {hit && hitContext(hit as never) ? <Text style={styles.sub}>{hitContext(hit as never)}</Text> : null}
             {ai ? (
               <View style={styles.meta}>
@@ -270,7 +233,7 @@ export default function QuestionBankScreen() {
         <Select label="Subject" searchable value={form.subject} onChange={(v) => set('subject', v)} placeholder="Choose a subject"
           options={(subjects.data ?? []).map((s) => ({ value: s.id, label: s.name }))} />
         <Select label="Type" value={form.type} onChange={(v) => set('type', v)} options={QUESTION_TYPES.map((t) => ({ value: t.value as string, label: t.label }))} />
-        <Input label="Question" value={form.text} onChangeText={(v) => set('text', v)} multiline style={styles.big} />
+        <RichTextField label="Question" value={form.text} onChange={(v) => set('text', v)} resetKey={current?.id ?? 'new'} />
         {form.type === 'MCQ' ? (
           <>
             <Input label="Option A" value={form.a} onChangeText={(v) => set('a', v)} />
@@ -283,47 +246,18 @@ export default function QuestionBankScreen() {
         ) : form.type === 'TRUE_FALSE' ? (
           <Select label="Answer" value={form.correct.toLowerCase()} onChange={(v) => set('correct', v)} placeholder="Choose"
             options={[{ value: 'true', label: 'True' }, { value: 'false', label: 'False' }]} />
-        ) : (
-          <Input label={form.type === 'FILL_BLANK' ? 'Accepted answer (optional)' : 'Short answer key (optional)'} value={form.correct} onChangeText={(v) => set('correct', v)} />
+        ) : form.type === 'FILL_BLANK' ? (
+          <BlankFields blanks={form.blanks} onChange={(next) => set('blanks', next)} />
+        ) : form.type === 'MATCHING' ? null : (
+          <Input label="Short answer key (optional)" value={form.correct} onChangeText={(v) => set('correct', v)} />
         )}
         {['SHORT', 'LONG', 'ESSAY'].includes(form.type) ? <Input label="Model answer (optional)" value={form.answer} onChangeText={(v) => set('answer', v)} multiline /> : null}
-        {form.type === 'MATCHING' ? (
-          <View style={styles.matching}>
-            <Text style={styles.sub}>Left column, then right column. Choose each left item's partner.</Text>
-            {form.left.map((l, i) => (
-              <View key={`l${i}`} style={styles.matchRow}>
-                <View style={styles.matchCol}><Input value={l} placeholder={`Left ${i + 1}`} onChangeText={(v) => set('left', form.left.map((x, j) => (j === i ? v : x)))} /></View>
-                <View style={styles.matchCol}>
-                  <Select value={form.pairs[i] ?? -1} placeholder="Partner" onChange={(v) => set('pairs', form.pairs.map((x, j) => (j === i ? (v === -1 ? null : v) : x)))}
-                    options={[{ value: -1, label: 'No partner' }, ...form.right.map((r, ri) => ({ value: ri, label: r.trim() || `Right ${ri + 1}` })).filter((o) => form.right[o.value].trim())]} />
-                </View>
-              </View>
-            ))}
-            {form.right.map((r, i) => (
-              <Input key={`r${i}`} value={r} placeholder={`Right ${i + 1}`} onChangeText={(v) => set('right', form.right.map((x, j) => (j === i ? v : x)))} />
-            ))}
-            <View style={styles.matchRow}>
-              <Button title="+ Left item" variant="ghost" size="sm" disabled={form.left.length >= 8} onPress={() => { set('left', [...form.left, '']); set('pairs', [...form.pairs, null]); }} />
-              <Button title="+ Right item" variant="ghost" size="sm" disabled={form.right.length >= 8} onPress={() => set('right', [...form.right, ''])} />
-            </View>
-          </View>
-        ) : null}
+        {form.type === 'MATCHING' ? <MatchingFields form={form} set={set} /> : null}
         <Select label="Class (to find the book topics)" searchable value={topicClass} onChange={setTopicClass} placeholder="Choose a class"
           options={(masterClasses.data ?? []).map((c) => ({ value: Number(c.id), label: String(c.name) }))} />
         <Button title={form.topics.length ? `Topics tagged: ${form.topics.length}` : 'Tag book topics'} variant="outline" size="sm" disabled={!topicClass || !form.subject} onPress={() => setTopicPicker(true)} />
         {form.topics.length ? <Text style={styles.sub}>{topicSummary(books.data ?? [], form.topics) || 'Topics from other books or classes are kept.'}</Text> : null}
-        {current ? (
-          <View style={styles.pictures}>
-            <Text style={styles.sub}>Pictures (JPEG, PNG or WebP, up to 5 MB)</Text>
-            {slotsFor(form.type).map((sl) => (
-              <View key={sl.slot} style={styles.matchRow}>
-                <Text style={[styles.sub, styles.pictureLabel]}>{sl.label}{hasPicture(current, sl.slot) ? ' ✓' : ''}</Text>
-                <Button title={hasPicture(current, sl.slot) ? 'Replace' : 'Add'} size="sm" variant="outline" onPress={() => addPicture(sl.slot)} loading={pictureBusy === sl.slot} disabled={pictureBusy !== null} />
-                {hasPicture(current, sl.slot) ? <Button title="Remove" size="sm" variant="ghost" onPress={() => dropPicture(sl.slot)} disabled={pictureBusy !== null} /> : null}
-              </View>
-            ))}
-          </View>
-        ) : <Text style={styles.sub}>Save the question first to add pictures.</Text>}
+        {current ? <QuestionPictures question={current} type={form.type} ensure={async () => current} onChange={(q) => setEditing(q)} /> : <Text style={styles.sub}>Save the question first to add pictures.</Text>}
         <View style={styles.pictures}>
           <Text style={styles.sub}>Tags (subject tags)</Text>
           {!form.subject ? <Text style={styles.sub}>Choose the subject to see its tags.</Text> : (
