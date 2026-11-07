@@ -1,6 +1,6 @@
 import { reportsApi } from '../services/api'
 
-function saveBlobAsFile(data, contentType, filename) {
+export function saveBlobAsFile(data, contentType, filename) {
   const url = window.URL.createObjectURL(new Blob([data], { type: contentType }))
   const link = document.createElement('a')
   link.href = url
@@ -30,4 +30,10 @@ export async function downloadGeneratedReport(reportId, filename = 'report.pdf')
 export async function downloadInstantReport(requestData, filename = 'report.pdf') {
   const response = await reportsApi.generateInstant(requestData)
   saveBlobAsFile(response.data, response.headers?.['content-type'] || 'application/pdf', filename)
+}
+
+/** Generates a report synchronously and returns its raw bytes without saving (for bundling into a zip). */
+export async function fetchInstantReport(requestData) {
+  const response = await reportsApi.generateInstant(requestData)
+  return response.data
 }

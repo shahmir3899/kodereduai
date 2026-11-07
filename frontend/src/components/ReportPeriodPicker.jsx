@@ -1,7 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 
+// Local calendar date, not toISOString(): month boundaries are built at local midnight, and in
+// UTC+5 that serialises one day early ("this month" reported 31 Oct - 29 Nov, adding an October block).
 function formatDate(d) {
-  return d.toISOString().slice(0, 10)
+  const p = (n) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
 }
 
 function currentMonthRange(offsetMonths = 0) {

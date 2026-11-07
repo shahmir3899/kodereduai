@@ -43,7 +43,7 @@ export default function AuthCardLayout({
 }) {
   const subdomainSchool = useSubdomainSchoolBranding()
 
-  const resolvedLogo = logo || subdomainSchool?.logo || '/Logo.jpeg'
+  const resolvedLogo = logo || subdomainSchool?.logo || '/logo-full.png'
   const resolvedTitle = title || subdomainSchool?.name || 'Education AI'
   const resolvedAddress = address ?? subdomainSchool?.address
   const resolvedEmail = email ?? subdomainSchool?.email
@@ -62,7 +62,7 @@ export default function AuthCardLayout({
           <img
             src={resolvedLogo}
             alt={resolvedTitle}
-            className="mx-auto mb-4 h-20 w-20 rounded-full border-2 border-blue-200 object-cover md:mx-0 md:mb-6 md:h-28 md:w-28 md:border-white/50"
+            className="mx-auto mb-4 h-20 w-20 rounded-full border-2 border-blue-200 bg-white object-cover md:mx-0 md:mb-6 md:h-28 md:w-28 md:border-white/50"
             onError={(e) => {
               // A dead school-logo URL shouldn't leave a broken-image icon on the login screen.
               e.target.style.display = 'none'

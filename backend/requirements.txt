@@ -66,6 +66,9 @@ django-celery-beat>=2.6.0
 # PDF Generation
 fpdf2>=2.8.0
 reportlab>=4.2.0
+# Urdu/Arabic shaping for reportlab (student report PDF)
+uharfbuzz>=0.39.0
+python-bidi>=0.6.0
 python-docx>=1.1.2
 
 # Excel Generation

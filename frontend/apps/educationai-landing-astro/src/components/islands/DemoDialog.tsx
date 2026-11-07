@@ -187,6 +187,7 @@ export default function DemoDialog() {
   return (
     <dialog
       ref={dialogRef}
+      dir="ltr"
       onCancel={handleClose}
       onClick={handleBackdropClick}
       className="bg-transparent p-0 max-w-none w-full h-full backdrop:bg-brand-dark/70 backdrop:backdrop-blur-sm"
@@ -213,16 +214,13 @@ export default function DemoDialog() {
                   <path d="M5 13l4 4L19 7"/>
                 </svg>
               </div>
-              <h3 className="font-display font-bold text-brand-dark text-lg">Request sent!</h3>
+              <h3 className="font-display font-bold text-brand-dark text-lg">
+                {visitorCredentialsSent ? 'Check your inbox' : 'Request received'}
+              </h3>
               <p className="text-brand-gray text-sm max-w-xs">
-                Your request has been emailed to the Education AI team. We&apos;ll confirm your demo slot within
-                1 business day.
-                {visitorCredentialsSent ? (
-                  <>
-                    {' '}
-                    Check your inbox for demo login instructions (sent automatically when enabled on our server).
-                  </>
-                ) : null}
+                {visitorCredentialsSent
+                  ? "We've emailed your demo login to the address you entered. If you don't see it in a few minutes, check your spam folder. Our team will also contact you within 1 business day to arrange your walkthrough."
+                  : "Thanks! Our team will contact you within 1 business day to arrange your demo."}
               </p>
               <button onClick={close} className="btn-primary mt-2">
                 Close
@@ -236,7 +234,7 @@ export default function DemoDialog() {
                   Schedule a personalised walkthrough
                 </h2>
                 <p className="text-sm text-brand-gray mt-1">
-                  We'll show you exactly the modules that matter for your school — live, in your data.
+                  We'll show you exactly the modules that matter for your school, in a ready-made demo school.
                 </p>
               </div>
 

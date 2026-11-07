@@ -20,7 +20,7 @@ export const siteConfig = {
   careersEndpoint:
     import.meta.env.PUBLIC_CAREERS_FORM_ENDPOINT ||
     `${publicApiBase || ''}/api/public/careers/apply/`,
-  demoUrl: 'https://m3d1a.educationai.pk',
+  demoUrl: 'https://demo.educationai.pk',
   // The guide videos are uploaded once, with the main app; the public guide plays them from there.
   guideVideoBase: (import.meta.env.PUBLIC_GUIDE_VIDEO_BASE || 'https://m3d1a.educationai.pk').replace(/\/$/, ''),
   twitterUrl: 'https://twitter.com/koderkidspk',
@@ -32,20 +32,20 @@ export const siteConfig = {
 export const landingContent = {
   /* SEO */
   // Titles over ~60 characters and descriptions over ~160 are cut off in Google results.
-  title: 'School Management Software in Pakistan | Education AI',
+  title: 'School Management Software & AI Agent | Education AI',
   description:
-    'Cloud school management software for Pakistan: attendance, fees, exams, timetable, HR and parent portal in one place. Book a free demo.',
+    'Cloud school management software and AI agent for Pakistan: attendance, fees, exams, timetable, HR and parent portal in one place. Book a free demo.',
 
   /* ── Hero ─────────────────────────────────────────── */
   hero: {
     label: 'EDUCATION AI',
-    heading: 'The School Operating System Powered by AI.',
+    heading: 'Run your whole school from one place, with an AI agent that does the admin work.',
     subheading:
       'Admissions, attendance, finance, academics, HR, transport, inventory — one cloud platform with AI-assisted workflows for every role.',
     primaryCta: { label: 'Book a Demo', href: '#contact' },
     secondaryCta: { label: 'See it in action', href: '#walkthrough' },
     dashboardImage: '/screens/dashboard-desktop.webp',
-    dashboardAlt: 'Education AI school dashboard overview',
+    dashboardAlt: 'Education AI dashboard showing daily attendance, fee collection against target and upcoming school events',
     /* Fallback metrics shown when live fetch is unavailable */
     metrics: {
       schools: '1,200+',
@@ -72,7 +72,7 @@ export const landingContent = {
         icon: 'brain',
         color: 'blue',
         title: 'AI Across Modules',
-        desc: 'Finance AI, Academics AI, Communication AI, and an OCR attendance pipeline.',
+        desc: 'Finance AI, Academics AI and Communication AI built into everyday school workflows.',
       },
       {
         icon: 'network',
@@ -97,6 +97,7 @@ export const landingContent = {
     slides: [
       {
         id: 'dashboard',
+        alt: 'Dashboard with an attendance ring, fee collection against target chart and upcoming school events',
         label: 'Dashboard',
         title: 'Your Whole School at a Glance',
         description:
@@ -112,6 +113,7 @@ export const landingContent = {
       },
       {
         id: 'attendance',
+        alt: 'Monthly academic calendar with holidays, exam periods and school events marked',
         label: 'Academic Calendar',
         title: 'Academic Calendar Planning & Tracking',
         description:
@@ -127,6 +129,7 @@ export const landingContent = {
       },
       {
         id: 'academics',
+        alt: 'Weekly drag-and-drop timetable with teacher and room clash warnings',
         label: 'Time table',
         title: 'Timetable & Lesson Plans',
         description:
@@ -142,6 +145,7 @@ export const landingContent = {
       },
       {
         id: 'finance',
+        alt: 'Fee ledger screen with fee types, due dates and a class-wise collection summary',
         label: 'Finance',
         title: 'Fee Ledger & Collection',
         description:
@@ -157,6 +161,7 @@ export const landingContent = {
       },
       {
         id: 'hr',
+        alt: 'Staff profile, payroll and leave management screen',
         label: 'HR & Staff',
         title: 'Staff, Salary & Leave',
         description:
@@ -172,6 +177,7 @@ export const landingContent = {
       },
       {
         id: 'exams',
+        alt: 'Marks entry and grade scale setup with printable student report cards',
         label: 'Exams',
         title: 'Marks, Grade Scales & Report Cards',
         description:
@@ -187,6 +193,7 @@ export const landingContent = {
       },
       {
         id: 'parents',
+        alt: 'Notification centre sending announcements to staff, students and parents with delivery status',
         label: 'Notifications',
         title: 'School Notifications & Alerts',
         description:
@@ -202,6 +209,7 @@ export const landingContent = {
       },
       {
         id: 'lms',
+        alt: 'Lesson plan editor showing topics, objectives and curriculum coverage by subject',
         label: 'Lesson Plans',
         title: 'Lesson Planning by Class & Subject',
         description:
@@ -217,6 +225,7 @@ export const landingContent = {
       },
       {
         id: 'settings',
+        alt: 'Multi-school settings with user role permissions and module toggles',
         label: 'Settings',
         title: 'Multi-School & Role Configuration',
         description:
@@ -273,7 +282,7 @@ export const landingContent = {
     label: 'PRICING',
     heading: 'Simple Per-Student Pricing',
     subheading:
-      'One plan. Every module. Pay only for the students you have. Annual billing saves 20%.',
+      'One plan. Every module. Pay only for the students you have. Priced in PKR. Annual billing saves 20%.',
     plans: [
       {
         tier: 'flat',
@@ -284,15 +293,15 @@ export const landingContent = {
         annualPrice: 'Rs 20 / student / month (billed annually)',
         features: [
           'Students, Classes & Bulk Import',
-          'AI Attendance Register OCR',
           'Academics, Timetable & Exams',
           'Finance, Fees & Payroll',
           'Parent Portal & Admissions CRM',
           'LMS, Transport, Hostel, Library & Inventory',
           'AI Paper Builder & AI Finance Assistant',
+          'Fee collection via Kuickpay',
           'Mobile App (Android)',
         ],
-        cta: 'Get Started',
+        cta: 'Book a Free Demo',
         highlight: true,
         accentClass: 'text-white',
         badgeBg: 'bg-white/15 text-white',
@@ -316,12 +325,12 @@ export const landingContent = {
       {
         icon: 'mobile',
         title: 'Mobile Ready',
-        desc: 'Native iOS and Android apps for parents and teachers.',
+        desc: 'Android app for parents and teachers.',
       },
       {
         icon: 'zap',
-        title: 'Cloud Infrastructure',
-        desc: 'Hosted on Supabase + Render — no on-premise setup required.',
+        title: 'Secure Cloud Hosting',
+        desc: 'Accessible from anywhere, on any device. No on-premise setup required.',
       },
     ] as const,
   },
@@ -332,9 +341,9 @@ export const landingContent = {
     heading: 'Ready to run a fully connected school?',
     subheading:
       'Book a personalized demo — see admissions, academics, attendance, and finance workflows in one production-ready platform.',
-    chips: ['Cloud-based', 'Role-based access', 'AI-assisted workflows', '18 live modules'],
+    chips: ['Cloud-based', 'Role-based access', 'AI-assisted workflows', '18 live modules', 'PKR pricing', 'Kuickpay fee collection', 'Urdu video guides'],
     primaryCta: { label: 'Book a Demo', href: '#contact' },
-    secondaryCta: { label: 'Try Live Demo', href: 'https://m3d1a.educationai.pk' },
+    secondaryCta: { label: 'Try Live Demo', href: 'https://demo.educationai.pk' },
     formTitle: 'Send us a message',
   },
 
@@ -348,7 +357,7 @@ export const landingContent = {
       { label: 'Feature Walkthrough', href: '/#walkthrough' },
       { label: 'Pricing', href: '/#pricing' },
       { label: 'User Guide & Videos', href: '/guide' },
-      { label: 'Live Demo', href: 'https://m3d1a.educationai.pk', external: true },
+      { label: 'Live Demo', href: 'https://demo.educationai.pk', external: true },
     ],
     companyLinks: [
       { label: 'Contact', href: '/#contact' },
@@ -360,7 +369,7 @@ export const landingContent = {
       { label: 'Terms of Service', href: '/terms', modalKey: 'terms' },
       { label: 'Support', href: '/support', modalKey: 'support' },
     ],
-    copyright: 'Education AI (a product of Koder Kids)',
+    copyright: 'Education AI, a product of Koder Kids Pvt Ltd',
   },
 };
 
@@ -369,12 +378,12 @@ export const faqContent = [
   {
     question: 'What is Education AI?',
     answer:
-      'Education AI is a cloud-based school operating system that brings admissions, AI-assisted attendance, academics, finance, HR, transport, library, hostel, and inventory management into a single platform designed for K-12 schools.',
+      'Education AI is a cloud-based school operating system that brings admissions, attendance, academics, finance, HR, transport, library, hostel, and inventory management into a single platform designed for K-12 schools.',
   },
   {
-    question: 'How does Education AI attendance work?',
+    question: 'How does attendance work in Education AI?',
     answer:
-      'Teachers photograph handwritten attendance registers. Education AI uses Google Cloud Vision OCR and an LLM to extract student names and present/absent marks from the image. Staff review the extracted data, confirm it, and the system saves the records without manual data entry.',
+      'Teachers mark attendance class by class on the web or the Android app. Admins see class-wise attendance analytics and risk flags, and parents can follow attendance in the parent portal.',
   },
   {
     question: 'Can Education AI manage multiple school branches?',
@@ -384,26 +393,31 @@ export const faqContent = [
   {
     question: 'What modules are included in Education AI?',
     answer:
-      'Education AI includes 18 modules: Admissions, Attendance (AI-powered), Academics, Examinations, Finance & Fees, HR & Payroll, Transport & GPS, Library, Hostel & Gate Passes, Inventory, LMS & Assignments, Parent Portal, Notifications, Reports, and more.',
+      'Education AI includes 18 modules: Admissions, Attendance, Academics, Examinations, Finance & Fees, HR & Payroll, Transport & GPS, Library, Hostel & Gate Passes, Inventory, LMS & Assignments, Parent Portal, Notifications, Reports, and more.',
   },
   {
     question: 'Is Education AI available on mobile?',
     answer:
-      'Yes. A React Native mobile app is available for iOS and Android, giving teachers, parents, and admins on-the-go access to attendance, notifications, fee status, and more.',
+      'Yes. An Android app is available, giving teachers, parents, and admins on-the-go access to attendance, notifications, fee status, and more.',
   },
   {
     question: 'How is school data kept secure?',
     answer:
-      'All data is encrypted in transit (TLS) and at rest. Role-based access control ensures users only see data relevant to their role. File storage is hosted on Supabase with private bucket policies. The platform is built following OWASP security best practices.',
+      'All data is encrypted in transit (TLS) and at rest. Role-based access control ensures users only see data relevant to their role. Files are kept in private, access-controlled cloud storage. The platform is built following OWASP security best practices.',
   },
   {
     question: 'Can I try Education AI before committing?',
     answer:
-      'Yes. Book a live demo via the form on this page and our team will walk you through the platform with a fully seeded demo environment. You can also access the live demo at demo.educationai.pk.',
+      'Yes. Request a demo with the form on this page and we will email you login details for a ready-made demo school at demo.educationai.pk. Our team will also contact you to walk you through the platform.',
   },
   {
     question: 'How is Education AI pricing structured?',
     answer:
-      'Education AI offers three plans: Starter (PKR 6,000/month), Growth (PKR 8,000/month), and Enterprise (PKR 12,000/month). Annual billing gets a 10% discount on each plan.',
+      'Education AI has one all-inclusive plan with every module: Rs 25 per student per month, or Rs 20 per student per month when billed annually (20% less). There are no tiers and prices are in PKR.',
+  },
+  {
+    question: 'Is Education AI built for Pakistani schools?',
+    answer:
+      'Yes. Pricing is in PKR, parents can pay school fees through Kuickpay, and the video tutorials are available in both Urdu and English. The application interface itself is in English.',
   },
 ];

@@ -1,0 +1,204 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import Footer from '../../components/sections/Footer.astro';
+import DemoDialog from '../../components/islands/DemoDialog.tsx';
+import { siteConfig } from '../../content/landing';
+
+const siteUrl = Astro.site?.toString().replace(/\/$/, '') ?? siteConfig.siteUrl.replace(/\/$/, '');
+
+const title = 'اسکول مینجمنٹ سافٹ ویئر اور AI ایجنٹ | Education AI';
+const description =
+  'پاکستان کے اسکولوں کے لیے کلاؤڈ سافٹ ویئر: حاضری، فیس، امتحانات، ٹائم ٹیبل، عملہ اور والدین کا پورٹل ایک جگہ۔ مفت ڈیمو بک کریں۔';
+
+const pillars = [
+  { title: 'انتظامی کام خودکار', desc: 'فیس، بلنگ اور رپورٹس خود بخود تیار ہوں اور روزانہ گھنٹوں کی بچت ہو۔' },
+  { title: 'ہر شعبے میں AI', desc: 'فنانس AI، اکیڈمکس AI اور کمیونیکیشن AI روزمرہ کے کاموں میں شامل ہیں۔' },
+  { title: 'جڑا ہوا کیمپس', desc: 'والدین، اساتذہ اور منتظمین ایک ہی پلیٹ فارم پر، بکھرے ہوئے ٹولز کے بغیر۔' },
+  { title: 'بروقت معلومات', desc: 'حاضری کے خطرات اور فیس کی بے قاعدگیاں مسئلہ بننے سے پہلے نظر آ جائیں۔' },
+];
+
+const modules = [
+  'داخلے', 'حاضری', 'تعلیمی امور اور ٹائم ٹیبل', 'امتحانات اور رپورٹ کارڈ', 'فیس اور فنانس',
+  'عملہ اور تنخواہ', 'والدین کا پورٹل', 'ٹرانسپورٹ اور جی پی ایس', 'لائبریری', 'ہاسٹل', 'انوینٹری',
+];
+
+const pakistanPoints = [
+  'قیمت پاکستانی روپے میں',
+  'کوئیک پے کے ذریعے فیس کی وصولی',
+  'اردو اور انگریزی میں ویڈیو گائیڈز',
+  'اینڈرائیڈ موبائل ایپ',
+];
+
+const faqs = [
+  {
+    q: 'ایجوکیشن اے آئی کیا ہے؟',
+    a: 'یہ ایک کلاؤڈ پر مبنی اسکول مینجمنٹ پلیٹ فارم ہے جس میں داخلے، حاضری، تعلیمی امور، امتحانات، فیس، عملہ و تنخواہ، ٹرانسپورٹ، لائبریری، ہاسٹل اور انوینٹری ایک جگہ دستیاب ہیں۔',
+  },
+  {
+    q: 'قیمت کیسے طے ہوتی ہے؟',
+    a: 'ایک ہی پلان ہے جس میں تمام ماڈیولز شامل ہیں: 25 روپے فی طالب علم ماہانہ، یا سالانہ ادائیگی پر 20 روپے فی طالب علم ماہانہ (20٪ کم)۔ کوئی الگ درجے یا پوشیدہ فیس نہیں۔',
+  },
+  {
+    q: 'کیا والدین فیس کوئیک پے سے ادا کر سکتے ہیں؟',
+    a: 'جی ہاں، والدین کوئیک پے کے ذریعے اسکول فیس ادا کر سکتے ہیں۔',
+  },
+  {
+    q: 'کیا ایپ اردو میں ہے؟',
+    a: 'ایپ کا انٹرفیس انگریزی میں ہے، لیکن ہر کام سکھانے کے لیے اردو اور انگریزی دونوں میں ویڈیو گائیڈز موجود ہیں۔',
+  },
+  {
+    q: 'کیا موبائل ایپ موجود ہے؟',
+    a: 'جی ہاں، اساتذہ اور والدین کے لیے اینڈرائیڈ ایپ دستیاب ہے۔',
+  },
+  {
+    q: 'میں ڈیمو کیسے دیکھ سکتا ہوں؟',
+    a: 'اس صفحے پر ڈیمو فارم بھریں۔ آپ کو ای میل پر ڈیمو اسکول کی لاگ اِن تفصیل مل جائے گی اور ہماری ٹیم بھی آپ سے رابطہ کرے گی۔',
+  },
+];
+
+const jsonLd = [
+  {
+    '@context': 'https://schema.org',
+    '@type': 'WebPage',
+    '@id': `${siteUrl}/ur/#webpage`,
+    url: `${siteUrl}/ur/`,
+    name: title,
+    description,
+    inLanguage: 'ur',
+    isPartOf: { '@id': `${siteUrl}/#website` },
+  },
+  {
+    '@context': 'https://schema.org',
+    '@type': 'FAQPage',
+    inLanguage: 'ur',
+    mainEntity: faqs.map((f) => ({
+      '@type': 'Question',
+      name: f.q,
+      acceptedAnswer: { '@type': 'Answer', text: f.a },
+    })),
+  },
+];
+
+const openDemo = "document.dispatchEvent(new CustomEvent('open-demo-dialog'))";
+---
+
+<BaseLayout
+  title={title}
+  description={description}
+  canonical="/ur/"
+  ogImage="/og-home.jpg"
+  lang="ur"
+  alternates={[{ lang: 'en', href: '/' }, { lang: 'ur', href: '/ur/' }, { lang: 'x-default', href: '/' }]}
+  jsonLd={jsonLd}
+>
+  <div style="font-family: 'Noto Naskh Arabic', 'Noto Nastaliq Urdu', serif; line-height: 2;">
+    <header class="bg-brand-light/90 border-b border-gray-200/60">
+      <div class="flex items-center justify-between h-16 px-6 max-w-6xl mx-auto">
+        <a href="/ur/" class="flex items-center gap-2.5">
+          <img src="/logo-mark.png" alt="Education AI logo" class="h-8 w-8 rounded-md object-contain" width="32" height="32" />
+          <span class="font-display font-semibold text-brand-dark tracking-tight" dir="ltr">Education <span class="text-primary">AI</span></span>
+        </a>
+        <div class="flex items-center gap-3">
+          <a href="/" hreflang="en" lang="en" dir="ltr" class="text-sm font-medium text-brand-gray hover:text-brand-dark">English</a>
+          <button type="button" onclick={openDemo} class="text-sm font-semibold text-white bg-primary rounded-full px-4 py-2 hover:bg-primary-600 transition-colors cursor-pointer border-0">
+            ڈیمو بک کریں
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <main id="main-content">
+      <!-- Hero -->
+      <section class="bg-brand-dark py-20 lg:py-28">
+        <div class="max-w-4xl mx-auto px-6 text-center">
+          <h1 class="text-3xl sm:text-5xl font-bold text-white leading-[1.5] mb-6">
+            اپنا پورا اسکول ایک جگہ سے چلائیں، ایک AI ایجنٹ کے ساتھ جو انتظامی کام سنبھالے۔
+          </h1>
+          <p class="text-brand-gray text-lg max-w-2xl mx-auto mb-10">
+            داخلے، حاضری، فیس، امتحانات، عملہ، ٹرانسپورٹ اور انوینٹری، سب ایک کلاؤڈ پلیٹ فارم پر، ہر کردار کے لیے۔
+          </p>
+          <div class="flex flex-wrap justify-center gap-3">
+            <button type="button" onclick={openDemo} class="inline-flex items-center px-6 py-3 bg-primary text-white font-semibold rounded-full hover:bg-primary-600 transition-colors border-0 cursor-pointer">
+              ڈیمو بک کریں
+            </button>
+            <a href={siteConfig.demoUrl} target="_blank" rel="noreferrer noopener" class="inline-flex items-center px-6 py-3 bg-white/10 text-white font-semibold rounded-full border border-white/20 hover:bg-white/15 transition-colors">
+              لائیو ڈیمو دیکھیں
+            </a>
+          </div>
+        </div>
+      </section>
+
+      <!-- Pillars -->
+      <section class="py-20 bg-brand-light">
+        <div class="max-w-6xl mx-auto px-6">
+          <h2 class="text-3xl font-bold text-brand-dark text-center mb-12">ایک پلیٹ فارم، ہر کام</h2>
+          <div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            {pillars.map((p) => (
+              <div class="bg-white rounded-2xl border border-gray-200 p-6">
+                <h3 class="font-bold text-brand-dark mb-2">{p.title}</h3>
+                <p class="text-sm text-brand-gray">{p.desc}</p>
+              </div>
+            ))}
+          </div>
+          <div class="mt-12 flex flex-wrap justify-center gap-2">
+            {modules.map((m) => (
+              <span class="text-sm px-4 py-1 rounded-full bg-white border border-gray-200 text-brand-dark">{m}</span>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <!-- Pakistan + pricing -->
+      <section class="py-20 bg-white">
+        <div class="max-w-5xl mx-auto px-6 grid lg:grid-cols-2 gap-10 items-start">
+          <div>
+            <h2 class="text-3xl font-bold text-brand-dark mb-6">پاکستانی اسکولوں کے لیے</h2>
+            <ul class="space-y-3 text-brand-gray">
+              {pakistanPoints.map((pt) => (
+                <li class="flex items-start gap-3"><span class="text-primary font-bold">✓</span><span>{pt}</span></li>
+              ))}
+            </ul>
+          </div>
+          <div class="rounded-2xl bg-brand-dark p-8 text-white">
+            <div class="text-sm font-bold text-primary-300 mb-1">ایک سادہ پلان، تمام ماڈیولز</div>
+            <p class="text-3xl font-bold mb-1">25 روپے فی طالب علم ماہانہ</p>
+            <p class="text-sm text-gray-300 mb-6">سالانہ ادائیگی پر 20 روپے فی طالب علم ماہانہ (20٪ کم)</p>
+            <button type="button" onclick={openDemo} class="block w-full text-center text-sm font-semibold rounded-full py-3 px-6 bg-primary text-white hover:bg-primary-600 transition-colors border-0 cursor-pointer">
+              مفت ڈیمو بک کریں
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- FAQ -->
+      <section class="py-20 bg-brand-light">
+        <div class="max-w-3xl mx-auto px-6">
+          <h2 class="text-3xl font-bold text-brand-dark text-center mb-10">اکثر پوچھے جانے والے سوالات</h2>
+          <div class="space-y-3">
+            {faqs.map((f) => (
+              <details class="border border-gray-200 rounded-2xl bg-white overflow-hidden">
+                <summary class="px-6 py-4 cursor-pointer font-semibold text-brand-dark">{f.q}</summary>
+                <p class="px-6 pb-5 pt-2 text-brand-gray text-sm border-t border-gray-100">{f.a}</p>
+              </details>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <!-- Final CTA -->
+      <section class="py-20 bg-brand-dark text-center">
+        <div class="max-w-2xl mx-auto px-6">
+          <h2 class="text-3xl font-bold text-white mb-4">اپنے اسکول کو ایک ہی نظام پر لائیں</h2>
+          <p class="text-brand-gray mb-8">ڈیمو کی درخواست دیں، ہم آپ کو ای میل پر ڈیمو اسکول کی لاگ اِن تفصیل بھیجیں گے۔</p>
+          <button type="button" onclick={openDemo} class="inline-flex items-center px-6 py-3 bg-primary text-white font-semibold rounded-full hover:bg-primary-600 transition-colors border-0 cursor-pointer">
+            ڈیمو بک کریں
+          </button>
+        </div>
+      </section>
+    </main>
+
+    <Footer />
+  </div>
+
+  <DemoDialog client:idle />
+</BaseLayout>

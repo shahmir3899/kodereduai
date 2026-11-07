@@ -56,7 +56,7 @@ const allLabels = walkthrough.slides.map((s) => s.label);
         </div>
         <img
           src={firstSlide.image}
-          alt={`${firstSlide.label} screen — ${firstSlide.title}`}
+          alt={firstSlide.alt ?? `${firstSlide.label} screen — ${firstSlide.title}`}
           class="w-full block"
           loading="lazy"
           decoding="async"

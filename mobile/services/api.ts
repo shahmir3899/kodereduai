@@ -827,6 +827,8 @@ export const examinationsApi = {
   uploadPaperImage: (form: FormData) => api.post('/api/examinations/paper-uploads/upload-image/', form, { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 120000 }),
   getPaperUpload: (id: number) => api.get(`/api/examinations/paper-uploads/${id}/`, { timeout: 30000 }),
   confirmPaperUpload: (id: number, data: object) => api.post(`/api/examinations/paper-uploads/${id}/confirm/`, data),
+  // Progress of a paper whose page count was declared up front; once every page is read it also carries the joined paper.
+  getPaperGroupStatus: (groupId: string, totalPages: number) => api.get('/api/examinations/paper-uploads/group-status/', { params: { group_id: groupId, total_pages: totalPages }, timeout: 30000 }),
   uploadWorksheetImage: (form: FormData) => api.post('/api/examinations/worksheet-uploads/upload-image/', form, { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 120000 }),
   getWorksheetUpload: (id: number) => api.get(`/api/examinations/worksheet-uploads/${id}/`, { timeout: 30000 }),
   // Search by meaning (needs a class), and subject tags on a question (add_tag, with remove). Same calls as the web.

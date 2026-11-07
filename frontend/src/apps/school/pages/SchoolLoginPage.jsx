@@ -67,7 +67,7 @@ export default function SchoolLoginPage({ school }) {
     <AuthCardLayout
       title={school?.name || 'School'}
       subtitle="Sign in to access your school"
-      logo={school?.logo || '/Logo.jpeg'}
+      logo={school?.logo || '/logo-full.png'}
       address={school?.address || ''}
       email={school?.contact_email || ''}
     >

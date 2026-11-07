@@ -52,242 +52,127 @@ vi.mock('../PaperStructureBuilder', () => ({
   }),
 }))
 
-vi.mock('../QuestionSlotEditor', () => ({
-  default: function MockQuestionSlotEditor({ draftData }) {
-    return <div data-testid="questions-count">{draftData.questions.length}</div>
-  },
-}))
+
+
 
 const mockUploadPaperImage = vi.fn()
-const mockGetPaperUpload = vi.fn()
+const mockGetPaperGroupStatus = vi.fn()
 
 vi.mock('../../../services/api', () => ({
   questionPaperApi: {
     uploadPaperImage: (...args) => mockUploadPaperImage(...args),
-    getPaperUpload: (...args) => mockGetPaperUpload(...args),
+    getPaperGroupStatus: (...args) => mockGetPaperGroupStatus(...args),
   },
 }))
 
-function makeExtractedUpload({ id, groupId, pageNumber, sectionTitle, questionCount, marksPerQuestion = 1, headerOverrides = {} }) {
-  const questions = Array.from({ length: questionCount }, (_, i) => ({
-    question_text: `Page ${pageNumber} Q${i + 1}`,
-    question_type: 'MCQ',
-    marks: marksPerQuestion,
-    options: { A: 'a', B: 'b', C: 'c', D: 'd' },
-  }))
-  return {
-    data: {
-      id,
-      group_id: groupId,
-      page_number: pageNumber,
-      status: 'EXTRACTED',
-      error_message: '',
-      ai_extracted_json: {
-        header: { exam_title: 'Test Paper', detected_total_marks: 20, ...headerOverrides },
-        sections: [
-          {
-            title: sectionTitle,
-            instruction: null,
-            question_type_guess: 'MCQ',
-            marks_per_question: marksPerQuestion,
-            shown_count: questionCount,
-            counted_count: questionCount,
-            questions,
-          },
-        ],
-        questions,
-        computed_total_marks: questionCount * marksPerQuestion,
-      },
-    },
-  }
+const section = (title, type, n, extra = {}) => ({
+  title, instruction: null, question_type_guess: type, marks_per_question: 2, shown_count: n, counted_count: n,
+  questions: Array.from({ length: n }, (_, i) => ({ question_text: `${title} question ${i + 1}`, question_type: type, marks: 2, options: null, type_data: null, ...extra })),
+})
+
+const status = (pages, result = null) => ({
+  data: {
+    group_id: 'g', total_pages: pages.length, pages, missing_pages: [], failed_pages: [], extra_pages: [],
+    complete: pages.every((p) => p.status === 'EXTRACTED'), result,
+  },
+})
+const pageRow = (n, s = 'EXTRACTED') => ({ page_number: n, upload_id: n, status: s, error_message: '' })
+
+const result = {
+  header: { exam_title: 'Mid Term', class_label: 'FIFTH', subject_label: 'SS', detected_total_marks: 8, duration_label: '90 minutes' },
+  sections: [section('Objective', 'MCQ', 2), section('Short', 'SHORT', 2, { needs_review: true })],
+  marks_check: { detected: 8, computed: 8, matches: true },
+  low_confidence_count: 2,
 }
 
-async function uploadAFile() {
-  const user = userEvent.setup()
-  const fileInput = document.querySelector('input[type="file"]')
-  const file = new File(['fake-image-bytes'], 'paper.png', { type: 'image/png' })
-  await user.upload(fileInput, file)
+async function chooseCount(user, n) {
+  const input = screen.getByLabelText('Total pages')
+  await user.clear(input)
+  await user.type(input, String(n))
+  await user.click(screen.getByRole('button', { name: 'Continue' }))
 }
 
-describe('ImageCapturePaperTab multi-page sequential capture', () => {
+describe('ImageCapturePaperTab: declared page count, parallel upload, staged review', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    // Recovery snapshots are keyed by school/user id (fixed by the AuthContext mock
-    // above), so they'd otherwise leak between tests in this file.
     localStorage.clear()
   })
 
-  it('page 1 upload has no group_id; page 2 reuses the group_id returned from page 1', async () => {
-    mockUploadPaperImage
-      .mockResolvedValueOnce({ data: { id: 1, group_id: 'group-abc', page_number: 1 } })
-      .mockResolvedValueOnce({ data: { id: 2, group_id: 'group-abc', page_number: 2 } })
-    mockGetPaperUpload
-      .mockResolvedValueOnce(makeExtractedUpload({ id: 1, groupId: 'group-abc', pageNumber: 1, sectionTitle: 'Section 1', questionCount: 5 }))
-      .mockResolvedValueOnce(makeExtractedUpload({ id: 2, groupId: 'group-abc', pageNumber: 2, sectionTitle: 'Section 2', questionCount: 5 }))
-
-    const onApplyPrefill = vi.fn()
-    renderWithProviders(<ImageCapturePaperTab classId={1} subjectId={1} onApplyPrefill={onApplyPrefill} />)
-
-    await uploadAFile()
-    await waitFor(() => expect(screen.getByText('Page 1 ✓ 5 Qs')).toBeInTheDocument())
-
-    // First call: no group_id argument (4th positional arg undefined).
-    expect(mockUploadPaperImage.mock.calls[0][3]).toBeUndefined()
-
-    await userEvent.click(screen.getByRole('button', { name: '+ Add Page' }))
-    await uploadAFile()
-    await waitFor(() => expect(screen.getByText('Page 2 ✓ 5 Qs')).toBeInTheDocument())
-
-    // Second call: reuses the group_id from page 1's response.
-    expect(mockUploadPaperImage.mock.calls[1][3]).toBe('group-abc')
-  })
-
-  it('accumulates structure/questions across pages instead of replacing them', async () => {
-    mockUploadPaperImage
-      .mockResolvedValueOnce({ data: { id: 1, group_id: 'group-abc', page_number: 1 } })
-      .mockResolvedValueOnce({ data: { id: 2, group_id: 'group-abc', page_number: 2 } })
-    mockGetPaperUpload
-      .mockResolvedValueOnce(makeExtractedUpload({ id: 1, groupId: 'group-abc', pageNumber: 1, sectionTitle: 'Section 1', questionCount: 3 }))
-      .mockResolvedValueOnce(makeExtractedUpload({ id: 2, groupId: 'group-abc', pageNumber: 2, sectionTitle: 'Section 2', questionCount: 4 }))
-
+  it('asks for the page count first and shows one slot per declared page', async () => {
+    mockGetPaperGroupStatus.mockResolvedValue(status([pageRow(1, 'MISSING'), pageRow(2, 'MISSING'), pageRow(3, 'MISSING')]))
+    const user = userEvent.setup()
     renderWithProviders(<ImageCapturePaperTab classId={1} subjectId={1} onApplyPrefill={vi.fn()} />)
-
-    await uploadAFile()
-    await waitFor(() => expect(screen.getByTestId('structure-sections-count')).toHaveTextContent('1'))
-    expect(screen.getByTestId('questions-count')).toHaveTextContent('3')
-
-    await userEvent.click(screen.getByRole('button', { name: '+ Add Page' }))
-    await uploadAFile()
-
-    await waitFor(() => expect(screen.getByTestId('structure-sections-count')).toHaveTextContent('2'))
-    expect(screen.getByTestId('questions-count')).toHaveTextContent('7')
+    expect(screen.getByText('How many pages does the paper have?')).toBeInTheDocument()
+    await chooseCount(user, 3)
+    expect(await screen.findByLabelText('Page 3 image')).toBeInTheDocument()
+    expect(await screen.findByText((_, el) => el?.tagName === 'P' && /^0 of 3 pages read/.test(el.textContent))).toBeInTheDocument()
   })
 
-  it('marks-progress banner warns when captured marks are below the detected total', async () => {
-    mockUploadPaperImage.mockResolvedValueOnce({ data: { id: 1, group_id: 'group-abc', page_number: 1 } })
-    mockGetPaperUpload.mockResolvedValueOnce(
-      makeExtractedUpload({ id: 1, groupId: 'group-abc', pageNumber: 1, sectionTitle: 'Section 1', questionCount: 5, headerOverrides: { detected_total_marks: 20 } }),
-    )
+  it('uploads every page with the same client-made group id and its own page number, a few at a time', async () => {
+    mockGetPaperGroupStatus.mockResolvedValue(status([pageRow(1, 'MISSING'), pageRow(2, 'MISSING'), pageRow(3, 'MISSING'), pageRow(4, 'MISSING')]))
+    let release
+    const gate = new Promise((resolve) => { release = resolve })
+    mockUploadPaperImage.mockImplementation(() => gate.then(() => ({ data: {} })))
+    const user = userEvent.setup()
+    renderWithProviders(<ImageCapturePaperTab classId={5} subjectId={6} onApplyPrefill={vi.fn()} />)
+    await chooseCount(user, 4)
+    for (let n = 1; n <= 4; n += 1) {
+      await user.upload(await screen.findByLabelText(`Page ${n} image`), new File(['x'], `p${n}.png`, { type: 'image/png' }))
+    }
+    // Four pages chosen, but only three uploads run at once.
+    await waitFor(() => expect(mockUploadPaperImage).toHaveBeenCalledTimes(3))
+    release()
+    await waitFor(() => expect(mockUploadPaperImage).toHaveBeenCalledTimes(4))
 
+    const calls = mockUploadPaperImage.mock.calls
+    expect(new Set(calls.map((c) => c[3])).size).toBe(1)
+    expect(calls[0][3]).toMatch(/^[0-9a-f-]{36}$/)
+    expect(calls.map((c) => c[4]).sort()).toEqual([1, 2, 3, 4])
+    expect(calls[0][1]).toBe(5)
+    expect(calls[0][2]).toBe(6)
+  })
+
+  it('opens the review only after every declared page is read, questions first', async () => {
+    mockGetPaperGroupStatus
+      .mockResolvedValueOnce(status([pageRow(1), pageRow(2, 'PROCESSING')]))
+      .mockResolvedValue(status([pageRow(1), pageRow(2)], result))
+    localStorage.setItem('paper_builder_image_capture_1_1', JSON.stringify({ groupId: 'g', totalPages: 2 }))
     renderWithProviders(<ImageCapturePaperTab classId={1} subjectId={1} onApplyPrefill={vi.fn()} />)
+    expect(await screen.findByText((_, el) => el?.tagName === 'P' && /^1 of 2 pages read/.test(el.textContent))).toBeInTheDocument()
+    expect(screen.queryByText('1. Questions')).toBeNull()
+    expect(await screen.findByText('1. Questions', {}, { timeout: 6000 })).toBeInTheDocument()
+    expect(screen.getByText('Objective question 1')).toBeInTheDocument()
+    expect(screen.getByText('Short question 1')).toBeInTheDocument()
+    expect(screen.getAllByText('Check type')).toHaveLength(2)
+  }, 15000)
 
-    await uploadAFile()
-    // 5 questions * 1 mark = 5 captured, vs detected 20 -> incomplete warning, non-blocking.
-    await waitFor(() => expect(screen.getByText(/this paper may be incomplete/)).toBeInTheDocument())
-    expect(screen.getByRole('button', { name: 'Accept & continue' })).toBeEnabled()
-  })
-
-  it('marks-progress banner shows complete once captured marks equal the detected total', async () => {
-    mockUploadPaperImage.mockResolvedValueOnce({ data: { id: 1, group_id: 'group-abc', page_number: 1 } })
-    mockGetPaperUpload.mockResolvedValueOnce(
-      makeExtractedUpload({ id: 1, groupId: 'group-abc', pageNumber: 1, sectionTitle: 'Section 1', questionCount: 5, marksPerQuestion: 4, headerOverrides: { detected_total_marks: 20 } }),
-    )
-
-    renderWithProviders(<ImageCapturePaperTab classId={1} subjectId={1} onApplyPrefill={vi.fn()} />)
-
-    await uploadAFile()
-    await waitFor(() => expect(screen.getByText(/looks complete/)).toBeInTheDocument())
-  })
-
-  it('accept passes every page\'s uploadId, not just the last page', async () => {
-    mockUploadPaperImage
-      .mockResolvedValueOnce({ data: { id: 1, group_id: 'group-abc', page_number: 1 } })
-      .mockResolvedValueOnce({ data: { id: 2, group_id: 'group-abc', page_number: 2 } })
-    mockGetPaperUpload
-      .mockResolvedValueOnce(makeExtractedUpload({ id: 1, groupId: 'group-abc', pageNumber: 1, sectionTitle: 'Section 1', questionCount: 3 }))
-      .mockResolvedValueOnce(makeExtractedUpload({ id: 2, groupId: 'group-abc', pageNumber: 2, sectionTitle: 'Section 2', questionCount: 4 }))
-
-    const onApplyPrefill = vi.fn()
-    renderWithProviders(<ImageCapturePaperTab classId={1} subjectId={1} onApplyPrefill={onApplyPrefill} />)
-
-    await uploadAFile()
-    await waitFor(() => expect(screen.getByText('Page 1 ✓ 3 Qs')).toBeInTheDocument())
-    await userEvent.click(screen.getByRole('button', { name: '+ Add Page' }))
-    await uploadAFile()
-    await waitFor(() => expect(screen.getByText('Page 2 ✓ 4 Qs')).toBeInTheDocument())
-
-    await userEvent.click(screen.getByRole('button', { name: 'Accept & continue' }))
-
-    expect(onApplyPrefill).toHaveBeenCalledWith(expect.objectContaining({
-      uploadIds: [1, 2],
+  it('requires title and total marks, hands class/subject hints to the builder, and sends the types the user corrected', async () => {
+    mockGetPaperGroupStatus.mockResolvedValue(status([pageRow(1)], {
+      ...result, header: { ...result.header, exam_title: null, detected_total_marks: null }, sections: [section('Objective', 'MCQ', 2)],
     }))
-  })
+    localStorage.setItem('paper_builder_image_capture_1_1', JSON.stringify({ groupId: 'g', totalPages: 1 }))
+    const onApplyPrefill = vi.fn()
+    const user = userEvent.setup()
+    renderWithProviders(<ImageCapturePaperTab onApplyPrefill={onApplyPrefill} />)
 
-  describe('crash/reload recovery', () => {
-    const RECOVERY_KEY = 'paper_builder_image_capture_recovery_1_1'
+    await screen.findByText('1. Questions')
+    await user.selectOptions(screen.getByLabelText('Type of question 2'), 'TRUE_FALSE')
+    await user.click(screen.getByRole('button', { name: '3. Details & accept' }))
+    expect(screen.getByText(/Fill in before continuing: Paper title, Total marks/)).toBeInTheDocument()
+    const accept = screen.getByRole('button', { name: 'Accept & continue' })
+    expect(accept).toBeDisabled()
 
-    it('restores an accumulated capture from localStorage on mount', async () => {
-      localStorage.setItem(RECOVERY_KEY, JSON.stringify({
-        groupId: 'group-abc',
-        pages: [{ pageNumber: 1, uploadId: 1, status: 'extracted', questionCount: 3, marksThisPage: 3, errorMessage: '' }],
-        reviewStructure: [{ local_id: 'sec_0', key: 'sec_0', type: 'question_group', title: 'Section 1', slots_shown: 3, slots_counted: 3, marks_per_question: 1 }],
-        reviewDraft: { paper_title: 'Recovered Paper', instructions: '', total_marks: '3', duration_minutes: '60', questions: [{ local_id: 'q1', question_text: 'Q1' }] },
-        detectedHeader: { exam_title: 'Recovered Paper' },
-      }))
+    await user.type(screen.getByLabelText('Paper title *'), 'Unit Test')
+    await user.type(screen.getByLabelText('Total marks *'), '4')
+    expect(accept).not.toBeDisabled()
+    await user.click(accept)
 
-      renderWithProviders(<ImageCapturePaperTab classId={1} subjectId={1} onApplyPrefill={vi.fn()} />)
-
-      await waitFor(() => expect(screen.getByText('Page 1 ✓ 3 Qs')).toBeInTheDocument())
-      expect(mockShowSuccess).toHaveBeenCalledWith(expect.stringContaining('Recovered'))
-      // Nothing was uploaded to reach this state -- it came entirely from storage.
-      expect(mockUploadPaperImage).not.toHaveBeenCalled()
-    })
-
-    it('does not restore anything when there is no prior capture', () => {
-      renderWithProviders(<ImageCapturePaperTab classId={1} subjectId={1} onApplyPrefill={vi.fn()} />)
-
-      expect(mockShowSuccess).not.toHaveBeenCalled()
-      expect(screen.getByText('Upload Question Paper Image')).toBeInTheDocument()
-    })
-
-    it('saves the accumulated capture to localStorage as pages are extracted', async () => {
-      mockUploadPaperImage.mockResolvedValueOnce({ data: { id: 1, group_id: 'group-abc', page_number: 1 } })
-      mockGetPaperUpload.mockResolvedValueOnce(
-        makeExtractedUpload({ id: 1, groupId: 'group-abc', pageNumber: 1, sectionTitle: 'Section 1', questionCount: 3 }),
-      )
-
-      renderWithProviders(<ImageCapturePaperTab classId={1} subjectId={1} onApplyPrefill={vi.fn()} />)
-      await uploadAFile()
-      await waitFor(() => expect(screen.getByText('Page 1 ✓ 3 Qs')).toBeInTheDocument())
-
-      await waitFor(() => {
-        const saved = JSON.parse(localStorage.getItem(RECOVERY_KEY) || 'null')
-        expect(saved).not.toBeNull()
-        expect(saved.pages).toHaveLength(1)
-        expect(saved.groupId).toBe('group-abc')
-      })
-    })
-
-    it('clears the saved capture once accepted', async () => {
-      mockUploadPaperImage.mockResolvedValueOnce({ data: { id: 1, group_id: 'group-abc', page_number: 1 } })
-      mockGetPaperUpload.mockResolvedValueOnce(
-        makeExtractedUpload({ id: 1, groupId: 'group-abc', pageNumber: 1, sectionTitle: 'Section 1', questionCount: 3 }),
-      )
-
-      renderWithProviders(<ImageCapturePaperTab classId={1} subjectId={1} onApplyPrefill={vi.fn()} />)
-      await uploadAFile()
-      await waitFor(() => expect(screen.getByText('Page 1 ✓ 3 Qs')).toBeInTheDocument())
-      await waitFor(() => expect(localStorage.getItem(RECOVERY_KEY)).not.toBeNull())
-
-      await userEvent.click(screen.getByRole('button', { name: 'Accept & continue' }))
-
-      expect(localStorage.getItem(RECOVERY_KEY)).toBeNull()
-    })
-
-    it('clears the saved capture on Start Over', async () => {
-      mockUploadPaperImage.mockResolvedValueOnce({ data: { id: 1, group_id: 'group-abc', page_number: 1 } })
-      mockGetPaperUpload.mockResolvedValueOnce(
-        makeExtractedUpload({ id: 1, groupId: 'group-abc', pageNumber: 1, sectionTitle: 'Section 1', questionCount: 3 }),
-      )
-
-      renderWithProviders(<ImageCapturePaperTab classId={1} subjectId={1} onApplyPrefill={vi.fn()} />)
-      await uploadAFile()
-      await waitFor(() => expect(screen.getByText('Page 1 ✓ 3 Qs')).toBeInTheDocument())
-      await waitFor(() => expect(localStorage.getItem(RECOVERY_KEY)).not.toBeNull())
-
-      await userEvent.click(screen.getByRole('button', { name: 'Start Over' }))
-
-      expect(localStorage.getItem(RECOVERY_KEY)).toBeNull()
-    })
+    const prefill = onApplyPrefill.mock.calls[0][0]
+    expect(prefill.paperFields.paper_title).toBe('Unit Test')
+    expect(prefill.detected).toEqual({ class_label: 'FIFTH', subject_label: 'SS' })
+    expect(prefill.structure).toHaveLength(2) // the MCQ section split when one question became True/False
+    expect(prefill.questions.map((q) => q.question_type)).toEqual(['MCQ', 'TRUE_FALSE'])
+    expect(prefill.questions.every((q) => !('needs_review' in q))).toBe(true)
+    expect(prefill.uploadIds).toEqual([1])
   })
 })

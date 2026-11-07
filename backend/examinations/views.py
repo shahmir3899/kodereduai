@@ -5057,6 +5057,58 @@ class PaperUploadViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelV
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
+    @action(detail=False, methods=['get'], url_path='group-status')
+    def group_status(self, request):
+        """Progress of a multi-page capture whose page count was declared up front.
+
+        Query: group_id (uuid) and total_pages (1..30). Returns one row per expected page
+        (latest upload wins when a page was retried), which pages are missing or failed,
+        and -- once every page is EXTRACTED -- the reconciled paper (sections joined across
+        page breaks, mixed-type sections split, marks and header checks).
+        """
+        import uuid as uuid_lib
+        from .paper_reconcile import reconcile_pages
+
+        try:
+            group_id = uuid_lib.UUID(str(request.query_params.get('group_id', '')))
+            total_pages = int(request.query_params.get('total_pages', ''))
+        except (ValueError, TypeError):
+            return Response({'detail': 'group_id and total_pages are required.'}, status=status.HTTP_400_BAD_REQUEST)
+        if not 1 <= total_pages <= 30:
+            return Response({'detail': 'total_pages must be between 1 and 30.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # get_queryset is school-scoped, so a guessed group_id never reads another school's pages.
+        latest = {}
+        for upload in self.get_queryset().filter(group_id=group_id).order_by('created_at'):
+            latest[upload.page_number] = upload
+
+        pages = []
+        for number in range(1, total_pages + 1):
+            upload = latest.get(number)
+            pages.append({
+                'page_number': number,
+                'upload_id': upload.id if upload else None,
+                'status': upload.status if upload else 'MISSING',
+                'error_message': (upload.error_message or '') if upload else '',
+            })
+
+        extra_pages = sorted(n for n in latest if n > total_pages)
+        complete = all(p['status'] == PaperUpload.Status.EXTRACTED for p in pages)
+        result = None
+        if complete:
+            result = reconcile_pages([(n, latest[n].ai_extracted_json or {}) for n in range(1, total_pages + 1)])
+
+        return Response({
+            'group_id': str(group_id),
+            'total_pages': total_pages,
+            'pages': pages,
+            'missing_pages': [p['page_number'] for p in pages if p['status'] == 'MISSING'],
+            'failed_pages': [p['page_number'] for p in pages if p['status'] == PaperUpload.Status.FAILED],
+            'extra_pages': extra_pages,
+            'complete': complete,
+            'result': result,
+        })
+
     @action(detail=True, methods=['post'], url_path='confirm')
     def confirm_extraction(self, request, pk=None):
         """Confirm extracted questions.

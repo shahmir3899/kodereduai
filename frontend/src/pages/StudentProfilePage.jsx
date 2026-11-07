@@ -7,6 +7,7 @@ import { useAcademicYear } from '../contexts/AcademicYearContext'
 import { useAuth } from '../contexts/AuthContext'
 import { useUpdateStudent } from '../hooks/useUpdateStudent'
 import { useStudentExit } from '../hooks/useStudentExit'
+import { durationLabel, singleReportFileName } from '../utils/reportFileNames'
 import { downloadInstantReport } from '../utils/downloadReport'
 import { canManageStudentLifecycle } from '../utils/accessPolicies'
 import Spinner from '../components/ui/Spinner'
@@ -67,7 +68,7 @@ export default function StudentProfilePage() {
     try {
       await downloadInstantReport(
         { report_type: 'STUDENT_COMPREHENSIVE', parameters: { student_id: parseInt(id), ...periodParams } },
-        `${student?.name || 'student'}-report.pdf`,
+        singleReportFileName(student || {}, durationLabel(periodParams, activeAcademicYear?.name)),
       )
     } catch {
       showError('Failed to generate report')

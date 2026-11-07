@@ -48,10 +48,10 @@ const UNASSIGNED_SECTION = { key: '', title: 'Unassigned', question_type: 'SHORT
 
 /**
  * QuestionSlotEditor - shared section/slot/composer engine for wizard Step 3.
- * `source="manual"` renders the original free-typing flow (ManualEntryPaperTab).
- * `source="bank"` additionally offers a per-slot "Add from bank" action, pre-filtered
- * to the section's question_type plus the caller-supplied topicIds (BankFillSource).
- * When `structure` is empty, falls back to a flat free-form list either way.
+ * Every empty slot offers "Write" (composer) and "From bank" (picker pre-filtered to the
+ * section's question type, optionally narrowed by lesson plans); a section header offers
+ * "Fill from bank" to attach several questions into its free slots at once.
+ * When `structure` is empty, falls back to a flat free-form list.
  */
 export default function QuestionSlotEditor({
   draftData,
@@ -67,13 +67,12 @@ export default function QuestionSlotEditor({
   structure = [],
   overusedQuestionCounts = {},
   readOnly = false,
-  source = 'manual',
-  topicIds = [],
+  lessonPlanIds,
+  onLessonPlanIdsChange,
   hideFooter = false,
 }) {
   const questions = draftData?.questions || []
   const hasStructure = structure.length > 0
-  const isBankSource = source === 'bank'
 
   const [currentQuestion, setCurrentQuestion] = useState(EMPTY_QUESTION)
   const [composerTarget, setComposerTarget] = useState(null) // { sectionKey, localId }
@@ -274,8 +273,15 @@ export default function QuestionSlotEditor({
         .filter((value) => !Number.isNaN(value) && value > 0),
     )
 
+    // A section only takes as many questions as it has free slots (the picker already
+    // caps the selection; this keeps a stale selection from overflowing the section).
+    const freeSlots = section
+      ? Math.max(0, (Number(section.slots_shown) || 0) - (questionsBySection.get(section.key) || []).length)
+      : Infinity
+
     const additions = selectedQuestions
       .filter((question) => !existingIds.has(Number(question.id)))
+      .slice(0, freeSlots)
       .map((question) => toDraftQuestionFromBank(question, section ? {
         section_key: section.key,
         marks: Number(section.marks_per_question) || 1,
@@ -824,22 +830,20 @@ export default function QuestionSlotEditor({
         </span>
         {!readOnly && (
           <div className="flex gap-2">
-            {isBankSource && (
-              <button
-                type="button"
-                onClick={() => openBankPicker(section)}
-                disabled={!classId || !subjectId}
-                className="px-2 py-1 text-xs bg-primary-600 text-white rounded hover:bg-primary-700 disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                Add from bank
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={() => openBankPicker(section)}
+              disabled={!classId || !subjectId}
+              className="px-2 py-1 text-xs bg-primary-600 text-white rounded hover:bg-primary-700 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              From bank
+            </button>
             <button
               type="button"
               onClick={() => openSlotComposer(section, slotIndex)}
               className="px-2 py-1 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
             >
-              {isBankSource ? 'Type manually' : 'Add question'}
+              Write
             </button>
           </div>
         )}
@@ -923,6 +927,7 @@ export default function QuestionSlotEditor({
     const sectionMarksTotal = slotsCounted * marksPerQuestion
     const typeLabel = QUESTION_TYPE_LABELS[section.question_type] || section.question_type
     const isOverflow = sectionQuestions.length > section.slots_shown
+    const freeSlots = Math.max(0, (Number(section.slots_shown) || 0) - sectionQuestions.length)
 
     // Anchors the composer directly under whichever slot triggered it (openSlotComposer/
     // openSlotEdit record that slotIndex) instead of always appending it after every slot in
@@ -949,11 +954,23 @@ export default function QuestionSlotEditor({
 
     return (
       <div key={section.key} className="border border-gray-200 rounded-lg overflow-hidden">
-        <div className="bg-gray-50 px-4 py-3 border-b border-gray-200">
-          <p className="font-semibold text-gray-800">
-            {section.title} — {typeLabel} — {slotsCounted}×{marksPerQuestion} = {sectionMarksTotal} marks
-          </p>
-          {section.instruction && <p className="text-sm text-gray-600 mt-1">{section.instruction}</p>}
+        <div className="bg-gray-50 px-4 py-3 border-b border-gray-200 flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="font-semibold text-gray-800">
+              {section.title} — {typeLabel} — {slotsCounted}×{marksPerQuestion} = {sectionMarksTotal} marks
+            </p>
+            {section.instruction && <p className="text-sm text-gray-600 mt-1">{section.instruction}</p>}
+          </div>
+          {!readOnly && freeSlots > 0 && (
+            <button
+              type="button"
+              onClick={() => openBankPicker(section)}
+              disabled={!classId || !subjectId}
+              className="shrink-0 px-3 py-1.5 border border-blue-300 text-blue-700 rounded-lg text-sm hover:bg-blue-50 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              Fill from bank ({freeSlots} free)
+            </button>
+          )}
         </div>
         <div className="p-4 space-y-2">
           {Array.from({ length: section.slots_shown }).map((_, slotIndex) => {
@@ -1078,19 +1095,6 @@ export default function QuestionSlotEditor({
 
       {hasStructure && (
         <>
-          {!readOnly && (
-            <div className="flex justify-end">
-              <button
-                type="button"
-                onClick={() => openBankPicker(null)}
-                disabled={!classId || !subjectId}
-                className="px-3 py-1.5 border border-blue-300 text-blue-700 rounded-lg text-sm hover:bg-blue-50 disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                Load from Question Bank
-              </button>
-            </div>
-          )}
-
           <div className="space-y-4">
             {structure.map((section) => renderSection(section))}
           </div>
@@ -1184,8 +1188,13 @@ export default function QuestionSlotEditor({
         onClose={closeBankPicker}
         classId={classId}
         subjectId={subjectId}
-        topicIds={isBankSource ? topicIds : []}
         lockedQuestionType={bankPickerSection ? bankPickerSection.question_type : undefined}
+        slotsLeft={bankPickerSection
+          ? Math.max(0, (Number(bankPickerSection.slots_shown) || 0) - (questionsBySection.get(bankPickerSection.key) || []).length)
+          : null}
+        sectionLabel={bankPickerSection ? bankPickerSection.title : ''}
+        lessonPlanIds={lessonPlanIds}
+        onLessonPlanIdsChange={onLessonPlanIdsChange}
         excludeQuestionIds={questions.map((q) => q.question_id).filter(Boolean)}
         overusedQuestionCounts={overusedQuestionCounts}
         onAttach={handleBankAttach}

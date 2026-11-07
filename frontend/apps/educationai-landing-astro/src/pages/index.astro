@@ -24,7 +24,7 @@ const organizationSchema = {
   name: siteConfig.brandName,
   alternateName: siteConfig.productName,
   url: siteUrl,
-  logo: `${siteUrl}/Logo.jpeg`,
+  logo: `${siteUrl}/logo-full.png`,
   sameAs: [
     siteConfig.twitterUrl,
     siteConfig.linkedInUrl,
@@ -60,16 +60,16 @@ const softwareSchema = {
   '@context': 'https://schema.org',
   '@type': 'SoftwareApplication',
   name: siteConfig.productName,
-  operatingSystem: 'Web, iOS, Android',
+  operatingSystem: 'Web, Android',
   applicationCategory: 'EducationApplication',
   description: landingContent.description,
   url: siteUrl,
   publisher: { '@id': `${siteUrl}/#organization` },
   screenshot: `${siteUrl}/screens/dashboard-desktop.webp`,
   featureList: [
-    'AI-powered attendance from handwritten registers',
+    'Attendance tracking and analytics',
     'Admissions management',
-    'Fee & finance management',
+    'Fee & finance management with Kuickpay collection',
     'Academic timetabling',
     'Examination & report cards',
     'HR & payroll',
@@ -100,6 +100,7 @@ const faqSchema = {
   title={landingContent.title}
   description={landingContent.description}
   canonical="/"
+  alternates={[{ lang: 'en', href: '/' }, { lang: 'ur', href: '/ur/' }, { lang: 'x-default', href: '/' }]}
   ogImage="/og-home.jpg"
   jsonLd={[organizationSchema, websiteSchema, softwareSchema, faqSchema]}
 >

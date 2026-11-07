@@ -64,7 +64,6 @@ export const pricingDetails: Record<PricingTierKey, TierDetail> = {
       'No telecom/SMS carrier charges included',
     ],
     expensiveFeatures: [
-      'OCR-based register digitization is billed separately when enabled',
       'Custom one-off development requests are quoted separately',
       'On-site training or deployment visits are available as paid add-ons',
     ],
@@ -73,7 +72,7 @@ export const pricingDetails: Record<PricingTierKey, TierDetail> = {
       'AI finance assistant and AI notification drafting',
       'Multi-branch / multi-school support',
       'Role-based access (Admin, Principal, Teacher, HR, Accountant, Parent, Student)',
-      'Supabase file storage for documents and images',
+      'Secure cloud storage for documents and images',
       'Mobile app for teachers and parents (Android)',
     ],
   },

@@ -7,6 +7,8 @@ interface Props {
   ogImage?: string;
   ogType?: string;
   jsonLd?: object | object[];
+  locale?: string;
+  alternates?: { lang: string; href: string }[];
 }
 
 const {
@@ -17,10 +19,14 @@ const {
   ogImage = '/og-home.jpg',
   ogType = 'website',
   jsonLd,
+  locale = 'en',
+  alternates = [],
 } = Astro.props as Props;
 
 const site = Astro.site;
-const canonicalUrl = canonical ? new URL(canonical, site).toString() : undefined;
+// The sitemap lists every page with a trailing slash, so canonical and og:url must match it.
+const withSlash = (path: string) => (path.endsWith('/') || /\.\w+$/.test(path) ? path : `${path}/`);
+const canonicalUrl = canonical ? new URL(withSlash(canonical), site).toString() : undefined;
 const ogImageUrl = new URL(ogImage, site).toString();
 
 // Normalise jsonLd to an array so we can render multiple schemas cleanly
@@ -33,18 +39,19 @@ const schemas: object[] = jsonLd
 <meta name="description" content={description} />
 <meta name="robots" content={robots} />
 {canonicalUrl && <link rel="canonical" href={canonicalUrl} />}
+{alternates.map((a) => <link rel="alternate" hreflang={a.lang} href={new URL(a.href, site).toString()} />)}
 
 <!-- Open Graph -->
 <meta property="og:type" content={ogType} />
 <meta property="og:site_name" content="Education AI" />
-<meta property="og:locale" content="en_US" />
-<meta property="og:locale:alternate" content="ur_PK" />
+<meta property="og:locale" content={locale === 'ur' ? 'ur_PK' : 'en_US'} />
+<meta property="og:locale:alternate" content={locale === 'ur' ? 'en_US' : 'ur_PK'} />
 <meta property="og:title" content={title} />
 <meta property="og:description" content={description} />
 <meta property="og:image" content={ogImageUrl} />
 <meta property="og:image:width" content="1200" />
 <meta property="og:image:height" content="630" />
-<meta property="og:image:alt" content="Education AI school dashboard" />
+<meta property="og:image:alt" content="Education AI dashboard showing attendance, fee collection and upcoming school events" />
 {canonicalUrl && <meta property="og:url" content={canonicalUrl} />}
 
 <!-- Twitter / X -->
@@ -54,7 +61,7 @@ const schemas: object[] = jsonLd
 <meta name="twitter:title" content={title} />
 <meta name="twitter:description" content={description} />
 <meta name="twitter:image" content={ogImageUrl} />
-<meta name="twitter:image:alt" content="Education AI for schools" />
+<meta name="twitter:image:alt" content="Education AI dashboard showing attendance, fee collection and upcoming school events" />
 
 <!-- JSON-LD Structured Data -->
 {schemas.map((schema) => (

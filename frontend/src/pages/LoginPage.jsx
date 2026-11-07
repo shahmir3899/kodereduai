@@ -104,7 +104,7 @@ export default function LoginPage() {
     ? {
         title: 'Education AI Admin Portal',
         subtitle: 'Super Administrator Access',
-        logo: '/Logo.jpeg',
+        logo: '/logo-full.png',
         address: '',
         email: '',
       }

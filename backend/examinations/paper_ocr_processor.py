@@ -148,9 +148,16 @@ def _normalize_question(raw_question: Any) -> Dict[str, Any]:
     if not isinstance(type_data, dict):
         type_data = None
 
+    # How sure the model is of THIS question's type (0..1). None = not reported, which
+    # the review never flags; only an explicit low score asks the user to double-check.
+    type_confidence = _clean_optional_number(raw_question.get('type_confidence'))
+    if type_confidence is not None:
+        type_confidence = max(0.0, min(1.0, type_confidence))
+
     return {
         'question_text': str(raw_question.get('question_text') or '').strip(),
         'question_type': question_type,
+        'type_confidence': type_confidence,
         'marks': marks,
         'options': options,
         'type_data': type_data,
@@ -198,6 +205,9 @@ def _normalize_section(raw_section: Any, index: int) -> Dict[str, Any]:
         'marks_per_question': marks_per_question,
         'shown_count': shown_count,
         'counted_count': counted_count,
+        # True when this section's first items continue a section that began on the
+        # previous page (no new heading printed); paper_reconcile merges them.
+        'continues_previous': bool(raw_section.get('continues_previous')),
         'questions': questions,
     }
 
@@ -283,6 +293,19 @@ def _build_continuation_hint(continuation_context: Optional[Dict[str, Any]]) -> 
     if not continuation_context:
         return ''
 
+    if continuation_context.get('independent'):
+        # Pages of one paper are read at the same time, so this page cannot be told what
+        # the previous page contained. It only flags a continuation and paper_reconcile
+        # joins the pieces afterwards.
+        return (
+            f"\nMULTI-PAGE CONTEXT: this is page {continuation_context.get('page_number')} of a "
+            f"multi-page exam paper that is being read page by page, independently. If this page "
+            f"starts with items that continue a section begun on the previous page (more items "
+            f"under a heading you cannot see here, with no new section heading printed), put them "
+            f"in their own first section with \"continues_previous\": true and a best-guess title. "
+            f"Otherwise \"continues_previous\" is false."
+        )
+
     page_number = continuation_context.get('page_number')
     header = continuation_context.get('header') or {}
     last_section = continuation_context.get('last_section')
@@ -356,10 +379,12 @@ Return ONLY a single valid JSON object (no markdown fences, no extra commentary)
       "marks_per_question": number|null,
       "shown_count": integer,
       "counted_count": integer,
+      "continues_previous": boolean,
       "questions": [
         {{
           "question_text": string,
           "question_type": "MCQ"|"SHORT"|"LONG"|"ESSAY"|"TRUE_FALSE"|"MATCHING"|"FILL_BLANK",
+          "type_confidence": number between 0 and 1,
           "marks": number,
           "options": {{"A": string, "B": string, "C": string, "D": string}} or null,
           "type_data": object or null
@@ -394,7 +419,11 @@ Rules:
 7. Every question needs a question_type and a numeric marks value — if an individual
    question's marks aren't printed, use the section's marks_per_question or your best
    estimate; never leave marks null.
-8. If a MULTI-PAGE CONTEXT block is present above, follow its instructions for whether
+8. Decide "question_type" for EACH question from the question itself (options A-D -> MCQ,
+   blanks -> FILL_BLANK, two columns -> MATCHING, true/false statement -> TRUE_FALSE, and so on),
+   not from the section heading alone; sections can mix types. "type_confidence" is how sure you
+   are of that type: 1.0 when obvious, below 0.7 when you are guessing.
+9. If a MULTI-PAGE CONTEXT block is present above, follow its instructions for whether
    to continue the previous page's last section or start fresh — otherwise ignore it.
 
 Return ONLY the JSON object described above."""

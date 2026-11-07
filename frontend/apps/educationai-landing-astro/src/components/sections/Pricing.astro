@@ -59,16 +59,17 @@ const plan = pricingDetails.flat;
       </ul>
 
       <!-- CTA -->
-      <a
-        href="/contact"
-        class="block w-full text-center text-sm font-semibold rounded-full py-3 px-6 transition-all hover:-translate-y-0.5 bg-primary text-white hover:bg-primary-600 hover:shadow-[0_6px_20px_rgba(43,106,255,0.4)]"
+      <button
+        type="button"
+        onclick="document.dispatchEvent(new CustomEvent('open-demo-dialog'))"
+        class="block w-full text-center text-sm font-semibold rounded-full py-3 px-6 transition-all hover:-translate-y-0.5 bg-primary text-white hover:bg-primary-600 hover:shadow-[0_6px_20px_rgba(43,106,255,0.4)] border-0 cursor-pointer"
       >
-        Get Started — Contact Us
-      </a>
+        {pricing.plans[0].cta}
+      </button>
     </div>
 
     <p class="text-center text-sm text-brand-gray mt-8">
-      One plan. All modules. No hidden tiers. Annual billing saves 10%.
+      One plan. All modules. No hidden tiers. Annual billing saves 20%.
     </p>
   </div>
 </section>

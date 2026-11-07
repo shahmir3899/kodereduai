@@ -7,6 +7,7 @@ import { hrApi, sessionsApi } from '../../services/api'
 import { useToast } from '../../components/Toast'
 import Spinner from '../../components/ui/Spinner'
 import { useAuth } from '../../contexts/AuthContext'
+import { schoolDateStr } from '../../utils/schoolTime'
 
 const STATUS_OPTIONS = [
   { value: '', label: '-- Select --' },
@@ -26,7 +27,7 @@ const statusColors = {
 }
 
 function formatDate(date) {
-  return date.toISOString().split('T')[0]
+  return schoolDateStr(date)
 }
 
 // Self-service (2026-09): Teacher/Staff get a read-only view of their own
@@ -322,7 +323,7 @@ function StaffAttendanceAdminView() {
 
   // Navigate date
   const changeDate = (delta) => {
-    const d = new Date(selectedDate)
+    const d = new Date(`${selectedDate}T12:00:00`) // noon: a UTC-midnight parse would step the wrong day
     d.setDate(d.getDate() + delta)
     setSelectedDate(formatDate(d))
   }

@@ -140,7 +140,7 @@ export default function StudentProfileScreen({ canEdit }: Props) {
           {banner.waived.map((w, i) => <Text key={i} style={styles.bannerText}>{w}</Text>)}
         </View>
       ) : null}
-      {canEdit ? <StudentAdminActions student={{ id: s.id, name: s.name, status: s.status as string | null | undefined, has_user_account: !!(s as { has_user_account?: boolean }).has_user_account, sectionId: Number((s as { session_class_obj?: number | null }).session_class_obj) || null }} /> : null}
+      {canEdit ? <StudentAdminActions student={{ id: s.id, name: s.name, roll: s.roll_number, className: s.class_name, status: s.status as string | null | undefined, has_user_account: !!(s as { has_user_account?: boolean }).has_user_account, sectionId: Number((s as { session_class_obj?: number | null }).session_class_obj) || null }} /> : null}
 
       {cards.length > 0 ? (
         <View style={styles.cards}>

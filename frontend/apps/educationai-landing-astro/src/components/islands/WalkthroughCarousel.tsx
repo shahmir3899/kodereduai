@@ -142,7 +142,7 @@ export default function WalkthroughCarousel() {
                       <source media="(max-width: 640px)" srcSet={slide.imageMobile} width={780} height={1688} />
                       <img
                         src={slide.image}
-                        alt={`${slide.label}: ${slide.title}`}
+                        alt={slide.alt ?? `${slide.label}: ${slide.title}`}
                         className="w-full rounded-xl slideshow-img"
                         loading={shouldPrioritizeImage ? 'eager' : 'lazy'}
                         decoding={shouldPrioritizeImage ? 'sync' : 'async'}

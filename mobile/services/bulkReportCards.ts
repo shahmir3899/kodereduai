@@ -14,6 +14,7 @@ export interface BulkStudent {
   enrollmentId: number | null;
   name: string;
   roll?: string | number | null;
+  className?: string | null;
 }
 
 export const needsConfirm = (count: number) => count > BULK_CONFIRM_ABOVE;
@@ -60,12 +61,14 @@ export interface BuildArgs {
   onProgress?: (done: number, total: number) => void;
   shouldCancel?: () => boolean;
   concurrency?: number;
+  // One name per student, in order; the default is the report-card style "<roll>_<name>.pdf".
+  fileNames?: string[];
 }
 
 // The ZIP bytes (null when nothing was made or the run was cancelled) and what happened to each student.
 export async function buildBulkZip(args: BuildArgs): Promise<{ zip: Uint8Array | null; result: BulkResult }> {
   const { students, fetchPdf, onProgress, shouldCancel = () => false, concurrency = BULK_CONCURRENCY } = args;
-  const names = bulkFileNames(students);
+  const names = args.fileNames ?? bulkFileNames(students);
   const files: Record<string, Uint8Array> = {};
   const skipped: BulkResult['skipped'] = [];
   let done = 0;

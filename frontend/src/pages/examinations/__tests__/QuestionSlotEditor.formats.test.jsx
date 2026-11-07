@@ -35,7 +35,7 @@ const saved = (spy) => spy.mock.calls.pop()[0].questions[0]
 describe('QuestionSlotEditor saves the formats the server accepts', () => {
   it('saves a matching question as left_items, right_items and index pairs', () => {
     const { onDraftDataChange } = setup([section('MATCHING')])
-    fireEvent.click(screen.getByText('Add question'))
+    fireEvent.click(screen.getByText('Write'))
     typeQuestion('Match the animals.')
     fireEvent.click(screen.getByText('+ Add Pair'))
     fireEvent.click(screen.getByText('+ Add Pair'))
@@ -51,7 +51,7 @@ describe('QuestionSlotEditor saves the formats the server accepts', () => {
 
   it('asks for two complete pairs, the server rule, and does not save with one', () => {
     const { onDraftDataChange } = setup([section('MATCHING')])
-    fireEvent.click(screen.getByText('Add question'))
+    fireEvent.click(screen.getByText('Write'))
     typeQuestion('Match.')
     fireEvent.click(screen.getByText('+ Add Pair'))
     fireEvent.change(screen.getByPlaceholderText('Left'), { target: { value: 'Fish' } })
@@ -78,7 +78,7 @@ describe('QuestionSlotEditor saves the formats the server accepts', () => {
 
   it('saves true/false as TRUE or FALSE', () => {
     const { onDraftDataChange } = setup([section('TRUE_FALSE')])
-    fireEvent.click(screen.getByText('Add question'))
+    fireEvent.click(screen.getByText('Write'))
     typeQuestion('The sun is a star.')
     fireEvent.click(screen.getByLabelText('True'))
     fireEvent.click(screen.getByText('Add Question'))

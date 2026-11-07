@@ -57,7 +57,6 @@ vi.mock('../../../components/ClassSelector', () => ({
 }))
 
 vi.mock('../ImageCapturePaperTab', () => ({ default: () => <div>Image Tab</div> }))
-vi.mock('../BankFillSource', () => ({ default: () => <div>Bank Fill Source</div> }))
 vi.mock('../ManualEntryPaperTab', () => ({
   default: function MockManualEntryPaperTab({ draftData, onDraftDataChange }) {
     return (

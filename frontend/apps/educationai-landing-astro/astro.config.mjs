@@ -19,6 +19,6 @@ export default defineConfig({
   },
   integrations: [
     react(),
-    sitemap(),
+    sitemap({ i18n: { defaultLocale: 'en', locales: { en: 'en', ur: 'ur' } } }),
   ],
 });

@@ -12,7 +12,8 @@ import { canManageStudentLifecycle } from '../utils/accessPolicies'
 // jsPDF/autotable/html2canvas (~600 KB) load on the export click, not when the list opens.
 import { useDebounce } from '../hooks/useDebounce'
 import PhotoCropModal from '../components/PhotoCropModal'
-import { downloadInstantReport } from '../utils/downloadReport'
+import { fetchInstantReport, saveBlobAsFile } from '../utils/downloadReport'
+import { durationLabel, singleReportFileName, uniqueNames, zipFileName } from '../utils/reportFileNames'
 import { useEscapeKey } from '../hooks/useEscapeKey'
 import { useViewPreference } from '../hooks/useViewPreference'
 import { useStudentSelection } from '../hooks/useStudentSelection'
@@ -450,34 +451,46 @@ export default function StudentsPage() {
     }
   }
 
-  // Downloads one STUDENT_COMPREHENSIVE report per selected student, sequentially;
-  // each is generated synchronously and streamed straight back (nothing saved
-  // server-side), so this is a plain loop rather than a background-task dispatch.
+  // Builds one STUDENT_COMPREHENSIVE report per selected student, sequentially (each is generated
+  // synchronously and streamed back, nothing saved server-side), and packs every one into a single
+  // zip so a 10-student selection arrives as one download instead of ten browser prompts.
   const handleDownloadSelectedReports = async (periodParams) => {
     const selected = allStudents.filter((s) => selectedIds.has(s.id))
     if (selected.length === 0) return
 
     setIsGeneratingReports(true)
     setReportDownloadProgress({ current: 0, total: selected.length })
-    let succeeded = 0
-    for (const student of selected) {
+    const duration = durationLabel(periodParams, activeAcademicYear?.name)
+    const names = uniqueNames(selected.map((s) => singleReportFileName(s, duration)))
+    const { default: JSZip } = await import('jszip')
+    const zip = new JSZip()
+    const included = []
+    for (const [index, student] of selected.entries()) {
       setReportDownloadProgress((prev) => ({ ...prev, current: prev.current + 1 }))
       try {
-        await downloadInstantReport(
+        const bytes = await fetchInstantReport(
           { report_type: 'STUDENT_COMPREHENSIVE', parameters: { student_id: student.id, ...periodParams } },
-          `${student.name}-report.pdf`,
         )
-        succeeded += 1
+        zip.file(names[index], bytes)
+        included.push(student)
       } catch {
-        // Continue downloading the remaining selected students even if one fails.
+        // Keep going: one failed student must not lose the rest of the zip.
       }
     }
-    setIsGeneratingReports(false)
-    setReportDownloadProgress({ current: 0, total: 0 })
-    if (succeeded > 0) {
-      showSuccess(`Downloaded ${succeeded} report${succeeded === 1 ? '' : 's'}.`)
-    } else {
-      showError('Failed to generate reports.')
+    try {
+      if (included.length > 0) {
+        const blob = await zip.generateAsync({ type: 'blob' })
+        saveBlobAsFile(blob, 'application/zip', zipFileName(included, duration))
+        const failed = selected.length - included.length
+        showSuccess(`Downloaded ${included.length} report${included.length === 1 ? '' : 's'}${failed ? `, ${failed} failed` : ''}.`)
+      } else {
+        showError('Failed to generate reports.')
+      }
+    } catch {
+      showError('Failed to build the zip.')
+    } finally {
+      setIsGeneratingReports(false)
+      setReportDownloadProgress({ current: 0, total: 0 })
     }
   }
 

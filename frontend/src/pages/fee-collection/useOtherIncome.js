@@ -22,7 +22,8 @@ export function useOtherIncome({ month, year }) {
     queryKey: ['otherIncome', month, year],
     queryFn: () => {
       const startDate = `${year}-${String(month).padStart(2, '0')}-01`
-      const endDate = new Date(year, month, 0).toISOString().split('T')[0]
+      // Built from the numeric last day: toISOString() on a local-midnight Date is UTC and drops a day in UTC+5.
+      const endDate = `${year}-${String(month).padStart(2, '0')}-${String(new Date(year, month, 0).getDate()).padStart(2, '0')}`
       return financeApi.getOtherIncome({ date_from: startDate, date_to: endDate, page_size: 9999 })
     },
   })

@@ -2,7 +2,8 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, ScrollView, FlatList, Switch, TouchableOpacity, StyleSheet } from 'react-native';
 import { useLocalSearchParams, useRouter, type Href } from 'expo-router';
 import { examinationsApi } from '../../services/api';
-import { bankQuestionPayload, confirmPayload, emptyCapture, type CaptureState, type ReviewQuestion } from '../../services/paperCapture';
+import { bankQuestionPayload, confirmPayload, type CaptureState, type ReviewQuestion } from '../../services/paperCapture';
+import { emptyPagesSession, type PagesSession } from '../../services/paperPages';
 import { useMasterClasses } from '../../hooks/useAcademicYear';
 import { usePersonaBase } from '../../hooks/usePersonaBase';
 import { usePaper, usePaperActions, usePaperCoverage, usePaperExams, usePaperLessons } from '../../hooks/usePapers';
@@ -34,7 +35,7 @@ import { useToast } from '../ui/Toast';
 import { confirm } from '../ui/confirm';
 import BottomSheet from '../ui/BottomSheet';
 import QuickQuestionSheet from './QuickQuestionSheet';
-import PaperCaptureSheet from './PaperCaptureSheet';
+import PaperPagesSheet from './PaperPagesSheet';
 import SectionsEditor from './SectionsEditor';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
 
@@ -69,7 +70,7 @@ export default function PaperBuilderScreen() {
   const [step, setStep] = useState<1 | 2 | 3>(routeId ? 3 : 1);
   // Capture from photos: the capture lives here so closing its sheet keeps it. Accepting creates the reviewed questions in
   // the bank, adds them with their sections, and remembers the pages to confirm once the paper is saved.
-  const [capture, setCapture] = useState<CaptureState>(emptyCapture());
+  const [capture, setCapture] = useState<PagesSession>(emptyPagesSession());
   const [captureOpen, setCaptureOpen] = useState(false);
   const [pendingConfirm, setPendingConfirm] = useState<{ uploadIds: number[]; questions: ReviewQuestion[] } | null>(null);
   const createdByLocal = React.useRef(new Map<string, Question>());
@@ -129,6 +130,7 @@ export default function PaperBuilderScreen() {
     }
     if (c.header.title.trim()) { setTitleAuto(false); set('title', c.header.title.trim()); }
     if (c.header.duration.trim()) set('duration', c.header.duration.trim());
+    if (Number(c.header.totalMarks) > 0) set('totalMarks', String(Number(c.header.totalMarks)));
     setSections((ss) => [...ss, ...c.sections]);
     setPicked((ps) => [...ps, ...made.map(({ q, question }) => ({ ...pickedFromQuestion(question), sectionKey: q.sectionKey }))]);
     setPendingConfirm((prev) => ({
@@ -136,7 +138,7 @@ export default function PaperBuilderScreen() {
       questions: [...(prev?.questions ?? []), ...c.questions],
     }));
     createdByLocal.current.clear();
-    setCapture(emptyCapture());
+    setCapture(emptyPagesSession());
   };
 
   const save = async (stay = false) => {
@@ -345,9 +347,9 @@ export default function PaperBuilderScreen() {
           <Button title="+ Write a new question" variant="outline" onPress={() => { setTarget(null); setQuick(true); }} disabled={!form.subject} />
         </>
       ) : null}
-      <Button title={capture.pages.length ? `Capture from photos (${capture.pages.length} page${capture.pages.length === 1 ? '' : 's'} in progress)` : 'Capture from photos'} variant="outline"
-        onPress={() => setCaptureOpen(true)} disabled={!form.classObj || !form.subject} />
-      {!form.classObj || !form.subject ? <Text style={styles.sub}>Choose the class and subject to capture a printed paper from photos.</Text> : null}
+      <Button title={capture.totalPages ? `Capture from photos (${capture.totalPages} page${capture.totalPages === 1 ? '' : 's'} in progress)` : 'Capture from photos'} variant="outline"
+        onPress={() => setCaptureOpen(true)} />
+      {!form.classObj || !form.subject ? <Text style={styles.sub}>Class and subject can be chosen after the photos are read; nothing is saved before that.</Text> : null}
 
       {picked.length > 0 ? (
         <View style={styles.q}>
@@ -393,8 +395,8 @@ export default function PaperBuilderScreen() {
 
       </View>
 
-      <PaperCaptureSheet kind="paper" visible={captureOpen} onClose={() => setCaptureOpen(false)} classId={form.classObj} subjectId={form.subject}
-        capture={capture} setCapture={setCapture} onAccept={acceptCapture} />
+      <PaperPagesSheet visible={captureOpen} onClose={() => setCaptureOpen(false)} classId={form.classObj} subjectId={form.subject}
+        session={capture} setSession={setCapture} onAccept={acceptCapture} />
       <QuickQuestionSheet
         visible={quick} subject={form.subject} onClose={() => setQuick(false)}
         section={target ? { title: target.title, question_type: target.question_type, marksPerQuestion: target.marksPerQuestion } : null}

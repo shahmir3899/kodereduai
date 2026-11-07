@@ -538,19 +538,19 @@ export default function Layout() {
           {isSuperAdmin ? (
             // Super admin sees platform branding
             <>
-              <img src="/Logo.jpeg" alt="Education AI" className="h-10 w-10 rounded-full object-cover flex-shrink-0" />
+              <img src="/logo-mark.png" alt="Education AI" className="h-10 w-10 object-contain flex-shrink-0" />
               <h1 className="text-lg font-bold text-primary-600 whitespace-nowrap overflow-hidden text-ellipsis">Education AI</h1>
             </>
           ) : (
             // School admin / staff / teacher sees their school branding
             <>
               <img
-                src={activeSchool?.logo || localStorage.getItem('currentSchoolLogo') || '/Logo.jpeg'}
+                src={activeSchool?.logo || localStorage.getItem('currentSchoolLogo') || '/logo-mark.png'}
                 alt={activeSchool?.name || 'School'}
                 className="h-10 w-10 rounded-full object-cover flex-shrink-0"
                 onError={(e) => {
                   e.currentTarget.onerror = null
-                  e.currentTarget.src = '/Logo.jpeg'
+                  e.currentTarget.src = '/logo-mark.png'
                 }}
               />
               <div className="flex flex-col min-w-0 flex-1">

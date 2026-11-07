@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import LoadingState from '../../components/ui/LoadingState'
 import { useQuery } from '@tanstack/react-query'
-import { questionPaperApi } from '../../services/api'
+import { questionPaperApi, lmsApi } from '../../services/api'
 import { useDebounce } from '../../hooks/useDebounce'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
 
@@ -68,6 +68,14 @@ export default function QuestionBankPicker({
   excludeQuestionIds = [],
   overusedQuestionCounts = {},
   onAttach,
+  // Free slots in the section being filled; caps the selection so "fill this section"
+  // never attaches more questions than the section can hold. null = no cap (flat list).
+  slotsLeft = null,
+  sectionLabel = '',
+  // Optional lesson-plan filter. Selection lives in the page (it is also what links the
+  // plans to the paper for curriculum coverage), so the picker only reads and reports it.
+  lessonPlanIds,
+  onLessonPlanIdsChange,
 }) {
   const [search, setSearch] = useState('')
   const debouncedSearch = useDebounce(search, 300)
@@ -75,7 +83,28 @@ export default function QuestionBankPicker({
   const [difficulty, setDifficulty] = useState('')
   const [selectedIds, setSelectedIds] = useState([])
 
-  const hasTopicFilter = Array.isArray(topicIds) && topicIds.length > 0
+  const [showLessons, setShowLessons] = useState(false)
+  const lessonFilterEnabled = typeof onLessonPlanIdsChange === 'function'
+  const selectedLessons = lessonPlanIds || []
+
+  const { data: lessonsData } = useQuery({
+    queryKey: ['lessonPlansForPaperBuilder', classId, subjectId],
+    queryFn: () => lmsApi.getLessonPlans({ page_size: 999, class_id: classId, subject_id: subjectId }),
+    enabled: open && lessonFilterEnabled && !!classId && !!subjectId,
+  })
+  const lessons = lessonsData?.data?.results || lessonsData?.data || []
+
+  // Topics of the chosen lesson plans narrow the bank; an explicit topicIds prop wins.
+  const lessonTopicIds = useMemo(() => {
+    const ids = new Set()
+    lessons
+      .filter((lesson) => selectedLessons.includes(lesson.id))
+      .forEach((lesson) => (lesson.planned_topics || []).forEach((topic) => ids.add(topic.id)))
+    return Array.from(ids)
+  }, [lessons, selectedLessons])
+
+  const effectiveTopicIds = topicIds.length > 0 ? topicIds : lessonTopicIds
+  const hasTopicFilter = effectiveTopicIds.length > 0
 
   const queryParams = useMemo(() => ({
     ...(classId && { class_id: classId }),
@@ -87,9 +116,9 @@ export default function QuestionBankPicker({
   }), [classId, subjectId, debouncedSearch, type, lockedQuestionType, difficulty])
 
   const { data: bankData, isLoading: bankLoading } = useQuery({
-    queryKey: ['paperBuilderQuestionBankPicker', queryParams, topicIds],
+    queryKey: ['paperBuilderQuestionBankPicker', queryParams, effectiveTopicIds],
     queryFn: () => (hasTopicFilter
-      ? questionPaperApi.getQuestionsByTopics(topicIds, queryParams)
+      ? questionPaperApi.getQuestionsByTopics(effectiveTopicIds, queryParams)
       : questionPaperApi.getQuestions(queryParams)),
     enabled: open && !!classId && !!subjectId,
   })
@@ -108,9 +137,20 @@ export default function QuestionBankPicker({
 
   if (!open) return null
 
+  const capped = slotsLeft !== null && slotsLeft !== undefined
+  const atCap = capped && selectedIds.length >= slotsLeft
+
   const toggleSelection = (questionId) => {
     const id = Number(questionId)
-    setSelectedIds((prev) => (prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]))
+    setSelectedIds((prev) => {
+      if (prev.includes(id)) return prev.filter((item) => item !== id)
+      if (capped && prev.length >= slotsLeft) return prev
+      return [...prev, id]
+    })
+  }
+
+  const toggleLesson = (lessonId, checked) => {
+    onLessonPlanIdsChange?.(checked ? [...selectedLessons, lessonId] : selectedLessons.filter((id) => id !== lessonId))
   }
 
   const handleClose = () => {
@@ -130,8 +170,14 @@ export default function QuestionBankPicker({
       <div className="bg-white rounded-none sm:rounded-lg w-full max-w-4xl min-h-full sm:min-h-0 sm:max-h-[85vh] flex flex-col overflow-hidden border border-gray-200 shadow-xl">
         <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
           <div>
-            <h4 className="text-lg font-semibold text-gray-900">Attach Questions from Bank</h4>
-            <p className="text-xs text-gray-500 mt-0.5">Select questions to add into this draft paper.</p>
+            <h4 className="text-lg font-semibold text-gray-900">
+              {sectionLabel ? `Fill ${sectionLabel} from bank` : 'Attach Questions from Bank'}
+            </h4>
+            <p className="text-xs text-gray-500 mt-0.5">
+              {capped
+                ? `Select up to ${slotsLeft} question${slotsLeft === 1 ? '' : 's'}; they fill the empty slots in order.`
+                : 'Select questions to add into this draft paper.'}
+            </p>
           </div>
           <button type="button" onClick={handleClose} className="text-gray-500 hover:text-gray-700 text-sm">
             Close
@@ -165,6 +211,35 @@ export default function QuestionBankPicker({
           </select>
         </div>
 
+        {lessonFilterEnabled && (
+          <div className="px-4 py-2 border-b border-gray-100">
+            <button
+              type="button"
+              onClick={() => setShowLessons((prev) => !prev)}
+              className="text-sm text-blue-600 hover:text-blue-800"
+            >
+              {showLessons ? 'Hide' : 'Narrow by'} lesson plans{selectedLessons.length > 0 ? ` (${selectedLessons.length} selected)` : ' (optional)'}
+            </button>
+            {showLessons && (
+              <div className="mt-2 max-h-40 overflow-y-auto space-y-1">
+                {lessons.length === 0 ? (
+                  <p className="text-xs text-gray-500">No lesson plans found for this class and subject.</p>
+                ) : lessons.map((lesson) => (
+                  <label key={lesson.id} className="flex items-center gap-2 text-sm text-gray-800 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={selectedLessons.includes(lesson.id)}
+                      onChange={(e) => toggleLesson(lesson.id, e.target.checked)}
+                    />
+                    <span className="truncate">{lesson.title}</span>
+                    <span className="text-xs text-gray-500">{(lesson.planned_topics || []).length} topic(s)</span>
+                  </label>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
         <div className="overflow-y-auto flex-1 sm:max-h-[50vh] p-4 space-y-2">
           {!classId || !subjectId ? (
             <div className="text-sm text-gray-500">Select class and subject in paper setup to load the bank.</div>
@@ -187,6 +262,7 @@ export default function QuestionBankPicker({
                       type="checkbox"
                       checked={checked}
                       onChange={() => toggleSelection(question.id)}
+                      disabled={!checked && atCap}
                       className="mt-1"
                     />
                     <div className="flex-1 min-w-0">
@@ -215,7 +291,9 @@ export default function QuestionBankPicker({
         </div>
 
         <div className="px-4 py-3 border-t border-gray-200 flex items-center justify-between gap-2">
-          <p className="text-xs text-gray-500">{selectedIds.length} selected</p>
+          <p className="text-xs text-gray-500">
+            {selectedIds.length} selected{capped ? ` of ${slotsLeft} slot${slotsLeft === 1 ? '' : 's'}` : ''}
+          </p>
           <div className="flex items-center gap-2">
             <button
               type="button"

@@ -1092,83 +1092,191 @@ class MultiPageContinuationPromptTests(TestCase):
         self.assertIn('MULTI-PAGE CONTEXT', prompt)
 
 
-class BuildContinuationContextFromPriorPagesTests(TestCase):
-    """tasks._build_continuation_context reads prior PaperUpload rows in the same
-    group_id, scoped to the same school, to feed the prompt builder above."""
+class BuildContinuationContextTests(TestCase):
+    """Pages of one paper are read at the same time, so a page's context is only its own
+    number: it must never depend on (or leak) other uploads."""
 
     @classmethod
     def setUpTestData(cls):
         cls.school = _make_school()
-        cls.other_school = _make_school(suffix='-cc')
         cls.user = get_user_model().objects.create_superuser(
             username='continuation_admin',
             email='continuation_admin@test.com',
             password='test12345',
         )
 
-    def _make_upload(self, school, group_id, page_number, ai_extracted_json=None):
+    def _make_upload(self, group_id, page_number):
         return PaperUpload.objects.create(
-            school=school,
+            school=self.school,
             uploaded_by=self.user,
             image_url='https://example.test/p.png',
             group_id=group_id,
             page_number=page_number,
-            ai_extracted_json=ai_extracted_json,
             status=PaperUpload.Status.EXTRACTED,
         )
 
     def test_returns_none_for_page_one(self):
         import uuid
-        page1 = self._make_upload(self.school, uuid.uuid4(), 1)
-        self.assertIsNone(_build_continuation_context(page1))
+        self.assertIsNone(_build_continuation_context(self._make_upload(uuid.uuid4(), 1)))
 
     def test_returns_none_when_group_id_absent(self):
-        page = PaperUpload.objects.create(
-            school=self.school,
-            uploaded_by=self.user,
-            image_url='https://example.test/p.png',
-            page_number=2,  # nonsensical without a group, but must still short-circuit
-            status=PaperUpload.Status.EXTRACTED,
+        self.assertIsNone(_build_continuation_context(self._make_upload(None, 2)))
+
+    def test_later_pages_get_an_independent_context_with_their_number_only(self):
+        import uuid
+        context = _build_continuation_context(self._make_upload(uuid.uuid4(), 3))
+        self.assertEqual(context, {'page_number': 3, 'independent': True})
+
+    def test_independent_hint_asks_for_a_continues_previous_flag(self):
+        hint = _build_continuation_hint({'page_number': 2, 'independent': True})
+        self.assertIn('page 2', hint)
+        self.assertIn('continues_previous', hint)
+
+
+class ReconcilePagesTests(TestCase):
+    """paper_reconcile.reconcile_pages: puts independently-read pages back together."""
+
+    @staticmethod
+    def _q(qtype='SHORT', marks=2, confidence=None):
+        return {'question_text': 'q', 'question_type': qtype, 'marks': marks, 'type_confidence': confidence,
+                'options': None, 'type_data': None}
+
+    def _section(self, title, qtype, n, marks=2, counted=None, continues=False, questions=None):
+        return {'title': title, 'instruction': None, 'question_type_guess': qtype, 'marks_per_question': marks,
+                'shown_count': n, 'counted_count': n if counted is None else counted,
+                'continues_previous': continues, 'questions': questions or [self._q(qtype, marks) for _ in range(n)]}
+
+    def test_orders_pages_by_page_number_not_by_input_order(self):
+        from .paper_reconcile import reconcile_pages
+        p1 = {'header': {'exam_title': 'Mid Term'}, 'sections': [self._section('A', 'MCQ', 2)]}
+        p2 = {'header': {}, 'sections': [self._section('B', 'SHORT', 3)]}
+        result = reconcile_pages([(2, p2), (1, p1)])
+        self.assertEqual([s['title'] for s in result['sections']], ['A', 'B'])
+        self.assertEqual(result['header']['exam_title'], 'Mid Term')
+
+    def test_merges_a_section_flagged_as_continuing_from_the_previous_page(self):
+        from .paper_reconcile import reconcile_pages
+        p1 = {'sections': [self._section('Short questions', 'SHORT', 3)]}
+        p2 = {'sections': [self._section('Short questions (cont.)', 'SHORT', 2, continues=True), self._section('Long', 'LONG', 1, marks=5)]}
+        result = reconcile_pages([(1, p1), (2, p2)])
+        self.assertEqual([s['title'] for s in result['sections']], ['Short questions', 'Long'])
+        merged = result['sections'][0]
+        self.assertEqual((merged['shown_count'], merged['counted_count'], len(merged['questions'])), (5, 5, 5))
+        self.assertEqual(merged['pages'], [1, 2])
+
+    def test_merges_by_repeated_heading_only_for_the_first_section_of_a_page(self):
+        from .paper_reconcile import reconcile_pages
+        p1 = {'sections': [self._section('Q2 Short', 'SHORT', 2)]}
+        p2 = {'sections': [self._section('q2  short', 'SHORT', 2), self._section('Q2 Short', 'SHORT', 1)]}
+        result = reconcile_pages([(1, p1), (2, p2)])
+        self.assertEqual(len(result['sections']), 2)
+
+    def test_attempt_any_keeps_the_printed_count_when_merging(self):
+        from .paper_reconcile import reconcile_pages
+        p1 = {'sections': [self._section('Attempt any 4', 'SHORT', 5, counted=4)]}
+        p2 = {'sections': [self._section('x', 'SHORT', 3, continues=True)]}
+        merged = reconcile_pages([(1, p1), (2, p2)])['sections'][0]
+        self.assertEqual((merged['shown_count'], merged['counted_count']), (8, 4))
+
+    def test_splits_a_mixed_type_section_into_one_section_per_type_run(self):
+        from .paper_reconcile import reconcile_pages
+        questions = [self._q('MCQ', 1), self._q('MCQ', 1), self._q('TRUE_FALSE', 1)]
+        page = {'sections': [self._section('Objective', 'MCQ', 3, marks=1, questions=questions)]}
+        sections = reconcile_pages([(1, page)])['sections']
+        self.assertEqual([(s['question_type_guess'], s['shown_count']) for s in sections], [('MCQ', 2), ('TRUE_FALSE', 1)])
+        self.assertEqual(sections[0]['title'], 'Objective')
+        self.assertIn('True/False', sections[1]['title'])
+
+    def test_does_not_split_an_attempt_any_section(self):
+        from .paper_reconcile import reconcile_pages
+        questions = [self._q('SHORT'), self._q('LONG')]
+        page = {'sections': [self._section('Attempt any 1', 'SHORT', 2, counted=1, questions=questions)]}
+        self.assertEqual(len(reconcile_pages([(1, page)])['sections']), 1)
+
+    def test_flags_low_confidence_questions_and_checks_marks_and_missing_fields(self):
+        from .paper_reconcile import reconcile_pages
+        questions = [self._q('SHORT', 2, 0.4), self._q('SHORT', 2, 0.95), self._q('SHORT', 2, None)]
+        page = {'header': {'detected_total_marks': 6}, 'sections': [self._section('A', 'SHORT', 3, questions=questions)]}
+        result = reconcile_pages([(1, page)])
+        self.assertEqual(result['low_confidence_count'], 1)
+        self.assertEqual([q['needs_review'] for q in result['questions']], [True, False, False])
+        self.assertEqual(result['marks_check'], {'detected': 6, 'computed': 6.0, 'matches': True})
+        self.assertEqual(result['missing_fields'], ['class_label', 'subject_label'])
+
+    def test_marks_check_has_no_verdict_without_a_printed_total(self):
+        from .paper_reconcile import reconcile_pages
+        result = reconcile_pages([(1, {'sections': [self._section('A', 'SHORT', 1)]})])
+        self.assertIsNone(result['marks_check']['matches'])
+        self.assertIn('detected_total_marks', result['missing_fields'])
+
+
+class PaperUploadGroupStatusTests(TestCase):
+    """GET paper-uploads/group-status/: the declared page count drives completeness."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.school = _make_school()
+        cls.other_school = _make_school(suffix='-gs')
+        cls.user = get_user_model().objects.create_superuser(
+            username='group_status_admin', email='group_status_admin@test.com', password='test12345',
         )
-        self.assertIsNone(_build_continuation_context(page))
 
-    def test_summarizes_prior_page_for_page_two(self):
+    def setUp(self):
         import uuid
-        group_id = uuid.uuid4()
-        self._make_upload(self.school, group_id, 1, ai_extracted_json={
-            'header': {'class_label': 'FIFTH', 'subject_label': 'SS'},
-            'sections': [{'title': 'Section A', 'instruction': None, 'question_type_guess': 'MCQ'}],
-            'questions': [{'question_text': 'Q1'}, {'question_text': 'Q2'}],
-            'computed_total_marks': 10,
-        })
-        page2 = self._make_upload(self.school, group_id, 2)
+        self.group_id = uuid.uuid4()
+        self.client = APIClient()
+        self.client.force_authenticate(self.user)
+        self.header = {'HTTP_X_SCHOOL_ID': str(self.school.id)}
 
-        context = _build_continuation_context(page2)
+    def _page(self, number, status_value=PaperUpload.Status.EXTRACTED, school=None, extracted=None):
+        return PaperUpload.objects.create(
+            school=school or self.school, uploaded_by=self.user, image_url='https://example.test/p.png',
+            group_id=self.group_id, page_number=number, status=status_value,
+            ai_extracted_json=extracted if extracted is not None else {'sections': [{
+                'title': f'S{number}', 'question_type_guess': 'SHORT', 'marks_per_question': 1, 'shown_count': 1,
+                'counted_count': 1, 'questions': [{'question_text': 'q', 'question_type': 'SHORT', 'marks': 1}]}]},
+        )
 
-        self.assertEqual(context['page_number'], 2)
-        self.assertEqual(context['header']['class_label'], 'FIFTH')
-        self.assertEqual(context['last_section']['title'], 'Section A')
-        self.assertEqual(context['questions_so_far'], 2)
-        self.assertEqual(context['marks_so_far'], 10)
+    def _get(self, total_pages):
+        return self.client.get(
+            '/api/examinations/paper-uploads/group-status/',
+            {'group_id': str(self.group_id), 'total_pages': total_pages}, **self.header,
+        )
 
-    def test_does_not_leak_another_schools_group_id_collision(self):
-        """A group_id that happens to also exist under another school must not
-        contribute that school's extraction data as continuation context."""
-        import uuid
-        group_id = uuid.uuid4()
-        self._make_upload(self.other_school, group_id, 1, ai_extracted_json={
-            'header': {'class_label': 'OTHER SCHOOL CLASS'},
-            'sections': [{'title': 'Other School Section', 'instruction': None, 'question_type_guess': 'MCQ'}],
-            'questions': [{'question_text': 'Q1'}],
-            'computed_total_marks': 5,
-        })
-        page2 = self._make_upload(self.school, group_id, 2)
+    def test_reports_missing_pages_and_withholds_the_result(self):
+        self._page(1)
+        body = self._get(3).json()
+        self.assertFalse(body['complete'])
+        self.assertEqual(body['missing_pages'], [2, 3])
+        self.assertIsNone(body['result'])
 
-        context = _build_continuation_context(page2)
+    def test_failed_page_blocks_completion_and_a_retry_replaces_it(self):
+        self._page(1)
+        self._page(2, PaperUpload.Status.FAILED)
+        body = self._get(2).json()
+        self.assertEqual(body['failed_pages'], [2])
+        self.assertFalse(body['complete'])
+        self._page(2)  # the retry is a newer upload for the same page number
+        body = self._get(2).json()
+        self.assertTrue(body['complete'])
+        self.assertEqual(body['failed_pages'], [])
 
-        # This school has no prior page in this group_id -- must come back None,
-        # not the other school's data.
-        self.assertIsNone(context)
+    def test_returns_the_reconciled_paper_once_every_declared_page_is_extracted(self):
+        self._page(2)
+        self._page(1)
+        body = self._get(2).json()
+        self.assertTrue(body['complete'])
+        self.assertEqual([s['title'] for s in body['result']['sections']], ['S1', 'S2'])
+
+    def test_rejects_a_missing_or_out_of_range_page_count(self):
+        self.assertEqual(self._get(0).status_code, 400)
+        self.assertEqual(self._get(31).status_code, 400)
+        response = self.client.get('/api/examinations/paper-uploads/group-status/', **self.header)
+        self.assertEqual(response.status_code, 400)
+
+    def test_never_reads_another_schools_pages(self):
+        self._page(1, school=self.other_school)
+        self.assertEqual(self._get(1).json()['missing_pages'], [1])
 
 
 class PaperUploadContextPersistenceTests(TestCase):

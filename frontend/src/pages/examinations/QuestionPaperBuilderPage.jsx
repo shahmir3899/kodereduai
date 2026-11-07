@@ -18,7 +18,6 @@ import useTeacherScopedClasses from '../../hooks/useTeacherScopedClasses'
 import { getClassSelectorScope, getResolvedMasterClassId } from '../../utils/classScope'
 import ImageCapturePaperTab from './ImageCapturePaperTab'
 import ManualEntryPaperTab from './ManualEntryPaperTab'
-import BankFillSource from './BankFillSource'
 import PaperStructureBuilder from './PaperStructureBuilder'
 import {
   buildManualAutosaveQuestions,
@@ -137,12 +136,14 @@ export default function QuestionPaperBuilderPage() {
   const { paperId: routePaperId } = useParams()
   const { activeAcademicYear } = useAcademicYear()
   const resumePaperId = routePaperId || location.state?.paperId || location.state?.draftId || null
-  const [activeTab, setActiveTab] = useState(location.state?.lessonPlanId ? 'lesson' : 'manual') // 'manual' | 'image' | 'lesson'
+  const [activeTab, setActiveTab] = useState('manual') // 'manual' (slot board) | 'image' (OCR upload)
   const { showError, showSuccess } = useToast()
   const { confirm, ConfirmModalRoot } = useConfirmModal()
   const [draftId, setDraftId] = useState(resumePaperId)
   const [manualDraft, setManualDraft] = useState(MANUAL_DRAFT_DEFAULT)
   const [manualDirty, setManualDirty] = useState(false)
+  // Class / subject labels read off an uploaded paper; shown on Setup until both are chosen.
+  const [ocrHints, setOcrHints] = useState(null)
   const [saveState, setSaveState] = useState('idle')
   const [lastSavedAt, setLastSavedAt] = useState(null)
   const [coverageCollapsed, setCoverageCollapsed] = useState(false)
@@ -156,7 +157,6 @@ export default function QuestionPaperBuilderPage() {
   const [wizardStep, setWizardStep] = useState(location.state?.lessonPlanId ? 3 : 1)
   const [structure, setStructure] = useState([])
   const [renderOptions, setRenderOptions] = useState(RENDER_OPTIONS_DEFAULT)
-  const [sourceChosen, setSourceChosen] = useState(Boolean(location.state?.lessonPlanId))
   const hasJumpedToStep3Ref = useRef(false)
   // Raw Master Class id (ExamPaper.class_obj) from a resumed draft, held here so the
   // late-loading-sessionClasses safety-net effect below can retry the session-class
@@ -273,7 +273,6 @@ export default function QuestionPaperBuilderPage() {
     if (!hasJumpedToStep3Ref.current) {
       hasJumpedToStep3Ref.current = true
       setWizardStep(3)
-      setSourceChosen(true)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resumeDraftRes])
@@ -305,7 +304,6 @@ export default function QuestionPaperBuilderPage() {
     }
     if (isReadOnlyPaper) {
       setWizardStep(3)
-      setSourceChosen(true)
     }
   }, [activeTab, isReadOnlyPaper])
 
@@ -557,7 +555,6 @@ export default function QuestionPaperBuilderPage() {
       }
       if (parsed.wizardStep) {
         setWizardStep(parsed.wizardStep)
-        setSourceChosen(parsed.wizardStep >= 3)
       }
       setSaveState('pending')
       showSuccess('Recovered unsaved manual draft from this browser.')
@@ -819,11 +816,19 @@ export default function QuestionPaperBuilderPage() {
     setSaveState((prev) => (prev === 'saving' ? prev : 'pending'))
     setStructure((prev) => [...prev, ...prefill.structure])
     setActiveTab('manual')
-    setSourceChosen(true)
-    setWizardStep(3)
     setPendingImageConfirm({ uploadIds: prefill.uploadIds || [prefill.uploadId], questions: prefill.questions })
-    showSuccess('Prefilled from your uploaded paper — review and edit; it autosaves as you go.')
-  }, [showSuccess])
+    if (!resolvedClassObj || !paperMetadata.subject) {
+      // The paper's class/subject could not be taken from the page for us (they are labels,
+      // never ids): ask for them on Setup, with what was read as a hint. The questions are
+      // already in the draft and autosave only starts once both are chosen.
+      setOcrHints(prefill.detected || { class_label: '', subject_label: '' })
+      setWizardStep(1)
+      showSuccess('Questions read. Choose the class and subject to continue; nothing is saved before that.')
+    } else {
+      setWizardStep(3)
+      showSuccess('Prefilled from your uploaded paper — review and edit; it autosaves as you go.')
+    }
+  }, [showSuccess, resolvedClassObj, paperMetadata.subject])
 
   const linkLessonPlansMutation = useMutation({
     mutationFn: ({ id, lessonPlanIds }) => questionPaperApi.linkLessonPlans(id, { lesson_plan_ids: lessonPlanIds }),
@@ -832,19 +837,27 @@ export default function QuestionPaperBuilderPage() {
     },
   })
 
-  const [selectedLessonPlanIds, setSelectedLessonPlanIds] = useState([])
+  // Lesson plans narrow the bank picker and are linked to the paper for coverage. Opening
+  // the builder from a lesson plan preselects it.
+  const [selectedLessonPlanIds, setSelectedLessonPlanIds] = useState(
+    location.state?.lessonPlanId ? [location.state.lessonPlanId] : [],
+  )
   const handleLessonPlanIdsChange = useCallback((lessonPlanIds) => {
     setSelectedLessonPlanIds(lessonPlanIds)
   }, [])
 
   // Seeded from the server's current linkage (via coverage stats) before any sync is
-  // allowed to fire — otherwise BankFillSource's default empty selection, reported on
+  // allowed to fire — otherwise the default empty selection, reported on
   // mount before the user touches anything, would wipe out lesson plans already linked
   // to a resumed draft.
   const lastLinkedLessonPlanIdsRef = useRef(null)
   useEffect(() => {
     if (lastLinkedLessonPlanIdsRef.current === null && coverageStatsRes) {
       lastLinkedLessonPlanIdsRef.current = JSON.stringify(linkedLessonPlanIds)
+      // Resumed draft: show the plans already linked as selected (keeps a lesson plan
+      // the user arrived with). The hash above is the server's truth, so this only
+      // triggers a sync when the arriving plan is not linked yet.
+      setSelectedLessonPlanIds((prev) => Array.from(new Set([...linkedLessonPlanIds, ...prev])))
     }
   }, [coverageStatsRes, linkedLessonPlanIds])
 
@@ -910,11 +923,20 @@ export default function QuestionPaperBuilderPage() {
                 </p>
                 <button
                   type="button"
-                  onClick={() => { setActiveTab('image'); setSourceChosen(true); setWizardStep(3) }}
+                  onClick={() => { setActiveTab('image'); setWizardStep(3) }}
                   className="shrink-0 px-3 py-1.5 border border-blue-300 text-blue-700 rounded-lg text-sm hover:bg-blue-100"
                 >
                   Upload paper image
                 </button>
+              </div>
+            )}
+
+            {ocrHints && (!resolvedClassObj || !paperMetadata.subject) && (
+              <div className="mb-6 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                Your questions are read and kept. Choose the class and subject below to continue — nothing is saved until both are chosen.
+                <span className="block mt-1">
+                  On the paper: class <strong>{ocrHints.class_label || 'not found'}</strong>, subject <strong>{ocrHints.subject_label || 'not found'}</strong>.
+                </span>
               </div>
             )}
 
@@ -1115,110 +1137,51 @@ export default function QuestionPaperBuilderPage() {
                 </div>
               )}
 
-              {!sourceChosen && !isReadOnlyPaper ? (
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <button
-                    type="button"
-                    onClick={() => { setActiveTab('manual'); setSourceChosen(true) }}
-                    className="p-6 border-2 border-gray-200 rounded-lg text-center hover:border-blue-400 hover:bg-blue-50 transition"
-                  >
-                    <span className="text-3xl block mb-2">⌨️</span>
-                    <span className="font-semibold text-gray-800">Type manually</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => { setActiveTab('lesson'); setSourceChosen(true) }}
-                    className="p-6 border-2 border-gray-200 rounded-lg text-center hover:border-blue-400 hover:bg-blue-50 transition"
-                  >
-                    <span className="text-3xl block mb-2">📚</span>
-                    <span className="font-semibold text-gray-800">From question bank / lesson plans</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => { setActiveTab('image'); setSourceChosen(true) }}
-                    className="p-6 border-2 border-gray-200 rounded-lg text-center hover:border-blue-400 hover:bg-blue-50 transition"
-                  >
-                    <span className="text-3xl block mb-2">📸</span>
-                    <span className="font-semibold text-gray-800">Capture from image</span>
-                  </button>
-                </div>
-              ) : (
+              {activeTab === 'image' && !isReadOnlyPaper && (
                 <>
-                  {!isReadOnlyPaper && (
-                    <div className="flex items-center justify-between mb-4">
-                      <div className="text-sm text-gray-600">
-                        Source: <span className="font-medium text-gray-800">
-                          {activeTab === 'manual' && 'Type manually'}
-                          {activeTab === 'lesson' && 'From question bank / lesson plans'}
-                          {activeTab === 'image' && 'Capture from image'}
-                        </span>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setSourceChosen(false)}
-                        className="text-sm text-blue-600 hover:text-blue-800"
-                      >
-                        Change source
-                      </button>
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="text-sm text-gray-600">
+                      Source: <span className="font-medium text-gray-800">Capture from image</span>
                     </div>
-                  )}
-
-                  {activeTab === 'manual' && (
-                    <ManualEntryPaperTab
-                      draftData={manualDraft}
-                      onDraftDataChange={handleManualDraftChange}
-                      onSubmitDraft={handleManualSubmit}
-                      isLoading={
-                        saveState === 'saving'
-                        || ensureDraftMutation.isPending
-                        || autosaveMutation.isPending
-                      }
-                      saveState={saveState}
-                      lastSavedAt={lastSavedAt}
-                      draftReady={!!draftId}
-                      draftAlreadyOpen={!!draftId && routePaperId === String(draftId)}
-                      classId={resolvedClassObj}
-                      subjectId={paperMetadata.subject}
-                      structure={structure}
-                      overusedQuestionCounts={overusedQuestionCounts}
-                      readOnly={isReadOnlyPaper}
-                    />
-                  )}
-
-                  {activeTab === 'image' && (
-                    <ImageCapturePaperTab
-                      classId={resolvedClassObj}
-                      subjectId={paperMetadata.subject}
-                      readOnly={isReadOnlyPaper}
-                      onApplyPrefill={handleApplyImagePrefill}
-                    />
-                  )}
-
-                  {activeTab === 'lesson' && (
-                    <BankFillSource
-                      draftData={manualDraft}
-                      onDraftDataChange={handleManualDraftChange}
-                      onSubmitDraft={handleManualSubmit}
-                      isLoading={
-                        saveState === 'saving'
-                        || ensureDraftMutation.isPending
-                        || autosaveMutation.isPending
-                      }
-                      saveState={saveState}
-                      lastSavedAt={lastSavedAt}
-                      draftReady={!!draftId}
-                      draftAlreadyOpen={!!draftId && routePaperId === String(draftId)}
-                      classId={resolvedClassObj}
-                      subjectId={paperMetadata.subject}
-                      structure={structure}
-                      overusedQuestionCounts={overusedQuestionCounts}
-                      readOnly={isReadOnlyPaper}
-                      initialLessonPlanId={location.state?.lessonPlanId}
-                      initialLessonPlanIds={linkedLessonPlanIds}
-                      onLessonPlanIdsChange={handleLessonPlanIdsChange}
-                    />
-                  )}
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('manual')}
+                      className="text-sm text-blue-600 hover:text-blue-800"
+                    >
+                      Back to question slots
+                    </button>
+                  </div>
+                  <ImageCapturePaperTab
+                    classId={resolvedClassObj}
+                    subjectId={paperMetadata.subject}
+                    readOnly={isReadOnlyPaper}
+                    onApplyPrefill={handleApplyImagePrefill}
+                  />
                 </>
+              )}
+
+              {activeTab === 'manual' && (
+                <ManualEntryPaperTab
+                  draftData={manualDraft}
+                  onDraftDataChange={handleManualDraftChange}
+                  onSubmitDraft={handleManualSubmit}
+                  isLoading={
+                    saveState === 'saving'
+                    || ensureDraftMutation.isPending
+                    || autosaveMutation.isPending
+                  }
+                  saveState={saveState}
+                  lastSavedAt={lastSavedAt}
+                  draftReady={!!draftId}
+                  draftAlreadyOpen={!!draftId && routePaperId === String(draftId)}
+                  classId={resolvedClassObj}
+                  subjectId={paperMetadata.subject}
+                  structure={structure}
+                  overusedQuestionCounts={overusedQuestionCounts}
+                  readOnly={isReadOnlyPaper}
+                  lessonPlanIds={selectedLessonPlanIds}
+                  onLessonPlanIdsChange={handleLessonPlanIdsChange}
+                />
               )}
             </div>
           </div>

@@ -6,11 +6,12 @@ import { todayString } from '../../services/attendanceEntry';
 import {
   REPORT_PERIODS, buildReportRequest, reportPeriodParams, type ReportPeriod,
 } from '../../services/studentLifecycle';
+import { durationLabel, reportsZipFileName, singleReportFileName, uniqueNames } from '../../services/studentReportNames';
 import { buildBulkZip, needsConfirm, type BulkResult, type BulkStudent } from '../../services/bulkReportCards';
 import { shareFileBytes } from '../../services/reportShare';
 import {
   accountsErrorText, bulkAccountsConfirmText, bulkAccountsResultText, bulkPasswordProblem, buildBulkAccountsPayload,
-  studentReportsProgress, studentReportsResultText, studentReportsZipName, type BulkAccountsResult,
+  studentReportsProgress, studentReportsResultText, type BulkAccountsResult,
 } from '../../services/studentBulk';
 import { PASSWORD_MIN_LENGTH } from '../../services/studentAccount';
 import { useAcademicYear } from '../../hooks/useAcademicYear';
@@ -97,6 +98,7 @@ export function BulkReportsSheet({ visible, onClose, students }: { visible: bool
   const [progress, setProgress] = useState<[number, number]>([0, 0]);
   const [result, setResult] = useState<BulkResult | null>(null);
   const [zip, setZip] = useState<Uint8Array | null>(null);
+  const [zipName, setZipName] = useState('');
   const [error, setError] = useState<string | null>(null);
   const cancelRef = useRef(false);
 
@@ -104,8 +106,8 @@ export function BulkReportsSheet({ visible, onClose, students }: { visible: bool
     if (visible) { setPeriod('this_month'); setCustom({ from: '', to: '' }); setRunning(false); setResult(null); setZip(null); setError(null); setProgress([0, students.length]); }
   }, [visible, students.length]);
 
-  const share = async (bytes: Uint8Array) => {
-    try { await shareFileBytes(bytes, studentReportsZipName(`${students.length}_students`), 'zip'); }
+  const share = async (bytes: Uint8Array, name: string) => {
+    try { await shareFileBytes(bytes, name, 'zip'); }
     catch (e) { setError((e as Error)?.message || 'Could not open the share sheet.'); }
   };
 
@@ -122,8 +124,10 @@ export function BulkReportsSheet({ visible, onClose, students }: { visible: bool
     setResult(null);
     setZip(null);
     setProgress([0, students.length]);
+    const duration = durationLabel(params, year.current?.name);
     const { zip: bytes, result: r } = await buildBulkZip({
       students,
+      fileNames: uniqueNames(students.map((s) => singleReportFileName(s, duration))),
       fetchPdf: (s) => reportsApi.generateInstant(buildReportRequest(s.studentId, params)) as Promise<{ data: ArrayBuffer }>,
       onProgress: (done, total) => setProgress([done, total]),
       shouldCancel: () => cancelRef.current,
@@ -131,7 +135,10 @@ export function BulkReportsSheet({ visible, onClose, students }: { visible: bool
     setRunning(false);
     setResult(r);
     setZip(bytes);
-    if (bytes) await share(bytes);
+    // Name the zip for the students actually in it, not everyone picked.
+    const name = reportsZipFileName(students.filter((s) => !r.skipped.some((k) => k.name === s.name)), duration);
+    setZipName(name);
+    if (bytes) await share(bytes, name);
   };
 
   const close = () => { if (running) cancelRef.current = true; onClose(); };
@@ -164,7 +171,7 @@ export function BulkReportsSheet({ visible, onClose, students }: { visible: bool
             ) : null}
             {error ? <Text style={styles.err} accessibilityRole="alert">{error}</Text> : null}
             <Button title={result ? 'Run again' : 'Start'} onPress={start} disabled={students.length === 0} />
-            {zip ? <Button title="Share the ZIP again" variant="outline" onPress={() => share(zip)} /> : null}
+            {zip ? <Button title="Share the ZIP again" variant="outline" onPress={() => share(zip, zipName)} /> : null}
           </>
         )}
       </View>

@@ -12,6 +12,7 @@ from django.utils import timezone
 import calendar
 import io
 import math
+import os
 import re
 from collections import OrderedDict
 from datetime import date, datetime, timedelta
@@ -434,6 +435,185 @@ def build_two_column_ratings(rating_pairs, col_width=(CONTENT_WIDTH - 0.2 * inch
     return build_two_column_row(left, right, col_width=col_width, gap=gap)
 
 
+# --- Urdu / Arabic-script text ---------------------------------------------
+# Helvetica has no Arabic-script glyphs, so Urdu rendered as blanks/boxes. Paragraphs that
+# contain Urdu switch wholesale to Noto Nastaliq with reportlab's shaping on (needs
+# uharfbuzz + python-bidi for joining and right-to-left order). A whole-paragraph switch,
+# not inline <font> runs: inline runs inside a Helvetica paragraph came out blank.
+
+URDU_FONT = 'NotoNastaliqUrdu'
+_URDU_FONT_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'fonts', 'NotoNastaliqUrdu-Regular.ttf')
+_ARABIC_RE = re.compile('[؀-ۿݐ-ݿﭐ-﷿ﹰ-﻿]')
+_urdu_font_ready = None
+
+
+def has_urdu(text):
+    return bool(text) and bool(_ARABIC_RE.search(str(text)))
+
+
+def _ensure_urdu_font():
+    """Register the Urdu font once; False (and Helvetica fallback) if it or shaping is unavailable."""
+    global _urdu_font_ready
+    if _urdu_font_ready is None:
+        try:
+            import uharfbuzz  # noqa: F401  (reportlab shapes only when it is importable)
+            from reportlab.lib.fonts import addMapping
+            from reportlab.pdfbase import pdfmetrics
+            from reportlab.pdfbase.ttfonts import TTFont
+            pdfmetrics.registerFont(TTFont(URDU_FONT, _URDU_FONT_PATH))
+            # Single weight: map bold/italic to it so <b> inside an Urdu paragraph doesn't raise.
+            for bold in (0, 1):
+                for italic in (0, 1):
+                    addMapping(URDU_FONT, bold, italic, URDU_FONT)
+            _urdu_font_ready = True
+        except Exception:  # missing font file/uharfbuzz must not break English reports
+            _urdu_font_ready = False
+    return _urdu_font_ready
+
+
+def urdu_aware_style(style, text):
+    """`style`, or a Nastaliq/shaped/right-aligned copy of it when `text` contains Urdu."""
+    if not has_urdu(text) or not _ensure_urdu_font():
+        return style
+    from reportlab.lib.styles import ParagraphStyle
+    size = style.fontSize
+    # Nastaliq glyphs are tall and sit low; default leading clips them.
+    return ParagraphStyle(
+        f'{style.name}_ur', parent=style, fontName=URDU_FONT, shaping=1,
+        leading=max(style.leading, size * 2.0), alignment=2, wordWrap='RTL',
+    )
+
+
+def urdu_paragraph(text, style, **kwargs):
+    from reportlab.platypus import Paragraph
+    return Paragraph(text, urdu_aware_style(style, text), **kwargs)
+
+
+def build_lessons_grid(lessons_by_subject, subject_style, body_style, week_style=None, max_per_block=14):
+    """
+    Subjects laid out two per row. `lessons_by_subject` maps subject -> {'total': n,
+    'groups': [(label|None, [topic, ...]), ...]} (label = "Week 1 (1-7 Nov)" etc.).
+    A long subject is cut into blocks of `max_per_block` lines ("Subject (cont.)") so no
+    table row can outgrow a page.
+    """
+    from reportlab.lib.styles import ParagraphStyle
+    from reportlab.platypus import Spacer, Table, TableStyle
+
+    week_style = week_style or body_style
+
+    col_width = (CONTENT_WIDTH - 0.2 * inch) / 2
+    count_style = ParagraphStyle(f'{body_style.name}_count', parent=body_style, leftIndent=0, firstLineIndent=0)
+
+    def item_para(text):
+        from reportlab.platypus import Paragraph
+        if not has_urdu(text):
+            return Paragraph(f'• {text}', body_style)
+        # Reportlab lays a paragraph mixing Urdu with "•"/"(x3)" out left-to-right (bullet on
+        # the left, count on the right), whatever the style says. Build the right-to-left row
+        # by hand instead: [count | Urdu text | bullet], text itself being pure Urdu.
+        m = re.match(r'^(.*?)(?:\s*\(x(\d+)\))?$', text)
+        body, count = m.group(1), m.group(2)
+        text_style = ParagraphStyle(
+            f'{body_style.name}_rtl', parent=urdu_aware_style(body_style, body),
+            leftIndent=0, firstLineIndent=0,
+        )
+        # A Latin "(x3)" inside the Urdu paragraph flips the whole line to left-to-right, so the
+        # count is its own cell hugging the end (left edge) of the text, which is sized to its
+        # widest line so the cell can sit right beside it.
+        side_style = ParagraphStyle(
+            f'{count_style.name}_side', parent=count_style, leading=text_style.leading,
+        )
+        bullet_w, count_w = 8, 24
+        body_para = Paragraph(body, text_style)
+        body_para.wrap(col_width - bullet_w - count_w, 10000)
+        text_w = min(max(body_para.getActualLineWidths0() or [0]) + 3, col_width - bullet_w - count_w)
+        count_cell = Paragraph(f'(x{count})' if count else '', ParagraphStyle(
+            f'{side_style.name}_r', parent=side_style, alignment=2,
+        ))
+        row = Table(
+            [['', count_cell, body_para, Paragraph('•', side_style)]],
+            colWidths=[col_width - bullet_w - count_w - text_w, count_w, text_w, bullet_w],
+        )
+        row.setStyle(TableStyle([
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('LEFTPADDING', (0, 0), (-1, -1), 0), ('RIGHTPADDING', (0, 0), (-1, -1), 0),
+            ('TOPPADDING', (0, 0), (-1, -1), 0), ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
+            ('ALIGN', (3, 0), (3, 0), 'RIGHT'),
+        ]))
+        return row
+
+    blocks = []
+    for subject, info in lessons_by_subject.items():
+        lines = []  # (is_label, text)
+        for label, topics in info['groups']:
+            if label:
+                lines.append((True, label))
+            lines.extend((False, t) for t in topics)
+        # Never strand a week label at the bottom of a block.
+        chunks, cur = [], []
+        for line in lines:
+            if len(cur) >= max_per_block:
+                if cur[-1][0]:
+                    line_last = cur.pop()
+                    chunks.append(cur)
+                    cur = [line_last]
+                else:
+                    chunks.append(cur)
+                    cur = []
+            cur.append(line)
+        if cur:
+            chunks.append(cur)
+        for n, chunk in enumerate(chunks):
+            title = f"{subject} ({info['total']})" if n == 0 else f'{subject} (cont.)'
+            cell = [urdu_paragraph(f'<b>{title}</b>', subject_style)]
+            for is_label, text in chunk:
+                cell.append(urdu_paragraph(text, week_style) if is_label else item_para(text))
+            cell.append(Spacer(1, 4))
+            blocks.append(cell)
+
+    col_width = (CONTENT_WIDTH - 0.2 * inch) / 2
+    rows = []
+    for i in range(0, len(blocks), 2):
+        pair = blocks[i:i + 2]
+        rows.append([pair[0], '', pair[1] if len(pair) > 1 else ''])
+    grid = Table(rows, colWidths=[col_width, 0.2 * inch, col_width])
+    grid.setStyle(TableStyle([
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('LEFTPADDING', (0, 0), (-1, -1), 0),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 0),
+        ('TOPPADDING', (0, 0), (-1, -1), 0),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
+    ]))
+    return grid
+
+
+def group_lessons(plans, date_from, date_to):
+    """
+    Bucket (lesson_date, topic) pairs for one subject into [(label|None, [topic (xN)])].
+    Periods up to ~6 weeks group by 7-day weeks from the period start; longer or open
+    periods group by month. A single bucket carries no label (saves a line).
+    """
+    buckets = OrderedDict()
+    use_weeks = bool(date_from and date_to and (date_to - date_from).days <= 45)
+    for lesson_date, topic in plans:
+        if use_weeks:
+            idx = max((lesson_date - date_from).days, 0) // 7
+            start = date_from + timedelta(days=idx * 7)
+            end = min(start + timedelta(days=6), date_to)
+            label = f"Week {idx + 1} ({start.strftime('%d %b')} - {end.strftime('%d %b')})"
+        else:
+            label = lesson_date.strftime('%B %Y')
+        counts = buckets.setdefault(label, OrderedDict())
+        counts[topic] = counts.get(topic, 0) + 1
+    groups = [
+        (label, [f'{t} (x{n})' if n > 1 else t for t, n in counts.items()])
+        for label, counts in buckets.items()
+    ]
+    if len(groups) == 1:
+        groups = [(None, groups[0][1])]
+    return groups
+
+
 class StudentComprehensiveReportGenerator(BaseReportGenerator):
     """Premium student progress report: profile, attendance, learning, assessment, fees, remarks."""
 
@@ -671,12 +851,20 @@ class StudentComprehensiveReportGenerator(BaseReportGenerator):
         elif academic_year_id:
             lesson_qs = lesson_qs.filter(academic_year_id=academic_year_id)
         draft_lesson_count = lesson_qs.filter(status=LessonPlan.Status.DRAFT).count()
-        published = lesson_qs.filter(status=LessonPlan.Status.PUBLISHED).select_related('subject')
+        # Same "taught" rule as the coverage pages: published AND dated today or earlier.
+        from lms.coverage import taught_plan_q
+        published = lesson_qs.filter(taught_plan_q()).select_related('subject')
+        plans_by_subject = OrderedDict()
         for lp in published.order_by('lesson_date'):
             # display_text is multi-line (chapter / topic / subtopic); one line per lesson
             # reads better in a bullet list than collapsed whitespace.
             topic = ' - '.join(ln.strip() for ln in lp.display_text.splitlines() if ln.strip()) or lp.title
-            lessons_by_subject.setdefault(lp.subject.name, []).append(topic)
+            plans_by_subject.setdefault(lp.subject.name, []).append((lp.lesson_date, topic))
+        # Teachers log one plan per day for the same topic; each week lists a topic once with a count.
+        for subject_name, plans in plans_by_subject.items():
+            lessons_by_subject[subject_name] = {
+                'total': len(plans), 'groups': group_lessons(plans, date_from, date_to),
+            }
 
         # --- Skills / behaviour assessment + remarks (teacher-entered, StudentTermAssessment) ---
         skills_ratings = []
@@ -773,8 +961,14 @@ class StudentComprehensiveReportGenerator(BaseReportGenerator):
         photo_bytes = fetch_image_bytes(student.photo_url)
         school_logo_bytes = fetch_image_bytes(self.school.logo)
 
+        header_period = ''
         if date_from and date_to:
             period_label = f"{date_from.strftime('%d %b %Y')} - {date_to.strftime('%d %b %Y')}"
+            last_day = calendar.monthrange(date_from.year, date_from.month)[1]
+            if date_from.day == 1 and date_to == date(date_from.year, date_from.month, last_day):
+                header_period = date_from.strftime('%B %Y')  # a whole month reads as its name
+            else:
+                header_period = f"{date_from.strftime('%d %b %Y')} to {date_to.strftime('%d %b %Y')}"
         elif academic_year_obj:
             period_label = f"Academic Year {academic_year_obj.name}"
         elif academic_year_id:
@@ -827,6 +1021,7 @@ class StudentComprehensiveReportGenerator(BaseReportGenerator):
             'school_logo_bytes': school_logo_bytes,
             'academic_session_display': academic_session_display,
             'report_period_label': period_label,
+            'header_period': header_period,
             'student_info_rows': student_info_rows,
             'photo_bytes': photo_bytes,
             'attendance_by_date': attendance_by_date,
@@ -910,6 +1105,8 @@ class StudentComprehensiveReportGenerator(BaseReportGenerator):
             Paragraph('Student Report', report_title_style),
             Paragraph(f"Academic Session: {data['academic_session_display']}", session_style),
         ]
+        if data.get('header_period'):
+            header_text.append(Paragraph(f"Period: <b>{data['header_period']}</b>", session_style))
         if logo_bytes:
             try:
                 logo = Image(io.BytesIO(logo_bytes), width=0.8 * inch, height=0.8 * inch)
@@ -937,7 +1134,14 @@ class StudentComprehensiveReportGenerator(BaseReportGenerator):
             pair = info_rows[i:i + 2]
             row = []
             for label, value in pair:
-                row.append(Paragraph(f"<font color='{GRAY_TEXT}'>{label}</font><br/><b>{value}</b>", info_label_style))
+                if has_urdu(value):
+                    # Label stays Helvetica; only the value switches to the Urdu font.
+                    row.append([
+                        Paragraph(f"<font color='{GRAY_TEXT}'>{label}</font>", info_label_style),
+                        urdu_paragraph(f"<b>{value}</b>", info_label_style),
+                    ])
+                else:
+                    row.append(Paragraph(f"<font color='{GRAY_TEXT}'>{label}</font><br/><b>{value}</b>", info_label_style))
             if len(pair) == 1:
                 row.append('')
             info_table_data.append(row)
@@ -961,7 +1165,7 @@ class StudentComprehensiveReportGenerator(BaseReportGenerator):
         info_card_inner = Table([[info_grid, photo_cell]], colWidths=[None, 1.3 * inch])
         info_card_inner.setStyle(TableStyle([
             ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-            ('ALIGN', (1, 0), (1, 0), 'RIGHT'),
+            ('ALIGN', (3, 0), (3, 0), 'RIGHT'),
             ('LEFTPADDING', (0, 0), (-1, -1), 0),
             ('RIGHTPADDING', (0, 0), (-1, -1), 0),
         ]))
@@ -1030,12 +1234,21 @@ class StudentComprehensiveReportGenerator(BaseReportGenerator):
         learning = [section_heading('Learning Progress', styles), Spacer(1, 8)]
         lessons_by_subject = data.get('lessons_by_subject') or {}
         if lessons_by_subject:
-            for subject, topics in lessons_by_subject.items():
-                learning.append(KeepTogether([
-                    Paragraph(f"<b>{subject}</b>", body_style),
-                    Paragraph('<br/>'.join(f'• {t}' for t in topics), body_style),
-                    Spacer(1, 8),
-                ]))
+            lesson_subject_style = ParagraphStyle(
+                'LessonSubject', parent=body_style, fontSize=9.5, leading=12, spaceAfter=1,
+                textColor=colors.HexColor(BLUE),
+            )
+            lesson_item_style = ParagraphStyle(
+                'LessonItem', parent=body_style, fontSize=8.5, leading=10.5,
+                leftIndent=8, firstLineIndent=-8,
+            )
+            lesson_week_style = ParagraphStyle(
+                'LessonWeek', parent=lesson_item_style, fontName='Helvetica-Oblique',
+                textColor=colors.HexColor(GRAY_TEXT), leftIndent=0, firstLineIndent=0, spaceBefore=2,
+            )
+            learning.append(build_lessons_grid(
+                lessons_by_subject, lesson_subject_style, lesson_item_style, lesson_week_style,
+            ))
         elif data.get('draft_lesson_count'):
             n = data['draft_lesson_count']
             learning.append(Paragraph(
@@ -1114,7 +1327,7 @@ class StudentComprehensiveReportGenerator(BaseReportGenerator):
         teacher_remark_raw = data['teacher_remark'].replace('‑', '-').strip() if data['teacher_remark'] else ''
         teacher_remark_text = teacher_remark_raw or 'No remarks provided.'
         teacher_remark_style = body_style if teacher_remark_raw else empty_state_style
-        teacher_box = Table([[Paragraph(teacher_remark_text, teacher_remark_style)]], colWidths=[CONTENT_WIDTH])
+        teacher_box = Table([[urdu_paragraph(teacher_remark_text, teacher_remark_style)]], colWidths=[CONTENT_WIDTH])
         teacher_box.setStyle(remark_box_style)
         elements.append(teacher_box)
         elements.append(Spacer(1, 14))
@@ -1124,7 +1337,7 @@ class StudentComprehensiveReportGenerator(BaseReportGenerator):
         principal_remark_raw = data['principal_remark'].replace('‑', '-').strip() if data['principal_remark'] else ''
         principal_remark_text = principal_remark_raw or 'No remarks provided.'
         principal_remark_style = body_style if principal_remark_raw else empty_state_style
-        principal_box = Table([[Paragraph(principal_remark_text, principal_remark_style)]], colWidths=[CONTENT_WIDTH])
+        principal_box = Table([[urdu_paragraph(principal_remark_text, principal_remark_style)]], colWidths=[CONTENT_WIDTH])
         principal_box.setStyle(remark_box_style)
         elements.append(principal_box)
         elements.append(Spacer(1, 36))

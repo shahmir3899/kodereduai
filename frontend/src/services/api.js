@@ -1573,10 +1573,9 @@ export const questionPaperApi = {
   // Paper Uploads (image capture for OCR)
   getPaperUploads: (params) => api.get('/api/examinations/paper-uploads/', { params }),
   getPaperUpload: (id) => api.get(`/api/examinations/paper-uploads/${id}/`),
-  // groupId/pageNumber chain sequential pages of one multi-page capture together --
-  // omit both for page 1 (the backend generates and returns a group_id); pass that
-  // same group_id back for page 2+ so OCR can build continuation context from prior
-  // pages. page_number is normally left for the backend to auto-compute.
+  // groupId/pageNumber tie the pages of one capture together. The client makes the group
+  // id (a uuid) and sends every page with its own page number, so pages can go up at the
+  // same time; omit both for a single standalone upload.
   uploadPaperImage: (file, classObj, subject, groupId, pageNumber) => {
     const formData = new FormData()
     formData.append('image', file)
@@ -1589,6 +1588,9 @@ export const questionPaperApi = {
     })
   },
   confirmPaperUpload: (id, data) => api.post(`/api/examinations/paper-uploads/${id}/confirm/`, data),
+  // Progress of a multi-page capture whose page count was declared up front; once every page
+  // is extracted it also carries the reconciled paper (sections joined across page breaks).
+  getPaperGroupStatus: (groupId, totalPages) => api.get('/api/examinations/paper-uploads/group-status/', { params: { group_id: groupId, total_pages: totalPages } }),
 
   // Paper Feedback (for learning loop)
   getPaperFeedback: (params) => api.get('/api/examinations/paper-feedback/', { params }),

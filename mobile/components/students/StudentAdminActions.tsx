@@ -3,10 +3,11 @@ import { View, Text, TouchableOpacity, Share, StyleSheet } from 'react-native';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { parentsApi, reportsApi, studentsApi } from '../../services/api';
 import { shareReportFile } from '../../services/reportShare';
+import { durationLabel, singleReportFileName } from '../../services/studentReportNames';
 import { todayString } from '../../services/attendanceEntry';
 import {
   REPORT_PERIODS, RELATIONS, buildInvitePayload, buildOutcomePayload, buildReportRequest, inviteShareText, offeredOutcomes,
-  reportPeriodParams, studentReportFileName, validateOutcome, webOnlyOutcomes, type ReportPeriod,
+  reportPeriodParams, validateOutcome, webOnlyOutcomes, type ReportPeriod,
 } from '../../services/studentLifecycle';
 import { saveFailureMessage } from '../../services/errorKind';
 import { accountErrorText, accountProblem, buildAccountPayload, emptyAccountForm, PASSWORD_MIN_LENGTH, type AccountForm } from '../../services/studentAccount';
@@ -23,7 +24,7 @@ import { StudentMoveSheet, StudentRemoveSheet } from './StudentMoveSheets';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
 
 interface Props {
-  student: { id: number; name: string; status?: string | null; has_user_account?: boolean; sectionId?: number | null };
+  student: { id: number; name: string; roll?: string | number | null; className?: string | null; status?: string | null; has_user_account?: boolean; sectionId?: number | null };
 }
 
 type Open = 'status' | 'invite' | 'report' | 'move' | 'remove' | 'account' | null;
@@ -125,7 +126,9 @@ export default function StudentAdminActions({ student }: Props) {
     setReporting(true);
     try {
       await shareReportFile(() => reportsApi.generateInstant(buildReportRequest(student.id, params)) as Promise<{ data: ArrayBuffer }>,
-        studentReportFileName(student.name), 'pdf');
+        singleReportFileName(
+          { name: student.name, roll: student.roll, className: student.className }, durationLabel(params, year.current?.name),
+        ), 'pdf');
       close();
     } catch (e) { setError(saveFailureMessage(e, (e as Error)?.message || 'Could not make the report.')); }
     finally { setReporting(false); }

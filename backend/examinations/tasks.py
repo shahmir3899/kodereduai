@@ -68,58 +68,15 @@ def recompute_question_stats(question_id: int):
 
 
 def _build_continuation_context(upload: PaperUpload) -> dict | None:
-    """For page 2+ of a multi-page capture, summarizes what prior pages in the same
-    group already extracted so the LLM can decide whether this page continues the
-    previous section. Scoped by school_id (not just group_id) so a crafted/colliding
-    group_id can never pull another school's extraction data into this prompt --
-    mirrors the same school-scoping used for page_number auto-increment in the
-    upload-image view. Returns None for page 1 or a standalone (group_id is null)
-    upload, matching what _build_extraction_prompt expects to skip the hint block.
+    """Context for page 2+ of a multi-page capture. Pages of one paper are read at the
+    same time (the user declares the page count up front), so a page can no longer be
+    told what earlier pages contained; it only learns its own number and is asked to
+    flag a section that continues from the previous page. paper_reconcile.reconcile_pages
+    joins the pieces once every page is in. None for page 1 / a standalone upload.
     """
     if not upload.group_id or upload.page_number <= 1:
         return None
-
-    prior_pages = list(
-        PaperUpload.objects.filter(
-            school_id=upload.school_id,
-            group_id=upload.group_id,
-            page_number__lt=upload.page_number,
-        ).order_by('page_number').values_list('ai_extracted_json', flat=True)
-    )
-    prior_pages = [p for p in prior_pages if p]
-    if not prior_pages:
-        return None
-
-    header = None
-    last_section = None
-    questions_so_far = 0
-    marks_so_far = 0.0
-    for page_json in prior_pages:
-        # Header is normally only printed on page 1, but layer forward so a later
-        # page's own header fields (if it happens to have any) fill in gaps rather
-        # than overwrite what's already known.
-        page_header = page_json.get('header') or {}
-        if header is None:
-            header = dict(page_header)
-        else:
-            for key, value in page_header.items():
-                if value not in (None, '') and not header.get(key):
-                    header[key] = value
-
-        sections = page_json.get('sections') or []
-        if sections:
-            last_section = sections[-1]
-
-        questions_so_far += len(page_json.get('questions') or [])
-        marks_so_far += page_json.get('computed_total_marks') or 0
-
-    return {
-        'page_number': upload.page_number,
-        'header': header,
-        'last_section': last_section,
-        'questions_so_far': questions_so_far,
-        'marks_so_far': marks_so_far,
-    }
+    return {'page_number': upload.page_number, 'independent': True}
 
 
 @shared_task(bind=True, max_retries=2)

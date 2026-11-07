@@ -66,7 +66,7 @@ export default function StudentsListScreen({ classOptions, canAdd }: Props) {
   useEffect(() => { setSelected([]); }, [listKey]);
   const shownIds = students.map((s) => s.id);
   const loginIds = accountableIds(students, selected);
-  const picked: BulkStudent[] = students.filter((s) => selected.includes(s.id)).map((s) => ({ studentId: s.id, enrollmentId: null, name: s.name, roll: s.roll_number }));
+  const picked: BulkStudent[] = students.filter((s) => selected.includes(s.id)).map((s) => ({ studentId: s.id, enrollmentId: null, name: s.name, roll: s.roll_number, className: s.class_name }));
 
   const header = (
     <View>
