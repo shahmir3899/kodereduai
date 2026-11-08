@@ -100,6 +100,7 @@ INSTALLED_APPS = [
     'face_attendance',
     'messaging',
     'brochure',
+    'assistant',
 ]
 
 MIDDLEWARE = [
@@ -588,6 +589,42 @@ KUICKPAY_REQUIRE_HTTPS = os.getenv('EDU_KUICKPAY_REQUIRE_HTTPS', 'true').lower()
 
 GROQ_API_KEY = os.getenv('EDU_GROQ_API_KEY', '')
 GROQ_MODEL = os.getenv('EDU_GROQ_MODEL', 'openai/gpt-oss-120b')
+
+# ── Second model provider: Cerebras (assistant only for now) ────────────────────────────────────
+# Groq's free tier allows 200K tokens/day and 8K tokens/minute; Cerebras' allows 1M/day but only
+# 5 requests/minute. The assistant calls LLM_PRIMARY first and falls back to the other provider on
+# a rate limit or outage. Small calls (router, summaries) prefer Groq so they do not spend
+# Cerebras' scarce requests. See assistant/llm.py.
+CEREBRAS_API_KEY = os.getenv('EDU_CEREBRAS_API_KEY', '')
+CEREBRAS_MODEL = os.getenv('EDU_CEREBRAS_MODEL', 'gpt-oss-120b')
+# Blank = use the main model for the "fast" tier too (router, summaries). Set a smaller model to save tokens.
+CEREBRAS_FAST_MODEL = os.getenv('EDU_CEREBRAS_FAST_MODEL', '')
+GROQ_FAST_MODEL = os.getenv('EDU_GROQ_FAST_MODEL', '')
+# Kill switch: false = Groq only, exactly the behaviour before Cerebras was added.
+LLM_CEREBRAS_ENABLED = os.getenv('EDU_LLM_CEREBRAS_ENABLED', 'true').lower() in ('1', 'true', 'yes')
+LLM_PRIMARY = os.getenv('EDU_LLM_PRIMARY', 'cerebras')          # 'cerebras' or 'groq'
+# Local guard so we do not burn a request on a certain 429 (per server process; a 429 still falls back).
+LLM_CEREBRAS_RPM = int(os.getenv('EDU_LLM_CEREBRAS_RPM', '5'))
+# Blank omits the field. Set per what `manage.py llm_probe` reports the provider accepts.
+GROQ_REASONING_EFFORT = os.getenv('EDU_GROQ_REASONING_EFFORT', 'low')
+CEREBRAS_REASONING_EFFORT = os.getenv('EDU_CEREBRAS_REASONING_EFFORT', 'low')
+GROQ_MAX_TOKENS_PARAM = os.getenv('EDU_GROQ_MAX_TOKENS_PARAM', 'max_tokens')
+CEREBRAS_MAX_TOKENS_PARAM = os.getenv('EDU_CEREBRAS_MAX_TOKENS_PARAM', 'max_tokens')
+# ── Voice (speech-to-text through Groq Whisper) ─────────────────────────────────────────────────
+# Audio is sent to Groq for the request only; it is never stored. Kill switch: EDU_VOICE_ENABLED=false.
+VOICE_ENABLED = os.getenv('EDU_VOICE_ENABLED', 'true').lower() in ('1', 'true', 'yes')
+# whisper-large-v3-turbo is faster and cheaper; whisper-large-v3 is more accurate. Pick with `manage.py stt_probe`.
+STT_MODEL = os.getenv('EDU_STT_MODEL', 'whisper-large-v3-turbo')
+# Blank = detect the language. 'ur' forces Urdu (Roman-Urdu speech is Urdu speech); the client can override per request.
+STT_LANGUAGE = os.getenv('EDU_STT_LANGUAGE', '')
+# A few words that bias Whisper toward the vocabulary of a school; not student names or any personal data.
+STT_PROMPT = os.getenv('EDU_STT_PROMPT', 'School assistant. hazri, ghair hazir, chutti, fee, class 5A, lesson plan, diary, attendance, expense.')
+STT_MAX_BYTES = int(os.getenv('EDU_STT_MAX_BYTES', str(4 * 1024 * 1024)))
+VOICE_DAILY_PER_USER = int(os.getenv('EDU_VOICE_DAILY_PER_USER', '150'))     # transcriptions + spoken rewrites
+
+# Daily token budgets, only used to show "percent used" in `manage.py llm_status`.
+LLM_DAILY_BUDGETS = {'groq': int(os.getenv('EDU_GROQ_DAILY_TOKENS', '200000')),
+                     'cerebras': int(os.getenv('EDU_CEREBRAS_DAILY_TOKENS', '1000000'))}
 
 # Attendance Register OCR — PARKED (2026-05-13)
 # Set OCR_ENABLED=true only to re-activate the AI register scan feature.

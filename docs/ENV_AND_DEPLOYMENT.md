@@ -19,6 +19,13 @@
 | GROQ_API_KEY | Yes | - | Groq API key (console.groq.com) |
 | GROQ_MODEL | No | llama-3.3-70b-versatile | Groq LLM model ID |
 | GROQ_VISION_MODEL | No | llama-3.2-11b-vision-preview | Groq vision model ID |
+| EDU_CEREBRAS_API_KEY | No | - | Cerebras API key (second model provider for the assistant). Set it in the host's secret settings, never in the repo. Blank = Groq only. |
+| EDU_CEREBRAS_MODEL | No | gpt-oss-120b | Cerebras model for the assistant's main calls |
+| EDU_LLM_PRIMARY | No | cerebras | Provider tried first (`cerebras` or `groq`); the other is the fallback on a rate limit or outage |
+| EDU_LLM_CEREBRAS_ENABLED | No | true | Kill switch: `false` = Groq only, as before Cerebras was added |
+| EDU_LLM_CEREBRAS_RPM | No | 5 | Local per-process guard on Cerebras requests per minute (free trial allows 5) |
+| EDU_CEREBRAS_FAST_MODEL / EDU_GROQ_FAST_MODEL | No | (main model) | Optional smaller model for the router and summaries |
+| EDU_GROQ_REASONING_EFFORT / EDU_CEREBRAS_REASONING_EFFORT | No | low | `reasoning_effort` sent with each call; blank omits it for a model that rejects it |
 | USE_VISION_PIPELINE | No | True | Enable AI vision processing |
 | VISION_PROVIDER | No | google | Vision provider: google, groq, tesseract |
 | GOOGLE_VISION_API_KEY | Conditional | - | Required if VISION_PROVIDER=google |

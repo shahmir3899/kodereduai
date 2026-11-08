@@ -228,6 +228,9 @@ urlpatterns = [
     path('api/tasks/', include('core.urls')),
     path('api/bootstrap/', include('core.bootstrap_urls')),
     path('api/admin/brochure/', include('brochure.urls')),
+
+    # Unified AI assistant
+    path('api/assistant/', include('assistant.urls')),
 ]
 
 # Serve media files in development
