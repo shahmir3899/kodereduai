@@ -3645,7 +3645,7 @@ class FinanceAIChatView(ModuleAccessMixin, APIView):
         # Get AI response
         try:
             from .ai_agent import FinanceAIAgent
-            agent = FinanceAIAgent(school_id=school_id)
+            agent = FinanceAIAgent(school_id=school_id, role=get_effective_role(request))
             response_text = agent.process_query(user_message, user=request.user)
         except Exception as e:
             logger.error(f"Finance AI agent error: {e}")

@@ -121,9 +121,37 @@ If the question is not about finances, respond with a helpful answer directly (n
 class FinanceAIAgent:
     """AI agent that answers natural language questions about school finances."""
 
-    def __init__(self, school_id):
+    def __init__(self, school_id, role=None):
+        """`role` is the asking user's effective role. Roles the Finance screens treat as
+        data-restricted (principal and staff-level roles, accountants included) never see
+        sensitive entries or accounts hidden from staff - through chat either. role=None keeps
+        the unrestricted behaviour for internal callers."""
+        from core.permissions import STAFF_LEVEL_ROLES
         self.school_id = school_id
+        self.role = role
+        self._restricted = role in STAFF_LEVEL_ROLES + ('PRINCIPAL',)
+        self._staff_level = role in STAFF_LEVEL_ROLES
         self._school = None
+
+    # Querysets that apply the same hiding rules as ExpenseViewSet / OtherIncomeViewSet.
+    def _visible_account_ids(self):
+        from .models import Account
+        return list(Account.objects.filter(school_id=self.school_id, is_active=True, staff_visible=True)
+                    .values_list('id', flat=True))
+
+    def _scoped(self, qs):
+        if not self._restricted:
+            return qs
+        return qs.filter(is_sensitive=False).filter(
+            Q(account_id__in=self._visible_account_ids()) | Q(account__isnull=True))
+
+    def _expenses(self):
+        from .models import Expense
+        return self._scoped(Expense.objects.filter(school_id=self.school_id))
+
+    def _other_incomes(self):
+        from .models import OtherIncome
+        return self._scoped(OtherIncome.objects.filter(school_id=self.school_id))
 
     @property
     def school(self):
@@ -333,9 +361,7 @@ class FinanceAIAgent:
         }
 
     def _get_total_expenses(self, category=None, date_from=None, date_to=None):
-        from .models import Expense
-
-        qs = Expense.objects.filter(school_id=self.school_id)
+        qs = self._expenses()
         if category:
             qs = qs.filter(category__name__iexact=category)
         if date_from:
@@ -411,8 +437,7 @@ class FinanceAIAgent:
         status_counts = qs.values('status').annotate(count=Count('id'))
         counts = {item['status']: item['count'] for item in status_counts}
 
-        other_income = float(OtherIncome.objects.filter(
-            school_id=self.school_id,
+        other_income = float(self._other_incomes().filter(
             date__year=year,
             date__month=month,
         ).aggregate(total=Sum('amount'))['total'] or 0)
@@ -438,8 +463,8 @@ class FinanceAIAgent:
         from .models import FeePayment, Expense, OtherIncome
 
         fee_qs = FeePayment.objects.filter(school_id=self.school_id)
-        exp_qs = Expense.objects.filter(school_id=self.school_id)
-        other_qs = OtherIncome.objects.filter(school_id=self.school_id)
+        exp_qs = self._expenses()
+        other_qs = self._other_incomes()
 
         if date_from:
             fee_qs = fee_qs.filter(Q(payment_date__gte=date_from) | Q(payment_date__isnull=True))
@@ -466,9 +491,7 @@ class FinanceAIAgent:
         }
 
     def _get_expense_breakdown(self, date_from=None, date_to=None):
-        from .models import Expense
-
-        qs = Expense.objects.filter(school_id=self.school_id)
+        qs = self._expenses()
         if date_from:
             qs = qs.filter(date__gte=date_from)
         if date_to:
@@ -495,9 +518,7 @@ class FinanceAIAgent:
         }
 
     def _get_other_income(self, category=None, date_from=None, date_to=None):
-        from .models import OtherIncome
-
-        qs = OtherIncome.objects.filter(school_id=self.school_id)
+        qs = self._other_incomes()
         if category:
             qs = qs.filter(category__name__iexact=category)
         if date_from:
@@ -541,13 +562,15 @@ class FinanceAIAgent:
             org_id = None
 
         q = Q(school_id=self.school_id, is_active=True)
-        if org_id:
+        if org_id and self.role != 'PRINCIPAL':
             q |= Q(school__isnull=True, organization_id=org_id, is_active=True)
             org_school_ids = list(School.objects.filter(organization_id=org_id).values_list('id', flat=True))
         else:
             org_school_ids = [self.school_id]
 
         accounts = Account.objects.filter(q)
+        if self._staff_level:
+            accounts = accounts.filter(staff_visible=True)
         result = []
 
         for account in accounts:
@@ -559,6 +582,9 @@ class FinanceAIAgent:
             exp_qs = Expense.objects.filter(school_id__in=scope_ids, account=account)
             tfr_in_qs = Transfer.objects.filter(school_id__in=scope_ids, to_account=account)
             tfr_out_qs = Transfer.objects.filter(school_id__in=scope_ids, from_account=account)
+            if self._staff_level:
+                other_qs, exp_qs = other_qs.filter(is_sensitive=False), exp_qs.filter(is_sensitive=False)
+                tfr_in_qs, tfr_out_qs = tfr_in_qs.filter(is_sensitive=False), tfr_out_qs.filter(is_sensitive=False)
 
             if date_from:
                 fee_qs = fee_qs.filter(Q(payment_date__gte=date_from) | Q(payment_date__isnull=True))
@@ -843,6 +869,8 @@ class FinanceAIAgent:
         qs = Transfer.objects.filter(
             school_id=self.school_id,
         ).select_related('from_account', 'to_account').order_by('-date')
+        if self._restricted:
+            qs = qs.filter(is_sensitive=False)
 
         if date_from:
             qs = qs.filter(date__gte=date_from)
@@ -863,11 +891,7 @@ class FinanceAIAgent:
         return {"transfers": transfers, "total": len(transfers)}
 
     def _get_top_expenses(self, limit=10, date_from=None, date_to=None):
-        from .models import Expense
-
-        qs = Expense.objects.filter(
-            school_id=self.school_id,
-        ).select_related('category').order_by('-amount')
+        qs = self._expenses().select_related('category').order_by('-amount')
 
         if date_from:
             qs = qs.filter(date__gte=date_from)
