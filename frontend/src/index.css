@@ -96,3 +96,21 @@ textarea[dir="rtl"] {
 .notif-progress {
   animation: notif-progress-fill 6s linear forwards;
 }
+
+/* Assistant orb: breathes when idle, a dashed ring in the working agent's colour spins while it works. */
+@keyframes assistant-breathe { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.08); } }
+@keyframes assistant-spin { to { transform: rotate(360deg); } }
+@keyframes assistant-rise { from { opacity: 0; transform: translateY(16px) scale(0.98); } to { opacity: 1; transform: none; } }
+@keyframes assistant-sink { to { opacity: 0; transform: translateY(16px) scale(0.98); } }
+.assistant-orb-idle { animation: assistant-breathe 3.2s ease-in-out infinite; }
+.assistant-ring-spin { animation: assistant-spin 1.4s linear infinite; }
+.assistant-rise { animation: assistant-rise 180ms ease-out both; }
+.assistant-sink { animation: assistant-sink 180ms ease-in both; }
+@media (prefers-reduced-motion: reduce) {
+  .assistant-orb-idle, .assistant-ring-spin, .assistant-rise, .assistant-sink { animation: none; }
+}
+
+/* Assistant orb while it speaks: the three bars move. */
+@keyframes assistant-bar { 0%, 100% { transform: scaleY(0.55); } 50% { transform: scaleY(1.35); } }
+.assistant-bar-speaking { animation: assistant-bar 0.7s ease-in-out infinite; transform-origin: bottom; }
+@media (prefers-reduced-motion: reduce) { .assistant-bar-speaking { animation: none; } }

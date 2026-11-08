@@ -6,6 +6,8 @@ import { useToast } from './Toast'
 import FinanceChatWidget from './FinanceChatWidget'
 import AcademicsChatWidget from './AcademicsChatWidget'
 import CommunicationChatWidget from './CommunicationChatWidget'
+import AssistantOrb from './assistant/AssistantOrb'
+import { isAssistantEnabled } from './assistant/flag'
 import NotificationBell from './NotificationBell'
 import { TaskDrawerButton } from './TaskDrawer'
 import SchoolSwitcher from './SchoolSwitcher'
@@ -406,6 +408,7 @@ const SESSION_AWARE_PREFIXES = [
 
 export default function Layout() {
   const { user, logout, activeSchool, effectiveRole, isSuperAdmin, isStaffMember, isPrincipal, isManager, isStaffLevel, isParent, isStudent, isModuleEnabled } = useAuth()
+  const assistantOn = isAssistantEnabled()
   const { showSuccess } = useToast()
   const location = useLocation()
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -773,10 +776,13 @@ export default function Layout() {
         </main>
       </div>
 
+      {/* The unified assistant orb replaces the per-module chat widgets wherever it is switched on. */}
+      {assistantOn && <AssistantOrb />}
+
       {/* Floating AI Chat widgets - context-specific */}
-      {location.pathname.startsWith('/finance') && !isStaffLevel && <FinanceChatWidget />}
-      {location.pathname.startsWith('/academics') && <AcademicsChatWidget />}
-      {location.pathname.startsWith('/notifications') && !isStaffLevel && !isParent && !isStudent && <CommunicationChatWidget />}
+      {!assistantOn && location.pathname.startsWith('/finance') && !isStaffLevel && <FinanceChatWidget />}
+      {!assistantOn && location.pathname.startsWith('/academics') && <AcademicsChatWidget />}
+      {!assistantOn && location.pathname.startsWith('/notifications') && !isStaffLevel && !isParent && !isStudent && <CommunicationChatWidget />}
     </div>
   )
 }

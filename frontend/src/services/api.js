@@ -11,6 +11,7 @@ import {
 // - DEV mode (npm run dev): Use empty string to leverage Vite proxy → localhost:8000
 // - PROD mode (npm run build): Use production API URL from .env
 const API_URL = import.meta.env.DEV ? '' : (import.meta.env.VITE_API_URL || '')
+export const API_BASE_URL = API_URL
 
 const api = axios.create({
   baseURL: API_URL,
