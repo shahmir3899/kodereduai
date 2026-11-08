@@ -95,3 +95,6 @@ scripts/demo-videos/audio/
 
 # zips built for uploading media/guide to the media host
 media/_upload/
+
+# Assistant baseline run output (generated)
+docs/ai_baseline_*_state.json
