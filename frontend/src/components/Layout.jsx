@@ -789,7 +789,7 @@ export default function Layout() {
       </div>
 
       {/* The unified assistant orb replaces the per-module chat widgets wherever it is switched on. */}
-      {assistantOn && <AssistantOrb />}
+      {assistantOn && <AssistantOrb userId={user?.id} />}
 
       {/* Floating AI Chat widgets - context-specific */}
       {!assistantOn && location.pathname.startsWith('/finance') && !isStaffLevel && <FinanceChatWidget />}

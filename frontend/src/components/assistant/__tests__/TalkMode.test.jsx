@@ -335,6 +335,7 @@ describe('thinking, speaking and what is waiting for you', () => {
 
   it('a device with no Urdu voice says so and still shows the reply', async () => {
     installSpeech([{ lang: 'en-US', name: 'English' }])
+    window.localStorage.setItem('assistant_welcome_heard_anon', '1')   // an English voice would otherwise speak the welcome
     await openTalk()
     await user.click(screen.getByLabelText(/Send instantly/))
     await speakOnce()

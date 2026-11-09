@@ -14,6 +14,7 @@ from datetime import date, timedelta
 from unittest.mock import patch, MagicMock
 
 import pytest
+from assistant.llm import LLMReply
 
 P16 = "P16CUR_"
 
@@ -729,8 +730,6 @@ class TestTocParser:
     def test_suggest_toc_reaches_the_ai_prompt(self, seed_data, api):
         """The prompt holds literal JSON braces; building it must not raise, or the AI never runs."""
         import json
-        import sys
-        import types
         from lms.models import Book
         token = seed_data["tokens"]["admin"]
         sid = seed_data["SID_A"]
@@ -740,20 +739,12 @@ class TestTocParser:
         )
         seen = {}
 
-        class FakeCompletions:
-            def create(self, **kwargs):
-                seen["prompt"] = kwargs["messages"][-1]["content"]
-                answer = {"chapters": [{"title": "Numbers", "topics": [{"title": "Counting"}]}], "confidence": 0.9}
-                message = types.SimpleNamespace(content=json.dumps(answer))
-                return types.SimpleNamespace(choices=[types.SimpleNamespace(message=message)])
+        def fake_complete(messages, **kwargs):
+            seen["prompt"] = messages[-1]["content"]
+            answer = {"chapters": [{"title": "Numbers", "topics": [{"title": "Counting"}]}], "confidence": 0.9}
+            return LLMReply(content=json.dumps(answer))
 
-        class FakeGroq:
-            def __init__(self, api_key=None):
-                self.chat = types.SimpleNamespace(completions=FakeCompletions())
-
-        fake_module = types.ModuleType("groq")
-        fake_module.Groq = FakeGroq
-        with patch.dict(sys.modules, {"groq": fake_module}), patch("lms.toc_ai_suggester.settings") as mock_settings:
+        with patch("assistant.llm.complete", fake_complete), patch("lms.toc_ai_suggester.settings") as mock_settings:
             mock_settings.GROQ_API_KEY = "test-key"
             mock_settings.GROQ_MODEL = "test-model"
             resp = api.post(f"/api/lms/books/{book.id}/suggest_toc/", {"raw_text": "Unit 1 Numbers\nCounting"}, token, sid)
@@ -804,14 +795,10 @@ class TestAIGenerator:
             '"teaching_methods":"Methods","materials_needed":"Materials"}'
         )
         with patch("lms.ai_generator.settings") as mock_settings, \
-             patch("groq.Groq") as MockGroq:
+             patch("assistant.llm.complete") as MockGroq:
             mock_settings.GROQ_API_KEY = "test-key"
             mock_settings.GROQ_MODEL = "test-model"
-            mock_client = MagicMock()
-            MockGroq.return_value = mock_client
-            mock_client.chat.completions.create.return_value.choices = [
-                MagicMock(message=MagicMock(content=mock_json))
-            ]
+            MockGroq.return_value = LLMReply(content=mock_json)
 
             result = generate_lesson_plan(
                 school=seed_data["school_a"],
@@ -828,14 +815,10 @@ class TestAIGenerator:
     def test_json_parse_error(self, seed_data, lms_book):
         from lms.ai_generator import generate_lesson_plan
         with patch("lms.ai_generator.settings") as mock_settings, \
-             patch("groq.Groq") as MockGroq:
+             patch("assistant.llm.complete") as MockGroq:
             mock_settings.GROQ_API_KEY = "test-key"
             mock_settings.GROQ_MODEL = "test-model"
-            mock_client = MagicMock()
-            MockGroq.return_value = mock_client
-            mock_client.chat.completions.create.return_value.choices = [
-                MagicMock(message=MagicMock(content="not valid json at all"))
-            ]
+            MockGroq.return_value = LLMReply(content="not valid json at all")
 
             result = generate_lesson_plan(
                 school=seed_data["school_a"],
@@ -851,7 +834,7 @@ class TestAIGenerator:
     def test_groq_api_exception(self, seed_data, lms_book):
         from lms.ai_generator import generate_lesson_plan
         with patch("lms.ai_generator.settings") as mock_settings, \
-             patch("groq.Groq") as MockGroq:
+             patch("assistant.llm.complete") as MockGroq:
             mock_settings.GROQ_API_KEY = "test-key"
             mock_settings.GROQ_MODEL = "test-model"
             MockGroq.side_effect = Exception("API quota exceeded")
@@ -883,21 +866,15 @@ class TestAIGenerator:
 
         captured_prompt = {}
 
-        def capture_create(**kwargs):
-            captured_prompt["messages"] = kwargs.get("messages", [])
-            mock_resp = MagicMock()
-            mock_resp.choices = [
-                MagicMock(message=MagicMock(content='{"title":"t","objectives":"o","description":"d","teaching_methods":"m","materials_needed":"n"}'))
-            ]
-            return mock_resp
+        def capture_create(messages, **kwargs):
+            captured_prompt["messages"] = messages
+            return LLMReply(content='{"title":"t","objectives":"o","description":"d","teaching_methods":"m","materials_needed":"n"}')
 
         with patch("lms.ai_generator.settings") as mock_settings, \
-             patch("groq.Groq") as MockGroq:
+             patch("assistant.llm.complete") as MockGroq:
             mock_settings.GROQ_API_KEY = "test-key"
             mock_settings.GROQ_MODEL = "test-model"
-            mock_client = MagicMock()
-            MockGroq.return_value = mock_client
-            mock_client.chat.completions.create.side_effect = capture_create
+            MockGroq.side_effect = capture_create
 
             generate_lesson_plan(
                 school=seed_data["school_a"],
@@ -916,14 +893,10 @@ class TestAIGenerator:
         from lms.ai_generator import generate_lesson_plan
         fenced = '```json\n{"title":"Fenced","objectives":"O","description":"D","teaching_methods":"M","materials_needed":"N"}\n```'
         with patch("lms.ai_generator.settings") as mock_settings, \
-             patch("groq.Groq") as MockGroq:
+             patch("assistant.llm.complete") as MockGroq:
             mock_settings.GROQ_API_KEY = "test-key"
             mock_settings.GROQ_MODEL = "test-model"
-            mock_client = MagicMock()
-            MockGroq.return_value = mock_client
-            mock_client.chat.completions.create.return_value.choices = [
-                MagicMock(message=MagicMock(content=fenced))
-            ]
+            MockGroq.return_value = LLMReply(content=fenced)
 
             result = generate_lesson_plan(
                 school=seed_data["school_a"],
@@ -2233,43 +2206,40 @@ class TestPhase6AIRetrieval:
         resp = api.post("/api/lms/generate-exam-questions/", {"book_id": 999999}, token, sid)
         assert resp.status_code == 404
 
+    # The endpoint hands the work to a background task and answers 202 with its id; the outcome (and any error)
+    # lives on the BackgroundTask row, which is what the screen polls. These tests read that row.
+
+    def _start(self, seed_data, api, book):
+        from core.models import BackgroundTask
+        resp = api.post("/api/lms/generate-exam-questions/", {
+            "book_id": book.id,
+            "content_kind": "exercise",
+        }, seed_data["tokens"]["admin"], seed_data["SID_A"])
+        assert resp.status_code == 202
+        return BackgroundTask.objects.get(celery_task_id=resp.json()["task_id"])
+
     def test_generate_exam_questions_no_matching_topics(self, seed_data, api):
-        """When no exercise topics exist, endpoint returns 400."""
-        token = seed_data["tokens"]["admin"]
-        sid = seed_data["SID_A"]
+        """When no exercise topics exist, the task fails with a clear message."""
         book = self._make_book(seed_data)
         # Only general topics, no exercises
         self._make_chapter_with_topics(book, 1, [
             {'title': 'General Only', 'content_kind': 'general'},
         ])
+        task = self._start(seed_data, api, book)
+        assert task.status == "FAILED"
+        assert 'No matching topics' in task.error_message
 
-        resp = api.post("/api/lms/generate-exam-questions/", {
-            "book_id": book.id,
-            "content_kind": "exercise",
-        }, token, sid)
-        assert resp.status_code == 400
-        assert 'No matching topics' in resp.json().get('error', '')
-
-    def test_generate_exam_questions_no_api_key_returns_503(self, seed_data, api):
-        token = seed_data["tokens"]["admin"]
-        sid = seed_data["SID_A"]
+    def test_generate_exam_questions_no_api_key_fails_the_task(self, seed_data, api, settings):
         book = self._make_book(seed_data)
         self._make_chapter_with_topics(book, 1, [
             {'title': 'Exercise', 'content_kind': 'exercise'},
         ])
+        settings.GROQ_API_KEY = None
+        task = self._start(seed_data, api, book)
+        assert task.status == "FAILED"
+        assert 'not configured' in task.error_message
 
-        with patch("lms.views.settings") as mock_settings:
-            mock_settings.GROQ_API_KEY = None
-            resp = api.post("/api/lms/generate-exam-questions/", {
-                "book_id": book.id,
-                "content_kind": "exercise",
-            }, token, sid)
-
-        assert resp.status_code == 503
-
-    def test_generate_exam_questions_success(self, seed_data, api):
-        token = seed_data["tokens"]["admin"]
-        sid = seed_data["SID_A"]
+    def test_generate_exam_questions_success(self, seed_data, api, settings):
         book = self._make_book(seed_data)
         self._make_chapter_with_topics(book, 1, [
             {'title': 'Exercise 1', 'content_kind': 'exercise'},
@@ -2277,22 +2247,13 @@ class TestPhase6AIRetrieval:
 
         mock_json = '{"title":"Test Quiz","total_marks":10,"questions":[{"number":1,"question":"What is X?","marks":5,"answer":"X is Y"}]}'
 
-        with patch("lms.views.settings") as mock_settings, \
-             patch("groq.Groq") as MockGroq:
-            mock_settings.GROQ_API_KEY = "test-key"
-            mock_settings.GROQ_MODEL = "test-model"
-            mock_client = MagicMock()
-            MockGroq.return_value = mock_client
-            mock_client.chat.completions.create.return_value.choices = [
-                MagicMock(message=MagicMock(content=mock_json))
-            ]
-            resp = api.post("/api/lms/generate-exam-questions/", {
-                "book_id": book.id,
-                "content_kind": "exercise",
-            }, token, sid)
+        settings.GROQ_API_KEY = "test-key"
+        with patch("assistant.llm.complete") as mock_complete:      # the gateway; a test must never reach a provider
+            mock_complete.return_value = LLMReply(content=mock_json)
+            task = self._start(seed_data, api, book)
 
-        assert resp.status_code == 200
-        body = resp.json()
+        assert task.status == "SUCCESS"
+        body = task.result_data
         assert body.get("success") is True
         assert body.get("title") == "Test Quiz"
         assert len(body.get("questions", [])) == 1

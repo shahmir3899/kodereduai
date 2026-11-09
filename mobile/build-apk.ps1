@@ -345,6 +345,7 @@ try {
     $env:EXPO_PUBLIC_API_URL = $ApiUrl
     $env:EXPO_PUBLIC_APP_ENV = 'internal'
     $env:EXPO_PUBLIC_ALLOW_INSECURE_HTTP = 'true'
+    $env:EXPO_PUBLIC_ASSISTANT_ENABLED = 'true'   # Aura is dark unless a build turns it on; this script makes internal test APKs
     $env:NODE_ENV = 'production'
     $env:CI = '1'
 

@@ -82,9 +82,7 @@ def generate_lesson_plan(
         }
 
     try:
-        from groq import Groq
-
-        client = Groq(api_key=settings.GROQ_API_KEY)
+        from assistant import llm
 
         # Format chapter/topic context (and optional sub-topics)
         topics_lines = []
@@ -133,16 +131,7 @@ def generate_lesson_plan(
             language_instruction=language_instruction,
         )
 
-        model_name = settings.GROQ_MODEL
-
-        response = client.chat.completions.create(
-            model=model_name,
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.3,
-            max_tokens=2000,
-        )
-
-        result_text = response.choices[0].message.content
+        result_text = llm.legacy_text(prompt, tag='lms.ai_generator', max_tokens=2000, temperature=0.3)
 
         # Parse JSON response (same pattern as llm_reasoner.py)
         if "```json" in result_text:

@@ -493,9 +493,9 @@ class SessionHealthService:
     def _ai_summary_via_groq(self, groq_key: str, report_data: dict) -> dict:
         """Call Groq LLM (configured via settings.GROQ_MODEL / EDU_GROQ_MODEL) to
         produce a structured summary with highlights, concerns, and action items."""
-        from groq import Groq
+        from assistant import llm
 
-        client = Groq(api_key=groq_key)
+        # `groq_key` stays in the signature (callers and tests pass it); the gateway reads its own key.
 
         # Build a concise data snapshot for the prompt
         snapshot = {
@@ -525,17 +525,10 @@ class SessionHealthService:
 
         user_prompt = f"Session health metrics:\n{json.dumps(snapshot, indent=2)}"
 
-        response = client.chat.completions.create(
-            model=settings.GROQ_MODEL,
-            messages=[
-                {'role': 'system', 'content': system_prompt},
-                {'role': 'user', 'content': user_prompt},
-            ],
-            temperature=0.3,
-            max_tokens=1500,
-        )
-
-        raw = response.choices[0].message.content.strip()
+        raw = llm.legacy_text(
+            [{'role': 'system', 'content': system_prompt}, {'role': 'user', 'content': user_prompt}],
+            tag='academic_sessions.session_health_service', max_tokens=1500, temperature=0.3,
+        ).strip()
         # Strip markdown fences if present
         if raw.startswith('```'):
             raw = raw.split('\n', 1)[1] if '\n' in raw else raw[3:]

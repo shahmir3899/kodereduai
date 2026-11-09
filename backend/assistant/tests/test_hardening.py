@@ -201,3 +201,67 @@ class TestLegacyText:
         with patch('groq.Groq', return_value=client), patch('assistant.providers.post_chat') as gateway:
             assert llm.legacy_text('hello', tag='x', max_tokens=50) == 'sdk'
         assert not gateway.called
+
+
+@pytest.mark.django_db
+class TestMovedSites:
+    """The three sites moved in the second batch had no test of their model path; the gateway is mocked here."""
+
+    def test_inventory_suggestions_parse_a_fenced_json_answer(self, seed_data, settings):
+        from inventory.ai_service import suggest_inventory_items
+        settings.GROQ_API_KEY = 'x'
+        text = '```json\n{"categories": [{"name": "Stationery"}], "items": [{"name": "Chalk"}]}\n```'
+        with patch('assistant.llm.complete', return_value=llm.LLMReply(content=text)) as mocked:
+            result = suggest_inventory_items(seed_data['school_a'])
+        assert result['success'] and result['categories'] == [{'name': 'Stationery'}] and result['items'] == [{'name': 'Chalk'}]
+        assert mocked.call_args.kwargs['only'] == ('groq',)
+
+    def test_inventory_falls_back_when_the_model_is_unavailable(self, seed_data, settings):
+        from inventory.ai_service import suggest_inventory_items
+        settings.GROQ_API_KEY = 'x'
+        with patch('assistant.llm.complete', side_effect=llm.LLMUnavailable('resting')):
+            result = suggest_inventory_items(seed_data['school_a'])
+        assert result['success'] and result['categories']          # the built-in suggestions, not an error
+
+    def test_message_personalisation_uses_the_model_then_the_template(self, seed_data, settings):
+        from notifications.ai_service import NotificationOptimizerService
+        settings.GROQ_API_KEY = 'x'
+        service, student = NotificationOptimizerService(seed_data['SID_A']), seed_data['students'][0]
+        with patch('assistant.llm.complete', return_value=llm.LLMReply(content=' Dear parent, hello ')):
+            assert service.personalize_message('Hi {{student_name}}', student, {}) == 'Dear parent, hello'
+        with patch('assistant.llm.complete', side_effect=llm.LLMUnavailable('resting')):
+            assert student.name in service.personalize_message('Hi {{student_name}}', student, {})
+
+    def test_session_health_summary_reads_the_json_the_model_returns(self):
+        from academic_sessions.session_health_service import SessionHealthService
+        data = {'academic_year': {'name': 'Y'}, 'enrollment': {'retention_rate': 90},
+                'attendance': {'average_attendance_rate': 90, 'current_term_rate': 91, 'previous_term_rate': 89, 'chronic_absentees': 2},
+                'fee_collection': {'collection_rate': 80, 'defaulting_students': 5},
+                'exam_performance': {'average_pass_rate': 70, 'average_score': 60},
+                'staff': {'total_staff': 10, 'staff_attendance_rate': 95, 'leaves_this_term': 1}}
+        body = '{"highlights": ["a"], "concerns": ["b"], "action_items": ["c"]}'
+        with patch('assistant.llm.complete', return_value=llm.LLMReply(content=body)):
+            out = SessionHealthService(1, 1)._ai_summary_via_groq('key', data)
+        assert out == {'highlights': ['a'], 'concerns': ['b'], 'action_items': ['c'], 'source': 'ai'}
+
+
+class TestSecondBatchSites:
+    """Sites with no earlier test of their model path: the HR letter draft and the TOC suggester (gateway mocked)."""
+
+    def test_letter_draft_reads_a_fenced_json_answer_and_needs_both_fields(self, settings):
+        from reports.views import LetterAIDraftView
+        settings.GROQ_API_KEY = 'x'
+        body = '```json\n{"subject": "Leave", "body_text": "Dear team"}\n```'
+        with patch('assistant.llm.complete', return_value=llm.LLMReply(content=body)) as mocked:
+            out = LetterAIDraftView()._generate_with_llm('system', 'user')
+        assert out == {'subject': 'Leave', 'body_text': 'Dear team'}
+        assert mocked.call_args.kwargs['only'] == ('groq',)
+        with patch('assistant.llm.complete', return_value=llm.LLMReply(content='{"subject": "x"}')), pytest.raises(ValueError):
+            LetterAIDraftView()._generate_with_llm('system', 'user')
+
+    def test_toc_suggestion_falls_back_to_rules_when_the_model_is_down(self, settings):
+        from lms import toc_ai_suggester
+        settings.GROQ_API_KEY = 'x'
+        with patch('assistant.llm.complete', side_effect=llm.LLMUnavailable('resting')):
+            out = toc_ai_suggester.suggest_toc_structure('Unit 1 Numbers\nCounting')
+        assert out['source'] == 'rule_based'

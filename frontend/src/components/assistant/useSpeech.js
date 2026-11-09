@@ -51,13 +51,15 @@ export default function useSpeech() {
     setCaption('')
   }, [supported])
 
-  const speak = useCallback((text) => {
+  // `quiet` is for speech nobody asked for (the welcome): a missing voice is then not worth an error banner.
+  const speak = useCallback((text, { quiet = false } = {}) => {
     const words = (text || '').trim()
     if (!supported || !words) return false
     const script = scriptOf(words)
     const voice = pickVoice(window.speechSynthesis.getVoices?.() || voices, script)
     window.speechSynthesis.cancel()
     if (!voice) {
+      if (quiet) return false
       setNotice(script === 'ur'
         ? 'This device has no Urdu voice, so the reply is shown as text. You can still read it on screen.'
         : 'This device has no English voice for spoken replies.')

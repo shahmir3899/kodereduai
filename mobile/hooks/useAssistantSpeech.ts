@@ -11,6 +11,7 @@ export default function useAssistantSpeech() {
   const [voices, setVoices] = useState<Speech.Voice[]>([]);
   const [speaking, setSpeaking] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [caption, setCaption] = useState(''); // what is being read, shown under the orb in Talk mode
 
   useEffect(() => {
     let alive = true;
@@ -32,6 +33,7 @@ export default function useAssistantSpeech() {
     setNotice(null);
     Speech.stop();
     setSpeaking(true);
+    setCaption(words);
     Speech.speak(words, { voice: voice.identifier, language: voice.language, onDone: () => setSpeaking(false), onStopped: () => setSpeaking(false), onError: () => setSpeaking(false) });
   }, [voices]);
 
@@ -47,5 +49,5 @@ export default function useAssistantSpeech() {
     if (spoken) speakText(spoken);
   }, [speakText]);
 
-  return { speaking, notice, clearNotice: () => setNotice(null), speakReply, stop };
+  return { speaking, caption, notice, clearNotice: () => setNotice(null), speakReply, stop };
 }

@@ -44,6 +44,7 @@ function installSpeech(voices) {
 
 beforeEach(() => {
   window.localStorage.setItem('assistant_beta', '1')
+  window.localStorage.setItem('assistant_welcome_heard_anon', '1')   // these tests are about replies, not the welcome
   now = 1_000_000
   vi.spyOn(Date, 'now').mockImplementation(() => now)
   trackStop = vi.fn()

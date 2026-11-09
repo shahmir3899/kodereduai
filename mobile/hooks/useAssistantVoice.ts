@@ -3,6 +3,7 @@ import {
   RecordingPresets, requestRecordingPermissionsAsync, setAudioModeAsync, useAudioRecorder, useAudioRecorderState,
 } from 'expo-audio';
 import { assistantApi } from '../services/assistantApi';
+import { newTracker, nextSilenceAction, SPEECH_LEVEL, type SilenceTracker } from '../services/assistantTalk';
 
 const MIN_SECONDS = 0.6; // shorter than this is a mis-tap, not a request
 
@@ -26,14 +27,17 @@ export function describeVoiceError(err: any): string {
  * and are never sent by this hook: the person reads and corrects them first. The recording stays in the app's
  * cache for this one request and is not kept.
  */
-export default function useAssistantVoice({ enabled, maxSeconds = 60, language = 'auto', onTranscript }: {
+export default function useAssistantVoice({ enabled, maxSeconds = 60, language = 'auto', onTranscript, silenceStopMs = 0, speechLevel = SPEECH_LEVEL }: {
   enabled: boolean; maxSeconds?: number; language?: string; onTranscript: (text: string) => void;
+  // Talk mode: end the recording by itself after a pause (0 = only when the person taps stop).
+  silenceStopMs?: number; speechLevel?: number;
 }) {
   const recorder = useAudioRecorder({ ...RecordingPresets.HIGH_QUALITY, isMeteringEnabled: true });
   const recState = useAudioRecorderState(recorder, 100);
   const [phase, setPhase] = useState<'idle' | 'recording' | 'transcribing'>('idle');
   const [error, setError] = useState<string | null>(null);
   const startedAt = useRef(0);
+  const tracker = useRef<SilenceTracker>(newTracker(0));
   const callbackRef = useRef(onTranscript);
   callbackRef.current = onTranscript;
 
@@ -72,6 +76,7 @@ export default function useAssistantVoice({ enabled, maxSeconds = 60, language =
       await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });
       await recorder.prepareToRecordAsync();
       startedAt.current = Date.now();
+      tracker.current = newTracker(startedAt.current);
       recorder.record();
       setPhase('recording');
     } catch (err: any) {
@@ -87,6 +92,14 @@ export default function useAssistantVoice({ enabled, maxSeconds = 60, language =
   useEffect(() => {
     if (phase === 'recording' && seconds >= maxSeconds) finish(false);
   }, [phase, seconds, maxSeconds, finish]);
+
+  // Talk mode: they spoke then paused = send it; nobody spoke = drop it, never upload silence.
+  useEffect(() => {
+    if (phase !== 'recording' || !silenceStopMs) return;
+    const action = nextSilenceAction(tracker.current, Date.now(), levelFromDb(recState.metering), { silenceStopMs, speechLevel });
+    if (action === 'stop') finish(false);
+    else if (action === 'cancel') { finish(true); setError('I did not hear anything. Tap the orb and try again.'); }
+  }, [phase, recState.metering, recState.durationMillis, silenceStopMs, speechLevel, finish]);
 
   // Leaving the screen mid-recording must release the microphone.
   useEffect(() => () => { recorder.stop().catch(() => {}); }, [recorder]);

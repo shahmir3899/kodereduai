@@ -659,20 +659,12 @@ class LetterAIDraftView(APIView):
         if not settings.GROQ_API_KEY:
             raise ValueError("GROQ_API_KEY not configured")
 
-        from groq import Groq
-        client = Groq(api_key=settings.GROQ_API_KEY)
+        from assistant import llm
 
-        response = client.chat.completions.create(
-            model=settings.GROQ_MODEL,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
-            temperature=0.4,
-            max_tokens=1500,
-        )
-
-        content = response.choices[0].message.content.strip()
+        content = llm.legacy_text(
+            [{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}],
+            tag='reports.views', max_tokens=1500, temperature=0.4,
+        ).strip()
 
         # Parse JSON — handle markdown code blocks
         if '```json' in content:

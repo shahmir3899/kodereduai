@@ -136,17 +136,14 @@ def suggest_toc_structure(raw_text, language='en'):
         )
 
     try:
-        from groq import Groq  # type: ignore[import-not-found]
-
-        client = Groq(api_key=api_key)
-        model_name = settings.GROQ_MODEL
+        from assistant import llm
 
         # str.format would choke on the literal JSON braces in the prompt (KeyError), so the AI never ran.
         prompt = TOC_SUGGESTION_PROMPT.replace('{raw_text}', text)
         def _run_completion():
-            return client.chat.completions.create(
-                model=model_name,
-                messages=[
+            # The request itself is bounded too, so an abandoned thread ends instead of lingering.
+            return llm.legacy_text(
+                [
                     {
                         'role': 'system',
                         'content': (
@@ -156,8 +153,7 @@ def suggest_toc_structure(raw_text, language='en'):
                     },
                     {'role': 'user', 'content': prompt},
                 ],
-                temperature=0.1,
-                max_tokens=2000,
+                tag='lms.toc_ai_suggester', max_tokens=2000, temperature=0.1, timeout=TOC_AI_TIMEOUT_SECONDS,
             )
 
         with ThreadPoolExecutor(max_workers=1) as executor:
@@ -168,7 +164,7 @@ def suggest_toc_structure(raw_text, language='en'):
                 future.cancel()
                 raise TimeoutError('TOC AI suggestion timed out.') from exc
 
-        content = response.choices[0].message.content
+        content = response
         if '```json' in content:
             content = content.split('```json', 1)[1].split('```', 1)[0]
         elif '```' in content:

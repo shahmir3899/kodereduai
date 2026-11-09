@@ -107,9 +107,7 @@ def suggest_inventory_items(school, user_context=''):
         return _filtered_fallback(existing_cats, existing_items_list)
 
     try:
-        from groq import Groq
-
-        client = Groq(api_key=settings.GROQ_API_KEY)
+        from assistant import llm
 
         existing_categories_text = ', '.join(existing_cats) if existing_cats else 'None yet'
         existing_items_text = ', '.join(existing_items_list) if existing_items_list else 'None yet'
@@ -121,16 +119,7 @@ def suggest_inventory_items(school, user_context=''):
             existing_items=existing_items_text,
         )
 
-        model_name = settings.GROQ_MODEL
-
-        response = client.chat.completions.create(
-            model=model_name,
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.4,
-            max_tokens=2000,
-        )
-
-        result_text = response.choices[0].message.content
+        result_text = llm.legacy_text(prompt, tag='inventory.ai_service', max_tokens=2000, temperature=0.4)
 
         if "```json" in result_text:
             result_text = result_text.split("```json")[1].split("```")[0]

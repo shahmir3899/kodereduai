@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import ActionCard from './ActionCard'
 import StepTrail from './StepTrail'
 import TalkOrb from './TalkOrb'
+import AssistantWelcome from './AssistantWelcome'
 import { themeFor } from './agentTheme'
 import { StopIcon, XIcon } from './icons'
 
@@ -73,7 +74,7 @@ export default function TalkMode({
   onOrbTap, onCancelListening, onStopSpeaking,
   caption, lastReply, onListen, canListen, choices = [], onChoose,
   cards, cardNotes, onApprove, onReject, onEdit,
-  errors,
+  errors, welcome,
 }) {
   const heading = {
     ready: 'Tap the orb and speak',
@@ -117,6 +118,7 @@ export default function TalkMode({
             </button>
           </div>
         )}
+        {phase === 'ready' && !lastReply && welcome && <div className="w-full"><AssistantWelcome welcome={welcome} /></div>}
         {phase === 'ready' && lastReply && (
           <div className="w-full rounded-lg border border-slate-200 p-3">
             <p className="mb-1 text-[11px] uppercase tracking-wide text-slate-400">Last reply</p>

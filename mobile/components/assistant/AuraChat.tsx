@@ -5,12 +5,17 @@ import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors'
 import useAssistant from '../../hooks/useAssistant';
 import useAssistantVoice from '../../hooks/useAssistantVoice';
 import useAssistantSpeech from '../../hooks/useAssistantSpeech';
-import type { ChatMessage } from '../../services/assistantState';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { pendingCards, type ChatMessage } from '../../services/assistantState';
+import { PAUSE_STOPS_MS, talkPhase } from '../../services/assistantTalk';
 import ActionCard from './ActionCard';
+import TalkMode from './TalkMode';
 import FeedbackThumbs from './FeedbackThumbs';
 import HistoryList from './HistoryList';
 import RichText from './RichText';
 import StepTrail from './StepTrail';
+
+const MODE_KEY = 'aura_mode'; // "talk" or "chat", remembered per phone
 
 function Bubble({ message, latest, onChoose, notes, onApprove, onReject, onEdit }: {
   message: ChatMessage; latest: boolean; onChoose: (text: string) => void; notes: Record<number, any>;
@@ -53,12 +58,25 @@ export default function AuraChat({ onClose }: { onClose: () => void }) {
   const spokenId = useRef<string | number | null>(null);
   const list = useRef<FlatList>(null);
 
+  const [mode, setMode] = useState<'chat' | 'talk'>('chat');
+  const [heard, setHeard] = useState<{ id: number; text: string } | null>(null);
+  useEffect(() => {
+    AsyncStorage.getItem(MODE_KEY).then((v) => { if (v === 'talk') setMode('talk'); }).catch(() => {});
+  }, []);
+
   const voiceOn = Boolean(a.capabilities?.voice?.enabled);
+  const talking = voiceOn && mode === 'talk';
   const voice = useAssistantVoice({
     enabled: voiceOn,
     maxSeconds: a.capabilities?.voice?.max_seconds ?? 60,
-    // The words go to the box so the person can correct them; nothing is sent or approved by voice.
-    onTranscript: (t) => { setText((cur) => (cur ? `${cur} ${t}` : t)); speakNext.current = true; },
+    silenceStopMs: talking ? PAUSE_STOPS_MS : 0,
+    // Chat: the words go to the box so the person can correct them. Talk: they wait on screen for a
+    // few seconds first. Either way nothing is sent or approved without that look.
+    onTranscript: (t) => {
+      speakNext.current = true;
+      if (talking) setHeard({ id: Date.now(), text: t });
+      else setText((cur) => (cur ? `${cur} ${t}` : t));
+    },
   });
 
   const { messages, live, status, error, memory } = a.state;
@@ -73,17 +91,32 @@ export default function AuraChat({ onClose }: { onClose: () => void }) {
     const last = messages[messages.length - 1];
     if (!last || last.role !== 'assistant' || last.id === spokenId.current) return;
     spokenId.current = last.id;
-    if (speakNext.current && speakReplies) speech.speakReply(last.content);
+    if (speakNext.current && (speakReplies || talking)) speech.speakReply(last.content);
     speakNext.current = false;
-  }, [messages, speakReplies, speech]);
+  }, [messages, speakReplies, talking, speech]);
 
   const submit = (value: string) => {
     const t = value.trim();
     if (!t || working) return;
     speech.stop();
     setText('');
+    setHeard(null);
+    if (talking) speakNext.current = true; // Talk mode always answers out loud, including a tapped choice
     a.send(t);
   };
+
+  const switchMode = (next: 'chat' | 'talk') => {
+    voice.cancel(); speech.stop(); setHeard(null); setMode(next);
+    AsyncStorage.setItem(MODE_KEY, next).catch(() => {});
+  };
+
+  const phase = talkPhase({ recording: voice.phase === 'recording', transcribing: voice.phase === 'transcribing', heard: Boolean(heard), working, speaking: speech.speaking });
+  const lastAssistant = [...messages].reverse().find((m) => m.role === 'assistant');
+  const talkCards = useMemo(() => {
+    const seen = new Set<number>();
+    return [...(live?.cards || []), ...(lastAssistant?.actions || []), ...pendingCards(a.state)].filter((c) => (seen.has(c.id) ? false : (seen.add(c.id), true)));
+  }, [live, lastAssistant, a.state]);
+  const talkAgent = live?.steps?.length ? live.steps[live.steps.length - 1].sub_agent : live?.agents?.[0];
 
   const lastAssistantId = useMemo(() => [...messages].reverse().find((m) => m.role === 'assistant')?.id, [messages]);
   const empty = messages.length === 0 && !live;
@@ -107,6 +140,11 @@ export default function AuraChat({ onClose }: { onClose: () => void }) {
           <Text style={styles.memory} accessibilityLabel={`Memory ${memory.used} of ${memory.limit}`}>Memory {memory.used}/{memory.limit}</Text>
         </View>
         <View style={styles.headRight}>
+          {voiceOn && (
+            <Pressable accessibilityRole="button" accessibilityLabel={talking ? 'Switch to text chat' : 'Switch to Talk mode'} onPress={() => switchMode(talking ? 'chat' : 'talk')} hitSlop={10}>
+              <Text style={styles.headLink}>{talking ? 'Chat' : 'Talk'}</Text>
+            </Pressable>
+          )}
           <Pressable accessibilityRole="button" accessibilityLabel="Past conversations" onPress={() => setShowHistory(true)} hitSlop={10}><Text style={styles.headLink}>History</Text></Pressable>
           <Pressable accessibilityRole="button" accessibilityLabel="New chat" onPress={a.newChat} hitSlop={10}><Text style={styles.headLink}>New</Text></Pressable>
         </View>
@@ -114,6 +152,21 @@ export default function AuraChat({ onClose }: { onClose: () => void }) {
 
       {a.capabilities && agents.length === 0 ? (
         <Text style={styles.empty}>Aura is not available for your account at this school.</Text>
+      ) : talking ? (
+        <TalkMode
+          phase={phase} level={voice.level} seconds={voice.seconds} maxSeconds={a.capabilities?.voice?.max_seconds ?? 60}
+          agent={talkAgent} steps={live?.steps || []} agents={live?.agents || []}
+          heard={heard} onHeardSend={submit} onHeardCancel={() => { setHeard(null); speakNext.current = false; }}
+          onOrbTap={() => { if (phase === 'listening') voice.stop(); else if (phase === 'ready' || phase === 'speaking') { speech.stop(); voice.start(); } }}
+          onCancelListening={voice.cancel} onStopSpeaking={speech.stop}
+          caption={speech.caption} lastReply={lastAssistant?.content || ''} onListen={(t) => speech.speakReply(t)} canListen={voiceOn}
+          choices={lastAssistant?.choices || []} onChoose={submit}
+          cards={talkCards} cardNotes={a.cardNotes} onApprove={a.approve} onReject={a.reject} onEdit={a.edit}
+          errors={[
+            ...(error ? [{ text: error }] : []),
+            ...((speech.notice || voice.error) ? [{ text: (speech.notice || voice.error) as string, dismiss: () => { speech.clearNotice(); voice.clearError(); } }] : []),
+          ]}
+        />
       ) : (
         <FlatList
           ref={list}
@@ -146,13 +199,13 @@ export default function AuraChat({ onClose }: { onClose: () => void }) {
         />
       )}
 
-      {notice ? (
+      {notice && !talking ? (
         <Pressable accessibilityRole="button" accessibilityLabel="Dismiss notice" onPress={() => { speech.clearNotice(); voice.clearError(); }} style={styles.notice}>
           <Text style={styles.noticeText}>{notice}</Text>
         </Pressable>
       ) : null}
 
-      <View style={[styles.composer, { paddingBottom: Math.max(insets.bottom, Spacing.sm) }]}>
+      {talking ? <View style={{ height: Math.max(insets.bottom, Spacing.sm) }} /> : <View style={[styles.composer, { paddingBottom: Math.max(insets.bottom, Spacing.sm) }]}>
         {voice.phase === 'recording' ? (
           <View style={styles.recording}>
             <View style={[styles.meter, { width: `${Math.round(voice.level * 100)}%` }]} />
@@ -182,7 +235,7 @@ export default function AuraChat({ onClose }: { onClose: () => void }) {
             </Pressable>
           </>
         )}
-      </View>
+      </View>}
     </KeyboardAvoidingView>
   );
 }

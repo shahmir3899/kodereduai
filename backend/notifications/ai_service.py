@@ -130,8 +130,7 @@ class NotificationOptimizerService:
             if not settings.GROQ_API_KEY:
                 raise Exception("No API key")
 
-            from groq import Groq
-            client = Groq(api_key=settings.GROQ_API_KEY)
+            from assistant import llm
 
             prompt = f"""Personalize this school notification message for a parent. Keep it brief and professional.
 
@@ -142,13 +141,7 @@ Context: {context}
 
 Return ONLY the personalized message text, nothing else."""
 
-            response = client.chat.completions.create(
-                model=settings.GROQ_MODEL,
-                messages=[{"role": "user", "content": prompt}],
-                temperature=0.3,
-                max_tokens=300,
-            )
-            return response.choices[0].message.content.strip()
+            return llm.legacy_text(prompt, tag='notifications.ai_service', max_tokens=300, temperature=0.3).strip()
 
         except Exception:
             # Fallback: simple replacement

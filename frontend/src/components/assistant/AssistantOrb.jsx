@@ -12,6 +12,8 @@ import HistoryList from './HistoryList'
 import RichText from './RichText'
 import FeedbackThumbs from './FeedbackThumbs'
 import useSpeech, { scriptOf } from './useSpeech'
+import useWelcome from './useWelcome'
+import AssistantWelcome from './AssistantWelcome'
 import useVoiceInput from './useVoiceInput'
 
 const CLOSE_MS = 180
@@ -114,7 +116,7 @@ function talkCards(state) {
   return [...older, ...shown].filter((a) => !seen.has(a.id) && seen.add(a.id))
 }
 
-export default function AssistantOrb() {
+export default function AssistantOrb({ userId }) {
   const enabled = isAssistantEnabled()
   const [open, setOpen] = useState(false)
   const [closing, setClosing] = useState(false)
@@ -132,6 +134,11 @@ export default function AssistantOrb() {
   const { state, capabilities, cardNotes, send, approve, reject, edit, newChat, pending, conversationId, history, openConversation, pinConversation, removeConversation } = useAssistant({ enabled, open })
   const [showHistory, setShowHistory] = useState(false)
   const speech = useSpeech()
+  // Only an untouched conversation gets the welcome by itself; opening the panel is the tap that lets sound play.
+  const welcome = useWelcome({
+    agents: capabilities?.agents, speech, userId,
+    autoplay: open && !closing && state.messages.length === 0 && !state.live,
+  })
 
   const sendMessage = useCallback((text, viaVoice) => {
     speakNext.current = Boolean(viaVoice)
@@ -339,6 +346,7 @@ export default function AssistantOrb() {
                 onReject={reject}
                 onEdit={edit}
                 errors={talkErrors}
+                welcome={welcome}
               />
               <label className="flex items-center gap-2 border-t border-slate-100 px-3 py-1 text-[11px] text-slate-500">
                 <input type="checkbox" checked={instant} onChange={(e) => toggleInstant(e.target.checked)} />
@@ -350,9 +358,8 @@ export default function AssistantOrb() {
               <div className="flex-1 space-y-3 overflow-y-auto p-3">
                 {empty && (
                   <div className="space-y-3">
-                    <p className="text-sm text-slate-700">
-                      I am Aura. Ask in English, Urdu or Roman Urdu{voice.supported ? ', by typing or by voice' : ''}. I can look things up and prepare changes for you to approve.
-                    </p>
+                    <AssistantWelcome welcome={welcome} />
+                    <p className="text-xs text-slate-500">Ask in English, Urdu or Roman Urdu{voice.supported ? ', by typing or by voice' : ''}.</p>
                     <div className="flex flex-wrap gap-1">
                       {capabilities.agents.map((a) => (
                         <span key={a.name} className={`rounded-full border px-2 py-0.5 text-[11px] ${themeFor(a.name).pill}`}>{a.label}</span>

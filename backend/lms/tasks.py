@@ -155,16 +155,8 @@ def generate_exam_questions_task(self, school_id, book_id, content_kind, page_st
     update_task_progress(task_id, current=1)
 
     try:
-        from groq import Groq
-        client = Groq(api_key=settings.GROQ_API_KEY)
-        model_name = settings.GROQ_MODEL
-        response = client.chat.completions.create(
-            model=model_name,
-            messages=[{'role': 'user', 'content': prompt}],
-            temperature=0.3,
-            max_tokens=3000,
-        )
-        result_text = response.choices[0].message.content
+        from assistant import llm
+        result_text = llm.legacy_text(prompt, tag='lms.tasks', max_tokens=3000, temperature=0.3)
         if '```json' in result_text:
             result_text = result_text.split('```json')[1].split('```')[0]
         elif '```' in result_text:

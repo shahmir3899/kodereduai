@@ -1,7 +1,6 @@
 import io
 import logging
 
-from assistant.usage import record_external
 import re
 from datetime import date
 from decimal import Decimal
@@ -4142,26 +4141,9 @@ Respond with ONLY a JSON array, no extra text:
         
         # Call Groq API
         try:
-            groq_response = requests.post(
-                'https://api.groq.com/openai/v1/chat/completions',
-                headers={
-                    'Authorization': f'Bearer {settings.GROQ_API_KEY}',
-                    'Content-Type': 'application/json',
-                },
-                json={
-                    'model': settings.GROQ_MODEL,
-                    'messages': [{'role': 'user', 'content': prompt}],
-                    'temperature': 0.7,
-                    'max_tokens': 2048,
-                },
-                timeout=30,
-            )
-            groq_response.raise_for_status()
-            record_external('examinations.views', groq_response.json())
-            
-            # Parse response
-            ai_text = groq_response.json()['choices'][0]['message']['content'].strip()
-            
+            from assistant import llm
+            ai_text = llm.legacy_text(prompt, tag='examinations.views', max_tokens=2048, temperature=0.7, timeout=30).strip()
+
             # Extract JSON from response
             json_match = re.search(r'\[.*\]', ai_text, re.DOTALL)
             if json_match:
