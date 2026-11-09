@@ -8,6 +8,8 @@ import difflib
 import re
 from datetime import date, timedelta
 
+from core.class_scope import scope_for_session_class
+
 from ..registry import ProposalError
 
 HONORIFICS = {'miss', 'sir', 'mr', 'mrs', 'ms', 'madam', 'maam', 'mam', 'teacher', 'ustad', 'ustaani', 'baji'}
@@ -104,7 +106,13 @@ def find_sections(ctx, class_name, section=None):
     qs = SessionClass.objects.filter(school_id=ctx.school_id, academic_year_id=year_id, is_active=True)
     want_key, want = class_key(class_name), flat(class_name)
     if not want_key and not want:
-        raise ProposalError('Which class? Ask the user.')
+        # A saved "usual class" fills in only what the user left out; naming a class always wins.
+        from .. import prefs
+        usual = prefs.get(ctx.school_id, ctx.user.id).get('default_class') if getattr(ctx, 'user', None) else None
+        if not usual:
+            raise ProposalError('Which class? Ask the user.')
+        class_name = usual
+        want_key, want = class_key(usual), flat(usual)
     out = []
     for sc in qs.select_related('class_obj'):
         ntoks = tokens(sc.display_name)
@@ -115,6 +123,13 @@ def find_sections(ctx, class_name, section=None):
             out.append(sc)
     if section:
         out = [sc for sc in out if sc.section.lower() == str(section).strip().lower()]
+    # Same validity rule as the views (core.class_scope). An orphan section has no master class, so exams, fees and
+    # books cannot be tied to it; dropping it quietly would show a half-empty class, so say so instead.
+    for sc in out:
+        scope = scope_for_session_class(ctx.school_id, sc.id)
+        if scope['invalid']:
+            raise ProposalError(f'{section_label(sc)} is not linked to a master class, so it cannot be used here. '
+                                'Tell the user an admin must link it first (Classes page).')
     return out
 
 

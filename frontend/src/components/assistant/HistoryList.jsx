@@ -11,14 +11,22 @@ function when(iso) {
 }
 
 /** Past conversations: pinned first, then newest. Opening one replaces the chat; deleting asks once. */
-export default function HistoryList({ query, currentId, onOpen, onPin, onDelete, onClose }) {
+export default function HistoryList({ query, currentId, onOpen, onPin, onRename, onDelete, onClose }) {
   const [confirming, setConfirming] = useState(null)
+  const [renaming, setRenaming] = useState(null)      // { id, text }
   const [failed, setFailed] = useState('')
   const rows = [...(query.data || [])].sort((a, b) => Number(b.pinned) - Number(a.pinned) || new Date(b.last_active) - new Date(a.last_active))
 
   const run = async (fn) => {
     setFailed('')
-    try { await fn() } catch { setFailed('That did not work. Please try again.') }
+    try { await fn() } catch (e) { setFailed(e?.response?.data?.error || 'That did not work. Please try again.') }
+  }
+
+  const saveRename = async () => {
+    const { id, text } = renaming
+    if (!text.trim()) { setFailed('The name cannot be empty.'); return }
+    setFailed('')
+    try { await onRename(id, text.trim()); setRenaming(null) } catch (e) { setFailed(e?.response?.data?.error || 'That did not work. Please try again.') }
   }
 
   return (
@@ -34,10 +42,29 @@ export default function HistoryList({ query, currentId, onOpen, onPin, onDelete,
       <ul className="divide-y divide-slate-100">
         {rows.map((c) => (
           <li key={c.id} className={`flex items-center gap-2 px-3 py-2 ${c.id === currentId ? 'bg-slate-50' : ''}`}>
-            <button type="button" onClick={() => onOpen(c.id)} className="min-w-0 flex-1 text-left">
-              <span dir="auto" className="block truncate text-sm text-slate-900">{c.title || 'New conversation'}</span>
-              <span className="text-[11px] text-slate-500">{when(c.last_active)}</span>
-            </button>
+            {renaming?.id === c.id ? (
+              <form className="flex min-w-0 flex-1 items-center gap-1" onSubmit={(e) => { e.preventDefault(); saveRename() }}>
+                <input
+                  autoFocus
+                  aria-label="Conversation name"
+                  value={renaming.text}
+                  maxLength={200}
+                  dir="auto"
+                  onChange={(e) => setRenaming({ id: c.id, text: e.target.value })}
+                  onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); setRenaming(null) } }}
+                  className="min-w-0 flex-1 rounded border border-slate-300 px-2 py-0.5 text-sm"
+                />
+                <button type="submit" className="rounded bg-slate-900 px-2 py-0.5 text-xs text-white">Save</button>
+              </form>
+            ) : (
+              <>
+                <button type="button" onClick={() => onOpen(c.id)} className="min-w-0 flex-1 text-left">
+                  <span dir="auto" className="block truncate text-sm text-slate-900">{c.title || 'New conversation'}</span>
+                  <span className="text-[11px] text-slate-500">{when(c.last_active)}</span>
+                </button>
+                <button type="button" aria-label={`Rename ${c.title || 'conversation'}`} onClick={() => { setFailed(''); setRenaming({ id: c.id, text: c.title || '' }) }} className="rounded px-1.5 py-0.5 text-xs text-slate-600 hover:bg-slate-100">Rename</button>
+              </>
+            )}
             <button
               type="button"
               aria-pressed={c.pinned}

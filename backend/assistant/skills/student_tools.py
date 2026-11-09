@@ -258,12 +258,15 @@ def add_enquiry(ctx, child_name=None, father_name=None, mobile=None, class_name=
     grade_label = None
     if class_name:
         matches = directory.find_class(ctx, class_name)['matches']
-        top = [m for m in matches if directory.class_key(m['label']) == directory.class_key(class_name)] or matches[:1]
+        # An enquiry is for a grade, not a section: "Class 5" now returns 5A and 5B, which are one master class.
+        ids = list(dict.fromkeys(m['class_id'] for m in matches if m.get('class_id')))
+        top = [i for i in ids if any(directory.class_key(m['label']) == directory.class_key(class_name) or directory.class_key(m['name']) == directory.class_key(class_name)
+                                     for m in matches if m['class_id'] == i)] or ids[:1]
         if len(top) != 1:
             raise ProposalError('Which class is the child applying for? Ask the user.')
         from students.models import Class
-        grade_level = Class.objects.get(pk=top[0]['class_id']).grade_level
-        grade_label = top[0]['label']
+        master = Class.objects.get(pk=top[0])
+        grade_level, grade_label = master.grade_level, master.name
     elif grade_level is not None:
         grade_label = f'grade level {grade_level}'
     src = (source or 'WALK_IN').upper().replace(' ', '_').replace('-', '_')

@@ -375,6 +375,76 @@ def apply_marks(ctx, payload):
             **({} if saved else {'error': 'No marks could be saved: ' + str(body.get('errors'))[:200]})}
 
 
+# ── delete marks ─────────────────────────────────────────────────────────────
+
+def _delete_marks_card(ctx, payload):
+    from examinations.models import Exam, ExamSubject, StudentMark
+
+    es = ExamSubject.objects.filter(school_id=ctx.school_id, id=payload['exam_subject'], is_active=True).select_related('exam', 'subject').first()
+    if es is None:
+        raise ProposalError('That exam subject no longer exists.')
+    # Announced results are already seen by students and parents: Aura never removes them from chat (the Marks screen can).
+    if es.exam.status == Exam.Status.PUBLISHED:
+        raise ProposalError(f'{es.exam.name} is published, so its marks cannot be deleted from here. Use the Marks screen.')
+    marks = {m.id: m for m in StudentMark.objects.filter(school_id=ctx.school_id, exam_subject=es, id__in=payload['mark_ids']).select_related('student')}
+    rows, warnings = [], []
+    for mid in payload['mark_ids']:
+        m = marks.get(mid)
+        if m is None:
+            warnings.append(f'Mark {mid} no longer exists - removed.')
+            continue
+        rows.append({'id': m.id, 'student_id': m.student_id, 'student': m.student.name,
+                     'marks': 'Absent' if m.is_absent else (float(m.marks_obtained) if m.marks_obtained is not None else None)})
+    if not rows:
+        raise ProposalError('Nothing to delete: those marks no longer exist.')
+    warnings.append('Deleted marks cannot be restored; results and report cards for these students change.')
+    return {'payload': {'kind': 'delete_marks', 'exam_subject': es.id, 'mark_ids': [r['id'] for r in rows]}, 'preview': {
+        'kind': 'delete_marks', 'title': 'Delete marks', 'summary': f'{es.exam.name}, {es.subject.name}: {len(rows)} mark(s) - cannot be undone',
+        'columns': ['Student', 'Marks'], 'rows': rows, 'totals': {'count': len(rows)}, 'warnings': warnings,
+        'assumptions': {'exam': es.exam.name, 'subject': es.subject.name, 'status': es.exam.get_status_display()}, 'editable': {'remove_ids': True}}}
+
+
+def delete_marks(ctx, exam_id=None, exam_name=None, class_name=None, section=None, subject_name=None, students=None):
+    from examinations.models import StudentMark
+
+    if not students:
+        raise ProposalError('Whose marks should be deleted? Ask the user for the student names.')
+    exam = _find_exam(ctx, exam_id, exam_name, class_name, section)
+    es = _find_exam_subject(ctx, exam, subject_name)
+    existing = {m.student_id: m for m in StudentMark.objects.filter(school_id=ctx.school_id, exam_subject_id=es['id']).select_related('student')}
+    if not existing:
+        raise ProposalError(f"No marks are entered for {es['subject_name']} in {exam['name']}.")
+    people = {sid: m.student.name for sid, m in existing.items()}
+    ids = set()
+    for who in students:
+        if isinstance(who, dict):
+            who = who.get('student_name') or who.get('student_id')
+        if isinstance(who, int):
+            ids |= lc.match_names(people, None, [who], ' with marks here')
+        else:
+            ids |= lc.match_names(people, [str(who)], None, ' with marks here')
+    return _delete_marks_card(ctx, {'kind': 'delete_marks', 'exam_subject': es['id'], 'mark_ids': [existing[sid].id for sid in ids]})
+
+
+def revise_delete_marks(ctx, payload, edits):
+    remove = {int(k) for k in (edits.get('remove_ids') or [])}
+    return _delete_marks_card(ctx, {**payload, 'mark_ids': [i for i in payload['mark_ids'] if i not in remove]})
+
+
+def apply_delete_marks(ctx, payload):
+    from examinations.views import StudentMarkViewSet
+
+    done, errors = 0, []
+    for mid in payload['mark_ids']:
+        status, body = call(ctx.user, ctx.school_id, StudentMarkViewSet, {'delete': 'destroy'}, 'delete', f'/api/examinations/marks/{mid}/', pk=mid)
+        if status in (200, 204):
+            done += 1
+        else:
+            errors.append({'mark': mid, 'error': _fail(body, 'Could not be deleted.')})
+    return {'ok': done > 0, 'deleted': done, 'failed': len(errors), 'errors': errors,
+            **({} if done else {'error': 'No mark could be deleted: ' + (errors[0]['error'] if errors else '')})}
+
+
 # ── exams: create, move, delete ──────────────────────────────────────────────
 
 def _iso(value, what):
@@ -613,6 +683,16 @@ register(Tool(
             'marks': {'type': 'number'}, 'absent': {'type': 'boolean'}}}}}},
     handler=enter_marks, sub_agent='exams', module='examinations', roles=MARK_WRITE_ROLES, kind='write',
     revise=revise_marks, apply=apply_marks,
+))
+register(Tool(
+    name='delete_marks',
+    description=('PREPARE deleting the marks of named students in ONE exam subject ("Ali ke maths ke marks delete kar do"). Refused for published exams. '
+                 'Nothing is deleted until the user approves; a teacher can only touch their own class and subject.'),
+    parameters={'type': 'object', **_O, 'properties': {
+        **_FIND, 'subject_name': {'type': 'string'},
+        'students': {'type': 'array', 'items': {'type': 'string'}, 'description': 'Student names'}}},
+    handler=delete_marks, sub_agent='exams', module='examinations', roles=MARK_WRITE_ROLES, kind='write',
+    revise=revise_delete_marks, apply=apply_delete_marks,
 ))
 register(Tool(
     name='create_exam',

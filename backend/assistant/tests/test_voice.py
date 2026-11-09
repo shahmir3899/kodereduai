@@ -188,6 +188,21 @@ class TestSpokenVersion:
         assert r.status_code == 200 and r.json()['spoken'] == 'کلاس 5 کی 12 بچوں کی فیس باقی ہے'
         assert seen['tier'] == 'fast' and 'Urdu script' in seen['system'] and 'Class 5 mein 12' in seen['user']
 
+    def test_options_and_short_lists_are_never_reduced_to_a_count(self, seed_data, modules, api):
+        # A reply that asks "which category?" lost its options when the rewrite said "N categories" instead.
+        seen = {}
+
+        def fake(messages, **kw):
+            seen.update(kw, system=messages[0]['content'])
+            return llm.LLMReply(content='ok')
+
+        with patch('assistant.llm.complete', fake):
+            post_json(api, seed_data, S, {'text': 'Which category? Salaries, Utilities, Repairs.'})
+        rules = seen['system']
+        assert 'MUST say every option' in rules and 'Never replace such options with a count' in rules
+        assert '8 items or fewer' in rules and 'and N more' in rules
+        assert seen['max_tokens'] >= 300          # room to read a list of options aloud
+
     def test_empty_and_oversized_text(self, seed_data, modules, api):
         assert post_json(api, seed_data, S, {'text': '  '}).status_code == 400
         assert post_json(api, seed_data, S, {'text': 'x' * 4000}).status_code == 400

@@ -127,12 +127,20 @@ def _build_plans(ctx, payload):
         if set(r['topic_ids']) - valid_topics:
             warnings.append(f'{r["date"]}: some topics no longer exist - removed.')
             r = {**r, 'topic_ids': [t for t in r['topic_ids'] if t in valid_topics]}
-        clash = LessonPlan.objects.filter(
+        existing = list(LessonPlan.objects.filter(
             school_id=ctx.school_id, class_obj_id=r['class_obj'], session_class_id=r['section'], subject_id=r['subject'],
-            lesson_date=r['date'], is_active=True).exists()
-        if clash and payload.get('on_conflict', 'skip') == 'skip':
+            lesson_date=r['date'], is_active=True))
+        clash, mode = bool(existing), payload.get('on_conflict', 'skip')
+        r = {**r, 'replace_ids': []}
+        if clash and mode == 'skip':
             skipped.append({'date': r['date'], 'section': lc.section_label(sc), 'reason': 'a lesson plan already exists'})
             continue
+        if clash and mode == 'replace':
+            # A published plan was already shown to students and parents: it is never swapped silently.
+            if any(p.status == 'PUBLISHED' for p in existing):
+                skipped.append({'date': r['date'], 'section': lc.section_label(sc), 'reason': 'a published lesson plan is kept'})
+                continue
+            r['replace_ids'] = [p.id for p in existing]
         rows.append(r)
         preview_rows.append({
             'key': r['key'], 'date': r['date'], 'weekday': _wd(date.fromisoformat(r['date'])),
@@ -146,8 +154,12 @@ def _build_plans(ctx, payload):
         raise ProposalError(f'That is {len(rows)} lesson plans; please do at most {MAX_ROWS} at a time.')
     if skipped:
         warnings.append(f'{len(skipped)} date(s) skipped because a lesson plan already exists.')
+    replacing = sum(1 for r in rows if r['replace_ids'])
+    if replacing:
+        warnings.append(f'{replacing} existing draft plan(s) will be replaced (deleted) after the new ones are saved.')
 
-    meta = payload.get('meta', {})
+    mode_now = payload.get('on_conflict', 'skip')
+    meta = {**payload.get('meta', {}), 'on_conflict': mode_now, 'minutes': payload.get('duration', 45)}
     new_payload = {**payload, 'rows': rows, 'warnings': payload.get('warnings', [])}
     sections_txt = ', '.join(sorted({p['section'] for p in preview_rows}))
     return {'payload': new_payload, 'preview': {
@@ -161,7 +173,10 @@ def _build_plans(ctx, payload):
         'assumptions': meta,
         'warnings': warnings,
         'editable': {'remove_keys': True, 'titles': True, 'texts': list(TEXT_FIELDS), 'swap': True,
-                     'on_conflict': ['skip', 'add']},
+                     'on_conflict': ['skip', 'add', 'replace'],
+                     # Chips: Saturday plans the dates again from the stored request, so it is only offered when there is one.
+                     **({'chips': {'skip_saturday': bool(payload['request'].get('skip_saturday')), 'on_conflict': mode_now,
+                                   'duration_minutes': payload.get('duration', 45)}} if payload.get('request') else {})},
     }}
 
 
@@ -179,6 +194,11 @@ def plan_lessons_from_book(ctx, class_name=None, subject_name=None, date_from=No
         raise ProposalError('Which class and which subject? Ask the user.')
     if not (date_from and date_to):
         raise ProposalError('Which dates (for example "next month")? Ask the user, or work them out from today\'s date.')
+    # Kept so the Saturday chip can plan again with one thing changed.
+    request = {'class_name': class_name, 'subject_name': subject_name, 'date_from': date_from, 'date_to': date_to, 'chapters': chapters, 'unit': unit,
+               'page_from': page_from, 'page_to': page_to, 'custom_units': custom_units, 'section': section, 'sections': sections,
+               'all_sections': all_sections, 'teacher_name': teacher_name, 'teacher_id': teacher_id, 'book_id': book_id,
+               'skip_saturday': skip_saturday}
     d0, d1 = lc.parse_date(date_from, 'date_from'), lc.parse_date(date_to, 'date_to')
     subject = lc.find_subject(ctx, subject_name)
     teacher = lc.resolve_teacher(ctx, teacher_name, teacher_id) if (ctx.role == 'TEACHER' or teacher_name or teacher_id) else None
@@ -204,7 +224,7 @@ def plan_lessons_from_book(ctx, class_name=None, subject_name=None, date_from=No
             'working_days': len({r['date'] for r in rows}), 'saturday': 'skipped' if skip_saturday else 'taught',
             'teachers': sorted({lc.staff_name(t) for _, t in targets})}
     return _build_plans(ctx, {'kind': 'lesson_plans', 'rows': rows, 'on_conflict': on_conflict, 'duration': duration_minutes,
-                              'ai_generated': False, 'meta': meta, 'warnings': warnings})
+                              'ai_generated': False, 'meta': meta, 'warnings': warnings, 'request': request})
 
 
 def create_lesson_plan(ctx, class_name=None, subject_name=None, lesson_date=None, title=None, section=None,
@@ -233,9 +253,25 @@ def revise_plans(ctx, payload, edits):
     if unknown:
         raise ProposalError('Rows not on this card: ' + ', '.join(sorted(unknown)))
     if edits.get('on_conflict'):
-        if edits['on_conflict'] not in ('skip', 'add'):
-            raise ProposalError('on_conflict must be skip or add.')
+        if edits['on_conflict'] not in ('skip', 'add', 'replace'):
+            raise ProposalError('on_conflict must be skip, add or replace.')
         payload['on_conflict'] = edits['on_conflict']
+    if edits.get('duration_minutes') is not None:
+        try:
+            minutes = int(edits['duration_minutes'])
+        except (TypeError, ValueError):
+            raise ProposalError('The lesson length must be a number of minutes.')
+        if not 10 <= minutes <= 180:
+            raise ProposalError('The lesson length must be between 10 and 180 minutes.')
+        payload['duration'] = minutes
+    if 'skip_saturday' in edits:
+        # Saturday changes which days exist, so the whole spread is planned again from the original request; row edits (titles, texts, swaps,
+        # removed rows) made on this card are lost, which the card says before the chip is used.
+        request = payload.get('request')
+        if not request:
+            raise ProposalError('Saturday can only be changed on a card made from a book plan.')
+        request = {**request, 'skip_saturday': bool(edits['skip_saturday'])}
+        return plan_lessons_from_book(ctx, **request, on_conflict=payload.get('on_conflict', 'skip'), duration_minutes=payload.get('duration', 45))
     for k, t in (edits.get('titles') or {}).items():
         if not str(t).strip():
             raise ProposalError('A title cannot be empty.')
@@ -258,7 +294,7 @@ def revise_plans(ctx, payload, edits):
 def apply_plans(ctx, payload):
     from lms.views import LessonPlanViewSet
 
-    done, failed = [], []
+    done, failed, replaced = [], [], 0
     for r in payload['rows']:
         data = {'class_obj': r['class_obj'], 'session_class': r['section'], 'subject': r['subject'], 'teacher': r['teacher'],
                 'title': r['title'], 'lesson_date': r['date'], 'duration_minutes': payload.get('duration', 45),
@@ -268,9 +304,14 @@ def apply_plans(ctx, payload):
         status, body = call(ctx.user, ctx.school_id, LessonPlanViewSet, {'post': 'create'}, 'post', '/api/lms/lesson-plans/', data)
         if status == 201:
             done.append({'key': r['key'], 'id': body.get('id'), 'date': r['date']})
+            # The old draft goes only after the new plan exists, so a failed save never leaves the day empty.
+            if r.get('replace_ids'):
+                call(ctx.user, ctx.school_id, LessonPlanViewSet, {'post': 'bulk_delete'}, 'post', '/api/lms/lesson-plans/bulk_delete/',
+                     {'ids': r['replace_ids']})
+                replaced += len(r['replace_ids'])
         else:
             failed.append({'key': r['key'], 'date': r['date'], 'error': str(body)[:200]})
-    return {'ok': bool(done), 'created': len(done), 'failed': len(failed), 'rows': done, 'errors': failed,
+    return {'ok': bool(done), 'created': len(done), 'replaced': replaced, 'failed': len(failed), 'rows': done, 'errors': failed,
             **({} if done else {'error': 'No lesson plan could be saved: ' + (failed[0]['error'] if failed else '')})}
 
 
@@ -458,7 +499,7 @@ register(Tool(
         'page_from': {'type': 'integer'}, 'page_to': {'type': 'integer'},
         'custom_units': {'type': 'array', 'items': {'type': 'string'}, 'description': 'Labels given by the user when the book has no structure'},
         'book_id': {'type': 'integer'}, 'skip_saturday': {'type': 'boolean'},
-        'on_conflict': {'type': 'string', 'enum': ['skip', 'add'], 'description': 'What to do on a date that already has a plan'},
+        'on_conflict': {'type': 'string', 'enum': ['skip', 'add', 'replace'], 'description': 'On a date that already has a plan: skip it, add another, or replace the existing DRAFT (a published plan is always kept)'},
         'duration_minutes': {'type': 'integer', 'minimum': 10, 'maximum': 180}, **_WHO}},
     handler=plan_lessons_from_book, sub_agent='academics', module='lms', roles=WRITE_ROLES, kind='write',
     revise=revise_plans, apply=apply_plans,

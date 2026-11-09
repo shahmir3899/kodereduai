@@ -135,6 +135,12 @@ export default function useAssistant({ enabled, open }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  const renameConversation = useCallback(async (id, title) => {
+    await assistantApi.updateConversation(id, { title })
+    refreshHistory()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   const removeConversation = useCallback(async (id) => {
     await assistantApi.deleteConversation(id)
     if (id === conversationId) newChat()
@@ -144,7 +150,7 @@ export default function useAssistant({ enabled, open }) {
 
   return {
     state, capabilities, cardNotes, send, approve, reject, edit, newChat,
-    conversationId, history, openConversation, pinConversation, removeConversation,
+    conversationId, history, openConversation, pinConversation, renameConversation, removeConversation,
     pending: pendingCards(state).length,
   }
 }

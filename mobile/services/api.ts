@@ -923,8 +923,8 @@ export const notificationsApi = {
     api.get('/api/notifications/unread-count/'),
   markRead: (id: number) =>
     api.post(`/api/notifications/${id}/mark-read/`),
-  markAllRead: () =>
-    api.post('/api/notifications/mark-all-read/'),
+  markAllRead: (body?: Record<string, unknown>) =>
+    api.post('/api/notifications/mark-all-read/', body ?? {}),
   // One person (recipient_identifier) or a role group (broadcast), with a recipient preview first.
   send: (data: Record<string, unknown>) =>
     api.post('/api/notifications/send/', data),

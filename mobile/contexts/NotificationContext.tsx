@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useEffect, useRef, useState, useCallback } from 'react';
+import { AppState } from 'react-native';
 import { useRouter, type Href } from 'expo-router';
 import * as Notifications from 'expo-notifications';
 import { notificationsApi } from '../services/api';
@@ -31,7 +32,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   const refreshUnreadCount = useCallback(async () => {
     try {
       const response = await notificationsApi.getUnreadCount();
-      setUnreadCount(response.data.count ?? response.data.unread_count ?? 0);
+      setUnreadCount(response.data.unread_count ?? response.data.count ?? 0);
     } catch {
       // silent
     }
@@ -48,6 +49,20 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     })();
 
     refreshUnreadCount();
+  }, [user, refreshUnreadCount]);
+
+  // The web bell polls every 30s; do the same while the app is in front, so a notification that
+  // arrives without a push still lights the badge. Paused in the background to spare battery/data.
+  useEffect(() => {
+    if (!user) return;
+    let timer: ReturnType<typeof setInterval> | null = null;
+    const start = () => { if (!timer) timer = setInterval(refreshUnreadCount, 30_000); };
+    const stop = () => { if (timer) { clearInterval(timer); timer = null; } };
+    if (AppState.currentState === 'active') start();
+    const sub = AppState.addEventListener('change', (s) => {
+      if (s === 'active') { refreshUnreadCount(); start(); } else stop();
+    });
+    return () => { stop(); sub.remove(); };
   }, [user, refreshUnreadCount]);
 
   // Configure notification handlers

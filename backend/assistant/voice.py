@@ -101,8 +101,13 @@ def transcribe(audio: bytes, content_type: str, language: str = '', usage_for=No
 
 
 SPOKEN_PROMPT = (
-    'Rewrite a school assistant reply so it can be read aloud. Rules: at most two short sentences; keep every number, '
-    'amount and name exactly; no tables, lists, markdown or emoji; say how many things there are instead of listing them all. '
+    'Rewrite a school assistant reply so it can be read aloud. Rules: keep every number, amount and name exactly; '
+    'no tables, markdown or emoji. Normally use at most two short sentences. Two exceptions: '
+    '(1) If the reply asks the person to choose or give something (a category, a class, a student, a date, an option), '
+    'you MUST say every option it offers, in the reply’s own words and order, then the question. If there are more than '
+    '8 options, say the first 8 and "and N more". Never replace such options with a count. '
+    '(2) If the reply is a list of 8 items or fewer, say each item; only a longer list may be summed up with a count and '
+    'a few examples. '
     'If the reply is in Urdu or Roman Urdu, write the spoken version in Urdu script (names too). If it is in English, '
     'keep English. Reply with the spoken text only.')
 
@@ -113,7 +118,7 @@ def spoken_version(text: str, usage_for=None) -> str:
         with usage.scope(*(usage_for or (None, None))):
             reply = llm.complete(
                 [{'role': 'system', 'content': SPOKEN_PROMPT}, {'role': 'user', 'content': text[:SPOKEN_INPUT_MAX]}],
-                max_tokens=160, temperature=0.2, retries=0, tier='fast')
+                max_tokens=320, temperature=0.2, retries=0, tier='fast')
     except llm.LLMUnavailable:
         raise VoiceUnavailable('Could not prepare the spoken version right now.')
     return reply.content.strip()

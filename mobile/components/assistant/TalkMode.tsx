@@ -53,6 +53,30 @@ export function HeardBox({ text, onSend, onCancel }: { text: string; onSend: (t:
   );
 }
 
+export type WelcomeState = {
+  text: string; lang: 'en' | 'ur'; setLang: (l: 'en' | 'ur') => void; playing: boolean; play: () => void; skip: () => void;
+};
+
+/** The welcome words, always visible (sound may be off), with replay, skip and a language switch. */
+export function WelcomeBox({ welcome }: { welcome: WelcomeState }) {
+  const { text, lang, setLang, playing, play, skip } = welcome;
+  return (
+    <View style={styles.welcome} testID="assistant-welcome">
+      <Text style={[styles.welcomeText, lang === 'ur' && { writingDirection: 'rtl', textAlign: 'right' }]}>{text}</Text>
+      <View style={styles.row}>
+        {playing ? (
+          <Pressable accessibilityRole="button" accessibilityLabel="Skip the welcome" onPress={skip} style={styles.dark}><Text style={styles.darkText}>Skip</Text></Pressable>
+        ) : (
+          <Pressable accessibilityRole="button" accessibilityLabel="Hear what Aura can do" onPress={play} style={styles.dark}><Text style={styles.darkText}>🔊  Hear what Aura can do</Text></Pressable>
+        )}
+        <Pressable accessibilityRole="button" accessibilityLabel={lang === 'ur' ? 'Switch the welcome to English' : 'Switch the welcome to Urdu'} onPress={() => setLang(lang === 'ur' ? 'en' : 'ur')} style={styles.light}>
+          <Text style={styles.lightText}>{lang === 'ur' ? 'English' : 'اردو'}</Text>
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
 /**
  * Voice-first view of Aura: one large orb, one line of status, the words, and any change waiting for approval.
  * Everything it shows comes from the same state as the text chat. A change card stays on screen until a person
@@ -66,7 +90,10 @@ export default function TalkMode(p: {
   choices: { label: string; send: string }[]; onChoose: (t: string) => void;
   cards: Card[]; cardNotes: Record<number, any>; onApprove: (id: number) => void; onReject: (id: number) => void; onEdit: (id: number, edits: object) => Promise<void> | void;
   errors: { text: string; dismiss?: () => void }[];
+  welcome?: WelcomeState;
 }) {
+  const [showReply, setShowReply] = useState(false);
+  useEffect(() => { setShowReply(false); }, [p.lastReply]); // a new reply starts hidden again
   const t = themeFor(p.agent);
   const heading = p.phase === 'thinking' ? (t.label === 'Assistant' ? 'Working on it' : `${t.label} agent`) : PHASE_HEADING[p.phase];
 
@@ -97,15 +124,24 @@ export default function TalkMode(p: {
             <Pressable accessibilityRole="button" accessibilityLabel="Stop speaking" onPress={p.onStopSpeaking} style={[styles.dark, { backgroundColor: Colors.primary, alignSelf: 'flex-start' }]}><Text style={styles.darkText}>Stop</Text></Pressable>
           </View>
         )}
+        {p.phase === 'ready' && !p.lastReply && p.welcome?.text ? <WelcomeBox welcome={p.welcome} /> : null}
+        {/* Talk mode is about voice, so the written reply stays out of the way until it is asked for. */}
         {p.phase === 'ready' && p.lastReply ? (
+          <View style={styles.lastRow}>
+            {p.canListen && (
+              <Pressable accessibilityRole="button" accessibilityLabel="Listen to the last reply" onPress={() => p.onListen(p.lastReply)} hitSlop={8} style={styles.chip}>
+                <Text style={styles.chipText}>🔊  Listen again</Text>
+              </Pressable>
+            )}
+            <Pressable accessibilityRole="button" accessibilityState={{ expanded: showReply }} accessibilityLabel={showReply ? 'Hide last reply' : 'Show last reply'} onPress={() => setShowReply((v) => !v)} hitSlop={8} style={styles.chip}>
+              <Text style={styles.chipText}>{showReply ? 'Hide reply' : 'Show reply'}</Text>
+            </Pressable>
+          </View>
+        ) : null}
+        {p.phase === 'ready' && p.lastReply && showReply ? (
           <View style={styles.last}>
             <Text style={styles.lastLabel}>LAST REPLY</Text>
             <Text style={styles.lastText}>{p.lastReply}</Text>
-            {p.canListen && (
-              <Pressable accessibilityRole="button" accessibilityLabel="Listen to the last reply" onPress={() => p.onListen(p.lastReply)} hitSlop={8} style={{ marginTop: Spacing.xs }}>
-                <Text style={styles.small}>Listen</Text>
-              </Pressable>
-            )}
           </View>
         ) : null}
         {p.phase === 'ready' && p.choices.length > 0 && (
@@ -144,6 +180,11 @@ const styles = StyleSheet.create({
   light: { borderWidth: 1, borderColor: Colors.border, borderRadius: BorderRadius.md, paddingHorizontal: Spacing.md, minHeight: 40, justifyContent: 'center' },
   lightText: { color: Colors.text, fontSize: FontSize.sm },
   caption: { fontSize: FontSize.md, color: Colors.primary, backgroundColor: Colors.surfaceSecondary, borderRadius: BorderRadius.md, padding: Spacing.md },
+  welcome: { alignSelf: 'stretch', gap: Spacing.sm, backgroundColor: Colors.surface, borderRadius: BorderRadius.lg, borderWidth: 1, borderColor: Colors.border, padding: Spacing.md },
+  welcomeText: { fontSize: FontSize.md, lineHeight: 22, color: Colors.text },
+  lastRow: { flexDirection: 'row', gap: Spacing.sm, flexWrap: 'wrap', justifyContent: 'center' },
+  chip: { borderWidth: 1, borderColor: Colors.border, backgroundColor: Colors.surface, borderRadius: BorderRadius.full, paddingHorizontal: Spacing.md, minHeight: 36, justifyContent: 'center' },
+  chipText: { fontSize: FontSize.sm, color: Colors.text },
   last: { alignSelf: 'stretch', borderWidth: 1, borderColor: Colors.border, borderRadius: BorderRadius.md, padding: Spacing.md },
   lastLabel: { fontSize: 11, letterSpacing: 0.6, color: Colors.textSecondary, marginBottom: Spacing.xs },
   lastText: { fontSize: FontSize.sm, color: Colors.text },

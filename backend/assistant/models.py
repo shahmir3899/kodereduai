@@ -192,3 +192,18 @@ class AgentGap(models.Model):
             models.Index(fields=['delete_after']),
             models.Index(fields=['group']),
         ]
+
+
+class AgentPreference(models.Model):
+    """What a person told Aura to remember about how they work: reply language, default class, default fee account.
+
+    One row per (school, user), small JSON on purpose: the keys are validated in assistant/prefs.py, and a class is kept as the
+    label the user typed ("5A") rather than an id, because sections are per academic year and a stored id goes stale every April.
+    Owner approved this table 2026-11-09 (backlog item D)."""
+    school = models.ForeignKey('schools.School', on_delete=models.CASCADE, related_name='agent_preferences')
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='agent_preferences')
+    data = models.JSONField(default=dict, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['school', 'user'], name='uniq_agent_preference_school_user')]

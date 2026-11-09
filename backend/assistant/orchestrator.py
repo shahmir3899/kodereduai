@@ -1,18 +1,19 @@
 """The one agent loop that replaces the four per-app loops."""
 import json
 import logging
+import re
 from dataclasses import dataclass, field
 
 from django.utils import timezone
 
-from . import gaps, guards, llm, memory, registry, router, usage
+from . import gaps, guards, llm, memory, prefs, registry, router, usage
 from .models import AgentAction, AgentMessage
 
 logger = logging.getLogger(__name__)
 
 MAX_ROUNDS = 8
 
-SYSTEM_PROMPT = """You are the EduAI assistant for a school management platform.
+SYSTEM_PROMPT = """You are Aura from Education AI, the assistant for a school management platform. If asked who you are, say you are Aura from Education AI.
 School: {school_name}. Today: {today}. The user's role: {role}.
 
 How to work:
@@ -36,11 +37,13 @@ How to work:
   or the question is vague: not one Urdu-script word, not even inside an otherwise Latin sentence
   (e.g. "Aaj 12 bachay ghair hazir hain", never "Aaj 12 طلباء ..."). Keep answers short and clear;
   use a list for a few short items; for several records with the same fields use a markdown table (header row, then a |---|---| line) so the screen can draw it as a real table.
+- If you have no tool for what was asked, say so plainly and point to the screen. Never write a tool call, JSON or a function name in your
+  reply, and never give figures, names or tables that did not come from a tool result.
 - If a name or class matches more than one record, ask which one before acting. If nobody has the name the
   user gave, say that plainly (do not present unrelated people as "several matches").
 - "my / mine / mera / meri / mujhe" means the signed-in user: use their own record, never ask for their name.
 - Dates: use Today above and the dates the tools return. Never write a year you were not given.
-{role_block}{summary_block}{state_block}"""
+{role_block}{pref_block}{summary_block}{state_block}"""
 
 UNAVAILABLE = "The assistant is temporarily unavailable. Please try again in a moment."
 
@@ -61,6 +64,7 @@ def _system_prompt(ctx, conversation):
         today=timezone.localdate().isoformat(),
         role=ctx.role,
         role_block=(f'\n{guards.ROLE_PROMPTS[ctx.role]}\n' if ctx.role in guards.ROLE_PROMPTS else ''),
+        pref_block=prefs.prompt_block(ctx.school_id, ctx.user.id),
         summary_block=f'\nSummary of earlier conversation: {summary}\n' if summary else '',
         state_block=(f'\nRemembered context (JSON): {json.dumps(state)[:2000]}\n' if state else ''),
     )
@@ -88,6 +92,24 @@ def _tools_named_in_error(ctx, result, offered):
     if not text:
         return []
     return [t for t in registry.tools_for(ctx) if t.name not in offered and t.kind == 'read' and t.name in text]
+
+
+_NON_LATIN = re.compile(r'[؀-ۿݐ-ݿऀ-ॿ]')
+
+
+def _keep_latin(messages, user_message, content):
+    """A prompt rule alone did not stop the model dropping Urdu-script words into a reply to a Roman Urdu question (it happens mostly with
+    unusual spellings), so check the result and ask once for a rewrite. Never changes a reply to someone who wrote in those scripts."""
+    if not content or _NON_LATIN.search(user_message) or not _NON_LATIN.search(content):
+        return content
+    try:
+        fixed = llm.complete(messages + [
+            {'role': 'assistant', 'content': content},
+            {'role': 'user', 'content': 'Rewrite your last answer using Latin letters only (Roman Urdu or English), no Urdu or Hindi script. '
+                                        'Keep every number, name and table exactly as it is.'}]).content
+    except llm.LLMUnavailable:
+        return content
+    return fixed if fixed and not _NON_LATIN.search(fixed) else content
 
 
 def _label(tool):
@@ -118,7 +140,8 @@ def _choices_from(name, result):
             where = f", {m['class']}" if m.get('class') else ''
             out.append({'label': f"{m['name']}{where}", 'send': f"{m['name']}{where} (student_id {m['student_id']})"})
         else:
-            out.append({'label': m['label'], 'send': f"{m['label']} (class_id {m['class_id']})"})
+            ids = f"section_id {m['section_id']}, class_id {m['class_id']}" if m.get('section_id') else f"class_id {m['class_id']}"
+            out.append({'label': m['label'], 'send': f"{m['label']} ({ids})"})
     return out
 
 
@@ -151,6 +174,7 @@ def iter_turn(conversation, user_message: str, ctx: registry.ToolContext):
         specs = [t.spec() for t in tools] or None
         by_name = {t.name: t for t in tools}
         yield {'type': 'route', 'agents': sorted({t.sub_agent for t in tools if not t.shared})}
+        rerouted = False
         try:
             for _ in range(MAX_ROUNDS):
                 with usage.scope(ctx.school_id, ctx.user.pk):
@@ -158,6 +182,19 @@ def iter_turn(conversation, user_message: str, ctx: registry.ToolContext):
                 if not reply.tool_calls:
                     content = reply.content
                     break
+                if not tools and not rerouted:
+                    # The router found no data need, yet the model reached for a tool (usually report_missing_capability) - typical of an
+                    # oddly spelled question. The model's own English summary routes far better than the raw spelling, so route once more
+                    # with it instead of telling the user we cannot help.
+                    rerouted = True
+                    note = ' '.join(str(v) for c in reply.tool_calls for v in (c.get('arguments') or {}).values())
+                    with usage.scope(ctx.school_id, ctx.user.pk):
+                        tools = _offered_tools(ctx, f'{user_message}\n{note}', history)
+                    if tools:
+                        specs = [t.spec() for t in tools]
+                        by_name = {t.name: t for t in tools}
+                        yield {'type': 'route', 'agents': sorted({t.sub_agent for t in tools if not t.shared})}
+                        continue
 
                 messages.append({
                     'role': 'assistant',
@@ -212,6 +249,7 @@ def iter_turn(conversation, user_message: str, ctx: registry.ToolContext):
         except llm.LLMUnavailable:
             content = UNAVAILABLE
 
+        content = _keep_latin(messages, user_message, content)
         content = guards.check_output(ctx, content) if content else content
         content = content or "I couldn't put together an answer. Please rephrase your question."
         reply = _save_reply(conversation, user_message, content, sub_agents, steps, proposals)

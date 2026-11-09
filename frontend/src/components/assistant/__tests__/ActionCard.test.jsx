@@ -169,3 +169,52 @@ describe('buildEdits', () => {
     expect(buildEdits('mystery', rows, empty())).toEqual({})
   })
 })
+
+const planCard = (chips = { skip_saturday: false, on_conflict: 'skip', duration_minutes: 45 }) => ({
+  id: 21, status: 'pending', can_act: true,
+  preview: {
+    kind: 'lesson_plans', title: 'Create lesson plans (drafts)', summary: '2 lesson plan(s) for Class 4 A - English',
+    columns: ['Date', 'Day', 'Class', 'Plan'],
+    rows: [{ key: '1:2026-12-01', date: '2026-12-01', weekday: 'Tue', section: 'Class 4 A', content: 'Unit 3' }],
+    totals: { count: 1 }, warnings: [],
+    assumptions: { class: 'Class 4', saturday: 'taught', on_conflict: 'skip', minutes: 45 },
+    editable: { remove_keys: true, chips },
+  },
+})
+
+describe('lesson plan chips', () => {
+  it('shows the assumptions as controls and asks for a rebuild when one changes', async () => {
+    const h = handlers()
+    render(<ActionCard action={planCard()} {...h} />)
+    expect(screen.getByText('Saturday: taught')).toBeInTheDocument()
+    expect(screen.getByText(/edits made on this card are lost/)).toBeInTheDocument()
+    expect(screen.queryByText('saturday: taught')).toBeNull()          // the plain text chip is replaced, not duplicated
+    await userEvent.click(screen.getByRole('button', { name: 'Saturday' }))
+    expect(h.onEdit).toHaveBeenLastCalledWith(21, { skip_saturday: true })
+    await userEvent.selectOptions(screen.getByLabelText('If a plan already exists'), 'replace')
+    expect(h.onEdit).toHaveBeenLastCalledWith(21, { on_conflict: 'replace' })
+    await userEvent.selectOptions(screen.getByLabelText('Lesson length'), '60')
+    expect(h.onEdit).toHaveBeenLastCalledWith(21, { duration_minutes: 60 })
+  })
+
+  it('a card with no stored request has no chips', () => {
+    const card = planCard()
+    delete card.preview.editable.chips
+    render(<ActionCard action={card} {...handlers()} />)
+    expect(screen.queryByTestId('plan-chips')).toBeNull()
+    expect(screen.getByText('saturday: taught')).toBeInTheDocument()
+  })
+
+  it('a card that is no longer open has no chips', () => {
+    render(<ActionCard action={{ ...planCard(), can_act: false, status: 'executed' }} {...handlers()} />)
+    expect(screen.queryByTestId('plan-chips')).toBeNull()
+  })
+})
+
+describe('grade submissions card', () => {
+  it('edits a mark and sends it keyed by the submission', () => {
+    const rows = [{ key: 7, student: 'Ali', status: 'SUBMITTED', was: null, marks: 8, feedback: '' }]
+    expect(buildEdits('grade_submissions', rows, { removed: new Set(), amounts: { 7: '9' }, statuses: {} })).toEqual({ amounts: { 7: '9' } })
+    expect(buildEdits('grade_submissions', rows, { removed: new Set([7]), amounts: {}, statuses: {} })).toEqual({ remove_keys: [7] })
+  })
+})

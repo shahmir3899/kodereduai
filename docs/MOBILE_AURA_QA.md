@@ -31,5 +31,14 @@ Nothing here has been run on a phone yet. It needs a **new APK** (new native mod
 19. **Last reply and choices.** In the ready state the last reply shows with Listen; "which one?" choices appear and a tap on one sends it and the answer is read aloud.
 20. **Urdu and no Urdu voice.** Same rules as check 9.
 
+## Welcome, reply text and look
+21. **Welcome plays once.** The first time Talk is opened after a tap, a short welcome is read aloud and its words show under the orb. It does not play when the app starts, or on later visits. "Hear what Aura can do" replays it, Skip stops it, "اردو"/"English" switches language (Urdu needs an Urdu voice; otherwise nothing is read and no error shows on the automatic play).
+22. **Role wording.** A parent or student welcome never mentions preparing changes.
+23. **Talk shows little text.** After a reply only "Listen again" and "Show reply" appear; the full text opens on demand and hides again on the next reply. While speaking, only the short spoken line shows.
+24. **Look.** The round Aura button (small orb bars, a slow pulse) sits clear of every role's tab bar. The header has close, a Chat/Talk switch, history and new chat; starter prompts are chips; bubbles and the input bar are rounded.
+25. **Name.** Ask "who are you?": the answer says Aura from Education AI (needs the backend deployed).
+
+26. **Move the button.** Press and drag the Aura button anywhere: it follows your finger, then settles against the nearer side edge at the height you dropped it. It never goes under the status bar or over the tab bar. A quick tap (even a slightly shaky one) still opens Aura; a drag never does. Close the app and reopen: it is where you left it. Rotate the phone: it stays on screen.
+
 ## Not covered by automated tests
 Recording and upload (m4a to `/voice/transcribe/`), `expo/fetch` streaming on a real network, the Urdu voice check, button placement above the tab bar on each shell, keyboard behaviour. The jest files only cover the parser, reducer, card edits, transport (mocked), and speech helpers.

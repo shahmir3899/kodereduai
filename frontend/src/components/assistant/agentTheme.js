@@ -10,6 +10,7 @@ export const AGENT_THEME = {
   exams: { label: 'Exams', dot: 'bg-rose-500', pill: 'bg-rose-50 text-rose-800 border-rose-200', ring: 'border-rose-500', hex: { ring: '#F43F5E', fill: '#FFF1F2', ink: '#9F1239' } },
   students: { label: 'Students & admissions', dot: 'bg-orange-500', pill: 'bg-orange-50 text-orange-800 border-orange-200', ring: 'border-orange-500', hex: { ring: '#F97316', fill: '#FFF7ED', ink: '#9A3412' } },
   operations: { label: 'Operations', dot: 'bg-teal-500', pill: 'bg-teal-50 text-teal-800 border-teal-200', ring: 'border-teal-500', hex: { ring: '#14B8A6', fill: '#F0FDFA', ink: '#115E59' } },
+  settings: { label: 'My settings', dot: 'bg-slate-500', pill: 'bg-slate-50 text-slate-800 border-slate-200', ring: 'border-slate-500', hex: { ring: '#64748B', fill: '#F8FAFC', ink: '#334155' } },
   family: { label: 'My children', dot: 'bg-pink-500', pill: 'bg-pink-50 text-pink-800 border-pink-200', ring: 'border-pink-500', hex: { ring: '#EC4899', fill: '#FDF2F8', ink: '#9D174D' } },
   hr: { label: 'HR', dot: 'bg-cyan-500', pill: 'bg-cyan-50 text-cyan-800 border-cyan-200', ring: 'border-cyan-500', hex: { ring: '#06B6D4', fill: '#ECFEFF', ink: '#155E75' } },
   study: { label: 'Study helper', dot: 'bg-violet-500', pill: 'bg-violet-50 text-violet-800 border-violet-200', ring: 'border-violet-500', hex: { ring: '#8B5CF6', fill: '#F5F3FF', ink: '#5B21B6' } },

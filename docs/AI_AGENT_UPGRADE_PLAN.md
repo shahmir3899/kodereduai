@@ -353,6 +353,40 @@ Captures what Aura could not do, groups it weekly and shows it to admins. Detail
 - Signals: missing tool (tool or decline text), tool error, denied, card rejected/edited, clarify loop, thumbs. Endpoints: `/api/assistant/feedback/`, `/insights/`, `/insights/groups/<id>/`. Web page `/aura-insights`.
 - Celery Beat: `assistant-gap-cleanup` (daily 03:30), `assistant-gap-grouping` (Sundays 04:00). Commands: `group_gaps_now`, `export_gap_questions`.
 
+### Roman Urdu and spelling variants (2026-11-09, uncommitted)
+
+Source for spellings: the Dakshina romanization lexicon, Urdu part (Google Research, **CC BY-SA 4.0**, https://github.com/google-research-datasets/dakshina,
+data in `dakshina_dataset_v1.0.tar`). Attribution: "Dakshina dataset, Roark et al. 2020, CC BY-SA 4.0". Share-alike applies to derived data, so the
+lexicon, the generated variant question file and every state file that contains variant text are kept OUTSIDE the repository (`D:\data\dakshina`).
+Only `roman_urdu_variants.py` (code) is committed. No hand-typed glossary was added.
+
+| Set (school 37, unified mode) | Pass |
+|---|---|
+| Roman Urdu originals (40) | 37 / 40 (92.5%); X01 and X24 fixed afterwards (3 of 3 runs each); C14 is a data limit: nobody is absent on the run day |
+| Spelling variants (72) before the last fixes | 50 / 72 (69%) |
+| Spelling variants after fixes (re-run of the real misses only) | about 55 / 72 (76%) |
+| Variants without test artefacts (12 name / English-word swaps, 2 C14) | about 55 / 58 (95%); the 12 were judged by reading, not re-run |
+
+Findings and fixes (descriptions, prompts and one guard; no glossary):
+- **Fast router returned an empty answer** for many Roman Urdu messages (20 tokens were used up by its reasoning), which silently offered all 144 tools
+  (over Groq's 128 limit, so the fallback failed too). `max_tokens` is now 200.
+- **Router said "none" for oddly spelled questions**, leaving the model without tools; it then wrote pretend tool calls and invented figures (F02v1, X19v2).
+  The router prompt now allows "none" only for greetings and general knowledge, and the system prompt forbids tool-call text and figures that did not come
+  from a tool.
+- **Urdu-script words inside Latin replies** (3 of 72 variants, 0 of 40 originals): a prompt rule did not hold, so `orchestrator._keep_latin` asks once for a rewrite.
+- A tool error that names a tool the router did not offer now adds that read tool (`_tools_named_in_error`); before, the model repeated the failing call.
+- Description fixes: communication vs attendance (school-wide counts), finance vs hr (payroll), `find_student(class_name)`, `get_staff_salary`, `get_leave_today`.
+- Scorer: `report_missing_capability` is not "data". Generator: capitalised names after the first word are not swapped. Baseline runner waits and retries a question
+  when both providers are resting.
+
+Later in the day: X24v1/v2 ("maheeney" read as a staff name) now pass 4 of 4 runs after `get_staff_salary` was changed to tell the model to call
+`get_payroll_summary` when no staff member matches. A re-route (one more routing pass using the model's own tool-call summary when the router offered no
+tools) was added and unit-tested, but did NOT fix X19v2 in live runs.
+
+Still failing, not fixed: X19v2 ("aaj koon kon chutti paar hai": the router answers "none", and the model reads "chutti" as holiday, so it logs a gap) and
+the Groq fallback failing on its 128-tool limit (see `03_HARDENING.md`). A second forced router prompt was tried and reverted: it made greetings route to every
+agent. Reply script was re-checked only on the 7 re-run variants (all Latin), not on all 72.
+
 ### State of the working tree
 Nothing from items 1-3 (Exams), the Talk mode, the 406 fix or the voice diagnostics is committed. Never push without the user's explicit OK. Commit messages carry no Claude co-author trailer unless the user says otherwise.
 

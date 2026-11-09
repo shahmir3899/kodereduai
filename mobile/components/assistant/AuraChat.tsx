@@ -5,6 +5,8 @@ import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors'
 import useAssistant from '../../hooks/useAssistant';
 import useAssistantVoice from '../../hooks/useAssistantVoice';
 import useAssistantSpeech from '../../hooks/useAssistantSpeech';
+import useAssistantWelcome from '../../hooks/useAssistantWelcome';
+import { useAuth } from '../../contexts/AuthContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { pendingCards, type ChatMessage } from '../../services/assistantState';
 import { PAUSE_STOPS_MS, talkPhase } from '../../services/assistantTalk';
@@ -49,6 +51,7 @@ function Bubble({ message, latest, onChoose, notes, onApprove, onReject, onEdit 
 
 export default function AuraChat({ onClose }: { onClose: () => void }) {
   const insets = useSafeAreaInsets();
+  const { user } = useAuth();
   const a = useAssistant({ enabled: true });
   const speech = useAssistantSpeech();
   const [text, setText] = useState('');
@@ -116,6 +119,7 @@ export default function AuraChat({ onClose }: { onClose: () => void }) {
     const seen = new Set<number>();
     return [...(live?.cards || []), ...(lastAssistant?.actions || []), ...pendingCards(a.state)].filter((c) => (seen.has(c.id) ? false : (seen.add(c.id), true)));
   }, [live, lastAssistant, a.state]);
+  const welcome = useAssistantWelcome({ agents, speech, userId: user?.id, autoplay: talking && phase === 'ready' });
   const talkAgent = live?.steps?.length ? live.steps[live.steps.length - 1].sub_agent : live?.agents?.[0];
 
   const lastAssistantId = useMemo(() => [...messages].reverse().find((m) => m.role === 'assistant')?.id, [messages]);
@@ -134,21 +138,31 @@ export default function AuraChat({ onClose }: { onClose: () => void }) {
   return (
     <KeyboardAvoidingView style={[styles.screen, { paddingTop: insets.top }]} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <View style={styles.header}>
-        <Pressable accessibilityRole="button" accessibilityLabel="Close Aura" onPress={onClose} hitSlop={10}><Text style={styles.headLink}>Close</Text></Pressable>
-        <View style={{ alignItems: 'center' }}>
-          <Text style={styles.headTitle}>Aura</Text>
+        <Pressable accessibilityRole="button" accessibilityLabel="Close Aura" onPress={onClose} hitSlop={8} style={styles.iconBtn}><Text style={styles.iconText}>✕</Text></Pressable>
+        <View style={styles.titleBox}>
+          <View style={styles.titleRow}>
+            <View style={styles.dot} />
+            <Text style={styles.headTitle}>Aura</Text>
+          </View>
           <Text style={styles.memory} accessibilityLabel={`Memory ${memory.used} of ${memory.limit}`}>Memory {memory.used}/{memory.limit}</Text>
         </View>
         <View style={styles.headRight}>
-          {voiceOn && (
-            <Pressable accessibilityRole="button" accessibilityLabel={talking ? 'Switch to text chat' : 'Switch to Talk mode'} onPress={() => switchMode(talking ? 'chat' : 'talk')} hitSlop={10}>
-              <Text style={styles.headLink}>{talking ? 'Chat' : 'Talk'}</Text>
-            </Pressable>
-          )}
-          <Pressable accessibilityRole="button" accessibilityLabel="Past conversations" onPress={() => setShowHistory(true)} hitSlop={10}><Text style={styles.headLink}>History</Text></Pressable>
-          <Pressable accessibilityRole="button" accessibilityLabel="New chat" onPress={a.newChat} hitSlop={10}><Text style={styles.headLink}>New</Text></Pressable>
+          <Pressable accessibilityRole="button" accessibilityLabel="Past conversations" onPress={() => setShowHistory(true)} hitSlop={8} style={styles.iconBtn}><Text style={styles.iconText}>🕘</Text></Pressable>
+          <Pressable accessibilityRole="button" accessibilityLabel="New chat" onPress={a.newChat} hitSlop={8} style={styles.iconBtn}><Text style={styles.iconText}>＋</Text></Pressable>
         </View>
       </View>
+      {voiceOn && (
+        <View style={styles.segmentWrap}>
+          <View style={styles.segment} accessibilityRole="tablist">
+            {(['chat', 'talk'] as const).map((m) => (
+              <Pressable key={m} accessibilityRole="tab" accessibilityState={{ selected: (m === 'talk') === talking }} accessibilityLabel={m === 'talk' ? 'Talk mode' : 'Text chat'}
+                onPress={() => { if ((m === 'talk') !== talking) switchMode(m); }} style={[styles.segBtn, (m === 'talk') === talking && styles.segOn]}>
+                <Text style={[styles.segText, (m === 'talk') === talking && styles.segTextOn]}>{m === 'talk' ? '🎙  Talk' : '💬  Chat'}</Text>
+              </Pressable>
+            ))}
+          </View>
+        </View>
+      )}
 
       {a.capabilities && agents.length === 0 ? (
         <Text style={styles.empty}>Aura is not available for your account at this school.</Text>
@@ -162,6 +176,7 @@ export default function AuraChat({ onClose }: { onClose: () => void }) {
           caption={speech.caption} lastReply={lastAssistant?.content || ''} onListen={(t) => speech.speakReply(t)} canListen={voiceOn}
           choices={lastAssistant?.choices || []} onChoose={submit}
           cards={talkCards} cardNotes={a.cardNotes} onApprove={a.approve} onReject={a.reject} onEdit={a.edit}
+          welcome={welcome}
           errors={[
             ...(error ? [{ text: error }] : []),
             ...((speech.notice || voice.error) ? [{ text: (speech.notice || voice.error) as string, dismiss: () => { speech.clearNotice(); voice.clearError(); } }] : []),
@@ -177,10 +192,13 @@ export default function AuraChat({ onClose }: { onClose: () => void }) {
           keyboardShouldPersistTaps="handled"
           ListEmptyComponent={empty ? (
             <View>
-              <Text style={styles.hello}>Hi, I am Aura. Ask me about your school, or tell me what to prepare.</Text>
-              {suggestions.map((s) => (
-                <Pressable key={s} accessibilityRole="button" accessibilityLabel={s} onPress={() => submit(s)} style={styles.suggest}><Text style={styles.suggestText}>{s}</Text></Pressable>
-              ))}
+              <Text style={styles.helloTitle}>Hi, I am Aura</Text>
+              <Text style={styles.hello}>Ask me about your school, or tell me what to prepare. In Urdu, Roman Urdu or English.</Text>
+              <View style={styles.suggestWrap}>
+                {suggestions.map((s) => (
+                  <Pressable key={s} accessibilityRole="button" accessibilityLabel={s} onPress={() => submit(s)} style={styles.suggest}><Text style={styles.suggestText}>{s}</Text></Pressable>
+                ))}
+              </View>
             </View>
           ) : null}
           renderItem={({ item }) => (
@@ -242,19 +260,32 @@ export default function AuraChat({ onClose }: { onClose: () => void }) {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: Colors.background },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm, backgroundColor: Colors.surface, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: Colors.border },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: Spacing.sm, paddingVertical: Spacing.xs, backgroundColor: Colors.surface },
+  titleBox: { alignItems: 'center' },
+  titleRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs },
+  dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: Colors.secondary },
   headTitle: { fontSize: FontSize.lg, fontWeight: '700', color: Colors.text },
   memory: { fontSize: FontSize.xs, color: Colors.textSecondary },
   headLink: { fontSize: FontSize.sm, color: Colors.primary },
-  headRight: { flexDirection: 'row', gap: Spacing.md },
+  headRight: { flexDirection: 'row', gap: Spacing.xs },
+  iconBtn: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', backgroundColor: Colors.surfaceSecondary },
+  iconText: { fontSize: 16, color: Colors.text },
+  segmentWrap: { backgroundColor: Colors.surface, paddingHorizontal: Spacing.lg, paddingBottom: Spacing.sm, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: Colors.border },
+  segment: { flexDirection: 'row', backgroundColor: Colors.surfaceSecondary, borderRadius: BorderRadius.full, padding: 3 },
+  segBtn: { flex: 1, minHeight: 36, borderRadius: BorderRadius.full, alignItems: 'center', justifyContent: 'center' },
+  segOn: { backgroundColor: Colors.surface, shadowColor: Colors.shadow, shadowOpacity: 0.12, shadowRadius: 3, shadowOffset: { width: 0, height: 1 }, elevation: 2 },
+  segText: { fontSize: FontSize.sm, color: Colors.textSecondary, fontWeight: '600' },
+  segTextOn: { color: Colors.primary },
   empty: { padding: Spacing.xl, fontSize: FontSize.md, color: Colors.textSecondary },
-  hello: { fontSize: FontSize.md, color: Colors.text, marginBottom: Spacing.md },
-  suggest: { borderWidth: 1, borderColor: Colors.border, backgroundColor: Colors.surface, borderRadius: BorderRadius.lg, padding: Spacing.md, marginBottom: Spacing.sm },
-  suggestText: { fontSize: FontSize.sm, color: Colors.text },
+  helloTitle: { fontSize: FontSize.xxl, fontWeight: '700', color: Colors.text, marginTop: Spacing.sm },
+  hello: { fontSize: FontSize.md, color: Colors.textSecondary, marginTop: Spacing.xs, marginBottom: Spacing.lg, lineHeight: 21 },
+  suggestWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm },
+  suggest: { borderWidth: 1, borderColor: Colors.border, backgroundColor: Colors.surface, borderRadius: BorderRadius.full, paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm, minHeight: 40, justifyContent: 'center', maxWidth: '100%' },
+  suggestText: { fontSize: FontSize.sm, color: Colors.primary },
   bubbleRow: { marginBottom: Spacing.md },
-  bubble: { maxWidth: '92%', borderRadius: BorderRadius.lg, padding: Spacing.md },
-  mine: { backgroundColor: Colors.primary },
-  theirs: { backgroundColor: Colors.surface, borderWidth: 1, borderColor: Colors.border },
+  bubble: { maxWidth: '92%', borderRadius: 18, paddingHorizontal: Spacing.md, paddingVertical: Spacing.md },
+  mine: { backgroundColor: Colors.primary, borderBottomRightRadius: 4 },
+  theirs: { backgroundColor: Colors.surface, borderWidth: 1, borderColor: Colors.border, borderBottomLeftRadius: 4 },
   choices: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.xs, marginTop: Spacing.sm },
   choice: { borderWidth: 1, borderColor: Colors.border, borderRadius: BorderRadius.full, paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm, minHeight: 36, justifyContent: 'center' },
   choiceText: { fontSize: FontSize.sm, color: Colors.text },
@@ -262,11 +293,11 @@ const styles = StyleSheet.create({
   notice: { backgroundColor: Colors.warningLight, paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm },
   noticeText: { fontSize: FontSize.xs, color: Colors.warningText },
   composer: { flexDirection: 'row', alignItems: 'flex-end', gap: Spacing.sm, paddingHorizontal: Spacing.sm, paddingTop: Spacing.sm, backgroundColor: Colors.surface, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: Colors.border },
-  input: { flex: 1, maxHeight: 120, minHeight: 44, borderWidth: 1, borderColor: Colors.border, borderRadius: BorderRadius.lg, paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm, fontSize: FontSize.md, color: Colors.text },
+  input: { flex: 1, maxHeight: 120, minHeight: 44, backgroundColor: Colors.surfaceSecondary, borderRadius: 22, paddingHorizontal: Spacing.lg, paddingTop: 12, paddingBottom: 12, fontSize: FontSize.md, color: Colors.text },
   round: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: Colors.surfaceSecondary },
   roundText: { fontSize: 20 },
-  send: { height: 44, paddingHorizontal: Spacing.lg, borderRadius: BorderRadius.lg, backgroundColor: Colors.primary, alignItems: 'center', justifyContent: 'center' },
-  sendText: { color: Colors.textInverse, fontWeight: '600', fontSize: FontSize.sm },
+  send: { height: 44, paddingHorizontal: Spacing.lg, borderRadius: 22, backgroundColor: Colors.primary, alignItems: 'center', justifyContent: 'center' },
+  sendText: { color: Colors.textInverse, fontWeight: '700', fontSize: FontSize.sm },
   recording: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: Spacing.md, minHeight: 44 },
   meter: { position: 'absolute', left: 0, bottom: 0, height: 3, backgroundColor: Colors.primaryLight },
   recText: { flex: 1, fontSize: FontSize.md, color: Colors.text },

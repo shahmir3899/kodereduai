@@ -2,12 +2,14 @@
 
 The numbers (averages, trends, days to each paper, minutes per day) are computed here in code, so the model only words the result.
 Everything is the student's own data, through the same StudyHelperService the other study tools use. Nothing is saved or changed.
-Not here yet: flashcards and photo-of-a-problem (need the vision model).
+Flashcards and the running quiz score are here too. Not here: photo-of-a-problem (needs a vision model the Groq project allows, image upload in the chat
+API, and a privacy decision about sending a child's photo out; see docs/handoff/08_BACKLOG_FROM_PLAN.md item K).
 """
 from datetime import date as date_cls, timedelta
 
 from django.utils import timezone
 
+from .. import memory
 from ..registry import ProposalError, Tool, register
 
 ROLES = ('STUDENT',)
@@ -104,6 +106,68 @@ def get_quiz_material(ctx, subject=None, chapter_number=None):
                                            'asks or has tried. Explain wrong answers kindly. Nothing is saved.')}
 
 
+MAX_QUIZ_SUBJECTS = 10
+MAX_CARD_TOPICS = 12
+
+
+def record_quiz_answer(ctx, subject=None, correct=None, reset=False):
+    """A running score for the quiz in THIS chat, kept in the conversation's remembered state (scratch, not school data)."""
+    conv = ctx.conversation
+    if conv is None:
+        raise ProposalError('There is no conversation to keep a score in.')
+    quiz = dict((conv.state or {}).get('quiz') or {})
+    if reset:
+        quiz = {k: v for k, v in quiz.items() if subject and k.lower() != subject.strip().lower()} if subject else {}
+        memory.merge_state(conv, {'quiz': quiz})
+        return {'score': 'reset', 'all': quiz}
+    if not subject or not str(subject).strip():
+        raise ProposalError('Which subject is the quiz in? Ask the student.')
+    if not isinstance(correct, bool):
+        raise ProposalError('Was the answer right or wrong? Pass correct=true or false.')
+    name = str(subject).strip()[:40]
+    key = next((k for k in quiz if k.lower() == name.lower()), name)
+    if key not in quiz and len(quiz) >= MAX_QUIZ_SUBJECTS:
+        raise ProposalError('That is a lot of different quizzes in one chat. Start a new chat, or reset the score first.')
+    row = dict(quiz.get(key) or {'asked': 0, 'correct': 0})
+    row['asked'] += 1
+    row['correct'] += 1 if correct else 0
+    quiz[key] = row
+    memory.merge_state(conv, {'quiz': quiz})
+    asked = sum(r['asked'] for r in quiz.values())
+    right = sum(r['correct'] for r in quiz.values())
+    return {'subject': key, 'score': f"{row['correct']}/{row['asked']}", 'all_subjects': {k: f"{v['correct']}/{v['asked']}" for k, v in quiz.items()},
+            'total': f'{right}/{asked}'}
+
+
+def get_flashcard_topics(ctx, subject=None, limit=MAX_CARD_TOPICS):
+    """Curriculum topics to turn into flashcards: the named subject, or the student's weakest subjects when none is named."""
+    svc = _service(ctx)
+    try:
+        cap = max(1, min(int(limit), MAX_CARD_TOPICS))
+    except (TypeError, ValueError):
+        raise ProposalError('limit must be a number.')
+    if subject:
+        wanted = [subject]
+    else:
+        ranked = _by_subject(svc)
+        wanted = [s['subject'] for s in ranked[:2]]
+        if not wanted:
+            return {'topics': [], 'note': 'No published results yet, so there are no weak subjects. Ask which subject to make cards for.'}
+    topics = []
+    for name in wanted:
+        for book in svc._execute_tool('get_topic_details', {'subject_name': name}).get('books', []):
+            for ch in book['chapters']:
+                for t in ch['topics']:
+                    topics.append({'subject': book['subject'], 'chapter': f"Ch {ch['chapter_number']}: {ch['title']}", 'topic': t['title'],
+                                   'about': (t.get('description') or '')[:160]})
+    if not topics:
+        return {'topics': [], 'subjects': wanted, 'note': 'No curriculum topics are set up for this subject yet. Ask the teacher, or make cards from what the student pastes.'}
+    return {'subjects': wanted, 'topics': topics[:cap],
+            'how_to_use': ('Write one flashcard per topic as a two-column markdown table (Front: a short question or term, Back: the answer in one or two lines), '
+                           'only from these topics. Nothing is saved.'),
+            **({'note': f'Showing {cap} of {len(topics)} topics; offer more if the student wants.'} if len(topics) > cap else {})}
+
+
 _O = {'additionalProperties': False}
 register(Tool(name='get_weak_subjects', description="Which of the student's subjects are weakest, from their published marks (average, latest, change since the previous exam).",
               parameters={'type': 'object', **_O, 'properties': {}}, handler=get_weak_subjects, sub_agent='study', module=None, roles=ROLES))
@@ -114,3 +178,12 @@ register(Tool(name='make_revision_plan', description=('A day-by-day revision pla
 register(Tool(name='get_quiz_material', description='Curriculum topics for a subject (optionally one chapter) to build a practice quiz from. Use before writing quiz questions.',
               parameters={'type': 'object', **_O, 'properties': {'subject': {'type': 'string'}, 'chapter_number': {'type': 'integer'}}},
               handler=get_quiz_material, sub_agent='study', module=None, roles=ROLES))
+register(Tool(name='record_quiz_answer',
+              description=('Keep the running score of the practice quiz in this chat: call it after EACH answer the student gives (correct true or false), then tell them the score. '
+                           'reset=true starts a fresh score (for one subject if named). The score lives only in this chat.'),
+              parameters={'type': 'object', **_O, 'properties': {'subject': {'type': 'string'}, 'correct': {'type': 'boolean'}, 'reset': {'type': 'boolean'}}},
+              handler=record_quiz_answer, sub_agent='study', module=None, roles=ROLES))
+register(Tool(name='get_flashcard_topics',
+              description='Curriculum topics to make flashcards from ("flashcards banao"): the named subject, or the weakest subjects when none is named.',
+              parameters={'type': 'object', **_O, 'properties': {'subject': {'type': 'string'}, 'limit': {'type': 'integer', 'minimum': 1, 'maximum': 12}}},
+              handler=get_flashcard_topics, sub_agent='study', module=None, roles=ROLES))

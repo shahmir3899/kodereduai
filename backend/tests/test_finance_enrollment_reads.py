@@ -77,8 +77,8 @@ def test_ai_class_filter_uses_the_payments_own_year(seed_data, past_year):
         fee_type='MONTHLY', month=5, year=2024, amount_due=Decimal('100'), amount_paid=Decimal('0'),
     )
 
-    by_class_2 = FeePayment.objects.filter(_payment_class_q(class_2.name))
-    by_class_1 = FeePayment.objects.filter(_payment_class_q(seed_data['classes'][0].name))
+    by_class_2 = FeePayment.objects.filter(_payment_class_q(class_2.name, seed_data['school_a'].id))
+    by_class_1 = FeePayment.objects.filter(_payment_class_q(seed_data['classes'][0].name, seed_data['school_a'].id))
 
     assert payment in by_class_2
     assert payment not in by_class_1

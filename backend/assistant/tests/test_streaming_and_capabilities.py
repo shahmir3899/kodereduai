@@ -188,16 +188,16 @@ class TestCapabilities:
         assert finance['label'] == 'Finance' and finance['can_write'] is True and finance['tools'] > 10
 
     def test_roles_see_only_their_agents(self, seed_data, modules, api):
-        # HR is self-service for everyone (own leave, own payslip), so it shows next to the role's own agents.
-        assert {a['name'] for a in self._caps(api, seed_data, 'accountant')['agents']} == {'finance', 'hr'}
-        assert [a['name'] for a in self._caps(api, seed_data, 'accountant')['agents'] if a['can_write'] and a['name'] != 'hr'] == []
-        assert {a['name'] for a in self._caps(api, seed_data, 'teacher')['agents']} == {'academics', 'attendance', 'exams', 'hr', 'students'}
+        # HR and settings are self-service for everyone (own leave, own payslip, own preferences), so they show next to the role's own agents.
+        assert {a['name'] for a in self._caps(api, seed_data, 'accountant')['agents']} == {'finance', 'students', 'hr', 'settings'}      # students: the fee ledger of one student, which finance roles may read
+        assert [a['name'] for a in self._caps(api, seed_data, 'accountant')['agents'] if a['can_write'] and a['name'] not in ('hr', 'settings')] == []
+        assert {a['name'] for a in self._caps(api, seed_data, 'teacher')['agents']} == {'academics', 'attendance', 'exams', 'hr', 'students', 'settings'}
 
     def test_staff_only_get_the_self_service_hr_agent(self, seed_data, modules, api):
         caps = self._caps(api, seed_data, 'staff')
-        assert [a['name'] for a in caps['agents']] == ['hr']
+        assert [a['name'] for a in caps['agents']] == ['hr', 'settings']
         # directory, own leave list, own balance, own payslip, apply for leave - nothing about other people's pay or leave
-        assert caps['agents'][0]['tools'] == 5
+        assert caps['agents'][0]['tools'] == 6        # the five above plus the department list
 
     def test_modules_off_means_no_agents(self, seed_data, api):
         school = seed_data['school_a']

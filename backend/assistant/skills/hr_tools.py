@@ -176,7 +176,14 @@ def get_staff_attendance(ctx, date=None, status=None):
 def get_staff_salary(ctx, staff_name=None, staff_id=None):
     from hr.views import SalaryStructureViewSet
 
-    staff = _one_staff(ctx, staff_id, staff_name)
+    try:
+        staff = _one_staff(ctx, staff_id, staff_name)
+    except ProposalError as exc:
+        # A misspelled "month" or "salary" in Roman Urdu gets read as a person's name; point at the tool for the whole month's bill.
+        if str(exc).startswith('No staff member matching'):
+            raise ProposalError(f'{exc} Do not ask the user or send them to a screen: if the question is about the whole school\'s salary bill '
+                                'for a month, call get_payroll_summary now.')
+        raise
     status, body = call(ctx.user, ctx.school_id, SalaryStructureViewSet, {'get': 'current'}, 'get',
                         '/api/hr/salary-structures/current/', {'staff_member': staff.id})
     if status == 404:

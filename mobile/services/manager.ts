@@ -2,6 +2,7 @@ import { plainText } from './richText';
 import type { NavGroup } from '../navigation/navConfig';
 import type { TimetableEntry } from './teacher';
 import { listOf } from './academicYear';
+import { normalizeNotification, type NotificationRecord } from './notificationMeta';
 
 // Pure helpers for the Manager screens (read-only academics + content). No React imports so
 // Jest can load it.
@@ -122,12 +123,11 @@ export function shiftMonth(year: number, month: number, delta: number): { year: 
   return { year: Math.floor(idx / 12), month: (idx % 12) + 1 };
 }
 
-export interface NotificationRecord {
-  id: number; title: string; message: string; created_at: string; is_read: boolean; notification_type?: string;
-}
-
-// /notifications/my/ answers a page, a { notifications } object or a bare array.
+// /notifications/my/ answers a page, a { notifications } object or a bare array. Every row goes
+// through normalizeNotification so `body`/`event_type` from the API reach the screens.
+export type { NotificationRecord } from './notificationMeta';
 export function notificationsOf(data: unknown): NotificationRecord[] {
   const alt = (data as { notifications?: unknown } | null | undefined)?.notifications;
-  return Array.isArray(alt) ? (alt as NotificationRecord[]) : listOf<NotificationRecord>(data);
+  const rows = Array.isArray(alt) ? (alt as unknown[]) : listOf<unknown>(data);
+  return rows.map(normalizeNotification);
 }

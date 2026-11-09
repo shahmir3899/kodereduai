@@ -21,10 +21,12 @@ export default function useAssistantSpeech() {
 
   const stop = useCallback(() => { Speech.stop(); setSpeaking(false); }, []);
 
-  const speakText = useCallback((words: string) => {
+  // `quiet` is for speech nobody asked for (the welcome): a missing voice is then not worth a notice.
+  const speakText = useCallback((words: string, quiet = false) => {
     const script = scriptOf(words);
     const voice = pickVoice(voices, script);
     if (!voice) {
+      if (quiet) return;
       setNotice(script === 'ur'
         ? 'This phone has no Urdu voice, so the reply is shown as text only.'
         : 'This phone has no English voice for spoken replies.');
@@ -49,5 +51,5 @@ export default function useAssistantSpeech() {
     if (spoken) speakText(spoken);
   }, [speakText]);
 
-  return { speaking, caption, notice, clearNotice: () => setNotice(null), speakReply, stop };
+  return { speaking, caption, notice, speakText, voicesReady: voices.length > 0, clearNotice: () => setNotice(null), speakReply, stop };
 }

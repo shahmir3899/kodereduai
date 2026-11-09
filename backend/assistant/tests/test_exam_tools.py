@@ -258,3 +258,59 @@ class TestSubjectTeacherScope:
         out = self._run_as_teacher(seed_data, exams, 'enter_marks', exam_id=exams['exam'].id, subject_name='urdu',
                                    entries=[{'student_id': exams['students'][0].id, 'marks': 41}])
         assert 'error' in out and 'Maths' in out['error']
+
+
+# ── item J: delete marks ─────────────────────────────────────────────────────
+
+class TestDeleteMarks:
+    def _marked(self, exams):
+        from examinations.models import StudentMark
+        ali, sara = exams['students']
+        es = exams['es']['Maths']
+        school = exams['exam'].school
+        a = StudentMark.objects.create(school=school, exam_subject=es, student=ali, marks_obtained=Decimal('40'))
+        b = StudentMark.objects.create(school=school, exam_subject=es, student=sara, is_absent=True)
+        return a, b
+
+    def test_card_then_delete_on_approval(self, seed_data, exams):
+        from examinations.models import StudentMark
+        a, b = self._marked(exams)
+        out = _run(seed_data, 'delete_marks', exam_id=exams['exam'].id, subject_name='Maths', students=['Ali'])
+        assert out['status'] == 'awaiting_user_approval' and StudentMark.objects.count() == 2
+        card = _card(out)
+        assert card.preview['rows'] == [{'id': a.id, 'student_id': a.student_id, 'student': a.student.name, 'marks': 40.0}]
+        assert 'cannot be restored' in card.preview['warnings'][-1]
+        user = seed_data['users']['admin']
+        done = engine.approve(card.id, user, user.school_id)
+        assert done.status == 'executed' and done.result['deleted'] == 1
+        assert list(StudentMark.objects.values_list('id', flat=True)) == [b.id]
+
+    def test_an_absent_entry_can_be_deleted_too(self, seed_data, exams):
+        a, b = self._marked(exams)
+        card = _card(_run(seed_data, 'delete_marks', exam_id=exams['exam'].id, subject_name='Maths', students=['Sara']))
+        assert card.preview['rows'][0]['marks'] == 'Absent'
+
+    def test_a_published_exam_is_refused(self, seed_data, exams):
+        self._marked(exams)
+        exams['exam'].status = 'PUBLISHED'
+        exams['exam'].save(update_fields=['status'])
+        out = _run(seed_data, 'delete_marks', exam_id=exams['exam'].id, subject_name='Maths', students=['Ali'])
+        assert 'is published' in out['error']
+
+    def test_nothing_entered_and_unknown_names_are_clear(self, seed_data, exams):
+        assert 'No marks are entered' in _run(seed_data, 'delete_marks', exam_id=exams['exam'].id, subject_name='Urdu', students=['Ali'])['error']
+        self._marked(exams)
+        assert 'No student matching' in _run(seed_data, 'delete_marks', exam_id=exams['exam'].id, subject_name='Maths', students=['Nobody'])['error']
+        assert 'Whose marks' in _run(seed_data, 'delete_marks', exam_id=exams['exam'].id, subject_name='Maths')['error']
+
+    def test_remove_a_row_from_the_card(self, seed_data, exams):
+        a, b = self._marked(exams)
+        out = _run(seed_data, 'delete_marks', exam_id=exams['exam'].id, subject_name='Maths', students=['Ali', 'Sara'])
+        user = seed_data['users']['admin']
+        edited = engine.edit(out['proposal']['action_id'], user, user.school_id, {'remove_ids': [str(a.id)]})
+        assert [r['id'] for r in edited.preview['rows']] == [b.id]
+
+    def test_roles(self, seed_data, exams):
+        self._marked(exams)
+        for role in ('accountant', 'staff'):
+            assert _run(seed_data, 'delete_marks', role, exam_id=exams['exam'].id, subject_name='Maths', students=['Ali']) == {'error': 'You do not have permission to use this tool.'}

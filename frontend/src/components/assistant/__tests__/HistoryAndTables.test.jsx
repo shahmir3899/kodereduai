@@ -69,6 +69,23 @@ describe('past conversations', () => {
     expect(assistantApi.updateConversation).toHaveBeenCalledWith(1, { pinned: true })
   })
 
+  it('renames a conversation, and shows the server message when it is refused', async () => {
+    assistantApi.updateConversation.mockResolvedValueOnce({ data: {} })
+    await openPanel()
+    await userEvent.click(screen.getByRole('button', { name: 'History' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Rename Old chat' }))
+    const box = screen.getByRole('textbox', { name: 'Conversation name' })
+    await userEvent.clear(box)
+    await userEvent.type(box, 'Fee follow-up')
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(assistantApi.updateConversation).toHaveBeenCalledWith(1, { title: 'Fee follow-up' }))
+
+    assistantApi.updateConversation.mockRejectedValueOnce({ response: { data: { error: 'The name is too long (200 characters at most).' } } })
+    await userEvent.click(await screen.findByRole('button', { name: 'Rename Pinned chat' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('too long')
+  })
+
   it('asks once before deleting, and Keep cancels', async () => {
     assistantApi.deleteConversation.mockResolvedValue({})
     await openPanel()

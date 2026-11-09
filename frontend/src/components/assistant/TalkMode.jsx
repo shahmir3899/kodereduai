@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
 import ActionCard from './ActionCard'
-import StepTrail from './StepTrail'
 import TalkOrb from './TalkOrb'
 import AssistantWelcome from './AssistantWelcome'
 import { themeFor } from './agentTheme'
@@ -10,7 +9,7 @@ const SEND_AFTER = 3          // seconds the words stay on screen before they ar
 const clock = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
 
 /** The words just heard, held for a few seconds so a wrong word can be fixed before anything is sent. */
-function HeardBox({ text, onSend, onCancel }) {
+function HeardBox({ text, onSend, onCancel, onEditing = () => {} }) {
   const [editing, setEditing] = useState(false)
   const [value, setValue] = useState(text)
   const [left, setLeft] = useState(SEND_AFTER)
@@ -30,11 +29,7 @@ function HeardBox({ text, onSend, onCancel }) {
   }, [editing, left, value])
 
   return (
-    <div className="w-full space-y-2" data-testid="heard-box">
-      <div className="flex items-center justify-between text-xs text-slate-600">
-        <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5">Check your words</span>
-        {!editing && <span role="status">Sending in {left}</span>}
-      </div>
+    <div className="talk-fade-in w-full space-y-2 text-center" data-testid="heard-box">
       {editing ? (
         <textarea
           autoFocus
@@ -46,18 +41,19 @@ function HeardBox({ text, onSend, onCancel }) {
           className="w-full resize-none rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
         />
       ) : (
-        <p dir="auto" className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900">{value}</p>
+        <p dir="auto" className="px-2 text-sm italic text-slate-500">&ldquo;{value}&rdquo;</p>
       )}
-      <div className="flex gap-2">
+      <div className="flex items-center justify-center gap-3 text-xs">
+        {!editing && <span role="status" className="tabular-nums text-slate-400">Sending in {left}</span>}
         {editing ? (
-          <button type="button" onClick={() => value.trim() && send(value)} className="rounded-lg bg-slate-900 px-3 py-1 text-xs font-medium text-white">Send</button>
+          <button type="button" onClick={() => value.trim() && send(value)} className="rounded-full bg-slate-900 px-3 py-1 font-medium text-white">Send</button>
         ) : (
           <>
-            <button type="button" onClick={() => send(value)} className="rounded-lg bg-slate-900 px-3 py-1 text-xs font-medium text-white">Send now</button>
-            <button type="button" onClick={() => setEditing(true)} className="rounded-lg border border-slate-300 px-3 py-1 text-xs">Edit</button>
+            <button type="button" onClick={() => send(value)} className="rounded-full bg-slate-900 px-3 py-1 font-medium text-white">Send now</button>
+            <button type="button" onClick={() => { setEditing(true); onEditing(true) }} className="text-slate-500 underline-offset-2 hover:underline">Edit</button>
           </>
         )}
-        <button type="button" onClick={onCancel} className="rounded-lg border border-slate-300 px-3 py-1 text-xs">Cancel</button>
+        <button type="button" onClick={onCancel} className="text-slate-500 underline-offset-2 hover:underline">Cancel</button>
       </div>
     </div>
   )
@@ -76,6 +72,11 @@ export default function TalkMode({
   cards, cardNotes, onApprove, onReject, onEdit,
   errors, welcome,
 }) {
+  const [editingHeard, setEditingHeard] = useState(false)
+  const [showReply, setShowReply] = useState(false)
+  useEffect(() => { if (phase !== 'heard') setEditingHeard(false) }, [phase])
+  useEffect(() => { if (phase !== 'ready') setShowReply(false) }, [phase])
+  const lastStep = steps && steps.length ? steps[steps.length - 1] : null
   const heading = {
     ready: 'Tap the orb and speak',
     listening: 'Listening',
@@ -89,7 +90,7 @@ export default function TalkMode({
     <div className="flex flex-1 flex-col overflow-y-auto" data-testid="talk-mode" data-phase={phase}>
       <div className="flex flex-col items-center gap-2 px-4 pt-5">
         {/* A smaller orb while a change waits, so its Approve / Edit / Reject buttons stay within reach. */}
-        <TalkOrb phase={phase} level={level} agent={agent} onClick={onOrbTap} size={cards.length > 0 ? 120 : 168} />
+        <TalkOrb phase={phase} level={level} agent={agent} paused={editingHeard} onClick={onOrbTap} size={cards.length > 0 ? 120 : 168} />
         <div aria-live="polite" className="min-h-[1.5rem] text-center">
           {heading && <p className="text-sm font-medium text-slate-900">{heading}</p>}
           {phase === 'ready' && <p className="text-xs text-slate-500">English, Urdu or Roman Urdu</p>}
@@ -106,27 +107,38 @@ export default function TalkMode({
             <XIcon width={14} height={14} /> Cancel
           </button>
         )}
-        {phase === 'heard' && heard && <HeardBox key={heard.id} text={heard.text} onSend={onHeardSend} onCancel={onHeardCancel} />}
+        {phase === 'heard' && heard && <HeardBox key={heard.id} text={heard.text} onSend={onHeardSend} onCancel={onHeardCancel} onEditing={setEditingHeard} />}
         {phase === 'thinking' && (
-          <div className="w-full"><StepTrail live steps={steps} agents={agents} /></div>
+          <p className="talk-fade-in max-w-full truncate text-xs text-slate-500" aria-live="polite" data-testid="live-trail">{lastStep ? lastStep.label : 'Thinking'}</p>
         )}
         {phase === 'speaking' && (
-          <div className="w-full space-y-2" role="status">
-            <p dir="auto" data-testid="talk-caption" className="rounded-lg bg-blue-50 px-3 py-2 text-sm text-blue-900">{caption}</p>
-            <button type="button" onClick={onStopSpeaking} className="flex items-center gap-1 rounded-lg bg-blue-700 px-3 py-1 text-xs text-white">
+          <div className="talk-fade-in flex w-full flex-col items-center gap-2" role="status">
+            <p dir="auto" data-testid="talk-caption" className="line-clamp-2 px-2 text-center text-sm text-slate-500">{caption}</p>
+            <button type="button" onClick={onStopSpeaking} className="flex items-center gap-1 rounded-full border border-slate-300 px-3 py-1 text-xs text-slate-600 hover:bg-slate-50">
               <StopIcon width={14} height={14} /> Stop
             </button>
           </div>
         )}
         {phase === 'ready' && !lastReply && welcome && <div className="w-full"><AssistantWelcome welcome={welcome} /></div>}
         {phase === 'ready' && lastReply && (
-          <div className="w-full rounded-lg border border-slate-200 p-3">
-            <p className="mb-1 text-[11px] uppercase tracking-wide text-slate-400">Last reply</p>
-            <p dir="auto" className="whitespace-pre-wrap text-sm text-slate-800">{lastReply}</p>
-            {canListen && (
-              <button type="button" onClick={() => onListen(lastReply)} className="mt-1 rounded px-1.5 py-0.5 text-[11px] text-slate-500 hover:bg-slate-100" aria-label="Listen to the last reply">
-                Listen
+          <div className="talk-fade-in w-full">
+            <div className="flex justify-center gap-2">
+              <button type="button" onClick={() => setShowReply((v) => !v)} aria-expanded={showReply}
+                className="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-600 hover:bg-slate-50">
+                {showReply ? 'Hide reply' : 'Show reply'}
               </button>
+              {canListen && (
+                <button type="button" onClick={() => onListen(lastReply)} aria-label="Listen to the last reply"
+                  className="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-600 hover:bg-slate-50">
+                  Listen again
+                </button>
+              )}
+            </div>
+            {showReply && (
+              <div className="talk-fade-in mt-2 rounded-lg border border-slate-200 p-3">
+                <p className="mb-1 text-[11px] uppercase tracking-wide text-slate-400">Last reply</p>
+                <p dir="auto" className="whitespace-pre-wrap text-sm text-slate-800">{lastReply}</p>
+              </div>
             )}
           </div>
         )}

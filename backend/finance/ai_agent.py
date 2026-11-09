@@ -19,21 +19,33 @@ from academic_sessions.roster import placement_group, placement_roll, placements
 from academic_sessions.utils import resolve_current_academic_year_id
 
 
-def _payment_class_q(class_name):
+def _payment_class_q(class_name, school_id):
     """Q matching fee payments whose student was in `class_name` for the
     payment's own year -- by master class name or section label ("Class 2",
-    "Class 2 - A"). The Student.class_obj snapshot answered "Class 1 fees" with
-    this year's Class 1 students, even for last year's records."""
-    name, _, section = class_name.partition(' - ')
-    in_class = Q(class_obj__name__icontains=class_name) | Q(session_class__display_name__icontains=class_name)
-    if section:
-        in_class |= Q(session_class__display_name__icontains=name.strip(), session_class__section__iexact=section.strip())
+    "Class 2 - A", "2A"). The Student.class_obj snapshot answered "Class 1 fees" with
+    this year's Class 1 students, even for last year's records.
+
+    Names are compared by class_key, never by substring ("Class 1" is not Class 10), and "2A" selects only that
+    section's payments, not the whole master class."""
+    from academic_sessions.models import SessionClass
+    from assistant.skills.directory import class_key, class_matches
+    from students.models import Class
+
+    want = class_key(class_name.replace(' - ', ' '))
+    section_ids = [sc.id for sc in SessionClass.objects.filter(school_id=school_id)
+                   if want in (class_key(f'{sc.display_name} {sc.section}'), class_key(sc.display_name))]
+    classes = list(Class.objects.filter(school_id=school_id))
+    labelled = [(c, class_key(f'{c.name} {c.section or ""}'), class_key(c.name)) for c in classes]
+    master_ids = [c.id for c, label, name in labelled if class_matches(want, label) or class_matches(want, name)]
+    exact = [c.id for c, label, name in labelled if want in (label, name)]
+    master_ids = exact or master_ids
+    in_class = Q(class_obj_id__in=master_ids) | Q(session_class_id__in=section_ids)
     year_enrollment = StudentEnrollment.objects.filter(
         student_id=OuterRef('student_id'), academic_year_id=OuterRef('academic_year_id'),
     )
     return (
         Q(Exists(year_enrollment.filter(in_class)))
-        | (~Q(Exists(year_enrollment)) & Q(student__class_obj__name__icontains=class_name))
+        | (~Q(Exists(year_enrollment)) & Q(student__class_obj_id__in=master_ids))
     )
 
 logger = logging.getLogger(__name__)
@@ -341,7 +353,7 @@ class FinanceAIAgent:
         )
 
         if class_name:
-            qs = qs.filter(_payment_class_q(class_name))
+            qs = qs.filter(_payment_class_q(class_name, self.school_id))
 
         totals = qs.aggregate(
             total_due=Sum('amount_due'),
@@ -393,7 +405,7 @@ class FinanceAIAgent:
         ).select_related('student', 'student__class_obj')
 
         if class_name:
-            qs = qs.filter(_payment_class_q(class_name))
+            qs = qs.filter(_payment_class_q(class_name, self.school_id))
 
         payments = list(qs[:50])  # Limit to 50 for LLM context
         placements = placements_for(self.school_id, ((p.student_id, p.academic_year_id) for p in payments))
@@ -632,7 +644,8 @@ class FinanceAIAgent:
 
         qs = FeeStructure.objects.filter(school_id=self.school_id, is_active=True)
         if class_name:
-            qs = qs.filter(class_obj__name__icontains=class_name)
+            from assistant.skills.directory import master_classes_matching
+            qs = qs.filter(class_obj__in=master_classes_matching(self.school_id, class_name))
         if fee_type:
             qs = qs.filter(fee_type=fee_type.upper())
 

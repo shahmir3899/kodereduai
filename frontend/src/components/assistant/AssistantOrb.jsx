@@ -9,10 +9,13 @@ import { isAssistantEnabled } from './flag'
 import { KeyboardIcon, MicIcon } from './icons'
 import useAssistant from './useAssistant'
 import HistoryList from './HistoryList'
+import PreferencesSheet from './PreferencesSheet'
 import RichText from './RichText'
 import FeedbackThumbs from './FeedbackThumbs'
 import useSpeech, { scriptOf } from './useSpeech'
 import useWelcome from './useWelcome'
+import useDraggableFab from './useDraggableFab'
+import { panelRect } from './fabPosition'
 import AssistantWelcome from './AssistantWelcome'
 import useVoiceInput from './useVoiceInput'
 
@@ -29,39 +32,61 @@ const readPref = (key, fallback) => {
 const writePref = (key, on) => { try { window.localStorage.setItem(key, on ? '1' : '0') } catch { /* private mode */ } }
 const readMode = () => { try { return window.localStorage.getItem(PREF_MODE) === 'talk' ? 'talk' : 'text' } catch { return 'text' } }
 
-function Orb({ working, agent, pending, onClick, open, voice, level }) {
+const BAR_SHAPE = [0.38, 0.62, 0.9, 0.62, 0.38] // the same five bars as the Talk orb and the phone button
+
+/**
+ * The floating button. Drag it anywhere (mouse, finger, pen) and it settles on the nearer side edge; a click
+ * still opens Aura. Alt+arrow keys move it too. The slow pulse rests while it is open, working or being dragged.
+ */
+function Orb({ working, agent, pending, onClick, open, voice, level, fab }) {
   const recording = voice === 'recording'
   const busy = working || voice === 'transcribing'
-  const ring = recording ? 'border-red-400' : busy ? themeFor(agent).ring : 'border-blue-400'
-  const heights = [10, 18, 12]
+  const ring = recording ? 'border-red-300' : busy ? themeFor(agent).ring : 'border-violet-300'
+  const calm = open || busy || recording || fab.dragging
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-label={open ? 'Minimise Aura' : 'Open Aura'}
-      aria-expanded={open}
-      className="fixed bottom-4 right-4 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-slate-900 text-white shadow-lg"
+    <div
+      {...fab.handlers}
+      className="fixed z-40 flex w-14 select-none flex-col items-center gap-0.5"
+      style={{
+        left: fab.pos.x, top: fab.pos.y, touchAction: 'none', cursor: fab.dragging ? 'grabbing' : 'grab',
+        transition: fab.dragging ? 'none' : 'left 180ms ease-out, top 180ms ease-out',
+      }}
+      data-testid="aura-fab"
     >
-      <span
-        className={`absolute inset-0 rounded-full border-2 ${ring} ${busy ? 'assistant-ring-spin border-dashed' : recording ? '' : 'assistant-orb-idle'}`}
-        style={recording ? { transform: `scale(${1 + Math.min(level, 1) * 0.3})`, transition: 'transform 80ms linear' } : undefined}
-        aria-hidden="true"
-      />
-      <span className="relative flex items-end gap-0.5" aria-hidden="true">
-        {heights.map((h, i) => (
-          <span
-            key={i}
-            className={`w-1 rounded-full bg-white ${voice === 'speaking' ? 'assistant-bar-speaking' : ''}`}
-            style={{ height: recording ? Math.max(6, Math.round(8 + level * 14 * (1 - i * 0.2))) : h, animationDelay: `${i * 120}ms` }}
-          />
-        ))}
-      </span>
-      {pending > 0 && (
-        <span className="absolute -right-1 -top-1 flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-amber-500 px-1 text-[11px] font-medium text-white" aria-label={`${pending} waiting for approval`}>
-          {pending}
+      <button
+        type="button"
+        onClick={() => { if (!fab.consumeDrag()) onClick() }}
+        aria-label={open ? 'Minimise Aura' : 'Open Aura'}
+        aria-expanded={open}
+        title="Drag to move (or hold Alt and use the arrow keys)"
+        className={`relative flex h-14 w-14 items-center justify-center rounded-full bg-violet-600 text-white ring-2 ring-violet-300 focus:outline-none focus-visible:ring-4 focus-visible:ring-violet-400 ${fab.dragging ? 'shadow-2xl' : 'shadow-lg'}`}
+      >
+        {!calm && <span className="assistant-fab-pulse absolute inset-0 rounded-full bg-violet-600" aria-hidden="true" />}
+        <span
+          className={`absolute inset-0 rounded-full border-2 ${ring} ${busy ? 'assistant-ring-spin border-dashed' : recording ? '' : 'assistant-orb-idle'}`}
+          style={recording ? { transform: `scale(${1 + Math.min(level, 1) * 0.3})`, transition: 'transform 80ms linear' } : undefined}
+          aria-hidden="true"
+        />
+        <span className="relative flex items-center gap-[3px]" aria-hidden="true">
+          {BAR_SHAPE.map((share, i) => (
+            <span
+              key={i}
+              className={`w-[3.5px] rounded-full bg-white ${voice === 'speaking' ? 'assistant-bar-speaking' : ''}`}
+              style={{
+                height: recording ? Math.max(5, Math.round(22 * share * (0.35 + level * 1.4))) : Math.round(22 * share),
+                animationDelay: `${i * 110}ms`, transformOrigin: 'center',
+              }}
+            />
+          ))}
         </span>
-      )}
-    </button>
+        {pending > 0 && (
+          <span className="absolute -right-1 -top-1 flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-amber-500 px-1 text-[11px] font-medium text-white" aria-label={`${pending} waiting for approval`}>
+            {pending}
+          </span>
+        )}
+      </button>
+      <span className="pointer-events-none text-[11px] font-bold text-violet-700" aria-hidden="true">Aura</span>
+    </div>
   )
 }
 
@@ -73,7 +98,7 @@ function Message({ message, notes, onApprove, onReject, onEdit, onListen, onChoo
       {!mine && <StepTrail steps={message.tool_calls || []} />}
       <div
         dir="auto"
-        className={`max-w-[92%] whitespace-pre-wrap rounded-2xl px-3 py-2 text-sm ${mine ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-900'}`}
+        className={`max-w-[92%] whitespace-pre-wrap rounded-2xl px-3 py-2 text-sm ${mine ? 'rounded-br-md bg-blue-800 text-white' : 'rounded-bl-md border border-slate-200 bg-white text-slate-900 shadow-sm'}`}
       >
         <RichText text={message.content} />
       </div>
@@ -131,9 +156,11 @@ export default function AssistantOrb({ userId }) {
   const draftIsVoice = useRef(false)          // the words in the box came from the microphone
   const speakNext = useRef(false)             // the next reply answers a spoken question
   const spokenId = useRef(null)
-  const { state, capabilities, cardNotes, send, approve, reject, edit, newChat, pending, conversationId, history, openConversation, pinConversation, removeConversation } = useAssistant({ enabled, open })
+  const { state, capabilities, cardNotes, send, approve, reject, edit, newChat, pending, conversationId, history, openConversation, pinConversation, renameConversation, removeConversation } = useAssistant({ enabled, open })
   const [showHistory, setShowHistory] = useState(false)
+  const [showPrefs, setShowPrefs] = useState(false)
   const speech = useSpeech()
+  const fab = useDraggableFab()
   // Only an untouched conversation gets the welcome by itself; opening the panel is the tap that lets sound play.
   const welcome = useWelcome({
     agents: capabilities?.agents, speech, userId,
@@ -256,6 +283,9 @@ export default function AssistantOrb({ userId }) {
   const talkMode = talking && talkAvailable
   const phase = recording ? 'listening' : transcribing ? 'transcribing' : heard ? 'heard' : working ? 'thinking' : speech.speaking ? 'speaking' : 'ready'
   const lastReply = [...state.messages].reverse().find((m) => m.role === 'assistant')?.content
+  // The panel opens beside the button (on the side with room), and is a full-width sheet on a narrow screen.
+  const rect = panelRect(fab.pos, fab.bounds)
+  const pill = 'whitespace-nowrap rounded-full px-2 py-1 text-xs text-slate-600 hover:bg-slate-100'
 
   const onOrbTap = () => {
     if (phase === 'listening') voice.stop()
@@ -273,51 +303,66 @@ export default function AssistantOrb({ userId }) {
         <section
           role="dialog"
           aria-label="Aura"
-          className={`fixed bottom-20 right-4 z-40 flex h-[min(34rem,calc(100vh-7rem))] w-[min(26rem,calc(100vw-2rem))] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl ${closing ? 'assistant-sink' : 'assistant-rise'}`}
+          className={`fixed z-40 flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl ${closing ? 'assistant-sink' : 'assistant-rise'}`}
+          style={{ left: rect.left, top: rect.top, width: rect.width, height: rect.height }}
         >
-          <header className="flex items-center justify-between border-b border-slate-200 px-3 py-2">
-            <div className="flex items-center gap-2">
-              <span className={`h-2.5 w-2.5 rounded-full ${working ? themeFor(liveAgent).dot : 'bg-blue-400'}`} aria-hidden="true" />
-              <h2 className="text-sm font-medium text-slate-900">Aura</h2>
-              <span
-                className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-600"
-                title={`Aura remembers the last ${state.memory.limit} messages`}
-                aria-label={`Memory ${state.memory.used} of ${state.memory.limit} messages`}
-              >
-                {state.memory.used}/{state.memory.limit}
-              </span>
-            </div>
-            <div className="flex items-center gap-1">
-              {talkAvailable && (
-                <button
-                  type="button"
-                  onClick={switchMode}
-                  aria-label={talkMode ? 'Switch to text chat' : 'Switch to Talk mode'}
-                  className="flex items-center gap-1 rounded px-2 py-1 text-xs text-slate-700 hover:bg-slate-100"
+          <header className="border-b border-slate-200 bg-white">
+            <div className="flex items-center justify-between gap-2 px-3 py-2">
+              <div className="flex items-center gap-2">
+                <span className={`h-2.5 w-2.5 rounded-full ${working ? themeFor(liveAgent).dot : 'bg-violet-500'}`} aria-hidden="true" />
+                <h2 className="text-base font-semibold text-slate-900">Aura</h2>
+                <span
+                  className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-600"
+                  title={`Aura remembers the last ${state.memory.limit} messages`}
+                  aria-label={`Memory ${state.memory.used} of ${state.memory.limit} messages`}
                 >
-                  {talkMode ? <KeyboardIcon width={16} height={16} /> : <MicIcon width={16} height={16} />}
-                  {talkMode ? 'Text' : 'Talk'}
-                </button>
-              )}
-              {speech.supported && voiceReady && (
-                <button
-                  type="button"
-                  onClick={toggleSpeak}
-                  aria-pressed={speakReplies}
-                  title="Read replies aloud when you ask by voice"
-                  className="rounded px-2 py-1 text-xs text-slate-600 hover:bg-slate-100"
-                >
-                  Aloud: {speakReplies ? 'on' : 'off'}
-                </button>
-              )}
-              <button type="button" onClick={() => setShowHistory((v) => !v)} aria-pressed={showHistory} className="rounded px-2 py-1 text-xs text-slate-600 hover:bg-slate-100">History</button>
-              <button type="button" onClick={startNewChat} className="rounded px-2 py-1 text-xs text-slate-600 hover:bg-slate-100">New chat</button>
-              <button type="button" onClick={minimise} aria-label="Minimise" className="rounded px-2 py-1 text-slate-600 hover:bg-slate-100">▾</button>
+                  {state.memory.used}/{state.memory.limit}
+                </span>
+              </div>
+              <div className="flex flex-wrap items-center justify-end gap-0.5">
+                {speech.supported && voiceReady && (
+                  <button
+                    type="button"
+                    onClick={toggleSpeak}
+                    aria-pressed={speakReplies}
+                    title="Read replies aloud when you ask by voice"
+                    className={pill}
+                  >
+                    Aloud: {speakReplies ? 'on' : 'off'}
+                  </button>
+                )}
+                <button type="button" onClick={() => setShowHistory((v) => !v)} aria-pressed={showHistory} className={`${pill} ${showHistory ? 'bg-slate-100' : ''}`}>History</button>
+                <button type="button" onClick={() => { setShowHistory(false); setShowPrefs((v) => !v) }} aria-pressed={showPrefs} className={`${pill} ${showPrefs ? 'bg-slate-100' : ''}`}>Settings</button>
+                <button type="button" onClick={startNewChat} className={pill}>New chat</button>
+                <button type="button" onClick={minimise} aria-label="Minimise" className="ml-0.5 flex h-7 w-7 items-center justify-center rounded-full bg-slate-100 text-slate-600 hover:bg-slate-200">▾</button>
+              </div>
             </div>
+            {talkAvailable && (
+              <div role="group" aria-label="Mode" className="mx-3 mb-2 flex rounded-full bg-slate-100 p-0.5">
+                {[['text', 'Text', KeyboardIcon, 'Switch to text chat'], ['talk', 'Talk', MicIcon, 'Switch to Talk mode']].map(([key, label, Icon, aria]) => {
+                  const active = (key === 'talk') === talkMode
+                  return (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => { if (!active) switchMode() }}
+                      aria-label={aria}
+                      aria-pressed={active}
+                      className={`flex flex-1 items-center justify-center gap-1.5 rounded-full py-1.5 text-xs font-medium transition-colors ${active ? 'bg-white text-blue-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                    >
+                      <Icon width={16} height={16} />
+                      {label}
+                    </button>
+                  )
+                })}
+              </div>
+            )}
           </header>
 
-          {showHistory ? (
-            <HistoryList query={history} currentId={conversationId} onOpen={openPast} onPin={pinConversation} onDelete={removeConversation} onClose={() => setShowHistory(false)} />
+          {showPrefs ? (
+            <PreferencesSheet onClose={() => setShowPrefs(false)} />
+          ) : showHistory ? (
+            <HistoryList query={history} currentId={conversationId} onOpen={openPast} onPin={pinConversation} onRename={renameConversation} onDelete={removeConversation} onClose={() => setShowHistory(false)} />
           ) : talkMode ? (
             <>
               <TalkMode
@@ -355,7 +400,7 @@ export default function AssistantOrb({ userId }) {
             </>
           ) : (
             <>
-              <div className="flex-1 space-y-3 overflow-y-auto p-3">
+              <div className="flex-1 space-y-3 overflow-y-auto bg-slate-50 p-3">
                 {empty && (
                   <div className="space-y-3">
                     <AssistantWelcome welcome={welcome} />
@@ -365,9 +410,9 @@ export default function AssistantOrb({ userId }) {
                         <span key={a.name} className={`rounded-full border px-2 py-0.5 text-[11px] ${themeFor(a.name).pill}`}>{a.label}</span>
                       ))}
                     </div>
-                    <div className="flex flex-col gap-1">
+                    <div className="flex flex-wrap gap-2">
                       {capabilities.suggestions.map((s) => (
-                        <button key={s} type="button" dir="auto" onClick={() => submit(s)} className="rounded-lg border border-slate-200 px-3 py-1.5 text-left text-xs text-slate-700 hover:bg-slate-50">
+                        <button key={s} type="button" dir="auto" onClick={() => submit(s)} className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-left text-xs text-blue-800 shadow-sm hover:bg-slate-50">
                           {s}
                         </button>
                       ))}
@@ -436,7 +481,7 @@ export default function AssistantOrb({ userId }) {
                         disabled={transcribing || working}
                         aria-label="Speak your message"
                         title="Speak your message"
-                        className="shrink-0 rounded-lg border border-slate-300 px-3 py-2 text-slate-700 hover:bg-slate-50 disabled:opacity-40"
+                        className="shrink-0 rounded-full bg-slate-100 px-3 py-2 text-slate-700 hover:bg-slate-200 disabled:opacity-40"
                       >
                         <MicIcon />
                       </button>
@@ -452,9 +497,9 @@ export default function AssistantOrb({ userId }) {
                       placeholder={transcribing ? 'Turning your voice into text…' : 'Type or paste a request'}
                       aria-label="Message"
                       maxLength={2000}
-                      className="max-h-28 flex-1 resize-none rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
+                      className="max-h-28 flex-1 resize-none rounded-2xl bg-slate-100 px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
                     />
-                    <button type="submit" disabled={working || transcribing || !draft.trim()} className="rounded-lg bg-slate-900 px-3 py-2 text-sm text-white disabled:opacity-40">
+                    <button type="submit" disabled={working || transcribing || !draft.trim()} className="rounded-full bg-blue-800 px-4 py-2 text-sm font-medium text-white disabled:opacity-40">
                       Send
                     </button>
                   </>
@@ -470,8 +515,11 @@ export default function AssistantOrb({ userId }) {
           )}
         </section>
       )}
-      <Orb working={working} agent={liveAgent} pending={pending} open={open} voice={orbVoice} level={voice.level}
-        onClick={() => (open ? minimise() : setOpen(true))} />
+      {/* On a narrow screen the open panel is a full sheet with its own Minimise, so the button steps aside. */}
+      {!(open && rect.sheet) && (
+        <Orb working={working} agent={liveAgent} pending={pending} open={open} voice={orbVoice} level={voice.level} fab={fab}
+          onClick={() => (open ? minimise() : setOpen(true))} />
+      )}
     </>
   )
 }

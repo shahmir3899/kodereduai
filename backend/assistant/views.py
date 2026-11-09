@@ -15,7 +15,7 @@ from rest_framework.views import APIView
 from core.mixins import ensure_tenant_school_id
 from core.permissions import HasSchoolAccess, get_effective_role
 
-from . import engine, gaps, insights, memory, orchestrator, registry, usage, voice
+from . import engine, gaps, insights, memory, orchestrator, prefs, registry, usage, voice
 from .guards import GuardRefusal
 from .models import AgentConversation, AgentGap, AgentGapGroup, AgentMessage
 
@@ -98,7 +98,12 @@ class ConversationDetailView(_AssistantView):
     def patch(self, request, pk):
         conv = self._conversation(request, pk)
         if 'title' in request.data:
-            conv.title = str(request.data['title'])[:200]
+            title = str(request.data['title'] or '').strip()
+            if not title:
+                return Response({'error': 'The name cannot be empty.'}, status=400)
+            if len(title) > 200:
+                return Response({'error': 'The name is too long (200 characters at most).'}, status=400)
+            conv.title = title
         if 'pinned' in request.data:
             conv.pinned = bool(request.data['pinned'])
         conv.save()
@@ -181,6 +186,38 @@ class FeedbackView(_AssistantView):
             agent=message.sub_agent.split(',')[0] if message.sub_agent else '',
             message_id=message.pk, rating=rating, reason=str(request.data.get('reason', ''))[:300], dedupe=False)
         return Response({'ok': row is not None})
+
+
+class PreferencesView(_AssistantView):
+    """The signed-in user's own saved preferences (backlog item D). Never anyone else's: the row is looked up by request.user."""
+
+    def _ctx(self, request):
+        return registry.ToolContext(user=request.user, school_id=self._school_id(request), role=get_effective_role(request))
+
+    def _payload(self, request, ctx):
+        accounts = []
+        try:
+            from .skills.finance_writes import _accounts
+            if get_effective_role(request) in ('SUPER_ADMIN', 'SCHOOL_ADMIN', 'PRINCIPAL', 'ACCOUNTANT'):
+                accounts = [{'id': a['id'], 'name': a['name']} for a in _accounts(ctx)]
+        except Exception:       # finance off or no permission: the sheet simply hides the account choice
+            accounts = []
+        return {'preferences': prefs.get(ctx.school_id, request.user.id), 'languages': prefs.LANGUAGES, 'accounts': accounts}
+
+    def get(self, request):
+        ctx = self._ctx(request)
+        return Response(self._payload(request, ctx))
+
+    def patch(self, request):
+        ctx = self._ctx(request)
+        changes = {k: v for k, v in (request.data or {}).items() if k in prefs.KEYS}
+        if not changes:
+            return Response({'error': 'Send language, default_class or default_account_id.'}, status=400)
+        try:
+            prefs.save(ctx, changes)
+        except registry.ProposalError as exc:
+            return Response({'error': str(exc)}, status=400)
+        return Response(self._payload(request, ctx))
 
 
 class InsightsView(_AssistantView):
@@ -274,7 +311,7 @@ class ActionEditView(_ActionStepView):
 AGENT_LABELS = {
     'finance': 'Finance', 'academics': 'Academics', 'attendance': 'Attendance',
     'communication': 'Parent communication', 'study': 'Study helper', 'exams': 'Exams',
-    'operations': 'Operations', 'family': 'My children', 'hr': 'HR', 'students': 'Students & admissions',
+    'operations': 'Operations', 'settings': 'My settings', 'family': 'My children', 'hr': 'HR', 'students': 'Students & admissions',
 }
 # Starter prompts per sub-agent, in the mix the users actually type (English and Roman Urdu).
 SUGGESTIONS = {
@@ -313,6 +350,9 @@ class CapabilitiesView(_AssistantView):
                                                        'tools': 0, 'can_write': False})
             entry['tools'] += 1
             entry['can_write'] = entry['can_write'] or tool.kind == 'write'
+        # "My settings" exists for every user, so on its own it must not make the orb appear: a school with every module off still has nothing to ask Aura.
+        if set(agents) <= {'settings'}:
+            return Response({'agents': [], 'suggestions': []})
         ordered = sorted(agents.values(), key=lambda a: a['name'])
         suggestions = [s for a in ordered for s in SUGGESTIONS.get(a['name'], [])[:2]][:8]
         return Response({'agents': ordered, 'suggestions': suggestions, 'memory_limit': memory.WINDOW,

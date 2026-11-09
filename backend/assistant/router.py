@@ -14,15 +14,16 @@ logger = logging.getLogger(__name__)
 
 # One line each: this is what the routing model reads.
 AGENTS = {
-    'finance': 'fees, LISTS of who owes / has pending or unpaid fees, collection, payments, expenses, income, account balances, net position, discounts, who has a scholarship. NEVER for staff salary or payroll totals (that is hr)',
-    'academics': 'timetable, teacher/class/room schedules, substitutes, workload, curriculum gaps',
+    'finance': 'fees, LISTS of who owes / has pending or unpaid fees, collection, payments, expenses, income, account balances, a cash or bank ACCOUNT statement (not a student ledger), receipts (payments received in a period), net position, discounts, who has a scholarship, creating or changing discount and scholarship rules. NEVER for staff salary or payroll totals (that is hr), NEVER for the own fee ledger of one student / fee statement (that is students)',
+    'academics': 'timetable, teacher/class/room schedules, substitutes, workload, curriculum gaps, lesson plans and class diary, assignment submissions (who handed in, who has not, grading, returning work)',
     'communication': "one student in detail: attendance history, absences, marks, fee status, transport, scholarships; drafting and sending messages to parents. NEVER for 'how many are absent today' or class / school-wide counts (that is attendance)",
     'study': "the student's own marks, homework, attendance, exams, study help, weak subjects, revision plan, practice quiz",
     'exams': 'exams, results, pass/fail, marks, entering marks, marks still missing, creating or rescheduling an exam, grade scale, students at risk of failing',
-    'hr': 'staff, teachers and employees by name; staff directory, who is on leave, leave requests and balances, approving or rejecting leave, applying for leave, staff attendance, staff salary, staff contact details, payroll, payslips, generating / approving / paying / deleting payslips',
-    'students': "a person's student record: one student profile, student counts, admission enquiries and their notes / status, converting an enquiry to a student, editing student details, changing a student class, one student's own monthly fee or discount. NEVER for 'who owes fees' lists (finance) or staff / teachers (hr)",
-    'operations': "library books (search, issue, return, overdue), hostel (occupancy, rooms, gate passes), inventory (stock, low stock, stock in / out), transport (routes, who rides, assign a student, is a bus running)",
+    'hr': 'staff, teachers and employees by name; staff directory, who is on leave, leave requests and balances, approving or rejecting leave, applying for leave, staff attendance, staff salary, staff contact details, payroll, payslips, generating / approving / paying / deleting payslips. NEVER for parents leave requests for their children (that is students)',
+    'students': "a person's student record: one student profile, student counts, admission enquiries and their notes / status, converting an enquiry to a student, editing student details, changing a student class, leave requests that parents sent for their children, the documents on a student file, one student's own monthly fee or discount, one student's fee ledger, fee statement or fee history (for example Ali ka ledger). NEVER for 'who owes fees' lists (finance) or staff / teachers (hr)",
+    'operations': "library books (search, issue, return, overdue), hostel (occupancy, rooms, gate passes), inventory (stock, low stock, stock in / out, vendors and suppliers), transport (routes, who rides, assign a student, is a bus running)",
     'family': "a parent asking about their own children: attendance, fees owed, timetable, exam dates and results, library, bus, leave requests, messages",
+    'settings': 'saving how the user wants Aura to behave: always reply in a language, my usual class, my usual fee account (for example always reply in Roman Urdu, my class is 5A)',
     'attendance': "class and school-wide attendance COUNTS for a day: how many students are absent today, which classes have not marked, marking a class register. NEVER one student's attendance history (that is communication)",
 }
 
@@ -41,7 +42,9 @@ def pick_agents(available: dict, message: str, recent_agents=()) -> list:
             f'Options:\n{options}{hint}\n'
             'If a name could be a student or a staff member, choose both students and hr. '
             'Reply with the option names only, comma separated (usually one). '
-            'Reply "none" if no data lookup is needed (greeting, general question).')},
+            'Reply "none" ONLY for a greeting, thanks or a general-knowledge question that has nothing to do with this school. '
+            'Any question about students, staff, fees, attendance, exams, leave, money or classes needs data, even if it is misspelled or '
+            'unclear: then pick the closest option, never "none".')},
         {'role': 'user', 'content': message[:500]},
     ]
     try:

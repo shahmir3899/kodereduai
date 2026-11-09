@@ -106,6 +106,8 @@ accurate (line numbers may drift by a few lines release to release; re-check bef
 
 ---
 
+> **Update 2026-11-09:** `Exam` now has a nullable `session_class` (null = every section of `class_obj`; see `examinations/models.py`, field `session_class`, with its own unique constraint). Statements below that say `Exam` has no `session_class` field, or that auto-fill cannot be scoped without a schema change, describe the state at 2026-08-01 and are out of date. `ExamPaper` and `StudentTermAssessment` were not re-checked.
+
 ## 2. Verified Issue List (re-audit as of 2026-08-01)
 
 All items from `CLASS_SYSTEM_DOCUMENTATION.md` §7 (Known Issues) and §8 (Open Questions),

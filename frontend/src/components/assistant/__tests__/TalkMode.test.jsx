@@ -328,6 +328,7 @@ describe('thinking, speaking and what is waiting for you', () => {
     await openTalk()
     await user.click(screen.getByLabelText(/Send instantly/))
     await speakOnce()
+    await user.click(await screen.findByRole('button', { name: 'Show reply' }))
     expect(await screen.findByText('Last reply')).toBeInTheDocument()
     expect(screen.getByText('Register ready.')).toBeInTheDocument()
     expect(synth.speak).not.toHaveBeenCalled()
@@ -340,6 +341,7 @@ describe('thinking, speaking and what is waiting for you', () => {
     await user.click(screen.getByLabelText(/Send instantly/))
     await speakOnce()
     expect(await screen.findByText(/no Urdu voice/i)).toBeInTheDocument()
+    await user.click(await screen.findByRole('button', { name: 'Show reply' }))
     expect(screen.getByText('Register ready.')).toBeInTheDocument()
     expect(synth.speak).not.toHaveBeenCalled()
   })
@@ -399,8 +401,8 @@ describe('TalkOrb', () => {
   })
 
   it('listening is red and the rings swell with the voice', () => {
-    const quiet = render(<TalkOrb phase="listening" level={0} />).container.querySelector('circle')
-    const loud = render(<TalkOrb phase="listening" level={1} />).container.querySelector('circle')
+    const quiet = render(<TalkOrb phase="listening" level={0} />).container.querySelector('circle:not(.talk-ripple)')
+    const loud = render(<TalkOrb phase="listening" level={1} />).container.querySelector('circle:not(.talk-ripple)')
     expect(quiet.getAttribute('stroke')).toBe('#E24B4A')
     expect(loud.style.transform).not.toBe(quiet.style.transform)
   })

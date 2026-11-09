@@ -278,7 +278,7 @@ class TestPlanFromBook:
         assert rows[keys[2]]['title'] == 'Revision day'
 
     @pytest.mark.parametrize('edits', [{'remove_keys': ['nope']}, {'swap': [['a', 'b']]}, {'titles': {'x': 'y'}},
-                                       {'on_conflict': 'replace'}, {'texts': {'1:2026-12-01': {'bogus': 'x'}}}])
+                                       {'on_conflict': 'overwrite'}, {'texts': {'1:2026-12-01': {'bogus': 'x'}}}])
     def test_bad_edits_are_rejected(self, seed_data, lms, edits):
         ctx = _teacher_ctx(lms)
         card = _card(_run(ctx, 'plan_lessons_from_book', **_base(chapters=[3, 4])))
@@ -474,3 +474,58 @@ class TestReads:
         ctx = _admin_ctx(seed_data)
         for text, expected in [('Class 4', 2), ('4', 2), ('4A', 1), ('class 4 b', 1), ('Class 5', 0)]:
             assert len(lc.find_sections(ctx, text)) == expected, text
+
+
+# ── item H: replace, and the chips ───────────────────────────────────────────
+
+class TestReplaceAndChips:
+    def _old(self, seed_data, lms, status='DRAFT', day=date(2026, 12, 2)):
+        from lms.models import LessonPlan
+        return LessonPlan.objects.create(school=seed_data['school_a'], class_obj=lms['klass'], session_class=lms['sec']['A'], subject=lms['english'],
+                                         teacher=lms['ali'], title='old', lesson_date=day, status=status)
+
+    def test_replace_swaps_a_draft_after_the_new_plan_is_saved(self, seed_data, lms):
+        from lms.models import LessonPlan
+        old = self._old(seed_data, lms)
+        ctx = _teacher_ctx(lms)
+        card = _card(_run(ctx, 'plan_lessons_from_book', **_base(chapters=[3, 4], on_conflict='replace')))
+        assert len(card.preview['rows']) == 8 and any('replaced' in w for w in card.preview['warnings'])
+        done = engine.approve(card.id, ctx.user, ctx.school_id)
+        assert done.result['created'] == 8 and done.result['replaced'] == 1
+        assert not LessonPlan.objects.filter(pk=old.pk).exists()
+        assert LessonPlan.objects.filter(lesson_date=date(2026, 12, 2)).count() == 1
+
+    def test_a_published_plan_is_never_replaced(self, seed_data, lms):
+        from lms.models import LessonPlan
+        old = self._old(seed_data, lms, status='PUBLISHED')
+        card = _card(_run(_teacher_ctx(lms), 'plan_lessons_from_book', **_base(chapters=[3, 4], on_conflict='replace')))
+        assert len(card.preview['rows']) == 7
+        assert card.preview['skipped'][0]['reason'] == 'a published lesson plan is kept'
+        ctx = _teacher_ctx(lms)
+        engine.approve(card.id, ctx.user, ctx.school_id)
+        assert LessonPlan.objects.filter(pk=old.pk).exists()
+
+    def test_chips_are_offered_on_a_book_plan_and_not_on_a_single_plan(self, seed_data, lms):
+        ctx = _teacher_ctx(lms)
+        card = _card(_run(ctx, 'plan_lessons_from_book', **_base(chapters=[3, 4])))
+        assert card.preview['editable']['chips'] == {'skip_saturday': True, 'on_conflict': 'skip', 'duration_minutes': 45}
+        single = _card(_run(ctx, 'create_lesson_plan', class_name='Class 4', section='A', subject_name='English', lesson_date=D0, title='One'))
+        assert 'chips' not in single.preview['editable']
+
+    def test_saturday_chip_plans_the_dates_again(self, seed_data, lms):
+        ctx = _teacher_ctx(lms)
+        card = _card(_run(ctx, 'plan_lessons_from_book', **_base(chapters=[3, 4])))
+        assert 'Sat' not in {r['weekday'] for r in card.preview['rows']}
+        edited = engine.edit(card.id, ctx.user, ctx.school_id, {'skip_saturday': False})
+        days = {r['weekday'] for r in edited.preview['rows']}
+        assert 'Sat' in days and len(edited.preview['rows']) == 9
+        assert edited.preview['editable']['chips']['skip_saturday'] is False
+
+    def test_conflict_and_length_chips_keep_the_rows(self, seed_data, lms):
+        ctx = _teacher_ctx(lms)
+        card = _card(_run(ctx, 'plan_lessons_from_book', **_base(chapters=[3, 4])))
+        edited = engine.edit(card.id, ctx.user, ctx.school_id, {'on_conflict': 'replace', 'duration_minutes': 60})
+        assert edited.preview['editable']['chips']['on_conflict'] == 'replace' and edited.payload['duration'] == 60
+        assert len(edited.preview['rows']) == 8
+        with pytest.raises(engine.ActionError):
+            engine.edit(card.id, ctx.user, ctx.school_id, {'duration_minutes': 5})

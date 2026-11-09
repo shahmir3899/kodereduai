@@ -1448,6 +1448,17 @@ class AcademicsAIAgent:
             return {"error": f"Unknown tool: {tool_name}. Available tools: {available}"}
         return handler(**params)
 
+    def _find_class(self, class_name):
+        """(Class, None) for one exact match, else (None, error dict). "Class 1" never matches Class 10; "4A" maps to Class 4."""
+        from assistant.skills.directory import master_classes_matching
+
+        hits = master_classes_matching(self.school_id, class_name)
+        if len(hits) == 1:
+            return hits[0], None
+        if hits:
+            return None, {"error": f"'{class_name}' matches several classes: {', '.join(c.name for c in hits[:6])}. Ask which one."}
+        return None, {"error": f"Class '{class_name}' not found.{self._suggest_classes(class_name)}"}
+
     def _suggest_classes(self, class_name: str) -> str:
         """Return suggestion string for similar class names."""
         from students.models import Class
@@ -1470,11 +1481,9 @@ class AcademicsAIAgent:
         from students.models import Class
         from .models import TimetableEntry
 
-        cls = Class.objects.filter(
-            school_id=self.school_id, name__icontains=class_name
-        ).first()
-        if not cls:
-            return {"error": f"Class '{class_name}' not found.{self._suggest_classes(class_name)}"}
+        cls, class_error = self._find_class(class_name)
+        if class_error:
+            return class_error
 
         entries = TimetableEntry.objects.filter(
             school_id=self.school_id, class_obj=cls
@@ -1575,7 +1584,8 @@ class AcademicsAIAgent:
         ).select_related('slot', 'class_obj', 'teacher').order_by('class_obj__name', 'day', 'slot__order')
 
         if class_name:
-            entry_qs = entry_qs.filter(class_obj__name__icontains=class_name)
+            matched = self._find_class(class_name)[0]
+            entry_qs = entry_qs.filter(class_obj=matched) if matched else entry_qs.none()
 
         schedule = []
         for entry in entry_qs[:30]:
@@ -1610,11 +1620,9 @@ class AcademicsAIAgent:
         from students.models import Class
         from .models import ClassSubject
 
-        cls = Class.objects.filter(
-            school_id=self.school_id, name__icontains=class_name
-        ).first()
-        if not cls:
-            return {"error": f"Class '{class_name}' not found.{self._suggest_classes(class_name)}"}
+        cls, class_error = self._find_class(class_name)
+        if class_error:
+            return class_error
 
         assignments = ClassSubject.objects.filter(
             school_id=self.school_id, class_obj=cls, is_active=True
@@ -1638,11 +1646,9 @@ class AcademicsAIAgent:
     def _get_quality_score(self, class_name: str) -> dict:
         from students.models import Class
 
-        cls = Class.objects.filter(
-            school_id=self.school_id, name__icontains=class_name
-        ).first()
-        if not cls:
-            return {"error": f"Class '{class_name}' not found.{self._suggest_classes(class_name)}"}
+        cls, class_error = self._find_class(class_name)
+        if class_error:
+            return class_error
 
         scorer = TimetableQualityScorer(self.school_id, cls.id)
         result = scorer.score()
@@ -1689,11 +1695,9 @@ class AcademicsAIAgent:
         # Filter results to a specific class if requested
         if class_name:
             from students.models import Class
-            cls = Class.objects.filter(
-                school_id=self.school_id, name__icontains=class_name
-            ).first()
-            if not cls:
-                return {"error": f"Class '{class_name}' not found.{self._suggest_classes(class_name)}"}
+            cls, class_error = self._find_class(class_name)
+            if class_error:
+                return class_error
             # Filter gap lists to only include entries for the requested class
             for key in ['missing_subjects', 'unmet_periods', 'unassigned_teachers']:
                 if key in gaps and isinstance(gaps[key], list):
@@ -1714,11 +1718,9 @@ class AcademicsAIAgent:
         if not teacher:
             return {"error": f"Teacher '{teacher_name}' not found.{self._suggest_teachers(teacher_name)}"}
 
-        cls = Class.objects.filter(
-            school_id=self.school_id, name__icontains=class_name
-        ).first()
-        if not cls:
-            return {"error": f"Class '{class_name}' not found.{self._suggest_classes(class_name)}"}
+        cls, class_error = self._find_class(class_name)
+        if class_error:
+            return class_error
 
         day_upper = day.upper()[:3]
         slot = TimetableSlot.objects.filter(

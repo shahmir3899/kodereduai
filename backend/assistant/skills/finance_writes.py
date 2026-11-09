@@ -47,7 +47,7 @@ def _pending_queryset(school_id, class_name, month, year):
         school_id=school_id, status__in=['UNPAID', 'PARTIAL'], month=month or today.month, year=year or today.year,
     ).select_related('student').order_by('student__name', 'id')
     if class_name:
-        qs = qs.filter(_payment_class_q(class_name))
+        qs = qs.filter(_payment_class_q(class_name, school_id))
     return qs
 
 
@@ -122,6 +122,11 @@ def _choose_account(ctx, account_id):
         raise ProposalError('That account does not exist. Accounts: ' + ', '.join(f"{a['name']} (id {a['id']})" for a in accounts))
     if len(accounts) == 1:
         return accounts[0], accounts
+    from .. import prefs
+    usual = prefs.get(ctx.school_id, ctx.user.id).get('default_account_id') if getattr(ctx, 'user', None) else None
+    for a in accounts:
+        if usual and a['id'] == usual:          # a saved "usual account" only fills the gap; a named account always wins
+            return a, accounts
     raise ProposalError('Which account should receive the money? Ask the user. Accounts: '
                         + ', '.join(f"{a['name']} (id {a['id']})" for a in accounts))
 

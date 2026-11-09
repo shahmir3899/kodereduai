@@ -4,8 +4,34 @@ import { ATTENDANCE_STATUSES, CARD_KINDS, buildEdits, cellsFor, isEditable } fro
 
 const VISIBLE_ROWS = 8
 
-function Assumptions({ data }) {
-  const items = Object.entries(data || {}).filter(([, v]) => v !== '' && v !== null && v !== undefined)
+const CONFLICT_LABELS = { skip: 'keep existing plans', add: 'add alongside', replace: 'replace existing drafts' }
+const MINUTES = [30, 40, 45, 60, 90]
+const CHIP_KEYS = ['saturday', 'on_conflict', 'minutes']
+
+/** The assumptions a lesson-plan card was built on, as controls. Each change asks the server to rebuild the card. */
+function PlanChips({ chips, disabled, onChange }) {
+  const minutes = MINUTES.includes(chips.duration_minutes) ? MINUTES : [...MINUTES, chips.duration_minutes].sort((a, b) => a - b)
+  const chip = 'rounded-full border border-slate-300 bg-white px-2 py-0.5 text-[11px] text-slate-700 hover:bg-slate-50 disabled:opacity-50'
+  return (
+    <div className="mb-2" data-testid="plan-chips">
+      <div className="flex flex-wrap items-center gap-1">
+        <button type="button" disabled={disabled} className={chip} aria-label="Saturday" onClick={() => onChange({ skip_saturday: !chips.skip_saturday })}>
+          Saturday: {chips.skip_saturday ? 'skipped' : 'taught'}
+        </button>
+        <select aria-label="If a plan already exists" disabled={disabled} className={chip} value={chips.on_conflict} onChange={(e) => onChange({ on_conflict: e.target.value })}>
+          {Object.entries(CONFLICT_LABELS).map(([k, label]) => <option key={k} value={k}>If a plan exists: {label}</option>)}
+        </select>
+        <select aria-label="Lesson length" disabled={disabled} className={chip} value={chips.duration_minutes} onChange={(e) => onChange({ duration_minutes: Number(e.target.value) })}>
+          {minutes.map((m) => <option key={m} value={m}>{m} min</option>)}
+        </select>
+      </div>
+      <p className="mt-1 text-[11px] text-slate-500">Changing Saturday plans the dates again; edits made on this card are lost.</p>
+    </div>
+  )
+}
+
+function Assumptions({ data, hide = [] }) {
+  const items = Object.entries(data || {}).filter(([k, v]) => !hide.includes(k) && v !== '' && v !== null && v !== undefined)
   if (!items.length) return null
   return (
     <div className="mb-2 flex flex-wrap gap-1">
@@ -74,7 +100,10 @@ export default function ActionCard({ action, note = {}, onApprove, onReject, onE
       </div>
 
       <div className="mt-2">
-        <Assumptions data={preview.assumptions} />
+        {preview.editable?.chips && open && !busy && (
+          <PlanChips chips={preview.editable.chips} disabled={busy} onChange={(edits) => onEdit(action.id, edits)} />
+        )}
+        <Assumptions data={preview.assumptions} hide={preview.editable?.chips && open ? CHIP_KEYS : []} />
         {rows.length > 0 && (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">

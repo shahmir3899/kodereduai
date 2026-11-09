@@ -68,12 +68,20 @@ def resolve_class_scope(
     if not result['has_session_class']:
         return result
 
+    resolved_school_id = school_id or ensure_tenant_school_id(request)
+    return validate_session_scope(result, resolved_school_id)
+
+
+def validate_session_scope(result, school_id):
+    """Check a session_class_id against its school, class and year, and fill in the master class and year.
+
+    Request-free so callers that start from a spoken name (the assistant) use the same rules as the views:
+    an unknown, orphan (no master class) or mismatching section comes back `invalid` with a reason."""
     from academic_sessions.models import SessionClass
 
-    resolved_school_id = school_id or ensure_tenant_school_id(request)
     session_qs = SessionClass.objects.filter(id=result['session_class_id'])
-    if resolved_school_id:
-        session_qs = session_qs.filter(school_id=resolved_school_id)
+    if school_id:
+        session_qs = session_qs.filter(school_id=school_id)
 
     session_class = session_qs.select_related('academic_year').first()
     if not session_class:
@@ -102,3 +110,11 @@ def resolve_class_scope(
     result['class_obj_id'] = resolved_class_id
     result['academic_year_id'] = resolved_year_id
     return result
+
+
+def scope_for_session_class(school_id, session_class_id, class_obj_id=None, academic_year_id=None):
+    """validate_session_scope for one section id, without a request."""
+    fields = {'class_obj_id': class_obj_id, 'academic_year_id': academic_year_id, 'session_class_id': session_class_id}
+    result = {k: (str(v) if v not in (None, '') else None) for k, v in fields.items()}
+    result.update(has_session_class=True, invalid=False, error='')
+    return validate_session_scope(result, school_id)

@@ -56,12 +56,64 @@ class TestErrorNamedTools:
         assert 'NEVER for' in router.AGENTS['communication'] and 'absent today' in router.AGENTS['attendance']
 
 
+class TestRerouteWhenNoToolsWereOffered:
+    def test_a_tool_call_after_a_none_route_routes_again_with_the_models_own_summary(self, seed_data):
+        _enable(seed_data, 'finance', 'academics', 'notifications', 'students', 'hr')
+        conv = AgentConversation.objects.create(school=seed_data['school_a'], user=seed_data['users']['admin'])
+        ctx = _ctx(seed_data, 'admin', conv)
+        gap = type('R', (), {'content': '', 'tool_calls': [{'id': '1', 'name': 'report_missing_capability', 'raw_arguments': '{}',
+                                                            'arguments': {'summary': 'who is on leave today'}}]})()
+        done = type('R', (), {'content': 'Nobody is on leave.', 'tool_calls': []})()
+        seen = []
+
+        def fake_pick(by_agent, message, recent=()):
+            seen.append(message)
+            return [] if len(seen) == 1 else ['hr']
+
+        with patch.object(router, 'pick_agents', fake_pick), patch.object(llm, 'complete', side_effect=[gap, done]) as call:
+            result = orchestrator.run_turn(conv, 'aaj koon kon chutti paar hai?', ctx)
+        assert result.content == 'Nobody is on leave.'
+        assert 'who is on leave today' in seen[1] and call.call_count == 2
+        assert not result.tool_calls          # the gap call was dropped, not executed
+
+
+class TestSalaryLookupHint:
+    def test_unknown_name_points_to_the_monthly_total_tool(self):
+        from assistant.skills import hr_tools
+        from assistant.registry import ProposalError
+
+        with patch.object(hr_tools, '_one_staff', side_effect=ProposalError('No staff member matching "Maheeney".')):
+            with pytest.raises(ProposalError) as err:
+                hr_tools.get_staff_salary(None, staff_name='Maheeney')
+        assert 'get_payroll_summary' in str(err.value)
+
+
+class TestKeepLatin:
+    def _fake(self, text):
+        return type('R', (), {'content': text, 'tool_calls': []})()
+
+    def test_urdu_script_in_a_roman_urdu_reply_is_rewritten_once(self):
+        with patch.object(llm, 'complete', return_value=self._fake('Aaj 0 bachay ghair hazir hain')) as call:
+            out = orchestrator._keep_latin([], 'aj kitne bachay ghair hazir heen?', 'Aaj 0 طلباء ghair hazir hain')
+        assert out == 'Aaj 0 bachay ghair hazir hain' and call.call_count == 1
+
+    def test_a_user_who_wrote_urdu_script_is_left_alone_and_so_is_a_latin_reply(self):
+        with patch.object(llm, 'complete') as call:
+            assert orchestrator._keep_latin([], 'آج کتنے بچے غیر حاضر ہیں؟', 'آج صفر') == 'آج صفر'
+            assert orchestrator._keep_latin([], 'aj kitne bachay?', 'Aaj 0') == 'Aaj 0'
+        call.assert_not_called()
+
+    def test_a_rewrite_that_still_has_urdu_script_is_not_used(self):
+        with patch.object(llm, 'complete', return_value=self._fake('Aaj طلباء')):
+            assert orchestrator._keep_latin([], 'aj kitne?', 'Aaj صفر') == 'Aaj صفر'
+
+
 class TestPorts:
     def test_tool_counts(self):
         by = {}
         for t in registry.all_tools():
             by[t.sub_agent] = by.get(t.sub_agent, 0) + 1
-        assert by == {'finance': 26, 'academics': 21, 'communication': 17, 'study': 11, 'directory': 4, 'attendance': 4, 'exams': 10, 'hr': 18, 'students': 19, 'operations': 25, 'family': 12}
+        assert by == {'finance': 32, 'academics': 26, 'communication': 17, 'study': 13, 'directory': 4, 'settings': 2, 'attendance': 4, 'exams': 12, 'hr': 19, 'students': 22, 'operations': 26, 'family': 12}
 
     def test_every_tool_has_valid_schema(self):
         for t in registry.all_tools():
@@ -95,7 +147,7 @@ class TestPorts:
         names = _names(ctx)
         assert names == {'get_my_marks', 'get_my_assignments', 'get_topic_details', 'get_my_attendance',
                          'get_exam_schedule', 'get_lesson_materials', 'get_grade_targets', 'get_teacher_feedback',
-                         'get_weak_subjects', 'make_revision_plan', 'get_quiz_material', 'report_missing_capability'}
+                         'get_weak_subjects', 'make_revision_plan', 'get_quiz_material', 'record_quiz_answer', 'get_flashcard_topics', 'report_missing_capability', 'get_my_preferences'}
 
     def test_student_tools_take_no_student_id_argument(self):
         for t in registry.all_tools():

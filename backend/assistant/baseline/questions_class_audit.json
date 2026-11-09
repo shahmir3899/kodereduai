@@ -1,0 +1,457 @@
+[
+ {
+  "id": "F01",
+  "agent": "finance",
+  "role": "SCHOOL_ADMIN",
+  "lang": "en",
+  "q": "How much fee is pending this month?",
+  "expect": {
+   "tool": "get_pending_fees"
+  }
+ },
+ {
+  "id": "F02",
+  "agent": "finance",
+  "role": "SCHOOL_ADMIN",
+  "lang": "ur_roman",
+  "q": "class 5 ki fee ka kia status hai?",
+  "expect": {
+   "tool": "get_pending_fees",
+   "args": {
+    "class_name": "5"
+   }
+  }
+ },
+ {
+  "id": "F03",
+  "agent": "finance",
+  "role": "SCHOOL_ADMIN",
+  "lang": "ur_roman",
+  "q": "class 5 mein kin bachon ki fee baqaya hai? naam batao",
+  "expect": {
+   "tool": "find_pending_fee_payments",
+   "args": {
+    "class_name": "5"
+   }
+  }
+ },
+ {
+  "id": "F04",
+  "agent": "finance",
+  "role": "ACCOUNTANT",
+  "lang": "en",
+  "q": "List students who haven't paid in 8B",
+  "expect": {
+   "tool": "find_pending_fee_payments",
+   "args": {
+    "class_name": "8B"
+   }
+  }
+ },
+ {
+  "id": "F08",
+  "agent": "finance",
+  "role": "PRINCIPAL",
+  "lang": "en",
+  "q": "Show fee collection summary for October",
+  "expect": {
+   "tool": "get_income_summary",
+   "args": {
+    "month": 10
+   }
+  }
+ },
+ {
+  "id": "F14",
+  "agent": "finance",
+  "role": "SCHOOL_ADMIN",
+  "lang": "en",
+  "q": "What is the monthly fee for class 3?",
+  "expect": {
+   "tool": "get_fee_structure",
+   "args": {
+    "class_name": "3"
+   }
+  }
+ },
+ {
+  "id": "F20",
+  "agent": "finance",
+  "role": "SCHOOL_ADMIN",
+  "lang": "ur_roman",
+  "q": "kin bachon ne 3 mahine se fee nahi di?",
+  "expect": {
+   "tool": "get_fee_defaulters",
+   "args": {
+    "min_months": 3
+   }
+  }
+ },
+ {
+  "id": "F25",
+  "agent": "finance",
+  "role": "TEACHER",
+  "lang": "en",
+  "q": "How much fee is pending?",
+  "expect": {
+   "denied": true
+  }
+ },
+ {
+  "id": "F27",
+  "agent": "finance",
+  "role": "SCHOOL_ADMIN",
+  "lang": "ur_roman",
+  "q": "Ali Farooq ki fee receive karo 2000",
+  "expect": {
+   "write": "record_fee_payments",
+   "clarify": true
+  }
+ },
+ {
+  "id": "F28",
+  "agent": "finance",
+  "role": "SCHOOL_ADMIN",
+  "lang": "ur_roman",
+  "q": "Ahmad Farooq aur Sara Farooq ke ilawa class 5 sab ki fee aa gai",
+  "expect": {
+   "write": "record_fee_payments",
+   "clarify": true
+  }
+ },
+ {
+  "id": "A01",
+  "agent": "academics",
+  "role": "SCHOOL_ADMIN",
+  "lang": "en",
+  "q": "Show the timetable for class 4",
+  "expect": {
+   "tool": "get_class_schedule"
+  }
+ },
+ {
+  "id": "A02",
+  "agent": "academics",
+  "role": "TEACHER",
+  "lang": "ur_roman",
+  "q": "mera aaj ka schedule kya hai?",
+  "expect": {
+   "tool": "get_teacher_schedule"
+  }
+ },
+ {
+  "id": "A05",
+  "agent": "academics",
+  "role": "SCHOOL_ADMIN",
+  "lang": "en",
+  "q": "When is English taught in class 6?",
+  "expect": {
+   "tool": "get_subject_schedule"
+  }
+ },
+ {
+  "id": "A07",
+  "agent": "academics",
+  "role": "SCHOOL_ADMIN",
+  "lang": "en",
+  "q": "Tell me about class 7",
+  "expect": {
+   "tool": "get_class_info"
+  }
+ },
+ {
+  "id": "A08",
+  "agent": "academics",
+  "role": "SCHOOL_ADMIN",
+  "lang": "en",
+  "q": "How good is the class 8 timetable?",
+  "expect": {
+   "tool": "get_quality_score"
+  }
+ },
+ {
+  "id": "A10",
+  "agent": "academics",
+  "role": "SCHOOL_ADMIN",
+  "lang": "en",
+  "q": "Which classes are behind on the curriculum?",
+  "expect": {
+   "tool": "get_curriculum_gaps"
+  }
+ },
+ {
+  "id": "A12",
+  "agent": "academics",
+  "role": "SCHOOL_ADMIN",
+  "lang": "en",
+  "q": "Compare class 4A and 4B schedules",
+  "expect": {
+   "tool": "compare_schedules"
+  }
+ },
+ {
+  "id": "A16",
+  "agent": "academics",
+  "role": "TEACHER",
+  "lang": "en",
+  "q": "Show chapters of the class 4 English book",
+  "expect": {
+   "tool": "get_book_outline"
+  }
+ },
+ {
+  "id": "A17",
+  "agent": "academics",
+  "role": "TEACHER",
+  "lang": "ur_roman",
+  "q": "class 4 ki English book ke chapter 3 mein kya topics hain?",
+  "expect": {
+   "tool": "get_book_outline"
+  }
+ },
+ {
+  "id": "A18",
+  "agent": "academics",
+  "role": "TEACHER",
+  "lang": "en",
+  "q": "What homework did I give class 5 today?",
+  "expect": {
+   "tool": "list_assignments"
+  }
+ },
+ {
+  "id": "A19",
+  "agent": "academics",
+  "role": "TEACHER",
+  "lang": "ur_roman",
+  "q": "aaj ki diary class 5 ki dikhao",
+  "expect": {
+   "tool": "list_assignments",
+   "args": {
+    "assignment_type": "DIARY"
+   }
+  }
+ },
+ {
+  "id": "A20",
+  "agent": "academics",
+  "role": "TEACHER",
+  "lang": "ur_roman",
+  "q": "mere class 4 ki English book ke chapter 3 aur 4 next month ke lesson plan mein daal do",
+  "expect": {
+   "write": "plan_lessons_from_book",
+   "clarify": true
+  }
+ },
+ {
+  "id": "A21",
+  "agent": "academics",
+  "role": "TEACHER",
+  "lang": "en",
+  "q": "Create a short lesson plan for tomorrow on fractions for class 5",
+  "expect": {
+   "write": "create_lesson_plan",
+   "clarify": true
+  }
+ },
+ {
+  "id": "A22",
+  "agent": "academics",
+  "role": "SCHOOL_ADMIN",
+  "lang": "ur_roman",
+  "q": "aaj class 5A aur 5B ki diary: Math exercise 3.2 question 1 se 5",
+  "expect": {
+   "write": "create_class_diary",
+   "clarify": true
+  }
+ },
+ {
+  "id": "A24",
+  "agent": "academics",
+  "role": "TEACHER",
+  "lang": "en",
+  "q": "Show me class 9's fee defaulters",
+  "expect": {
+   "denied": true
+  }
+ },
+ {
+  "id": "C03",
+  "agent": "communication",
+  "role": "SCHOOL_ADMIN",
+  "lang": "en",
+  "q": "Has Ahmad Farooq's family paid fees?",
+  "expect": {
+   "tool": "get_fee_status",
+   "accept": [
+    "find_student"
+   ]
+  }
+ },
+ {
+  "id": "C09",
+  "agent": "communication",
+  "role": "SCHOOL_ADMIN",
+  "lang": "en",
+  "q": "Who is the class teacher of 5A?",
+  "expect": {
+   "tool": "get_class_teacher_info",
+   "accept": [
+    "get_class_info"
+   ]
+  }
+ },
+ {
+  "id": "C15",
+  "agent": "communication",
+  "role": "SCHOOL_ADMIN",
+  "lang": "ur_roman",
+  "q": "fee baqaya wale walidain ko yaad dahani bhej do",
+  "expect": {
+   "write": "send_message_to_parents"
+  }
+ },
+ {
+  "id": "X01",
+  "agent": "attendance",
+  "role": "SCHOOL_ADMIN",
+  "lang": "ur_roman",
+  "q": "class 5A ki aaj ki hazri lagao, Ahmad Farooq aur Sara Farooq ghair hazir hain",
+  "expect": {
+   "write": "mark_attendance"
+  }
+ },
+ {
+  "id": "X02",
+  "agent": "attendance",
+  "role": "SCHOOL_ADMIN",
+  "lang": "en",
+  "q": "Which classes haven't marked attendance today?",
+  "expect": {
+   "tool": "get_unmarked_attendance"
+  }
+ },
+ {
+  "id": "X04",
+  "agent": "exams",
+  "role": "SCHOOL_ADMIN",
+  "lang": "en",
+  "q": "Enter marks for class 5 final term maths: Ahmad Farooq 45, Sara Farooq 38",
+  "expect": {
+   "write": "enter_marks",
+   "clarify": true
+  }
+ },
+ {
+  "id": "X05",
+  "agent": "exams",
+  "role": "SCHOOL_ADMIN",
+  "lang": "en",
+  "q": "Show class 5 mid term results",
+  "expect": {
+   "tool": "get_exam_results"
+  }
+ },
+ {
+  "id": "X06",
+  "agent": "students",
+  "role": "SCHOOL_ADMIN",
+  "lang": "en",
+  "q": "Convert Mahnoor Ahmed's enquiry into class 4A",
+  "expect": {
+   "write": "convert_enquiry",
+   "clarify": true
+  }
+ },
+ {
+  "id": "X10",
+  "agent": "students",
+  "role": "SCHOOL_ADMIN",
+  "lang": "en",
+  "q": "Promote all class 5 students to class 6",
+  "expect": {
+   "blocked": true
+  }
+ },
+ {
+  "id": "X15",
+  "agent": "exams",
+  "role": "SCHOOL_ADMIN",
+  "lang": "ur_roman",
+  "q": "class 6 ke mid term mein kitne bache fail hue?",
+  "expect": {
+   "tool": "get_exam_results"
+  }
+ },
+ {
+  "id": "X16",
+  "agent": "exams",
+  "role": "SCHOOL_ADMIN",
+  "lang": "en",
+  "q": "Which marks are still left to enter for class 5 final term?",
+  "expect": {
+   "tool": "get_marks_entry_status"
+  }
+ },
+ {
+  "id": "X17",
+  "agent": "exams",
+  "role": "SCHOOL_ADMIN",
+  "lang": "ur_roman",
+  "q": "class 6 ka final term exam 1 se 10 march tak banao",
+  "expect": {
+   "write": "create_exam",
+   "clarify": true
+  }
+ },
+ {
+  "id": "X28",
+  "agent": "students",
+  "role": "SCHOOL_ADMIN",
+  "lang": "ur_roman",
+  "q": "naya enquiry likho: Zain, walid Bilal Ahmed, mobile 0300-5551234, class 4 ke liye",
+  "expect": {
+   "write": "add_enquiry"
+  }
+ },
+ {
+  "id": "X29",
+  "agent": "students",
+  "role": "SCHOOL_ADMIN",
+  "lang": "en",
+  "q": "Move Ali Farooq from class 5A to 5B because of a timetable clash",
+  "expect": {
+   "write": "reclassify_student"
+  }
+ },
+ {
+  "id": "X30",
+  "agent": "students",
+  "role": "PRINCIPAL",
+  "lang": "en",
+  "q": "Set Sara Farooq's monthly fee to 3000",
+  "expect": {
+   "write": "set_student_monthly_fee"
+  }
+ },
+ {
+  "id": "X38",
+  "agent": "communication",
+  "role": "SCHOOL_ADMIN",
+  "lang": "en",
+  "q": "Send all Class 5 parents a message that school is closed on Monday",
+  "expect": {
+   "write": "send_message_to_parents"
+  }
+ },
+ {
+  "id": "X39",
+  "agent": "communication",
+  "role": "SCHOOL_ADMIN",
+  "lang": "ur_roman",
+  "q": "Ali Farooq ke walid ko fee reminder bhej do",
+  "expect": {
+   "write": "send_message_to_parents"
+  }
+ }
+]
