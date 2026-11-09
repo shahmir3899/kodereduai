@@ -16,7 +16,8 @@ _RANGE = {'date_from': _DATE, 'date_to': _DATE}
 _SPECS = {
     'get_pending_fees': ('Total pending/unpaid fee amount, optionally for a class and month.',
                          {'class_name': _CLASS, 'month': _MONTH, 'year': _YEAR}),
-    'get_total_expenses': ('ONE total of expenses, optionally for one category and a date range. Not for a split by category: use get_expense_breakdown for that.',
+    'get_total_expenses': ('ONE total of expenses, optionally for one category and a date range. Not for a split by category: use get_expense_breakdown for that. '
+                           'The SALARY category is only salary expenses booked in the ledger; the staff salary bill for a month is get_payroll_summary (hr).',
                            {'category': {'type': 'string', 'enum': ['SALARY', 'RENT', 'UTILITIES', 'SUPPLIES', 'MAINTENANCE', 'MISC']}, **_RANGE}),
     'get_income_summary': ('Fee collection summary for a month.', {'month': _MONTH, 'year': _YEAR}),
     'get_balance': ('Net position to date: ALL income (fees + other) minus ALL expenses. Call it with NO dates for "total collection minus expenses so far"; add dates only for a specific period. For one month of fee collection use get_income_summary.', _RANGE),

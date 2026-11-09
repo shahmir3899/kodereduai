@@ -9,6 +9,7 @@ from decimal import Decimal
 from unittest import mock
 
 import pytest
+from assistant.llm import LLMReply
 from django.core.cache import cache
 
 from academic_sessions.models import StudentEnrollment
@@ -144,50 +145,48 @@ class TestLeftSchool:
 @pytest.mark.django_db
 class TestSummaryCache:
     def _with_llm(self, text='LLM says hi'):
-        client = mock.MagicMock()
-        client.chat.completions.create.return_value.choices = [mock.MagicMock(message=mock.MagicMock(content=text))]
-        return client
+        # The summary goes through the assistant gateway (Groq only); a real provider call must never happen in a test.
+        return mock.MagicMock(return_value=LLMReply(content=text))
 
     def test_the_llm_is_called_once_per_day_for_unchanged_facts(self, ctx, settings):
         settings.GROQ_API_KEY = 'x'
         client = self._with_llm()
-        with mock.patch('groq.Groq', return_value=client):
+        with mock.patch('assistant.llm.complete', client):
             first, second = profile(ctx), profile(ctx)
         assert first['ai_summary'] == second['ai_summary'] == 'LLM says hi'
-        assert client.chat.completions.create.call_count == 1
+        assert client.call_count == 1
 
     def test_changed_facts_get_a_fresh_summary(self, ctx, settings):
         settings.GROQ_API_KEY = 'x'
         client = self._with_llm()
-        with mock.patch('groq.Groq', return_value=client):
+        with mock.patch('assistant.llm.complete', client):
             profile(ctx)
             mark_days(ctx, ['ABSENT'] * 25)
             profile(ctx)
-        assert client.chat.completions.create.call_count == 2
+        assert client.call_count == 2
 
     def test_a_fee_free_summary_is_never_served_to_a_fee_viewer(self, ctx, settings):
         settings.GROQ_API_KEY = 'x'
         client = self._with_llm()
-        with mock.patch('groq.Groq', return_value=client):
+        with mock.patch('assistant.llm.complete', client):
             profile(ctx, include_fees=False)
             profile(ctx, include_fees=True)
-        assert client.chat.completions.create.call_count == 2
+        assert client.call_count == 2
 
     def test_the_prompt_for_a_non_finance_role_has_no_fee_lines(self, ctx, settings):
         settings.GROQ_API_KEY = 'x'
         three_months_owed(ctx)
         client = self._with_llm()
-        with mock.patch('groq.Groq', return_value=client):
+        with mock.patch('assistant.llm.complete', client):
             profile(ctx, include_fees=False)
-        prompt = client.chat.completions.create.call_args.kwargs['messages'][0]['content']
+        prompt = client.call_args.args[0][0]['content']
         assert 'Fees' not in prompt and 'outstanding' not in prompt
 
     def test_a_failed_llm_call_is_not_cached(self, ctx, settings):
         settings.GROQ_API_KEY = 'x'
-        broken = mock.MagicMock()
-        broken.chat.completions.create.side_effect = RuntimeError('down')
-        with mock.patch('groq.Groq', return_value=broken):
+        broken = mock.MagicMock(side_effect=RuntimeError('down'))
+        with mock.patch('assistant.llm.complete', broken):
             assert profile(ctx)['ai_summary']          # rule-based fallback
         good = self._with_llm('recovered')
-        with mock.patch('groq.Groq', return_value=good):
+        with mock.patch('assistant.llm.complete', good):
             assert profile(ctx)['ai_summary'] == 'recovered'

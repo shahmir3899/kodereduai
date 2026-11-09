@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 # One line each: this is what the routing model reads.
 AGENTS = {
-    'finance': 'fees, LISTS of who owes / has pending or unpaid fees, collection, payments, expenses, income, account balances, net position, discounts, who has a scholarship',
+    'finance': 'fees, LISTS of who owes / has pending or unpaid fees, collection, payments, expenses, income, account balances, net position, discounts, who has a scholarship. NEVER for staff salary or payroll totals (that is hr)',
     'academics': 'timetable, teacher/class/room schedules, substitutes, workload, curriculum gaps',
     'communication': "one student in detail: attendance history, absences, marks, fee status, transport, scholarships; drafting and sending messages to parents. NEVER for 'how many are absent today' or class / school-wide counts (that is attendance)",
     'study': "the student's own marks, homework, attendance, exams, study help, weak subjects, revision plan, practice quiz",

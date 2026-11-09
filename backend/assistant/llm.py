@@ -200,9 +200,10 @@ def _parse(provider, data, payload):
                     model=payload['model'], usage=data.get('usage') or {})
 
 
-def complete(messages, tools=None, max_tokens=1500, temperature=0.3, retries=2, tier='main') -> LLMReply:
-    """One model call with native tool calling. `tier` is 'main' (default) or 'fast' (small calls)."""
-    order = order_for(tier)
+def complete(messages, tools=None, max_tokens=1500, temperature=0.3, retries=2, tier='main', only=None, timeout=None) -> LLMReply:
+    """One model call with native tool calling. `tier` is 'main' (default) or 'fast' (small calls).
+    `only` limits the providers (e.g. ('groq',)); `timeout` is seconds for one request, default the transport's."""
+    order = [p for p in order_for(tier) if not only or p in only]
     if not order:
         raise LLMUnavailable('no model provider is configured')
     awake = [p for p in order if rest_remaining(p) <= 0]
@@ -219,7 +220,7 @@ def complete(messages, tools=None, max_tokens=1500, temperature=0.3, retries=2, 
             started = time.monotonic()
             try:
                 _note_request(provider)
-                data, _headers = providers.post_chat(provider, payload)
+                data, _headers = providers.post_chat(provider, payload, **({'timeout': timeout} if timeout else {}))
                 reply = _parse(provider, data, payload)
             except ProviderError as exc:
                 last = exc
@@ -263,3 +264,24 @@ def snapshot():
         }
     out['order'] = {tier: order_for(tier) for tier in ('main', 'fast')}
     return out
+
+
+# ── older features outside the assistant ─────────────────────────────────────
+
+def legacy_text(prompt, *, tag, max_tokens, temperature=0.3, timeout=None, tier='fast') -> str:
+    """One plain text answer for a feature that is not the assistant (digest, student summary, ...).
+
+    Goes through the gateway on Groq ONLY: these prompts carry school data and the Cerebras terms are not yet
+    reviewed, and a failure must stay a failure the caller already handles (it raises, as the SDK did).
+    EDU_LEGACY_VIA_GATEWAY=false restores the direct SDK call. Either way the tokens are counted under `tag`."""
+    messages = prompt if isinstance(prompt, list) else [{'role': 'user', 'content': prompt}]
+    if settings.LEGACY_VIA_GATEWAY:
+        reply = complete(messages, max_tokens=max_tokens, temperature=temperature, retries=0, tier=tier,
+                         only=(GROQ,), timeout=timeout)
+        usage.record_external(tag, {'usage': reply.usage}, count_provider=False)    # complete() already counted the provider
+        return reply.content
+    from groq import Groq
+
+    client = Groq(api_key=settings.GROQ_API_KEY, **({'timeout': timeout} if timeout else {}))
+    response = client.chat.completions.create(model=settings.GROQ_MODEL, messages=messages, temperature=temperature, max_tokens=max_tokens)
+    return (response.choices[0].message.content or '').strip()

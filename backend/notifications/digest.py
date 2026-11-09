@@ -91,7 +91,7 @@ def fallback_text(counts):
 def _llm_text(counts, role):
     if not getattr(settings, 'GROQ_API_KEY', ''):
         return ''
-    from groq import Groq
+    from assistant import llm
 
     lines = [f"- {n} {_noun(t, n)}" for t, n in _ordered(counts)]
     prompt = (
@@ -101,14 +101,7 @@ def _llm_text(counts, role):
         "Plain, friendly, direct. Mention the most urgent items first. "
         "Return only the digest text.\n\nUnread notifications:\n" + "\n".join(lines)
     )
-    client = Groq(api_key=settings.GROQ_API_KEY, timeout=8)
-    response = client.chat.completions.create(
-        model=settings.GROQ_MODEL,
-        messages=[{"role": "user", "content": prompt}],
-        temperature=0.3,
-        max_tokens=400,
-    )
-    return (response.choices[0].message.content or '').strip()
+    return llm.legacy_text(prompt, tag='notifications.digest', max_tokens=400, temperature=0.3, timeout=8).strip()
 
 
 def get_digest(user, unread_qs, school_key):

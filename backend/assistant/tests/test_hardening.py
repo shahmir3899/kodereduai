@@ -168,3 +168,36 @@ class TestOlderGroqCalls:
     def test_counting_never_raises(self):
         usage.record_external('x', None)
         usage.record_external('x', object())
+
+
+class TestLegacyText:
+    """Older features (digest, student summary) call llm.legacy_text: Groq only, counted under their own tag."""
+
+    def test_only_groq_is_ever_asked_and_the_tag_is_counted(self):
+        asked = []
+
+        def fake(provider, payload, **kw):
+            asked.append(provider)
+            return answer(90)
+        with patch('assistant.providers.post_chat', fake):
+            text = llm.legacy_text('hello', tag='notifications.digest', max_tokens=50, timeout=8)
+        assert text == 'hi' and asked == ['groq']
+        assert usage.external_today('notifications.digest') == (90, 1)
+
+    def test_a_groq_failure_raises_and_cerebras_is_never_tried(self):
+        asked = []
+
+        def fake(provider, payload, **kw):
+            asked.append(provider)
+            raise ProviderError(provider, 'rate_limit', 'slow')
+        with patch('assistant.providers.post_chat', fake), pytest.raises(llm.LLMUnavailable):
+            llm.legacy_text('hello', tag='x', max_tokens=50)
+        assert asked == ['groq']        # school data must not reach Cerebras through the older features
+
+    def test_the_rollback_switch_uses_the_groq_sdk_again(self, settings):
+        settings.LEGACY_VIA_GATEWAY = False
+        client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(
+            create=lambda **kw: SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content=' sdk '))]))))
+        with patch('groq.Groq', return_value=client), patch('assistant.providers.post_chat') as gateway:
+            assert llm.legacy_text('hello', tag='x', max_tokens=50) == 'sdk'
+        assert not gateway.called

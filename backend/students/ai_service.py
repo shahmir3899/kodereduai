@@ -184,8 +184,7 @@ class Student360Service:
             if not settings.GROQ_API_KEY:
                 raise RuntimeError("No API key")
 
-            from groq import Groq
-            client = Groq(api_key=settings.GROQ_API_KEY)
+            from assistant import llm
 
             lines = [
                 f"- Attendance: {attendance['rate']}% rate (leave days count as present), "
@@ -209,13 +208,7 @@ class Student360Service:
                 "Be concise and actionable. Mention the most important concern first. "
                 "Only mention what is listed above."
             )
-            response = client.chat.completions.create(
-                model=settings.GROQ_MODEL,
-                messages=[{"role": "user", "content": prompt}],
-                temperature=0.3,
-                max_tokens=200,
-            )
-            text = response.choices[0].message.content.strip()
+            text = llm.legacy_text(prompt, tag='students.ai_service', max_tokens=200, temperature=0.3).strip()
             try:
                 cache.set(key, text, SUMMARY_CACHE_SECONDS)
             except Exception:  # cache outage must not break the profile

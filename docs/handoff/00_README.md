@@ -14,6 +14,7 @@ paste-ready prompt.
 | 6 | `06_LEARNING_FEATURE.md` | The "learning loop" feature (gap capture, insights page, weekly grouping). **BUILT 2026-11-09, uncommitted; see the status block in that file** |
 | 7 | `07_FINAL_DOCS.md` | Final documentation update (plan doc, ENV_AND_DEPLOYMENT, memory) |
 | 8 | `08_BACKLOG_FROM_PLAN.md` | Items the ORIGINAL plan promised that are still unbuilt (class-system audit, rollout and leakage tests, preferences, coverage matrix, finance / academics gaps, retiring old widgets, ...) with a prompt per item |
+| 9 | `09_VOICE_WELCOME.md` | Spoken welcome for Aura (who it is, what this role can do), skippable, English and Urdu |
 
 ## State of the work (2026-11-08)
 

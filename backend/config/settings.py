@@ -634,6 +634,9 @@ VOICE_DAILY_PER_USER = int(os.getenv('EDU_VOICE_DAILY_PER_USER', '150'))     # t
 # Per-school switch default when a school has no explicit setting (School.ai_config['assistant_enabled']).
 # Production rollout: set false, then turn schools on one by one with `manage.py assistant_switch`.
 ASSISTANT_DEFAULT_ENABLED = os.getenv('EDU_ASSISTANT_DEFAULT_ENABLED', 'true').lower() in ('1', 'true', 'yes')
+# Older per-feature text calls (digest, student summary, ...) go through the assistant gateway, on Groq only
+# (no school data to Cerebras until the owner has read its terms). false = the old direct Groq SDK call, no redeploy of code.
+LEGACY_VIA_GATEWAY = os.getenv('EDU_LEGACY_VIA_GATEWAY', 'true').lower() in ('1', 'true', 'yes')
 # Per-person daily model-token allowance (all schools together); 0 = no cap. At ~7k tokens a question,
 # 60k is about 8 questions a day for staff and 250k about 35 for school leaders.
 USER_DAILY_TOKENS = int(os.getenv('EDU_USER_DAILY_TOKENS', '60000'))

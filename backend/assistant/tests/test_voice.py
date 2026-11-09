@@ -114,7 +114,9 @@ class TestTranscribeEndpoint:
         assert upload(api, seed_data, audio=clip(), language='klingon').status_code == 400
 
     def test_a_role_with_no_assistant_tools_cannot_use_voice(self, seed_data, modules, api):
-        with patch('assistant.providers.post_transcription') as mocked:
+        # Every seeded role has at least one tool now (STAFF got its own leave and payslip), so the
+        # empty list is simulated: the gate must refuse whoever has nothing to ask Aura.
+        with patch('assistant.providers.post_transcription') as mocked, patch('assistant.registry.tools_for', return_value=[]):
             r = upload(api, seed_data, uname='staff', audio=clip())
         assert r.status_code == 403 and not mocked.called              # nothing was sent to Groq
 
@@ -196,7 +198,8 @@ class TestSpokenVersion:
 
     def test_same_gates_as_transcription(self, seed_data, modules, api, settings):
         with patch('assistant.llm.complete') as mocked:
-            assert post_json(api, seed_data, S, {'text': 'hello'}, uname='staff').status_code == 403
+            with patch('assistant.registry.tools_for', return_value=[]):      # STAFF has tools now; simulate a role with none
+                assert post_json(api, seed_data, S, {'text': 'hello'}, uname='staff').status_code == 403
             settings.VOICE_ENABLED = False
             assert post_json(api, seed_data, S, {'text': 'hello'}).status_code == 503
         assert not mocked.called

@@ -90,7 +90,7 @@ def record_voice(school_id, user_id, seconds):
         logger.warning('voice usage not recorded', exc_info=True)
 
 
-def record_external(tag, response, provider='groq'):
+def record_external(tag, response, provider='groq', count_provider=True):
     """Count a call made OUTSIDE the gateway (the older per-feature Groq calls) so the shared daily
     budget is visible. Takes the SDK response object or the JSON dict. Never raises."""
     try:
@@ -103,8 +103,9 @@ def record_external(tag, response, provider='groq'):
                 cache.incr(key, amount)
             except ValueError:
                 cache.set(key, amount, EXTERNAL_TTL)
-        from . import llm
-        llm.count_tokens(provider, total)      # keeps the provider's daily total honest
+        if count_provider:
+            from . import llm
+            llm.count_tokens(provider, total)      # keeps the provider's daily total honest
     except Exception:
         logger.debug('external usage not recorded', exc_info=True)
 
@@ -155,7 +156,10 @@ def patch_groq_sdk():
     def counted(self, *args, **kwargs):
         response = original(self, *args, **kwargs)
         try:
-            tag = sys._getframe(1).f_globals.get('__name__', 'unknown')
+            frame = sys._getframe(1)
+            while frame.f_back and frame.f_globals.get('__name__') == 'assistant.llm':     # llm.legacy_text: blame its caller
+                frame = frame.f_back
+            tag = frame.f_globals.get('__name__', 'unknown')
             if not kwargs.get('stream'):
                 record_external(tag, response)
         except Exception:

@@ -126,7 +126,8 @@ def find_class(ctx, query):
 register(Tool(
     name='find_student',
     description='Find a student by name (partial or misspelled is fine). Returns student_id and class. '
-                'Use before any tool that needs a student_id. If several match, ask the user which one.',
+                'Use before any tool that needs a student_id. When the user names a class or section (e.g. "5A"), pass it as class_name so only '
+                'that class is searched. If several still match, ask the user which one.',
     parameters={'type': 'object', 'properties': {
         'query': {'type': 'string', 'description': 'Student name as the user said it'},
         'class_name': {'type': 'string', 'description': 'Optional class to narrow down, e.g. "8B"'},
