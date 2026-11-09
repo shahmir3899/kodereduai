@@ -6,7 +6,7 @@ import { useAcademicYear } from '../../hooks/useAcademicYear';
 import { useScopedQuery } from '../../hooks/useScopedQuery';
 import { todayString } from '../../services/attendanceEntry';
 import {
-  departureLine, hasCurriculumData, insightGates, lessonPlanPreview, type DepartureBlock, type LeadershipData,
+  departureLine, hasCurriculumData, insightGates, lessonPlanClassRows, lessonPlanPreview, teachersBehind, type DepartureBlock, type LeadershipData, type PlanMonth,
 } from '../../services/leadershipInsights';
 import Card from '../ui/Card';
 import Skeleton from '../ui/Skeleton';
@@ -81,6 +81,10 @@ function Curriculum({ d }: { d: LeadershipData }) {
   const qb = d.question_bank ?? { total: 0, by_subject: [] };
   const lp = lessonPlanPreview(d);
   const labels = d.lesson_plans?.buckets;
+  const [month, setMonth] = useState<PlanMonth>('current_month');
+  const classRows = lessonPlanClassRows(d, month);
+  const behind = teachersBehind(d);
+  const hasTree = (d.lesson_plans?.by_class?.length ?? 0) > 0;
   return (
     <Card style={styles.card}>
       <Text style={styles.title}>Curriculum &amp; plans</Text>
@@ -102,7 +106,48 @@ function Curriculum({ d }: { d: LeadershipData }) {
           </View>
         </>
       ) : null}
-      {lp.rows.length > 0 ? (
+      {hasTree ? (
+        <>
+          <Text style={styles.eyebrow}>Lesson plans by class</Text>
+          <View style={styles.monthTabs}>
+            {([['previous_month', 'Previous'], ['current_month', 'Current'], ['next_month', 'Next']] as Array<[PlanMonth, string]>).map(([k, label]) => (
+              <TouchableOpacity key={k} accessibilityRole="button" accessibilityState={{ selected: month === k }} style={[styles.monthTab, month === k && styles.monthTabOn]} onPress={() => setMonth(k)}>
+                <Text style={[styles.monthTabText, month === k && styles.monthTabTextOn]}>{label}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+          <Text style={styles.muted}>{labels?.[month]?.label ?? ''}</Text>
+          {classRows.length === 0 ? <Text style={styles.muted}>No lesson plans in this month.</Text> : null}
+          {classRows.map((c) => (
+            <View key={c.class_id} style={styles.lpClass}>
+              <View style={styles.lpClassHead}>
+                <Text style={styles.lpClassName} numberOfLines={1}>{c.class_name}</Text>
+                <Text style={styles.lpClassCount}>{c[month]} plans</Text>
+              </View>
+              {c.teachers.map((t) => (
+                <Text key={t.teacher_id} style={styles.lpTeacher}>
+                  {t.teacher_name}{' — '}
+                  {t.subjects.map((s, i) => `${i ? ', ' : ''}${s.subject_name} (${s[month]})`).join('')}
+                </Text>
+              ))}
+            </View>
+          ))}
+        </>
+      ) : null}
+      {behind.length > 0 ? (
+        <>
+          <Text style={styles.eyebrow}>Teachers behind schedule</Text>
+          {behind.map((t) => (
+            <View key={t.teacher_id} style={styles.lpClassHead}>
+              <Text style={styles.lpClassName} numberOfLines={1}>{t.teacher_name}</Text>
+              <Text style={styles.lpClassCount}>
+                {`${t.current} this month (${t.previous} last)${t.drafts ? ` · ${t.drafts} draft${t.drafts === 1 ? '' : 's'}` : ''}`}
+              </Text>
+            </View>
+          ))}
+        </>
+      ) : null}
+      {!hasTree && lp.rows.length > 0 ? (
         <>
           <Text style={styles.eyebrow}>Lesson plans by teacher</Text>
           <View style={styles.lpHead}>
@@ -158,5 +203,15 @@ const styles = StyleSheet.create({
   lpHeadText: { fontSize: 10, fontWeight: '700', color: Colors.textSecondary },
   lpRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 4, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: Colors.border },
   lpName: { flex: 1, fontSize: FontSize.xs, color: Colors.text },
+  monthTabs: { flexDirection: 'row', gap: Spacing.xs },
+  monthTab: { paddingHorizontal: Spacing.md, paddingVertical: 4, borderRadius: 999, borderWidth: 1, borderColor: Colors.border },
+  monthTabOn: { backgroundColor: Colors.primary, borderColor: Colors.primary },
+  monthTabText: { fontSize: FontSize.xs, color: Colors.text },
+  monthTabTextOn: { color: '#fff' },
+  lpClass: { paddingVertical: 4, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: Colors.border },
+  lpClassHead: { flexDirection: 'row', alignItems: 'center' },
+  lpClassName: { flex: 1, fontSize: FontSize.sm, fontWeight: '600', color: Colors.text },
+  lpClassCount: { fontSize: FontSize.xs, color: Colors.textSecondary },
+  lpTeacher: { fontSize: FontSize.xs, color: Colors.textSecondary, marginTop: 2, paddingLeft: Spacing.sm },
   lpNum: { width: 44, textAlign: 'right', fontSize: FontSize.xs, color: Colors.text },
 });

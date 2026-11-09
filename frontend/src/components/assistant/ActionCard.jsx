@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import FeedbackThumbs from './FeedbackThumbs'
 import { ATTENDANCE_STATUSES, CARD_KINDS, buildEdits, cellsFor, isEditable } from './cardConfig'
 
 const VISIBLE_ROWS = 8
@@ -107,15 +108,15 @@ export default function ActionCard({ action, note = {}, onApprove, onReject, onE
                             />
                           ) : editing && cfg.status?.key === key ? (
                             <select
-                              aria-label={`Status for ${row.student}`}
+                              aria-label={`Status for ${row.student || row.staff}`}
                               className="rounded border border-slate-300 px-1 py-0.5"
                               defaultValue={row[key]}
                               onChange={(e) => setDraft((d) => ({ ...d, statuses: { ...d.statuses, [id]: e.target.value } }))}
                             >
-                              {ATTENDANCE_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+                              {(cfg.status.options || ATTENDANCE_STATUSES).map((s) => <option key={s} value={s}>{s}</option>)}
                             </select>
                           ) : (
-                            <span className={key === 'status' && row[key] === 'ABSENT' ? 'font-medium text-red-700' : ''}>{format(row[key])}</span>
+                            <span className={key === 'status' && row[key] === 'ABSENT' ? 'font-medium text-red-700' : ''}>{format(row[key], row)}</span>
                           )}
                         </td>
                       ))}
@@ -151,6 +152,7 @@ export default function ActionCard({ action, note = {}, onApprove, onReject, onE
       {note.error && <p role="alert" className="mt-2 text-xs text-red-700" dir="auto">{note.error}</p>}
       {action.status === 'failed' && action.error && <p className="mt-2 text-xs text-red-700" dir="auto">{action.error}</p>}
       {action.status === 'executed' && <p className="mt-2 text-xs text-emerald-700">{resultLine(action.result)}</p>}
+      {(action.status === 'executed' || action.status === 'rejected') && <FeedbackThumbs messageId={action.message_id} label="Was this card right?" />}
       {action.status === 'expired' && <p className="mt-2 text-xs text-slate-500">This card expired. Ask again to prepare it.</p>}
 
       {open && (

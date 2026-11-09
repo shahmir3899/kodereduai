@@ -17,7 +17,9 @@ def call(user, school_id, viewset, mapping, method, path, data=None, **view_kwar
     else:
         request = getattr(factory, method.lower())(path, data or {}, format='json', **headers)
     force_authenticate(request, user=user)
-    response = viewset.as_view(mapping)(request, **view_kwargs)
+    # A plain APIView (dashboards, stats) takes no action map; a ViewSet does.
+    view = viewset.as_view(mapping) if hasattr(viewset, 'get_extra_actions') else viewset.as_view()
+    response = view(request, **view_kwargs)
     if hasattr(response, 'render'):
         response.render()
     return response.status_code, getattr(response, 'data', None)

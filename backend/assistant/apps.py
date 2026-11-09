@@ -9,3 +9,5 @@ class AssistantConfig(AppConfig):
         # Tool packs register themselves on import.
         from .skills import load_all
         load_all()
+        from .usage import patch_groq_sdk
+        patch_groq_sdk()

@@ -133,6 +133,12 @@ def _to_jsonable(data):
     return json.loads(json.dumps(data, cls=DjangoJSONEncoder))
 
 
+def _gap(ctx, kind, tool):
+    """Learning loop: remember that a tool was refused or crashed. Tool name only, never user text."""
+    from . import gaps
+    gaps.record_gap(ctx, kind, agent=tool.sub_agent, tool_hint=tool.name)
+
+
 def execute(ctx: ToolContext, name: str, args) -> dict:
     """Run a tool for the model. Always returns a dict; errors become {'error': ...}
     so the model can correct itself instead of the whole turn failing.
@@ -158,6 +164,7 @@ def execute(ctx: ToolContext, name: str, args) -> dict:
         return {'error': f'Unknown tool: {name}'}
     if not is_allowed(tool, ctx):
         audit(AgentAuditLog.Kind.DENIED, False, 'not permitted')
+        _gap(ctx, 'denied', tool)
         return {'error': 'You do not have permission to use this tool.'}
 
     clean, ignored = _clean_args(tool, args)
@@ -176,6 +183,7 @@ def execute(ctx: ToolContext, name: str, args) -> dict:
         except Exception as exc:
             logger.error('assistant proposal %s failed: %s', name, exc, exc_info=True)
             audit(kind, False, str(exc), clean)
+            _gap(ctx, 'tool_error', tool)
             return {'error': f'{name} failed. Tell the user it is unavailable.'}
         audit(kind, True, '', clean)
         return {
@@ -197,6 +205,7 @@ def execute(ctx: ToolContext, name: str, args) -> dict:
     except Exception as exc:
         logger.error('assistant tool %s failed: %s', name, exc, exc_info=True)
         audit(kind, False, str(exc), clean)
+        _gap(ctx, 'tool_error', tool)
         return {'error': f'{name} failed. Try different arguments or tell the user it is unavailable.'}
 
     audit(kind, True, '', clean)

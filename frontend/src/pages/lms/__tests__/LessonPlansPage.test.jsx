@@ -78,23 +78,23 @@ describe('LessonPlansPage', () => {
   })
 
   describe('Table', () => {
-    it('does not load any plans until a class filter is applied', async () => {
+    it('opens on this month and loads plans without choosing a class', async () => {
       renderWithProviders(<LessonPlansPage />)
       await waitFor(() => {
-        expect(screen.getByText(/No lesson plans yet/)).toBeInTheDocument()
+        expect(screen.getAllByText('Introduction to Algebra').length).toBeGreaterThanOrEqual(1)
       }, WAIT_OPTS)
-      expect(screen.queryByText('Introduction to Algebra')).not.toBeInTheDocument()
-      expect(screen.queryByText('Geometry Basics')).not.toBeInTheDocument()
+      expect(screen.getByTestId('lesson-plan-stats')).toBeInTheDocument()
     })
 
-    it('does not load any plans when a class is selected but no date range is applied', async () => {
-      renderWithProviders(<LessonPlansPage />)
+    it('does not load any plans when the date range is cleared', async () => {
+      const { container } = renderWithProviders(<LessonPlansPage />)
       selectClass1()
+      const dateInputs = container.querySelectorAll('input[type="date"]')
+      fireEvent.change(dateInputs[0], { target: { value: '' } })
       await waitFor(() => {
         expect(screen.getByText(/Select a valid lesson-date range/)).toBeInTheDocument()
       }, WAIT_OPTS)
       expect(screen.queryByText('Introduction to Algebra')).not.toBeInTheDocument()
-      expect(screen.queryByText('Geometry Basics')).not.toBeInTheDocument()
     })
 
     it('displays plan titles and metadata once a class and date range are applied', async () => {
@@ -267,7 +267,7 @@ describe('LessonPlansPage', () => {
       )
       renderWithProviders(<LessonPlansPage />)
       await waitFor(() => {
-        expect(screen.getByText(/No lesson plans yet/)).toBeInTheDocument()
+        expect(screen.getByText(/No lesson plans found for the selected/)).toBeInTheDocument()
       }, WAIT_OPTS)
     })
   })

@@ -90,20 +90,28 @@ def section_label(sc):
 
 
 def find_sections(ctx, class_name, section=None):
-    """Current-year sections matching "Class 4", "4", "4A"..."""
+    """Current-year sections matching what a person says.
+
+    A class and a section are two things: "Class 5" is the class (all its sections), "5A" / "5-A" / "Class 5 section A" /
+    "fifth A" is one section. Matching uses the same normaliser as the student and class lookups (directory.class_key), so
+    number words, ordinals, "section", "grade" and a school's own prefix ("Beaconhouse Class 5") are all understood."""
     from academic_sessions.models import SessionClass
     from academic_sessions.utils import resolve_current_academic_year_id
 
+    from .directory import class_key
+
     year_id = resolve_current_academic_year_id(ctx.school_id)
     qs = SessionClass.objects.filter(school_id=ctx.school_id, academic_year_id=year_id, is_active=True)
-    want = flat(class_name)
-    if not want:
+    want_key, want = class_key(class_name), flat(class_name)
+    if not want_key and not want:
         raise ProposalError('Which class? Ask the user.')
     out = []
     for sc in qs.select_related('class_obj'):
         ntoks = tokens(sc.display_name)
         short = ''.join(ntoks[-1:]) + sc.section.lower()          # "Class 4" + "A" -> "4a"
-        if want in (flat(sc.display_name), flat(section_label(sc)), short) or (want.isdigit() and ntoks[-1:] == [want]):
+        master_key = class_key(sc.display_name)                   # "Class 5" -> "5"; a name that already holds the letter ("1A") stays "1a"
+        full_key = master_key + sc.section.lower()
+        if (want_key and want_key in (master_key, full_key)) or want in (flat(sc.display_name), flat(section_label(sc)), short) or (want.isdigit() and ntoks[-1:] == [want]):
             out.append(sc)
     if section:
         out = [sc for sc in out if sc.section.lower() == str(section).strip().lower()]

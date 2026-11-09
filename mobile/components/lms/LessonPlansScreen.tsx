@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { View, Text, FlatList, ActivityIndicator, Switch, TouchableOpacity, StyleSheet, type RefreshControlProps } from 'react-native';
+import { View, Text, FlatList, ScrollView, ActivityIndicator, Switch, TouchableOpacity, StyleSheet, type RefreshControlProps } from 'react-native';
 import { useAuth } from '../../contexts/AuthContext';
 import { useAcademicYear, useAttendanceClassOptions } from '../../hooks/useAcademicYear';
 import { useBooksForClassSubject, useLessonPlanActions, useLessonPlansPaged, useMyStaffRecordId, useTopicObjectives, useClassSubjectTeachers } from '../../hooks/useLessonPlans';
@@ -30,6 +30,7 @@ import {
   validateAiDraft, validateBulkPlans, type AiResult, type BulkPlanForm,
 } from '../../services/lessonPlanTools';
 import LessonPlanTopicPicker from './LessonPlanTopicPicker';
+import { DATE_PRESETS, activePreset, groupPlans, planBodySections, planStats, presetRange, type GroupMode, type PresetId } from '../../services/lessonPlanView';
 import SearchBar from '../ui/SearchBar';
 import SegmentedTabs from '../ui/SegmentedTabs';
 import Select from '../ui/Select';
@@ -65,12 +66,35 @@ export default function LessonPlansScreen({ classOptions }: { classOptions?: Cla
   const [tab, setTab] = useState<Tab>('');
   const [search, setSearch] = useState('');
   const term = useDebouncedValue(search.trim(), 400);
-  const [filters, setFilters] = useState<PlanFilters>(emptyFilters());
+  // Opens on this month so the list is bounded and the quick stats mean something straight away.
+  const thisMonth = () => ({ ...emptyFilters(), ...presetRange('month') });
+  const [filters, setFilters] = useState<PlanFilters>(thisMonth);
+  const [groupMode, setGroupMode] = useState<GroupMode>('subject');
+  const [groupKey, setGroupKey] = useState<string | null>(null);
+  const [viewing, setViewing] = useState<LessonPlan | null>(null);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const params = useMemo(() => filterParams(filters, options), [filters, options]);
   const query = useLessonPlansPaged(tab, term, params);
   const refreshControl = useRefreshControl(query.refetch) as React.ReactElement<RefreshControlProps>;
   const rows = useMemo(() => query.data?.pages.flatMap((p) => p.results) ?? [], [query.data]);
+  // Grouping and the stats need the whole list, not one page of it, so the rest is fetched in the
+  // background (capped, like the PDF export, so a huge range cannot run away).
+  const GROUP_FETCH_CAP = 500;
+  React.useEffect(() => {
+    if (groupMode !== 'flat' && query.hasNextPage && !query.isFetchingNextPage && rows.length < GROUP_FETCH_CAP) query.fetchNextPage();
+  }, [groupMode, query, rows.length]);
+  const stats = useMemo(() => planStats(rows), [rows]);
+  const sections = useMemo(() => (groupMode === 'flat' ? [] : groupPlans(rows, groupMode)), [rows, groupMode]);
+  const activeSection = sections.find((s) => s.key === groupKey) ?? sections[0];
+  type Item = { kind: 'plan'; plan: LessonPlan } | { kind: 'head'; key: string; label: string; count: number; published: number; draft: number };
+  const items: Item[] = useMemo(() => {
+    if (groupMode === 'flat') return rows.map((plan) => ({ kind: 'plan' as const, plan }));
+    return (activeSection?.children ?? []).flatMap((c) => [
+      { kind: 'head' as const, key: c.key, label: c.label, count: c.count, published: c.published, draft: c.draft },
+      ...c.plans.map((plan) => ({ kind: 'plan' as const, plan })),
+    ]);
+  }, [groupMode, rows, activeSection]);
+  const preset = activePreset(filters.from, filters.to);
   const rangeProblem = filterProblem(filters);
   const filterCount = activeFilterCount(filters);
 
@@ -83,7 +107,7 @@ export default function LessonPlansScreen({ classOptions }: { classOptions?: Cla
   const draftIds = draftIdsOf(rows, selected);
 
   const [editing, setEditing] = useState<LessonPlan | 'new' | null>(null);
-  const staff = useStaffOptions(isSchoolAdminNav && editing !== null);
+  const staff = useStaffOptions(isSchoolAdminNav && (editing !== null || filtersOpen));
   const [form, setForm] = useState<LessonPlanForm>(emptyPlanForm(todayString()));
   const [error, setError] = useState<string | null>(null);
   const set = <K extends keyof LessonPlanForm>(k: K, v: LessonPlanForm[K]) => setForm((f) => ({ ...f, [k]: v }));
@@ -247,6 +271,33 @@ export default function LessonPlansScreen({ classOptions }: { classOptions?: Cla
     <View>
       <SegmentedTabs tabs={TABS} value={tab} onChange={setTab} />
       <SearchBar value={search} onChangeText={setSearch} placeholder="Search lesson plans..." />
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
+        {DATE_PRESETS.map((p) => (
+          <TouchableOpacity key={p.id} accessibilityRole="button" accessibilityState={{ selected: preset === p.id }} style={[styles.chip, preset === p.id && styles.chipOn]}
+            onPress={() => setFilters((f) => ({ ...f, ...presetRange(p.id as PresetId) }))}>
+            <Text style={[styles.chipText, preset === p.id && styles.chipTextOn]}>{p.label}</Text>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
+      {rows.length > 0 ? (
+        <Text style={styles.stats} accessibilityLabel="Lesson plan totals">
+          {`${stats.total}${query.hasNextPage ? '+' : ''} plans · ${stats.published} published · ${stats.draft} draft · ${stats.teachers} teachers · ${stats.subjects} subjects · ${stats.classes} classes`}
+        </Text>
+      ) : null}
+      <SegmentedTabs
+        tabs={[{ value: 'subject', label: 'By subject' }, { value: 'class', label: 'By class' }, { value: 'flat', label: 'All' }]}
+        value={groupMode} onChange={(v) => { setGroupMode(v as GroupMode); setGroupKey(null); }}
+      />
+      {groupMode !== 'flat' && sections.length > 0 ? (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
+          {sections.map((s) => (
+            <TouchableOpacity key={s.key} accessibilityRole="button" accessibilityState={{ selected: activeSection?.key === s.key }}
+              style={[styles.chip, activeSection?.key === s.key && styles.chipOn]} onPress={() => setGroupKey(s.key)}>
+              <Text style={[styles.chipText, activeSection?.key === s.key && styles.chipTextOn]}>{`${s.label} (${s.count})`}</Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      ) : null}
       <View style={styles.actions}>
         <Button title={filterCount > 0 ? `Filters (${filterCount})` : 'Filters'} size="sm" variant="outline" onPress={() => setFiltersOpen((v) => !v)} />
         <Button title={selecting ? 'Done selecting' : 'Select'} size="sm" variant="outline" onPress={() => { setSelecting((v) => !v); setSelected([]); }} />
@@ -257,12 +308,16 @@ export default function LessonPlansScreen({ classOptions }: { classOptions?: Cla
             options={[{ value: -1, label: 'All classes' }, ...options.map((o) => ({ value: o.id, label: o.label }))]} />
           <Select label="Subject" searchable value={filters.subject ?? -1} onChange={(v) => setFilter('subject', v === -1 ? null : Number(v))}
             options={[{ value: -1, label: 'All subjects' }, ...(subjects.data ?? []).map((s) => ({ value: s.id, label: s.name }))]} />
+          {isSchoolAdminNav ? (
+            <Select label="Teacher" searchable value={filters.teacher ?? -1} onChange={(v) => setFilter('teacher', v === -1 ? null : Number(v))}
+              options={[{ value: -1, label: 'All teachers' }, ...(staff.data ?? []).map((m) => ({ value: m.id, label: m.full_name ?? m.name ?? `#${m.id}` }))]} />
+          ) : null}
           <DateField label="Lesson date from" value={filters.from} onChange={(v) => setFilter('from', v)} />
           <DateField label="Lesson date to" value={filters.to} onChange={(v) => setFilter('to', v)} />
           {rangeProblem ? <Text style={styles.problem} accessibilityRole="alert">{rangeProblem}</Text> : null}
           <Button title="Download as PDF" size="sm" variant="outline" onPress={exportPdf} loading={exporting} disabled={exporting || !!exportRangeProblem(filters.from, filters.to)} />
           <Text style={styles.hint}>Needs both lesson dates. Includes every plan in the range for the class, subject and search above.</Text>
-          {filterCount > 0 ? <Button title="Clear filters" size="sm" variant="ghost" onPress={() => setFilters(emptyFilters())} /> : null}
+          {filterCount > 0 ? <Button title="Clear filters" size="sm" variant="ghost" onPress={() => setFilters(thisMonth())} /> : null}
         </View>
       ) : null}
       {selecting ? (
@@ -286,8 +341,8 @@ export default function LessonPlansScreen({ classOptions }: { classOptions?: Cla
     <View style={styles.container}>
       <FlatList
         contentContainerStyle={styles.content}
-        data={rows}
-        keyExtractor={(p) => String(p.id)}
+        data={items}
+        keyExtractor={(it) => (it.kind === 'head' ? `h${it.key}` : String(it.plan.id))}
         keyboardShouldPersistTaps="handled"
         refreshControl={refreshControl}
         ListHeaderComponent={header}
@@ -295,7 +350,17 @@ export default function LessonPlansScreen({ classOptions }: { classOptions?: Cla
         onEndReachedThreshold={0.5}
         ListEmptyComponent={<EmptyState title="No lesson plans" message={term ? 'Nothing matches your search.' : 'Write the first lesson plan.'} />}
         ListFooterComponent={query.isFetchingNextPage ? <ActivityIndicator color={Colors.primary} style={{ margin: Spacing.lg }} /> : null}
-        renderItem={({ item: p }) => (
+        renderItem={({ item }) => {
+          if (item.kind === 'head') {
+            return (
+              <View style={styles.sectionHead}>
+                <Text style={styles.name}>{item.label}</Text>
+                <Text style={styles.sub}>{`${item.count} plan${item.count === 1 ? '' : 's'} · ${item.published} published · ${item.draft} draft`}</Text>
+              </View>
+            );
+          }
+          const p = item.plan;
+          return (
           <View style={styles.card}>
             <TouchableOpacity accessibilityRole={selecting ? 'checkbox' : 'button'} accessibilityState={selecting ? { checked: selected.includes(p.id) } : undefined} style={styles.row}
               onPress={() => (selecting ? setSelected((s) => toggleId(s, p.id)) : (setForm(planToForm(p, options)), setError(null), setEditing(p)))}>
@@ -317,14 +382,34 @@ export default function LessonPlansScreen({ classOptions }: { classOptions?: Cla
                 {p.ai_generated ? <StatusPill label="AI" tone="info" /> : null}
               </View>
             </TouchableOpacity>
-            {!selecting && canPublish(p) ? (
+            {!selecting ? (
               <View style={styles.actions}>
-                <Button title="Publish" size="sm" variant="outline" onPress={() => publishOne(p)} loading={actions.publish.isPending && actions.publish.variables === p.id} disabled={actions.publish.isPending} />
+                <Button title="View" size="sm" variant="outline" onPress={() => setViewing(p)} />
+                {canPublish(p) ? (
+                  <Button title="Publish" size="sm" variant="outline" onPress={() => publishOne(p)} loading={actions.publish.isPending && actions.publish.variables === p.id} disabled={actions.publish.isPending} />
+                ) : null}
               </View>
             ) : null}
           </View>
-        )}
+          );
+        }}
       />
+
+      <FormSheet visible={viewing !== null} title={viewing?.title ?? 'Lesson plan'} onClose={() => setViewing(null)} submitLabel="Edit"
+        onSubmit={() => { const p = viewing; if (!p) return; setViewing(null); setForm(planToForm(p, options)); setError(null); setEditing(p); }} busy={false} error={null}>
+        {viewing ? (
+          <>
+            <Text style={styles.sub}>{[viewing.lesson_date, viewing.class_name, viewing.subject_name, viewing.teacher_name, `${viewing.duration_minutes} min`, viewing.status === 'PUBLISHED' ? 'Published' : 'Draft'].filter(Boolean).join('  ·  ')}</Text>
+            {planBodySections(viewing).length === 0 ? <Text style={styles.sub}>This plan has no lesson content yet.</Text> : null}
+            {planBodySections(viewing).map(([heading, text]) => (
+              <View key={heading} style={styles.viewBlock}>
+                <Text style={styles.viewHead}>{heading}</Text>
+                <Text style={styles.viewText}>{text}</Text>
+              </View>
+            ))}
+          </>
+        ) : null}
+      </FormSheet>
 
       <FormSheet visible={editing !== null} title={editing === 'new' ? 'New lesson plan' : 'Edit lesson plan'} onClose={() => setEditing(null)} onSubmit={save}
         submitLabel={isQuick ? 'Save quick plan' : 'Save'} busy={actions.create.isPending || actions.update.isPending} error={error}>
@@ -387,6 +472,16 @@ export default function LessonPlansScreen({ classOptions }: { classOptions?: Cla
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
+  chips: { gap: Spacing.sm, paddingVertical: Spacing.sm },
+  chip: { paddingHorizontal: Spacing.md, paddingVertical: 6, borderRadius: 999, borderWidth: 1, borderColor: Colors.border, backgroundColor: Colors.surface },
+  chipOn: { backgroundColor: Colors.primary, borderColor: Colors.primary },
+  chipText: { fontSize: FontSize.sm, color: Colors.text },
+  chipTextOn: { color: '#fff' },
+  stats: { fontSize: FontSize.sm, color: Colors.textSecondary, marginVertical: Spacing.xs },
+  sectionHead: { marginTop: Spacing.lg },
+  viewBlock: { marginTop: Spacing.sm },
+  viewHead: { fontSize: FontSize.xs, fontWeight: '700', color: Colors.textSecondary, textTransform: 'uppercase' },
+  viewText: { fontSize: FontSize.md, color: Colors.text },
   content: { padding: Spacing.lg, paddingBottom: Spacing.xxxl },
   card: { backgroundColor: Colors.surface, borderRadius: BorderRadius.md, padding: Spacing.md, marginTop: Spacing.sm, gap: Spacing.sm },
   row: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md },

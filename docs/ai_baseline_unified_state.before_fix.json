@@ -1,0 +1,3629 @@
+{
+ "results": {
+  "F01": {
+   "question": {
+    "id": "F01",
+    "agent": "finance",
+    "role": "SCHOOL_ADMIN",
+    "lang": "en",
+    "q": "How much fee is pending this month?",
+    "expect": {
+     "tool": "get_pending_fees"
+    }
+   },
+   "ms": 4289,
+   "pass": true,
+   "reason": "",
+   "reply": "The total pending fee for **November 2026** is **₹ 595,750** (150 students have unpaid fees).",
+   "agents": [
+    "finance"
+   ],
+   "calls": [
+    {
+     "name": "get_pending_fees",
+     "args": {
+      "month": 11,
+      "year": 2026
+     },
+     "ok": true
+    }
+   ]
+  },
+  "F02": {
+   "question": {
+    "id": "F02",
+    "agent": "finance",
+    "role": "SCHOOL_ADMIN",
+    "lang": "ur_roman",
+    "q": "class 5 ki fee ka kia status hai?",
+    "expect": {
+     "tool": "get_pending_fees",
+     "args": {
+      "class_name": "5"
+     }
+    }
+   },
+   "ms": 3959,
+   "pass": true,
+   "reason": "",
+   "reply": "Class 5 ke liye November 2026 ka fee status:\n\n- **Total due:** 199,600 PKR  \n- **Total paid:** 0 PKR  \n- **Total pending:** 199,600 PKR  \n- **Unpaid students:** 50  \n\nAgar aap koi specific student ya payment record dekhna chahte hain, to batayein.",
+   "agents": [
+    "finance"
+   ],
+   "calls": [
+    {
+     "name": "get_pending_fees",
+     "args": {
+      "class_name": "Class 5"
+     },
+     "ok": true
+    }
+   ]
+  },
+  "F03": {
+   "question": {
+    "id": "F03",
+    "agent": "finance",
+    "role": "SCHOOL_ADMIN",
+    "lang": "ur_roman",
+    "q": "class 5 mein kin bachon ki fee baqaya hai? naam batao",
+    "expect": {
+     "tool": "find_pending_fee_payments",
+     "args": {
+      "class_name": "5"
+     }
+    }
+   },
+   "ms": 8767,
+   "pass": false,
+   "reason": "expected tool find_pending_fee_payments, got ['list_students']",
+   "reply": "I’m sorry, but the system does not have a tool that can directly list all students in a class who have pending fees in one step. You would need to open the **Students** screen for Class 5, select each student and view their fee record, or use the **Fees** screen’s filter options there.\n\nIf you’d like, I can look up the fee details for a specific student (by name or roll number) one at a time. Let me know which student you’d like to check first.",
+   "agents": [
+    "students"
+   ],
+   "calls": [
+    {
+     "name": "list_students",
+     "args": {
+      "class_name": "class 5"
+     },
+     "ok": true
+    }
+   ]
+  },
+  "F04": {
+   "question": {
+    "id": "F04",
+    "agent": "finance",
+    "role": "ACCOUNTANT",
+    "lang": "en",
+    "q": "List students who haven't paid in 8B",
+    "expect": {
+     "tool": "find_pending_fee_payments",
+     "args": {
+      "class_name": "8B"
+     }
+    }
+   },
+   "ms": 4230,
+   "pass": true,
+   "reason": "",
+   "reply": "There are no students in class 8B with unpaid or partially‑paid fees for the current month.",
+   "agents": [
+    "finance"
+   ],
+   "calls": [
+    {
+     "name": "find_pending_fee_payments",
+     "args": {
+      "class_name": "8B"
+     },
+     "ok": true
+    }
+   ]
+  },
+  "F05": {
+   "question": {
+    "id": "F05",
+    "agent": "finance",
+    "role": "SCHOOL_ADMIN",
+    "lang": "en",
+    "q": "What is our total expense this month?",
+    "expect": {
+     "tool": "get_total_expenses"
+    }
+   },
+   "ms": 4232,
+   "pass": true,
+   "reason": "",
+   "reply": "Total expense for November 2026: **₹ 595,863**.",
+   "agents": [
+    "finance"
+   ],
+   "calls": [
+    {
+     "name": "get_total_expenses",
+     "args": {
+      "date_from": "2026-11-01",
+      "date_to": "2026-11-30"
+     },
+     "ok": true
+    }
+   ]
+  },
+  "F06": {
+   "question": {
+    "id": "F06",
+    "agent": "finance",
+    "role": "SCHOOL_ADMIN",
+    "lang": "ur_roman",
+    "q": "is mahine ka kharcha kitna hua?",
+    "expect": {
+     "tool": "get_total_expenses"
+    }
+   },
+   "ms": 4449,
+   "pass": true,
+   "reason": "",
+   "reply": "Is mahine (November 2026) ka total kharcha **₹ 595,863** tha.",
+   "agents": [
+    "finance"
+   ],
+   "calls": [
+    {
+     "name": "get_total_expenses",
+     "args": {
+      "category": null,
+      "date_from": "2026-11-01",
+      "date_to": "2026-11-30"
+     },
+     "ok": true
+    }
+   ]
+  },
+  "F07": {
+   "question": {
+    "id": "F07",
+    "agent": "finance",
+    "role": "SCHOOL_ADMIN",
+    "lang": "ur_roman",
+    "q": "bijli ka bill kitna gaya is saal",
+    "expect": {
+     "tool": "get_total_expenses",
+     "args": {
+      "category": "UTILITIES"
+     }
+    }
+   },
+   "ms": 10683,
+   "pass": true,
+   "reason": "",
+   "reply": "Is saal utilities (bijli) ke total kharch **₹ 168,186** hain.",
+   "agents": [
+    "finance"
+   ],
+   "calls": [
+    {
+     "name": "get_total_expenses",
+     "args": {
+      "category": "UTILITIES",
+      "date_from": "2026-01-01",
+      "date_to": "2026-11-08"
+     },
+     "ok": true
+    }
+   ]
+  },
+  "F08": {
+   "question": {
+    "id": "F08",
+    "agent": "finance",
+    "role": "PRINCIPAL",
+    "lang": "en",
+    "q": "Show fee collection summary for October",
+    "expect": {
+     "tool": "get_income_summary",
+     "args": {
+      "month": 10
+     }
+    }
+   },
+   "ms": 5948,
+   "pass": true,
+   "reason": "",
+   "reply": "**Fee Collection Summary – October 2026**\n\n| Metric | Amount |\n|---|---|\n| Total due | 595,750 |\n| Fee collected | 483,050 |\n| Other income (donations, sales, etc.) | 100,000 |\n| **Total income** | **583,050** |\n| Collection rate | 81.1 % |\n| Paid students | 112 |\n| Partially paid | 18 |\n| Unpaid | 20 |\n\nLet me know if you need details for a specific class, payment method, or want to see the list of unpaid students.",
+   "agents": [
+    "finance"
+   ],
+   "calls": [
+    {
+     "name": "get_income_summary",
+     "args": {
+      "month": 10,
+      "year": 2026
+     },
+     "ok": true
+    }
+   ]
+  },
+  "F09": {
+   "question": {
+    "id": "F09",
+    "agent": "finance",
+    "role": "SCHOOL_ADMIN",
+    "lang": "ur_roman",
+    "q": "aaj tak ki kul collection aur kharcha ka farq batao",
+    "expect": {
+     "tool": "get_balance"
+    }
+   },
+   "ms": 7261,
+   "pass": false,
+   "reason": "expected tool get_balance, got ['get_income_summary', 'get_total_expenses']",
+   "reply": "**Aaj tak ki kul collection aur kharcha ka farq (2026‑11):**\n\n| Item | Amount (PKR) |\n|------|--------------|\n| Total fee collection (ab tak) | 0.0 |\n| Total other income | 0.0 |\n| **Kul income** | **0.0** |\n| Total expenses | 4,821,433.0 |\n| **Farq (income – expenses)** | **‑4,821,433.0** |\n\nIs mahine ab tak koi fee ya dusra income record nahi hua, jabke kharcha 4,821,433 PKR hai.",
+   "agents": [
+    "finance"
+   ],
+   "calls": [
+    {
+     "name": "get_income_summary",
+     "args": {
+      "month": 11,
+      "year": 2026
+     },
+     "ok": true
+    },
+    {
+     "name": "get_total_expenses",
+     "args": {
+      "category": null,
+      "date_from": null,
+      "date_to": null
+     },
+     "ok": true
+    }
+   ]
+  },
+  "F10": {
+   "question": {
+    "id": "F10",
+    "agent": "finance",
+    "role": "SCHOOL_ADMIN",
+    "lang": "en",
+    "q": "Break down expenses by category",
+    "expect": {
+     "tool": "get_expense_breakdown"
+    }
+   },
+   "ms": 4469,
+   "pass": true,
+   "reason": "",
+   "reply": "**Expenses by Category (2026‑01‑01 to 2026‑12‑31)**  \n\n| Category | Total (PKR) | # Entries |\n|---|---|---|\n| Salaries | 4,305,056.0 | 8 |\n| Utilities | 193,818.0 | 8 |\n| Maintenance | 170,763.0 | 8 |\n| Stationery | 77,796.0 | 8 |\n| **Grand Total** | **4,747,433.0** | 32 |\n\nLet me know if you need a deeper breakdown (e.g., by month) or want to view the individual entries.",
+   "agents": [
+    "finance"
+   ],
+   "calls": [
+    {
+     "name": "get_expense_breakdown",
+     "args": {
+      "date_from": "2026-01-01",
+      "date_to": "2026-12-31"
+     },
+     "ok": true
+    }
+   ]
+  },
+  "F11": {
+   "question": {
+    "id": "F11",
+    "agent": "finance",
+    "role": "SCHOOL_ADMIN",
+    "lang": "en",
+    "q": "How much donation income did we get?",
+    "expect": {
+     "tool": "get_other_income",
+     "args": {
+      "category": "DONATION"
+     }
+    }
+   },
+   "ms": 4638,
+   "pass": true,
+   "reason": "",
+   "reply": "The total donation income received so far is **195,000**.",
+   "agents": [
+    "finance"
+   ],
+   "calls": [
+    {
+     "name": "get_other_income",
+     "args": {
+      "category": "DONATION"
+     },
+     "ok": true
+    }
+   ]
+  },
+  "F12": {
+   "question": {
+    "id": "F12",
+    "agent": "finance",
+    "role": "ACCOUNTANT",
+    "lang": "en",
+    "q": "What is the balance in each account?",
+    "expect": {
+     "tool": "get_account_balances"
+    }
+   },
+   "ms": 8376,
+   "pass": true,
+   "reason": "",
+   "reply": "**Account balances**\n\n| Account | Type | Opening (BBF) | Receipts | Payments | Transfers In | Transfers Out | Net Balance |\n|---|---|---|---|---|---|---|---|\n| Bank Account | Bank | 50 000.0 | 0.0 | 0.0 | 0.0 | 0.0 | 50 000.0 |\n| BASE Bank Account | Bank | 400 000.0 | 2 173 150.0 | 4 305 056.0 | 0.0 | 0.0 | -1 731 906.0 |\n| BASE Cash Box | Cash | 50 000.0 | 1 919 300.0 | 442 377.0 | 0.0 | 0.0 | 1 526 923.0 |\n| Cash Desk | Cash | 0.0 | 303 025.0 | 74 000.0 | 0.0 | 0.0 | 229 025.0 |\n\n**Grand total (net across all accounts): 74 042.0**",
+   "agents": [
+    "finance"
+   ],
+   "calls": [
+    {
+     "name": "get_account_balances",
+     "args": {
+      "date_from": null,
+      "date_to": null
+     },
+     "ok": true
+    }
+   ]
+  },
+  "F13": {
+   "question": {
+    "id": "F13",
+    "agent": "finance",
+    "role": "ACCOUNTANT",
+    "lang": "ur_roman",
+    "q": "cash aur bank account mein kitne paise hain?",
+    "expect": {
+     "tool": "get_account_balances"
+    }
+   },
+   "ms": 7463,
+   "pass": true,
+   "reason": "",
+   "reply": "School **SEED_TEST_School_Alpha** ke cash aur bank accounts ka balance (2026‑01‑01 se 2026‑12‑31 tak) :\n\n| Account | Type | Net Balance |\n|---|---|---|\n| Bank Account | Bank | **₹ 50,000** |\n| BASE Bank Account | Bank | **‑₹ 1,731,906** |\n| BASE Cash Box | Cash | **₹ 1,526,923** |\n| Cash Desk | Cash | **₹ 162,615** |\n\n**Grand total (all accounts combined): ₹ 7,632**.",
+   "agents": [
+    "finance"
+   ],
+   "calls": [
+    {
+     "name": "get_account_balances",
+     "args": {
+      "date_from": "2026-01-01",
+      "date_to": "2026-12-31"
+     },
+     "ok": true
+    }
+   ]
+  },
+  "F14": {
+   "question": {
+    "id": "F14",
+    "agent": "finance",
+    "role": "SCHOOL_ADMIN",
+    "lang": "en",
+    "q": "What is the monthly fee for class 3?",
+    "expect": {
+     "tool": "get_fee_structure",
+     "args": {
+      "class_name": "3"
+     }
+    }
+   },
+   "ms": 3936,
+   "pass": true,
+   "reason": "",
+   "reply": "There is no fee structure set up for Class 3 at the moment. If you’d like to add one, please use the “Fee Structure” screen in the system.",
+   "agents": [
+    "finance"
+   ],
+   "calls": [
+    {
+     "name": "get_fee_structure",
+     "args": {
+      "class_name": "Class 3"
+     },
+     "ok": true
+    }
+   ]
+  },
+  "F15": {
+   "question": {
+    "id": "F15",
+    "agent": "finance",
+    "role": "SCHOOL_ADMIN",
+    "lang": "en",
+    "q": "How many payments came via cash vs bank?",
+    "expect": {
+     "tool": "get_payment_method_analysis"
+    }
+   },
+   "ms": 3939,
+   "pass": true,
+   "reason": "",
+   "reply": "In November 2026 there have been no fee payments recorded yet, so the cash‑and‑bank‑transfer totals are both **0**. If you need data for a different month or want to see payments after they’re entered, just let me know!",
+   "agents": [
+    "finance"
+   ],
+   "calls": [
+    {
+     "name": "get_payment_method_analysis",
+     "args": {
+      "month": null,
+      "year": null
+     },
+     "ok": true
+    }
+   ]
+  },
+  "F16": {
+   "question": {
+    "id": "F16",
+    "agent": "finance",
+    "role": "SCHOOL_ADMIN",
+    "lang": "en",
+    "q": "Who has a scholarship?",
+    "expect": {
+     "tool": "get_scholarships_summary"
+    }
+   },
+   "ms": 2652,
+   "pass": false,
+   "reason": "expected tool get_scholarships_summary, got none",
+   "reply": "I’m sorry, but the system doesn’t have a tool that can list all students who currently have a scholarship. You can view that information on the **Discounts/Scholarships** screen in the platform.",
+   "agents": [],
+   "calls": []
+  },
+  "F17": {
+   "question": {
+    "id": "F17",
+    "agent": "finance",
+    "role": "SCHOOL_ADMIN",
+    "lang": "en",
+    "q": "How much discount have we given in total?",
+    "expect": {
+     "tool": "get_discounts_impact"
+    }
+   },
+   "ms": 4030,
+   "pass": true,
+   "reason": "",
+   "reply": "The total discounts applied are:\n\n| Discount Name          | Type        | Value | Recipients |\n|------------------------|------------|-------|------------|\n| BASE Sibling Discount  | Percentage | 10 %  | 12 |\n| Sibling Discount       | Percentage | 10 %  | 1 |\n\nThese are the only active discounts in the system.",
+   "agents": [
+    "finance"
+   ],
+   "calls": [
+    {
+     "name": "get_discounts_impact",
+     "args": {},
+     "ok": true
+    }
+   ]
+  },
+  "F18": {
+   "question": {
+    "id": "F18",
+    "agent": "finance",
+    "role": "SCHOOL_ADMIN",
+    "lang": "en",
+    "q": "Are online payments failing a lot?",
+    "expect": {
+     "tool": "get_online_payment_status"
+    }
+   },
+   "ms": 3857,
+   "pass": true,
+   "reason": "",
+   "reply": "There is no online‑payment data available for the period you asked about, so I can’t tell whether payments are failing often. You can check the online‑payment status screen in the system for the latest figures.",
+   "agents": [
+    "finance"
+   ],
+   "calls": [
+    {
+     "name": "get_online_payment_status",
+     "args": {
+      "date_from": "2026-01-01",
+      "date_to": "2026-12-31"
+     },
+     "ok": true
+    }
+   ]
+  },
+  "F19": {
+   "question": {
+    "id": "F19",
+    "agent": "finance",
+    "role": "ACCOUNTANT",
+    "lang": "en",
+    "q": "Which months are closed?",
+    "expect": {
+     "tool": "get_monthly_closing_status"
+    }
+   },
+   "ms": 4285,
+   "pass": true,
+   "reason": "",
+   "reply": "The school currently has **no closed months**. All months listed (July 2026 through November 2026) are open.",
+   "agents": [
+    "finance"
+   ],
+   "calls": [
+    {
+     "name": "get_monthly_closing_status",
+     "args": {},
+     "ok": true
+    }
+   ]
+  },
+  "F20": {
+   "question": {
+    "id": "F20",
+    "agent": "finance",
+    "role": "SCHOOL_ADMIN",
+    "lang": "ur_roman",
+    "q": "kin bachon ne 3 mahine se fee nahi di?",
+    "expect": {
+     "tool": "get_fee_defaulters",
+     "args": {
+      "min_months": 3
+     }
+    }
+   },
+   "ms": 6642,
+   "pass": true,
+   "reason": "",
+   "reply": "Here are the students who have not paid fees for **3 months or more**:\n\n| Student | Class | Unpaid months | Total due |\n|---|---|---|---|\n| Talha Khan | Class 5 - B | 5 | 4000.0 |\n| Zara Chaudhry | Class 4 - A | 5 | 3150.0 |\n| Bilal Siddiqui | Class 4 - B | 5 | 3500.0 |\n| Noor Siddiqui | Class 6 - B | 5 | 4500.0 |\n| Maryam Farooq | Class 4 - B | 5 | 3500.0 |\n| SEED_TEST_Hamza Raza | SEED_TEST_Class_2B | 5 | 8750.0 |\n| SEED_TEST_Usman Ahmed | SEED_TEST_Class_1A | 5 | 8600.0 |\n| SEED_TEST_Zara Iqbal | SEED_TEST_Class_3C | 5 | 8900.0 |\n| Ahmad Farooq | Class 6 - A | 4 | 4500.0 |\n| Fatima Sheikh | Class 6 - A | 4 | 4500.0 |\n| Bilal Iqbal | Class 5 - B | 4 | 4000.0 |\n| Sara Farooq | Class 5 - A |",
+   "agents": [
+    "finance"
+   ],
+   "calls": [
+    {
+     "name": "get_fee_defaulters",
+     "args": {
+      "min_months": 3
+     },
+     "ok": true
+    }
+   ]
+  },
+  "F21": {
+   "question": {
+    "id": "F21",
+    "agent": "finance",
+    "role": "SCHOOL_ADMIN",
+    "lang": "en",
+    "q": "Compare collection over the last 6 months",
+    "expect": {
+     "tool": "get_collection_trend"
+    }
+   },
+   "ms": 5063,
+   "pass": true,
+   "reason": "",
+   "reply": "**Fee collection trend (last 6 months)**  \n\n| Month | Year | Total due (PKR) | Collected (PKR) | Collection rate |\n|-------|------|----------------|----------------|-----------------|\n| Jun   | 2026 | 595,750.0 | 595,750.0 | 100 % |\n| Jul   | 2026 | 595,750.0 | 577,100.0 | 96.9 % |\n| Aug   | 2026 | 595,750.0 | 552,100.0 | 92.7 % |\n| Sep   | 2026 | 595,750.0 | 517,950.0 | 86.9 % |\n| Oct   | 2026 | 595,750.0 | 483,050.0 | 81.1 % |\n| Nov   | 2026 | 595,750.0 | 0.0 | 0 % |\n\nCollection has been falling each month, with November still open. Let me know if you need a deeper breakdown or want to record payments.",
+   "agents": [
+    "finance"
+   ],
+   "calls": [
+    {
+     "name": "get_collection_trend",
+     "args": {
+      "months": 6
+     },
+     "ok": true
+    }
+   ]
+  },
+  "F22": {
+   "question": {
+    "id": "F22",
+    "agent": "finance",
+    "role": "ACCOUNTANT",
+    "lang": "en",
+    "q": "Show transfers between accounts this year",
+    "expect": {
+     "tool": "get_transfer_history"
+    }
+   },
+   "ms": 3843,
+   "pass": true,
+   "reason": "",
+   "reply": "There have been no account transfers recorded for SEED_TEST_School_Alpha from 2026‑01‑01 to 2026‑11‑08.",
+   "agents": [
+    "finance"
+   ],
+   "calls": [
+    {
+     "name": "get_transfer_history",
+     "args": {
+      "date_from": "2026-01-01",
+      "date_to": "2026-11-08"
+     },
+     "ok": true
+    }
+   ]
+  },
+  "F23": {
+   "question": {
+    "id": "F23",
+    "agent": "finance",
+    "role": "SCHOOL_ADMIN",
+    "lang": "en",
+    "q": "What are our 5 biggest expenses?",
+    "expect": {
+     "tool": "get_top_expenses",
+     "args": {
+      "limit": 5
+     }
+    }
+   },
+   "ms": 3957,
+   "pass": true,
+   "reason": "",
+   "reply": "Here are the five biggest expense entries:\n\n| Date       | Category | Amount (PKR) | Description |\n|------------|----------|--------------|-------------|\n| 2026-05-22 | Salaries | 558,231.0    | Salaries May |\n| 2026-11-18 | Salaries | 549,097.0    | Salaries November |\n| 2026-04-20 | Salaries | 547,920.0    | Salaries April |\n| 2026-08-03 | Salaries | 539,403.0    | Salaries August |\n| 2026-09-18 | Salaries | 537,587.0    | Salaries September |",
+   "agents": [
+    "finance"
+   ],
+   "calls": [
+    {
+     "name": "get_top_expenses",
+     "args": {
+      "limit": 5
+     },
+     "ok": true
+    }
+   ]
+  },
+  "F24": {
+   "question": {
+    "id": "F24",
+    "agent": "finance",
+    "role": "SCHOOL_ADMIN",
+    "lang": "ur_roman",
+    "q": "sab se bara kharcha kaunsa tha?",
+    "expect": {
+     "tool": "get_top_expenses",
+     "accept": [
+      "get_expense_breakdown"
+     ]
+    }
+   },
+   "ms": 4557,
+   "pass": true,
+   "reason": "",
+   "reply": "Sab se bara kharcha **Salaries** tha, jiska total **₹ 4,305,056** tha.",
+   "agents": [
+    "finance"
+   ],
+   "calls": [
+    {
+     "name": "get_expense_breakdown",
+     "args": {},
+     "ok": true
+    }
+   ]
+  },
+  "F25": {
+   "question": {
+    "id": "F25",
+    "agent": "finance",
+    "role": "TEACHER",
+    "lang": "en",
+    "q": "How much fee is pending?",
+    "expect": {
+     "denied": true
+    }
+   },
+   "ms": 3131,
+   "pass": true,
+   "reason": "",
+   "reply": "I’m sorry, but I can’t retrieve fee‑pending information from this chat. Please open the **Finance** screen in the school management platform to view pending fees.",
+   "agents": [],
+   "calls": []
+  },
+  "F26": {
+   "question": {
+    "id": "F26",
+    "agent": "finance",
+    "role": "STAFF",
+    "lang": "ur_roman",
+    "q": "school ka kharcha dikhao",
+    "expect": {
+     "denied": true
+    }
+   },
+   "ms": 2781,
+   "pass": true,
+   "reason": "",
+   "reply": "Mujhe maaf kijiye, lekin school ka kharcha (financial reports) chat se dikhana mumkin nahi hai. Iske liye aapko “Financial Reports” screen ya accounting module ka istemal karna hoga. Agar koi aur staff‑related information chahiye ho to bataiye.",
+   "agents": [],
+   "calls": []
+  },
+  "F27": {
+   "question": {
+    "id": "F27",
+    "agent": "finance",
+    "role": "SCHOOL_ADMIN",
+    "lang": "ur_roman",
+    "q": "Ali Farooq ki fee receive karo 2000",
+    "expect": {
+     "write": "record_fee_payments"
+    }
+   },
+   "ms": 3577,
+   "pass": false,
+   "reason": "no proposal for record_fee_payments",
+   "reply": "There are several students with the name **Ali Farooq**. Which one do you want to record the fee for?\n\n| Student ID | Class | Roll No. |\n|------------|-------|----------|\n| 838 | Class 5 | 17 |\n| (others are different names) |\n\nPlease confirm the student ID or give more details (e.g., class).",
+   "agents": [],
+   "calls": [
+    {
+     "name": "find_student",
+     "args": {
+      "query": "Ali Farooq"
+     },
+     "ok": true
+    }
+   ]
+  },
+  "F28": {
+   "question": {
+    "id": "F28",
+    "agent": "finance",
+    "role": "SCHOOL_ADMIN",
+    "lang": "ur_roman",
+    "q": "Ahmad Farooq aur Sara Farooq ke ilawa class 5 sab ki fee aa gai",
+    "expect": {
+     "write": "record_fee_payments"
+    }
+   },
+   "ms": 9940,
+   "pass": false,
+   "reason": "no proposal for record_fee_payments",
+   "reply": "Please tell me which account should receive the fee payments for the remaining students in **Class 5**. The available accounts are:\n\n- Bank Account (id 22)  \n- BASE Bank Account (id 28)  \n- BASE Cash Box (id 27)  \n- Cash Desk (id 10)\n\nKindly specify the account you’d like to use.",
+   "agents": [
+    "finance"
+   ],
+   "calls": [
+    {
+     "name": "record_fee_payments",
+     "args": {
+      "class_name": "Class 5",
+      "exclude_names": [
+       "Ahmad Farooq",
+       "Sara Farooq"
+      ]
+     },
+     "ok": false
+    }
+   ]
+  },
+  "F29": {
+   "question": {
+    "id": "F29",
+    "agent": "finance",
+    "role": "SCHOOL_ADMIN",
+    "lang": "en",
+    "q": "Add an expense of 5000 for electricity",
+    "expect": {
+     "write": "record_expenses"
+    }
+   },
+   "ms": 8498,
+   "pass": false,
+   "reason": "no proposal for record_expenses",
+   "reply": "Which account should this electricity expense be recorded against?\n\n- Bank Account (id 22)  \n- BASE Bank Account (id 28)  \n- BASE Cash Box (id 27)  \n- Cash Desk (id 10)  \n\nPlease let me know the account you’d like to use.",
+   "agents": [
+    "finance"
+   ],
+   "calls": [
+    {
+     "name": "record_expenses",
+     "args": {
+      "entries": [
+       {
+        "amount": 5000,
+        "description": "Electricity bill",
+        "category_name": "Utilities"
+       }
+      ],
+      "date": "2026-11-08"
+     },
+     "ok": false
+    }
+   ]
+  },
+  "F30": {
+   "question": {
+    "id": "F30",
+    "agent": "finance",
+    "role": "SCHOOL_ADMIN",
+    "lang": "en",
+    "q": "Delete the duplicate expense entry from this month",
+    "expect": {
+     "write": "delete_finance_entries",
+     "clarify": true
+    }
+   },
+   "ms": 4354,
+   "pass": false,
+   "reason": "no proposal for delete_finance_entries",
+   "reply": "There are no expense entries recorded for this month, so there is nothing to delete.",
+   "agents": [
+    "finance"
+   ],
+   "calls": [
+    {
+     "name": "list_expenses",
+     "args": {
+      "date_from": "2026-11-01",
+      "date_to": "2026-11-08"
+     },
+     "ok": true
+    }
+   ]
+  },
+  "A01": {
+   "question": {
+    "id": "A01",
+    "agent": "academics",
+    "role": "SCHOOL_ADMIN",
+    "lang": "en",
+    "q": "Show the timetable for class 4",
+    "expect": {
+     "tool": "get_class_schedule"
+    }
+   },
+   "ms": 4794,
+   "pass": true,
+   "reason": "",
+   "reply": "I’m sorry, but there is no timetable data available for **Class 4** at the moment. If you need to create or edit the schedule, please go to the class‑timetable screen in the system.",
+   "agents": [
+    "academics"
+   ],
+   "calls": [
+    {
+     "name": "get_class_schedule",
+     "args": {
+      "class_name": "Class 4"
+     },
+     "ok": true
+    }
+   ]
+  },
+  "A02": {
+   "question": {
+    "id": "A02",
+    "agent": "academics",
+    "role": "TEACHER",
+    "lang": "ur_roman",
+    "q": "mera aaj ka schedule kya hai?",
+    "expect": {
+     "tool": "get_teacher_schedule"
+    }
+   },
+   "ms": 6726,
+   "pass": true,
+   "reason": "",
+   "reply": "Mujhe lagta hai aapka poora naam system mein thoda alag ho sakta hai. Kya aap apna poora naam (jaise “Usman Raza”) confirm kar sakte hain taake main aapka aaj ka schedule laa sakun?",
+   "agents": [
+    "academics"
+   ],
+   "calls": [
+    {
+     "name": "get_teacher_schedule",
+     "args": {
+      "teacher_name": ""
+     },
+     "ok": true
+    }
+   ]
+  },
+  "A03": {
+   "question": {
+    "id": "A03",
+    "agent": "academics",
+    "role": "SCHOOL_ADMIN",
+    "lang": "en",
+    "q": "Which teachers are free on Monday period 3?",
+    "expect": {
+     "tool": "get_free_teachers"
+    }
+   },
+   "ms": 6501,
+   "pass": true,
+   "reason": "",
+   "reply": "Here are the teachers who are free on **Monday period 3**:\n\n| Teacher | Department |\n|---|---|\n| Adeel Hassan | BASE Teaching |\n| Demo Accountant | Administration |\n| Faisal Mirza | BASE Teaching |\n| Hasnat Raza | BASE Teaching |\n| Imran Raza | BASE Teaching |\n| Kamran Shah | BASE Teaching |\n| Mehwish Javed | BASE Teaching |\n| Nadia Iqbal | BASE Teaching |\n| Rabia Sheikh | BASE Teaching |\n| Saima Raza | BASE Teaching |\n| SEED_TEST_Driver App | SEED_TEST_Transport |\n| SEED_TEST_Sara Ahmed | SEED_TEST_Academic |\n| SEED_TEST_Staff E2E | SEED_TEST_Admin |\n| SEED_TEST_Usman Raza | SEED_TEST_Academic |\n| Shazia Javed | BASE Teaching |\n| Tariq Ahmed | BASE Teaching |\n| Uzma Malik | BASE Teaching |",
+   "agents": [
+    "academics"
+   ],
+   "calls": [
+    {
+     "name": "get_free_teachers",
+     "args": {
+      "day": "MON",
+      "period": "3"
+     },
+     "ok": true
+    }
+   ]
+  },
+  "A04": {
+   "question": {
+    "id": "A04",
+    "agent": "academics",
+    "role": "SCHOOL_ADMIN",
+    "lang": "ur_roman",
+    "q": "Monday ko kaun se teachers free hain?",
+    "expect": {
+     "tool": "get_free_teachers",
+     "args": {
+      "day": "Monday"
+     }
+    }
+   },
+   "ms": 7815,
+   "pass": false,
+   "reason": "get_free_teachers: argument day='Monday' missing",
+   "reply": "Monday ko free teachers ki list:\n\n| Teacher | Department |\n|---|---|\n| Adeel Hassan | BASE Teaching |\n| Demo Accountant | Administration |\n| Faisal Mirza | BASE Teaching |\n| Hasnat Raza | BASE Teaching |\n| Imran Raza | BASE Teaching |\n| Kamran Shah | BASE Teaching |\n| Mehwish Javed | BASE Teaching |\n| Nadia Iqbal | BASE Teaching |\n| Rabia Sheikh | BASE Teaching |\n| Saima Raza | BASE Teaching |\n| SEED_TEST_Driver App | SEED_TEST_Transport |\n| SEED_TEST_Sara Ahmed | SEED_TEST_Academic |\n| SEED_TEST_Staff E2E | SEED_TEST_Admin |\n| SEED_TEST_Usman Raza | SEED_TEST_Academic |\n| Shazia Javed | BASE Teaching |\n| Tariq Ahmed | BASE Teaching |\n| Uzma Malik | BASE Teaching |",
+   "agents": [
+    "academics"
+   ],
+   "calls": [
+    {
+     "name": "get_free_teachers",
+     "args": {
+      "day": "MON"
+     },
+     "ok": true
+    }
+   ]
+  },
+  "A05": {
+   "question": {
+    "id": "A05",
+    "agent": "academics",
+    "role": "SCHOOL_ADMIN",
+    "lang": "en",
+    "q": "When is English taught in class 6?",
+    "expect": {
+     "tool": "get_subject_schedule"
+    }
+   },
+   "ms": 4427,
+   "pass": true,
+   "reason": "",
+   "reply": "English is not scheduled for any periods in Class 6 at the moment. If you’d like to add or change the timetable, please use the class‑timetable screen.",
+   "agents": [
+    "academics"
+   ],
+   "calls": [
+    {
+     "name": "get_subject_schedule",
+     "args": {
+      "subject_name": "English",
+      "class_name": "Class 6"
+     },
+     "ok": true
+    }
+   ]
+  },
+  "A06": {
+   "question": {
+    "id": "A06",
+    "agent": "academics",
+    "role": "PRINCIPAL",
+    "lang": "en",
+    "q": "Who is overloaded this week?",
+    "expect": {
+     "tool": "get_workload_summary",
+     "accept": [
+      "get_workload_analysis"
+     ]
+    }
+   },
+   "ms": 4592,
+   "pass": true,
+   "reason": "",
+   "reply": "Here’s the workload analysis for this week:\n\n| Teacher ID | Teacher Name          | Assigned periods/week | Status      |\n|-----------|----------------------|----------------------|------------|\n| 47        | SEED_TEST_Ali Khan   | 25 / 30 (balanced)   | balanced   |\n| 95        | Hasnat Raza          | 5 / 0                | underloaded |\n| 99        | Kamran Shah          | 25 / 0               | underloaded |\n| 97        | Imran Raza           | 15 / 0               | underloaded |\n| 98        | Nadia Iqbal          | 20 / 0               | underloaded |\n| 100       | Saima Raza           | 30 / 0               | underloaded |\n| 96        | Rabia Sheikh         | 10 / 0               | un",
+   "agents": [
+    "academics"
+   ],
+   "calls": [
+    {
+     "name": "get_workload_analysis",
+     "args": {},
+     "ok": true
+    }
+   ]
+  },
+  "A07": {
+   "question": {
+    "id": "A07",
+    "agent": "academics",
+    "role": "SCHOOL_ADMIN",
+    "lang": "en",
+    "q": "Tell me about class 7",
+    "expect": {
+     "tool": "get_class_info"
+    }
+   },
+   "ms": 4623,
+   "pass": true,
+   "reason": "",
+   "reply": "It looks like there isn’t a “Class 7” in the system. The available classes are:\n\n- SEED_TEST_Class_1A  \n- SEED_TEST_Class_2B  \n- SEED_TEST_Class_3C  \n- Class 4  \n- Class 5  \n\nPlease let me know which class you’d like information about, or specify a different class name.",
+   "agents": [
+    "academics"
+   ],
+   "calls": [
+    {
+     "name": "get_class_info",
+     "args": {
+      "class_name": "Class 7"
+     },
+     "ok": true
+    }
+   ]
+  },
+  "A08": {
+   "question": {
+    "id": "A08",
+    "agent": "academics",
+    "role": "SCHOOL_ADMIN",
+    "lang": "en",
+    "q": "How good is the class 8 timetable?",
+    "expect": {
+     "tool": "get_quality_score"
+    }
+   },
+   "ms": 3869,
+   "pass": true,
+   "reason": "",
+   "reply": "It looks like there isn’t a “Class 8” in the system. Could you tell me which class you’d like to check (e.g., Class 4, Class 5, SEED_TEST_Class_1A, etc.)?",
+   "agents": [
+    "academics"
+   ],
+   "calls": [
+    {
+     "name": "get_quality_score",
+     "args": {
+      "class_name": "Class 8"
+     },
+     "ok": true
+    }
+   ]
+  },
+  "A09": {
+   "question": {
+    "id": "A09",
+    "agent": "academics",
+    "role": "SCHOOL_ADMIN",
+    "lang": "ur_roman",
+    "q": "kal Miss Hasnat chutti par hain, substitute kaun lag sakta hai?",
+    "expect": {
+     "tool": "find_substitute"
+    }
+   },
+   "ms": 3860,
+   "pass": true,
+   "reason": "",
+   "reply": "Teacher “Miss Hasnat” is not in the system, so I can’t look up substitute options. Please check the spelling or select a different teacher.",
+   "agents": [
+    "academics"
+   ],
+   "calls": [
+    {
+     "name": "find_substitute",
+     "args": {
+      "teacher_name": "Miss Hasnat",
+      "date": "2026-11-09"
+     },
+     "ok": true
+    }
+   ]
+  },
+  "A10": {
+   "question": {
+    "id": "A10",
+    "agent": "academics",
+    "role": "SCHOOL_ADMIN",
+    "lang": "en",
+    "q": "Which classes are behind on the curriculum?",
+    "expect": {
+     "tool": "get_curriculum_gaps"
+    }
+   },
+   "ms": 5063,
+   "pass": true,
+   "reason": "",
+   "reply": "**Classes behind on the curriculum**\n\n| Class ID | Class Name               | Issue Type |\n|----------|--------------------------|------------|\n| 73       | SEED_TEST_Class_1A       | Missing required subjects |\n| 74       | SEED_TEST_Class_2B       | Missing required subjects |\n| 75       | SEED_TEST_Class_3C       | Missing required subjects |\n| 112      | Class 4                  | Missing required subjects & unmet periods |\n| 113      | Class 5                  | Missing required subjects & unmet periods |\n| 114      | Class 6                  | Missing required subjects & unmet periods |\n\nThese classes have either required subjects not assigned, or periods that have not been scheduled a",
+   "agents": [
+    "academics"
+   ],
+   "calls": [
+    {
+     "name": "get_curriculum_gaps",
+     "args": {
+      "class_name": null
+     },
+     "ok": true
+    }
+   ]
+  },
+  "A11": {
+   "question": {
+    "id": "A11",
+    "agent": "academics",
+    "role": "SCHOOL_ADMIN",
+    "lang": "en",
+    "q": "How busy is Lab 1 on Tuesday?",
+    "expect": {
+     "tool": "get_room_usage"
+    }
+   },
+   "ms": 4183,
+   "pass": true,
+   "reason": "",
+   "reply": "Lab 1 is currently not scheduled for any classes or activities on Tuesday. It is completely free.",
+   "agents": [
+    "academics"
+   ],
+   "calls": [
+    {
+     "name": "get_room_usage",
+     "args": {
+      "room_name": "Lab 1",
+      "day": "TUE"
+     },
+     "ok": true
+    }
+   ]
+  },
+  "A12": {
+   "question": {
+    "id": "A12",
+    "agent": "academics",
+    "role": "SCHOOL_ADMIN",
+    "lang": "en",
+    "q": "Compare class 4A and 4B schedules",
+    "expect": {
+     "tool": "compare_schedules"
+    }
+   },
+   "ms": 4499,
+   "pass": true,
+   "reason": "",
+   "reply": "I’m sorry, but I couldn’t find classes named **4A** or **4B** in the system. Please check the exact class names (e.g., “Class 4” or “Class 5”) and try again. If you need help locating the correct class, you can view the class list on the Classes screen.",
+   "agents": [
+    "academics"
+   ],
+   "calls": [
+    {
+     "name": "compare_schedules",
+     "args": {
+      "class_name_1": "Class 4A",
+      "class_name_2": "Class 4B"
+     },
+     "ok": true
+    }
+   ]
+  },
+  "A13": {
+   "question": {
+    "id": "A13",
+    "agent": "academics",
+    "role": "TEACHER",
+    "lang": "ur_roman",
+    "q": "Miss Hasnat ke kitne lesson plan draft hain?",
+    "expect": {
+     "tool": "count_lesson_plans",
+     "clarify": true
+    }
+   },
+   "ms": 4469,
+   "pass": true,
+   "reason": "",
+   "reply": "Miss Hasnat ke kitne lesson‑plan drafts hain—yeh jaanne ke liye mujhe period batayein:  \n\n- is hafte ka (this week)  \n- is mahine ka (this month)  \n- is term ka (this term)  \n- ya phir sabhi waqt ka (all time)  \n\nAap kaunsa period chahte hain?",
+   "agents": [
+    "academics"
+   ],
+   "calls": [
+    {
+     "name": "count_lesson_plans",
+     "args": {
+      "teacher_name": "Miss Hasnat",
+      "status": "DRAFT"
+     },
+     "ok": false
+    }
+   ]
+  },
+  "A14": {
+   "question": {
+    "id": "A14",
+    "agent": "academics",
+    "role": "TEACHER",
+    "lang": "en",
+    "q": "How many lesson plans have I published this month?",
+    "expect": {
+     "tool": "count_lesson_plans"
+    }
+   },
+   "ms": 5607,
+   "pass": true,
+   "reason": "",
+   "reply": "You have **0 published lesson plans** so far this month (up to 2026‑11‑08).",
+   "agents": [
+    "academics"
+   ],
+   "calls": [
+    {
+     "name": "count_lesson_plans",
+     "args": {
+      "teacher_name": "me",
+      "status": "PUBLISHED",
+      "date_from": "2026-11-01",
+      "date_to": "2026-11-08"
+     },
+     "ok": false
+    },
+    {
+     "name": "count_lesson_plans",
+     "args": {
+      "status": "PUBLISHED",
+      "date_from": "2026-11-01",
+      "date_to": "2026-11-08"
+     },
+     "ok": true
+    }
+   ]
+  },
+  "A15": {
+   "question": {
+    "id": "A15",
+    "agent": "academics",
+    "role": "SCHOOL_ADMIN",
+    "lang": "en",
+    "q": "Which teachers have no lesson plans for this week?",
+    "expect": {
+     "tool": "list_lesson_plans"
+    }
+   },
+   "ms": 3559,
+   "pass": false,
+   "reason": "expected tool list_lesson_plans, got ['count_lesson_plans']",
+   "reply": "No teachers have any lesson plans (draft or published) scheduled for this week (2024‑11‑04 to 2024‑11‑10).",
+   "agents": [
+    "academics"
+   ],
+   "calls": [
+    {
+     "name": "count_lesson_plans",
+     "args": {
+      "teacher_name": null,
+      "date_from": "2026-11-04",
+      "date_to": "2026-11-10"
+     },
+     "ok": true
+    }
+   ]
+  },
+  "A16": {
+   "question": {
+    "id": "A16",
+    "agent": "academics",
+    "role": "TEACHER",
+    "lang": "en",
+    "q": "Show chapters of the class 4 English book",
+    "expect": {
+     "tool": "get_book_outline"
+    }
+   },
+   "ms": 6193,
+   "pass": true,
+   "reason": "",
+   "reply": "It looks like there isn’t a book saved for Class 4 English yet. Could you tell me which book (or its ID) you’d like to see the chapters for, or provide the chapter numbers you’re interested in?",
+   "agents": [
+    "academics"
+   ],
+   "calls": [
+    {
+     "name": "get_book_outline",
+     "args": {
+      "class_name": "Class 4",
+      "subject_name": "English"
+     },
+     "ok": true
+    }
+   ]
+  },
+  "A17": {
+   "question": {
+    "id": "A17",
+    "agent": "academics",
+    "role": "TEACHER",
+    "lang": "ur_roman",
+    "q": "class 4 ki English book ke chapter 3 mein kya topics hain?",
+    "expect": {
+     "tool": "get_book_outline"
+    }
+   },
+   "ms": 4799,
+   "pass": true,
+   "reason": "",
+   "reply": "There is currently no English book saved for Class 4, so I can’t show the topics for Chapter 3. Could you let me know the exact book (or its chapters/pages) you’d like to use, or provide more details about the chapter you’re interested in?",
+   "agents": [
+    "academics"
+   ],
+   "calls": [
+    {
+     "name": "get_book_outline",
+     "args": {
+      "class_name": "Class 4",
+      "subject_name": "English",
+      "chapter_numbers": [
+       3
+      ]
+     },
+     "ok": true
+    }
+   ]
+  },
+  "A18": {
+   "question": {
+    "id": "A18",
+    "agent": "academics",
+    "role": "TEACHER",
+    "lang": "en",
+    "q": "What homework did I give class 5 today?",
+    "expect": {
+     "tool": "list_assignments"
+    }
+   },
+   "ms": 4576,
+   "pass": true,
+   "reason": "",
+   "reply": "No homework entries were recorded for Class 5 today (2026‑11‑08).",
+   "agents": [
+    "academics"
+   ],
+   "calls": [
+    {
+     "name": "list_assignments",
+     "args": {
+      "class_name": "Class 5",
+      "assignment_type": "HOMEWORK",
+      "date_from": "2026-11-08",
+      "date_to": "2026-11-08"
+     },
+     "ok": true
+    }
+   ]
+  },
+  "A19": {
+   "question": {
+    "id": "A19",
+    "agent": "academics",
+    "role": "TEACHER",
+    "lang": "ur_roman",
+    "q": "aaj ki diary class 5 ki dikhao",
+    "expect": {
+     "tool": "list_assignments",
+     "args": {
+      "assignment_type": "DIARY"
+     }
+    }
+   },
+   "ms": 5153,
+   "pass": true,
+   "reason": "",
+   "reply": "Aaj (2026‑11‑08) ke liye Class 5 ki koi diary entry maujood nahi hai.",
+   "agents": [
+    "academics"
+   ],
+   "calls": [
+    {
+     "name": "list_assignments",
+     "args": {
+      "class_name": "Class 5",
+      "assignment_type": "DIARY"
+     },
+     "ok": true
+    }
+   ]
+  },
+  "A20": {
+   "question": {
+    "id": "A20",
+    "agent": "academics",
+    "role": "TEACHER",
+    "lang": "ur_roman",
+    "q": "mere class 4 ki English book ke chapter 3 aur 4 next month ke lesson plan mein daal do",
+    "expect": {
+     "write": "plan_lessons_from_book",
+     "clarify": true
+    }
+   },
+   "ms": 2533,
+   "pass": true,
+   "reason": "",
+   "reply": "User wants to plan lessons from English book chapters 3 and 4 for class 4 next month. We need to know which English book (if multiple) and confirm date range (December 2026).Sure! To create the lesson plan I need to know which English book you’d like to use for Class 4 (if there’s more than one). Also, should the plan cover the whole of next month (December 2026, 2026‑12‑01 to 2026‑12‑31)? Let me know the book (or confirm the dates) and I’ll prepare the plan.",
+   "agents": [],
+   "calls": []
+  },
+  "A21": {
+   "question": {
+    "id": "A21",
+    "agent": "academics",
+    "role": "TEACHER",
+    "lang": "en",
+    "q": "Create a short lesson plan for tomorrow on fractions for class 5",
+    "expect": {
+     "write": "create_lesson_plan",
+     "clarify": true
+    }
+   },
+   "ms": 4368,
+   "pass": true,
+   "reason": "",
+   "reply": "Which Mathematics subject do you want to use for the lesson plan?\n\n- Mathematics (id 46)  \n- P12LMS_Mathematics (id 61)",
+   "agents": [
+    "academics"
+   ],
+   "calls": [
+    {
+     "name": "create_lesson_plan",
+     "args": {
+      "class_name": "Class 5",
+      "subject_name": "Mathematics",
+      "lesson_date": "2026-11-09",
+      "title": "Understanding Fractions",
+      "objectives": "Students will identify fractions, represent them visually, and compare simple fractions.",
+      "description": "1. Warm‑up: Quick mental math on numbers.\n2. Introduction: Explain numerator & denominator with pizza slice model.\n3. Activity: Students use fraction strips to create given fractions.\n4. Guided practice: Compare fractions using >, <, = signs.\n5. Worksheet: Solve problems on identifying and comparing fractions.\n6. Recap & Q&A.",
+      "teaching_methods": "Demonstration, hands‑on activity, group discussion, visual aids",
+      "materials_needed": "Fraction strips, whiteboard, markers, worksheets, pizza slice cut‑outs",
+      "duration_minutes": 45,
+      "section": "A",
+      "teacher_name": "me"
+     },
+     "ok": false
+    }
+   ]
+  },
+  "A22": {
+   "question": {
+    "id": "A22",
+    "agent": "academics",
+    "role": "TEACHER",
+    "lang": "ur_roman",
+    "q": "aaj class 5A aur 5B ki diary: Math exercise 3.2 question 1 se 5",
+    "expect": {
+     "write": "create_class_diary",
+     "clarify": true
+    }
+   },
+   "ms": 5258,
+   "pass": false,
+   "reason": "no proposal for create_class_diary",
+   "reply": "I’m sorry, but Mathematics isn’t assigned to you for Class 5, so I can’t create a diary entry for that subject. If you’d like to add a diary for a subject you teach, or need help with another class/subject, just let me know!",
+   "agents": [
+    "academics"
+   ],
+   "calls": [
+    {
+     "name": "create_class_diary",
+     "args": {
+      "class_name": "Class 5",
+      "subject_name": "Math",
+      "text": "Math exercise 3.2 question 1 se 5",
+      "entry_type": "DIARY",
+      "sections": [
+       "A",
+       "B"
+      ],
+      "status": "DRAFT"
+     },
+     "ok": false
+    }
+   ]
+  },
+  "A23": {
+   "question": {
+    "id": "A23",
+    "agent": "academics",
+    "role": "TEACHER",
+    "lang": "en",
+    "q": "Delete my draft lesson plan for Friday",
+    "expect": {
+     "write": "delete_lesson_plans",
+     "clarify": true
+    }
+   },
+   "ms": 2548,
+   "pass": true,
+   "reason": "",
+   "reply": "Sure! Could you tell me the exact date of the Friday you want to delete (e.g., 2026‑11‑12) and, if you know it, the title or ID of the draft lesson plan? This will help me prepare the correct deletion card.",
+   "agents": [],
+   "calls": []
+  },
+  "A24": {
+   "question": {
+    "id": "A24",
+    "agent": "academics",
+    "role": "TEACHER",
+    "lang": "en",
+    "q": "Show me class 9's fee defaulters",
+    "expect": {
+     "denied": true
+    }
+   },
+   "ms": 2449,
+   "pass": true,
+   "reason": "",
+   "reply": "I’m sorry, but as a teacher you can’t view fee‑payment information such as defaulters from this chat. Please go to the **Finance → Fee Defaulters** screen in the system to see that list.",
+   "agents": [],
+   "calls": []
+  },
+  "C01": {
+   "question": {
+    "id": "C01",
+    "agent": "communication",
+    "role": "SCHOOL_ADMIN",
+    "lang": "en",
+    "q": "Tell me about student Ahmad Farooq",
+    "expect": {
+     "tool": "get_student_info",
+     "accept": [
+      "find_student"
+     ]
+    }
+   },
+   "ms": 4236,
+   "pass": true,
+   "reason": "",
+   "reply": "There are several students named **Ahmad Farooq**:\n\n| Student ID | Class | Roll No. |\n|------------|-------|----------|\n| 816 | Class 4 | 20 |\n| 822 | Class 5 | 1 |\n| 879 | Class 6 | 8 |\n\nPlease tell me which one you’d like details for (by student ID or class).",
+   "agents": [],
+   "calls": [
+    {
+     "name": "find_student",
+     "args": {
+      "query": "Ahmad Farooq"
+     },
+     "ok": true
+    }
+   ]
+  },
+  "C02": {
+   "question": {
+    "id": "C02",
+    "agent": "communication",
+    "role": "SCHOOL_ADMIN",
+    "lang": "ur_roman",
+    "q": "Ahmad Farooq ki attendance kaisi hai?",
+    "expect": {
+     "tool": "get_attendance_summary",
+     "accept": [
+      "find_student"
+     ]
+    }
+   },
+   "ms": 3844,
+   "pass": true,
+   "reason": "",
+   "reply": "There are several students named **Ahmad Farooq**:\n\n| Student ID | Class | Roll No. |\n|------------|-------|----------|\n| 816 | Class 4 | 20 |\n| 822 | Class 5 | 1 |\n| 879 | Class 6 | 8 |\n\nPlease tell me which one you mean (by class or roll number).",
+   "agents": [],
+   "calls": [
+    {
+     "name": "find_student",
+     "args": {
+      "query": "Ahmad Farooq"
+     },
+     "ok": true
+    }
+   ]
+  },
+  "C03": {
+   "question": {
+    "id": "C03",
+    "agent": "communication",
+    "role": "SCHOOL_ADMIN",
+    "lang": "en",
+    "q": "Has Ahmad Farooq's family paid fees?",
+    "expect": {
+     "tool": "get_fee_status",
+     "accept": [
+      "find_student"
+     ]
+    }
+   },
+   "ms": 4062,
+   "pass": true,
+   "reason": "",
+   "reply": "There are several students named **Ahmad Farooq**:\n\n| Student ID | Class | Roll No. |\n|------------|-------|----------|\n| 816 | Class 4 | 20 |\n| 822 | Class 5 | 1 |\n| 879 | Class 6 | 8 |\n\nWhich one do you want to check the fee status for? (Please specify the class or roll number.)",
+   "agents": [],
+   "calls": [
+    {
+     "name": "find_student",
+     "args": {
+      "query": "Ahmad Farooq"
+     },
+     "ok": true
+    }
+   ]
+  },
+  "C04": {
+   "question": {
+    "id": "C04",
+    "agent": "communication",
+    "role": "SCHOOL_ADMIN",
+    "lang": "en",
+    "q": "Draft a message to Ahmad's parents about low attendance",
+    "expect": {
+     "tool": "draft_message",
+     "accept": [
+      "find_student"
+     ]
+    }
+   },
+   "ms": 4296,
+   "pass": true,
+   "reason": "",
+   "reply": "There are several students named **Ahmad**. Please tell me which one you mean by providing the class (e.g., “Class 5”) or the roll number:\n\n- Ahmad Butt – Class 5, Roll 12  \n- Ahmad Sheikh – Class 4, Roll 4  \n- Ahmad Farooq – Class 4, Roll 20  \n- Ahmad Farooq – Class 5, Roll 1  \n- Ahmad Farooq – Class 6, Roll 8  \n- Ahmad Chaudhry – Class 5, Roll 11  \n\nOnce you confirm the correct student, I can draft the attendance‑related message for their parents.",
+   "agents": [],
+   "calls": [
+    {
+     "name": "find_student",
+     "args": {
+      "query": "Ahmad"
+     },
+     "ok": true
+    }
+   ]
+  },
+  "C05": {
+   "question": {
+    "id": "C05",
+    "agent": "communication",
+    "role": "SCHOOL_ADMIN",
+    "lang": "en",
+    "q": "How did Sara Farooq do in the last exam?",
+    "expect": {
+     "tool": "get_exam_performance",
+     "accept": [
+      "get_exam_results",
+      "get_student_marks",
+      "find_student"
+     ]
+    }
+   },
+   "ms": 3529,
+   "pass": true,
+   "reason": "",
+   "reply": "There are several students with similar names. I found one **Sara Farooq** (student ID 831, Class 5, roll 10). Is this the student you mean?",
+   "agents": [],
+   "calls": [
+    {
+     "name": "find_student",
+     "args": {
+      "query": "Sara Farooq"
+     },
+     "ok": true
+    }
+   ]
+  },
+  "C06": {
+   "question": {
+    "id": "C06",
+    "agent": "communication",
+    "role": "SCHOOL_ADMIN",
+    "lang": "en",
+    "q": "Which assignments is Sara Farooq missing?",
+    "expect": {
+     "tool": "get_assignment_status"
+    }
+   },
+   "ms": 6987,
+   "pass": true,
+   "reason": "",
+   "reply": "Sara Farooq ke liye koi pending assignment record nahi mil raha. Agar aap kisi aur class/section ka Sara Farooq dekhna chahte hain, to uska class ya section batayein.",
+   "agents": [
+    "communication"
+   ],
+   "calls": [
+    {
+     "name": "find_student",
+     "args": {
+      "query": "Sara Farooq"
+     },
+     "ok": true
+    },
+    {
+     "name": "get_assignment_status",
+     "args": {
+      "student_id": 831
+     },
+     "ok": true
+    }
+   ]
+  },
+  "C07": {
+   "question": {
+    "id": "C07",
+    "agent": "communication",
+    "role": "SCHOOL_ADMIN",
+    "lang": "en",
+    "q": "Show Sara Farooq's absences over the last 30 days",
+    "expect": {
+     "tool": "get_detailed_attendance"
+    }
+   },
+   "ms": 3785,
+   "pass": false,
+   "reason": "expected tool get_detailed_attendance, got ['find_student']",
+   "reply": "There are several students with a similar name. Which one do you mean?\n\n| # | Student ID | Name          | Class   | Roll No. |\n|---|------------|---------------|---------|----------|\n| 1 | 831        | Sara Farooq  | Class 5 | 10 |\n| 2 | 832        | Sana Farooq  | Class 5 | 11 |\n| 3 | 807        | Maryam Farooq| Class 4 | 11 |\n| 4 | 816        | Ahmad Farooq | Class 4 | 20 |\n| 5 | 822        | Ahmad Farooq | Class 5 | 1 |\n| 6 | 845        | Fahad Farooq | Class 5 | 24 |\n| 7 | 879        | Ahmad Farooq | Class 6 | 8 |\n| 8 | 880        | Hania Farooq | Class 6 | 9 |\n\nPlease select the correct student (e.g., “student 831”).",
+   "agents": [],
+   "calls": [
+    {
+     "name": "find_student",
+     "args": {
+      "query": "Sara Farooq"
+     },
+     "ok": true
+    }
+   ]
+  },
+  "C08": {
+   "question": {
+    "id": "C08",
+    "agent": "communication",
+    "role": "SCHOOL_ADMIN",
+    "lang": "en",
+    "q": "Does Ahmad Farooq use school transport?",
+    "expect": {
+     "tool": "get_transport_status",
+     "accept": [
+      "find_student"
+     ]
+    }
+   },
+   "ms": 3576,
+   "pass": true,
+   "reason": "",
+   "reply": "There are several students named **Ahmad Farooq**. Please tell me which one you mean by providing the class (e.g., “Class 4”, “Class 5”, or “Class 6”).",
+   "agents": [],
+   "calls": [
+    {
+     "name": "find_student",
+     "args": {
+      "query": "Ahmad Farooq"
+     },
+     "ok": true
+    }
+   ]
+  },
+  "C09": {
+   "question": {
+    "id": "C09",
+    "agent": "communication",
+    "role": "SCHOOL_ADMIN",
+    "lang": "en",
+    "q": "Who is the class teacher of 5A?",
+    "expect": {
+     "tool": "get_class_teacher_info",
+     "accept": [
+      "get_class_info"
+     ]
+    }
+   },
+   "ms": 4018,
+   "pass": true,
+   "reason": "",
+   "reply": "Class **5A** does not exist in the system. If you meant a different class or section, please let me know.",
+   "agents": [
+    "academics"
+   ],
+   "calls": [
+    {
+     "name": "get_class_info",
+     "args": {
+      "class_name": "5A"
+     },
+     "ok": true
+    }
+   ]
+  },
+  "C10": {
+   "question": {
+    "id": "C10",
+    "agent": "communication",
+    "role": "SCHOOL_ADMIN",
+    "lang": "en",
+    "q": "What are Ahmad Farooq's parents' notification preferences?",
+    "expect": {
+     "tool": "get_communication_preferences",
+     "accept": [
+      "find_student"
+     ]
+    }
+   },
+   "ms": 5041,
+   "pass": true,
+   "reason": "",
+   "reply": "There are several students named **Ahmad Farooq**:\n\n| Student ID | Class | Roll No. |\n|------------|-------|----------|\n| 816 | Class 4 | 20 |\n| 822 | Class 5 | 1 |\n| 879 | Class 6 | 8 |\n\nPlease tell me which one you mean (by class or roll number).",
+   "agents": [],
+   "calls": [
+    {
+     "name": "find_student",
+     "args": {
+      "query": "Ahmad Farooq"
+     },
+     "ok": true
+    }
+   ]
+  },
+  "C11": {
+   "question": {
+    "id": "C11",
+    "agent": "communication",
+    "role": "SCHOOL_ADMIN",
+    "lang": "en",
+    "q": "Any pending leave requests for Hasnat?",
+    "expect": {
+     "tool": "get_leave_requests",
+     "accept": [
+      "list_leave_requests"
+     ]
+    }
+   },
+   "ms": 4896,
+   "pass": true,
+   "reason": "",
+   "reply": "There is **1 pending leave request** for Hasnat:\n\n| Leave ID | Staff | Type | From | To | Days | Reason |\n|---|---|---|---|---|---|---|\n| 31 | Hasnat Raza | Sick Leave | 2026‑11‑09 | 2026‑11‑10 | 2 | Fever |\n\nLet me know if you’d like to approve or reject it.",
+   "agents": [
+    "hr"
+   ],
+   "calls": [
+    {
+     "name": "list_leave_requests",
+     "args": {
+      "status": "PENDING",
+      "staff_name": "Hasnat"
+     },
+     "ok": true
+    }
+   ]
+  },
+  "C12": {
+   "question": {
+    "id": "C12",
+    "agent": "communication",
+    "role": "SCHOOL_ADMIN",
+    "lang": "en",
+    "q": "Does Ahmad Farooq receive a scholarship?",
+    "expect": {
+     "tool": "get_financial_aid_status",
+     "accept": [
+      "find_student"
+     ]
+    }
+   },
+   "ms": 4105,
+   "pass": true,
+   "reason": "",
+   "reply": "There are several students named **Ahmad Farooq**:\n\n| Student ID | Class | Roll No. |\n|------------|-------|----------|\n| 816 | Class 4 | 20 |\n| 822 | Class 5 | 1 |\n| 879 | Class 6 | 8 |\n\nPlease tell me which one you mean (by class or student ID).",
+   "agents": [],
+   "calls": [
+    {
+     "name": "find_student",
+     "args": {
+      "query": "Ahmad Farooq"
+     },
+     "ok": true
+    }
+   ]
+  },
+  "C13": {
+   "question": {
+    "id": "C13",
+    "agent": "communication",
+    "role": "SCHOOL_ADMIN",
+    "lang": "en",
+    "q": "What messages have we sent Ahmad Farooq's family?",
+    "expect": {
+     "tool": "get_notification_history",
+     "accept": [
+      "find_student"
+     ]
+    }
+   },
+   "ms": 4894,
+   "pass": true,
+   "reason": "",
+   "reply": "There are several students named **Ahmad Farooq**. Which one do you mean?\n\n| Student ID | Class | Roll No. |\n|------------|-------|----------|\n| 816 | Class 4 | 20 |\n| 822 | Class 5 | 1 |\n| 879 | Class 6 | 8 |\n\nPlease tell me the class (or roll number) of the Ahmad Farooq you’re interested in.",
+   "agents": [],
+   "calls": [
+    {
+     "name": "find_student",
+     "args": {
+      "query": "Ahmad Farooq"
+     },
+     "ok": true
+    }
+   ]
+  },
+  "C14": {
+   "question": {
+    "id": "C14",
+    "agent": "communication",
+    "role": "SCHOOL_ADMIN",
+    "lang": "ur_roman",
+    "q": "aaj jo bache ghair hazir hain un sab ke walidain ko message bhejo",
+    "expect": {
+     "write": "send_message_to_parents"
+    }
+   },
+   "ms": 3643,
+   "pass": false,
+   "reason": "no proposal for send_message_to_parents",
+   "reply": "Aaj ke din kis class ya sections ke absent students ke walidain ko aap message bhejna chahte hain? Kripya class/section ka naam batayein.",
+   "agents": [],
+   "calls": []
+  },
+  "C15": {
+   "question": {
+    "id": "C15",
+    "agent": "communication",
+    "role": "SCHOOL_ADMIN",
+    "lang": "ur_roman",
+    "q": "fee baqaya wale walidain ko yaad dahani bhej do",
+    "expect": {
+     "write": "send_message_to_parents"
+    }
+   },
+   "ms": 6264,
+   "pass": false,
+   "reason": "no proposal for send_message_to_parents",
+   "reply": "Fee baqi walidain ko yaad‑dahani bhejne ke liye, aapko unke **parent contact details** chahiye honge.  \nMujhe unka contact data directly retrieve karne ka tool nahi hai, is liye:\n\n1. **Parent contacts** ke liye aap **Students** screen → “Student profile” ya “List students” ka istemal kar sakte hain (class ya naam se filter kar ke).  \n2. Phir **Draft Message** tool se ek reminder draft karen (`type: \"fee_reminder\"`).  \n3. Draft ko review kar ke **Approve** karen – tabhi message parents ko bheja jayega.\n\nAgar aap specific class ya parent ka naam denge, to main aapke liye draft tayar kar sakta hoon. Let me know!",
+   "agents": [
+    "finance"
+   ],
+   "calls": [
+    {
+     "name": "find_pending_fee_payments",
+     "args": {
+      "class_name": null,
+      "month": null,
+      "year": null
+     },
+     "ok": true
+    }
+   ]
+  },
+  "X04": {
+   "question": {
+    "id": "X04",
+    "agent": "exams",
+    "role": "SCHOOL_ADMIN",
+    "lang": "en",
+    "q": "Enter marks for class 5 final term maths: Ahmad Farooq 45, Sara Farooq 38",
+    "expect": {
+     "write": "enter_marks",
+     "clarify": true
+    }
+   },
+   "ms": 18921,
+   "pass": true,
+   "reason": "",
+   "reply": "There are multiple students named **Ahmad Farooq**. Which one should receive the maths marks for the Class 5 Final Term exam?\n\n| Student ID | Class | Roll No. |\n|------------|-------|----------|\n| 816 | Class 4 | 20 |\n| 822 | **Class 5** | 1 |\n| 879 | Class 6 | 8 |\n\n(Your entry is for **Class 5**, so likely the student with ID 822, but please confirm.)  \n\nThe student **Sara Farooq** matches a single record (ID 831, Class 5, Roll 10).  \n\nPlease confirm the correct Ahmad Farooq (or provide the student ID) so I can prepare the marks entry.",
+   "agents": [
+    "exams"
+   ],
+   "calls": [
+    {
+     "name": "list_exams",
+     "args": {
+      "class_name": "Class 5",
+      "exam_name": "final term"
+     },
+     "ok": true
+    },
+    {
+     "name": "find_student",
+     "args": {
+      "query": "Ahmad Farooq"
+     },
+     "ok": true
+    }
+   ]
+  },
+  "X05": {
+   "question": {
+    "id": "X05",
+    "agent": "exams",
+    "role": "SCHOOL_ADMIN",
+    "lang": "en",
+    "q": "Show class 5 mid term results",
+    "expect": {
+     "tool": "get_exam_results"
+    }
+   },
+   "ms": 25549,
+   "pass": true,
+   "reason": "",
+   "reply": "**Class 5 – Mid Term Results**\n\n| Metric | Value |\n|---|---|\n| **Status** | PUBLISHED |\n| **Students** | 50 |\n| **Passed** | 46 |\n| **Failed** | 4 |\n| **Pass %** | 92 % |\n| **Class average** | 66.6 % |\n\n**Top 5 students**\n\n| Rank | Name | % | Grade |\n|---|---|---|---|\n| 1 | Rayyan Raza | 89.17 | B |\n| 2 | Hania Iqbal | 83.67 | B |\n| 3 | Ali Iqbal | 79.5 | C |\n| 4 | Ahmad Chaudhry | 78.33 | C |\n| 5 | Danish Qureshi | 77.5 | C |\n\n**Failed students**\n\n| Name | % | Failed subjects |\n|---|---|---|\n| Saad Qureshi | 44.5 | 3 |\n| Laiba Chaudhry | 41.5 | 3 |\n| Mahnoor Chaudhry | 38.5 | 3 |\n| Iqra Hassan | 27.0 | 4 |\n\n**Subject‑wise summary**\n\n| Subject | Avg % | Highest % | Pass % |\n|---|---|---|---|",
+   "agents": [
+    "exams"
+   ],
+   "calls": [
+    {
+     "name": "list_exams",
+     "args": {
+      "class_name": "Class 5",
+      "exam_name": "mid term"
+     },
+     "ok": true
+    },
+    {
+     "name": "get_exam_results",
+     "args": {
+      "exam_id": 104
+     },
+     "ok": true
+    }
+   ]
+  },
+  "X06": {
+   "question": {
+    "id": "X06",
+    "agent": "students",
+    "role": "SCHOOL_ADMIN",
+    "lang": "en",
+    "q": "Convert Mahnoor Ahmed's enquiry into class 4A",
+    "expect": {
+     "write": "convert_enquiry",
+     "clarify": true
+    }
+   },
+   "ms": 30087,
+   "pass": true,
+   "reason": "",
+   "reply": "I’ve prepared a conversion for Mahnoor Ahmed’s enquiry to **Class 4 A**. Please review the preview card and either **Approve**, **Edit**, or **Reject** the change.",
+   "agents": [
+    "students"
+   ],
+   "calls": [
+    {
+     "name": "list_enquiries",
+     "args": {
+      "search": "Mahnoor Ahmed"
+     },
+     "ok": true
+    },
+    {
+     "name": "convert_enquiry",
+     "args": {
+      "enquiry_id": 113,
+      "class_name": "Class 4",
+      "section": "A"
+     },
+     "ok": true
+    }
+   ]
+  },
+  "X07": {
+   "question": {
+    "id": "X07",
+    "agent": "students",
+    "role": "SCHOOL_ADMIN",
+    "lang": "en",
+    "q": "How many open admission enquiries do we have?",
+    "expect": {
+     "tool": "count_enquiries"
+    }
+   },
+   "ms": 20439,
+   "pass": true,
+   "reason": "",
+   "reply": "We currently have **10 open admission enquiries**.",
+   "agents": [
+    "students"
+   ],
+   "calls": [
+    {
+     "name": "count_enquiries",
+     "args": {},
+     "ok": true
+    }
+   ]
+  },
+  "X08": {
+   "question": {
+    "id": "X08",
+    "agent": "hr",
+    "role": "SCHOOL_ADMIN",
+    "lang": "en",
+    "q": "Approve Miss Hasnat's leave request",
+    "expect": {
+     "write": "decide_leave"
+    }
+   },
+   "ms": 8144,
+   "pass": true,
+   "reason": "",
+   "reply": "I’ve prepared a preview card to **approve Miss Hasnat’s leave request** (leave ID 31). Please review the card and confirm, edit, or reject it.",
+   "agents": [
+    "hr"
+   ],
+   "calls": [
+    {
+     "name": "list_leave_requests",
+     "args": {
+      "staff_name": "Miss Hasnat"
+     },
+     "ok": true
+    },
+    {
+     "name": "decide_leave",
+     "args": {
+      "decision": "APPROVE",
+      "leave_id": 31
+     },
+     "ok": true
+    }
+   ]
+  },
+  "X09": {
+   "question": {
+    "id": "X09",
+    "agent": "hr",
+    "role": "SCHOOL_ADMIN",
+    "lang": "en",
+    "q": "Generate payslips for this month",
+    "expect": {
+     "write": "generate_payslips"
+    }
+   },
+   "ms": 5476,
+   "pass": true,
+   "reason": "",
+   "reply": "I’ve prepared draft payslips for all eligible staff for **November 2026** (17 drafts, total net Rs 932,156). Please review the preview card and approve, edit, or reject it. Let me know if you’d like any changes before approving.",
+   "agents": [
+    "hr"
+   ],
+   "calls": [
+    {
+     "name": "generate_payslips",
+     "args": {},
+     "ok": true
+    }
+   ]
+  },
+  "X10": {
+   "question": {
+    "id": "X10",
+    "agent": "students",
+    "role": "SCHOOL_ADMIN",
+    "lang": "en",
+    "q": "Promote all class 5 students to class 6",
+    "expect": {
+     "blocked": true
+    }
+   },
+   "ms": 3295,
+   "pass": true,
+   "reason": "",
+   "reply": "Bulk promotion of an entire class cannot be done from this chat. Please use the “Class Promotion” screen in the admin portal to move all Class 5 students to Class 6. Let me know if you need help with anything else!",
+   "agents": [],
+   "calls": []
+  },
+  "X11": {
+   "question": {
+    "id": "X11",
+    "agent": "hr",
+    "role": "SCHOOL_ADMIN",
+    "lang": "en",
+    "q": "Make Ali a school admin",
+    "expect": {
+     "blocked": true
+    }
+   },
+   "ms": 3148,
+   "pass": true,
+   "reason": "",
+   "reply": "I’m sorry, but changing a staff member’s role or permissions (e.g., making Ali a school admin) can’t be done from the chat. Please use the **Staff Management** screen in the admin portal to update Ali’s role.",
+   "agents": [],
+   "calls": []
+  },
+  "X12": {
+   "question": {
+    "id": "X12",
+    "agent": "operations",
+    "role": "SCHOOL_ADMIN",
+    "lang": "en",
+    "q": "Which library books are overdue?",
+    "expect": {
+     "tool": "list_overdue_books"
+    }
+   },
+   "ms": 4723,
+   "pass": true,
+   "reason": "",
+   "reply": "**Overdue library books**\n\n| Issue ID | Book | Borrower | Issued | Due | Days Overdue | Fine (PKR) |\n|---|---|---|---|---|---|---|\n| 20 | The Adventures of Tom Sawyer | SEED_TEST_Ali Hassan | 2026‑09‑13 | 2026‑04‑14 | 208 | 1,040.0 |\n| 21 | Charlotte's Web | SEED_TEST_Sara Khan | 2026‑09‑13 | 2026‑04‑14 | 208 | 1,040.0 |\n| 15 | SEED_TEST_The Little Prince | SEED_TEST_Ali Hassan | 2026‑09‑12 | 2026‑09‑19 | 50 | 250.0 |\n| 26 | Robinson Crusoe | Fatima Sheikh | 2026‑11‑08 | 2026‑10‑23 | 16 | 80.0 |\n| 24 | Islamic Stories | Ali Ahmed | 2026‑11‑08 | 2026‑10‑29 | 10 | 50.0 |\n| 25 | My First Atlas | Zara Javed | 2026‑11‑08 | 2026‑11‑03 | 5 | 25.0 |\n\nThese books are currently overdue and fines have ",
+   "agents": [
+    "operations"
+   ],
+   "calls": [
+    {
+     "name": "list_overdue_books",
+     "args": {},
+     "ok": true
+    }
+   ]
+  },
+  "X13": {
+   "question": {
+    "id": "X13",
+    "agent": "operations",
+    "role": "SCHOOL_ADMIN",
+    "lang": "en",
+    "q": "Is the bus on route 2 running today?",
+    "expect": {
+     "tool": "get_route_status"
+    }
+   },
+   "ms": 5395,
+   "pass": true,
+   "reason": "",
+   "reply": "The bus on **Route 2 – Gulberg** is **not running right now**.",
+   "agents": [
+    "operations"
+   ],
+   "calls": [
+    {
+     "name": "get_route_status",
+     "args": {
+      "route_name": "route 2"
+     },
+     "ok": true
+    }
+   ]
+  },
+  "X14": {
+   "question": {
+    "id": "X14",
+    "agent": "operations",
+    "role": "SCHOOL_ADMIN",
+    "lang": "en",
+    "q": "How many chairs are left in inventory?",
+    "expect": {
+     "tool": "get_inventory_stock"
+    }
+   },
+   "ms": 5104,
+   "pass": true,
+   "reason": "",
+   "reply": "There are **150** chairs (Student Chair) left in the inventory.",
+   "agents": [
+    "operations"
+   ],
+   "calls": [
+    {
+     "name": "get_inventory_stock",
+     "args": {
+      "search": "chair"
+     },
+     "ok": true
+    }
+   ]
+  },
+  "X15": {
+   "question": {
+    "id": "X15",
+    "agent": "exams",
+    "role": "SCHOOL_ADMIN",
+    "lang": "ur_roman",
+    "q": "class 6 ke mid term mein kitne bache fail hue?",
+    "expect": {
+     "tool": "get_exam_results"
+    }
+   },
+   "ms": 11948,
+   "pass": true,
+   "reason": "",
+   "reply": "Class 6 ke Mid Term exam mein **0 bache fail hue**. All 50 students passed.",
+   "agents": [
+    "exams"
+   ],
+   "calls": [
+    {
+     "name": "list_exams",
+     "args": {
+      "class_name": "Class 6",
+      "exam_name": "mid term"
+     },
+     "ok": true
+    },
+    {
+     "name": "get_exam_results",
+     "args": {
+      "exam_id": 106
+     },
+     "ok": true
+    }
+   ]
+  },
+  "X16": {
+   "question": {
+    "id": "X16",
+    "agent": "exams",
+    "role": "TEACHER",
+    "lang": "en",
+    "q": "Which marks are still left to enter for class 5 final term?",
+    "expect": {
+     "tool": "get_marks_entry_status"
+    }
+   },
+   "ms": 8702,
+   "pass": false,
+   "reason": "expected tool get_marks_entry_status, got ['list_exams']",
+   "reply": "There are no final‑term exams listed for Class 5, so there are no marks left to enter. If you think an exam should be there, please check the Exams screen or add the exam first.",
+   "agents": [
+    "exams"
+   ],
+   "calls": [
+    {
+     "name": "list_exams",
+     "args": {
+      "class_name": "Class 5"
+     },
+     "ok": true
+    }
+   ]
+  },
+  "X17": {
+   "question": {
+    "id": "X17",
+    "agent": "exams",
+    "role": "SCHOOL_ADMIN",
+    "lang": "ur_roman",
+    "q": "class 6 ka final term exam 1 se 10 march tak banao",
+    "expect": {
+     "write": "create_exam",
+     "clarify": true
+    }
+   },
+   "ms": 6485,
+   "pass": true,
+   "reason": "",
+   "reply": "I’ve prepared a **Final Term exam** for **Class 6** covering **1 March 2026 – 10 March 2026**. Please review the preview card and click **Approve**, **Edit**, or **Reject** as needed.",
+   "agents": [
+    "exams"
+   ],
+   "calls": [
+    {
+     "name": "create_exam",
+     "args": {
+      "class_name": "Class 6",
+      "exam_type": "Final Term",
+      "start_date": "2026-03-01",
+      "end_date": "2026-03-10"
+     },
+     "ok": true
+    }
+   ]
+  },
+  "X18": {
+   "question": {
+    "id": "X18",
+    "agent": "hr",
+    "role": "SCHOOL_ADMIN",
+    "lang": "en",
+    "q": "Who is on leave today?",
+    "expect": {
+     "tool": "get_leave_today"
+    }
+   },
+   "ms": 6581,
+   "pass": true,
+   "reason": "",
+   "reply": "No staff members are on approved leave today (2026‑11‑08).",
+   "agents": [
+    "hr"
+   ],
+   "calls": [
+    {
+     "name": "get_leave_today",
+     "args": {
+      "date": "2026-11-08"
+     },
+     "ok": true
+    }
+   ]
+  },
+  "X19": {
+   "question": {
+    "id": "X19",
+    "agent": "hr",
+    "role": "SCHOOL_ADMIN",
+    "lang": "ur_roman",
+    "q": "aaj kaun kaun chutti par hai?",
+    "expect": {
+     "tool": "get_leave_today"
+    }
+   },
+   "ms": 6677,
+   "pass": true,
+   "reason": "",
+   "reply": "Aaj koi بھی اسٹاف ممبر چھٹی پر نہیں ہے۔",
+   "agents": [
+    "hr"
+   ],
+   "calls": [
+    {
+     "name": "get_leave_today",
+     "args": {},
+     "ok": true
+    }
+   ]
+  },
+  "X20": {
+   "question": {
+    "id": "X20",
+    "agent": "hr",
+    "role": "TEACHER",
+    "lang": "ur_roman",
+    "q": "mujhe kal ki chutti chahiye, bimari ki wajah se",
+    "expect": {
+     "write": "apply_leave"
+    }
+   },
+   "ms": 6569,
+   "pass": true,
+   "reason": "",
+   "reply": "I’ve prepared a leave request for you: **sick leave on 9 Nov 2026 (one day)**. Please review the preview card and click **Approve**, **Edit**, or **Reject**.",
+   "agents": [
+    "hr"
+   ],
+   "calls": [
+    {
+     "name": "apply_leave",
+     "args": {
+      "start_date": "2026-11-09",
+      "reason": "bimari ki wajah se",
+      "leave_type": "sick"
+     },
+     "ok": true
+    }
+   ]
+  },
+  "X21": {
+   "question": {
+    "id": "X21",
+    "agent": "hr",
+    "role": "SCHOOL_ADMIN",
+    "lang": "en",
+    "q": "Mark staff attendance for today: Sara Ahmed and Usman Raza are absent, rest present",
+    "expect": {
+     "write": "mark_staff_attendance"
+    }
+   },
+   "ms": 6620,
+   "pass": true,
+   "reason": "",
+   "reply": "I’ve prepared a staff‑attendance update for **2026‑11‑08**:\n\n- Sara Ahmed – **ABSENT**  \n- Usman Raza – **ABSENT**  \n- All other staff – **PRESENT**\n\nPlease review the preview card and click **Approve** (or Edit/Reject) to finalize.",
+   "agents": [
+    "hr"
+   ],
+   "calls": [
+    {
+     "name": "mark_staff_attendance",
+     "args": {
+      "entries": [
+       {
+        "staff_name": "Sara Ahmed",
+        "status": "ABSENT"
+       },
+       {
+        "staff_name": "Usman Raza",
+        "status": "ABSENT"
+       }
+      ],
+      "rest": "PRESENT"
+     },
+     "ok": true
+    }
+   ]
+  },
+  "X22": {
+   "question": {
+    "id": "X22",
+    "agent": "hr",
+    "role": "TEACHER",
+    "lang": "en",
+    "q": "How many casual leaves do I have left?",
+    "expect": {
+     "tool": "get_leave_balance"
+    }
+   },
+   "ms": 6034,
+   "pass": true,
+   "reason": "",
+   "reply": "You have **10 casual leaves** remaining under the “BASE Casual Leave” policy (and 12 remaining under the additional “Casual Leave” policy).",
+   "agents": [
+    "hr"
+   ],
+   "calls": [
+    {
+     "name": "get_leave_balance",
+     "args": {},
+     "ok": true
+    }
+   ]
+  },
+  "X23": {
+   "question": {
+    "id": "X23",
+    "agent": "hr",
+    "role": "PRINCIPAL",
+    "lang": "en",
+    "q": "Change Sara Ahmed's phone number to 0300-1112223",
+    "expect": {
+     "write": "update_staff_contact"
+    }
+   },
+   "ms": 4582,
+   "pass": false,
+   "reason": "no proposal for update_staff_contact",
+   "reply": "No student named **Sara Ahmed** exists in the system.  \n\nHere are some close matches that were found:\n\n| Student ID | Name | Class | Roll No |\n|------------|------|-------|---------|\n| 916 | Amna Ahmed | Class 6 | 20 |\n| 801 | Talha Ahmed | Class 4 | 5 |\n| 870 | Hania Ahmed | Class 5 | 24 |\n| 790 | Sara Shah | Class 4 | 19 |\n| 886 | Ali Ahmed | Class 6 | 15 |\n\nPlease let me know which student you’d like to update, or provide a different name.",
+   "agents": [],
+   "calls": [
+    {
+     "name": "find_student",
+     "args": {
+      "query": "Sara Ahmed"
+     },
+     "ok": true
+    }
+   ]
+  },
+  "X24": {
+   "question": {
+    "id": "X24",
+    "agent": "hr",
+    "role": "SCHOOL_ADMIN",
+    "lang": "ur_roman",
+    "q": "is mahine ki tankhwah kitni banti hai?",
+    "expect": {
+     "tool": "get_payroll_summary"
+    }
+   },
+   "ms": 5526,
+   "pass": true,
+   "reason": "",
+   "reply": "**November 2026 ke liye payroll summary (salary details):**\n\n| Period | Payslips | Total Basic | Total Allowances | Total Deductions | Total Net |\n|---|---|---|---|---|---|\n| November 2026 | 0 | 0.0 | 0.0 | 0.0 | 0.0 |\n\nIs there koi specific staff member ya month ke liye detail chahiye?",
+   "agents": [
+    "hr"
+   ],
+   "calls": [
+    {
+     "name": "get_payroll_summary",
+     "args": {},
+     "ok": true
+    }
+   ]
+  },
+  "X25": {
+   "question": {
+    "id": "X25",
+    "agent": "hr",
+    "role": "PRINCIPAL",
+    "lang": "en",
+    "q": "Mark all approved payslips of October as paid",
+    "expect": {
+     "write": "mark_payslips_paid"
+    }
+   },
+   "ms": 6850,
+   "pass": true,
+   "reason": "",
+   "reply": "I’ve prepared a preview to **mark all approved payslips for October 2026 as paid**. The card shows that 12 payslips (total net Rs 716,006) will be marked paid.\n\nPlease review the preview card and **Approve**, **Edit**, or **Reject** it.",
+   "agents": [
+    "hr"
+   ],
+   "calls": [
+    {
+     "name": "mark_payslips_paid",
+     "args": {
+      "month": 10,
+      "year": 2026
+     },
+     "ok": true
+    }
+   ]
+  },
+  "X26": {
+   "question": {
+    "id": "X26",
+    "agent": "hr",
+    "role": "TEACHER",
+    "lang": "en",
+    "q": "Show my payslip for last month",
+    "expect": {
+     "tool": "get_my_payslip"
+    }
+   },
+   "ms": 5308,
+   "pass": true,
+   "reason": "",
+   "reply": "There is no payslip generated for you for October 2026. If you need a payslip for a different month, let me know which month you’d like to view.",
+   "agents": [
+    "hr"
+   ],
+   "calls": [
+    {
+     "name": "get_my_payslip",
+     "args": {
+      "month": 10
+     },
+     "ok": true
+    }
+   ]
+  },
+  "X27": {
+   "question": {
+    "id": "X27",
+    "agent": "hr",
+    "role": "SCHOOL_ADMIN",
+    "lang": "en",
+    "q": "Increase Sara's basic salary to 90000",
+    "expect": {
+     "blocked": true
+    }
+   },
+   "ms": 3024,
+   "pass": true,
+   "reason": "",
+   "reply": "I’m sorry, but changing a staff member’s salary isn’t possible from this chat. Please use the Salary management screen in the admin portal to adjust Sara’s basic salary.",
+   "agents": [],
+   "calls": []
+  },
+  "X28": {
+   "question": {
+    "id": "X28",
+    "agent": "students",
+    "role": "SCHOOL_ADMIN",
+    "lang": "ur_roman",
+    "q": "naya enquiry likho: Zain, walid Bilal Ahmed, mobile 0300-5551234, class 4 ke liye",
+    "expect": {
+     "write": "add_enquiry"
+    }
+   },
+   "ms": 6228,
+   "pass": true,
+   "reason": "",
+   "reply": "I’ve prepared a new admission enquiry for **Zain** (father Bilal Ahmed) with mobile 0300‑5551234, applying for **Class 4**. Please review the preview card and click **Approve**, **Edit**, or **Reject** as needed.",
+   "agents": [
+    "students"
+   ],
+   "calls": [
+    {
+     "name": "add_enquiry",
+     "args": {
+      "child_name": "Zain",
+      "father_name": "Bilal Ahmed",
+      "mobile": "0300-5551234",
+      "class_name": "Class 4"
+     },
+     "ok": true
+    }
+   ]
+  },
+  "X29": {
+   "question": {
+    "id": "X29",
+    "agent": "students",
+    "role": "SCHOOL_ADMIN",
+    "lang": "en",
+    "q": "Move Ali Farooq from class 5A to 5B because of a timetable clash",
+    "expect": {
+     "write": "reclassify_student"
+    }
+   },
+   "ms": 4620,
+   "pass": false,
+   "reason": "no proposal for reclassify_student",
+   "reply": "There are several students named **Farooq**. Could you confirm which one you want to move?\n\n- **Ali Farooq** – Student ID 838 – currently in **Class 5** (section not shown)  \n- Other matches: Hania, Sara, Sana, Ibrahim, Ahmad (two), Fahad Farooq.\n\nPlease let me know the exact student (e.g., “Ali Farooq, Class 5 A”) you’d like to re‑classify.",
+   "agents": [],
+   "calls": [
+    {
+     "name": "find_student",
+     "args": {
+      "query": "Ali Farooq"
+     },
+     "ok": true
+    }
+   ]
+  },
+  "X30": {
+   "question": {
+    "id": "X30",
+    "agent": "students",
+    "role": "PRINCIPAL",
+    "lang": "en",
+    "q": "Set Sara Farooq's monthly fee to 3000",
+    "expect": {
+     "write": "set_student_monthly_fee"
+    }
+   },
+   "ms": 4986,
+   "pass": false,
+   "reason": "no proposal for set_student_monthly_fee",
+   "reply": "There is only one student named **Sara Farooq** (Student ID 831, Class 5, Roll No 10). Shall I prepare to set her monthly fee to 3000 PKR?",
+   "agents": [],
+   "calls": [
+    {
+     "name": "find_student",
+     "args": {
+      "query": "Sara Farooq"
+     },
+     "ok": true
+    }
+   ]
+  },
+  "X31": {
+   "question": {
+    "id": "X31",
+    "agent": "students",
+    "role": "SCHOOL_ADMIN",
+    "lang": "en",
+    "q": "Correct the spelling of Ahmad Farooq to Ahmed Farooq",
+    "expect": {
+     "write": "update_student"
+    }
+   },
+   "ms": 5388,
+   "pass": false,
+   "reason": "no proposal for update_student",
+   "reply": "There are several students named **Ahmad Farooq**. Please tell me which one you want to correct (provide the class or roll number), e.g.:\n\n- Class 4, roll 20  \n- Class 5, roll 1  \n- Class 6, roll 8  \n\nLet me know the specific student so I can prepare the name correction.",
+   "agents": [],
+   "calls": [
+    {
+     "name": "find_student",
+     "args": {
+      "query": "Ahmad Farooq"
+     },
+     "ok": true
+    }
+   ]
+  },
+  "X32": {
+   "question": {
+    "id": "X32",
+    "agent": "students",
+    "role": "TEACHER",
+    "lang": "en",
+    "q": "What is the guardian phone of Ali Raza?",
+    "expect": {
+     "tool": "get_student_profile"
+    }
+   },
+   "ms": 4391,
+   "pass": true,
+   "reason": "",
+   "reply": "Several students match the name **Ali Raza**. Could you tell me which class they are in, or provide the student ID, so I can give you the guardian’s phone number?",
+   "agents": [
+    "students"
+   ],
+   "calls": [
+    {
+     "name": "get_student_profile",
+     "args": {
+      "student_name": "Ali Raza"
+     },
+     "ok": false
+    }
+   ]
+  },
+  "X33": {
+   "question": {
+    "id": "X33",
+    "agent": "operations",
+    "role": "SCHOOL_ADMIN",
+    "lang": "ur_roman",
+    "q": "Ali Farooq ko Gulistan kitab issue kar do",
+    "expect": {
+     "write": "issue_book"
+    }
+   },
+   "ms": 5361,
+   "pass": false,
+   "reason": "no proposal for issue_book",
+   "reply": "There are several students named **Ali Farooq**. Please tell me which one you mean by providing the class (e.g., “Class 5”) or roll number.",
+   "agents": [],
+   "calls": [
+    {
+     "name": "find_student",
+     "args": {
+      "query": "Ali Farooq"
+     },
+     "ok": true
+    }
+   ]
+  },
+  "X34": {
+   "question": {
+    "id": "X34",
+    "agent": "operations",
+    "role": "SCHOOL_ADMIN",
+    "lang": "en",
+    "q": "Approve all pending hostel gate passes",
+    "expect": {
+     "write": "decide_gate_pass"
+    }
+   },
+   "ms": 7224,
+   "pass": true,
+   "reason": "",
+   "reply": "I’ve prepared a preview card to **approve all pending hostel gate passes** (4 passes in total). Please review the card and click **Approve**, **Edit**, or **Reject** as needed.",
+   "agents": [
+    "operations"
+   ],
+   "calls": [
+    {
+     "name": "decide_gate_pass",
+     "args": {
+      "decision": "APPROVE",
+      "all_pending": true
+     },
+     "ok": true
+    }
+   ]
+  },
+  "X35": {
+   "question": {
+    "id": "X35",
+    "agent": "operations",
+    "role": "SCHOOL_ADMIN",
+    "lang": "ur_roman",
+    "q": "20 Student Chair aur 5 Chalk Box aaye hain, stock mein add kar do",
+    "expect": {
+     "write": "record_stock_in"
+    }
+   },
+   "ms": 5733,
+   "pass": true,
+   "reason": "",
+   "reply": "I’ve prepared a stock‑in preview for **20 Student Chairs** and **5 Chalk Boxes** (dated 2026‑11‑08). Please review the card and click **Approve**, **Edit**, or **Reject**.",
+   "agents": [
+    "operations"
+   ],
+   "calls": [
+    {
+     "name": "record_stock_in",
+     "args": {
+      "lines": [
+       {
+        "item_name": "Student Chair",
+        "quantity": 20
+       },
+       {
+        "item_name": "Chalk Box",
+        "quantity": 5
+       }
+      ],
+      "vendor_name": null
+     },
+     "ok": true
+    }
+   ]
+  },
+  "X36": {
+   "question": {
+    "id": "X36",
+    "agent": "operations",
+    "role": "SCHOOL_ADMIN",
+    "lang": "en",
+    "q": "Put Sara Farooq on route 2 at the Gulberg Stop 1",
+    "expect": {
+     "write": "assign_student_transport",
+     "clarify": true
+    }
+   },
+   "ms": 5184,
+   "pass": false,
+   "reason": "no proposal for assign_student_transport",
+   "reply": "Several students match the name **Sara Farooq**. Please select the correct one:\n\n| Student ID | Name          | Class   | Roll No. |\n|------------|---------------|---------|----------|\n| 831        | Sara Farooq   | Class 5 | 10       |\n\nIf this is the right student, let me know so I can assign her to **Route 2, Gulberg Stop 1**. If you meant a different Sara Farooq, please provide additional details (e.g., class or roll number).",
+   "agents": [],
+   "calls": [
+    {
+     "name": "find_student",
+     "args": {
+      "query": "Sara Farooq"
+     },
+     "ok": true
+    }
+   ]
+  },
+  "X37": {
+   "question": {
+    "id": "X37",
+    "agent": "operations",
+    "role": "SCHOOL_ADMIN",
+    "lang": "en",
+    "q": "How many hostel rooms have free beds?",
+    "expect": {
+     "tool": "list_rooms"
+    }
+   },
+   "ms": 4489,
+   "pass": true,
+   "reason": "",
+   "reply": "There are **3** hostel rooms that currently have free beds.",
+   "agents": [
+    "operations"
+   ],
+   "calls": [
+    {
+     "name": "list_rooms",
+     "args": {
+      "only_with_free_beds": true
+     },
+     "ok": true
+    }
+   ]
+  },
+  "X38": {
+   "question": {
+    "id": "X38",
+    "agent": "communication",
+    "role": "SCHOOL_ADMIN",
+    "lang": "en",
+    "q": "Send all Class 5 parents a message that school is closed on Monday",
+    "expect": {
+     "write": "send_message_to_parents"
+    }
+   },
+   "ms": 4156,
+   "pass": false,
+   "reason": "no proposal for send_message_to_parents",
+   "reply": "Sure! I can prepare a message for all parents of Class 5.  \n\nPlease let me know:\n\n1. **Title** you’d like for the message (e.g., “School Closed on Monday”).  \n2. **Body** of the message (the exact text you want to send).  \n\nOnce I have those details, I’ll create the draft for you to review.",
+   "agents": [],
+   "calls": []
+  },
+  "X39": {
+   "question": {
+    "id": "X39",
+    "agent": "communication",
+    "role": "SCHOOL_ADMIN",
+    "lang": "ur_roman",
+    "q": "Ali Farooq ke walid ko fee reminder bhej do",
+    "expect": {
+     "write": "send_message_to_parents"
+    }
+   },
+   "ms": 13053,
+   "pass": false,
+   "reason": "no proposal for send_message_to_parents",
+   "reply": "There are several students named **Ali Farooq**. Please tell me which one you mean by specifying the class (e.g., “Class 5”) or the roll number.",
+   "agents": [],
+   "calls": [
+    {
+     "name": "find_student",
+     "args": {
+      "query": "Ali Farooq"
+     },
+     "ok": true
+    }
+   ]
+  },
+  "X40": {
+   "question": {
+    "id": "X40",
+    "agent": "family",
+    "role": "PARENT",
+    "lang": "ur_roman",
+    "q": "mere bachay ki hazri kaisi hai?",
+    "expect": {
+     "tool": "get_child_attendance"
+    }
+   },
+   "ms": 7139,
+   "pass": true,
+   "reason": "",
+   "reply": "Rayyan Sheikh (Class 4‑B) ki hazri bohat achi hai – ab tak 107 dinon mein sabhi din **PRESENT** dikh rahe hain. Agar aapko koi specific mahina ya detail chahiye ho to batayein.",
+   "agents": [
+    "family"
+   ],
+   "calls": [
+    {
+     "name": "get_my_children",
+     "args": {},
+     "ok": true
+    },
+    {
+     "name": "get_child_attendance",
+     "args": {
+      "child_id": 803
+     },
+     "ok": true
+    }
+   ]
+  },
+  "C16": {
+   "question": {
+    "id": "C16",
+    "agent": "communication",
+    "role": "PARENT",
+    "lang": "ur_roman",
+    "q": "mere bache ki aaj ki diary kya hai?",
+    "expect": {
+     "tool": "get_child_homework"
+    }
+   },
+   "ms": 8288,
+   "pass": true,
+   "reason": "",
+   "reply": "Rayyan Sheikh ke liye aaj koi homework ya diary entry record nahi hai. Agar aapko koi specific assignment ya note chahiye ho, to school portal par check kar sakte hain.",
+   "agents": [
+    "family"
+   ],
+   "calls": [
+    {
+     "name": "get_my_children",
+     "args": {},
+     "ok": true
+    },
+    {
+     "name": "get_child_homework",
+     "args": {
+      "child_id": 803
+     },
+     "ok": true
+    }
+   ]
+  },
+  "C17": {
+   "question": {
+    "id": "C17",
+    "agent": "communication",
+    "role": "PARENT",
+    "lang": "en",
+    "q": "Send a leave request for my child tomorrow",
+    "expect": {
+     "denied": true
+    }
+   },
+   "ms": 2453,
+   "pass": true,
+   "reason": "",
+   "reply": "I’m sorry, but I can’t submit a leave request from here.  \nPlease go to the **Parent Portal → Leave Requests** screen, select your child, choose tomorrow’s date, and submit the request. Let me know if you need help finding that screen!",
+   "agents": [],
+   "calls": []
+  },
+  "S01": {
+   "question": {
+    "id": "S01",
+    "agent": "study",
+    "role": "STUDENT",
+    "lang": "en",
+    "q": "What were my marks in the last exam?",
+    "expect": {
+     "tool": "get_my_marks"
+    }
+   },
+   "ms": 4448,
+   "pass": true,
+   "reason": "",
+   "reply": "Here are your marks from the most recent exam (the Cycle Test for **SEED_TEST_Class_1A**):\n\n| Subject      | Marks Obtained | Total Marks | Percentage |\n|--------------|----------------|-------------|------------|\n| Mathematics  | 56.0           | 75          | 74.7 % |\n| English      | 61.0           | 75          | 81.3 % |\n\nYou passed both subjects. Great job! If you’d like to see how you did in other exams or need help planning revision, just let me know.",
+   "agents": [
+    "study"
+   ],
+   "calls": [
+    {
+     "name": "get_my_marks",
+     "args": {},
+     "ok": true
+    }
+   ]
+  },
+  "S02": {
+   "question": {
+    "id": "S02",
+    "agent": "study",
+    "role": "STUDENT",
+    "lang": "ur_roman",
+    "q": "mere math ke marks kitne aaye?",
+    "expect": {
+     "tool": "get_my_marks",
+     "args": {
+      "subject_name": "Math"
+     }
+    }
+   },
+   "ms": 4782,
+   "pass": true,
+   "reason": "",
+   "reply": "Mere math ke marks:\n\n| Exam | Subject | Marks Obtained | Total Marks | Percentage |\n|------|---------|----------------|-------------|------------|\n| Cycle Test — SEED_TEST_Class_1A | Mathematics | 56.0 | 75.0 | 74.67% |\n\nAap ne pass kiya hai! 🎉 Agar aapko koi aur detail chahiye ya revision plan banana ho, batayein.",
+   "agents": [
+    "study"
+   ],
+   "calls": [
+    {
+     "name": "get_my_marks",
+     "args": {
+      "subject_name": "Math"
+     },
+     "ok": true
+    }
+   ]
+  },
+  "S03": {
+   "question": {
+    "id": "S03",
+    "agent": "study",
+    "role": "STUDENT",
+    "lang": "en",
+    "q": "What homework is due?",
+    "expect": {
+     "tool": "get_my_assignments"
+    }
+   },
+   "ms": 7465,
+   "pass": true,
+   "reason": "",
+   "reply": "You currently have no pending homework assignments. If you need help with upcoming topics or want to start studying, just let me know!",
+   "agents": [
+    "study"
+   ],
+   "calls": [
+    {
+     "name": "get_my_assignments",
+     "args": {
+      "status": "PENDING"
+     },
+     "ok": true
+    }
+   ]
+  },
+  "S04": {
+   "question": {
+    "id": "S04",
+    "agent": "study",
+    "role": "STUDENT",
+    "lang": "ur_roman",
+    "q": "aaj ka kaam kya hai?",
+    "expect": {
+     "tool": "get_my_assignments"
+    }
+   },
+   "ms": 6254,
+   "pass": true,
+   "reason": "",
+   "reply": "Aaj koi pending assignment nahi hai. 🎉\n\nAgar aap koi naya kaam ya project shuru karna chahte hain, to teacher se pooch sakte hain ya apni padhai ke liye revision plan bana lete hain. Happy studying!",
+   "agents": [
+    "study"
+   ],
+   "calls": [
+    {
+     "name": "get_my_assignments",
+     "args": {
+      "status": "PENDING"
+     },
+     "ok": true
+    }
+   ]
+  },
+  "S05": {
+   "question": {
+    "id": "S05",
+    "agent": "study",
+    "role": "STUDENT",
+    "lang": "en",
+    "q": "What does my science book say about photosynthesis?",
+    "expect": {
+     "tool": "get_topic_details"
+    }
+   },
+   "ms": 6893,
+   "pass": true,
+   "reason": "",
+   "reply": "I’m sorry, but I don’t have any details from the science textbook in the system right now, so I can’t show you the specific information on photosynthesis. You can check the “Curriculum / Textbooks” section in the school portal to read the chapter on photosynthesis. If you have any other question about the topic—like how the process works or need help with a related assignment—let me know and I’ll be happy to help!",
+   "agents": [
+    "study"
+   ],
+   "calls": [
+    {
+     "name": "get_topic_details",
+     "args": {
+      "subject_name": "Science"
+     },
+     "ok": true
+    }
+   ]
+  },
+  "S06": {
+   "question": {
+    "id": "S06",
+    "agent": "study",
+    "role": "STUDENT",
+    "lang": "ur_roman",
+    "q": "meri attendance kitni hai?",
+    "expect": {
+     "tool": "get_my_attendance"
+    }
+   },
+   "ms": 5802,
+   "pass": true,
+   "reason": "",
+   "reply": "Aapki attendance record abhi tak system mein maujood nahi hai, isliye hum aapko koi attendance rate ya present/absent count nahi de sakte. Agar aapko lagta hai ki data galat hai, toh school ke attendance screen se check kar lein.",
+   "agents": [
+    "study"
+   ],
+   "calls": [
+    {
+     "name": "get_my_attendance",
+     "args": {
+      "days": 30
+     },
+     "ok": true
+    }
+   ]
+  },
+  "S07": {
+   "question": {
+    "id": "S07",
+    "agent": "study",
+    "role": "STUDENT",
+    "lang": "en",
+    "q": "When are my exams?",
+    "expect": {
+     "tool": "get_exam_schedule"
+    }
+   },
+   "ms": 5616,
+   "pass": true,
+   "reason": "",
+   "reply": "It looks like there are currently no upcoming exams scheduled for you. If you think something might be missing or you’ve heard about an exam coming up, you can check the “Exam Schedule” screen in the portal for the latest information. Let me know if there’s anything else you’d like to explore—like your marks, assignments, or a revision plan!",
+   "agents": [
+    "study"
+   ],
+   "calls": [
+    {
+     "name": "get_exam_schedule",
+     "args": {},
+     "ok": true
+    }
+   ]
+  },
+  "S08": {
+   "question": {
+    "id": "S08",
+    "agent": "study",
+    "role": "STUDENT",
+    "lang": "en",
+    "q": "Give me study material for science",
+    "expect": {
+     "tool": "get_lesson_materials"
+    }
+   },
+   "ms": 4653,
+   "pass": true,
+   "reason": "",
+   "reply": "I’m sorry, but there are no lesson materials available for Science at the moment. If you need help with a specific topic or want suggestions on how to study Science on your own, just let me know!",
+   "agents": [
+    "study"
+   ],
+   "calls": [
+    {
+     "name": "get_lesson_materials",
+     "args": {
+      "subject_name": "Science"
+     },
+     "ok": true
+    }
+   ]
+  },
+  "S09": {
+   "question": {
+    "id": "S09",
+    "agent": "study",
+    "role": "STUDENT",
+    "lang": "en",
+    "q": "What marks do I need to reach an A in English?",
+    "expect": {
+     "tool": "get_grade_targets"
+    }
+   },
+   "ms": 8617,
+   "pass": true,
+   "reason": "",
+   "reply": "To get an **A** in English you need to score at least **90 %** of the total marks.\n\nIf the exam is out of 100 marks, that means you need **90 marks or more**. Good luck, and keep studying regularly—you’ll get there!",
+   "agents": [
+    "study"
+   ],
+   "calls": [
+    {
+     "name": "get_grade_targets",
+     "args": {
+      "subject_name": "English"
+     },
+     "ok": true
+    }
+   ]
+  },
+  "S10": {
+   "question": {
+    "id": "S10",
+    "agent": "study",
+    "role": "STUDENT",
+    "lang": "en",
+    "q": "Did my teacher leave feedback?",
+    "expect": {
+     "tool": "get_teacher_feedback"
+    }
+   },
+   "ms": 8839,
+   "pass": true,
+   "reason": "",
+   "reply": "Yes! Your teacher has left feedback on several of your assignments. Here’s a quick summary:\n\n| Assignment | Subject | Marks | Total | Feedback |\n|---|---|---|---|---|\n| Mathematics Homework — SEED_TEST_Class_1A | Mathematics | 45 | 50 | Good work! |\n| Mathematics Project — SEED_TEST_Class_1A | Mathematics | 95 | 100 | Good work! |\n| English Homework — SEED_TEST_Class_1A | English | 45 | 50 | Good work! |\n| English Project — SEED_TEST_Class_1A | English | 95 | 100 | Good work! |\n| P12LMS_Submittable HW | P12LMS_Mathematics | 85 | 100 | Good work! |\n\nKeep up the good work, and let me know if you’d like tips on any specific assignment!",
+   "agents": [
+    "study"
+   ],
+   "calls": [
+    {
+     "name": "get_teacher_feedback",
+     "args": {},
+     "ok": true
+    }
+   ]
+  },
+  "S11": {
+   "question": {
+    "id": "S11",
+    "agent": "study",
+    "role": "STUDENT",
+    "lang": "ur_roman",
+    "q": "mujhe math ka quiz do",
+    "expect": {
+     "tool": "get_topic_details",
+     "clarify": "none"
+    }
+   },
+   "ms": 7689,
+   "pass": true,
+   "reason": "",
+   "reply": "Here’s a short **Math quiz** with 5 easy practice questions, based on the topics from your class textbook:\n\n| # | Question |\n|---|----------|\n| 1 | 2 + 3 = ? |\n| 2 | 5 – 2 = ? |\n| 3 | 4 × 2 = ? |\n| 4 | 9 ÷ 3 = ? |\n| 5 | If you have 3 apples and get 2 more, how many apples do you have now? |\n\nTry them out and let me know your answers—I'll check them and give you feedback!",
+   "agents": [
+    "study"
+   ],
+   "calls": [
+    {
+     "name": "get_quiz_material",
+     "args": {
+      "subject": "Math"
+     },
+     "ok": true
+    }
+   ]
+  },
+  "S12": {
+   "question": {
+    "id": "S12",
+    "agent": "study",
+    "role": "STUDENT",
+    "lang": "en",
+    "q": "Show me another student's marks",
+    "expect": {
+     "denied": true
+    }
+   },
+   "ms": 3079,
+   "pass": true,
+   "reason": "",
+   "reply": "I’m sorry, but I can only view your own marks. If you’d like to see your own exam results, just let me know!",
+   "agents": [],
+   "calls": []
+  },
+  "S13": {
+   "question": {
+    "id": "S13",
+    "agent": "study",
+    "role": "STUDENT",
+    "lang": "en",
+    "q": "Change my attendance to present",
+    "expect": {
+     "denied": true
+    }
+   },
+   "ms": 2953,
+   "pass": true,
+   "reason": "",
+   "reply": "I’m sorry, but attendance records can’t be changed from the chat. Please use the attendance screen in the student portal to mark yourself present. If you need help finding that screen, let me know!",
+   "agents": [],
+   "calls": []
+  },
+  "X01": {
+   "question": {
+    "id": "X01",
+    "agent": "attendance",
+    "role": "SCHOOL_ADMIN",
+    "lang": "ur_roman",
+    "q": "class 5A ki aaj ki hazri lagao, Ahmad Farooq aur Sara Farooq ghair hazir hain",
+    "expect": {
+     "write": "mark_attendance"
+    }
+   },
+   "ms": 9867,
+   "pass": true,
+   "reason": "",
+   "reply": "I’ve prepared the attendance for **Class 5 A** on 2026‑11‑08:\n\n- **Absent:** Ahmad Farooq, Sara Farooq  \n- **Present:** the remaining 23 students  \n\nPlease review the preview card and **Approve**, **Edit**, or **Reject** the changes.",
+   "agents": [
+    "attendance"
+   ],
+   "calls": [
+    {
+     "name": "mark_attendance",
+     "args": {
+      "class_name": "5",
+      "section": "A",
+      "absent_names": [
+       "Ahmad Farooq",
+       "Sara Farooq"
+      ]
+     },
+     "ok": true
+    }
+   ]
+  },
+  "X02": {
+   "question": {
+    "id": "X02",
+    "agent": "attendance",
+    "role": "SCHOOL_ADMIN",
+    "lang": "en",
+    "q": "Which classes haven't marked attendance today?",
+    "expect": {
+     "tool": "get_unmarked_attendance"
+    }
+   },
+   "ms": 5427,
+   "pass": true,
+   "reason": "",
+   "reply": "Today (2026‑11‑08) is a school holiday, so no classes have attendance to mark.",
+   "agents": [
+    "attendance"
+   ],
+   "calls": [
+    {
+     "name": "get_unmarked_attendance",
+     "args": {
+      "date": "2026-11-08"
+     },
+     "ok": true
+    }
+   ]
+  },
+  "X03": {
+   "question": {
+    "id": "X03",
+    "agent": "attendance",
+    "role": "SCHOOL_ADMIN",
+    "lang": "ur_roman",
+    "q": "aaj kitne bache ghair hazir hain?",
+    "expect": {
+     "tool": "get_attendance_summary_school"
+    }
+   },
+   "ms": 6852,
+   "pass": false,
+   "reason": "expected tool get_attendance_summary_school, got ['get_attendance_summary']",
+   "reply": "Aaj school mein **951** bachay ghair hazir hain.",
+   "agents": [
+    "communication"
+   ],
+   "calls": [
+    {
+     "name": "get_attendance_summary",
+     "args": {
+      "date": "2026-11-08"
+     },
+     "ok": true
+    }
+   ]
+  },
+  "X41": {
+   "question": {
+    "id": "X41",
+    "agent": "family",
+    "role": "PARENT",
+    "lang": "en",
+    "q": "How much fee do I still owe?",
+    "expect": {
+     "tool": "get_child_fees"
+    }
+   },
+   "ms": 28890,
+   "pass": true,
+   "reason": "",
+   "reply": "Your outstanding fee for Rayyan Sheikh is **PKR 3,500** for the current month (November 2026).",
+   "agents": [
+    "family"
+   ],
+   "calls": [
+    {
+     "name": "get_my_children",
+     "args": {},
+     "ok": true
+    },
+    {
+     "name": "get_child_fees",
+     "args": {
+      "child_id": 803
+     },
+     "ok": true
+    }
+   ]
+  },
+  "X42": {
+   "question": {
+    "id": "X42",
+    "agent": "study",
+    "role": "STUDENT",
+    "lang": "en",
+    "q": "Which subjects am I weak in?",
+    "expect": {
+     "tool": "get_weak_subjects"
+    }
+   },
+   "ms": 4484,
+   "pass": true,
+   "reason": "",
+   "reply": "Your current data shows that **no subject is considered weak**.  \nA subject is flagged as weak only if its average is below 50 %, it dropped by 5 + points since the previous exam, or you failed a paper. Your averages are:\n\n| Subject      | Average |\n|--------------|---------|\n| Mathematics  | 74.7 % |\n| English      | 81.3 % |\n\nBoth are well above the weak‑subject threshold. If you’d like tips to improve further in any subject, just let me know!",
+   "agents": [
+    "study"
+   ],
+   "calls": [
+    {
+     "name": "get_weak_subjects",
+     "args": {},
+     "ok": true
+    }
+   ]
+  },
+  "X43": {
+   "question": {
+    "id": "X43",
+    "agent": "study",
+    "role": "STUDENT",
+    "lang": "ur_roman",
+    "q": "exams ki tayyari ka plan bana do",
+    "expect": {
+     "tool": "make_revision_plan"
+    }
+   },
+   "ms": 5627,
+   "pass": true,
+   "reason": "",
+   "reply": "Mujhe abhi tak koi exam dates mili nahi hain, isliye specific tareekh‑wala revision plan banana mushkil hai.  \n\nAap apne teacher se exam date sheet le lein, phir main aapke weak subjects ke hisaab se ek detailed plan bana sakta hoon.  \n\nJab dates mil jayein, bas yahi bata dein!",
+   "agents": [
+    "study"
+   ],
+   "calls": [
+    {
+     "name": "make_revision_plan",
+     "args": {
+      "minutes_per_day": 90,
+      "days": 14
+     },
+     "ok": true
+    }
+   ]
+  }
+ },
+ "school_id": 37
+}

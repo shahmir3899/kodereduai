@@ -74,7 +74,7 @@ const script = (events) => streamMessage.mockImplementation(async (_i, _m, onEve
 
 async function open() {
   renderWithProviders(<AssistantOrb />)
-  await userEvent.click(await screen.findByRole('button', { name: 'Open assistant' }))
+  await userEvent.click(await screen.findByRole('button', { name: 'Open Aura' }))
 }
 
 async function speak(seconds = 2) {
@@ -167,6 +167,17 @@ describe('speaking a request', () => {
     await speak()
     expect(await screen.findByRole('alert')).toHaveTextContent(/Voice is busy/)
     expect(screen.getByLabelText('Message')).toBeEnabled()
+  })
+
+  it('says which HTTP status failed, or that the server cannot be reached', async () => {
+    assistantApi.transcribe.mockRejectedValueOnce({ response: { status: 503, data: {} } })
+    await open()
+    await speak()
+    expect(await screen.findByRole('alert')).toHaveTextContent('Voice did not work (HTTP 503)')
+    await userEvent.click(screen.getByRole('button', { name: 'Dismiss' }))
+    assistantApi.transcribe.mockRejectedValueOnce({ request: {}, message: 'Network Error' })
+    await speak()
+    expect(await screen.findByRole('alert')).toHaveTextContent('Could not reach the server')
   })
 
   it('stops by itself at the maximum length', async () => {

@@ -531,3 +531,15 @@ Pagination: All list endpoints return `{count, next, previous, results}`. Defaul
 | GET | /api/face-attendance/status/ | Face recognition availability, thresholds, enrollment count |
 
 **NOTE:** Session IDs are UUIDs, not integers. Enrollment uses async Celery task — response returns task_id for tracking.
+
+## Assistant (Aura): learning loop
+
+Other `/api/assistant/` endpoints (conversations, stream, actions, voice) are not listed in this file yet; see `backend/assistant/urls.py`.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | /api/assistant/feedback/ | Thumbs on one of the caller's own assistant replies. Body: {message_id, rating (1 or -1), reason?}. 404 if the message is not the caller's in the active school. One row per person per message (a new rating replaces the old). Students/parents: rating stored, text never stored |
+| GET | /api/assistant/insights/ | Grouped "Aura could not do this" requests. SCHOOL_ADMIN/PRINCIPAL: own school only (`?school=` ignored); SUPER_ADMIN: all schools. Others: 403. Params: days (7/30/90), kind, agent, role, status, school (super admin only). Returns groups (counts for 7/30 days, roles/agents/languages/kinds, 30-day trend, up to 3 redacted examples), satisfaction {up, down}, filters; super admin also gets schools |
+| PATCH | /api/assistant/insights/groups/{id}/ | Owner decision on a group. Body: {status (new/planned/built/wont_do), note, baseline_question_id}. SUPER_ADMIN only |
+
+**NOTE:** insights endpoints are not hidden when a school switches the assistant off. Rows are deleted 90 days after creation (daily Celery Beat task).

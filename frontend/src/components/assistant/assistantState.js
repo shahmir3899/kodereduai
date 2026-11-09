@@ -65,11 +65,13 @@ export function applyEvent(state, event) {
         actions: reply.actions && reply.actions.length ? reply.actions : live?.cards || [],
         tool_calls: reply.tool_calls || event.tool_calls || [],
         sub_agents: reply.sub_agents || event.sub_agents || [],
+        choices: event.choices || [],
+        ask_feedback: Boolean(event.ask_feedback),
       }
       return { ...state, messages: [...state.messages, message], live: null, status: 'idle', memory: event.memory || state.memory }
     }
     case 'error':
-      return { ...state, live: null, status: 'error', error: event.message || 'The assistant hit an error. Please try again.' }
+      return { ...state, live: null, status: 'error', error: event.message || 'Aura hit an error. Please try again.' }
     default:
       return state
   }

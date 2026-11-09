@@ -8,33 +8,46 @@ const num = (v: unknown) => Number(v ?? 0) || 0;
 const rate = (collected: number, due: number): number | null => (due > 0 ? Math.round((collected / due) * 100) : null);
 
 export interface AnnualFeeRow { name: string; due: number; collected: number; pending: number; rate: number | null }
+export interface FeeSchoolRow { schoolId: number; schoolName: string; due: number; collected: number; pending: number; rate: number | null }
+// One shape for the monthly and the annual collection cards. Student counts are monthly only.
 export interface AnnualFeeSummary {
   totalDue: number; totalCollected: number; totalPending: number; rate: number | null;
   byCategory: AnnualFeeRow[];
+  schools: FeeSchoolRow[];
+  counts?: { paid: number; partial: number; unpaid: number };
   isMulti: boolean;
 }
 
-// Annual fees are stored with month 0 for the year. A multi-school answer wraps the combined
-// numbers in `grand`, as the web normaliser does.
-export function normalizeAnnualFees(raw: Record<string, unknown> | null | undefined, isMulti: boolean): AnnualFeeSummary | null {
+const feeRow = (c: Record<string, unknown>) => {
+  const due = num(c.total_due);
+  const collected = num(c.total_collected);
+  return { due, collected, pending: num(c.total_pending ?? Math.max(0, due - collected)), rate: rate(collected, due) };
+};
+
+// A multi-school answer wraps the combined numbers in `grand` and lists each school in `schools`,
+// as the web normaliser does. Annual fees are stored with month 0 for the year.
+export function normalizeFeeCollection(raw: Record<string, unknown> | null | undefined, isMulti: boolean, withCounts = false): AnnualFeeSummary | null {
   const src = (isMulti ? (raw?.grand as Record<string, unknown> | undefined) : raw) ?? null;
   if (!src) return null;
-  const totalDue = num(src.total_due);
-  const totalCollected = num(src.total_collected);
   const cats = (src.by_category as Array<Record<string, unknown>> | undefined) ?? [];
+  const schools = isMulti ? ((raw?.schools as Array<Record<string, unknown>> | undefined) ?? []) : [];
+  const total = feeRow(src);
   return {
-    totalDue,
-    totalCollected,
-    totalPending: num(src.total_pending ?? Math.max(0, totalDue - totalCollected)),
-    rate: rate(totalCollected, totalDue),
+    totalDue: total.due,
+    totalCollected: total.collected,
+    totalPending: total.pending,
+    rate: total.rate,
     byCategory: cats.map((c) => {
-      const due = num(c.total_due);
-      const collected = num(c.total_collected);
-      return { name: String(c.category_name ?? 'Uncategorized'), due, collected, pending: Math.max(0, due - collected), rate: rate(collected, due) };
+      const r = feeRow(c);
+      return { name: String(c.category_name ?? 'Uncategorized'), ...r };
     }),
+    schools: schools.map((s) => ({ schoolId: num(s.school_id), schoolName: String(s.school_name ?? 'School'), ...feeRow(s) })),
+    ...(withCounts ? { counts: { paid: num(src.paid_count), partial: num(src.partial_count), unpaid: num(src.unpaid_count) } } : {}),
     isMulti,
   };
 }
+
+export const normalizeAnnualFees = (raw: Record<string, unknown> | null | undefined, isMulti: boolean) => normalizeFeeCollection(raw, isMulti);
 
 export const hasAnnualFees = (s: AnnualFeeSummary | null) => !!s && (s.totalDue > 0 || s.byCategory.length > 0);
 

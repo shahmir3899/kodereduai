@@ -14,7 +14,7 @@ from calendar import monthrange
 from datetime import date, timedelta
 
 from core.cache_utils import cached_api
-from django.db.models import Count
+from django.db.models import Count, Q
 from django.utils.dateparse import parse_date
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -228,7 +228,7 @@ def build_leadership_academic_insights(
             .order_by('-count', 'subject__name')
         ]
 
-    lesson_plans_payload = {'buckets': {}, 'by_teacher_class': []}
+    lesson_plans_payload = {'buckets': {}, 'by_teacher_class': [], 'by_class': []}
     if _module_on(enabled, 'lms'):
         py, pm = _shift_month(ref.year, ref.month, -1)
         cy, cm = ref.year, ref.month
@@ -243,7 +243,7 @@ def build_leadership_academic_insights(
             'next_month': {'year': ny, 'month': nm, 'label': _bucket_key(ny, nm)},
         }
 
-        def _agg_month(y: int, m: int) -> dict[tuple[int, int], int]:
+        def _agg_month(y: int, m: int) -> dict[tuple[int, int, int], dict]:
             d0, d1 = _month_bounds(y, m)
             rows = (
                 LessonPlan.objects.filter(
@@ -252,15 +252,22 @@ def build_leadership_academic_insights(
                     lesson_date__gte=d0,
                     lesson_date__lte=d1,
                 )
-                .values('teacher_id', 'class_obj_id')
-                .annotate(cnt=Count('id'))
+                .values('teacher_id', 'class_obj_id', 'subject_id', 'subject__name')
+                .annotate(cnt=Count('id'), drafts=Count('id', filter=Q(status=LessonPlan.Status.DRAFT)))
             )
-            return {(r['teacher_id'], r['class_obj_id']): r['cnt'] for r in rows}
+            return {
+                (r['teacher_id'], r['class_obj_id'], r['subject_id']): {
+                    'cnt': r['cnt'], 'drafts': r['drafts'], 'subject_name': r['subject__name'],
+                }
+                for r in rows
+            }
 
-        prev_map = _agg_month(py, pm)
-        cur_map = _agg_month(cy, cm)
-        next_map = _agg_month(ny, nm)
-        keys = set(prev_map) | set(cur_map) | set(next_map)
+        month_maps = {
+            'previous_month': _agg_month(py, pm),
+            'current_month': _agg_month(cy, cm),
+            'next_month': _agg_month(ny, nm),
+        }
+        keys = set().union(*month_maps.values())
 
         teacher_ids = {k[0] for k in keys}
         class_ids = {k[1] for k in keys}
@@ -282,19 +289,66 @@ def build_leadership_academic_insights(
                 # with lms_books_by_class above).
                 classes[c.id] = _resolve_class_label(c.id, c.name)
 
+        def _cnt(month: str, key) -> int:
+            return month_maps[month].get(key, {}).get('cnt', 0)
+
+        # Flat teacher x class grid (kept for older mobile builds).
+        pair_totals: dict[tuple[int, int], dict[str, int]] = {}
+        # Class > teacher > subject tree (the dashboard card).
+        tree: dict[int, dict[int, list]] = {}
+        for key in keys:
+            tid, cid, sid = key
+            totals = pair_totals.setdefault((tid, cid), {m: 0 for m in month_maps})
+            for m in month_maps:
+                totals[m] += _cnt(m, key)
+            subject_name = next(
+                (month_maps[m][key]['subject_name'] for m in month_maps if key in month_maps[m]), '',
+            )
+            tree.setdefault(cid, {}).setdefault(tid, []).append({
+                'subject_id': sid,
+                'subject_name': subject_name,
+                'previous_month': _cnt('previous_month', key),
+                'current_month': _cnt('current_month', key),
+                'next_month': _cnt('next_month', key),
+                'draft_current_month': month_maps['current_month'].get(key, {}).get('drafts', 0),
+            })
+
         grid = []
-        for tid, cid in sorted(keys, key=lambda x: (classes.get(x[1], ''), teachers.get(x[0], ''))):
+        for (tid, cid), totals in sorted(
+            pair_totals.items(), key=lambda x: (classes.get(x[0][1], ''), teachers.get(x[0][0], '')),
+        ):
             grid.append({
                 'teacher_id': tid,
                 'teacher_name': teachers.get(tid, str(tid)),
                 'class_id': cid,
                 'class_name': classes.get(cid, str(cid)),
-                'previous_month': prev_map.get((tid, cid), 0),
-                'current_month': cur_map.get((tid, cid), 0),
-                'next_month': next_map.get((tid, cid), 0),
+                **totals,
             })
 
-        lesson_plans_payload = {'buckets': buckets, 'by_teacher_class': grid}
+        by_class = []
+        for cid in sorted(tree, key=lambda c: classes.get(c, '')):
+            teacher_rows = []
+            for tid in sorted(tree[cid], key=lambda t: teachers.get(t, '')):
+                subjects = sorted(tree[cid][tid], key=lambda r: r['subject_name'])
+                teacher_rows.append({
+                    'teacher_id': tid,
+                    'teacher_name': teachers.get(tid, str(tid)),
+                    'previous_month': sum(r['previous_month'] for r in subjects),
+                    'current_month': sum(r['current_month'] for r in subjects),
+                    'next_month': sum(r['next_month'] for r in subjects),
+                    'draft_current_month': sum(r['draft_current_month'] for r in subjects),
+                    'subjects': subjects,
+                })
+            by_class.append({
+                'class_id': cid,
+                'class_name': classes.get(cid, str(cid)),
+                'previous_month': sum(t['previous_month'] for t in teacher_rows),
+                'current_month': sum(t['current_month'] for t in teacher_rows),
+                'next_month': sum(t['next_month'] for t in teacher_rows),
+                'teachers': teacher_rows,
+            })
+
+        lesson_plans_payload = {'buckets': buckets, 'by_teacher_class': grid, 'by_class': by_class}
 
     return {
         'admissions': admissions,

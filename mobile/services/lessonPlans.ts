@@ -28,7 +28,7 @@ export interface LessonPlan {
   custom_topics?: string[];
   display_text?: string;
   ai_generated?: boolean;
-  planned_topics?: Array<number | { id: number }>;
+  planned_topics?: Array<number | { id: number; title?: string; name?: string }>;
 }
 
 export interface LessonPlanForm {
@@ -128,7 +128,7 @@ export const sortPlans = (list: LessonPlan[]): LessonPlan[] =>
 
 // ── Finding and acting on many plans ──────────────────────────────────────────
 
-export interface PlanFilters { classOption: number | null; subject: number | null; from: string; to: string }
+export interface PlanFilters { classOption: number | null; subject: number | null; from: string; to: string; teacher?: number | null }
 export const emptyFilters = (): PlanFilters => ({ classOption: null, subject: null, from: '', to: '' });
 
 const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
@@ -143,7 +143,7 @@ export function filterProblem(f: PlanFilters): string | null {
 
 // How many of the four filters are in use, for the badge on the Filters button.
 export function activeFilterCount(f: PlanFilters): number {
-  return [f.classOption, f.subject, f.from, f.to].filter((v) => v !== null && v !== '').length;
+  return [f.classOption, f.subject, f.from, f.to, f.teacher ?? null].filter((v) => v !== null && v !== '').length;
 }
 
 // Query params for the list call. A section sends its master class and its own id, as the web does,
@@ -160,6 +160,7 @@ export function filterParams(f: PlanFilters, options: ClassOption[]): Record<str
     }
   }
   if (f.subject != null) params.subject_id = f.subject;
+  if (f.teacher != null) params.teacher_id = f.teacher;
   if (!filterProblem(f)) {
     if (f.from) params.date_from = f.from;
     if (f.to) params.date_to = f.to;

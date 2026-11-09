@@ -2,6 +2,7 @@ import React from 'react';
 import { Redirect, usePathname } from 'expo-router';
 import { useAuth } from '../../contexts/AuthContext';
 import Spinner from '../ui/Spinner';
+import AuraLauncher from '../assistant/AuraLauncher';
 import type { Persona } from '../../navigation/personas';
 
 // Mirrors the web's *AccessRoute guards: a deep link or stale tab into another persona's
@@ -13,5 +14,5 @@ export default function RoleGuard({ persona, children }: { persona: Persona; chi
   if (!isAuthenticated) return <Redirect href="/(auth)/login" />;
   // The wanted path rides along so the index can open the same screen in the user's own group.
   if (mine !== persona) return <Redirect href={{ pathname: '/', params: { next: pathname } }} />;
-  return <>{children}</>;
+  return <>{children}<AuraLauncher /></>;
 }

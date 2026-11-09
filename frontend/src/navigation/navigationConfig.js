@@ -302,6 +302,11 @@ export function buildStaffNavigation(ctx, I) {
       ? [{ type: 'item', name: 'School Setup', href: '/school-setup', icon: I.RocketIcon }]
       : []),
 
+    // Aura insights - school admins and principals (their own school only; the API enforces it)
+    ...(isSchoolAdminNav
+      ? [{ type: 'item', name: 'Aura insights', href: '/aura-insights', icon: I.ChartIcon }]
+      : []),
+
     // Settings - admin only (SCHOOL_ADMIN, not staff-level roles)
     ...(!isStaffLevel
       ? [{ type: 'item', name: 'Settings', href: '/settings', icon: I.CogIcon }]

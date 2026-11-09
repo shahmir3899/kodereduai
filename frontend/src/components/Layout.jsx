@@ -630,6 +630,18 @@ export default function Layout() {
                 <span className="ml-3 font-medium">Brochure Editor</span>
               </Link>
               <Link
+                to="/aura-insights"
+                className={`flex items-center px-4 py-2.5 mb-1 rounded-lg transition-colors text-sm ${
+                  isActive('/aura-insights')
+                    ? 'bg-primary-50 text-primary-700 dark:bg-primary-900/30 dark:text-primary-300'
+                    : 'text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700'
+                }`}
+                onClick={() => setSidebarOpen(false)}
+              >
+                <ChartIcon />
+                <span className="ml-3 font-medium">Aura insights</span>
+              </Link>
+              <Link
                 to="/guide"
                 className={`flex items-center px-4 py-2.5 mb-1 rounded-lg transition-colors text-sm ${
                   isActive('/guide')

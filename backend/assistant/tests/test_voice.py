@@ -152,6 +152,18 @@ class TestTranscribeEndpoint:
             r = upload(api, seed_data, audio=clip())
         assert r.status_code == 503 and 'busy' in r.json()['error']
 
+    def test_a_refused_upload_says_why_in_the_server_log(self, seed_data, modules, api, caplog):
+        with caplog.at_level(logging.WARNING):
+            upload(api, seed_data, audio=clip('text/plain', name='a.txt'))
+        text = ' '.join(r.getMessage() for r in caplog.records)
+        assert 'voice request refused (415)' in text and 'content_type=text/plain' in text
+
+    def test_the_browsers_default_accept_header_is_fine_for_audio_upload(self, seed_data, modules, api):
+        with patch('assistant.providers.post_transcription', return_value=WHISPER):
+            r = api.client.post(T, data={'audio': clip(), 'language': 'auto'}, HTTP_ACCEPT='application/json, text/plain, */*',
+                                HTTP_AUTHORIZATION=f'Bearer {seed_data["tokens"]["admin"]}', HTTP_X_SCHOOL_ID=str(seed_data['SID_A']))
+        assert r.status_code == 200 and r.json()['text'] == 'class 5A ki hazri lagao'
+
     def test_the_words_and_audio_are_never_logged(self, seed_data, modules, api, caplog):
         with caplog.at_level(logging.DEBUG), patch('assistant.providers.post_transcription', return_value=WHISPER):
             upload(api, seed_data, audio=clip(data=b'PRIVATE-AUDIO-BYTES'))

@@ -22,7 +22,7 @@ from datetime import datetime, timezone
 from django.conf import settings
 from django.core.cache import cache
 
-from . import providers
+from . import providers, usage
 from .providers import CEREBRAS, GROQ, ProviderError
 
 logger = logging.getLogger(__name__)
@@ -148,7 +148,7 @@ def usage_key(provider, day=None):
     return f'llm:tokens:{provider}:{day or datetime.now(timezone.utc).strftime("%Y-%m-%d")}'
 
 
-def _count_tokens(provider, total):
+def count_tokens(provider, total):
     """One cache write per call. Best effort: counting must never break an answer."""
     if not total:
         return
@@ -241,7 +241,8 @@ def complete(messages, tools=None, max_tokens=1500, temperature=0.3, retries=2, 
                 break
             _learn_from_headers(provider, _headers)
             total = reply.usage.get('total_tokens') or 0
-            _count_tokens(provider, total)
+            count_tokens(provider, total)
+            usage.record_call(total, fallback=index > 0)
             logger.info('llm_call provider=%s model=%s tier=%s prompt=%s completion=%s total=%s ms=%d fallback=%s tools=%d',
                         provider, payload['model'], tier, reply.usage.get('prompt_tokens'), reply.usage.get('completion_tokens'),
                         total, (time.monotonic() - started) * 1000, index > 0, len(reply.tool_calls))

@@ -35,6 +35,7 @@ class TestLeadershipAcademicInsightsHTTP:
         assert 'admissions' in body
         assert 'rolling_30d' in body['admissions']
         assert 'lesson_plans' in body
+        assert 'by_class' in body['lesson_plans']
 
     def test_principal_ok(self, seed_data, api):
         token = seed_data['tokens']['principal']
@@ -235,3 +236,35 @@ class TestLmsExcludedWhenDisabled:
         assert out['lms_topics_by_book'] == []
         assert out['question_bank']['total'] == 0
         assert out['lesson_plans']['by_teacher_class'] == []
+        assert out['lesson_plans']['by_class'] == []
+
+
+class TestLessonPlansByClass:
+    def test_class_teacher_subject_tree(self, seed_data, all_modules_on):
+        from lms.models import LessonPlan
+
+        school, ay = seed_data['school_a'], seed_data['academic_year']
+        klass = seed_data['classes'][0]
+        teacher = seed_data['staff'][0]
+        math, urdu = seed_data['subjects']
+        today = date.today()
+        for subject, status in ((math, LessonPlan.Status.PUBLISHED), (math, LessonPlan.Status.DRAFT), (urdu, LessonPlan.Status.DRAFT)):
+            LessonPlan.objects.create(
+                school=school, academic_year=ay, class_obj=klass, subject=subject, teacher=teacher,
+                title='t', lesson_date=today, duration_minutes=40, status=status,
+            )
+
+        out = build_leadership_academic_insights(
+            school_id=school.id, academic_year=ay, reference_date=today, enabled_modules=all_modules_on,
+        )
+        by_class = {c['class_id']: c for c in out['lesson_plans']['by_class']}
+        row = by_class[klass.id]
+        assert row['current_month'] == 3
+        (t_row,) = [t for t in row['teachers'] if t['teacher_id'] == teacher.id]
+        subjects = {s['subject_id']: s for s in t_row['subjects']}
+        assert subjects[math.id]['current_month'] == 2
+        assert subjects[math.id]['draft_current_month'] == 1
+        assert subjects[urdu.id]['current_month'] == 1
+        # The flat grid for older clients agrees with the tree.
+        flat = [r for r in out['lesson_plans']['by_teacher_class'] if r['class_id'] == klass.id and r['teacher_id'] == teacher.id]
+        assert flat[0]['current_month'] == 3

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { assistantApi, streamMessage } from '../../services/assistantApi'
 import { applyEvent, beginTurn, cardUpdated, initialState, loadMessages, pendingCards, reset } from './assistantState'
 
@@ -26,6 +26,7 @@ export default function useAssistant({ enabled, open }) {
   const [state, dispatch] = useReducer(reducer, initialState)
   const [conversationId, setConversationId] = useState(null)
   const [cardNotes, setCardNotes] = useState({})      // card id -> { busy, error }
+  const queryClient = useQueryClient()
   const abortRef = useRef(null)
   const loadedRef = useRef(false)
 
@@ -76,7 +77,7 @@ export default function useAssistant({ enabled, open }) {
       await streamMessage(id, message, (event) => dispatch({ type: 'event', event }), abortRef.current.signal)
     } catch (err) {
       if (err?.name !== 'AbortError') {
-        dispatch({ type: 'event', event: { type: 'error', message: errorText(err, 'The assistant could not answer.') } })
+        dispatch({ type: 'event', event: { type: 'error', message: errorText(err, 'Aura could not answer.') } })
       }
     }
   }, [conversationId, state.status])
@@ -106,8 +107,44 @@ export default function useAssistant({ enabled, open }) {
     dispatch({ type: 'reset' })
   }, [])
 
+  // Past conversations. Only fetched while the history list is open, and refreshed after each change.
+  const history = useQuery({
+    queryKey: ['assistant', 'conversations'],
+    queryFn: async () => (await assistantApi.listConversations()).data,
+    enabled: enabled && open,
+    staleTime: 0,
+    retry: false,
+  })
+  const refreshHistory = () => queryClient.invalidateQueries({ queryKey: ['assistant', 'conversations'] })
+
+  const openConversation = useCallback(async (id) => {
+    abortRef.current?.abort()
+    setCardNotes({})
+    setConversationId(id)
+    dispatch({ type: 'reset' })
+    try {
+      dispatch({ type: 'loaded', data: (await assistantApi.getMessages(id)).data })
+    } catch (err) {
+      dispatch({ type: 'event', event: { type: 'error', message: errorText(err, 'Could not open that conversation.') } })
+    }
+  }, [])
+
+  const pinConversation = useCallback(async (id, pinned) => {
+    await assistantApi.updateConversation(id, { pinned })
+    refreshHistory()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const removeConversation = useCallback(async (id) => {
+    await assistantApi.deleteConversation(id)
+    if (id === conversationId) newChat()
+    refreshHistory()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [conversationId, newChat])
+
   return {
     state, capabilities, cardNotes, send, approve, reject, edit, newChat,
+    conversationId, history, openConversation, pinConversation, removeConversation,
     pending: pendingCards(state).length,
   }
 }

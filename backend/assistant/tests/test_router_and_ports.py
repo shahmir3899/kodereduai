@@ -42,12 +42,26 @@ def _student_user(seed):
     return u
 
 
+class TestErrorNamedTools:
+    def test_read_tool_named_in_an_error_is_offered_but_a_write_tool_is_not(self, seed_data):
+        _enable(seed_data, 'notifications', 'attendance')
+        ctx = _ctx(seed_data, 'admin')
+        offered = {'get_attendance_summary'}
+        err = {'error': 'Needs student_id or class_id. For today use get_attendance_summary_school.'}
+        assert [t.name for t in orchestrator._tools_named_in_error(ctx, err, offered)] == ['get_attendance_summary_school']
+        assert orchestrator._tools_named_in_error(ctx, {'error': 'try mark_attendance'}, offered) == []
+        assert orchestrator._tools_named_in_error(ctx, {'data': 1}, offered) == []
+
+    def test_attendance_count_question_is_not_left_to_communication(self):
+        assert 'NEVER for' in router.AGENTS['communication'] and 'absent today' in router.AGENTS['attendance']
+
+
 class TestPorts:
     def test_tool_counts(self):
         by = {}
         for t in registry.all_tools():
             by[t.sub_agent] = by.get(t.sub_agent, 0) + 1
-        assert by == {'finance': 25, 'academics': 21, 'communication': 15, 'study': 8, 'directory': 3, 'attendance': 4}
+        assert by == {'finance': 26, 'academics': 21, 'communication': 17, 'study': 11, 'directory': 4, 'attendance': 4, 'exams': 10, 'hr': 18, 'students': 19, 'operations': 25, 'family': 12}
 
     def test_every_tool_has_valid_schema(self):
         for t in registry.all_tools():
@@ -80,7 +94,8 @@ class TestPorts:
         ctx = registry.ToolContext(user=user, school_id=seed_data['SID_A'], role='STUDENT')
         names = _names(ctx)
         assert names == {'get_my_marks', 'get_my_assignments', 'get_topic_details', 'get_my_attendance',
-                         'get_exam_schedule', 'get_lesson_materials', 'get_grade_targets', 'get_teacher_feedback'}
+                         'get_exam_schedule', 'get_lesson_materials', 'get_grade_targets', 'get_teacher_feedback',
+                         'get_weak_subjects', 'make_revision_plan', 'get_quiz_material', 'report_missing_capability'}
 
     def test_student_tools_take_no_student_id_argument(self):
         for t in registry.all_tools():
@@ -169,6 +184,25 @@ class TestRouter:
             pick_agents(self.AVAILABLE, 'how much fee is pending')
         assert seen['tools'] is None and seen['chars'] < 1500
 
+    def test_descriptions_keep_overlapping_topics_apart(self):
+        from assistant.router import AGENTS
+        assert 'who owes' in AGENTS['finance'] and 'scholarship' in AGENTS['finance']
+        assert 'NEVER' in AGENTS['students'] and 'finance' in AGENTS['students']
+        assert 'staff' in AGENTS['hr'].split(';')[0]
+        assert 'NEVER one student' in AGENTS['attendance']
+
+    def test_router_prompt_asks_for_both_agents_when_a_name_is_ambiguous(self):
+        seen = {}
+
+        def spy(messages, tools=None, **k):
+            seen['system'] = messages[0]['content']
+            return llm.LLMReply(content='students, hr')
+
+        avail = {'students': [1], 'hr': [1]}
+        with patch('assistant.llm.complete', spy):
+            assert pick_agents(avail, 'Show Ayesha Khan') == ['students', 'hr']
+        assert 'student or a staff member, choose both' in seen['system']
+
     def test_orchestrator_offers_only_the_routed_agents_tools(self, seed_data):
         _enable(seed_data, 'finance', 'academics', 'notifications', 'students')
         conv = AgentConversation.objects.create(school=seed_data['school_a'], user=seed_data['users']['admin'])
@@ -254,3 +288,44 @@ class TestGuards:
         r = api.post(f'/api/assistant/conversations/{cid}/messages/',
                      {'message': 'give me the phone number of my teacher'}, token, seed_data['SID_A'])
         assert r.status_code == 400 and 'error' in r.json()
+
+
+class TestClassWording:
+    """Users say a class many ways; the same class must come out of all of them."""
+
+    def test_every_wording_gives_one_key(self):
+        from assistant.skills.directory import class_key
+        for said in ('Class 8 B', '8B', '8-b', 'eighth B', 'class eight b', '8th B'):
+            assert class_key(said) == '8b', said
+        assert class_key('5th A') == '5a'
+
+    def test_whole_class_never_matches_a_higher_class(self):
+        from assistant.skills.directory import class_matches
+        assert class_matches('5', '5a') and class_matches('5', '5')
+        assert not class_matches('5', '15a') and not class_matches('1', '10')
+        assert not class_matches('5a', '5b')
+
+    def test_find_student_filters_by_class_wording(self, seed_data):
+        _enable(seed_data, 'students')
+        st = next(s for s in seed_data['students'] if s.class_obj_id)
+        c = st.class_obj
+        said = f'{c.name} {c.section or ""}'.upper().replace(' ', '')
+        out = registry.execute(_ctx(seed_data, 'admin'), 'find_student',
+                               {'query': st.name.split()[0], 'class_name': said})
+        assert st.id in [m['student_id'] for m in out['data']['matches']]
+
+
+class TestChoiceButtons:
+    def test_several_matches_become_buttons_with_real_ids(self):
+        from assistant.orchestrator import _choices_from
+        res = {'data': {'matches': [
+            {'student_id': 11, 'name': 'Ahmad Raza', 'class': 'Class 8 B'},
+            {'student_id': 12, 'name': 'Ahmad Khan', 'class': 'Class 5 A'}]}}
+        out = _choices_from('find_student', res)
+        assert [c['send'] for c in out] == ['Ahmad Raza, Class 8 B (student_id 11)', 'Ahmad Khan, Class 5 A (student_id 12)']
+
+    def test_one_match_or_other_tools_give_no_buttons(self):
+        from assistant.orchestrator import _choices_from
+        one = {'data': {'matches': [{'student_id': 1, 'name': 'A', 'class': ''}]}}
+        assert _choices_from('find_student', one) == []
+        assert _choices_from('get_balance', {'data': {'matches': [1, 2]}}) == []

@@ -247,6 +247,7 @@ Environment (all in `docs/ENV_AND_DEPLOYMENT.md`): `EDU_CEREBRAS_API_KEY` (set i
 | Cerebras lean gateway (§15) | Built; probe passes on a real key |
 | Baseline question set (98) and resumable runner | Built; first real numbers pending (quota) |
 | Voice, web: record, Whisper transcript into the message box, spoken short replies with subtitles (§17) | Built; blocked only by the Groq project setting for Whisper (see §17); not heard on a real Urdu voice yet |
+| Talk mode: the voice-first screen with the big orb (§17b) | Built (web); checked in a browser with a fake microphone and voice; not yet tried with a real voice |
 | Mobile orb | Not started |
 | Sub-agents Exams, Students & Admissions, HR, Operations | Not started (required for completion) |
 | History migration from the old chat tables; removal of the old widgets' code | Not started |
@@ -266,4 +267,92 @@ Environment (all in `docs/ENV_AND_DEPLOYMENT.md`): `EDU_CEREBRAS_API_KEY` (set i
 **Blocker found on the real key.** Groq answered 403 `model_permission_blocked_project` for both Whisper models: they are blocked in the Groq project settings (console.groq.com -> project -> limits). A project admin must enable them; the key itself is fine (chat works). After that run `manage.py stt_probe --file <clip> --models both --language auto` on real Urdu / Roman Urdu recordings and choose the model and language setting from the result.
 
 **Still open.** Hearing replies on real devices (Android Chrome and Windows usually have an Urdu voice; this must be tested), accuracy of Whisper on real voices (Urdu names must reach the tools in the Latin spelling stored in the database), the mobile app, and a hands-free "keep listening" mode. A cloud text-to-speech provider is only worth adding if the device voices sound poor, and would send reply text to another company.
+
+### 17a. Bug found on first real use (2026-11-08): 406 on every message
+The browser opens the stream with `Accept: text/event-stream`, which matches none of DRF's JSON/HTML renderers, so DRF answered **406 "Could not satisfy the request Accept header"** before the view ran. The test client sends no Accept header, so the tests never saw it. Fix: `MessageStreamView` uses `IgnoreAcceptNegotiation` (always the JSON renderer for its small error bodies; the stream itself is a plain streaming response). New tests send the real browser headers (`text/event-stream` on the stream, axios' `application/json, text/plain, */*` on every other assistant endpoint) and fail with 406 if the fix is removed. Audio upload was checked end to end with a real Chromium MediaRecorder recording (`audio/webm;codecs=opus`) through a running backend into Whisper: HTTP 200, correct words. Voice refusals are now logged with their reason in the backend console (never the audio or the words), and errors in the panel name the HTTP status or say the server cannot be reached.
+
+### 17b. Talk mode (web, built 2026-11-08)
+A second view of the same assistant, switched with the Talk / Text button in the panel header (remembered per browser; only offered where the device can record and the server has voice on). One large orb in the middle, one line of status, the words, and any change waiting for approval.
+
+| Phase | What happens |
+|---|---|
+| Ready | "Tap the orb and speak". The last reply stays readable below, with a Listen button. |
+| Listening | Red orb, rings swell with the voice, timer. **Stops by itself after 1.5 s of quiet** once speech was heard (loud for 0.32 s or more); gives up after 8 s with no speech and sends nothing. Tap the orb to finish early, Cancel to throw it away. |
+| Turning your voice into text | Grey turning orb. |
+| Check your words | The transcript with "Sending in 3", Send now, Edit (stops the countdown; the corrected text is what is sent) and Cancel. "Send instantly" removes the wait (remembered). |
+| Thinking | The orb takes the working agent's colour, with its name and live step lines. Not tappable. |
+| Speaking | Bars move, subtitles under the orb, Stop. Tapping the orb interrupts and starts listening again. Replies are read only for spoken questions ("Aloud" switch); with no Urdu voice on the device the subtitles and the reply text still show. |
+| Waiting for you | A card slides up under the orb and stays until a person taps Approve, Edit or Reject; the orb gets smaller so the buttons stay in reach. **Voice never approves.** Older unanswered cards stay visible too. |
+
+Files: `TalkMode.jsx`, `TalkOrb.jsx`, `icons.jsx`, changes in `AssistantOrb.jsx`, `useVoiceInput.js` (silence stop), `agentTheme.js` (SVG colours). 116 web assistant tests cover the phases, the countdown, edit/cancel, silence stop (with a fake audio level), no-speech timeout, speaking and interrupting, cards, and the mode switch.
+
+**To tune on real devices:** the loudness threshold (0.07), the 1.5 s pause and the 8 s no-speech limit are first guesses from a quiet fake input; a noisy classroom may need a higher threshold or a longer pause (constants in `AssistantOrb.jsx` and `useVoiceInput.js`).
+
+## 18. Progress log, 2026-11-08 (Aura)
+
+**Name.** The assistant is called **Aura** (Administrative and Unified Resource Assistant). Screen text says Aura; file and class names still say "Orb".
+
+### Remaining work: 8 groups, status
+
+| # | Group | Status |
+|---|---|---|
+| 1 | Fixes to what exists | **Done** (uncommitted). F10 tool descriptions (`get_total_expenses` = one total, `get_expense_breakdown` = split by category); `class_key` / `class_matches` in `skills/directory.py` so "8B", "8-b", "Class 8 B", "eighth B" are one class and "5" never matches "15"; `find_student` applies the class before its cut-off; clickable "which one?" buttons (`choices` on the final event, built from `find_student`/`find_class` results, live only, not saved). |
+| 2 | Chat screen | **Done** (uncommitted). History view (open, pin, delete with a confirm) using the existing conversation endpoints; markdown tables drawn as real tables (`RichText.jsx`); the system prompt now asks for a markdown table when records share fields. |
+| 3 | Four missing agents | **In progress.** Exams **done** (below). HR, Admissions & Students, Operations still to build, one at a time, pausing for approval between agents. |
+| 4 | More abilities | Not started: send messages with a preview, parent read access, Study Helper extras (quiz, revision planner, weak topics). |
+| 5 | Roman Urdu | Not started: licence check of public datasets first; run the remaining baseline questions on Cerebras (`--restart`, `--delay ~40`); fix misses. |
+| 6 | Hardening | Not started: per-school flag, usage numbers, per-user token caps, move ~22 legacy Groq calls to the gateway after measuring, Groq allowed-models vs exam-paper OCR, Cerebras data terms. |
+| 7 | Mobile | Not started: orb/Aura and voice in the Expo app. |
+| 8 | Real-world checks (user) | Not started: record Urdu / Roman Urdu clips for `stt_probe`; try on Render after the frontend deploy; try Talk mode with a real voice and tune the quiet/pause constants. |
+
+### Exams agent (built)
+File `backend/assistant/skills/exam_tools.py`, sub-agent `exams`, module `examinations`. Everything runs through `ExamViewSet`, `ExamSubjectViewSet`, `StudentMarkViewSet`, `AcademicRiskView` as the signed-in user, so teacher scope, the "departed students get no marks" rule and the marks range check are the app's own.
+
+| Tool | Kind | Roles | Notes |
+|---|---|---|---|
+| `list_exams` | read | admins, teacher | current year; marks entered / expected; teacher sees own scope |
+| `get_exam_results` | read | admins, teacher | pass/fail uses the exam's `fail_threshold_subjects` rule; top 5, failed list, per-subject average and pass % |
+| `get_marks_entry_status` | read | admins, teacher | missing marks by subject and name |
+| `get_student_marks` | read | admins, teacher | needs `student_id` (use `find_student`) |
+| `get_grade_scale` | read | admins, teacher | |
+| `get_at_risk_students` | read | admins | `AcademicRiskView` |
+| `enter_marks` | write | admins, teacher | one subject; card kind `marks_entry`; edit marks or remove students; teacher only for own subject (subjects come from the scoped list) |
+| `create_exam` | write | admins | whole-class exam (the single-exam serializer has no section field); starts with all class subjects |
+| `reschedule_exam` | write | admins | exam dates and single paper dates; refused for completed / published exams |
+| `delete_exam` | write | admins | only SCHEDULED with no marks |
+
+Frontend: card kinds `marks_entry`, `exam_create`, `exam_reschedule`, `delete_exams` in `cardConfig.js`; rose colour in `agentTheme.js`; `ActionCard` passes the row to a cell formatter (so an absent student shows "Absent"). Baseline questions X04, X05, X15, X16, X17. Tests: `assistant/tests/test_exam_tools.py` (29), tool-count and capability tests updated.
+
+### Decisions to remember
+- Salary figures (HR): the plan was to show them only to SUPER_ADMIN, SCHOOL_ADMIN, PRINCIPAL; the user was asked whether PRINCIPAL should see them and has **not answered yet**. Ask again before building HR salary reads.
+- Teacher scope: Exams = own classes and subjects only; HR = own leave only (proposed, not yet confirmed by the user).
+- Left out on purpose: bulk promotion, payroll, role/permission changes, student exit / transfer / re-admission, batch enquiry conversion.
+- Docs are updated again after all 8 groups finish (user's instruction); this section is the interim log.
+
+### Fix session 1 (2026-11-09): bugs B1-B7 and scorer corrections
+Fixed: B1 `find_student` returns only full-name matches when any exist; B2 prompt says the card is the confirmation; B3 router descriptions sharpened (+ "student or staff, choose both"); B4 legacy `get_attendance_summary` refuses school-wide use; B5 `period` in `list_lesson_plans` / `list_assignments`; B6 `fee_pending` audience and `list_scholarship_recipients`; B7 `get_balance` described as net position to date. Tests: `test_bugfixes_round1.py`, `test_router_and_ports.py`.
+
+Baseline re-run (failed questions only; before = 104/127). **Interim: 116 of 117 answered pass; 10 questions not yet re-run** (X03 X16 X23 X29 X30 X31 X33 X36 X38 X39) because the Cerebras daily budget ran out.
+
+| Group | Before | Now (117 done) |
+|---|---|---|
+| finance | 23/30 | 30/30 |
+| academics | 21/24 | 24/24 |
+| communication | 14/19 | 16/17 |
+| exams | 4/5 | 4/4 |
+| students | 5/8 | 5/5 |
+| attendance | 2/3 | 2/2 |
+| English | 75/87 | 80/80 |
+| Roman Urdu | 29/40 | 36/37 |
+
+Open: C14 (today was a Sunday, no absences with linked parents). Found while running: when Cerebras rests, the Groq fallback fails with 400 "tools: maximum number of items is 128" on turns that offer more than 128 tools, and the runner reports it as a rate limit.
+
+### Learning feature (built 2026-11-09, uncommitted)
+Captures what Aura could not do, groups it weekly and shows it to admins. Details, differences from the plan and what is unverified: `docs/handoff/06_LEARNING_FEATURE.md`.
+- Tables `AgentGap`, `AgentGapGroup` (`backend/assistant/models.py`, migration `0003_agentgap`, applied on Supabase). Text is redacted (`redact.py`) and kept 90 days; students and parents never have text stored.
+- Signals: missing tool (tool or decline text), tool error, denied, card rejected/edited, clarify loop, thumbs. Endpoints: `/api/assistant/feedback/`, `/insights/`, `/insights/groups/<id>/`. Web page `/aura-insights`.
+- Celery Beat: `assistant-gap-cleanup` (daily 03:30), `assistant-gap-grouping` (Sundays 04:00). Commands: `group_gaps_now`, `export_gap_questions`.
+
+### State of the working tree
+Nothing from items 1-3 (Exams), the Talk mode, the 406 fix or the voice diagnostics is committed. Never push without the user's explicit OK. Commit messages carry no Claude co-author trailer unless the user says otherwise.
 

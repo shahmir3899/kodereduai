@@ -10,6 +10,9 @@ import { exportErrorMessage, ledgerFileName } from '../../services/reports';
 import { shareReportFile } from '../../services/reportShare';
 import { useToast } from '../ui/Toast';
 import { useAccountBalances } from '../../hooks/useAccountant';
+import { useClosings } from '../../hooks/useAccountsAdmin';
+import { lastClosing, monthLabel } from '../../services/accountsAdmin';
+import DateField from '../ui/DateField';
 import { totalBalance } from '../../services/accountant';
 import { formatMoney } from '../../services/feeCollect';
 import { useRefreshControl } from '../../hooks/useRefreshControl';
@@ -37,7 +40,11 @@ export default function AccountsScreen({ canManage = false }: { canManage?: bool
 
 function AccountBalances({ canManage }: { canManage: boolean }) {
   const router = useRouter();
-  const q = useAccountBalances();
+  const [from, setFrom] = useState('');
+  const [to, setTo] = useState('');
+  const q = useAccountBalances(true, { from, to });
+  const closings = useClosings();
+  const closed = lastClosing(closings.data ?? []);
   const toast = useToast();
   const [busy, setBusy] = useState<string | null>(null);
 
@@ -57,7 +64,7 @@ function AccountBalances({ canManage }: { canManage: boolean }) {
     }
   };
   const refreshControl = useRefreshControl(q.refetch);
-  if (q.isLoading) return <Skeleton />;
+  if (q.isLoading && !q.data) return <Skeleton />;
   if (q.isError && !q.data) return <ErrorState onRetry={() => q.refetch()} />;
   const accounts = q.data ?? [];
   return (
@@ -69,6 +76,12 @@ function AccountBalances({ canManage }: { canManage: boolean }) {
       refreshControl={refreshControl}
       ListHeaderComponent={
         <View>
+          <View style={styles.dates}>
+            <View style={styles.date}><DateField label="From date" value={from} onChange={setFrom} /></View>
+            <View style={styles.date}><DateField label="To date" value={to} onChange={setTo} /></View>
+          </View>
+          {from || to ? <Button title="Clear dates" size="sm" variant="ghost" onPress={() => { setFrom(''); setTo(''); }} /> : null}
+          {closed ? <Text style={styles.closed}>Last closed: {monthLabel(closed.year, closed.month)}</Text> : null}
           <View style={styles.total}>
             <Text style={styles.totalLabel}>Total balance · {accounts.length} account{accounts.length === 1 ? '' : 's'}</Text>
             <Text style={styles.totalValue}>{formatMoney(totalBalance(accounts))}</Text>
@@ -114,6 +127,9 @@ function AccountBalances({ canManage }: { canManage: boolean }) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
+  dates: { flexDirection: 'row', gap: Spacing.md },
+  date: { flex: 1 },
+  closed: { fontSize: FontSize.xs, color: Colors.textSecondary, marginVertical: Spacing.sm },
   tabs: { padding: Spacing.lg, paddingBottom: 0 },
   content: { padding: Spacing.lg },
   total: { backgroundColor: Colors.surface, borderRadius: BorderRadius.md, padding: Spacing.lg, marginBottom: Spacing.md },

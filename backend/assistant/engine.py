@@ -46,6 +46,13 @@ def _ctx_for(action, user):
     return registry.ToolContext(user=user, school_id=action.school_id, role=role, conversation=action.conversation)
 
 
+def _gap(ctx, kind, action):
+    """Learning loop: a person changed or refused what Aura prepared. Which tool, never the card's contents."""
+    from . import gaps
+    gaps.record_gap(ctx, kind, agent=action.sub_agent, tool_hint=action.tool_name,
+                    message_id=action.message_id, dedupe=False)
+
+
 def create_proposal(ctx, tool, args) -> AgentAction:
     built = tool.handler(ctx, **args)           # may raise registry.ProposalError
     payload, preview = _jsonable(built['payload']), _jsonable(built['preview'])
@@ -71,6 +78,7 @@ def serialize(action: AgentAction) -> dict:
         'tool': action.tool_name,
         'sub_agent': action.sub_agent,
         'status': action.status,
+        'message_id': action.message_id,
         'preview': action.preview,
         'result': action.result,
         'error': action.error,
@@ -137,7 +145,9 @@ def edit(pk, user, school_id, edits: dict) -> AgentAction:
         action.expires_at = timezone.now() + EXPIRY
         action.save(update_fields=['payload', 'preview', 'status', 'expires_at'])
 
-    return _transition(pk, user, school_id, body)[0]
+    action, _tool, ctx = _transition(pk, user, school_id, body)
+    _gap(ctx, 'card_edited', action)
+    return action
 
 
 def reject(pk, user, school_id) -> AgentAction:
@@ -146,7 +156,9 @@ def reject(pk, user, school_id) -> AgentAction:
         action.decided_at = timezone.now()
         action.save(update_fields=['status', 'decided_at'])
 
-    return _transition(pk, user, school_id, body)[0]
+    action, _tool, ctx = _transition(pk, user, school_id, body)
+    _gap(ctx, 'card_rejected', action)
+    return action
 
 
 def approve(pk, user, school_id) -> AgentAction:

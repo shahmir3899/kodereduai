@@ -73,3 +73,18 @@ def test_academics_and_finance_expectations_name_registered_tools():
             want = q['expect'].get('tool') or q['expect'].get('write')
             if want:
                 assert want in names, (q['id'], want)
+
+
+def test_accept_lists_an_equally_correct_tool():
+    q = {'expect': {'tool': 'get_student_info', 'accept': ['find_student']}}
+    assert score(q, [{'name': 'find_student', 'args': {}, 'ok': True}])['pass']
+    assert not score(q, [{'name': 'get_fee_status', 'args': {}, 'ok': True}])['pass']
+
+
+def test_clarify_passes_only_for_a_real_question_with_no_change():
+    q = {'expect': {'write': 'plan_lessons_from_book', 'clarify': True}}
+    assert score(q, [], proposals=[], reply='Which section should it apply to?')['pass']
+    assert not score(q, [], proposals=[], reply='Done.')['pass']
+    assert not score({'expect': {'write': 'x'}}, [], proposals=[], reply='Which one?')['pass']       # no clarify flag: still a miss
+    assert score(q, [{'name': 't', 'args': {}, 'ok': False}], proposals=[], reply='Which subject?')['pass']      # the tool asked, via an error
+    assert not score(q, [{'name': 't', 'args': {}, 'ok': False}], proposals=[], reply='')['pass']

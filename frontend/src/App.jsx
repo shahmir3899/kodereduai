@@ -30,6 +30,7 @@ const StudentRiskScorePage = lazy(() => import('./pages/students/StudentRiskScor
 const DeletedStudentsPage = lazy(() => import('./pages/students/DeletedStudentsPage'))
 const ClassesGradesPage = lazy(() => import('./pages/ClassesGradesPage'))
 const SuperAdminDashboard = lazy(() => import('./pages/SuperAdminDashboard'))
+const AuraInsightsPage = lazy(() => import('./pages/admin/AuraInsightsPage'))
 const BrochurePage = lazy(() => import('./pages/admin/BrochurePage'))
 const ProfilePage = lazy(() => import('./pages/ProfilePage'))
 const FeeOverviewPage = lazy(() => import('./pages/fee-collection/FeeOverviewPage'))
@@ -724,6 +725,14 @@ function App() {
               element={
                 <ProtectedRoute requireSuperAdmin>
                   <SuperAdminDashboard />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="aura-insights"
+              element={
+                <ProtectedRoute>
+                  <AuraInsightsPage />
                 </ProtectedRoute>
               }
             />

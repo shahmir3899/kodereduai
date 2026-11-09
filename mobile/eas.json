@@ -21,7 +21,8 @@
       "env": {
         "EXPO_PUBLIC_API_URL": "https://personal-gateway-sg.onrender.com/educationai",
         "EXPO_PUBLIC_APP_ENV": "internal",
-        "EXPO_PUBLIC_ALLOW_INSECURE_HTTP": "true"
+        "EXPO_PUBLIC_ALLOW_INSECURE_HTTP": "true",
+        "EXPO_PUBLIC_ASSISTANT_ENABLED": "true"
       },
       "android": {
         "buildType": "apk"

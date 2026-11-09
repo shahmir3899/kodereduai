@@ -1,5 +1,7 @@
 import io
 import logging
+
+from assistant.usage import record_external
 import re
 from datetime import date
 from decimal import Decimal
@@ -4155,6 +4157,7 @@ Respond with ONLY a JSON array, no extra text:
                 timeout=30,
             )
             groq_response.raise_for_status()
+            record_external('examinations.views', groq_response.json())
             
             # Parse response
             ai_text = groq_response.json()['choices'][0]['message']['content'].strip()

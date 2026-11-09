@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import Modal from '../../components/ui/Modal'
 import Field from '../../components/ui/Field'
 import { TONE } from '../../components/ui/statusTones'
@@ -25,6 +26,7 @@ import LessonPlanTopicsPickerModal from './LessonPlanTopicsPickerModal'
 import { normalizeLessonPlanText, deriveAutoTitleFromCurriculumSummary } from './lessonPlanTextUtils'
 import StaffFilter from '../../components/StaffFilter'
 import { RecordCard, CardGrid, ViewToggle } from '../../components/cards'
+import { DATE_PRESETS, presetRange, activePreset, planStats, groupPlans, planBodySections } from './lessonPlanView'
 
 const STATUS_BADGES = {
   DRAFT: TONE.neutral,
@@ -106,10 +108,18 @@ export default function LessonPlansPage() {
   const [view, setView] = useViewPreference('lesson-plans')
 
   const [search, setSearch] = useState('')
-  const [exportDateFrom, setExportDateFrom] = useState('')
-  const [exportDateTo, setExportDateTo] = useState('')
+  // Opens on "this month" so the page shows plans immediately instead of waiting for a date range.
+  // The dashboard links here with teacher / subject / month already chosen.
+  const [searchParams] = useSearchParams()
+  const [exportDateFrom, setExportDateFrom] = useState(() => searchParams.get('from') || presetRange('month').from)
+  const [exportDateTo, setExportDateTo] = useState(() => searchParams.get('to') || presetRange('month').to)
+  const [filterTeacher, setFilterTeacher] = useState(() => searchParams.get('teacher_id') || '')
+  const [filterStatus, setFilterStatus] = useState('')
+  const [groupMode, setGroupMode] = useState('subject')
+  const [activeGroupKey, setActiveGroupKey] = useState(null)
+  const [detailPlan, setDetailPlan] = useState(null)
   const [filterClass, setFilterClass] = useState('')
-  const [filterSubject, setFilterSubject] = useState('')
+  const [filterSubject, setFilterSubject] = useState(() => searchParams.get('subject_id') || '')
   const [showModal, setShowModal] = useState(false)
   const [showBulkModal, setShowBulkModal] = useState(false)
   const [topicPickerOpen, setTopicPickerOpen] = useState(false)
@@ -203,20 +213,22 @@ export default function LessonPlansPage() {
   const hasValidDateRange = Boolean(exportDateFrom && exportDateTo && exportDateFrom <= exportDateTo)
 
   const { data: plansData, isLoading } = useQuery({
-    queryKey: ['lessonPlans', resolvedFilterClass, resolvedFilterSessionClassId, filterSubject, activeAcademicYear?.id, exportDateFrom, exportDateTo],
+    queryKey: ['lessonPlans', resolvedFilterClass, resolvedFilterSessionClassId, filterSubject, filterTeacher, filterStatus, activeAcademicYear?.id, exportDateFrom, exportDateTo],
     queryFn: () =>
       lmsApi.getLessonPlans({
         ...(resolvedFilterClass && { class_id: resolvedFilterClass }),
         ...(resolvedFilterSessionClassId && { session_class_id: resolvedFilterSessionClassId }),
         ...(filterSubject && { subject_id: filterSubject }),
+        ...(filterTeacher && { teacher_id: filterTeacher }),
+        ...(filterStatus && { status: filterStatus }),
         ...(activeAcademicYear?.id && { academic_year: activeAcademicYear.id }),
         date_from: exportDateFrom,
         date_to: exportDateTo,
         page_size: 9999,
       }),
-    // Lesson plans are only fetched once a class AND a valid lesson-date range are applied —
-    // the date range itself is now applied server-side rather than fetched-then-filtered.
-    enabled: !!resolvedFilterClass && hasValidDateRange,
+    // Class is optional so an admin can see every plan of one teacher; the date range is still
+    // required (and applied server-side) to keep the fetch bounded. Teachers stay scoped by the API.
+    enabled: hasValidDateRange,
   })
 
   const allPlans = hasValidDateRange ? (plansData?.data?.results || plansData?.data || []) : []
@@ -228,9 +240,22 @@ export default function LessonPlansPage() {
     return allPlans.filter(
       (p) =>
         p.title?.toLowerCase().includes(q) ||
-        p.description?.toLowerCase().includes(q)
+        p.description?.toLowerCase().includes(q) ||
+        p.display_text?.toLowerCase().includes(q) ||
+        p.teacher_name?.toLowerCase().includes(q) ||
+        p.subject_name?.toLowerCase().includes(q)
     )
   }, [allPlans, search])
+
+  const stats = useMemo(() => planStats(plans), [plans])
+  const groups = useMemo(() => (groupMode === 'flat' ? [] : groupPlans(plans, groupMode)), [plans, groupMode])
+  const activeGroup = groups.find((g) => g.key === activeGroupKey) || groups[0]
+  const currentPreset = activePreset(exportDateFrom, exportDateTo)
+  const applyPreset = (id) => {
+    const r = presetRange(id)
+    setExportDateFrom(r.from)
+    setExportDateTo(r.to)
+  }
 
   const exportPlans = useMemo(
     () => plans.slice().sort((a, b) => String(a.lesson_date).localeCompare(String(b.lesson_date))),
@@ -593,230 +618,11 @@ export default function LessonPlansPage() {
     }
   }
 
-  return (
-    <div>
-      {/* Header */}
-      <PageHeader title="Lesson Plans" subtitle="Create and manage lesson plans for your classes" className="mb-6" actions={<>
-<button type="button" onClick={() => setShowBulkModal(true)} className="btn btn-primary">
-          Add Lesson Plan
-        </button>
-</>} />
-
-      <div className="mb-6">
-        <TeacherScopeSummary compact />
-      </div>
-
-      {/* Filters */}
-      <div className="card mb-6">
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 sm:gap-4">
-          <div>
-            <label className="label">Class</label>
-            <ClassSelector
-              className="input"
-              value={filterClass}
-              onChange={(e) => {
-                setFilterClass(e.target.value)
-                setFilterSubject('')
-              }}
-              showAllOption={showAllOption}
-              scope={classSelectorScope}
-              academicYearId={activeAcademicYear?.id}
-              classes={teacherClassOptions || undefined}
-            />
-          </div>
-          <Field label="Subject">
-<select
-              className="input"
-              value={filterSubject}
-              onChange={(e) => setFilterSubject(e.target.value)}
-              disabled={!resolvedFilterClass || filterSubjectsLoading}
-            >
-              <option value="">
-                {!resolvedFilterClass
-                  ? 'Select class first'
-                  : filterSubjectsLoading
-                  ? 'Loading subjects...'
-                  : 'All Assigned Subjects'}
-              </option>
-              {filterClassSubjects.map((subject) => (
-                <option key={subject.id} value={subject.id}>
-                  {subject.code ? `${subject.code} - ` : ''}{subject.name}
-                </option>
-              ))}
-            </select>
-</Field>
-          <Field label="Search">
-<input
-              type="text"
-              className="input"
-              placeholder="Search by title or description..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-</Field>
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 sm:gap-4 mt-4 pt-4 border-t border-gray-100">
-          <Field label="Lesson date — from">
-<input
-              type="date"
-              className="input"
-              value={exportDateFrom}
-              onChange={(e) => setExportDateFrom(e.target.value)}
-            />
-</Field>
-          <Field label="Lesson date — to">
-<input
-              type="date"
-              className="input"
-              value={exportDateTo}
-              onChange={(e) => setExportDateTo(e.target.value)}
-            />
-</Field>
-          <div className="flex flex-col justify-end">
-            <button
-              type="button"
-              className="btn btn-secondary w-full sm:w-auto"
-              disabled={!canDownloadExport}
-              onClick={handleDownloadLessonPlansExport}
-              title={
-                !exportDateFrom || !exportDateTo
-                  ? 'Choose both dates to download full lesson plans in this range'
-                  : exportDateFrom > exportDateTo
-                  ? 'Start date must be on or before end date'
-                  : exportPlans.length === 0
-                  ? 'No plans in this range for current class/subject/search'
-                  : `Download ${exportPlans.length} plan(s) as PDF`
-              }
-            >
-              Download lesson plans (PDF)
-            </button>
-            <p className="text-xs text-gray-500 mt-1">
-              This date range also controls which lesson plans are shown below. Download gets a formatted
-              PDF with full details for every plan in range (respects class, subject, and search above).
-            </p>
-          </div>
-        </div>
-        <TeacherScopeHint
-          className="mt-3"
-          classId={resolvedFilterClass}
-          subjectId={filterSubject}
-          academicYearId={activeAcademicYear?.id}
-          fallbackText="Filter by class and subject to confirm whether the table is showing class-wide or subject-only access."
-        />
-      </div>
-
-      {/* Table */}
-      <div className="card">
-        {!resolvedFilterClass ? (
-          <div className="p-4 sm:p-6">
-            <div className="flex items-center gap-3 flex-wrap">
-              {/* Step 1 */}
-              <div className="flex items-center gap-2 px-3 py-1.5 rounded-full text-sm bg-blue-100 text-blue-700 ring-2 ring-blue-300">
-                <span className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold bg-blue-500 text-white">1</span>
-                Filter Class / Subject
-              </div>
-              <svg className="w-4 h-4 text-gray-300 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
-              {/* Step 2 */}
-              <div className="flex items-center gap-2 px-3 py-1.5 rounded-full text-sm bg-gray-100 text-gray-400">
-                <span className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold bg-gray-300 text-white">2</span>
-                Create Lesson Plan
-              </div>
-              <svg className="w-4 h-4 text-gray-300 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
-              {/* Step 3 */}
-              <div className="flex items-center gap-2 px-3 py-1.5 rounded-full text-sm bg-gray-100 text-gray-400">
-                <span className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold bg-gray-300 text-white">3</span>
-                Publish &amp; Track
-              </div>
-            </div>
-            <p className="text-sm text-gray-500 mt-3">
-              No lesson plans yet. Select a class above to get started.
-            </p>
-          </div>
-        ) : !hasValidDateRange ? (
-          <div className="p-4 sm:p-6 text-center text-gray-500">
-            <p className="text-sm">
-              Select a valid lesson-date range above ("Lesson date - from/to") to view lesson plans for this class.
-            </p>
-          </div>
-        ) : isLoading ? (
-          <div className="text-center py-8">
-            <LoadingState label="Loading lesson plans..." compact />
-          </div>
-        ) : plans.length === 0 ? (
-          allPlans.length === 0 ? (
-            <div className="p-4 sm:p-6 text-center text-gray-500">
-              <p className="text-sm">
-                No lesson plans found for the selected class/subject and date range.
-              </p>
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mt-3">
-                <p className="text-xs text-blue-700">
-                  <span className="font-semibold">Tip:</span> Use the AI Wizard to auto-generate lesson plans from your curriculum topics.
-                </p>
-              </div>
-            </div>
-          ) : (
-            <EmptyState title="No lesson plans match your search within the selected date range." />
-          )
-        ) : (
-          <>
-            {/* Bulk actions toolbar */}
-            {someVisibleSelected && (
-              <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-2 bg-blue-50 border-b border-blue-100">
-                <span className="text-sm text-blue-800 font-medium">
-                  {selectedVisibleIds.length} selected
-                </span>
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    className="text-xs text-gray-600 hover:text-gray-800"
-                    onClick={() => clearSelectedIds(selectedVisibleIds)}
-                  >
-                    Clear
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-secondary text-xs py-1 px-3"
-                    disabled={selectedDraftIds.length === 0 || bulkPublishMutation.isPending}
-                    onClick={() => bulkPublishMutation.mutate(selectedDraftIds)}
-                    title={
-                      selectedDraftIds.length === 0
-                        ? 'No draft plans selected'
-                        : `Approve ${selectedDraftIds.length} plan(s)`
-                    }
-                  >
-                    {bulkPublishMutation.isPending
-                      ? 'Approving...'
-                      : `Approve Selected (${selectedDraftIds.length})`}
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-danger text-xs py-1 px-3"
-                    onClick={() => setBulkDeleteConfirm(true)}
-                  >
-                    Delete Selected ({selectedVisibleIds.length})
-                  </button>
-                </div>
-              </div>
-            )}
-
-            <div className="flex items-center justify-between gap-2 px-2 pt-2">
-              <label className="flex items-center gap-2 text-xs text-gray-600">
-                <input
-                  type="checkbox"
-                  checked={allVisibleSelected}
-                  ref={(el) => {
-                    if (el) el.indeterminate = !allVisibleSelected && someVisibleSelected
-                  }}
-                  onChange={toggleSelectAllVisible}
-                />
-                Select all ({plans.length})
-              </label>
-              <ViewToggle view={view} onChange={setView} />
-            </div>
-
+  const renderPlanList = (listPlans) => (
+    <>
             {view === 'cards' ? (
             <CardGrid className="p-2">
-              {plans.map((plan) => (
+              {listPlans.map((plan) => (
                 <RecordCard
                   key={plan.id}
                   stripeTone={plan.status === 'PUBLISHED' ? 'success' : 'neutral'}
@@ -856,6 +662,7 @@ export default function LessonPlansPage() {
                     { label: 'Date · Duration', value: `${formatDate(plan.lesson_date)} · ${plan.duration_minutes || '--'} min` },
                   ]}
                   actions={[
+                    { label: 'View', tone: 'neutral', onClick: () => setDetailPlan(plan) },
                     { label: 'Edit', tone: 'info', onClick: () => openEditModal(plan) },
                     ...(plan.status === 'DRAFT' ? [{ label: 'Publish', tone: 'success', onClick: () => publishMutation.mutate(plan.id) }] : []),
                     { label: 'Delete', tone: 'danger', onClick: () => setDeleteConfirm(plan) },
@@ -969,7 +776,7 @@ export default function LessonPlansPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {plans.map((plan) => (
+                  {listPlans.map((plan) => (
                     <tr key={plan.id} className="hover:bg-gray-50">
                       <td className="px-4 py-3">
                         <input
@@ -1068,6 +875,12 @@ export default function LessonPlansPage() {
                       </td>
                       <td className="px-4 py-3 text-right">
                         <button
+                          onClick={() => setDetailPlan(plan)}
+                          className="text-sm text-gray-700 hover:text-gray-900 font-medium mr-3"
+                        >
+                          View
+                        </button>
+                        <button
                           onClick={() => openEditModal(plan)}
                           className="text-sm text-blue-600 hover:text-blue-800 font-medium mr-3"
                         >
@@ -1095,9 +908,367 @@ export default function LessonPlansPage() {
               </table>
             </div>
             )}
+    </>
+  )
+
+  return (
+    <div>
+      {/* Header */}
+      <PageHeader title="Lesson Plans" subtitle="Create and manage lesson plans for your classes" className="mb-6" actions={<>
+<button type="button" onClick={() => setShowBulkModal(true)} className="btn btn-primary">
+          Add Lesson Plan
+        </button>
+</>} />
+
+      <div className="mb-6">
+        <TeacherScopeSummary compact />
+      </div>
+
+      {/* Filters */}
+      <div className="card mb-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 sm:gap-4">
+          <div>
+            <label className="label">Class</label>
+            <ClassSelector
+              className="input"
+              value={filterClass}
+              onChange={(e) => {
+                setFilterClass(e.target.value)
+                setFilterSubject('')
+              }}
+              showAllOption={showAllOption}
+              scope={classSelectorScope}
+              academicYearId={activeAcademicYear?.id}
+              classes={teacherClassOptions || undefined}
+            />
+          </div>
+          <Field label="Subject">
+<select
+              className="input"
+              value={filterSubject}
+              onChange={(e) => setFilterSubject(e.target.value)}
+              disabled={!resolvedFilterClass || filterSubjectsLoading}
+            >
+              <option value="">
+                {!resolvedFilterClass
+                  ? 'Select class first'
+                  : filterSubjectsLoading
+                  ? 'Loading subjects...'
+                  : 'All Assigned Subjects'}
+              </option>
+              {filterClassSubjects.map((subject) => (
+                <option key={subject.id} value={subject.id}>
+                  {subject.code ? `${subject.code} - ` : ''}{subject.name}
+                </option>
+              ))}
+            </select>
+</Field>
+          <Field label="Teacher">
+            <StaffFilter
+              value={filterTeacher}
+              onChange={(e) => setFilterTeacher(e.target.value)}
+              role="TEACHER"
+              status="ACTIVE"
+              showAllOption
+              allOptionLabel="All teachers"
+            />
+          </Field>
+          <Field label="Status">
+            <select className="input" value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
+              <option value="">All</option>
+              <option value="DRAFT">Draft</option>
+              <option value="PUBLISHED">Published</option>
+            </select>
+          </Field>
+          <Field label="Search">
+<input
+              type="text"
+              className="input"
+              placeholder="Search by title or description..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+</Field>
+        </div>
+        <div className="flex flex-wrap items-center gap-1.5 mt-4 pt-4 border-t border-gray-100">
+          <span className="text-xs text-gray-500 mr-1">Quick range:</span>
+          {DATE_PRESETS.map((pr) => (
+            <button
+              key={pr.id}
+              type="button"
+              onClick={() => applyPreset(pr.id)}
+              className={`px-2.5 py-1 rounded-full text-xs font-medium border ${
+                currentPreset === pr.id
+                  ? 'bg-primary-600 text-white border-primary-600'
+                  : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
+              }`}
+            >
+              {pr.label}
+            </button>
+          ))}
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 sm:gap-4 mt-3">
+          <Field label="Lesson date — from">
+<input
+              type="date"
+              className="input"
+              value={exportDateFrom}
+              onChange={(e) => setExportDateFrom(e.target.value)}
+            />
+</Field>
+          <Field label="Lesson date — to">
+<input
+              type="date"
+              className="input"
+              value={exportDateTo}
+              onChange={(e) => setExportDateTo(e.target.value)}
+            />
+</Field>
+          <div className="flex flex-col justify-end">
+            <button
+              type="button"
+              className="btn btn-secondary w-full sm:w-auto"
+              disabled={!canDownloadExport}
+              onClick={handleDownloadLessonPlansExport}
+              title={
+                !exportDateFrom || !exportDateTo
+                  ? 'Choose both dates to download full lesson plans in this range'
+                  : exportDateFrom > exportDateTo
+                  ? 'Start date must be on or before end date'
+                  : exportPlans.length === 0
+                  ? 'No plans in this range for current class/subject/search'
+                  : `Download ${exportPlans.length} plan(s) as PDF`
+              }
+            >
+              Download lesson plans (PDF)
+            </button>
+            <p className="text-xs text-gray-500 mt-1">
+              This date range also controls which lesson plans are shown below. Download gets a formatted
+              PDF with full details for every plan in range (respects class, subject, and search above).
+            </p>
+          </div>
+        </div>
+        <TeacherScopeHint
+          className="mt-3"
+          classId={resolvedFilterClass}
+          subjectId={filterSubject}
+          academicYearId={activeAcademicYear?.id}
+          fallbackText="Filter by class and subject to confirm whether the table is showing class-wide or subject-only access."
+        />
+      </div>
+
+      {hasValidDateRange && !isLoading && allPlans.length > 0 && (
+        <div className="grid grid-cols-3 sm:grid-cols-6 gap-3 mb-6" data-testid="lesson-plan-stats">
+          {[
+            ['Plans', stats.total],
+            ['Published', stats.published],
+            ['Draft', stats.draft],
+            ['Teachers', stats.teachers],
+            ['Subjects', stats.subjects],
+            ['Classes', stats.classes],
+          ].map(([label, value]) => (
+            <div key={label} className="card py-3 text-center">
+              <div className="text-xl font-semibold text-gray-900 tabular-nums">{value}</div>
+              <div className="text-[11px] uppercase text-gray-500">{label}</div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Table */}
+      <div className="card">
+        {!resolvedFilterClass && !hasValidDateRange ? (
+          <div className="p-4 sm:p-6">
+            <div className="flex items-center gap-3 flex-wrap">
+              {/* Step 1 */}
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-full text-sm bg-blue-100 text-blue-700 ring-2 ring-blue-300">
+                <span className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold bg-blue-500 text-white">1</span>
+                Filter Class / Subject
+              </div>
+              <svg className="w-4 h-4 text-gray-300 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+              {/* Step 2 */}
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-full text-sm bg-gray-100 text-gray-400">
+                <span className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold bg-gray-300 text-white">2</span>
+                Create Lesson Plan
+              </div>
+              <svg className="w-4 h-4 text-gray-300 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+              {/* Step 3 */}
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-full text-sm bg-gray-100 text-gray-400">
+                <span className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold bg-gray-300 text-white">3</span>
+                Publish &amp; Track
+              </div>
+            </div>
+            <p className="text-sm text-gray-500 mt-3">
+              No lesson plans yet. Select a class above to get started.
+            </p>
+          </div>
+        ) : !hasValidDateRange ? (
+          <div className="p-4 sm:p-6 text-center text-gray-500">
+            <p className="text-sm">
+              Select a valid lesson-date range above ("Lesson date - from/to") to view lesson plans for this class.
+            </p>
+          </div>
+        ) : isLoading ? (
+          <div className="text-center py-8">
+            <LoadingState label="Loading lesson plans..." compact />
+          </div>
+        ) : plans.length === 0 ? (
+          allPlans.length === 0 ? (
+            <div className="p-4 sm:p-6 text-center text-gray-500">
+              <p className="text-sm">
+                No lesson plans found for the selected class/subject and date range.
+              </p>
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mt-3">
+                <p className="text-xs text-blue-700">
+                  <span className="font-semibold">Tip:</span> Use the AI Wizard to auto-generate lesson plans from your curriculum topics.
+                </p>
+              </div>
+            </div>
+          ) : (
+            <EmptyState title="No lesson plans match your search within the selected date range." />
+          )
+        ) : (
+          <>
+            {/* Bulk actions toolbar */}
+            {someVisibleSelected && (
+              <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-2 bg-blue-50 border-b border-blue-100">
+                <span className="text-sm text-blue-800 font-medium">
+                  {selectedVisibleIds.length} selected
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    className="text-xs text-gray-600 hover:text-gray-800"
+                    onClick={() => clearSelectedIds(selectedVisibleIds)}
+                  >
+                    Clear
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-secondary text-xs py-1 px-3"
+                    disabled={selectedDraftIds.length === 0 || bulkPublishMutation.isPending}
+                    onClick={() => bulkPublishMutation.mutate(selectedDraftIds)}
+                    title={
+                      selectedDraftIds.length === 0
+                        ? 'No draft plans selected'
+                        : `Approve ${selectedDraftIds.length} plan(s)`
+                    }
+                  >
+                    {bulkPublishMutation.isPending
+                      ? 'Approving...'
+                      : `Approve Selected (${selectedDraftIds.length})`}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-danger text-xs py-1 px-3"
+                    onClick={() => setBulkDeleteConfirm(true)}
+                  >
+                    Delete Selected ({selectedVisibleIds.length})
+                  </button>
+                </div>
+              </div>
+            )}
+
+            <div className="flex items-center justify-between gap-2 px-2 pt-2">
+              <label className="flex items-center gap-2 text-xs text-gray-600">
+                <input
+                  type="checkbox"
+                  checked={allVisibleSelected}
+                  ref={(el) => {
+                    if (el) el.indeterminate = !allVisibleSelected && someVisibleSelected
+                  }}
+                  onChange={toggleSelectAllVisible}
+                />
+                Select all ({plans.length})
+              </label>
+              <div className="flex items-center gap-2">
+                <select
+                  className="input text-xs py-1"
+                  value={groupMode}
+                  onChange={(e) => { setGroupMode(e.target.value); setActiveGroupKey(null) }}
+                  aria-label="Group by"
+                >
+                  <option value="subject">Group: Subject › Class</option>
+                  <option value="class">Group: Class › Subject</option>
+                  <option value="flat">No grouping</option>
+                </select>
+                <ViewToggle view={view} onChange={setView} />
+              </div>
+            </div>
+
+            {groupMode === 'flat' ? renderPlanList(plans) : (
+              <>
+                <div className="flex flex-wrap gap-1.5 px-2 pt-2 border-b border-gray-100">
+                  {groups.map((g) => (
+                    <button
+                      key={g.key}
+                      type="button"
+                      onClick={() => setActiveGroupKey(g.key)}
+                      className={`px-3 py-1.5 rounded-t-md text-sm font-medium border-b-2 ${
+                        activeGroup?.key === g.key
+                          ? 'border-primary-600 text-primary-700 bg-primary-50'
+                          : 'border-transparent text-gray-600 hover:bg-gray-50'
+                      }`}
+                    >
+                      {g.label}
+                      <span className="ml-1.5 text-xs tabular-nums text-gray-500">{g.count}</span>
+                    </button>
+                  ))}
+                </div>
+                {activeGroup?.children.map((child) => (
+                  <section key={child.key} className="mt-3">
+                    <h3 className="px-3 py-1.5 text-sm font-semibold text-gray-800 bg-gray-50 flex items-center justify-between">
+                      <span>{child.label}</span>
+                      <span className="text-xs font-normal text-gray-500 tabular-nums">
+                        {child.count} plan{child.count === 1 ? '' : 's'} · {child.published} published · {child.draft} draft
+                      </span>
+                    </h3>
+                    {renderPlanList(child.plans)}
+                  </section>
+                ))}
+              </>
+            )}
           </>
         )}
       </div>
+
+      {/* Read-only lesson view */}
+      {detailPlan && (
+        <Modal open onClose={() => setDetailPlan(null)} title={detailPlan.title} size="2xl">
+          <div className="text-xs text-gray-500 mb-3 flex flex-wrap gap-x-3 gap-y-1">
+            <span>{detailPlan.class_name}</span>
+            <span>{detailPlan.subject_name}</span>
+            <span>{detailPlan.teacher_name}</span>
+            <span>{formatDate(detailPlan.lesson_date)}</span>
+            {detailPlan.duration_minutes ? <span>{detailPlan.duration_minutes} min</span> : null}
+            <span className={`px-2 py-0.5 rounded-full font-medium ${STATUS_BADGES[detailPlan.status] || STATUS_BADGES.DRAFT}`}>
+              {detailPlan.status}
+            </span>
+          </div>
+          {planBodySections(detailPlan).length === 0 ? (
+            <p className="text-sm text-gray-500">This plan has no lesson content yet.</p>
+          ) : (
+            planBodySections(detailPlan).map(([heading, text]) => (
+              <div key={heading} className="mb-3">
+                <h4 className="text-xs font-semibold text-gray-500 uppercase mb-1">{heading}</h4>
+                <p className="text-sm text-gray-800 whitespace-pre-wrap break-words">{text}</p>
+              </div>
+            ))
+          )}
+          {(detailPlan.linked_objectives || []).length > 0 && (
+            <div className="mb-3">
+              <h4 className="text-xs font-semibold text-gray-500 uppercase mb-1">Curriculum objectives</h4>
+              <ul className="list-disc pl-5 text-sm text-gray-800">
+                {detailPlan.linked_objectives.map((o) => <li key={o.id}>{o.statement}</li>)}
+              </ul>
+            </div>
+          )}
+          <div className="flex justify-end gap-2 mt-4">
+            <button type="button" className="btn btn-secondary" onClick={() => setDetailPlan(null)}>Close</button>
+            <button type="button" className="btn btn-primary" onClick={() => { const p = detailPlan; setDetailPlan(null); openEditModal(p) }}>Edit</button>
+          </div>
+        </Modal>
+      )}
 
       {/* Create / Edit Modal */}
       {showModal && (

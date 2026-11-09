@@ -3,7 +3,7 @@
 `draft_message` only returns text for the user to review. Actually sending to parents is a
 write and arrives with the approval flow (Phase 4).
 """
-from ..registry import ADMINS, Tool, register
+from ..registry import ADMINS, ProposalError, Tool, register
 
 _STUDENT = {'student_id': {'type': 'integer', 'description': 'From find_student'}}
 _CLASS = {'class_id': {'type': 'integer', 'description': 'From find_class'}}
@@ -13,7 +13,7 @@ _SPECS = {
     'get_student_info': ('Student details: class, parent contact, attendance rate, fee status.', _STUDENT, ['student_id']),
     # Renamed: Academics already has a get_class_info that takes a class *name*.
     'get_class_overview': ('Class details by class_id: student count and teacher.', _CLASS, ['class_id']),
-    'get_attendance_summary': ('Attendance summary for one student or a whole class.', {**_STUDENT, **_CLASS}, []),
+    'get_attendance_summary': ('All-time attendance summary for ONE student (student_id) or ONE class (class_id); needs one of them and ignores dates. For "today" or school-wide counts use get_attendance_summary_school.', {**_STUDENT, **_CLASS}, []),
     'get_fee_status': ("A student's fee payment status.", _STUDENT, ['student_id']),
     'draft_message': ('Draft a message to parents. Returns text for the user to review; it does not send anything.',
                       {'type': {'type': 'string', 'enum': ['absence_followup', 'fee_reminder', 'meeting_invite', 'progress_update', 'circular']},
@@ -41,6 +41,10 @@ def _make_handler(tool_name):
     legacy_name = _LEGACY_NAME.get(tool_name, tool_name)
 
     def handler(ctx, **params):
+        # With neither id the legacy code counts every attendance record of the school for all time
+        # (it once produced "951 children absent today"), so school-wide questions are sent elsewhere.
+        if tool_name == 'get_attendance_summary' and not (params.get('student_id') or params.get('class_id')):
+            raise ProposalError('Needs student_id or class_id. For today or school-wide attendance use get_attendance_summary_school.')
         from notifications.ai_agent import ParentCommunicationAgent
         out = ParentCommunicationAgent(ctx.school_id)._execute_tool(legacy_name, params)
         # The old agent reports failures as plain strings; the registry expects an exception.

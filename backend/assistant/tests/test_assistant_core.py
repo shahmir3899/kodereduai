@@ -70,7 +70,7 @@ class TestRegistry:
     def test_finance_tools_are_registered(self):
         names = {t.name for t in registry.all_tools()}
         assert {'get_pending_fees', 'get_account_balances', 'get_top_expenses'} <= names
-        assert len([t for t in registry.all_tools() if t.sub_agent == 'finance']) == 25
+        assert len([t for t in registry.all_tools() if t.sub_agent == 'finance']) == 26
 
     def test_tool_visibility_follows_role(self, seed_data):
         _enable_finance(seed_data)

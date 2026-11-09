@@ -35,3 +35,35 @@ describe('hasCurriculumData', () => {
     expect(hasCurriculumData({ lms_books_by_class: [{ class_id: 1, class_name: 'A', book_count: 2 }] })).toBe(true);
   });
 });
+
+describe('lessonPlanClassRows', () => {
+  const sub = (id: number, cur: number, prev = 0) => ({ subject_id: id, subject_name: `S${id}`, previous_month: prev, current_month: cur, next_month: 0, draft_current_month: 0 });
+  const teacher = (subjects: ReturnType<typeof sub>[]) => ({ teacher_id: 1, teacher_name: 'T', previous_month: 0, current_month: 0, next_month: 0, draft_current_month: 0, subjects });
+  const data = { lesson_plans: { by_class: [
+    { class_id: 1, class_name: '5-A', previous_month: 0, current_month: 3, next_month: 0, teachers: [teacher([sub(1, 3)])] },
+    { class_id: 2, class_name: '6-A', previous_month: 4, current_month: 0, next_month: 0, teachers: [teacher([sub(2, 0, 4)])] },
+    { class_id: 3, class_name: '7-A', previous_month: 0, current_month: 0, next_month: 0, teachers: [teacher([])] },
+  ] } };
+  it('keeps classes with plans or with a subject gone quiet this month', () => {
+    const { lessonPlanClassRows } = require('../services/leadershipInsights');
+    expect(lessonPlanClassRows(data, 'current_month').map((c: { class_id: number }) => c.class_id)).toEqual([1, 2]);
+    expect(lessonPlanClassRows(data, 'previous_month').map((c: { class_id: number }) => c.class_id)).toEqual([1, 2]);
+  });
+});
+
+describe('teachersBehind', () => {
+  const t = (id: number, cur: number, prev: number, drafts = 0) => ({
+    teacher_id: id, teacher_name: `T${id}`, previous_month: prev, current_month: cur, next_month: 0, draft_current_month: drafts, subjects: [],
+  });
+  it('adds a teacher across classes and ranks the biggest drop first', () => {
+    const { teachersBehind } = require('../services/leadershipInsights');
+    const data = { lesson_plans: { by_class: [
+      { class_id: 1, class_name: 'A', previous_month: 0, current_month: 0, next_month: 0, teachers: [t(1, 2, 6), t(2, 5, 5, 0), t(3, 4, 4, 2)] },
+      { class_id: 2, class_name: 'B', previous_month: 0, current_month: 0, next_month: 0, teachers: [t(1, 1, 4)] },
+    ] } };
+    const rows = teachersBehind(data);
+    expect(rows.map((r: { teacher_id: number }) => r.teacher_id)).toEqual([1, 3]);
+    expect(rows[0]).toMatchObject({ current: 3, previous: 10 });
+    expect(rows[1].drafts).toBe(2);
+  });
+});

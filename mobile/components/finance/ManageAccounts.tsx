@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { ScrollView, Switch, Text, TouchableOpacity, View, StyleSheet } from 'react-native';
 import { useAccountManageActions, useManagedAccounts } from '../../hooks/useFinanceSetup';
+import { useAuth } from '../../contexts/AuthContext';
+import { manageableAccounts } from '../../services/accountsAdmin';
 import { useRefreshControl } from '../../hooks/useRefreshControl';
 import {
   ACCOUNT_TYPES, accountToForm, bankSummary, buildAccountPayload, emptyAccountForm, validateAccount, type AccountForm, type ManagedAccount,
@@ -24,6 +26,7 @@ import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors'
 export default function ManageAccounts() {
   const toast = useToast();
   const q = useManagedAccounts();
+  const { isPrincipal } = useAuth();
   const actions = useAccountManageActions();
   const refreshControl = useRefreshControl(q.refetch);
   const [editing, setEditing] = useState<ManagedAccount | 'new' | null>(null);
@@ -65,7 +68,7 @@ export default function ManageAccounts() {
 
   if (q.isLoading) return <Skeleton />;
   if (q.isError && !q.data) return <ErrorState error={q.error} onRetry={() => q.refetch()} />;
-  const rows = q.data ?? [];
+  const rows = manageableAccounts(q.data ?? [], isPrincipal);
 
   return (
     <>

@@ -16,6 +16,7 @@ const ADMIN_ROUTES: Record<string, string> = {
   '/inventory/transactions': '/(admin)/inventory/transactions',
   '/inventory/assignments': '/(admin)/inventory/assignments',
   '/inventory/reorder-prediction': '/(admin)/inventory/reorder-prediction',
+  '/finance/fees': '/(admin)/finance/fee-overview',
   '/finance/fees/collect': '/(admin)/finance/fee-collection',
   '/finance/income': '/(admin)/finance/income',
   '/finance/expenses': '/(admin)/finance/expense',

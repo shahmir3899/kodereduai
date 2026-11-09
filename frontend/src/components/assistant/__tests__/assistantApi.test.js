@@ -73,9 +73,22 @@ describe('streamMessage', () => {
     await expect(streamMessage(3, 'x', () => {})).rejects.toThrow('Daily message limit reached.')
   })
 
+  it('names the HTTP status when only a framework message comes back (the 406 case)', async () => {
+    fetch.mockResolvedValue({ ok: false, status: 406, json: async () => ({ detail: 'Could not satisfy the request Accept header.' }) })
+    const err = await streamMessage(3, 'x', () => {}).catch((e) => e)
+    expect(err.message).toBe('Could not satisfy the request Accept header. (HTTP 406)')
+    expect(err.status).toBe(406)
+  })
+
+  it('asks for an event stream, which the server now accepts', async () => {
+    fetch.mockResolvedValue(streamOf([sse({ type: 'final', content: 'ok' })]))
+    await streamMessage(3, 'x', () => {})
+    expect(fetch.mock.calls[0][1].headers.Accept).toBe('text/event-stream')
+  })
+
   it('falls back to a generic message when the error body is not JSON', async () => {
     fetch.mockResolvedValue({ ok: false, status: 502, json: async () => { throw new Error('html') } })
-    await expect(streamMessage(3, 'x', () => {})).rejects.toThrow(/could not answer/i)
+    await expect(streamMessage(3, 'x', () => {})).rejects.toThrow(/could not answer.*HTTP 502/i)
   })
 
   it('refreshes the session once on 401 and retries', async () => {

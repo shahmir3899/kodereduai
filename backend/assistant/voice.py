@@ -16,7 +16,7 @@ from datetime import datetime, timezone
 from django.conf import settings
 from django.core.cache import cache
 
-from . import llm, providers
+from . import llm, providers, usage
 from .providers import ProviderError
 
 logger = logging.getLogger(__name__)
@@ -70,7 +70,7 @@ def count_use(user):
         raise VoiceLimit()
 
 
-def transcribe(audio: bytes, content_type: str, language: str = '') -> dict:
+def transcribe(audio: bytes, content_type: str, language: str = '', usage_for=None) -> dict:
     ctype = normalise_type(content_type)
     started = time.monotonic()
     try:
@@ -95,6 +95,8 @@ def transcribe(audio: bytes, content_type: str, language: str = '') -> dict:
         text = ''
     logger.info('stt model=%s bytes=%d seconds=%.1f ms=%d empty=%s', settings.STT_MODEL, len(audio), duration,
                 (time.monotonic() - started) * 1000, not text)
+    if usage_for:       # (school_id, user_id): voice minutes are a cost too
+        usage.record_voice(usage_for[0], usage_for[1], duration)
     return {'text': text, 'language': data.get('language') or '', 'duration': round(duration, 1)}
 
 
@@ -105,12 +107,13 @@ SPOKEN_PROMPT = (
     'keep English. Reply with the spoken text only.')
 
 
-def spoken_version(text: str) -> str:
+def spoken_version(text: str, usage_for=None) -> str:
     """A short version of a reply for text-to-speech. Uses the small, cheap model tier."""
     try:
-        reply = llm.complete(
-            [{'role': 'system', 'content': SPOKEN_PROMPT}, {'role': 'user', 'content': text[:SPOKEN_INPUT_MAX]}],
-            max_tokens=160, temperature=0.2, retries=0, tier='fast')
+        with usage.scope(*(usage_for or (None, None))):
+            reply = llm.complete(
+                [{'role': 'system', 'content': SPOKEN_PROMPT}, {'role': 'user', 'content': text[:SPOKEN_INPUT_MAX]}],
+                max_tokens=160, temperature=0.2, retries=0, tier='fast')
     except llm.LLMUnavailable:
         raise VoiceUnavailable('Could not prepare the spoken version right now.')
     return reply.content.strip()

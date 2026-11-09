@@ -44,3 +44,11 @@ describe('face attendance', () => {
     expect(navFor('SCHOOL_ADMIN')).toContain('/face-attendance')
   })
 })
+
+describe('Aura insights link', () => {
+  it('is offered to school admins and principals only', () => {
+    expect(navFor('SCHOOL_ADMIN')).toContain('/aura-insights')
+    expect(navFor('PRINCIPAL')).toContain('/aura-insights')
+    for (const role of ['TEACHER', 'ACCOUNTANT', 'MANAGER', 'STAFF']) expect(navFor(role)).not.toContain('/aura-insights')
+  })
+})

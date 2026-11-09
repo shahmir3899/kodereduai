@@ -114,3 +114,7 @@ textarea[dir="rtl"] {
 @keyframes assistant-bar { 0%, 100% { transform: scaleY(0.55); } 50% { transform: scaleY(1.35); } }
 .assistant-bar-speaking { animation: assistant-bar 0.7s ease-in-out infinite; transform-origin: bottom; }
 @media (prefers-reduced-motion: reduce) { .assistant-bar-speaking { animation: none; } }
+
+/* Talk mode orb: the thinking ring turns around its own centre. */
+.talk-spin { transform-box: fill-box; transform-origin: center; animation: assistant-spin 2.4s linear infinite; }
+@media (prefers-reduced-motion: reduce) { .talk-spin { animation: none; } }

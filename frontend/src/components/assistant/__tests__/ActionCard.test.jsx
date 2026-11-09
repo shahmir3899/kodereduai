@@ -153,6 +153,18 @@ describe('buildEdits', () => {
     expect(buildEdits('expense_entries', rows, { ...empty(), amounts: { a: '100', b: '250' }, removed: new Set(['b']) })).toEqual({ remove_keys: ['b'] })
   })
 
+  it('staff attendance sends statuses and removals under the right names', () => {
+    const staff = [{ staff_id: 3, status: 'ABSENT' }, { staff_id: 4, status: 'PRESENT' }]
+    expect(buildEdits('staff_attendance', staff, { ...empty(), statuses: { 3: 'LATE', 4: 'PRESENT' }, removed: new Set([4]) }))
+      .toEqual({ remove_ids: [4], statuses: { 3: 'LATE' } })
+  })
+
+  it('stock cards send quantity edits and removals by line key', () => {
+    const lines = [{ key: 'l0', quantity: 20 }, { key: 'l1', quantity: 5 }]
+    expect(buildEdits('stock_entries', lines, { ...empty(), amounts: { l0: '25' }, removed: new Set(['l1']) }))
+      .toEqual({ remove_keys: ['l1'], amounts: { l0: '25' } })
+  })
+
   it('returns nothing for an unknown kind', () => {
     expect(buildEdits('mystery', rows, empty())).toEqual({})
   })

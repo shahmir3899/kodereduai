@@ -4,8 +4,10 @@ import logging
 from django.conf import settings
 from django.core.serializers.json import DjangoJSONEncoder
 from django.http import StreamingHttpResponse
+from django.http import Http404
 from django.shortcuts import get_object_or_404
 from rest_framework import serializers
+from rest_framework.negotiation import DefaultContentNegotiation
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -13,9 +15,9 @@ from rest_framework.views import APIView
 from core.mixins import ensure_tenant_school_id
 from core.permissions import HasSchoolAccess, get_effective_role
 
-from . import engine, memory, orchestrator, registry, voice
+from . import engine, gaps, insights, memory, orchestrator, registry, usage, voice
 from .guards import GuardRefusal
-from .models import AgentConversation, AgentMessage
+from .models import AgentConversation, AgentGap, AgentGapGroup, AgentMessage
 
 logger = logging.getLogger(__name__)
 
@@ -54,9 +56,17 @@ class _AssistantView(APIView):
     # Parents and students use the assistant too; what they may do is decided per tool,
     # not by the school-wide portal block.
     allow_portal_roles = True
+    # Capabilities answers "nothing available" instead of 404 so the app can simply hide the orb.
+    off_means_404 = True
 
     def _school_id(self, request):
         return ensure_tenant_school_id(request)
+
+    def initial(self, request, *args, **kwargs):
+        super().initial(request, *args, **kwargs)
+        school_id = self._school_id(request)
+        if self.off_means_404 and school_id and not usage.assistant_enabled(school_id):
+            raise Http404()
 
     def _conversation(self, request, pk):
         school_id = self._school_id(request)
@@ -139,6 +149,83 @@ class MessageListView(_AssistantView):
         })
 
 
+class FeedbackView(_AssistantView):
+    """Thumbs up/down on one of Aura's replies (or the reply that owns an approval card)."""
+
+    def post(self, request):
+        school_id = self._school_id(request)
+        try:
+            rating = int(request.data.get('rating'))
+            message_id = int(request.data.get('message_id'))
+        except (TypeError, ValueError):
+            return Response({'error': 'message_id and rating are required'}, status=400)
+        if rating not in (1, -1):
+            return Response({'error': 'rating must be 1 or -1'}, status=400)
+        # Someone else's message looks the same as a missing one.
+        message = AgentMessage.objects.filter(
+            pk=message_id, role=AgentMessage.Role.ASSISTANT,
+            conversation__school_id=school_id, conversation__user=request.user,
+        ).select_related('conversation').first()
+        if not message:
+            return Response({'detail': 'Message not found.'}, status=404)
+
+        ctx = registry.ToolContext(user=request.user, school_id=school_id, role=get_effective_role(request),
+                                   conversation=message.conversation)
+        kind = AgentGap.Kind.THUMBS_UP if rating == 1 else AgentGap.Kind.THUMBS_DOWN
+        # One opinion per person per message: a changed mind replaces the old row.
+        AgentGap.objects.filter(school_id=school_id, user=request.user, message_id=message.pk,
+                                kind__in=[AgentGap.Kind.THUMBS_UP, AgentGap.Kind.THUMBS_DOWN]).delete()
+        row = gaps.record_gap(ctx, kind, message.conversation.messages.filter(
+            role=AgentMessage.Role.USER, created_at__lte=message.created_at).order_by('-created_at', '-id')
+            .values_list('content', flat=True).first() or '',
+            agent=message.sub_agent.split(',')[0] if message.sub_agent else '',
+            message_id=message.pk, rating=rating, reason=str(request.data.get('reason', ''))[:300], dedupe=False)
+        return Response({'ok': row is not None})
+
+
+class InsightsView(_AssistantView):
+    """What people asked that Aura could not do. School admin / principal: own school. Super admin: all schools."""
+    # History stays readable even if a school switches Aura off.
+    off_means_404 = False
+
+    def get(self, request):
+        super_admin = bool(request.user.is_super_admin)
+        role = get_effective_role(request)
+        if not super_admin and role not in ('SCHOOL_ADMIN', 'PRINCIPAL'):
+            return Response({'detail': 'Only admins can see Aura insights.'}, status=403)
+        q = request.query_params
+        try:
+            days = int(q.get('days', 30))
+            school_filter = int(q['school']) if q.get('school') else None
+        except ValueError:
+            return Response({'error': 'days and school must be numbers'}, status=400)
+        return Response(insights.build(
+            self._school_id(request), super_admin, days=days, kind=q.get('kind') or None, agent=q.get('agent') or None,
+            role=q.get('role') or None, status=q.get('status') or None, school_filter=school_filter))
+
+
+class InsightsGroupView(_AssistantView):
+    """Owner decision on a group: status, note, linked baseline question. Super admin only."""
+    off_means_404 = False
+
+    def patch(self, request, pk):
+        if not request.user.is_super_admin:
+            return Response({'detail': 'Only the super admin can change a group.'}, status=403)
+        group = get_object_or_404(AgentGapGroup, pk=pk)
+        data = request.data
+        if 'status' in data:
+            if data['status'] not in AgentGapGroup.Status.values:
+                return Response({'error': 'Invalid status.'}, status=400)
+            group.status = data['status']
+        if 'note' in data:
+            group.note = str(data['note'])[:2000]
+        if 'baseline_question_id' in data:
+            group.baseline_question_id = (str(data['baseline_question_id'])[:60] or None)
+        group.save()
+        return Response({'id': group.id, 'status': group.status, 'note': group.note,
+                         'baseline_question_id': group.baseline_question_id})
+
+
 class ActionListView(_AssistantView):
     def get(self, request):
         school_id = self._school_id(request)
@@ -186,7 +273,8 @@ class ActionEditView(_ActionStepView):
 
 AGENT_LABELS = {
     'finance': 'Finance', 'academics': 'Academics', 'attendance': 'Attendance',
-    'communication': 'Parent communication', 'study': 'Study helper',
+    'communication': 'Parent communication', 'study': 'Study helper', 'exams': 'Exams',
+    'operations': 'Operations', 'family': 'My children', 'hr': 'HR', 'students': 'Students & admissions',
 }
 # Starter prompts per sub-agent, in the mix the users actually type (English and Roman Urdu).
 SUGGESTIONS = {
@@ -195,6 +283,11 @@ SUGGESTIONS = {
                   'Plan English chapters 3 and 4 for next month'],
     'attendance': ['Which classes have not marked attendance today?', 'Class 5A ki hazri lagao'],
     'communication': ['Draft a fee reminder for Class 5 parents', 'Ali Raza ki attendance kaisi hai?'],
+    'exams': ['How did Class 5 do in the mid term?', 'Class 6 maths ke marks enter karo'],
+    'students': ['How many open admission enquiries do we have?', 'Ali Raza ka profile dikhao'],
+    'family': ['How is my child doing in attendance?', 'Fees kitni baqi hai?'],
+    'operations': ['Which library books are overdue?', 'How many chairs are left in inventory?'],
+    'hr': ['Who is on leave today?', 'Sana ki chutti approve kar do', 'Generate payslips for this month'],
     'study': ['Aaj ka kaam kya hai?', 'What were my marks in the last exam?'],
 }
 
@@ -205,10 +298,11 @@ def _sse(event):
 
 class CapabilitiesView(_AssistantView):
     """What the assistant can do for THIS user: the orb only appears when the list is not empty."""
+    off_means_404 = False
 
     def get(self, request):
         school_id = self._school_id(request)
-        if not school_id:
+        if not school_id or not usage.assistant_enabled(school_id):
             return Response({'agents': [], 'suggestions': []})
         ctx = registry.ToolContext(user=request.user, school_id=school_id, role=get_effective_role(request))
         agents = {}
@@ -225,9 +319,20 @@ class CapabilitiesView(_AssistantView):
                          'voice': {'enabled': voice.available(), 'max_seconds': voice.MAX_SECONDS}})
 
 
+class IgnoreAcceptNegotiation(DefaultContentNegotiation):
+    """Browsers open an event stream with `Accept: text/event-stream`, which matches none of DRF's JSON/HTML
+    renderers, so DRF answered 406 before the view ran. This view returns its own streaming response and only
+    renders small JSON errors, so the Accept header must not decide anything: always use the first renderer (JSON).
+    Choosing the parser from the request's Content-Type is unchanged."""
+
+    def select_renderer(self, request, renderers, format_suffix=None):
+        return renderers[0], renderers[0].media_type
+
+
 class MessageStreamView(_AssistantView):
     """Same turn as the messages endpoint, but as server-sent events so the screen can show what is happening:
     start, route, step (start/end), card (a change waiting for approval), final (or error)."""
+    content_negotiation_class = IgnoreAcceptNegotiation
 
     def post(self, request, pk):
         conv = self._conversation(request, pk)
@@ -271,16 +376,21 @@ class _VoiceView(_AssistantView):
     def _gate(self, request):
         """Return an error Response, or None when voice may be used."""
         if not voice.available():
-            return Response({'error': 'Voice is switched off.'}, status=503)
+            return _refuse('Voice is switched off.', 503)
         school_id = self._school_id(request)
         ctx = registry.ToolContext(user=request.user, school_id=school_id, role=get_effective_role(request))
         if not school_id or not registry.tools_for(ctx):
-            return Response({'error': 'Voice is not available for your account.'}, status=403)
+            return _refuse('Voice is not available for your account.', 403, role=ctx.role)
         try:
             voice.count_use(request.user)
         except voice.VoiceLimit:
-            return Response({'error': 'Daily voice limit reached. You can still type.'}, status=429)
+            return _refuse('Daily voice limit reached. You can still type.', 429, user=request.user.pk)
         return None
+
+
+def _refuse(reason, status, **facts):
+    logger.warning('voice request refused (%s): %s %s', status, reason, ' '.join(f'{k}={v}' for k, v in facts.items()))
+    return Response({'error': reason}, status=status)
 
 
 class TranscribeView(_VoiceView):
@@ -289,23 +399,24 @@ class TranscribeView(_VoiceView):
     def post(self, request):
         audio = request.FILES.get('audio')
         if audio is None:
-            return Response({'error': 'audio is required'}, status=400)
+            return _refuse('audio is required', 400, fields=sorted(request.FILES))
         if audio.size == 0:
-            return Response({'error': 'The recording is empty.'}, status=400)
+            return _refuse('The recording is empty.', 400)
         if audio.size > settings.STT_MAX_BYTES:
-            return Response({'error': 'The recording is too long. Keep it under a minute.'}, status=413)
+            return _refuse('The recording is too long. Keep it under a minute.', 413, bytes=audio.size)
         if voice.normalise_type(audio.content_type) not in voice.EXTENSIONS:
-            return Response({'error': 'This audio format is not supported.'}, status=415)
+            return _refuse('This audio format is not supported.', 415, content_type=audio.content_type)
         language = str(request.data.get('language', '')).strip().lower()
         if language not in voice.LANGUAGES:
-            return Response({'error': 'language must be auto, ur or en'}, status=400)
+            return _refuse('language must be auto, ur or en', 400, language=language)
         blocked = self._gate(request)
         if blocked:
             return blocked
         try:
-            return Response(voice.transcribe(audio.read(), audio.content_type, language))
+            return Response(voice.transcribe(audio.read(), audio.content_type, language,
+                                                usage_for=(self._school_id(request), request.user.pk)))
         except voice.VoiceUnavailable as exc:
-            return Response({'error': str(exc)}, status=503)
+            return _refuse(str(exc), 503)
 
 
 class SpokenVersionView(_VoiceView):
@@ -321,7 +432,7 @@ class SpokenVersionView(_VoiceView):
         if blocked:
             return blocked
         try:
-            return Response({'spoken': voice.spoken_version(text)})
+            return Response({'spoken': voice.spoken_version(text, usage_for=(self._school_id(request), request.user.pk))})
         except voice.VoiceUnavailable as exc:
             return Response({'error': str(exc)}, status=503)
 

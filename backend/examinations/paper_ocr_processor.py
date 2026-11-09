@@ -10,6 +10,8 @@ handwriting detection optimized for document OCR.
 """
 
 import logging
+
+from assistant.usage import record_external
 import json
 from typing import Dict, Any, Optional, List
 from dataclasses import dataclass
@@ -645,6 +647,7 @@ class PaperOCRProcessor:
                 )
 
             result = response.json()
+            record_external('examinations.paper_ocr_processor.vision', result)
 
             if 'choices' not in result or not result['choices']:
                 return QuestionExtractionResult(
@@ -759,6 +762,7 @@ class PaperOCRProcessor:
             return self._fallback_or_raise(text, f"Groq API error ({GROQ_MODEL}): {error_detail}")
 
         result = response.json()
+        record_external('examinations.paper_ocr_processor.structure', result)
         content = result['choices'][0]['message']['content'].strip()
 
         try:
@@ -909,6 +913,7 @@ Return ONLY the JSON object, no extra text."""
             response.raise_for_status()
             
             result = response.json()
+            record_external('examinations.paper_ocr_processor.extract', result)
             content = result['choices'][0]['message']['content'].strip()
             
             # Remove markdown code blocks if present

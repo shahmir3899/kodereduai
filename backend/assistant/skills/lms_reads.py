@@ -78,7 +78,9 @@ def list_lesson_plans(ctx, limit=30, **filters):
     rows = [{'id': p.id, 'date': p.lesson_date, 'title': p.title, 'status': p.status, 'subject': p.subject.name,
              'class': (lc.section_label(p.session_class) if p.session_class_id else p.class_obj.name),
              'teacher': lc.staff_name(p.teacher)} for p in qs.order_by('lesson_date')[:min(int(limit), 60)]]
-    return {'count': qs.count(), 'shown': len(rows), 'plans': rows}
+    # The exact period is returned because the model otherwise writes the year from memory (it said 2024 for 2026).
+    period = 'all time' if filters.get('all_time') else f'{filters.get("date_from") or "..."} to {filters.get("date_to") or "..."}'
+    return {'count': qs.count(), 'shown': len(rows), 'period': period, 'plans': rows}
 
 
 def get_book_outline(ctx, class_name=None, subject_name=None, book_id=None, chapter_numbers=None):
@@ -139,7 +141,7 @@ def list_assignments(ctx, class_name=None, section=None, subject_name=None, assi
     rows = [{'id': a.id, 'type': a.assignment_type, 'class': (lc.section_label(a.session_class) if a.session_class_id else a.class_obj.name),
              'subject': a.subject.name, 'title': a.title, 'text': (a.description or '')[:300], 'status': a.status,
              'due': a.due_date, 'teacher': lc.staff_name(a.teacher)} for a in qs.order_by('-created_at')[:min(int(limit), 60)]]
-    return {'count': qs.count(), 'shown': len(rows), 'entries': rows}
+    return {'count': qs.count(), 'shown': len(rows), 'period': f'{d0} to {d1}', 'entries': rows}
 
 
 def find_teacher(ctx, query):
@@ -174,7 +176,8 @@ register(Tool(
 ))
 register(Tool(
     name='list_assignments',
-    description='Diary, homework, classwork and lab entries given to a class on a date or date range (default today).',
+    description=('Diary, homework, classwork and lab entries given to a class on a date or date range (default today). '
+                 'Set assignment_type to DIARY when the user asks for the diary, HOMEWORK for homework. A teacher asking about their own class needs no name.'),
     parameters={**_ANY, 'properties': {
         'class_name': {'type': 'string'}, 'section': {'type': 'string', 'description': 'Section letter, e.g. "A"'},
         'subject_name': {'type': 'string'},

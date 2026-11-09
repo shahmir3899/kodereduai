@@ -1,4 +1,130 @@
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
+
+const MONTH_TABS = [
+  ['previous_month', 'Previous'],
+  ['current_month', 'Current'],
+  ['next_month', 'Next'],
+]
+
+// "2026-11" -> the first and last day, for the lesson plans page link.
+function monthRange(label) {
+  const m = /^(\d{4})-(\d{2})$/.exec(label || '')
+  if (!m) return null
+  const last = new Date(Number(m[1]), Number(m[2]), 0).getDate()
+  return { from: `${label}-01`, to: `${label}-${String(last).padStart(2, '0')}` }
+}
+
+// Teachers whose plan count this month is below last month's, or who still have drafts waiting.
+// A teacher teaches in several classes, so rows are added up across the class tree. Biggest drop first.
+function teachersBehind(byClass, limit = 5) {
+  const byTeacher = new Map()
+  for (const c of byClass) {
+    for (const t of c.teachers) {
+      const row = byTeacher.get(t.teacher_id) || { teacher_id: t.teacher_id, teacher_name: t.teacher_name, current: 0, previous: 0, drafts: 0 }
+      row.current += t.current_month
+      row.previous += t.previous_month
+      row.drafts += t.draft_current_month
+      byTeacher.set(t.teacher_id, row)
+    }
+  }
+  return [...byTeacher.values()]
+    .filter((r) => r.current < r.previous || r.drafts > 0)
+    .sort((a, b) => (b.previous - b.current) - (a.previous - a.current) || b.drafts - a.drafts || a.teacher_name.localeCompare(b.teacher_name))
+    .slice(0, limit)
+}
+
+function TeachersBehind({ byClass, buckets }) {
+  const rows = teachersBehind(byClass)
+  if (rows.length === 0) return null
+  const range = monthRange(buckets.current_month?.label)
+  return (
+    <div>
+      <p className="text-[10px] font-semibold text-gray-500 uppercase mb-1.5">Teachers behind schedule</p>
+      <div className="border border-gray-100 rounded-lg divide-y divide-gray-100 text-xs">
+        {rows.map((t) => (
+          <div key={t.teacher_id} className="flex justify-between gap-2 px-2 py-1.5">
+            <Link
+              to={`/academics/lesson-plans?teacher_id=${t.teacher_id}${range ? `&from=${range.from}&to=${range.to}` : ''}`}
+              className="text-sky-700 hover:underline truncate"
+            >
+              {t.teacher_name}
+            </Link>
+            <span className="text-gray-600 tabular-nums shrink-0">
+              {t.current} this month ({t.previous} last)
+              {t.drafts > 0 && <span className="text-amber-700"> · {t.drafts} draft{t.drafts === 1 ? '' : 's'}</span>}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// Class > teacher > subjects with plan counts for one month. A subject with no plans in the chosen
+// month still shows (as 0) when it has plans in a neighbouring month, so gaps are visible.
+function LessonPlansByClass({ byClass, buckets }) {
+  const [month, setMonth] = useState('current_month')
+  const range = monthRange(buckets[month]?.label)
+  const link = (teacherId, subjectId) => {
+    const q = new URLSearchParams()
+    if (teacherId) q.set('teacher_id', teacherId)
+    if (subjectId) q.set('subject_id', subjectId)
+    if (range) { q.set('from', range.from); q.set('to', range.to) }
+    return `/academics/lesson-plans?${q.toString()}`
+  }
+  const rows = byClass.filter((c) => c[month] > 0 || c.teachers.some((t) => t.subjects.some((s) => s[month] === 0)))
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-1.5">
+        <p className="text-[10px] font-semibold text-gray-500 uppercase">Lesson plans by class</p>
+        <div className="inline-flex rounded-md border border-gray-200 overflow-hidden">
+          {MONTH_TABS.map(([key, label]) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => setMonth(key)}
+              title={buckets[key]?.label}
+              className={`px-2 py-0.5 text-[11px] ${month === key ? 'bg-sky-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="max-h-72 overflow-y-auto border border-gray-100 rounded-lg divide-y divide-gray-100 text-xs">
+        {rows.length === 0 && <p className="px-2 py-2 text-gray-500">No lesson plans in {buckets[month]?.label || 'this month'}.</p>}
+        {rows.map((c) => (
+          <div key={c.class_id} className="px-2 py-1.5">
+            <div className="flex justify-between font-medium text-gray-900">
+              <span className="truncate">{c.class_name}</span>
+              <span className="tabular-nums text-gray-600">{c[month]} plans</span>
+            </div>
+            {c.teachers.map((t) => (
+              <div key={t.teacher_id} className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 mt-0.5 pl-2">
+                <Link to={link(t.teacher_id)} className="text-sky-700 hover:underline truncate max-w-[130px]">{t.teacher_name}</Link>
+                <span className="text-gray-400">—</span>
+                {t.subjects.map((sub) => (
+                  <Link
+                    key={sub.subject_id}
+                    to={link(t.teacher_id, sub.subject_id)}
+                    className={`px-1.5 py-0.5 rounded border ${
+                      sub[month] === 0
+                        ? 'bg-red-50 text-red-700 border-red-100'
+                        : 'bg-gray-50 text-gray-700 border-gray-100 hover:bg-gray-100'
+                    }`}
+                  >
+                    {sub.subject_name} ({sub[month]})
+                  </Link>
+                ))}
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
 
 // ─── Leadership insights (bootstrap leadership-academic-insights) ─────────────
 
@@ -22,11 +148,8 @@ export default function LeadershipInsightsPanels({ data, loading, showRoster, sh
   const topicsByBook = data.lms_topics_by_book || []
   const qb = data.question_bank || { total: 0, by_subject: [] }
   const lp = data.lesson_plans || { buckets: {}, by_teacher_class: [] }
-  const lpRows = lp.by_teacher_class || []
+  const lpByClass = lp.by_class || []
   const buckets = lp.buckets || {}
-  const prevL = buckets.previous_month?.label || 'Prev'
-  const curL = buckets.current_month?.label || 'Current'
-  const nextL = buckets.next_month?.label || 'Next'
 
   const depChip = (label, block) => {
     if (!block) return null
@@ -47,7 +170,6 @@ export default function LeadershipInsightsPanels({ data, loading, showRoster, sh
   }
 
   const topicPreview = topicsByBook.slice(0, 12)
-  const lpPreview = lpRows.slice(0, 18)
 
   return (
     <div className="mb-6 grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -147,39 +269,13 @@ export default function LeadershipInsightsPanels({ data, loading, showRoster, sh
             </div>
           )}
 
-          {lpPreview.length > 0 && (
-            <div className="overflow-x-auto border border-gray-100 rounded-lg">
-              <table className="min-w-full text-xs">
-                <thead>
-                  <tr className="bg-gray-50 text-left text-[10px] uppercase text-gray-500">
-                    <th className="px-2 py-2 font-medium">Teacher</th>
-                    <th className="px-2 py-2 font-medium">Class</th>
-                    <th className="px-2 py-2 font-medium tabular-nums">{prevL}</th>
-                    <th className="px-2 py-2 font-medium tabular-nums">{curL}</th>
-                    <th className="px-2 py-2 font-medium tabular-nums">{nextL}</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {lpPreview.map((row) => (
-                    <tr key={`${row.teacher_id}-${row.class_id}`} className="hover:bg-gray-50/80">
-                      <td className="px-2 py-1.5 text-gray-800 max-w-[120px] truncate">{row.teacher_name}</td>
-                      <td className="px-2 py-1.5 text-gray-600 max-w-[80px] truncate">{row.class_name}</td>
-                      <td className="px-2 py-1.5 tabular-nums text-gray-700">{row.previous_month}</td>
-                      <td className="px-2 py-1.5 tabular-nums text-gray-700">{row.current_month}</td>
-                      <td className="px-2 py-1.5 tabular-nums text-gray-700">{row.next_month}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              {lpRows.length > lpPreview.length && (
-                <p className="text-[10px] text-gray-500 px-2 py-1 border-t bg-gray-50">
-                  Showing {lpPreview.length} of {lpRows.length} teacher–class combinations.
-                </p>
-              )}
-            </div>
-          )}
+          {lpByClass.length > 0 ? (
+            <LessonPlansByClass byClass={lpByClass} buckets={buckets} />
+          ) : null}
 
-          {books.length === 0 && topicPreview.length === 0 && qb.total === 0 && lpPreview.length === 0 && (
+          {lpByClass.length > 0 && <TeachersBehind byClass={lpByClass} buckets={buckets} />}
+
+          {books.length === 0 && topicPreview.length === 0 && qb.total === 0 && lpByClass.length === 0 && (
             <p className="text-xs text-gray-500">No curriculum or question bank data yet for this school.</p>
           )}
         </div>

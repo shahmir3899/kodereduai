@@ -85,6 +85,12 @@
         {
           "faceIDPermission": "Education AI uses Face ID to unlock the app."
         }
+      ],
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "Education AI uses the microphone so you can talk to the Aura assistant."
+        }
       ]
     ],
     "extra": {

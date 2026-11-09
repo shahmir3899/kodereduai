@@ -10,6 +10,9 @@ export const assistantApi = {
   updateConversation: (id, data) => api.patch(`${BASE}/conversations/${id}/`, data),
   deleteConversation: (id) => api.delete(`${BASE}/conversations/${id}/`),
   getMessages: (id) => api.get(`${BASE}/conversations/${id}/messages/`),
+  getInsights: (params) => api.get(`${BASE}/insights/`, { params }),
+  updateInsightGroup: (id, data) => api.patch(`${BASE}/insights/groups/${id}/`, data),
+  sendFeedback: (data) => api.post(`${BASE}/feedback/`, data),
   listActions: () => api.get(`${BASE}/actions/`),
   approveAction: (id) => api.post(`${BASE}/actions/${id}/approve/`, {}),
   rejectAction: (id) => api.post(`${BASE}/actions/${id}/reject/`, {}),
@@ -80,11 +83,14 @@ export async function streamMessage(conversationId, message, onEvent, signal) {
     let detail = 'The assistant could not answer. Please try again.'
     try {
       const body = await response.json()
-      detail = body.error || body.detail || detail
+      // Our own errors are written for people. A framework message (like a 406) is not, so say which HTTP status it was.
+      detail = body.error || (body.detail ? `${body.detail} (HTTP ${response.status})` : detail)
     } catch {
-      // keep the default message
+      detail = `${detail} (HTTP ${response.status})`
     }
-    throw new Error(detail)
+    const error = new Error(detail)
+    error.status = response.status
+    throw error
   }
   if (!response.body) throw new Error('Streaming is not supported by this browser.')
 

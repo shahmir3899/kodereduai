@@ -41,7 +41,7 @@ const finalWith = (content, extra = {}) => ({
 
 async function openOrb() {
   renderWithProviders(<AssistantOrb />)
-  await userEvent.click(await screen.findByRole('button', { name: 'Open assistant' }))
+  await userEvent.click(await screen.findByRole('button', { name: 'Open Aura' }))
 }
 
 beforeEach(() => {
@@ -56,7 +56,7 @@ describe('AssistantOrb visibility', () => {
   it('is absent and silent when the assistant is switched off', async () => {
     window.localStorage.setItem('assistant_beta', '0')
     renderWithProviders(<AssistantOrb />)
-    expect(screen.queryByRole('button', { name: /assistant/i })).toBeNull()
+    expect(screen.queryByRole('button', { name: /aura/i })).toBeNull()
     expect(assistantApi.capabilities).not.toHaveBeenCalled()
   })
 
@@ -64,19 +64,19 @@ describe('AssistantOrb visibility', () => {
     assistantApi.capabilities.mockResolvedValue({ data: { agents: [], suggestions: [] } })
     renderWithProviders(<AssistantOrb />)
     await waitFor(() => expect(assistantApi.capabilities).toHaveBeenCalled())
-    expect(screen.queryByRole('button', { name: /assistant/i })).toBeNull()
+    expect(screen.queryByRole('button', { name: /aura/i })).toBeNull()
   })
 
   it('appears for a user with tools', async () => {
     renderWithProviders(<AssistantOrb />)
-    expect(await screen.findByRole('button', { name: 'Open assistant' })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'Open Aura' })).toBeInTheDocument()
   })
 })
 
 describe('AssistantOrb panel', () => {
   it('opens with the agents, starter prompts and an empty memory counter', async () => {
     await openOrb()
-    expect(screen.getByRole('dialog', { name: 'Assistant' })).toBeInTheDocument()
+    expect(screen.getByRole('dialog', { name: 'Aura' })).toBeInTheDocument()
     expect(screen.getByLabelText('Memory 0 of 10 messages')).toHaveTextContent('0/10')
     expect(screen.getByText('Class 5A ki hazri lagao')).toBeInTheDocument()
     expect(screen.getByText('Finance')).toBeInTheDocument()
@@ -128,7 +128,7 @@ describe('AssistantOrb panel', () => {
   })
 
   it('shows an error line when the stream fails', async () => {
-    script([{ type: 'error', message: 'The assistant hit an error. Please try again.' }])
+    script([{ type: 'error', message: 'Aura hit an error. Please try again.' }])
     await openOrb()
     await userEvent.type(screen.getByLabelText('Message'), 'hi{Enter}')
     expect(await screen.findByRole('alert')).toHaveTextContent('hit an error')
@@ -164,6 +164,23 @@ describe('AssistantOrb panel', () => {
     await userEvent.type(screen.getByLabelText('Message'), 'two{Enter}')
     await screen.findByText('second answer')
     expect(streamMessage).toHaveBeenLastCalledWith(4, 'two', expect.any(Function), expect.anything())
+  })
+
+  it('a "which one?" reply offers buttons that send the exact choice, only on the newest reply', async () => {
+    const choices = [
+      { label: 'Ahmad Raza, Class 8 B', send: 'Ahmad Raza, Class 8 B (student_id 11)' },
+      { label: 'Ahmad Khan, Class 5 A', send: 'Ahmad Khan, Class 5 A (student_id 12)' },
+    ]
+    script([{ ...finalWith('Which Ahmad do you mean?'), choices }])
+    await openOrb()
+    await userEvent.type(screen.getByLabelText('Message'), 'ahmad ki fee{Enter}')
+    await screen.findByText('Which Ahmad do you mean?')
+    script([finalWith('Ahmad Raza has no fee pending.')])
+    await userEvent.click(screen.getByRole('button', { name: 'Ahmad Raza, Class 8 B' }))
+    await screen.findByText('Ahmad Raza has no fee pending.')
+    expect(streamMessage).toHaveBeenLastCalledWith(expect.anything(), 'Ahmad Raza, Class 8 B (student_id 11)', expect.any(Function), expect.anything())
+    // The old question has moved on: its buttons are gone.
+    expect(screen.queryByRole('group', { name: 'Pick one' })).toBeNull()
   })
 
   it('Escape minimises the panel', async () => {

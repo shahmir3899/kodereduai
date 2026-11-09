@@ -4,7 +4,7 @@ Roles are narrower than the old view (which let any non-portal user ask anything
 schedules for admins, managers and teachers; analysis that exposes every teacher's
 workload or proposes timetable changes for admins and managers only.
 """
-from ..registry import ADMINS, Tool, register
+from ..registry import ADMINS, ProposalError, Tool, register
 
 SCHEDULE_ROLES = ADMINS + ('MANAGER', 'TEACHER')
 PLANNING_ROLES = ADMINS + ('MANAGER',)
@@ -16,7 +16,8 @@ _TEACHER = {'type': 'string', 'description': 'Teacher name; partial names are fi
 # name -> (description, properties, required, roles)
 _SPECS = {
     'get_class_schedule': ('Weekly timetable of a class.', {'class_name': _CLASS}, ['class_name'], SCHEDULE_ROLES),
-    'get_teacher_schedule': ("A teacher's full weekly schedule.", {'teacher_name': _TEACHER}, ['teacher_name'], SCHEDULE_ROLES),
+    'get_teacher_schedule': ("A teacher's full weekly schedule. Leave teacher_name out when the user asks about THEIR OWN schedule (my / mera).",
+                             {'teacher_name': _TEACHER}, [], SCHEDULE_ROLES),
     'get_free_teachers': ('Teachers who are free on a day (optionally a period).',
                           {'day': _DAY, 'period': {'type': 'string', 'description': 'Period number or name'}}, ['day'], SCHEDULE_ROLES),
     'get_subject_schedule': ('When and where a subject is taught.',
@@ -44,6 +45,11 @@ _SPECS = {
 def _make_handler(tool_name):
     def handler(ctx, **params):
         from academics.ai_engine import AcademicsAIAgent
+        if tool_name == 'get_teacher_schedule' and not params.get('teacher_name'):
+            staff = getattr(ctx.user, 'staff_profile', None)
+            if staff is None:
+                raise ProposalError('Whose schedule? Your account is not linked to a staff profile; ask for a teacher name.')
+            params['teacher_name'] = f'{staff.first_name} {staff.last_name}'.strip()
         return AcademicsAIAgent(ctx.school_id)._execute_tool(tool_name, params)
     return handler
 

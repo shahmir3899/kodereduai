@@ -404,6 +404,15 @@ CELERY_BEAT_SCHEDULE = {
         'schedule': crontab(hour='*/6', minute=0),
         'kwargs': {'hours': 24},
     },
+    # Aura learning loop: retention (90 days) and the weekly grouping of "could not do" requests.
+    'assistant-gap-cleanup': {
+        'task': 'assistant.tasks.cleanup_expired_gaps',
+        'schedule': crontab(hour=3, minute=30),
+    },
+    'assistant-gap-grouping': {
+        'task': 'assistant.tasks.group_new_gaps',
+        'schedule': crontab(day_of_week='sunday', hour=4, minute=0),
+    },
     'cleanup-location-data': {
         'task': 'transport.tasks.cleanup_old_location_data',
         'schedule': crontab(hour=3, minute=0, day_of_week='sunday'),
@@ -621,6 +630,14 @@ STT_LANGUAGE = os.getenv('EDU_STT_LANGUAGE', '')
 STT_PROMPT = os.getenv('EDU_STT_PROMPT', 'School assistant. hazri, ghair hazir, chutti, fee, class 5A, lesson plan, diary, attendance, expense.')
 STT_MAX_BYTES = int(os.getenv('EDU_STT_MAX_BYTES', str(4 * 1024 * 1024)))
 VOICE_DAILY_PER_USER = int(os.getenv('EDU_VOICE_DAILY_PER_USER', '150'))     # transcriptions + spoken rewrites
+
+# Per-school switch default when a school has no explicit setting (School.ai_config['assistant_enabled']).
+# Production rollout: set false, then turn schools on one by one with `manage.py assistant_switch`.
+ASSISTANT_DEFAULT_ENABLED = os.getenv('EDU_ASSISTANT_DEFAULT_ENABLED', 'true').lower() in ('1', 'true', 'yes')
+# Per-person daily model-token allowance (all schools together); 0 = no cap. At ~7k tokens a question,
+# 60k is about 8 questions a day for staff and 250k about 35 for school leaders.
+USER_DAILY_TOKENS = int(os.getenv('EDU_USER_DAILY_TOKENS', '60000'))
+ADMIN_DAILY_TOKENS = int(os.getenv('EDU_ADMIN_DAILY_TOKENS', '250000'))
 
 # Daily token budgets, only used to show "percent used" in `manage.py llm_status`.
 LLM_DAILY_BUDGETS = {'groq': int(os.getenv('EDU_GROQ_DAILY_TOKENS', '200000')),

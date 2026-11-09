@@ -490,6 +490,8 @@ export const financeApi = {
     api.get('/api/finance/other-income/', { params }),
   createOtherIncome: (data: Record<string, unknown>) =>
     api.post('/api/finance/other-income/', data),
+  updateOtherIncome: (id: number, data: Record<string, unknown>) =>
+    api.patch(`/api/finance/other-income/${id}/`, data),
   // The server lets only an admin or the person who recorded the entry delete it, and refuses a closed month.
   deleteOtherIncome: (id: number) => api.delete(`/api/finance/other-income/${id}/`),
 

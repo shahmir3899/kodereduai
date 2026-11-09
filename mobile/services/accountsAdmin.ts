@@ -29,6 +29,12 @@ export function fromAccountOptions(accounts: AccountOption[], isPrincipal: boole
   return accounts.filter((a) => a.is_active !== false && (!isPrincipal || (a.school !== null && a.school !== undefined)));
 }
 
+// The Manage list: a principal sees the school's own accounts only, not the organisation's shared ones
+// (web Accounts page). Everyone else sees all.
+export function manageableAccounts<T extends { school?: number | null }>(accounts: T[], isPrincipal: boolean): T[] {
+  return isPrincipal ? accounts.filter((a) => a.school !== null && a.school !== undefined) : accounts;
+}
+
 export const toAccountOptions = (accounts: AccountOption[]): AccountOption[] => accounts.filter((a) => a.is_active !== false);
 
 export function validateTransfer(f: TransferForm): string | null {

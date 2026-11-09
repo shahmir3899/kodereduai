@@ -16,11 +16,11 @@ _RANGE = {'date_from': _DATE, 'date_to': _DATE}
 _SPECS = {
     'get_pending_fees': ('Total pending/unpaid fee amount, optionally for a class and month.',
                          {'class_name': _CLASS, 'month': _MONTH, 'year': _YEAR}),
-    'get_total_expenses': ('Total expenses, optionally by category and date range.',
+    'get_total_expenses': ('ONE total of expenses, optionally for one category and a date range. Not for a split by category: use get_expense_breakdown for that.',
                            {'category': {'type': 'string', 'enum': ['SALARY', 'RENT', 'UTILITIES', 'SUPPLIES', 'MAINTENANCE', 'MISC']}, **_RANGE}),
     'get_income_summary': ('Fee collection summary for a month.', {'month': _MONTH, 'year': _YEAR}),
-    'get_balance': ('Income minus expenses for a date range.', _RANGE),
-    'get_expense_breakdown': ('Expenses grouped by category.', _RANGE),
+    'get_balance': ('Net position to date: ALL income (fees + other) minus ALL expenses. Call it with NO dates for "total collection minus expenses so far"; add dates only for a specific period. For one month of fee collection use get_income_summary.', _RANGE),
+    'get_expense_breakdown': ('Expenses split by category (break down, split up, category wise, what did we spend on). Returns every category with its amount.', _RANGE),
     'get_other_income': ('Non-fee income (sales, donations, events).',
                          {'category': {'type': 'string', 'enum': ['SALE', 'DONATION', 'EVENT', 'MISC']}, **_RANGE}),
     'get_account_balances': ('Balance of every account (opening + receipts - payments +/- transfers).', _RANGE),
@@ -58,3 +58,30 @@ for _name, (_desc, _props) in _SPECS.items():
         module='finance',
         roles=FINANCE_ROLES,
     ))
+
+
+def list_scholarship_recipients(ctx, scholarship_name=None, limit=50):
+    """Names of students who hold a scholarship (get_scholarships_summary only has counts)."""
+    from finance.models import StudentDiscount
+
+    qs = StudentDiscount.objects.filter(school_id=ctx.school_id, is_active=True, scholarship__isnull=False,
+                                        student__isnull=False).select_related('student__class_obj', 'scholarship')
+    if scholarship_name:
+        qs = qs.filter(scholarship__name__icontains=scholarship_name)
+    rows = [{'student_id': d.student_id, 'student': d.student.name,
+             'class': d.student.class_obj.name if d.student.class_obj_id else '',
+             'scholarship': d.scholarship.name, 'type': d.scholarship.scholarship_type}
+            for d in qs.order_by('scholarship__name', 'student__name')[:min(int(limit), 100)]]
+    return {'count': qs.count(), 'shown': len(rows), 'recipients': rows}
+
+
+register(Tool(
+    name='list_scholarship_recipients',
+    description='Who has a scholarship: student names, class and scholarship, optionally for one scholarship name. '
+                'Use for "which students have a scholarship"; get_scholarships_summary only gives counts.',
+    parameters={'type': 'object', 'properties': {
+        'scholarship_name': {'type': 'string'},
+        'limit': {'type': 'integer', 'minimum': 1, 'maximum': 100},
+    }, 'additionalProperties': False},
+    handler=list_scholarship_recipients, sub_agent='finance', module='finance', roles=FINANCE_ROLES,
+))

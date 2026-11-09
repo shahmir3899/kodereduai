@@ -14,6 +14,8 @@ export interface ManagedAccount {
   account_type: string;
   opening_balance: number | string;
   is_active: boolean;
+  // Null for an account shared across the organisation.
+  school?: number | null;
   staff_visible?: boolean;
   bank_name?: string;
   // Hidden by the server from roles that do not run the books.

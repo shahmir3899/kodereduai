@@ -5,16 +5,18 @@ import {
   accountsOf, normalizeFeeSummary, type LedgerPayload, type DateRange, type ExpenseCategory, type RecentEntry, type TrendMonth,
 } from '../services/accountant';
 import type { FeePayment } from '../services/feeCollect';
-import { normalizeAllBalances, normalizeAnnualFees } from '../services/financeDashboard';
+import { normalizeAllBalances, normalizeAnnualFees, normalizeFeeCollection } from '../services/financeDashboard';
 import { useAcademicYear } from './useAcademicYear';
 import { useScopedPagedQuery, useScopedQuery } from './useScopedQuery';
 
 // Read-only finance data for the Accountant. Every root is a money root (services/queryRules.ts),
 // so none of it is persisted or served stale.
 
-export function useAccountBalances(enabled = true) {
-  return useScopedQuery('accounts', ['balances'], async () =>
-    accountsOf((await financeApi.getAccountBalances()).data), { enabled });
+// Balances up to now, or inside a date range (either end may be left open), as the web Accounts page.
+export function useAccountBalances(enabled = true, range?: { from?: string; to?: string }) {
+  const params = { ...(range?.from ? { date_from: range.from } : {}), ...(range?.to ? { date_to: range.to } : {}) };
+  return useScopedQuery('accounts', ['balances', range?.from ?? '', range?.to ?? ''], async () =>
+    accountsOf((await financeApi.getAccountBalances(params)).data), { enabled });
 }
 
 // One account's running ledger, newest first, capped so a long history stays light.
@@ -104,6 +106,19 @@ export function useAnnualFeeSummary(isMulti: boolean) {
   });
 }
 
+// This month's MONTHLY fees with counts, categories and, for several schools, each school and a combined total.
+export function useMonthlyCollection(isMulti: boolean) {
+  const { current } = useAcademicYear();
+  const now = new Date();
+  const params = { month: now.getMonth() + 1, year: now.getFullYear(), fee_type: 'MONTHLY' };
+  return useScopedQuery('feeSummary', ['monthly-collection', isMulti ? 'all' : 'single', params.month, params.year, current?.id ?? null], async () => {
+    const res = isMulti
+      ? await financeApi.getMonthlySummaryAll(params)
+      : await financeApi.getMonthlySummary({ ...params, ...(current?.id ? { academic_year: current.id } : {}) });
+    return normalizeFeeCollection(res.data, isMulti, true);
+  });
+}
+
 export interface TransferRow { id: number; date?: string; amount: number | string; description?: string; from_account_name?: string; to_account_name?: string }
 
 // The five newest transfers (the server orders newest first).
@@ -127,5 +142,29 @@ export function useDeleteOtherIncome() {
     onSuccess: () => {
       for (const key of ['otherIncome', 'accounts', 'finance', 'feeSummary', 'adminDashboard']) queryClient.invalidateQueries({ queryKey: [key] });
     },
+  });
+}
+
+// Edit or delete an expense or an income entry. Both move an account balance and the dashboard
+// figures, so every money root is refreshed.
+const ENTRY_ROOTS = ['expenses', 'otherIncome', 'accounts', 'finance', 'feeSummary', 'adminDashboard'];
+const refreshEntryRoots = (queryClient: ReturnType<typeof useQueryClient>) => {
+  for (const key of ENTRY_ROOTS) queryClient.invalidateQueries({ queryKey: [key] });
+};
+
+export function useUpdateEntry(kind: 'expense' | 'income') {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: number; data: Record<string, unknown> }) =>
+      (kind === 'expense' ? financeApi.updateExpense(id, data) : financeApi.updateOtherIncome(id, data)),
+    onSuccess: () => refreshEntryRoots(queryClient),
+  });
+}
+
+export function useDeleteExpense() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => financeApi.deleteExpense(id),
+    onSuccess: () => refreshEntryRoots(queryClient),
   });
 }

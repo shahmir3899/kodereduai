@@ -7,7 +7,7 @@ import { routeFor } from '../../../navigation/routes';
 import { useAcademicYear } from '../../../hooks/useAcademicYear';
 import {
   useAccountBalances, useAccountBalancesAll, useAnnualFeeSummary, useExpenseCategories, useFinanceSummary,
-  useMonthFeeSummary, useMonthlyTrend, useRecentEntries, useRecentTransfers,
+  useMonthlyCollection, useMonthlyTrend, useRecentEntries, useRecentTransfers,
 } from '../../../hooks/useAccountant';
 import { useRefreshControl } from '../../../hooks/useRefreshControl';
 import { PERIOD_LABELS, rangeFor, totalBalance, type AccountBalance, type DateRange, type Period } from '../../../services/accountant';
@@ -16,6 +16,7 @@ import { formatMoney } from '../../../services/feeCollect';
 import { exportErrorMessage, financeSummaryFileName, financeSummaryRequest } from '../../../services/reports';
 import { shareReportFile } from '../../../services/reportShare';
 import FeeOverviewCard from '../../../components/finance/FeeOverviewCard';
+import MonthlyFeeCollectionCard from '../../../components/finance/MonthlyFeeCollectionCard';
 import AnnualFeeCard from '../../../components/finance/AnnualFeeCard';
 import AccountBalancesCard from '../../../components/finance/AccountBalancesCard';
 import LedgerPreviewSheet from '../../../components/finance/LedgerPreviewSheet';
@@ -60,7 +61,7 @@ export default function FinanceDashboard() {
   const trend = useMonthlyTrend(6);
   const single = useAccountBalances(!multi);
   const all = useAccountBalancesAll(multi);
-  const fee = useMonthFeeSummary();
+  const fee = useMonthlyCollection(multi);
   const annual = useAnnualFeeSummary(multi);
   const transfers = useRecentTransfers(5);
   const entries = useRecentEntries(15);
@@ -143,8 +144,9 @@ export default function FinanceDashboard() {
       <Button title="Export PDF" variant="outline" size="sm" onPress={exportPdf} loading={exporting} disabled={!range || exporting} />
 
       <View style={styles.gap} />
+      <MonthlyFeeCollectionCard summary={fee.data} loading={fee.isLoading} onDetails={() => go(routeFor('admin', '/finance/fees'))} />
       <FeeOverviewCard />
-      <AnnualFeeCard summary={annual.data} loading={annual.isLoading} onDetails={() => go(routeFor('admin', '/finance/fees/collect'))} />
+      <AnnualFeeCard summary={annual.data} loading={annual.isLoading} onDetails={() => router.push({ pathname: '/(admin)/finance/fee-overview', params: { feeType: 'ANNUAL' } } as Href)} />
 
       <AccountBalancesCard
         accounts={multi ? undefined : single.data}

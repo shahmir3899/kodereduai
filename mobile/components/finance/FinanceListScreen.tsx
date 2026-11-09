@@ -2,8 +2,12 @@ import React, { useMemo, useState } from 'react';
 import { View, Text, FlatList, ActivityIndicator, StyleSheet, TouchableOpacity, type RefreshControlProps } from 'react-native';
 import { financeApi } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
-import { canDeleteIncome, incomeDescription } from '../../services/accountant';
-import { useDeleteOtherIncome } from '../../hooks/useAccountant';
+import { incomeDescription } from '../../services/accountant';
+import { useDeleteExpense, useDeleteOtherIncome } from '../../hooks/useAccountant';
+import { canChangeEntry } from '../../services/financeEntry';
+import EntryEditSheet from './EntryEditSheet';
+import { useEntryCategories } from './EntryFields';
+import Select from '../ui/Select';
 import { confirm } from '../ui/confirm';
 import { useToast } from '../ui/Toast';
 import { staffLeaveErrorMessage } from '../../services/staffLeave';
@@ -32,6 +36,9 @@ interface LedgerRow {
   amount: number | string;
   date: string;
   account_name?: string | null;
+  category?: number | null;
+  account?: number | null;
+  is_sensitive?: boolean;
   recorded_by?: number | null;
   recorded_by_name?: string | null;
 }
@@ -113,33 +120,40 @@ function FeesList() {
 }
 
 // Other income with a Delete control on the entries the person may remove (an admin any, others their own).
-// Used by the admin's income screen; the accountant's list above stays read only.
+// Used by the admin's income screen. Edit and delete show for the admin roles only: the finance API is
+// read only for the accountant, so their lists have no controls.
 export function OtherIncomeHistory() {
-  return <LedgerList kind="income" deletable />;
+  return <LedgerList kind="income" />;
 }
 
-function LedgerList({ kind, deletable = false }: { kind: 'expenses' | 'income'; deletable?: boolean }) {
+function LedgerList({ kind }: { kind: 'expenses' | 'income' }) {
   const toast = useToast();
   const { user, isSchoolAdmin } = useAuth();
-  const remove = useDeleteOtherIncome();
+  const isExpense = kind === 'expenses';
+  const removeIncome = useDeleteOtherIncome();
+  const removeExpense = useDeleteExpense();
+  const removing = removeIncome.isPending || removeExpense.isPending;
+  const [editing, setEditing] = useState<LedgerRow | null>(null);
   const removeEntry = async (r: LedgerRow) => {
-    if (!(await confirm({ title: 'Delete this income entry?', message: `${incomeDescription(r)}. It is taken out of the account balance. This cannot be undone.`, confirmLabel: 'Delete', destructive: true }))) return;
+    const noun = isExpense ? 'expense' : 'income entry';
+    if (!(await confirm({ title: `Delete this ${noun}?`, message: `${incomeDescription(r)}. The account balance is changed back. This cannot be undone.`, confirmLabel: 'Delete', destructive: true }))) return;
     try {
-      await remove.mutateAsync(r.id);
-      toast.success('Income entry deleted.');
+      await (isExpense ? removeExpense : removeIncome).mutateAsync(r.id);
+      toast.success(isExpense ? 'Expense deleted.' : 'Income entry deleted.');
     } catch (e) {
-      toast.error(staffLeaveErrorMessage(e, 'Could not delete the income entry.'));
+      toast.error(staffLeaveErrorMessage(e, `Could not delete the ${noun}.`));
     }
   };
-  const isExpense = kind === 'expenses';
   const [search, setSearch] = useState('');
   const [ym, setYm] = useState<YearMonth | null>(null);
+  const [categoryId, setCategoryId] = useState(0);
+  const entryCats = useEntryCategories(isExpense ? 'expense' : 'income');
   const range = ym ? monthRange(ym.year, ym.month) : null;
   const term = useDebouncedValue(search.trim(), 400);
   const query = useFinanceList<LedgerRow>(
     isExpense ? 'expenses' : 'otherIncome',
     isExpense ? financeApi.getExpenses : financeApi.getOtherIncome,
-    { ...(term ? { search: term } : {}), ...(range ? { date_from: range.from, date_to: range.to } : {}), ordering: '-date' },
+    { ...(term ? { search: term } : {}), ...(categoryId ? { category: categoryId } : {}), ...(range ? { date_from: range.from, date_to: range.to } : {}), ordering: '-date' },
   );
   // Category breakdown for what the filter shows (all months: since the start).
   const cats = useExpenseCategories(isExpense ? (range ?? { from: '2000-01-01', to: schoolToday() }) : null);
@@ -161,11 +175,14 @@ function LedgerList({ kind, deletable = false }: { kind: 'expenses' | 'income'; 
           ))}
         </Card>
       ) : null}
+      <Select label="Category" value={categoryId} onChange={setCategoryId}
+        options={[{ value: 0, label: 'All categories' }, ...(entryCats.data ?? []).map((c) => ({ value: c.id, label: c.name }))]} />
       <SearchBar value={search} onChangeText={setSearch} placeholder={isExpense ? 'Search expenses...' : 'Search income...'} />
     </View>
   );
 
   return (
+    <>
     <List
       query={query} header={header} rows={rows} refreshControl={refreshControl}
       emptyTitle={isExpense ? 'No expenses' : 'No other income'} keyOf={(r) => String(r.id)}
@@ -181,16 +198,24 @@ function LedgerList({ kind, deletable = false }: { kind: 'expenses' | 'income'; 
             <Text style={[styles.amount, { color: isExpense ? Colors.error : Colors.success }]}>
               {isExpense ? '-' : '+'}{formatMoney(Number(r.amount) || 0)}
             </Text>
-            {deletable && !isExpense && canDeleteIncome(r, user?.id, isSchoolAdmin) ? (
-              <TouchableOpacity accessibilityRole="button" accessibilityLabel={`Delete income: ${incomeDescription(r)}`} hitSlop={8} style={styles.del}
-                disabled={remove.isPending} onPress={() => removeEntry(r)}>
-                <Text style={styles.delText}>Delete</Text>
-              </TouchableOpacity>
+            {isSchoolAdmin && canChangeEntry(true, r, user?.id) ? (
+              <View style={styles.actions}>
+                <TouchableOpacity accessibilityRole="button" accessibilityLabel={`Edit ${isExpense ? 'expense' : 'income'}: ${incomeDescription(r)}`} hitSlop={8} style={styles.del}
+                  disabled={removing} onPress={() => setEditing(r)}>
+                  <Text style={styles.editText}>Edit</Text>
+                </TouchableOpacity>
+                <TouchableOpacity accessibilityRole="button" accessibilityLabel={`Delete ${isExpense ? 'expense' : 'income'}: ${incomeDescription(r)}`} hitSlop={8} style={styles.del}
+                  disabled={removing} onPress={() => removeEntry(r)}>
+                  <Text style={styles.delText}>Delete</Text>
+                </TouchableOpacity>
+              </View>
             ) : null}
           </View>
         </View>
       )}
     />
+    <EntryEditSheet kind={isExpense ? 'expense' : 'income'} row={editing} onClose={() => setEditing(null)} />
+    </>
   );
 }
 
@@ -242,5 +267,7 @@ const styles = StyleSheet.create({
   sub: { fontSize: FontSize.sm, color: Colors.textSecondary, marginTop: 2 },
   amount: { fontSize: FontSize.md, fontWeight: '700', color: Colors.text },
   del: { minHeight: 44, justifyContent: 'center' },
+  actions: { flexDirection: 'row', gap: Spacing.lg },
+  editText: { fontSize: FontSize.sm, fontWeight: '700', color: Colors.primary },
   delText: { fontSize: FontSize.sm, fontWeight: '700', color: Colors.error },
 });

@@ -51,9 +51,10 @@ def _events(response):
     return [json.loads(chunk[len('data: '):]) for chunk in body.split('\n\n') if chunk.startswith('data: ')]
 
 
-def _stream(api, seed, cid, message, uname='admin', sid=None):
+def _stream(api, seed, cid, message, uname='admin', sid=None, accept=None):
+    extra = {'HTTP_ACCEPT': accept} if accept else {}
     return api.client.post(f'{CONV}{cid}/stream/', data=json.dumps({'message': message}), content_type='application/json',
-                           HTTP_AUTHORIZATION=f'Bearer {seed["tokens"][uname]}', HTTP_X_SCHOOL_ID=str(sid or seed['SID_A']))
+                           HTTP_AUTHORIZATION=f'Bearer {seed["tokens"][uname]}', HTTP_X_SCHOOL_ID=str(sid or seed['SID_A']), **extra)
 
 
 def _new(api, seed, uname='admin'):
@@ -187,13 +188,16 @@ class TestCapabilities:
         assert finance['label'] == 'Finance' and finance['can_write'] is True and finance['tools'] > 10
 
     def test_roles_see_only_their_agents(self, seed_data, modules, api):
-        assert {a['name'] for a in self._caps(api, seed_data, 'accountant')['agents']} == {'finance'}
-        assert [a for a in self._caps(api, seed_data, 'accountant')['agents'] if a['can_write']] == []
-        assert {a['name'] for a in self._caps(api, seed_data, 'teacher')['agents']} == {'academics', 'attendance'}
+        # HR is self-service for everyone (own leave, own payslip), so it shows next to the role's own agents.
+        assert {a['name'] for a in self._caps(api, seed_data, 'accountant')['agents']} == {'finance', 'hr'}
+        assert [a['name'] for a in self._caps(api, seed_data, 'accountant')['agents'] if a['can_write'] and a['name'] != 'hr'] == []
+        assert {a['name'] for a in self._caps(api, seed_data, 'teacher')['agents']} == {'academics', 'attendance', 'exams', 'hr', 'students'}
 
-    def test_roles_without_tools_get_nothing_so_no_orb(self, seed_data, modules, api):
+    def test_staff_only_get_the_self_service_hr_agent(self, seed_data, modules, api):
         caps = self._caps(api, seed_data, 'staff')
-        assert caps['agents'] == [] and caps['suggestions'] == []
+        assert [a['name'] for a in caps['agents']] == ['hr']
+        # directory, own leave list, own balance, own payslip, apply for leave - nothing about other people's pay or leave
+        assert caps['agents'][0]['tools'] == 5
 
     def test_modules_off_means_no_agents(self, seed_data, api):
         school = seed_data['school_a']
@@ -203,3 +207,36 @@ class TestCapabilities:
 
     def test_requires_login(self, api_client):
         assert api_client.get('/api/assistant/capabilities/').status_code in (401, 403)
+
+
+class TestBrowserHeaders:
+    """The browser asks for `Accept: text/event-stream`; axios sends `application/json, text/plain, */*`.
+    The first one used to be answered 406 ("Could not satisfy the request Accept header") before the view ran,
+    because the test client sends no Accept header at all and so never exercised it."""
+    EVENT_STREAM = 'text/event-stream'
+    AXIOS = 'application/json, text/plain, */*'
+
+    def test_the_stream_endpoint_accepts_the_event_stream_header(self, seed_data, modules, api):
+        cid = _new(api, seed_data)
+        with patch('assistant.llm.complete', lambda *a, **k: llm.LLMReply(content='Hello!')):
+            r = _stream(api, seed_data, cid, 'hi', accept=self.EVENT_STREAM)
+            events = _events(r)
+        assert r.status_code == 200 and r['Content-Type'].startswith('text/event-stream')
+        assert [e['type'] for e in events][-1] == 'final' and events[-1]['content'] == 'Hello!'
+
+    @pytest.mark.parametrize('accept', ['text/event-stream', 'application/json', '*/*', 'text/html', 'application/xml'])
+    def test_errors_stay_json_whatever_the_accept_header_says(self, seed_data, api, accept):
+        cid = _new(api, seed_data)
+        r = _stream(api, seed_data, cid, '   ', accept=accept)
+        assert r.status_code == 400 and r['Content-Type'].startswith('application/json') and 'error' in r.json()
+        assert _stream(api, seed_data, 999999, 'hi', accept=accept).status_code == 404
+
+    def test_the_other_endpoints_work_with_the_axios_default_header(self, seed_data, modules, api):
+        h = {'HTTP_AUTHORIZATION': f'Bearer {seed_data["tokens"]["admin"]}', 'HTTP_X_SCHOOL_ID': str(seed_data['SID_A']), 'HTTP_ACCEPT': self.AXIOS}
+        assert api.client.get('/api/assistant/capabilities/', **h).status_code == 200
+        assert api.client.get(CONV, **h).status_code == 200
+        created = api.client.post(CONV, data=json.dumps({}), content_type='application/json', **h)
+        assert created.status_code == 201
+        assert api.client.get(f'{CONV}{created.json()["id"]}/messages/', **h).status_code == 200
+        assert api.client.get('/api/assistant/actions/', **h).status_code == 200
+

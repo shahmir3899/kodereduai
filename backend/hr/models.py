@@ -313,13 +313,20 @@ class SalaryStructure(models.Model):
     def __str__(self):
         return f"{self.staff_member.full_name} — {self.basic_salary}/month"
 
+    @staticmethod
+    def _total(parts):
+        # The JSON values can be ints or floats; adding a float to the Decimal basic salary raised TypeError
+        # and stopped payslip generation for the whole school.
+        from decimal import Decimal
+        return sum((Decimal(str(v)) for v in (parts or {}).values()), Decimal('0'))
+
     @property
     def gross_salary(self):
-        return self.basic_salary + sum(self.allowances.values())
+        return self.basic_salary + self._total(self.allowances)
 
     @property
     def total_deductions(self):
-        return sum(self.deductions.values())
+        return self._total(self.deductions)
 
     @property
     def net_salary(self):
