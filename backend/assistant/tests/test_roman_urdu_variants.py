@@ -41,6 +41,13 @@ def test_only_known_words_change_and_the_rest_is_kept(lexicon):
     assert 'Class 5A' in out and 'Ali' in out and 'lagao' in out
 
 
+def test_capitalised_names_after_the_first_word_are_never_swapped(lexicon):
+    v = {**load_variants(lexicon), 'bachay': ['bachey'], 'ali': ['ila']}
+    for seed in range(20):
+        out = make_variant('hazri lagao Ali Bachay', v, random.Random(seed))
+        assert out is None or ('Ali' in out and 'Bachay' in out)
+
+
 def test_capital_letter_is_kept(lexicon):
     out = make_variant('Hazri lagao', load_variants(lexicon), random.Random(2))
     assert out[0].isupper()

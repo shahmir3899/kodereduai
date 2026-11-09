@@ -23,7 +23,8 @@ def score(question: dict, tool_calls: list, proposals: list = None, reply: str =
     if proposals is None:   # proposals the assistant prepared this turn (write tools that succeeded)
         proposals = [c['name'] for c in tool_calls if c.get('kind') == 'write' and c.get('ok')]
     expect = question['expect']
-    ok_calls = [c for c in tool_calls if c.get('ok') and c.get('kind') != 'write']
+    # report_missing_capability only logs a gap and returns nothing about the school, so it is not "data" for a denied question.
+    ok_calls = [c for c in tool_calls if c.get('ok') and c.get('kind') != 'write' and c.get('name') != 'report_missing_capability']
 
     verdict = _score(question, expect, tool_calls, proposals, ok_calls)
     if verdict['pass']:

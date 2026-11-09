@@ -490,14 +490,15 @@ _read('list_staff', 'Staff directory: name, designation, department, status; adm
       'Use for "who is the librarian?", "list science department staff".',
       {'search': {'type': 'string', 'description': 'Part of a name'}, 'department': {'type': 'string'},
        'employment_status': {'type': 'string', 'enum': ['ACTIVE', 'ON_LEAVE', 'TERMINATED', 'RESIGNED', 'RETIRED']}}, list_staff, DIRECTORY_ROLES)
-_read('get_leave_today', 'Who is on approved leave on a date (default today).', {'date': _DATE}, get_leave_today, ADMINS)
+_read('get_leave_today', 'Who is on approved leave on a date (default today): "who is on leave today", staff or teachers absent on leave.', {'date': _DATE}, get_leave_today, ADMINS)
 _read('list_leave_requests', 'Leave requests, newest first; filter by status or person. Admins see everyone, anyone else sees only their own.',
       {'status': {'type': 'string', 'enum': ['PENDING', 'APPROVED', 'REJECTED', 'CANCELLED']}, **_WHO}, list_leave_requests, ADMINS + SELF_ROLES)
 _read('get_leave_balance', "Leave days allowed / used / remaining this year per policy. Admins can name anyone; everyone else gets their own.",
       dict(_WHO), get_leave_balance, ADMINS + SELF_ROLES)
 _read('get_staff_attendance', "Staff attendance for a date: counts, who has not been marked, and the records.",
       {'date': _DATE, 'status': {'type': 'string', 'enum': STAFF_STATUSES}}, get_staff_attendance, ADMINS)
-_read('get_staff_salary', "A staff member's current salary structure (basic, allowances, deductions, gross, net). Admins and principal only.",
+_read('get_staff_salary', "ONE named staff member's current salary structure (basic, allowances, deductions, gross, net). Admins and principal only. "
+        "Not for the school's salary bill for a month: that is get_payroll_summary.",
       dict(_WHO), get_staff_salary, SALARY_ROLES)
 
 register(Tool(

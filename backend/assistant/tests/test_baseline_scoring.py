@@ -42,6 +42,11 @@ def test_denied_and_blocked_scoring():
     assert not score({'expect': {'blocked': True}}, [], proposals=['run_payroll'])['pass']
 
 
+def test_logging_a_missing_capability_is_not_returning_data_to_a_denied_user():
+    gap = [{'name': 'report_missing_capability', 'args': {}, 'ok': True}]
+    assert score({'expect': {'denied': True}}, gap)['pass']
+
+
 def test_write_scoring_needs_a_proposal():
     q = {'expect': {'write': 'create_expense'}}
     assert not score(q, [])['pass']

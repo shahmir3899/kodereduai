@@ -51,7 +51,8 @@ def make_variant(text, variants, rng, max_swaps=3):
     """Swap up to `max_swaps` words of `text` for an attested alternative spelling; keep everything else (numbers, class names, names of people)."""
     words = [(m.start(), m.end(), m.group().lower()) for m in WORD.finditer(text)]
     # A word can be in the lexicon with a single attested spelling (empty list): nothing to swap it for, and random.choice would crash.
-    swappable = [w for w in words if variants.get(w[2]) and len(w[2]) > 2]
+    # A capital letter after the first word is a name, class or day ("Ali" -> "Ila" made the student not exist, which tested nothing about spelling).
+    swappable = [w for w in words if variants.get(w[2]) and len(w[2]) > 2 and (w[0] == 0 or not text[w[0]].isupper())]
     if not swappable:
         return None
     rng.shuffle(swappable)
