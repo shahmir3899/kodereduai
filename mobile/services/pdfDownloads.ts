@@ -6,6 +6,8 @@ const safe = (text: string, fallback: string) =>
 // The server names its own download "DateSheet_<group>.pdf"; the phone saves the same way.
 export const dateSheetFileName = (groupName: string) => `DateSheet_${safe(groupName, 'Exam')}.pdf`;
 
+export const dateSheetXlsxFileName = (groupName: string) => dateSheetFileName(groupName).replace(/\.pdf$/, '.xlsx');
+
 export const timetableFileName = (classLabel: string) => `Timetable_${safe(classLabel, 'Class')}.pdf`;
 
 // The server needs the master class, and a section id to title the PDF with the section.

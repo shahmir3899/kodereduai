@@ -18,6 +18,7 @@ import { useFaceAttendanceStatus } from '../../hooks/useFaceAttendanceStatus'
 import { getClassSelectorScope, getResolvedMasterClassId, resolveSessionClassId } from '../../utils/classScope'
 import { loadFaceApiModels, detectAllFacesQuick } from '../../utils/faceApiLoader'
 import FaceLiveCapturePage from './FaceLiveCapturePage'
+import GroupPhotoCamera from './GroupPhotoCamera'
 
 const FIXED_CAMERA_STATUS_BADGE = {
   active: { label: 'Fixed Camera: Active', className: TONE.success },
@@ -45,7 +46,7 @@ const TABS = [
 
 const TAB_NOTES = {
   'group-photo': 'Snap one photo of the class. A teacher reviews and confirms matches before attendance is recorded.',
-  'mobile-capture': "Point your phone at a student's face for instant recognition. Attendance is marked automatically, no review step.",
+  'mobile-capture': "Point your phone at a student's face for instant recognition. Clear matches are marked automatically; if the app is unsure it asks you to confirm with Yes or No right on the camera.",
 }
 
 export default function FaceAttendancePage() {
@@ -62,6 +63,9 @@ export default function FaceAttendancePage() {
   const [selectedDate, setSelectedDate] = useState(schoolToday())
   const [uploadStep, setUploadStep] = useState(null) // null | 'uploading' | 'creating'
   const [previewUrl, setPreviewUrl] = useState(null)
+  // The photo to process — either picked from files or taken with the live camera.
+  const [photoFile, setPhotoFile] = useState(null)
+  const [cameraOpen, setCameraOpen] = useState(false)
   // Client-side pre-submit check only — informational, doesn't replace or
   // duplicate the server-side dlib detection pipeline that actually
   // processes the session after upload.
@@ -133,6 +137,7 @@ export default function FaceAttendancePage() {
     onSuccess: (data) => {
       setUploadStep(null)
       setPreviewUrl(null)
+      setPhotoFile(null)
       showSuccess('Session created! Processing faces...')
       queryClient.invalidateQueries({ queryKey: ['faceSessions'] })
       queryClient.invalidateQueries({ queryKey: ['pendingFaceReviews'] })
@@ -154,11 +159,21 @@ export default function FaceAttendancePage() {
       return
     }
 
-    // Preview
+    showPhoto(file)
+  }
+
+  // Shows the chosen/captured photo as the preview, ready for "Process Attendance".
+  const showPhoto = (file) => {
+    setPhotoFile(file)
     setPreviewFaceCount(null)
     const reader = new FileReader()
     reader.onload = (ev) => setPreviewUrl(ev.target.result)
     reader.readAsDataURL(file)
+  }
+
+  const handleCameraCapture = (file) => {
+    setCameraOpen(false)
+    showPhoto(file)
   }
 
   // Runs once the preview <img> has actually loaded pixel data — face-api.js
@@ -180,12 +195,11 @@ export default function FaceAttendancePage() {
   }
 
   const handleCapture = () => {
-    const file = fileInputRef.current?.files?.[0]
-    if (!file) {
+    if (!photoFile) {
       showError('Please select an image first.')
       return
     }
-    createSessionMutation.mutate(file)
+    createSessionMutation.mutate(photoFile)
   }
 
   const getStatusBadge = (status) => {
@@ -302,7 +316,8 @@ export default function FaceAttendancePage() {
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
                 scope={classSelectorScope}
                 academicYearId={activeAcademicYear?.id}
-                showAllOption={showAllOption}
+                // A group photo belongs to exactly one class — no "All Classes" choice here.
+                showAllOption={false}
                 classes={teacherClassOptions || undefined}
               />
             </div>
@@ -350,6 +365,7 @@ export default function FaceAttendancePage() {
                     onClick={() => {
                       setPreviewUrl(null)
                       setPreviewFaceCount(null)
+                      setPhotoFile(null)
                       if (fileInputRef.current) fileInputRef.current.value = ''
                     }}
                     className="px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm"
@@ -367,6 +383,8 @@ export default function FaceAttendancePage() {
                   </button>
                 </div>
               </div>
+            ) : cameraOpen ? (
+              <GroupPhotoCamera onCapture={handleCameraCapture} onCancel={() => setCameraOpen(false)} />
             ) : (
               <div>
                 <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -374,23 +392,38 @@ export default function FaceAttendancePage() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
                 </svg>
                 <p className="mt-2 text-sm text-gray-500">
-                  Take a photo of the class or upload an image
+                  Take a live photo of the class or upload an image
                 </p>
                 <input
                   ref={fileInputRef}
                   type="file"
                   accept="image/jpeg,image/png,image/webp"
-                  capture="environment"
                   onChange={handleFileSelect}
                   className="hidden"
                 />
-                <button
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={!selectedClass}
-                  className="mt-4 px-4 py-2 bg-primary-600 text-white rounded-lg text-sm font-medium hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {selectedClass ? 'Select or Capture Photo' : 'Select a class first'}
-                </button>
+                {selectedClass ? (
+                  <div className="mt-4 flex flex-wrap gap-3 justify-center">
+                    <button
+                      onClick={() => setCameraOpen(true)}
+                      className="px-4 py-2 bg-primary-600 text-white rounded-lg text-sm font-medium hover:bg-primary-700"
+                    >
+                      Take live photo
+                    </button>
+                    <button
+                      onClick={() => fileInputRef.current?.click()}
+                      className="px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50"
+                    >
+                      Upload photo
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    disabled
+                    className="mt-4 px-4 py-2 bg-primary-600 text-white rounded-lg text-sm font-medium opacity-50 cursor-not-allowed"
+                  >
+                    Select a class first
+                  </button>
+                )}
               </div>
             )}
           </div>

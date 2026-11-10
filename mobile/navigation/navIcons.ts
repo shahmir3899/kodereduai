@@ -40,7 +40,6 @@ const ITEM_ICONS: Record<string, IconName> = {
   '/academics/curriculum': 'book-outline',
   '/academics/curriculum-coverage': 'bar-chart-outline',
   '/academics/lesson-plans': 'book-outline',
-  '/academics/analytics': 'bar-chart-outline',
   '/academics/academic-risk': 'warning-outline',
   '/academics/calendar': 'calendar-outline',
   '/academics/sessions': 'calendar-outline',

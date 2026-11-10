@@ -32,7 +32,9 @@ const REFRESH_ROOTS = ['studentExit', 'students', 'student', 'student-edit', 'st
 
 export function useExitActions() {
   const queryClient = useQueryClient();
-  const refresh = () => queryClient.invalidateQueries({ predicate: (q) => REFRESH_ROOTS.includes(q.queryKey[0] as string) });
+  // Not returned: a returned promise would make every action wait for all those lists to reload (slow
+  // on a big school) before the screen could move on, which left the finalized exit sheet hanging open.
+  const refresh = () => { void queryClient.invalidateQueries({ predicate: (q) => REFRESH_ROOTS.includes(q.queryKey[0] as string) }); };
   return {
     start: useMutation({ mutationFn: (data: object) => studentExitsApi.startExit(data), onSuccess: refresh }),
     update: useMutation({ mutationFn: ({ id, data }: { id: number; data: object }) => studentExitsApi.updateExit(id, data), onSuccess: refresh }),

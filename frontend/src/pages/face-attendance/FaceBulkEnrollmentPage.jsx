@@ -12,6 +12,7 @@ import useTeacherScopedClasses from '../../hooks/useTeacherScopedClasses'
 import { getClassSelectorScope, getResolvedMasterClassId, resolveSessionClassId } from '../../utils/classScope'
 import { LIVE_MOBILE_EMBEDDING_VERSION } from '../../utils/faceApiLoader'
 import { LiveEnrollCapture } from './FaceEnrollmentPage'
+import { DEFAULT_SAMPLES_REQUIRED, enrollSamplesSequentially, enrollErrorMessage } from '../../utils/enrollSamples'
 
 /**
  * Bulk faceapi_v1 enrollment queue — design doc §5/§10 backlog ("bulk
@@ -160,6 +161,27 @@ export default function FaceBulkEnrollmentPage() {
         },
       },
     )
+  }
+
+  // Multi-pose: each pose is its own enroll request (server checks run per sample).
+  // The queue only advances when the whole set went through; if a pose is
+  // rejected, poses saved before it stay saved and the operator retries this student.
+  const handleCaptureSamples = async (samples) => {
+    if (!currentStudent) return
+    const { saved, error } = await enrollSamplesSequentially(samples, (s) => (
+      enrollEmbeddingMutation.mutateAsync({
+        studentId: currentStudent.id, embedding: s.embedding, qualityScore: s.qualityScore,
+      })
+    ))
+    if (error) {
+      showError(
+        `${saved > 0 ? `Saved ${saved} of ${samples.length} poses for ${currentStudent.name}. ` : ''}`
+        + enrollErrorMessage(error, `Failed to enroll ${currentStudent.name}`),
+      )
+      return
+    }
+    setTally((prev) => ({ ...prev, captured: prev.captured + 1 }))
+    advanceQueue()
   }
 
   const handleSkip = () => {
@@ -322,6 +344,8 @@ export default function FaceBulkEnrollmentPage() {
             studentPhotoUrl={currentStudent.photo_url}
             studentName={currentStudent.name}
             onSubmit={handleCaptureSubmit}
+            samplesRequired={DEFAULT_SAMPLES_REQUIRED}
+            onSubmitSamples={handleCaptureSamples}
             submitting={enrollEmbeddingMutation.isPending}
           />
 

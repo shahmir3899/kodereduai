@@ -19,6 +19,7 @@ FR_SETTINGS = getattr(settings, 'FACE_RECOGNITION_SETTINGS', {})
 MAX_FACES = FR_SETTINGS.get('MAX_FACES_PER_IMAGE', 15)
 MIN_FACE_SIZE = FR_SETTINGS.get('MIN_FACE_SIZE', 60)
 MIN_BLUR_SCORE = FR_SETTINGS.get('MIN_BLUR_SCORE', 50.0)
+DETECTION_UPSAMPLE = FR_SETTINGS.get('DETECTION_UPSAMPLE', 1)
 
 
 class DetectedFace:
@@ -59,7 +60,9 @@ class FaceDetector:
             ValueError: If too many or zero faces detected
         """
         # Detect face locations using HOG model (faster, CPU-friendly)
-        face_locations = self._fr.face_locations(image_array, model='hog')
+        face_locations = self._fr.face_locations(
+            image_array, number_of_times_to_upsample=DETECTION_UPSAMPLE, model='hog',
+        )
 
         if len(face_locations) == 0:
             raise ValueError('No faces detected in the image.')

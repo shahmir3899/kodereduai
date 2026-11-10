@@ -3,6 +3,8 @@ from django.db import models, transaction
 from django.conf import settings
 from django.utils import timezone
 
+from core.models import ScannedDocumentMixin
+
 
 class RestoreConflict(Exception):
     """A deleted student cannot be restored as-is (roll number now taken)."""
@@ -323,7 +325,7 @@ class Student(models.Model):
             ])
 
 
-class StudentDocument(models.Model):
+class StudentDocument(ScannedDocumentMixin, models.Model):
     """
     Uploaded documents for a student (birth certificate, photos, TC, etc.).
     """
@@ -331,6 +333,8 @@ class StudentDocument(models.Model):
     DOCUMENT_TYPE_CHOICES = [
         ('PHOTO', 'Photo'),
         ('BIRTH_CERT', 'Birth Certificate'),
+        ('B_FORM', 'B-Form / Student ID'),
+        ('GUARDIAN_ID', 'Parent / Guardian ID Card'),
         ('PREV_REPORT', 'Previous Report Card'),
         ('TC', 'Transfer Certificate'),
         ('MEDICAL', 'Medical Record'),
@@ -356,6 +360,8 @@ class StudentDocument(models.Model):
         null=True,
         blank=True,
     )
+    notes = models.TextField(blank=True, default='')
+    expiry_date = models.DateField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

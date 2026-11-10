@@ -11,6 +11,7 @@ import {
 } from '../../services/api'
 
 import SessionHealthWidget from '../../components/SessionHealthWidget'
+import AcademicCalendarWidget from '../../components/dashboard/AcademicCalendarWidget'
 import StatCard from '../../components/dashboard/StatCard'
 import QuickActionGrid from '../../components/dashboard/QuickActionGrid'
 import NotificationsFeed from '../../components/dashboard/NotificationsFeed'
@@ -221,6 +222,8 @@ export default function AdminDashboard() {
           loading={hrOn && loadingHR}
         />
       </div>
+
+      <div className="mb-6"><AcademicCalendarWidget /></div>
 
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
         {/* Left column */}

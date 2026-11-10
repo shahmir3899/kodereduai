@@ -102,3 +102,22 @@ describe('documents', () => {
     expect(canDeleteDocument({})).toBe(true);
   });
 });
+
+describe('adding a student document', () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const m = require('../services/studentMove');
+  it('needs a file, and nothing else', () => {
+    expect(m.newDocumentProblem(m.emptyDocumentForm())).toMatch(/file/i);
+    expect(m.newDocumentProblem({ ...m.emptyDocumentForm(), fileUri: 'file:///a.pdf' })).toBeNull();
+  });
+  it('sends the typed title, else the file name, with the type', () => {
+    const f = { ...m.emptyDocumentForm(), fileUri: 'file:///a.pdf', fileName: 'a.pdf', type: 'TC' };
+    expect(m.newDocumentFields(f)).toEqual({ title: 'a.pdf', document_type: 'TC' });
+    expect(m.newDocumentFields({ ...f, title: '  Transfer letter ' }).title).toBe('Transfer letter');
+  });
+  it('offers every type except Photo (the profile photo has its own upload)', () => {
+    const values = m.DOC_TYPE_OPTIONS.map((o: { value: string }) => o.value);
+    expect(values).toContain('BIRTH_CERT');
+    expect(values).not.toContain('PHOTO');
+  });
+});

@@ -694,13 +694,20 @@ class StudentDocumentSerializer(serializers.ModelSerializer):
         source='uploaded_by.username', read_only=True, default=None,
     )
 
+    name_on_document = serializers.SerializerMethodField()
+
     class Meta:
         model = StudentDocument
         fields = [
             'id', 'school', 'student', 'document_type', 'title',
             'file_url', 'uploaded_by', 'uploaded_by_name', 'created_at',
+            'document_number', 'issue_date', 'expiry_date', 'notes',
+            'scan_status', 'scan_note', 'name_on_document',
         ]
-        read_only_fields = ['id', 'uploaded_by', 'created_at']
+        read_only_fields = ['id', 'uploaded_by', 'created_at', 'scan_status', 'scan_note']
+
+    def get_name_on_document(self, obj):
+        return (obj.extracted_data or {}).get('person_name', '')
 
 
 # ── Student Profile Summary ──────────────────────────────────

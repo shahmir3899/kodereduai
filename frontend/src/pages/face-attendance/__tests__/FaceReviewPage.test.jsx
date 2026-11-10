@@ -59,6 +59,41 @@ describe('FaceReviewPage', () => {
     expect(screen.getByText('Review')).toBeInTheDocument()
   })
 
+  it('summarises how many students are marked present', async () => {
+    renderWithProviders(<FaceReviewPage />, { route: '/face-attendance/review/uuid-session-1' })
+
+    // Auto-matched + flagged detections start as present (Ali, Sara) out of 4 on the roll.
+    await waitFor(() => {
+      expect(screen.getByTestId('marked-summary')).toHaveTextContent('2 of 4 students marked present')
+    })
+  })
+
+  it('on a confirmed session shows who was actually recorded present', async () => {
+    server.use(
+      http.get('/api/face-attendance/sessions/:id/', () => HttpResponse.json({
+        id: 'uuid-session-1', status: 'CONFIRMED', class_obj: { id: 1, name: 'Class 1A' }, date: '2026-02-18',
+        image_url: 'https://example.com/photo.jpg', total_faces_detected: 1, faces_matched: 1,
+        faces_flagged: 0, faces_ignored: 0,
+        detections: [],
+        // Usman was marked by hand during review — he has no detection but is recorded present.
+        present_student_ids: [1, 3],
+        class_students: [
+          { id: 1, name: 'Ali Hassan', roll_number: '1', has_embedding: true, matched: true },
+          { id: 3, name: 'Usman Ahmed', roll_number: '3', has_embedding: true, matched: false },
+          { id: 4, name: 'Fatima Noor', roll_number: '4', has_embedding: false, matched: false },
+        ],
+      }))
+    )
+    renderWithProviders(<FaceReviewPage />, { route: '/face-attendance/review/uuid-session-1' })
+
+    await waitFor(() => {
+      expect(screen.getByTestId('marked-summary')).toHaveTextContent('2 of 3 students marked present (confirmed)')
+    })
+    // The roll reflects the recorded attendance (P / A), not "everyone absent".
+    expect(screen.getAllByText('P')).toHaveLength(2)
+    expect(screen.getAllByText('A')).toHaveLength(1)
+  })
+
   it('shows class roll with all students', async () => {
     renderWithProviders(<FaceReviewPage />, { route: '/face-attendance/review/uuid-session-1' })
 

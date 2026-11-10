@@ -7,7 +7,7 @@ import { todayString } from '../../services/attendanceEntry';
 import { monthLabel, stepMonth } from '../../services/register';
 import { payslipPeriod, payslipTone } from '../../services/accountant';
 import {
-  breakdownLines, generationText, netPayTrend, trendNote, payslipActions, payslipFileName, STATUS_FILTERS, summaryLine, type PayslipFull,
+  bulkConfirmText, bulkDoneText, eligibleIds, type BulkKind, breakdownLines, generationText, netPayTrend, trendNote, payslipActions, payslipFileName, STATUS_FILTERS, summaryLine, type PayslipFull,
 } from '../../services/payroll';
 import { exportErrorMessage } from '../../services/reports';
 import { shareReportFile } from '../../services/reportShare';
@@ -46,6 +46,11 @@ export default function PayrollScreen() {
   const trend = open ? netPayTrend(history.data, open.staff_member) : [];
   const [paidOn, setPaidOn] = useState(todayString());
   const [busy, setBusy] = useState<string | null>(null);
+  // Select mode: tick payslips, then approve, mark paid or delete them together (the web has the same).
+  const [selecting, setSelecting] = useState(false);
+  const [picked, setPicked] = useState<number[]>([]);
+  const [bulkPaidOn, setBulkPaidOn] = useState(todayString());
+  const toggle = (id: number) => setPicked((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]));
 
   const run = async (key: string, fn: () => Promise<unknown>, done: string) => {
     setBusy(key);
@@ -92,6 +97,26 @@ export default function PayrollScreen() {
     if (!ok) return;
     if (await run('delete', () => actions.remove.mutateAsync(p.id), 'Draft deleted.')) setOpen(null);
   };
+  const bulk = async (kind: BulkKind) => {
+    const ids = eligibleIds(rows, picked, kind);
+    if (ids.length === 0) return toast.error(kind === 'approve' ? 'Only drafts can be approved.' : kind === 'paid' ? 'Only drafts and approved payslips can be marked paid.' : 'Only drafts can be deleted.');
+    const ok = await confirm({
+      title: kind === 'approve' ? 'Approve payslips?' : kind === 'paid' ? 'Mark as paid?' : 'Delete payslips?',
+      message: bulkConfirmText(kind, ids.length, picked.length, bulkPaidOn),
+      confirmLabel: kind === 'approve' ? 'Approve' : kind === 'paid' ? 'Mark paid' : 'Delete', destructive: kind === 'delete',
+    });
+    if (!ok) return;
+    setBusy(`bulk-${kind}`);
+    try {
+      const res = kind === 'approve' ? await actions.bulkApprove.mutateAsync(ids)
+        : kind === 'paid' ? await actions.bulkPaid.mutateAsync({ ids, date: bulkPaidOn })
+        : await actions.bulkRemove.mutateAsync(ids);
+      toast.success(bulkDoneText(kind, res.data as { approved?: number; paid?: number; deleted?: number; skipped?: number }));
+      setSelecting(false); setPicked([]);
+    } catch (e) { toast.error(inventoryErrorMessage(e)); }
+    finally { setBusy(null); }
+  };
+
   const pdf = async (p: PayslipFull) => {
     setBusy('pdf');
     try {
@@ -123,6 +148,22 @@ export default function PayrollScreen() {
       <Button title="Generate payslips" size="sm" onPress={generate} loading={busy === 'generate'} disabled={busy !== null} />
       <View style={styles.gap} />
       <SegmentedTabs tabs={STATUS_FILTERS.map((f) => ({ value: f.value, label: f.label }))} value={status as '' | 'DRAFT' | 'APPROVED' | 'PAID'} onChange={setStatus} />
+      <View style={styles.gap} />
+      {selecting ? (
+        <View>
+          <Text style={styles.sub}>{picked.length} selected. Choose the payslips, then an action.</Text>
+          <DateField label="Payment date (for Mark paid)" value={bulkPaidOn} onChange={setBulkPaidOn} />
+          <View style={styles.bulkRow}>
+            <Button title="Approve" size="sm" disabled={picked.length === 0 || busy !== null} loading={busy === 'bulk-approve'} onPress={() => bulk('approve')} />
+            <Button title="Mark paid" size="sm" variant="secondary" disabled={picked.length === 0 || busy !== null} loading={busy === 'bulk-paid'} onPress={() => bulk('paid')} />
+            <Button title="Delete" size="sm" variant="danger" disabled={picked.length === 0 || busy !== null} loading={busy === 'bulk-delete'} onPress={() => bulk('delete')} />
+          </View>
+          <View style={styles.bulkRow}>
+            <Button title="Select all shown" size="sm" variant="outline" onPress={() => setPicked(rows.map((r) => r.id))} />
+            <Button title="Cancel" size="sm" variant="ghost" onPress={() => { setSelecting(false); setPicked([]); }} />
+          </View>
+        </View>
+      ) : <Button title="Select payslips" size="sm" variant="outline" onPress={() => setSelecting(true)} />}
     </View>
   );
 
@@ -144,7 +185,8 @@ export default function PayrollScreen() {
         ListEmptyComponent={<EmptyState title="No payslips" message="Generate payslips for this month, or pick another month." />}
         ListFooterComponent={query.isFetchingNextPage ? <ActivityIndicator color={Colors.primary} style={{ margin: Spacing.lg }} /> : null}
         renderItem={({ item: p }) => (
-          <TouchableOpacity accessibilityRole="button" style={styles.row} onPress={() => { setOpen(p); setPaidOn(todayString()); }}>
+          <TouchableOpacity accessibilityRole="button" style={styles.row} onPress={() => { if (selecting) toggle(p.id); else { setOpen(p); setPaidOn(todayString()); } }}>
+            {selecting ? <Text style={styles.tick} accessibilityLabel={picked.includes(p.id) ? 'Selected' : 'Not selected'}>{picked.includes(p.id) ? '☑' : '☐'}</Text> : null}
             <View style={styles.who}>
               <Text style={styles.name} numberOfLines={1}>{p.staff_member_name}</Text>
               <Text style={styles.sub} numberOfLines={1}>{[p.staff_employee_id, p.department_name].filter(Boolean).join('  ·  ') || ' '}</Text>
@@ -218,6 +260,8 @@ const styles = StyleSheet.create({
   totalLabel: { fontSize: FontSize.sm, color: Colors.textSecondary },
   totalValue: { fontSize: FontSize.xxl, fontWeight: '700', color: Colors.primary },
   gap: { height: Spacing.md },
+  bulkRow: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm, marginBottom: Spacing.sm },
+  tick: { fontSize: 22, color: Colors.primary },
   row: { flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.surface, borderRadius: BorderRadius.md, padding: Spacing.md, marginTop: Spacing.sm, gap: Spacing.md },
   who: { flex: 1 },
   name: { fontSize: FontSize.md, fontWeight: '600', color: Colors.text },

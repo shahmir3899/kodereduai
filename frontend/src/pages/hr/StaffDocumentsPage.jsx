@@ -1,41 +1,45 @@
-import { useState } from 'react'
-import Modal from '../../components/ui/Modal'
-import Field from '../../components/ui/Field'
+import { useMemo, useRef, useState } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import PageHeader from '../../components/ui/PageHeader'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { hrApi } from '../../services/api'
-import { useConfirmModal } from '../../components/ConfirmModal'
-import { useToast } from '../../components/Toast'
-import Spinner from '../../components/ui/Spinner'
+import LoadingState from '../../components/ui/LoadingState'
+import EmptyState from '../../components/ui/EmptyState'
 import Badge from '../../components/ui/Badge'
 import StatCard from '../../components/dashboard/StatCard'
 import StaffFilter from '../../components/StaffFilter'
+import { RecordCard, CardGrid } from '../../components/cards'
+import DocumentUploader from '../../components/documents/DocumentUploader'
+import DocumentEditModal, { SCAN_STATUS, isImageUrl } from '../../components/documents/DocumentEditModal'
+import { useConfirmModal } from '../../components/ConfirmModal'
+import { useToast } from '../../components/Toast'
 import { useDebounce } from '../../hooks/useDebounce'
-import { useEscapeKey } from '../../hooks/useEscapeKey'
+import { hrApi } from '../../services/api'
+import { compressImageForUpload } from '../../utils/compressImageForUpload'
 
-const QUAL_TYPES = [
+const DOC_TYPES = [
+  { value: 'ID_DOCUMENT', label: 'ID Document', tone: 'info' },
+  { value: 'CONTRACT', label: 'Contract', tone: 'neutral' },
   { value: 'DEGREE', label: 'Degree', tone: 'info' },
   { value: 'DIPLOMA', label: 'Diploma', tone: 'neutral' },
   { value: 'CERTIFICATION', label: 'Certification', tone: 'success' },
   { value: 'TRAINING', label: 'Training', tone: 'warning' },
   { value: 'LICENSE', label: 'License', tone: 'info' },
-]
-
-const DOC_TYPES = [
-  { value: 'ID_DOCUMENT', label: 'ID Document', tone: 'info' },
-  { value: 'CONTRACT', label: 'Contract', tone: 'neutral' },
   { value: 'CERTIFICATE', label: 'Certificate', tone: 'success' },
   { value: 'MEDICAL', label: 'Medical', tone: 'danger' },
   { value: 'OTHER', label: 'Other', tone: 'neutral' },
 ]
+// These types are also a qualification (the timetable AI reads qualifications).
+const QUALIFICATION_TYPES = ['DEGREE', 'DIPLOMA', 'CERTIFICATION', 'TRAINING', 'LICENSE']
+const typeMap = Object.fromEntries(DOC_TYPES.map((t) => [t.value, t]))
 
-const qualTypeMap = Object.fromEntries(QUAL_TYPES.map(t => [t.value, t]))
-const docTypeMap = Object.fromEntries(DOC_TYPES.map(t => [t.value, t]))
-
-const EMPTY_QUAL = { staff_member: '', qualification_type: '', qualification_name: '', institution: '', year_of_completion: '', grade_or_percentage: '' }
-const EMPTY_DOC = { staff_member: '', document_type: '', title: '', notes: '', expiry_date: '' }
+const STATUS_FILTERS = [
+  { value: '', label: 'All records' },
+  { value: 'NEEDS_REVIEW', label: 'Needs review' },
+  { value: 'NO_FILE', label: 'No file' },
+  { value: 'EXPIRING', label: 'Expiring or expired' },
+]
 
 const EXPIRY_SOON_DAYS = 30
+const POLL_MS = 3000
 
 function expiryStatus(expiryDate) {
   if (!expiryDate) return null
@@ -45,709 +49,276 @@ function expiryStatus(expiryDate) {
   return null
 }
 
+const list = (res) => res?.data?.results || res?.data || []
+
+function Thumb({ doc }) {
+  if (doc.file_url && isImageUrl(doc.file_url)) {
+    return <img src={doc.file_url} alt="" loading="lazy" className="w-12 h-12 object-cover rounded border border-gray-200 flex-shrink-0" />
+  }
+  return (
+    <div className="w-12 h-12 rounded border border-gray-200 bg-gray-50 flex items-center justify-center text-[10px] text-gray-500 flex-shrink-0">
+      {doc.file_url ? 'FILE' : 'NO FILE'}
+    </div>
+  )
+}
+
+/**
+ * One list for everything kept on staff: scanned documents, and older qualifications
+ * that were typed with no file behind them (shown as "No file" until one is attached).
+ * Adding a document is image-only: the record is read from the photo on the server.
+ */
 export default function StaffDocumentsPage() {
   const queryClient = useQueryClient()
   const { confirm, ConfirmModalRoot } = useConfirmModal()
   const { showSuccess, showError } = useToast()
-  const [tab, setTab] = useState('qualifications')
-  const [detailItem, setDetailItem] = useState(null) // { kind: 'qualification' | 'document', item }
 
-  // Qualification state
-  const [qualSearch, setQualSearch] = useState('')
-  const debouncedQualSearch = useDebounce(qualSearch, 300)
-  const [qualTypeFilter, setQualTypeFilter] = useState('')
-  const [showQualModal, setShowQualModal] = useState(false)
-  const [editQualId, setEditQualId] = useState(null)
-  const [qualForm, setQualForm] = useState(EMPTY_QUAL)
-  const [qualErrors, setQualErrors] = useState({})
+  const [uploadStaff, setUploadStaff] = useState('')
+  const [staffFilter, setStaffFilter] = useState('')
+  const [search, setSearch] = useState('')
+  const debouncedSearch = useDebounce(search, 300)
+  const [typeFilter, setTypeFilter] = useState('')
+  const [statusFilter, setStatusFilter] = useState('')
+  const [editing, setEditing] = useState(null) // a document row, or a no-file qualification shaped like one
+  const attachInput = useRef(null)
+  const attachTarget = useRef(null)
+  const [attachingId, setAttachingId] = useState(null)
 
-  // Document state
-  const [docSearch, setDocSearch] = useState('')
-  const debouncedDocSearch = useDebounce(docSearch, 300)
-  const [docTypeFilter, setDocTypeFilter] = useState('')
-  const [showDocModal, setShowDocModal] = useState(false)
-  const [editDocId, setEditDocId] = useState(null)
-  const [docForm, setDocForm] = useState(EMPTY_DOC)
-  const [docFile, setDocFile] = useState(null) // File object; optional on edit
-  const [existingFileUrl, setExistingFileUrl] = useState(null) // current file_url when editing
-  const [docErrors, setDocErrors] = useState({})
-
-  // Fetch staff
   const { data: staffRes } = useQuery({
     queryKey: ['hrStaffActive'],
     queryFn: () => hrApi.getStaff({ employment_status: 'ACTIVE', page_size: 500 }),
   })
-  const staffList = staffRes?.data?.results || staffRes?.data || []
+  const staffList = list(staffRes)
 
-  // Fetch qualifications
-  const { data: qualRes, isLoading: qualLoading } = useQuery({
-    queryKey: ['hrQualifications', debouncedQualSearch, qualTypeFilter],
-    queryFn: () => hrApi.getQualifications({ search: debouncedQualSearch, qualification_type: qualTypeFilter || undefined, page_size: 200 }),
-    enabled: tab === 'qualifications',
-  })
-  const qualifications = qualRes?.data?.results || qualRes?.data || []
-
-  // Fetch documents
+  const params = { search: debouncedSearch || undefined, staff_member: staffFilter || undefined, page_size: 500 }
   const { data: docRes, isLoading: docLoading } = useQuery({
-    queryKey: ['hrDocuments', debouncedDocSearch, docTypeFilter],
-    queryFn: () => hrApi.getDocuments({ search: debouncedDocSearch, document_type: docTypeFilter || undefined, page_size: 200 }),
-    enabled: tab === 'documents',
+    queryKey: ['hrDocuments', debouncedSearch, staffFilter],
+    queryFn: () => hrApi.getDocuments(params),
+    // While the server is still reading an image, keep checking until it is done.
+    refetchInterval: (query) => (list(query.state.data).some((d) => d.scan_status === 'PENDING') ? POLL_MS : false),
   })
-  const documents = docRes?.data?.results || docRes?.data || []
-
-  // KPI summary — computed client-side from the already-fetched lists, no extra endpoint needed.
-  const qualTypeCounts = QUAL_TYPES.map(t => ({
-    ...t,
-    count: qualifications.filter(q => q.qualification_type === t.value).length,
-  }))
-  const staffWithoutDocuments = staffList.length
-    ? staffList.filter(s => !documents.some(d => d.staff_member === s.id)).length
-    : 0
-  const expiringSoonCount = documents.filter(d => {
-    const status = expiryStatus(d.expiry_date)
-    return status && status.tone === 'warning'
-  }).length
-  const expiredCount = documents.filter(d => expiryStatus(d.expiry_date)?.tone === 'danger').length
-
-  // Qualification mutations
-  const createQualMutation = useMutation({
-    mutationFn: (data) => hrApi.createQualification(data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['hrQualifications'] })
-      closeQualModal()
-      showSuccess('Qualification added successfully!')
-    },
-    onError: (err) => setQualErrors(err.response?.data || { detail: 'Failed to create qualification' }),
+  const { data: qualRes, isLoading: qualLoading } = useQuery({
+    queryKey: ['hrQualifications', debouncedSearch, staffFilter],
+    queryFn: () => hrApi.getQualifications(params),
   })
+  const documents = list(docRes)
+  const noFileRows = useMemo(() => list(qualRes).filter((q) => !q.document).map((q) => ({
+    key: `q-${q.id}`,
+    qualificationOnlyId: q.id,
+    staff_member: q.staff_member,
+    staff_member_name: q.staff_member_name,
+    document_type: q.qualification_type,
+    title: q.qualification_name,
+    institution: q.institution,
+    year_of_completion: q.year_of_completion,
+    grade_or_percentage: q.grade_or_percentage,
+    file_url: '',
+  })), [qualRes])
 
-  const updateQualMutation = useMutation({
-    mutationFn: ({ id, data }) => hrApi.updateQualification(id, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['hrQualifications'] })
-      closeQualModal()
-      showSuccess('Qualification updated successfully!')
-    },
-    onError: (err) => setQualErrors(err.response?.data || { detail: 'Failed to update qualification' }),
+  const reload = () => {
+    queryClient.invalidateQueries({ queryKey: ['hrDocuments'] })
+    queryClient.invalidateQueries({ queryKey: ['hrQualifications'] })
+  }
+
+  const allRows = [...documents.map((d) => ({ ...d, key: `d-${d.id}` })), ...noFileRows]
+  const rows = allRows.filter((r) => {
+    if (typeFilter && r.document_type !== typeFilter) return false
+    if (statusFilter === 'NEEDS_REVIEW') return r.scan_status === 'NEEDS_REVIEW'
+    if (statusFilter === 'NO_FILE') return !r.file_url
+    if (statusFilter === 'EXPIRING') return !!expiryStatus(r.expiry_date)
+    return true
   })
 
-  const deleteQualMutation = useMutation({
-    mutationFn: (id) => hrApi.deleteQualification(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['hrQualifications'] })
-      showSuccess('Qualification deleted successfully!')
-    },
-    onError: (err) => showError(err.response?.data?.detail || 'Failed to delete qualification'),
-  })
+  const needsReview = documents.filter((d) => d.scan_status === 'NEEDS_REVIEW').length
+  const noFile = allRows.filter((r) => !r.file_url).length
+  const expiringSoon = documents.filter((d) => expiryStatus(d.expiry_date)?.tone === 'warning').length
+  const expired = documents.filter((d) => expiryStatus(d.expiry_date)?.tone === 'danger').length
+  const loading = docLoading || qualLoading
 
-  // Document mutations
-  const createDocMutation = useMutation({
-    mutationFn: (data) => hrApi.createDocument(data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['hrDocuments'] })
-      closeDocModal()
-      showSuccess('Document added successfully!')
-    },
-    onError: (err) => setDocErrors(err.response?.data || { detail: 'Failed to create document' }),
-  })
-
-  const updateDocMutation = useMutation({
-    mutationFn: ({ id, data }) => hrApi.updateDocument(id, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['hrDocuments'] })
-      closeDocModal()
-      showSuccess('Document updated successfully!')
-    },
-    onError: (err) => setDocErrors(err.response?.data || { detail: 'Failed to update document' }),
-  })
-
-  const deleteDocMutation = useMutation({
-    mutationFn: (id) => hrApi.deleteDocument(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['hrDocuments'] })
-      showSuccess('Document deleted successfully!')
-    },
-    onError: (err) => showError(err.response?.data?.detail || 'Failed to delete document'),
-  })
-
-  // Qualification modal helpers
-  const openQualCreate = () => { setQualForm(EMPTY_QUAL); setEditQualId(null); setQualErrors({}); setShowQualModal(true) }
-  const openQualEdit = (q) => {
-    setQualForm({
-      staff_member: q.staff_member,
-      qualification_type: q.qualification_type,
-      qualification_name: q.qualification_name || '',
-      institution: q.institution || '',
-      year_of_completion: q.year_of_completion || '',
-      grade_or_percentage: q.grade_or_percentage || '',
+  const remove = async (row) => {
+    const ok = await confirm({
+      title: 'Delete record',
+      message: row.file_url
+        ? 'Delete this record and its file? This cannot be undone.'
+        : 'Delete this record? This cannot be undone.',
     })
-    setEditQualId(q.id)
-    setQualErrors({})
-    setShowQualModal(true)
-  }
-  const closeQualModal = () => { setShowQualModal(false); setEditQualId(null); setQualForm(EMPTY_QUAL); setQualErrors({}) }
-
-  const handleQualSubmit = (e) => {
-    e.preventDefault()
-    if (!qualForm.staff_member) {
-      setQualErrors({ detail: 'Please select a staff member.' })
-      return
+    if (!ok) return
+    try {
+      if (row.qualificationOnlyId) await hrApi.deleteQualification(row.qualificationOnlyId)
+      else await hrApi.deleteDocument(row.id)
+      showSuccess('Deleted.')
+      reload()
+    } catch (err) {
+      showError(err.response?.data?.detail || 'Failed to delete.')
     }
-    const payload = { ...qualForm, year_of_completion: qualForm.year_of_completion ? parseInt(qualForm.year_of_completion) : null }
-    if (editQualId) updateQualMutation.mutate({ id: editQualId, data: payload })
-    else createQualMutation.mutate(payload)
   }
 
-  // Document modal helpers
-  const openDocCreate = () => {
-    setDocForm(EMPTY_DOC)
-    setEditDocId(null)
-    setDocFile(null)
-    setExistingFileUrl(null)
-    setDocErrors({})
-    setShowDocModal(true)
-  }
-  const openDocEdit = (d) => {
-    setDocForm({
-      staff_member: d.staff_member,
-      document_type: d.document_type,
-      title: d.title || '',
-      notes: d.notes || '',
-      expiry_date: d.expiry_date || '',
-    })
-    setEditDocId(d.id)
-    setDocFile(null)
-    setExistingFileUrl(d.file_url || null)
-    setDocErrors({})
-    setShowDocModal(true)
-  }
-  const closeDocModal = () => {
-    setShowDocModal(false)
-    setEditDocId(null)
-    setDocForm(EMPTY_DOC)
-    setDocFile(null)
-    setExistingFileUrl(null)
-    setDocErrors({})
-  }
-
-  useEscapeKey(closeQualModal, showQualModal)
-  useEscapeKey(closeDocModal, showDocModal)
-  useEscapeKey(() => setDetailItem(null), !!detailItem)
-
-  const handleDocSubmit = (e) => {
-    e.preventDefault()
-    if (!docForm.staff_member) {
-      setDocErrors({ detail: 'Please select a staff member.' })
-      return
+  const save = async (row, payload) => {
+    if (row.qualificationOnlyId) {
+      await hrApi.updateQualification(row.qualificationOnlyId, {
+        qualification_type: QUALIFICATION_TYPES.includes(payload.document_type) ? payload.document_type : row.document_type,
+        qualification_name: payload.title,
+        institution: payload.institution || '',
+        year_of_completion: payload.year_of_completion ?? null,
+        grade_or_percentage: payload.grade_or_percentage || '',
+      })
+    } else {
+      await hrApi.updateDocumentDetails(row.id, payload)
     }
-    if (!editDocId && !docFile) {
-      setDocErrors({ detail: 'Please choose a file to upload.' })
-      return
+    showSuccess('Saved.')
+    reload()
+  }
+
+  const rescan = async (row) => {
+    const { data } = await hrApi.rescanDocument(row.id)
+    if (data?.duplicate) showSuccess('This was a copy of a document already on file, so it was not kept.')
+    reload()
+  }
+
+  const startAttach = (row) => {
+    attachTarget.current = row
+    attachInput.current?.click()
+  }
+
+  const attach = async (e) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    const row = attachTarget.current
+    if (!file || !row) return
+    setAttachingId(row.qualificationOnlyId)
+    try {
+      const toSend = file.type.startsWith('image/') ? await compressImageForUpload(file) : file
+      const { data } = await hrApi.scanDocument(row.staff_member, toSend, row.qualificationOnlyId)
+      if (data?.duplicate) showError('That file is already on record for this staff member, so it was not attached.')
+      else showSuccess('File attached.')
+      reload()
+    } catch (err) {
+      showError(err.response?.data?.error || 'Failed to attach the file.')
+    } finally {
+      setAttachingId(null)
     }
-    const payload = { ...docForm, file: docFile || undefined }
-    if (editDocId) updateDocMutation.mutate({ id: editDocId, data: payload })
-    else createDocMutation.mutate(payload)
   }
 
   return (
     <div>
-      <PageHeader title="Staff Documents" subtitle="Manage qualifications and documents" className="mb-6" />
+      <PageHeader title="Staff Documents" subtitle="Upload a photo or file. The details are read from it automatically." className="mb-6" />
 
-      {/* Tabs */}
-      <div className="flex gap-1 mb-6 bg-gray-100 p-1 rounded-lg w-fit">
-        <button
-          onClick={() => setTab('qualifications')}
-          className={`px-4 py-2 text-sm rounded-md transition-colors ${tab === 'qualifications' ? 'bg-white shadow text-primary-700 font-medium' : 'text-gray-600 hover:text-gray-800'}`}
-        >
-          Qualifications
-        </button>
-        <button
-          onClick={() => setTab('documents')}
-          className={`px-4 py-2 text-sm rounded-md transition-colors ${tab === 'documents' ? 'bg-white shadow text-primary-700 font-medium' : 'text-gray-600 hover:text-gray-800'}`}
-        >
-          Documents
-        </button>
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
+        <StatCard label="Total Records" value={loading ? '-' : allRows.length} color="blue" />
+        <StatCard label="Needs Review" value={loading ? '-' : needsReview} color={needsReview > 0 ? 'amber' : 'green'} />
+        <StatCard label="No File" value={loading ? '-' : noFile} color={noFile > 0 ? 'amber' : 'green'} />
+        <StatCard label="Expiring Soon" value={loading ? '-' : expiringSoon} subtitle={`within ${EXPIRY_SOON_DAYS} days`} color={expiringSoon > 0 ? 'amber' : 'green'} />
+        <StatCard label="Expired" value={loading ? '-' : expired} color={expired > 0 ? 'red' : 'green'} />
       </div>
 
-      {/* Qualifications Tab */}
-      {tab === 'qualifications' && (
-        <>
-          {/* KPI Summary */}
-          <div className="grid grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
-            <StatCard label="Total Qualifications" value={qualLoading ? '-' : qualifications.length} color="blue" />
-            <div className="card lg:col-span-2">
-              <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">By Type</p>
-              <div className="flex flex-wrap gap-3">
-                {qualTypeCounts.map(t => (
-                  <div key={t.value} className="flex items-center gap-1.5 text-sm">
-                    <Badge tone={t.tone}>{t.label}</Badge>
-                    <span className="text-gray-600">{t.count}</span>
+      {/* Add documents: pick the person once, then only images or files. */}
+      <div className="mb-6">
+        <div className="mb-2 max-w-sm">
+          <label className="label">Add documents for</label>
+          <StaffFilter
+            options={staffList}
+            value={uploadStaff}
+            onChange={(e) => setUploadStaff(e.target.value)}
+            placeholder="Select staff..."
+          />
+        </div>
+        <DocumentUploader
+          disabled={!uploadStaff}
+          disabledHint="Select a staff member first."
+          upload={(file) => hrApi.scanDocument(uploadStaff, file)}
+          onSettled={reload}
+        />
+      </div>
+
+      <div className="flex flex-col sm:flex-row gap-3 mb-4">
+        <input
+          type="text"
+          placeholder="Search by staff name or title..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="input w-full sm:w-64"
+          aria-label="Search records"
+        />
+        <StaffFilter
+          options={staffList}
+          value={staffFilter}
+          onChange={(e) => setStaffFilter(e.target.value)}
+          showAllOption
+          allOptionLabel="All staff"
+          className="w-full sm:w-56"
+        />
+        <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} className="input w-full sm:w-44" aria-label="Filter by type">
+          <option value="">All types</option>
+          {DOC_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+        </select>
+        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="input w-full sm:w-48" aria-label="Filter by status">
+          {STATUS_FILTERS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+        </select>
+      </div>
+
+      {loading ? (
+        <LoadingState label="Loading records..." />
+      ) : rows.length === 0 ? (
+        <EmptyState title="No records found" />
+      ) : (
+        <CardGrid>
+          {rows.map((row) => {
+            const scan = SCAN_STATUS[row.scan_status]
+            const expiry = expiryStatus(row.expiry_date)
+            const reading = row.scan_status === 'PENDING'
+            const type = typeMap[row.document_type]
+            return (
+              <RecordCard
+                key={row.key}
+                leading={<Thumb doc={row} />}
+                title={row.title}
+                meta={row.staff_member_name}
+                status={<Badge tone={type?.tone || 'neutral'}>{type?.label || row.document_type}</Badge>}
+                stripeTone={row.scan_status === 'NEEDS_REVIEW' || !row.file_url ? 'warning' : undefined}
+                fields={[
+                  row.document_number && { label: 'Number', value: row.document_number, mono: true },
+                  row.institution && { label: 'Institution', value: row.institution },
+                  row.year_of_completion && { label: 'Year', value: row.year_of_completion },
+                  row.expiry_date && { label: 'Expiry', value: row.expiry_date },
+                  row.uploaded_at && { label: 'Uploaded', value: row.uploaded_at.split('T')[0] },
+                ].filter(Boolean)}
+                actions={[
+                  !reading && { label: row.file_url ? 'View / Edit' : 'Edit', onClick: () => setEditing(row) },
+                  row.file_url && { label: 'Open file', onClick: () => window.open(row.file_url, '_blank', 'noopener') },
+                  row.qualificationOnlyId && {
+                    label: attachingId === row.qualificationOnlyId ? 'Attaching…' : 'Attach file',
+                    tone: 'success',
+                    disabled: attachingId === row.qualificationOnlyId,
+                    onClick: () => startAttach(row),
+                  },
+                  { label: 'Delete', tone: 'danger', onClick: () => remove(row) },
+                ].filter(Boolean)}
+              >
+                {(scan || expiry || !row.file_url) && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {scan && <Badge tone={scan.tone}>{scan.label}</Badge>}
+                    {!row.file_url && <Badge tone="warning">No file</Badge>}
+                    {expiry && <Badge tone={expiry.tone}>{expiry.label}</Badge>}
                   </div>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          <div className="flex flex-col sm:flex-row gap-3 mb-4">
-            <input
-              type="text"
-              placeholder="Search by staff name..."
-              value={qualSearch}
-              onChange={e => setQualSearch(e.target.value)}
-              className="input w-full sm:w-60"
-            />
-            <select
-              value={qualTypeFilter}
-              onChange={e => setQualTypeFilter(e.target.value)}
-              className="input w-full sm:w-48"
-            >
-              <option value="">All Types</option>
-              {QUAL_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
-            </select>
-            <button onClick={openQualCreate} className="btn-primary text-sm px-4 py-2 whitespace-nowrap">
-              + Add Qualification
-            </button>
-          </div>
-
-          {qualLoading ? (
-            <div className="text-center py-12">
-              <Spinner size="md" className="mx-auto" />
-            </div>
-          ) : qualifications.length === 0 ? (
-            <div className="card text-center py-8 text-gray-500">No qualifications found.</div>
-          ) : (
-            <>
-              {/* Desktop Table */}
-              <div className="hidden md:block overflow-x-auto">
-                <table className="min-w-full bg-white rounded-xl shadow-sm border border-gray-200">
-                  <thead>
-                    <tr className="bg-gray-50 text-xs text-gray-500 uppercase">
-                      <th className="px-4 py-3 text-left">Staff Member</th>
-                      <th className="px-4 py-3 text-left">Type</th>
-                      <th className="px-4 py-3 text-left">Qualification</th>
-                      <th className="px-4 py-3 text-left">Institution</th>
-                      <th className="px-4 py-3 text-center">Year</th>
-                      <th className="px-4 py-3 text-left">Grade</th>
-                      <th className="px-4 py-3 text-right">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {qualifications.map(q => (
-                      <tr key={q.id} className="hover:bg-gray-50">
-                        <td className="px-4 py-2 text-sm font-medium text-gray-900">{q.staff_member_name}</td>
-                        <td className="px-4 py-2">
-                          <Badge tone={qualTypeMap[q.qualification_type]?.tone || 'neutral'}>
-                            {qualTypeMap[q.qualification_type]?.label || q.qualification_type}
-                          </Badge>
-                        </td>
-                        <td className="px-4 py-2 text-sm text-gray-700">{q.qualification_name}</td>
-                        <td className="px-4 py-2 text-sm text-gray-600">{q.institution || '-'}</td>
-                        <td className="px-4 py-2 text-sm text-center text-gray-600">{q.year_of_completion || '-'}</td>
-                        <td className="px-4 py-2 text-sm text-gray-600">{q.grade_or_percentage || '-'}</td>
-                        <td className="px-4 py-2 text-right">
-                          <button onClick={() => setDetailItem({ kind: 'qualification', item: q })} className="text-xs text-primary-600 hover:underline mr-2">View</button>
-                          <button onClick={() => openQualEdit(q)} className="text-xs text-primary-600 hover:underline mr-2">Edit</button>
-                          <button
-                            onClick={async () => { const ok = await confirm({ title: 'Delete Qualification', message: 'Delete this qualification? This cannot be undone.' }); if (ok) deleteQualMutation.mutate(q.id) }}
-                            className="text-xs text-red-600 hover:underline"
-                          >Delete</button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-
-              {/* Mobile Cards */}
-              <div className="md:hidden space-y-3">
-                {qualifications.map(q => (
-                  <div key={q.id} className="card">
-                    <div className="flex items-start justify-between mb-2">
-                      <div>
-                        <p className="font-medium text-gray-900 text-sm">{q.staff_member_name}</p>
-                        <p className="text-xs text-gray-600">{q.qualification_name}</p>
-                      </div>
-                      <Badge tone={qualTypeMap[q.qualification_type]?.tone || 'neutral'}>
-                        {qualTypeMap[q.qualification_type]?.label || q.qualification_type}
-                      </Badge>
-                    </div>
-                    <div className="text-xs text-gray-500 mb-2">
-                      {q.institution && <span>{q.institution}</span>}
-                      {q.year_of_completion && <span className="ml-2">({q.year_of_completion})</span>}
-                      {q.grade_or_percentage && <span className="ml-2">Grade: {q.grade_or_percentage}</span>}
-                    </div>
-                    <div className="flex gap-2">
-                      <button onClick={() => setDetailItem({ kind: 'qualification', item: q })} className="text-xs text-primary-600 hover:underline">View</button>
-                      <button onClick={() => openQualEdit(q)} className="text-xs text-primary-600 hover:underline">Edit</button>
-                      <button
-                        onClick={async () => { const ok = await confirm({ title: 'Delete Qualification', message: 'Delete this qualification? This cannot be undone.' }); if (ok) deleteQualMutation.mutate(q.id) }}
-                        className="text-xs text-red-600 hover:underline"
-                      >Delete</button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </>
-          )}
-
-          {/* Qualification Modal */}
-          {showQualModal && (
-            <Modal open onClose={closeQualModal} title={editQualId ? 'Edit Qualification' : 'Add Qualification'}>
-
-                {(qualErrors.detail || qualErrors.non_field_errors) && (
-                  <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-lg text-sm">{qualErrors.detail || qualErrors.non_field_errors}</div>
                 )}
-
-                <form onSubmit={handleQualSubmit} className="space-y-4">
-                  <div>
-                    <label className="label">Staff Member *</label>
-                    <StaffFilter
-                      options={staffList}
-                      value={qualForm.staff_member}
-                      onChange={e => setQualForm(p => ({ ...p, staff_member: e.target.value }))}
-                      placeholder="Select staff..."
-                    />
-                  </div>
-                  <Field label="Type" required>
-<select value={qualForm.qualification_type} onChange={e => setQualForm(p => ({ ...p, qualification_type: e.target.value }))} className="input w-full" required>
-                      <option value="">Select type...</option>
-                      {QUAL_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
-                    </select>
-</Field>
-                  <Field label="Qualification Name" required>
-<input type="text" value={qualForm.qualification_name} onChange={e => setQualForm(p => ({ ...p, qualification_name: e.target.value }))} className="input w-full" required placeholder="e.g. B.Ed, MBA" />
-</Field>
-                  <Field label="Institution">
-<input type="text" value={qualForm.institution} onChange={e => setQualForm(p => ({ ...p, institution: e.target.value }))} className="input w-full" placeholder="University or institute name" />
-</Field>
-                  <div className="grid grid-cols-2 gap-3">
-                    <Field label="Year of Completion">
-<input type="number" min="1950" max="2099" value={qualForm.year_of_completion} onChange={e => setQualForm(p => ({ ...p, year_of_completion: e.target.value }))} className="input w-full" placeholder="2020" />
-</Field>
-                    <Field label="Grade / Percentage">
-<input type="text" value={qualForm.grade_or_percentage} onChange={e => setQualForm(p => ({ ...p, grade_or_percentage: e.target.value }))} className="input w-full" placeholder="e.g. A+, 85%" />
-</Field>
-                  </div>
-                  <div className="flex justify-end gap-3 pt-2">
-                    <button type="button" onClick={closeQualModal} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">Cancel</button>
-                    <button type="submit" disabled={createQualMutation.isPending || updateQualMutation.isPending} className="btn-primary px-4 py-2 text-sm disabled:opacity-50">
-                      {createQualMutation.isPending || updateQualMutation.isPending ? 'Saving...' : editQualId ? 'Update' : 'Create'}
-                    </button>
-                  </div>
-                </form>
-              </Modal>
-          )}
-        </>
+              </RecordCard>
+            )
+          })}
+        </CardGrid>
       )}
 
-      {/* Documents Tab */}
-      {tab === 'documents' && (
-        <>
-          {/* KPI Summary */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-            <StatCard label="Total Documents" value={docLoading ? '-' : documents.length} color="blue" />
-            <StatCard
-              label="Staff Missing Documents"
-              value={docLoading ? '-' : staffWithoutDocuments}
-              subtitle={`out of ${staffList.length} active staff`}
-              color={staffWithoutDocuments > 0 ? 'amber' : 'green'}
-            />
-            <StatCard
-              label="Expiring Soon"
-              value={docLoading ? '-' : expiringSoonCount}
-              subtitle={`within ${EXPIRY_SOON_DAYS} days`}
-              color={expiringSoonCount > 0 ? 'amber' : 'green'}
-            />
-            <StatCard
-              label="Expired"
-              value={docLoading ? '-' : expiredCount}
-              color={expiredCount > 0 ? 'red' : 'green'}
-            />
-          </div>
+      <input ref={attachInput} type="file" accept="image/jpeg,image/png,image/webp,application/pdf,.doc,.docx" className="hidden" onChange={attach} />
 
-          <div className="flex flex-col sm:flex-row gap-3 mb-4">
-            <input
-              type="text"
-              placeholder="Search by staff name..."
-              value={docSearch}
-              onChange={e => setDocSearch(e.target.value)}
-              className="input w-full sm:w-60"
-            />
-            <select
-              value={docTypeFilter}
-              onChange={e => setDocTypeFilter(e.target.value)}
-              className="input w-full sm:w-48"
-            >
-              <option value="">All Types</option>
-              {DOC_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
-            </select>
-            <button onClick={openDocCreate} className="btn-primary text-sm px-4 py-2 whitespace-nowrap">
-              + Add Document
-            </button>
-          </div>
-
-          {docLoading ? (
-            <div className="text-center py-12">
-              <Spinner size="md" className="mx-auto" />
-            </div>
-          ) : documents.length === 0 ? (
-            <div className="card text-center py-8 text-gray-500">No documents found.</div>
-          ) : (
-            <>
-              {/* Desktop Table */}
-              <div className="hidden md:block overflow-x-auto">
-                <table className="min-w-full bg-white rounded-xl shadow-sm border border-gray-200">
-                  <thead>
-                    <tr className="bg-gray-50 text-xs text-gray-500 uppercase">
-                      <th className="px-4 py-3 text-left">Staff Member</th>
-                      <th className="px-4 py-3 text-left">Type</th>
-                      <th className="px-4 py-3 text-left">Title</th>
-                      <th className="px-4 py-3 text-left">File</th>
-                      <th className="px-4 py-3 text-left">Expiry</th>
-                      <th className="px-4 py-3 text-left">Uploaded</th>
-                      <th className="px-4 py-3 text-left">Notes</th>
-                      <th className="px-4 py-3 text-right">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {documents.map(d => {
-                      const expiry = expiryStatus(d.expiry_date)
-                      return (
-                      <tr key={d.id} className="hover:bg-gray-50">
-                        <td className="px-4 py-2 text-sm font-medium text-gray-900">{d.staff_member_name}</td>
-                        <td className="px-4 py-2">
-                          <Badge tone={docTypeMap[d.document_type]?.tone || 'neutral'}>
-                            {docTypeMap[d.document_type]?.label || d.document_type}
-                          </Badge>
-                        </td>
-                        <td className="px-4 py-2 text-sm text-gray-700">{d.title}</td>
-                        <td className="px-4 py-2 text-sm">
-                          {d.file_url ? (
-                            <a href={d.file_url} target="_blank" rel="noopener noreferrer" className="text-primary-600 hover:underline">Open</a>
-                          ) : '-'}
-                        </td>
-                        <td className="px-4 py-2 text-sm text-gray-600">
-                          {d.expiry_date ? (
-                            <div className="flex items-center gap-1.5">
-                              <span>{d.expiry_date}</span>
-                              {expiry && <Badge tone={expiry.tone}>{expiry.label}</Badge>}
-                            </div>
-                          ) : '-'}
-                        </td>
-                        <td className="px-4 py-2 text-sm text-gray-500">{d.uploaded_at?.split('T')[0]}</td>
-                        <td className="px-4 py-2 text-sm text-gray-500 max-w-[200px] truncate">{d.notes || '-'}</td>
-                        <td className="px-4 py-2 text-right">
-                          <button onClick={() => setDetailItem({ kind: 'document', item: d })} className="text-xs text-primary-600 hover:underline mr-2">View</button>
-                          <button onClick={() => openDocEdit(d)} className="text-xs text-primary-600 hover:underline mr-2">Edit</button>
-                          <button
-                            onClick={async () => { const ok = await confirm({ title: 'Delete Document', message: 'Delete this document? This cannot be undone.' }); if (ok) deleteDocMutation.mutate(d.id) }}
-                            className="text-xs text-red-600 hover:underline"
-                          >Delete</button>
-                        </td>
-                      </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
-              </div>
-
-              {/* Mobile Cards */}
-              <div className="md:hidden space-y-3">
-                {documents.map(d => {
-                  const expiry = expiryStatus(d.expiry_date)
-                  return (
-                  <div key={d.id} className="card">
-                    <div className="flex items-start justify-between mb-2">
-                      <div>
-                        <p className="font-medium text-gray-900 text-sm">{d.staff_member_name}</p>
-                        <p className="text-xs text-gray-600">{d.title}</p>
-                      </div>
-                      <Badge tone={docTypeMap[d.document_type]?.tone || 'neutral'}>
-                        {docTypeMap[d.document_type]?.label || d.document_type}
-                      </Badge>
-                    </div>
-                    <div className="text-xs text-gray-500 mb-2">
-                      {d.uploaded_at && <span>Uploaded: {d.uploaded_at.split('T')[0]}</span>}
-                      {d.notes && <span className="ml-2">| {d.notes}</span>}
-                    </div>
-                    {(d.expiry_date || expiry) && (
-                      <div className="flex items-center gap-1.5 mb-2 text-xs text-gray-500">
-                        {d.expiry_date && <span>Expires: {d.expiry_date}</span>}
-                        {expiry && <Badge tone={expiry.tone}>{expiry.label}</Badge>}
-                      </div>
-                    )}
-                    <div className="flex gap-2">
-                      <button onClick={() => setDetailItem({ kind: 'document', item: d })} className="text-xs text-primary-600 hover:underline">View</button>
-                      <button onClick={() => openDocEdit(d)} className="text-xs text-primary-600 hover:underline">Edit</button>
-                      {d.file_url && (
-                        <a href={d.file_url} target="_blank" rel="noopener noreferrer" className="text-xs text-primary-600 hover:underline">Open File</a>
-                      )}
-                      <button
-                        onClick={async () => { const ok = await confirm({ title: 'Delete Document', message: 'Delete this document? This cannot be undone.' }); if (ok) deleteDocMutation.mutate(d.id) }}
-                        className="text-xs text-red-600 hover:underline"
-                      >Delete</button>
-                    </div>
-                  </div>
-                  )
-                })}
-              </div>
-            </>
-          )}
-
-          {/* Document Modal */}
-          {showDocModal && (
-            <Modal open onClose={closeDocModal} title={editDocId ? 'Edit Document' : 'Add Document'}>
-
-                {(docErrors.detail || docErrors.error || docErrors.non_field_errors) && (
-                  <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-lg text-sm">{docErrors.detail || docErrors.error || docErrors.non_field_errors}</div>
-                )}
-
-                <form onSubmit={handleDocSubmit} className="space-y-4">
-                  <div>
-                    <label className="label">Staff Member *</label>
-                    <StaffFilter
-                      options={staffList}
-                      value={docForm.staff_member}
-                      onChange={e => setDocForm(p => ({ ...p, staff_member: e.target.value }))}
-                      placeholder="Select staff..."
-                    />
-                  </div>
-                  <Field label="Document Type" required>
-<select value={docForm.document_type} onChange={e => setDocForm(p => ({ ...p, document_type: e.target.value }))} className="input w-full" required>
-                      <option value="">Select type...</option>
-                      {DOC_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
-                    </select>
-</Field>
-                  <Field label="Title" required>
-<input type="text" value={docForm.title} onChange={e => setDocForm(p => ({ ...p, title: e.target.value }))} className="input w-full" required placeholder="e.g. Aadhaar Card, Employment Contract" />
-</Field>
-                  <div>
-                    <label className="label">
-                      File {editDocId ? '(leave blank to keep the current file)' : '*'}
-                    </label>
-                    {existingFileUrl && (
-                      <p className="text-xs text-gray-500 mb-1">
-                        Current file: <a href={existingFileUrl} target="_blank" rel="noopener noreferrer" className="text-primary-600 hover:underline">Open</a>
-                      </p>
-                    )}
-                    <input
-                      type="file"
-                      accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
-                      onChange={e => setDocFile(e.target.files?.[0] || null)}
-                      className="input w-full"
-                      required={!editDocId}
-                    />
-                  </div>
-                  <Field label="Expiry Date">
-<input type="date" value={docForm.expiry_date} onChange={e => setDocForm(p => ({ ...p, expiry_date: e.target.value }))} className="input w-full" />
-</Field>
-                  <div>
-                    <label className="label">Notes</label>
-                    <textarea value={docForm.notes} onChange={e => setDocForm(p => ({ ...p, notes: e.target.value }))} className="input w-full" rows={2} placeholder="Additional notes..." />
-                  </div>
-                  <div className="flex justify-end gap-3 pt-2">
-                    <button type="button" onClick={closeDocModal} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">Cancel</button>
-                    <button type="submit" disabled={createDocMutation.isPending || updateDocMutation.isPending} className="btn-primary px-4 py-2 text-sm disabled:opacity-50">
-                      {createDocMutation.isPending || updateDocMutation.isPending ? 'Saving...' : editDocId ? 'Update' : 'Create'}
-                    </button>
-                  </div>
-                </form>
-              </Modal>
-          )}
-        </>
-      )}
-
-      {/* Detail Modal (Qualification or Document) */}
-      {detailItem && (
-        <Modal open onClose={() => setDetailItem(null)} size="lg">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold text-gray-900">
-                {detailItem.kind === 'qualification' ? 'Qualification Details' : 'Document Details'}
-              </h2>
-              <button onClick={() => setDetailItem(null)} className="text-gray-400 hover:text-gray-600 text-xl">&times;</button>
-            </div>
-
-            {detailItem.kind === 'qualification' ? (
-              <div className="space-y-3">
-                <div>
-                  <p className="text-xs text-gray-500">Staff Member</p>
-                  <p className="text-sm font-medium">{detailItem.item.staff_member_name}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-500">Type</p>
-                  <Badge tone={qualTypeMap[detailItem.item.qualification_type]?.tone || 'neutral'}>
-                    {qualTypeMap[detailItem.item.qualification_type]?.label || detailItem.item.qualification_type}
-                  </Badge>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-500">Qualification Name</p>
-                  <p className="text-sm">{detailItem.item.qualification_name}</p>
-                </div>
-                {detailItem.item.institution && (
-                  <div>
-                    <p className="text-xs text-gray-500">Institution</p>
-                    <p className="text-sm">{detailItem.item.institution}</p>
-                  </div>
-                )}
-                {detailItem.item.year_of_completion && (
-                  <div>
-                    <p className="text-xs text-gray-500">Year of Completion</p>
-                    <p className="text-sm">{detailItem.item.year_of_completion}</p>
-                  </div>
-                )}
-                {detailItem.item.grade_or_percentage && (
-                  <div>
-                    <p className="text-xs text-gray-500">Grade / Percentage</p>
-                    <p className="text-sm">{detailItem.item.grade_or_percentage}</p>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div className="space-y-3">
-                <div>
-                  <p className="text-xs text-gray-500">Staff Member</p>
-                  <p className="text-sm font-medium">{detailItem.item.staff_member_name}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-500">Type</p>
-                  <Badge tone={docTypeMap[detailItem.item.document_type]?.tone || 'neutral'}>
-                    {docTypeMap[detailItem.item.document_type]?.label || detailItem.item.document_type}
-                  </Badge>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-500">Title</p>
-                  <p className="text-sm">{detailItem.item.title}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-500">Uploaded</p>
-                  <p className="text-sm">{detailItem.item.uploaded_at?.split('T')[0] || '-'}</p>
-                </div>
-                {detailItem.item.file_url && (
-                  <div>
-                    <p className="text-xs text-gray-500">File</p>
-                    <a href={detailItem.item.file_url} target="_blank" rel="noopener noreferrer" className="text-sm text-primary-600 hover:underline">Open File</a>
-                  </div>
-                )}
-                {detailItem.item.expiry_date && (
-                  <div>
-                    <p className="text-xs text-gray-500">Expiry Date</p>
-                    <div className="flex items-center gap-2">
-                      <p className="text-sm">{detailItem.item.expiry_date}</p>
-                      {(() => {
-                        const status = expiryStatus(detailItem.item.expiry_date)
-                        return status ? <Badge tone={status.tone}>{status.label}</Badge> : null
-                      })()}
-                    </div>
-                  </div>
-                )}
-                {detailItem.item.notes && (
-                  <div>
-                    <p className="text-xs text-gray-500">Notes</p>
-                    <p className="text-sm whitespace-pre-wrap">{detailItem.item.notes}</p>
-                  </div>
-                )}
-              </div>
-            )}
-          </Modal>
+      {editing && (
+        <DocumentEditModal
+          doc={editing}
+          typeOptions={editing.qualificationOnlyId ? DOC_TYPES.filter((t) => QUALIFICATION_TYPES.includes(t.value)) : DOC_TYPES}
+          qualificationTypes={QUALIFICATION_TYPES}
+          withExpiry={!editing.qualificationOnlyId}
+          withNotes={!editing.qualificationOnlyId}
+          onSave={(payload) => save(editing, payload)}
+          onRescan={editing.qualificationOnlyId ? undefined : () => rescan(editing)}
+          onClose={() => setEditing(null)}
+        />
       )}
 
       <ConfirmModalRoot />

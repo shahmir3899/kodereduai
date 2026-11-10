@@ -40,6 +40,8 @@ from .serializers import (
     FaceCaptureDeviceSerializer,
     FaceLiveDetectionEventSerializer,
     FaceMatchFeedbackSerializer,
+    FaceMatchConfirmSerializer,
+    FaceCaptureDeviceCreateSerializer,
 )
 from .services.attendance_writer import upsert_attendance_record
 from .services.embedding_service import EmbeddingService
@@ -490,7 +492,7 @@ class FaceEnrollmentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Mod
           (detected by the 'embedding' key, distinct from the legacy
           {student_id, image_url} shape) — the faceapi_v1 guided-capture path.
         """
-        if self.action in ('list', 'retrieve'):
+        if self.action in ('list', 'retrieve', 'coverage'):
             return [IsAuthenticated(), CanConfirmAttendance()]
         if self.action == 'enroll' and 'embedding' in self.request.data:
             return [IsAuthenticated(), CanConfirmAttendance()]
@@ -533,6 +535,87 @@ class FaceEnrollmentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Mod
             qs = qs.filter(student_id=student_id)
 
         return qs
+
+    @action(detail=False, methods=['get'])
+    def coverage(self, request):
+        """
+        GET /enrollments/coverage/ — per-student enrollment strength.
+
+        Every active student (not just enrolled ones) with how many active
+        samples they have and whether they are not_enrolled / needs_more /
+        refresh_due / ok. Same school/class/teacher scoping as the list view.
+        Derived purely from existing fields — no schema involved.
+        """
+        from datetime import timedelta
+        from django.conf import settings
+        from django.db.models import Count, Max
+
+        fr = getattr(settings, 'FACE_RECOGNITION_SETTINGS', {})
+        recommended = fr.get('RECOMMENDED_SAMPLES', 3)
+        refresh_after = timedelta(days=fr.get('REFRESH_AFTER_DAYS', 365))
+
+        school_id = ensure_tenant_school_id(request)
+        students = Student.objects.filter(is_active=True).select_related('class_obj')
+        if school_id:
+            students = students.filter(school_id=school_id)
+
+        role = get_effective_role(request)
+        if role == 'TEACHER':
+            students = students.filter(
+                class_obj_id__in=get_teacher_class_scope(request, school_id=school_id)
+            )
+
+        scope = resolve_class_scope(
+            request, school_id=school_id, class_param_names=('class_obj', 'class_id'),
+        )
+        if scope['invalid']:
+            students = students.none()
+        elif scope['class_obj_id']:
+            students = students.filter(class_obj_id=scope['class_obj_id'])
+
+        student_ids = list(students.values_list('id', flat=True))
+        per_version = (
+            StudentFaceEmbedding.objects.filter(
+                student_id__in=student_ids, is_active=True,
+            ).values('student_id', 'embedding_version')
+            .annotate(n=Count('id'), last=Max('created_at'))
+        )
+        best = {}  # student_id -> (samples, last_enrolled_at) of the strongest version
+        for row in per_version:
+            cur = best.get(row['student_id'])
+            if cur is None or row['n'] > cur[0]:
+                best[row['student_id']] = (row['n'], row['last'])
+
+        now = timezone.now()
+        out = []
+        counts = {'not_enrolled': 0, 'needs_more': 0, 'refresh_due': 0, 'ok': 0}
+        for s in students.order_by('class_obj__name', 'roll_number', 'name'):
+            samples, last = best.get(s.id, (0, None))
+            if samples == 0:
+                state = 'not_enrolled'
+            elif samples < recommended:
+                state = 'needs_more'
+            elif last and now - last > refresh_after:
+                state = 'refresh_due'
+            else:
+                state = 'ok'
+            counts[state] += 1
+            out.append({
+                'student_id': s.id,
+                'name': s.name,
+                'roll_number': s.roll_number,
+                'class_id': s.class_obj_id,
+                'class_name': s.class_obj.name if s.class_obj_id else None,
+                'samples': samples,
+                'last_enrolled_at': last,
+                'status': state,
+            })
+
+        return Response({
+            'recommended_samples': recommended,
+            'summary': {'total': len(out), **counts},
+            'students': out,
+        })
 
     @action(detail=False, methods=['post'])
     def enroll(self, request):
@@ -635,6 +718,28 @@ class FaceEnrollmentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Mod
             'confidence': duplicate.confidence,
         } if duplicate else None
 
+        # Multi-sample guard: a sample far from this student's own earlier
+        # samples is most likely the wrong person (or a bad frame) and would
+        # poison their matching; a near-identical one adds nothing.
+        sample_status, nearest = EmbeddingService.check_sample_consistency(
+            student.id, embedding_array, data['embedding_version'],
+        )
+        if sample_status == 'inconsistent' and not data.get('override_consistency', False):
+            return Response({
+                'error': 'inconsistent_face',
+                'message': (
+                    f"This face does not look like {student.name}'s earlier samples. "
+                    'Check that the right student is selected, or retry with the consistency check overridden.'
+                ),
+                'nearest_distance': round(nearest, 4),
+            }, status=status.HTTP_409_CONFLICT)
+        if sample_status == 'too_similar':
+            return Response({
+                'error': 'sample_too_similar',
+                'message': 'This sample is almost identical to one already saved. Change the angle or expression slightly.',
+                'nearest_distance': round(nearest, 4),
+            }, status=status.HTTP_409_CONFLICT)
+
         had_prior_embedding = StudentFaceEmbedding.objects.filter(
             student=student, is_active=True
         ).exists()
@@ -645,6 +750,9 @@ class FaceEnrollmentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Mod
             embedding=data['embedding'],
             embedding_version=data['embedding_version'],
             quality_score=data['quality_score'],
+        )
+        retired_ids = EmbeddingService.enforce_sample_cap(
+            student.id, data['embedding_version'], keep_id=face_embedding.id,
         )
 
         FaceAuditLog.objects.create(
@@ -657,6 +765,9 @@ class FaceEnrollmentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Mod
                 'quality_score': data['quality_score'],
                 'source': 'live_capture',
                 **({'duplicate_override': duplicate_info} if duplicate_info else {}),
+                **({'retired_sample_ids': retired_ids} if retired_ids else {}),
+                **({'consistency_override': {'nearest_distance': round(nearest, 4)}}
+                   if sample_status == 'inconsistent' else {}),
             },
         )
 
@@ -947,6 +1058,16 @@ class LiveMatchView(APIView):
             'confidence': result.confidence,
             'event_id': str(event.id),
             'attendance_marked': resulted_in_attendance,
+            # Only for uncertain matches: the next-closest students, so the
+            # operator can pick the right one when "Is this X?" is answered No
+            # (see LiveMatchConfirmView).
+            'alternatives': (
+                [
+                    {'id': a['student_id'], 'name': a.get('name', ''), 'confidence': a['confidence']}
+                    for a in result.alternatives
+                ]
+                if result.match_status == FaceLiveDetectionEvent.MatchStatus.FLAGGED else []
+            ),
         })
 
 
@@ -1019,6 +1140,143 @@ class LiveMatchFeedbackView(APIView):
         return Response(status=status.HTTP_201_CREATED)
 
 
+class LiveMatchConfirmView(APIView):
+    """
+    POST /api/face-attendance/live/events/<event_id>/confirm/  {"student_id": N}
+
+    The operator's "Yes" on an uncertain (FLAGGED) live match — either the
+    suggested student or one of the alternatives shown with it. Confident
+    matches are marked automatically and never come here; this is the only
+    way a FLAGGED match turns into attendance.
+
+    Marks the student present through the same idempotent helper the other
+    capture paths use, links the record to the event, and records the
+    operator's judgement as a labelled threshold sample ("Yes" on the
+    suggestion = correct, a different student chosen = the suggestion was
+    wrong). Same who-may-act rule as LiveMatchFeedbackView.
+    """
+
+    permission_classes = [IsAuthenticated, CanConfirmAttendance]
+
+    def post(self, request, event_id):
+        try:
+            event = FaceLiveDetectionEvent.objects.select_related('school', 'class_obj').get(pk=event_id)
+        except FaceLiveDetectionEvent.DoesNotExist:
+            return Response(
+                {'error': 'Event not found (it may already have been purged).'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        if event.source_method != FaceLiveDetectionEvent.CaptureMethod.LIVE_MOBILE:
+            return Response(
+                {'error': 'Only Live Mobile capture events can be confirmed.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if event.match_status != FaceLiveDetectionEvent.MatchStatus.FLAGGED:
+            return Response(
+                {'error': 'Only uncertain (FLAGGED) matches need confirmation.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        role = get_effective_role(request)
+        is_capturing_operator = event.captured_by_id == request.user.id
+        is_school_admin = role in ADMIN_ROLES and event.school_id == ensure_tenant_school_id(request)
+        if not (is_capturing_operator or is_school_admin):
+            return Response(
+                {'error': 'Only the operator who captured this event, or a school admin, can confirm it.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        if event.resulted_in_attendance:
+            return Response(
+                {'error': 'This match has already been confirmed.'},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        serializer = FaceMatchConfirmSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        student_id = serializer.validated_data['student_id']
+
+        # The chosen student must be someone this scan could legitimately have
+        # matched: same school, active, and inside the scan's class when it
+        # had one. (Alternatives aren't stored on the event, so scope is the
+        # check — it never lets an operator mark someone outside their scan.)
+        students = Student.objects.filter(pk=student_id, school_id=event.school_id, is_active=True)
+        if event.class_obj_id:
+            students = students.filter(class_obj_id=event.class_obj_id)
+        student = students.first()
+        if not student:
+            return Response(
+                {'error': 'That student is not part of this scan.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        event_date = event.client_timestamp.date()
+        already_present = AttendanceRecord.objects.filter(
+            student=student, date=event_date,
+            status=AttendanceRecord.AttendanceStatus.PRESENT,
+        ).exists()
+
+        attendance_record = None
+        if not already_present:
+            from academic_sessions.models import AcademicYear
+
+            academic_year = AcademicYear.objects.filter(
+                school_id=event.school_id, is_current=True
+            ).first()
+            attendance_record, _ = upsert_attendance_record(
+                student=student,
+                date=event_date,
+                school=event.school,
+                academic_year=academic_year,
+                attendance_status=AttendanceRecord.AttendanceStatus.PRESENT,
+            )
+            if attendance_record is None:
+                return Response(
+                    {'error': 'Attendance cannot be recorded for this student on that date.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        original_student_id = event.matched_student_id
+        event.matched_student = student
+        event.resulted_in_attendance = attendance_record is not None
+        event.attendance_record = attendance_record
+        event.save(update_fields=['matched_student', 'resulted_in_attendance', 'attendance_record'])
+
+        if event.distance is not None:
+            FaceMatchThresholdSample.objects.create(
+                school=event.school,
+                source_method=event.source_method,
+                embedding_version=event.embedding_version,
+                distance=event.distance,
+                predicted_match_status=event.match_status,
+                is_correct=(student.id == original_student_id),
+                sample_date=event_date,
+            )
+
+        if attendance_record is not None:
+            FaceAuditLog.objects.create(
+                school=event.school,
+                event_type=FaceAuditLog.EventType.ATTENDANCE_MATCH,
+                student=student,
+                actor=request.user,
+                metadata={
+                    'confirmed_by_operator': True,
+                    'suggested_student_id': original_student_id,
+                    'distance': event.distance,
+                    'source_method': event.source_method,
+                    'class_id': event.class_obj_id,
+                    'live_event_id': str(event.id),
+                },
+            )
+
+        return Response({
+            'attendance_marked': attendance_record is not None,
+            'already_marked': already_present,
+            'student': {'id': student.id, 'name': student.name},
+        })
+
+
 class FaceCaptureDeviceViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet):
     """
     Read + limited edit for Fixed Camera capture devices — school admins
@@ -1026,15 +1284,18 @@ class FaceCaptureDeviceViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.
 
     list: GET /devices/ — devices for the current school
     retrieve: GET /devices/{id}/
+    create: POST /devices/ — register a device; the response carries the raw
+        `api_key` ONCE (only its hash is stored)
+    rotate_key: POST /devices/{id}/rotate_key/ — replace a lost/leaked key; the
+        old one stops working immediately and the new raw key is returned once
     partial_update: PATCH /devices/{id}/ — name/scope_type/class_obj/is_active only
-    No create/destroy: device provisioning (and the one-time key display)
-    stays a Django-admin-only action.
+    No destroy: switch a device off with is_active instead of deleting its history.
     """
 
     required_module = 'attendance'
     permission_classes = [IsAuthenticated, IsSchoolAdmin]
     serializer_class = FaceCaptureDeviceSerializer
-    http_method_names = ['get', 'patch', 'head', 'options']
+    http_method_names = ['get', 'post', 'patch', 'head', 'options']
 
     def get_queryset(self):
         qs = FaceCaptureDevice.objects.select_related('school', 'class_obj')
@@ -1042,6 +1303,41 @@ class FaceCaptureDeviceViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.
         if school_id:
             qs = qs.filter(school_id=school_id)
         return qs
+
+    def create(self, request, *args, **kwargs):
+        school_id = ensure_tenant_school_id(request) or request.user.school_id
+        if not school_id:
+            return Response(
+                {'error': 'No active school context (X-School-ID header required).'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        serializer = FaceCaptureDeviceCreateSerializer(data=request.data, context={'school_id': school_id})
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        raw_key, key_hash = FaceCaptureDevice.generate_api_key()
+        device = FaceCaptureDevice.objects.create(
+            school_id=school_id,
+            name=data['name'],
+            api_key_hash=key_hash,
+            scope_type=data['scope_type'],
+            class_obj=data.get('class_obj'),
+            embedding_version=data['embedding_version'],
+            created_by=request.user,
+        )
+        body = FaceCaptureDeviceSerializer(device).data
+        body['api_key'] = raw_key  # the only time the raw key is ever returned
+        return Response(body, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=['post'])
+    def rotate_key(self, request, pk=None):
+        device = self.get_object()
+        raw_key, key_hash = FaceCaptureDevice.generate_api_key()
+        device.api_key_hash = key_hash
+        device.save(update_fields=['api_key_hash'])
+        body = FaceCaptureDeviceSerializer(device).data
+        body['api_key'] = raw_key
+        return Response(body)
 
 
 class FaceLiveDetectionEventListView(ModuleAccessMixin, generics.ListAPIView):

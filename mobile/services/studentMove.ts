@@ -121,6 +121,18 @@ export const DOC_TYPE_LABELS: Record<string, string> = {
   PHOTO: 'Photo', BIRTH_CERT: 'Birth certificate', PREV_REPORT: 'Previous report', TC: 'Transfer certificate', MEDICAL: 'Medical record', OTHER: 'Other',
 };
 
+export const DOC_TYPE_OPTIONS = Object.entries(DOC_TYPE_LABELS).filter(([k]) => k !== 'PHOTO').map(([value, label]) => ({ value, label }));
+
+export interface NewDocumentForm { title: string; type: string; fileUri: string | null; fileName: string | null; mime: string | null }
+export const emptyDocumentForm = (): NewDocumentForm => ({ title: '', type: 'OTHER', fileUri: null, fileName: null, mime: null });
+
+// The title falls back to the file's name on the server, so only the file is required.
+export const newDocumentProblem = (f: NewDocumentForm): string | null => (f.fileUri ? null : 'Choose a file or take a photo first.');
+
+export const newDocumentFields = (f: NewDocumentForm): Record<string, string> => ({
+  title: f.title.trim() || f.fileName || 'Document', document_type: f.type,
+});
+
 export const docLine = (d: StudentDocumentRow) =>
   [DOC_TYPE_LABELS[d.document_type] ?? d.document_type, d.created_at ? d.created_at.slice(0, 10) : null].filter(Boolean).join('  ·  ');
 

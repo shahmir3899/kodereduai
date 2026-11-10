@@ -1259,26 +1259,101 @@ class StudentViewSet(ModuleAccessMixin, TenantQuerySetMixin, AuditedDeleteMixin,
             # only ever touch this record.
             return Response(history.document_rows(student))
 
-        # POST
-        serializer = StudentDocumentSerializer(data={
-            **request.data,
+        # POST. A real file (multipart field "file") is stored and its link saved; before
+        # 2026-11 the web sent only a made-up path, so no document ever had a file behind it.
+        data = {
+            'document_type': request.data.get('document_type') or 'OTHER',
+            'title': (request.data.get('title') or '').strip(),
+            'file_url': request.data.get('file_url') or '',
             'school': student.school_id,
             'student': student.id,
-        })
+        }
+        file = request.FILES.get('file')
+        if file:
+            import uuid
+            from core.storage import storage_service, validate_document_upload
+
+            try:
+                validate_document_upload(file)
+            except ValueError as e:
+                return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+            ext = file.name.rsplit('.', 1)[-1].lower() if '.' in file.name else 'bin'
+            data['title'] = data['title'] or file.name
+            try:
+                data['file_url'] = storage_service.upload_file(
+                    file, folder=f"student-documents/{student.school_id}/{student.id}",
+                    filename=f"{uuid.uuid4().hex}.{ext}",
+                )
+            except Exception as e:
+                return Response({'error': f'Failed to upload file: {e}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        serializer = StudentDocumentSerializer(data=data)
         serializer.is_valid(raise_exception=True)
         serializer.save(uploaded_by=request.user)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
-    @action(detail=True, methods=['delete'], url_path='documents/(?P<doc_id>[0-9]+)')
-    def delete_document(self, request, pk=None, doc_id=None):
-        """Delete a student document."""
+    @action(detail=True, methods=['post'], url_path='documents/scan', parser_classes=[MultiPartParser, FormParser])
+    def scan_document(self, request, pk=None):
+        """Image-only upload: store the file, create the record, and read the rest
+        from the image (students.document_intake). Answers {duplicate, document}."""
+        from core.storage import validate_document_upload
+        from .document_intake import intake
+
         student = self.get_object()
+        file = request.FILES.get('file')
+        if not file:
+            return Response({'error': 'A file is required.'}, status=status.HTTP_400_BAD_REQUEST)
         try:
-            doc = StudentDocument.objects.get(id=doc_id, student=student)
-            doc.delete()
-            return Response(status=status.HTTP_204_NO_CONTENT)
-        except StudentDocument.DoesNotExist:
+            validate_document_upload(file)
+        except ValueError as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            doc, duplicate = intake(student, file, request.user)
+        except Exception as e:
+            return Response({'error': f'Failed to upload file: {e}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        return Response(
+            {'duplicate': duplicate, 'document': StudentDocumentSerializer(doc).data if doc is not None else None},
+            status=status.HTTP_200_OK if duplicate else status.HTTP_201_CREATED,
+        )
+
+    @action(detail=True, methods=['post'], url_path='documents/(?P<doc_id>[0-9]+)/rescan')
+    def rescan_document(self, request, pk=None, doc_id=None):
+        """Read the image again (a record stuck on Reading, or one that needs review)."""
+        from .document_intake import rescan
+
+        doc = StudentDocument.objects.filter(id=doc_id, student=self.get_object()).first()
+        if doc is None:
             return Response({'error': 'Document not found'}, status=404)
+        doc = rescan(doc)
+        return Response({'duplicate': doc is None, 'document': StudentDocumentSerializer(doc).data if doc is not None else None})
+
+    @action(detail=True, methods=['patch', 'delete'], url_path='documents/(?P<doc_id>[0-9]+)')
+    def delete_document(self, request, pk=None, doc_id=None):
+        """Correct or delete one student document (only this record's own, never an
+        earlier branch's)."""
+        from .document_intake import delete_document
+
+        student = self.get_object()
+        doc = StudentDocument.objects.filter(id=doc_id, student=student).first()
+        if doc is None:
+            return Response({'error': 'Document not found'}, status=404)
+
+        if request.method == 'DELETE':
+            # The stored file goes too; a failure there must not keep the record alive.
+            delete_document(doc)
+            return Response(status=status.HTTP_204_NO_CONTENT)
+
+        editable = ('document_type', 'title', 'document_number', 'issue_date', 'expiry_date', 'notes')
+        serializer = StudentDocumentSerializer(
+            doc, data={k: request.data[k] for k in editable if k in request.data}, partial=True,
+        )
+        serializer.is_valid(raise_exception=True)
+        doc = serializer.save()
+        # A person has now looked at this record, so it no longer needs review.
+        if doc.scan_status == StudentDocument.ScanStatus.NEEDS_REVIEW:
+            doc.scan_status, doc.scan_note = StudentDocument.ScanStatus.DONE, ''
+            doc.save(update_fields=['scan_status', 'scan_note'])
+        return Response(StudentDocumentSerializer(doc).data)
 
     @action(detail=True, methods=['post'], parser_classes=[MultiPartParser, FormParser])
     def upload_photo(self, request, pk=None):

@@ -43,6 +43,7 @@ const mockDetectAllFacesWithDescriptors = vi.fn()
 vi.mock('../../../utils/faceApiLoader', () => ({
   loadFaceApiModels: vi.fn(() => Promise.resolve()),
   detectSingleFace: (...args) => mockDetectSingleFace(...args),
+  detectSingleFaceLandmarks: () => Promise.resolve(null),
   detectAllFacesQuick: (...args) => mockDetectAllFacesQuick(...args),
   getFramingHint: (...args) => mockGetFramingHint(...args),
   detectAllFacesWithDescriptors: (...args) => mockDetectAllFacesWithDescriptors(...args),
@@ -158,30 +159,33 @@ describe('FaceBulkEnrollmentPage', () => {
     await waitFor(() => expect(screen.getByText(/3 of 3 students will be captured/)).toBeInTheDocument())
     await user.click(screen.getByText('Start Bulk Capture'))
 
+    // Each student now takes 3 guided poses (DEFAULT_SAMPLES_REQUIRED); the
+    // poses are sent together on the last one and the queue advances after.
+    const captureAllPoses = async () => {
+      for (let pose = 1; pose <= 3; pose += 1) {
+        await waitFor(() => expect(screen.getByText('Capture Face')).not.toBeDisabled())
+        await user.click(screen.getByText('Capture Face'))
+        await user.click(await screen.findByText(pose < 3 ? 'Confirm & next pose' : 'Confirm & Enroll'))
+      }
+    }
+
     // Student 1: LiveEnrollCapture auto-requests the camera on mount now, so
     // there's no manual "Enable Camera" click — just wait for it to grant.
     expect(screen.getByText('1 of 3 students captured')).toBeInTheDocument()
-    await waitFor(() => expect(screen.getByText('Capture Face')).not.toBeDisabled())
-    await user.click(screen.getByText('Capture Face'))
-    await waitFor(() => expect(screen.getByText('Confirm & Enroll')).toBeInTheDocument())
-    await user.click(screen.getByText('Confirm & Enroll'))
+    await captureAllPoses()
 
     // Student 2: camera stays granted (same LiveEnrollCapture instance) — no
     // "Enable Camera" button reappears, straight to capturing.
     await waitFor(() => expect(screen.getByText('2 of 3 students captured')).toBeInTheDocument())
     expect(screen.queryByText('Enable Camera')).not.toBeInTheDocument()
-    await user.click(screen.getByText('Capture Face'))
-    await waitFor(() => expect(screen.getByText('Confirm & Enroll')).toBeInTheDocument())
-    await user.click(screen.getByText('Confirm & Enroll'))
+    await captureAllPoses()
 
     // Student 3
     await waitFor(() => expect(screen.getByText('3 of 3 students captured')).toBeInTheDocument())
-    await user.click(screen.getByText('Capture Face'))
-    await waitFor(() => expect(screen.getByText('Confirm & Enroll')).toBeInTheDocument())
-    await user.click(screen.getByText('Confirm & Enroll'))
+    await captureAllPoses()
 
     await waitFor(() => expect(screen.getByText('Bulk Capture Summary')).toBeInTheDocument())
-    expect(postedStudentIds).toEqual([1, 2, 3])
+    expect(postedStudentIds).toEqual([1, 1, 1, 2, 2, 2, 3, 3, 3])
     expect(screen.getByText('3')).toBeInTheDocument() // captured count tile
     expect(screen.queryByText(/Skipped \(needs follow-up\)/)).not.toBeInTheDocument()
   })

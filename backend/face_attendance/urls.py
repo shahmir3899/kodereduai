@@ -12,6 +12,7 @@ from .views import (
     FaceAttendanceStatusView,
     LiveMatchView,
     LiveMatchFeedbackView,
+    LiveMatchConfirmView,
     FaceCaptureDeviceViewSet,
     FaceLiveDetectionEventListView,
 )
@@ -28,5 +29,6 @@ urlpatterns = [
     path('live/match/', LiveMatchView.as_view(), name='face-live-match'),
     path('live/events/', FaceLiveDetectionEventListView.as_view(), name='face-live-events'),
     path('live/events/<uuid:event_id>/feedback/', LiveMatchFeedbackView.as_view(), name='face-live-match-feedback'),
+    path('live/events/<uuid:event_id>/confirm/', LiveMatchConfirmView.as_view(), name='face-live-match-confirm'),
     path('', include(router.urls)),
 ]

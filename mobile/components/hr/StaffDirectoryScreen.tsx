@@ -5,6 +5,7 @@ import { useDepartments, useStaffPaged } from '../../hooks/useHrAdmin';
 import { useDebouncedValue } from '../../hooks/useDebouncedValue';
 import { useRefreshControl } from '../../hooks/useRefreshControl';
 import { staffHasLeft, staffSubtitle } from '../../services/hrAdmin';
+import BulkLoginsSheet from './BulkLoginsSheet';
 import SearchBar from '../ui/SearchBar';
 import Select from '../ui/Select';
 import SegmentedTabs from '../ui/SegmentedTabs';
@@ -32,10 +33,12 @@ export default function StaffDirectoryScreen() {
   const staff = useMemo(() => query.data?.pages.flatMap((p) => p.results) ?? [], [query.data]);
   const total = query.data?.pages[0]?.count ?? 0;
   const go = (path: string) => router.push(path as Href);
+  const [loginsOpen, setLoginsOpen] = useState(false);
 
   const header = (
     <View style={styles.header}>
       <Button title="+ Add staff member" size="sm" onPress={() => go('/(admin)/hr/staff-form')} />
+      <Button title="Create logins for several staff" size="sm" variant="outline" onPress={() => setLoginsOpen(true)} />
       <SearchBar value={search} onChangeText={setSearch} placeholder="Search staff..." />
       <SegmentedTabs tabs={STATUS_TABS} value={status} onChange={setStatus} />
       <Select<string | number> label="Department" value={department} onChange={(v) => setDepartment(v === '' ? null : Number(v))} placeholder="All departments"
@@ -48,6 +51,7 @@ export default function StaffDirectoryScreen() {
   if (query.isError && !query.data) return <ErrorState error={query.error} onRetry={() => query.refetch()} />;
 
   return (
+    <>
     <FlatList
       style={styles.container}
       contentContainerStyle={styles.content}
@@ -72,6 +76,8 @@ export default function StaffDirectoryScreen() {
         </TouchableOpacity>
       )}
     />
+    <BulkLoginsSheet visible={loginsOpen} onClose={() => setLoginsOpen(false)} />
+    </>
   );
 }
 

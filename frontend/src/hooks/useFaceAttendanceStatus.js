@@ -18,13 +18,16 @@ export function useFaceAttendanceStatus() {
   })
   const status = data?.data
 
+  // `...rest` carries react-query's own `status` ('success'/'pending'); it must
+  // come first so it can't overwrite the server status object below — that
+  // overwrite made the "library not installed" banner show permanently.
   return {
+    ...rest,
     status,
     isLoading,
     // 'not_installed' | 'active' | 'inactive' while loading — no device
     // controls are shown until we actually know, since claiming "not
     // installed" prematurely would be misleading.
     fixedCameraStatus: status?.fixed_camera_status ?? null,
-    ...rest,
   }
 }

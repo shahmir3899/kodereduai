@@ -66,3 +66,28 @@ describe('salary form', () => {
     expect(salaryToForm(s)).toMatchObject({ staff: 4, basic: '50000', effectiveFrom: '2026-01-01', allowances: [{ key: 'rent', amount: '100' }] });
   });
 });
+
+describe('several payslips at once', () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const m = require('../services/payroll');
+  const rows = [{ id: 1, status: 'DRAFT' }, { id: 2, status: 'APPROVED' }, { id: 3, status: 'PAID' }];
+  it('picks the ticked payslips each action can touch', () => {
+    expect(m.eligibleIds(rows, [1, 2, 3], 'approve')).toEqual([1]);
+    expect(m.eligibleIds(rows, [1, 2, 3], 'paid')).toEqual([1, 2]);
+    expect(m.eligibleIds(rows, [1, 2, 3], 'delete')).toEqual([1]);
+    expect(m.eligibleIds(rows, [3], 'paid')).toEqual([]);
+    expect(m.eligibleIds(rows, [], 'approve')).toEqual([]);
+  });
+  it('says what will happen and what is left alone', () => {
+    expect(m.bulkConfirmText('approve', 1, 3)).toBe('Approve 1 payslip? Only drafts can be approved. 2 payslips in another state will be left alone.');
+    expect(m.bulkConfirmText('paid', 2, 2, '2026-11-10')).toMatch(/^Mark 2 payslips as paid on 2026-11-10\?/);
+    expect(m.bulkConfirmText('delete', 2, 2)).toMatch(/cannot be undone/);
+    expect(m.bulkConfirmText('delete', 2, 2)).not.toMatch(/left alone/);
+  });
+  it('reads the server counts', () => {
+    expect(m.bulkDoneText('approve', { approved: 2, skipped: 1 })).toBe('2 payslips approved. 1 skipped.');
+    expect(m.bulkDoneText('paid', { paid: 1, skipped: 0 })).toBe('1 payslip marked as paid.');
+    expect(m.bulkDoneText('delete', { deleted: 3 })).toBe('3 payslips deleted.');
+    expect(m.bulkDoneText('delete', undefined)).toBe('0 payslips deleted.');
+  });
+});

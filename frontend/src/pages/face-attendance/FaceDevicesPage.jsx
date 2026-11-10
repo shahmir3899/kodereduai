@@ -5,6 +5,9 @@ import { useToast } from '../../components/Toast'
 import { faceAttendanceApi } from '../../services/api'
 import LoadingState from '../../components/ui/LoadingState'
 import ClassSelector from '../../components/ClassSelector'
+import { useConfirmModal } from '../../components/ConfirmModal'
+import { AddDevicePanel, DeviceKeyReveal } from './AddDevicePanel'
+import { getDeviceKey, saveDeviceKey } from '../../utils/deviceKeyStore'
 
 // A device that hasn't posted a match in this long is shown as offline.
 // Matches the on-prem client's SAMPLE_INTERVAL_SECONDS default (a few
@@ -109,6 +112,9 @@ export default function FaceDevicesPage() {
   const queryClient = useQueryClient()
   const { showError, showSuccess } = useToast()
   const [editingId, setEditingId] = useState(null)
+  const [showAdd, setShowAdd] = useState(false)
+  const [revealed, setRevealed] = useState(null) // device + its raw api_key, kept in memory only, shown once
+  const { confirm, ConfirmModalRoot } = useConfirmModal()
 
   const { data, isLoading } = useQuery({
     queryKey: ['faceCaptureDevices'],
@@ -133,9 +139,69 @@ export default function FaceDevicesPage() {
     },
   })
 
+  const createMutation = useMutation({
+    mutationFn: (payload) => faceAttendanceApi.createDevice(payload),
+    onSuccess: (res) => {
+      setShowAdd(false)
+      setRevealed(res.data)
+      queryClient.invalidateQueries({ queryKey: ['faceCaptureDevices'] })
+      queryClient.invalidateQueries({ queryKey: ['faceStatus'] })
+    },
+    onError: (err) => {
+      showError(
+        err.response?.data?.error
+        || err.response?.data?.non_field_errors?.[0]
+        || err.response?.data?.name?.[0]
+        || err.response?.data?.detail
+        || 'Failed to add device'
+      )
+    },
+  })
+
+  const rotateMutation = useMutation({
+    mutationFn: (id) => faceAttendanceApi.rotateDeviceKey(id),
+    onSuccess: (res) => {
+      setRevealed(res.data)
+      queryClient.invalidateQueries({ queryKey: ['faceCaptureDevices'] })
+    },
+    onError: (err) => showError(err.response?.data?.error || err.response?.data?.detail || 'Failed to reset the key'),
+  })
+
+  // Run this browser as the device: keep its key on this browser only, then open the camera page.
+  const startAutoCamera = (device) => {
+    if (device.api_key) saveDeviceKey(device.id, device.api_key)
+    navigate(`/face-attendance/auto-camera/${device.id}`)
+  }
+
+  // A listed browser device only has its key on browsers that were given it. If this
+  // one wasn't, the only way to run it here is a fresh key (which retires the old one).
+  const handleStartFromList = async (device) => {
+    if (getDeviceKey(device.id)) {
+      navigate(`/face-attendance/auto-camera/${device.id}`)
+      return
+    }
+    const ok = await confirm({
+      title: 'Set up this browser',
+      message: "This browser doesn't have the device's key yet. Generate a new key for it? The old key stops working, so any other screen using it must be set up again.",
+      confirmLabel: 'Generate new key',
+      variant: 'warning',
+    })
+    if (ok) rotateMutation.mutate(device.id)
+  }
+
+  const handleResetKey = async (device) => {
+    const ok = await confirm({
+      title: 'Reset device key',
+      message: `Generate a new key for "${device.name}"? The current key stops working immediately.`,
+      confirmLabel: 'Reset key',
+    })
+    if (ok) rotateMutation.mutate(device.id)
+  }
+
   return (
     <div className="max-w-5xl mx-auto">
-      <div className="mb-6">
+      <div className="mb-6 flex items-start justify-between gap-4">
+        <div>
         <button
           onClick={() => navigate('/face-attendance')}
           className="text-sm text-gray-500 hover:text-gray-700 mb-1 flex items-center gap-1"
@@ -144,8 +210,15 @@ export default function FaceDevicesPage() {
         </button>
         <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Capture Devices</h1>
         <p className="text-sm text-gray-500 mt-1">
-          Fixed on-prem cameras registered for this school (Fixed Camera capture). New devices are provisioned by Education AI support.
+          Cameras registered for this school. A device recognises students and marks attendance automatically.
         </p>
+        </div>
+        <button
+          onClick={() => { setShowAdd((v) => !v); setRevealed(null) }}
+          className="shrink-0 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700"
+        >
+          Add Device
+        </button>
       </div>
 
       <div className="flex border-b border-gray-200 mb-6">
@@ -161,11 +234,25 @@ export default function FaceDevicesPage() {
       </div>
 
       <div className="bg-white rounded-lg border">
+        {showAdd && (
+          <AddDevicePanel
+            saving={createMutation.isPending}
+            onCancel={() => setShowAdd(false)}
+            onSubmit={(payload) => createMutation.mutate(payload)}
+          />
+        )}
+        {revealed && (
+          <DeviceKeyReveal
+            device={revealed}
+            onStartAutoCamera={() => startAutoCamera(revealed)}
+            onDone={() => setRevealed(null)}
+          />
+        )}
         {isLoading ? (
           <LoadingState />
         ) : devices.length === 0 ? (
           <div className="p-8 text-center text-gray-500 text-sm">
-            No capture devices registered yet. Contact Education AI support to set up a fixed camera.
+            No capture devices yet. Use &ldquo;Add Device&rdquo; to set up an automatic camera.
           </div>
         ) : (
           <div className="divide-y">
@@ -184,6 +271,20 @@ export default function FaceDevicesPage() {
                   </div>
                   <div className="flex items-center gap-4">
                     <OnlineBadge lastSeenAt={device.last_seen_at} />
+                    {device.embedding_version === 'faceapi_v1' && device.is_active && (
+                      <button
+                        onClick={() => handleStartFromList(device)}
+                        className="text-sm text-green-700 hover:text-green-900 font-medium"
+                      >
+                        Start auto camera
+                      </button>
+                    )}
+                    <button
+                      onClick={() => handleResetKey(device)}
+                      className="text-sm text-gray-500 hover:text-gray-700 font-medium"
+                    >
+                      Reset key
+                    </button>
                     <button
                       onClick={() => setEditingId(editingId === device.id ? null : device.id)}
                       className="text-sm text-blue-600 hover:text-blue-800 font-medium"
@@ -205,6 +306,7 @@ export default function FaceDevicesPage() {
           </div>
         )}
       </div>
+      <ConfirmModalRoot />
     </div>
   )
 }

@@ -1,4 +1,5 @@
 from django.db import models
+from core.models import ScannedDocumentMixin
 from django.core.validators import MinValueValidator, MaxValueValidator
 
 
@@ -221,6 +222,14 @@ class StaffQualification(models.Model):
     institution = models.CharField(max_length=200, blank=True)
     year_of_completion = models.IntegerField(null=True, blank=True)
     grade_or_percentage = models.CharField(max_length=50, blank=True)
+    # The scanned degree/certificate this qualification was read from. Null = typed by
+    # hand with no file behind it. The row stays the source the timetable AI reads.
+    document = models.ForeignKey(
+        'StaffDocument',
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='qualifications',
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -233,11 +242,18 @@ class StaffQualification(models.Model):
         return f"{self.staff_member.full_name} — {self.qualification_name}"
 
 
-class StaffDocument(models.Model):
+class StaffDocument(ScannedDocumentMixin, models.Model):
     """Store documents: contract, certifications, ID, etc."""
     class DocumentType(models.TextChoices):
         ID_DOCUMENT = 'ID_DOCUMENT', 'ID Document'
         CONTRACT = 'CONTRACT', 'Contract'
+        # These five mirror StaffQualification.QualificationType: a document of one of
+        # these types carries a linked qualification row (hr.document_intake).
+        DEGREE = 'DEGREE', 'Degree'
+        DIPLOMA = 'DIPLOMA', 'Diploma'
+        CERTIFICATION = 'CERTIFICATION', 'Certification'
+        TRAINING = 'TRAINING', 'Training'
+        LICENSE = 'LICENSE', 'License'
         CERTIFICATE = 'CERTIFICATE', 'Certificate'
         MEDICAL = 'MEDICAL', 'Medical Certificate'
         OTHER = 'OTHER', 'Other'
@@ -260,6 +276,12 @@ class StaffDocument(models.Model):
     title = models.CharField(max_length=200)
     file_url = models.URLField(help_text='Supabase storage URL')
     uploaded_at = models.DateTimeField(auto_now_add=True)
+    uploaded_by = models.ForeignKey(
+        'users.User',
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='+',
+    )
     notes = models.TextField(blank=True)
     expiry_date = models.DateField(
         null=True, blank=True,

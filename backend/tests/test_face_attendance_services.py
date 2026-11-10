@@ -329,7 +329,7 @@ class TestFaceDetector:
     def test_detect_faces_too_many_raises(self):
         """B3c: ValueError on > MAX_FACES."""
         mock_fr = MagicMock()
-        mock_fr.face_locations.return_value = [(i, i+80, i+60, i) for i in range(20)]
+        mock_fr.face_locations.return_value = [(i, i+80, i+60, i) for i in range(70)]
 
         detector = FaceDetector.__new__(FaceDetector)
         detector._fr = mock_fr

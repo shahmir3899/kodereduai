@@ -27,6 +27,12 @@ const SLOW_DETECTION_INTERVAL_MS = 2500
 const NO_FACE_TICKS_BEFORE_SLOWDOWN = 3
 const FEEDBACK_DISPLAY_MS = 4000
 const RECENT_MATCHES_LIMIT = 8
+// An unanswered "Is this <name>?" prompt closes itself after this long so a
+// phone left running doesn't sit on a stale question.
+const CONFIRM_PROMPT_TIMEOUT_MS = 15000
+// After a prompt is answered (Yes, No or a pick), don't ask about that same
+// student again for this long — they're usually still standing in front of the camera.
+const PROMPT_COOLDOWN_MS = 30000
 
 // Mobile Capture tab content on the main face-attendance page (consolidated
 // 2026-07 — this used to be a fully separate /face-attendance/live-capture
@@ -43,6 +49,12 @@ export default function FaceLiveCapturePage() {
   const [lastFeedback, setLastFeedback] = useState(null) // { studentName, matchStatus, attendanceMarked } | null
   const [selectedClass, setSelectedClass] = useState('')
   const [recentMatches, setRecentMatches] = useState([]) // [{ id, name, thumbnail, ts }, ...] most-recent-first, session-scoped
+  // Uncertain (FLAGGED) match waiting for the operator's answer on the camera view:
+  // { eventId, studentId, name, alternatives: [{ id, name }], thumbnail } | null
+  const [pendingConfirm, setPendingConfirm] = useState(null)
+  const pendingConfirmRef = useRef(null) // read by the tick loop, whose closure never sees the state
+  const promptTimeoutRef = useRef(null)
+  const handledRef = useRef(new Map()) // studentId -> when their prompt was last answered/closed
 
   const canvasRef = useRef(null)
   // Holds the current setTimeout id for the self-rescheduling poll loop (see
@@ -79,6 +91,11 @@ export default function FaceLiveCapturePage() {
 
   const feedbackMutation = useMutation({
     mutationFn: ({ eventId, isCorrect }) => faceAttendanceApi.submitLiveMatchFeedback(eventId, isCorrect),
+  })
+
+  // The operator's "Yes" (or a pick from the alternatives) on an uncertain match.
+  const confirmMutation = useMutation({
+    mutationFn: ({ eventId, studentId }) => faceAttendanceApi.confirmLiveMatch(eventId, studentId),
   })
 
   // Load the face-api.js models once on mount.
@@ -124,10 +141,13 @@ export default function FaceLiveCapturePage() {
     const scale = Math.max(displayWidth / vw, displayHeight / vh)
     const offsetX = (vw * scale - displayWidth) / 2
     const offsetY = (vh * scale - displayHeight) / 2
-    const x = box.x * scale - offsetX
-    const y = box.y * scale - offsetY
     const w = box.width * scale
     const h = box.height * scale
+    // The video is shown mirrored (selfie view), so draw the box from the
+    // opposite edge to land on the same face. The canvas itself isn't mirrored,
+    // which keeps the name label readable.
+    const x = displayWidth - (box.x * scale - offsetX) - w
+    const y = box.y * scale - offsetY
 
     const feedback = feedbackOverride !== undefined ? feedbackOverride : lastFeedbackRef.current
     let color = '#60a5fa' // neutral blue — face detected, no match resolved yet
@@ -198,7 +218,25 @@ export default function FaceLiveCapturePage() {
   useEffect(() => () => {
     if (pollTimeoutRef.current) clearTimeout(pollTimeoutRef.current)
     if (feedbackTimeoutRef.current) clearTimeout(feedbackTimeoutRef.current)
+    if (promptTimeoutRef.current) clearTimeout(promptTimeoutRef.current)
   }, [])
+
+  const closePrompt = useCallback((studentId) => {
+    if (promptTimeoutRef.current) {
+      clearTimeout(promptTimeoutRef.current)
+      promptTimeoutRef.current = null
+    }
+    if (studentId != null) handledRef.current.set(studentId, Date.now())
+    pendingConfirmRef.current = null
+    setPendingConfirm(null)
+  }, [])
+
+  const openPrompt = useCallback((prompt) => {
+    pendingConfirmRef.current = prompt
+    setPendingConfirm(prompt)
+    if (promptTimeoutRef.current) clearTimeout(promptTimeoutRef.current)
+    promptTimeoutRef.current = setTimeout(() => closePrompt(prompt.studentId), CONFIRM_PROMPT_TIMEOUT_MS)
+  }, [closePrompt])
 
   const canStartScanning = modelStatus === 'ready' && cameraStatus === 'granted'
     && (!isTeacher || !!resolvedSelectedClass)
@@ -211,6 +249,12 @@ export default function FaceLiveCapturePage() {
     let nextDelay = FAST_DETECTION_INTERVAL_MS
     if (!videoRef.current) {
       pollTimeoutRef.current = setTimeout(runTick, nextDelay)
+      return
+    }
+    // An "Is this <name>?" prompt is waiting for the operator: hold scanning so
+    // the question isn't replaced by a newer match underneath their finger.
+    if (pendingConfirmRef.current) {
+      pollTimeoutRef.current = setTimeout(runTick, 500)
       return
     }
     const detection = await detectSingleFace(videoRef.current)
@@ -259,6 +303,20 @@ export default function FaceLiveCapturePage() {
       lastFeedbackRef.current = feedback
       setLastFeedback(feedback)
       drawOverlay(detection, feedback)
+      // Uncertain match: ask on the camera view instead of guessing. Skip a
+      // student whose prompt was answered or closed a moment ago.
+      if (feedback.matchStatus === 'FLAGGED' && data.student?.id && data.event_id) {
+        const handledAt = handledRef.current.get(data.student.id)
+        if (!handledAt || now - handledAt > PROMPT_COOLDOWN_MS) {
+          openPrompt({
+            eventId: data.event_id,
+            studentId: data.student.id,
+            name: data.student.name,
+            alternatives: data.alternatives || [],
+            thumbnail: captureThumbnail(videoRef.current, detection.detection.box),
+          })
+        }
+      }
       if (feedback.matchStatus === 'AUTO_MATCHED' && feedback.studentName && data.student?.id) {
         const thumbnail = captureThumbnail(videoRef.current, detection.detection.box)
         setRecentMatches((prev) => [
@@ -280,16 +338,65 @@ export default function FaceLiveCapturePage() {
     }, FEEDBACK_DISPLAY_MS)
 
     pollTimeoutRef.current = setTimeout(runTick, nextDelay)
-  }, [matchMutation, resolvedSelectedClass, drawOverlay])
+  }, [matchMutation, resolvedSelectedClass, drawOverlay, openPrompt])
 
   const startScanning = () => {
     setScanning(true)
     noFaceStreakRef.current = 0
     setRecentMatches([])
+    handledRef.current = new Map()
     runTick()
   }
 
+  // Operator answers the "Is this <name>?" prompt. `studentId` is the suggested
+  // student for Yes, or a different student picked from the alternatives.
+  const handlePromptYes = (studentId, studentName) => {
+    const prompt = pendingConfirmRef.current
+    if (!prompt) return
+    closePrompt(prompt.studentId)
+    confirmMutation.mutate(
+      { eventId: prompt.eventId, studentId },
+      {
+        onSuccess: (res) => {
+          const marked = res.data
+          const feedback = {
+            matchStatus: 'CONFIRMED',
+            studentName: marked.student?.name || studentName,
+            attendanceMarked: marked.attendance_marked,
+            eventId: null,
+          }
+          lastFeedbackRef.current = feedback
+          setLastFeedback(feedback)
+          const thumbnail = studentId === prompt.studentId ? prompt.thumbnail : null
+          setRecentMatches((prev) => [
+            { id: studentId, name: feedback.studentName, thumbnail, ts: Date.now() },
+            ...prev,
+          ].slice(0, RECENT_MATCHES_LIMIT))
+          if (feedbackTimeoutRef.current) clearTimeout(feedbackTimeoutRef.current)
+          feedbackTimeoutRef.current = setTimeout(() => {
+            lastFeedbackRef.current = null
+            setLastFeedback(null)
+          }, FEEDBACK_DISPLAY_MS)
+        },
+        onError: () => {
+          const feedback = { matchStatus: 'CONFIRM_ERROR', studentName, attendanceMarked: false, eventId: null }
+          lastFeedbackRef.current = feedback
+          setLastFeedback(feedback)
+        },
+      },
+    )
+  }
+
+  const handlePromptNo = () => {
+    const prompt = pendingConfirmRef.current
+    if (!prompt) return
+    // "No" labels the suggestion as wrong (feeds threshold tuning); nothing is marked.
+    feedbackMutation.mutate({ eventId: prompt.eventId, isCorrect: false })
+    closePrompt(prompt.studentId)
+  }
+
   const stopScanning = () => {
+    closePrompt()
     setScanning(false)
     if (pollTimeoutRef.current) {
       clearTimeout(pollTimeoutRef.current)
@@ -344,11 +451,25 @@ export default function FaceLiveCapturePage() {
         </div>
       )
     }
+    if (lastFeedback.matchStatus === 'CONFIRMED') {
+      return (
+        <div className="p-3 bg-green-50 border border-green-200 rounded-lg text-sm text-green-800 font-medium">
+          {lastFeedback.studentName} — {lastFeedback.attendanceMarked ? 'confirmed and marked present' : 'already marked today'}
+        </div>
+      )
+    }
+    if (lastFeedback.matchStatus === 'CONFIRM_ERROR') {
+      return (
+        <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+          Couldn&apos;t mark {lastFeedback.studentName || 'the student'} present — please try the scan again.
+        </div>
+      )
+    }
     if (lastFeedback.matchStatus === 'FLAGGED') {
       return (
         <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-sm text-yellow-800">
-          Possible match ({lastFeedback.studentName || 'uncertain'}) — confidence too low to auto-mark.
-          {lastFeedback.studentName && feedbackConfirmButtons()}
+          Possible match ({lastFeedback.studentName || 'uncertain'}) — not sure enough to mark automatically.
+          {pendingConfirm && ' Answer on the camera view.'}
         </div>
       )
     }
@@ -397,17 +518,64 @@ export default function FaceLiveCapturePage() {
         </div>
 
         <div className="relative bg-black rounded-lg overflow-hidden aspect-video flex items-center justify-center">
+          {/* Mirrored like a selfie view so movements feel natural; display only —
+              face-api reads the raw frame, so matching is unaffected. */}
           <video
             ref={videoRef}
             autoPlay
             playsInline
             muted
+            style={{ transform: 'scaleX(-1)' }}
             className={`w-full h-full object-cover ${cameraStatus === 'granted' ? '' : 'hidden'}`}
           />
           <canvas
             ref={canvasRef}
             className={`absolute inset-0 w-full h-full pointer-events-none ${cameraStatus === 'granted' ? '' : 'hidden'}`}
           />
+          {pendingConfirm && (
+            <div
+              className="absolute inset-x-0 bottom-0 p-3 bg-gradient-to-t from-black/90 via-black/70 to-transparent"
+              role="dialog"
+              aria-label="Confirm the match"
+              data-testid="confirm-prompt"
+            >
+              <p className="text-white text-base font-semibold text-center">
+                Is this <span className="text-green-300">{pendingConfirm.name}</span>?
+              </p>
+              <div className="flex gap-2 justify-center mt-2">
+                <button
+                  onClick={() => handlePromptYes(pendingConfirm.studentId, pendingConfirm.name)}
+                  disabled={confirmMutation.isPending}
+                  className="flex-1 max-w-[9rem] py-2.5 rounded-lg bg-green-600 hover:bg-green-700 text-white text-sm font-semibold disabled:opacity-50"
+                >
+                  Yes
+                </button>
+                <button
+                  onClick={handlePromptNo}
+                  className="flex-1 max-w-[9rem] py-2.5 rounded-lg bg-red-600 hover:bg-red-700 text-white text-sm font-semibold"
+                >
+                  No
+                </button>
+              </div>
+              {pendingConfirm.alternatives.length > 0 && (
+                <div className="mt-2 text-center">
+                  <p className="text-[11px] text-white/80 mb-1">Or tap who it is:</p>
+                  <div className="flex flex-wrap gap-1.5 justify-center">
+                    {pendingConfirm.alternatives.map((alt) => (
+                      <button
+                        key={alt.id}
+                        onClick={() => handlePromptYes(alt.id, alt.name)}
+                        disabled={confirmMutation.isPending}
+                        className="px-2.5 py-1 rounded-full bg-white/90 hover:bg-white text-gray-900 text-xs font-medium disabled:opacity-50"
+                      >
+                        {alt.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
           <CameraPermissionNotice status={cameraStatus} size="md" />
         </div>
 

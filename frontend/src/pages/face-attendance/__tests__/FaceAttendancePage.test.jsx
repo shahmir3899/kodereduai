@@ -68,9 +68,11 @@ describe('FaceAttendancePage', () => {
   it('renders class selector in capture tab', async () => {
     renderWithProviders(<FaceAttendancePage />)
 
+    // A group photo belongs to exactly one class, so there is no "All Classes" choice.
     await waitFor(() => {
-      expect(screen.getByText('Select class...')).toBeInTheDocument()
+      expect(screen.getByDisplayValue('Select class...')).toBeInTheDocument()
     })
+    expect(screen.queryByText('All Classes')).not.toBeInTheDocument()
 
     // Classes should load from MSW mock — check options inside the select
     await waitFor(() => {
@@ -79,6 +81,22 @@ describe('FaceAttendancePage', () => {
       const optionTexts = Array.from(options).map((o) => o.textContent)
       expect(optionTexts.some((t) => t.includes('Class 1A'))).toBe(true)
     })
+  })
+
+  it('offers a live camera and an upload once a class is chosen', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(<FaceAttendancePage />)
+
+    // No class yet: neither option is available.
+    expect(await screen.findByText('Select a class first')).toBeDisabled()
+
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('Select class...').querySelectorAll('option').length).toBeGreaterThan(1)
+    })
+    await user.selectOptions(screen.getByDisplayValue('Select class...'), '1')
+
+    expect(await screen.findByText('Take live photo')).toBeInTheDocument()
+    expect(screen.getByText('Upload photo')).toBeInTheDocument()
   })
 
   it('shows sessions tab with session list', async () => {

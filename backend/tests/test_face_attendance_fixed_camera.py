@@ -467,13 +467,16 @@ class TestFaceCaptureDeviceViewSet:
         )
         assert resp.status_code == 400
 
-    def test_create_and_delete_not_allowed(self, seed_data, api):
-        resp = api.post(
-            '/api/face-attendance/devices/',
-            {'name': 'New', 'scope_type': 'SCHOOL'},
+    def test_delete_is_not_allowed(self, seed_data, api):
+        """Devices are created from the app now (see test_face_attendance_device_registration.py),
+        but never deleted — switch one off with is_active so its history stays."""
+        device, _ = _make_device(seed_data['school_a'], FaceCaptureDevice.ScopeType.SCHOOL)
+        resp = api.delete(
+            f'/api/face-attendance/devices/{device.id}/',
             seed_data['tokens']['admin'], seed_data['SID_A'],
         )
         assert resp.status_code == 405
+        assert FaceCaptureDevice.objects.filter(pk=device.pk).exists()
 
 
 @pytest.mark.django_db

@@ -300,6 +300,10 @@ CORS_ALLOW_HEADERS = [
     'x-requested-with',
     'x-school-id',
     'x-client',  # the mobile app sends it at login; browser builds of the app need it allowed
+    # The in-browser "auto camera" (Capture Devices -> Start auto camera) authenticates the
+    # live-match call with a device key instead of a user login; without this the cross-origin
+    # preflight in production rejects it.
+    'x-device-key',
 ]
 
 # =============================================================================
@@ -803,8 +807,26 @@ FACE_RECOGNITION_SETTINGS = {
     'DEFAULT_EMBEDDING_VERSION': 'dlib_v1',
 
     # Face detection constraints
-    'MAX_FACES_PER_IMAGE': 15,
+    # 60, not 15: a normal classroom photo has 25-45 faces, and the old cap
+    # failed the whole session outright (the UI already only warns past 25).
+    'MAX_FACES_PER_IMAGE': 60,
     'MIN_FACE_SIZE': 60,  # Minimum face width/height in pixels
+    # HOG upsampling passes. 1 = dlib default. 2 finds smaller/back-row faces
+    # but is ~4x slower per photo — keep at 1 until real classroom photos show
+    # missed faces (see scripts/face_eval).
+    'DETECTION_UPSAMPLE': 1,
+
+    # Multi-sample enrollment (Phase 2). The matcher scores a student by their
+    # closest sample, so a few varied samples raise auto-match rates without
+    # adding wrong matches (measured on LFW: 1 -> 5 samples, 32% -> 64% auto).
+    'MAX_SAMPLES_PER_STUDENT': 5,       # per embedding version; extras are deactivated, never deleted
+    'RECOMMENDED_SAMPLES': 3,           # below this the coverage view says "add more"
+    # A new sample farther than this from the student's existing samples is
+    # probably a different person (the same-person p95 on LFW is ~0.58).
+    'SAMPLE_CONSISTENCY_MAX_DISTANCE': 0.60,
+    # Nearly identical to an existing sample = a repeated frame, no new information.
+    'SAMPLE_DUPLICATE_MIN_DISTANCE': 0.03,
+    'REFRESH_AFTER_DAYS': 365,          # children change; flag enrollments older than this
 
     # Quality filtering
     'MIN_BLUR_SCORE': 50.0,  # Laplacian variance threshold

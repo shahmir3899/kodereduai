@@ -15,6 +15,7 @@ import DateField from '../ui/DateField';
 import Button from '../ui/Button';
 import Card from '../ui/Card';
 import StaffPhoto from './StaffPhoto';
+import StaffAccountSection from './StaffAccountSection';
 import ErrorState from '../ui/ErrorState';
 import Skeleton from '../ui/Skeleton';
 import { useToast } from '../ui/Toast';
@@ -141,7 +142,7 @@ export default function StaffFormScreen({ id }: { id: number | null }) {
         </Card>
       ) : null}
 
-      {!creating && member.data?.user_username ? <Text style={styles.hint}>{`Signs in as @${member.data.user_username}${member.data.user_role ? ` (${roleLabel(member.data.user_role)})` : ''}. Change roles under Settings, Users and roles.`}</Text> : null}
+      {!creating && member.data ? <StaffAccountSection member={member.data} /> : null}
 
       {error ? <Text style={styles.error} accessibilityRole="alert">{error}</Text> : null}
       <Button title={creating ? 'Add staff member' : 'Save changes'} onPress={submit} loading={saving} disabled={saving || !seeded} />

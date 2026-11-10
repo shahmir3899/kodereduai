@@ -123,3 +123,68 @@ export function parseShortcut(p: { class?: string; exam?: string; type?: string 
   const n = (v?: string) => (v && /^\d+$/.test(v) ? Number(v) : null);
   return { classId: n(p.class), examId: n(p.exam), typeId: n(p.type) };
 }
+
+// ─── Bulk delete ────────────────────────────────────────────────────────────────────────────
+
+// Deleting several exams or groups removes their subjects and every mark entered, so the phone asks
+// for this word to be typed rather than a single tap.
+export const BULK_DELETE_WORD = 'DELETE';
+
+export const toggleId = (ids: number[], id: number): number[] => (ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id]);
+
+export const bulkDeleteTyped = (typed: string) => typed.trim().toUpperCase() === BULK_DELETE_WORD;
+
+export function bulkDeleteText(kind: 'exam' | 'group', n: number): string {
+  if (kind === 'group') {
+    return `${n} exam group${n === 1 ? '' : 's'} will be deleted with every class exam in ${n === 1 ? 'it' : 'them'}, their subjects, dates and all marks entered. This cannot be undone.`;
+  }
+  return `${n} exam${n === 1 ? '' : 's'} will be deleted with their subjects, dates and all marks entered. This cannot be undone.`;
+}
+
+export function bulkDeleteDone(kind: 'exam' | 'group', data: { requested_count?: number; deleted_count?: number } | undefined, asked: number): string {
+  const done = data?.deleted_count ?? asked;
+  const noun = kind === 'group' ? 'exam group' : 'exam';
+  const base = `${done} ${noun}${done === 1 ? '' : 's'} deleted.`;
+  return done < asked ? `${base} ${asked - done} could not be found.` : base;
+}
+
+// ─── Subjects of one exam ───────────────────────────────────────────────────────────────────
+
+export interface ExamSubjectRow {
+  id: number; exam?: number; subject: number; subject_name: string;
+  exam_date?: string | null; total_marks?: number | string | null; passing_marks?: number | string | null;
+}
+
+export interface SubjectMarksForm { total: string; passing: string }
+
+export const DEFAULT_TOTAL_MARKS = '100';
+export const DEFAULT_PASSING_MARKS = '33';
+
+export const subjectToForm = (s: Pick<ExamSubjectRow, 'total_marks' | 'passing_marks'>): SubjectMarksForm => ({
+  total: s.total_marks != null ? String(Number(s.total_marks)) : DEFAULT_TOTAL_MARKS,
+  passing: s.passing_marks != null ? String(Number(s.passing_marks)) : DEFAULT_PASSING_MARKS,
+});
+
+const NUMBER = /^\d+(\.\d+)?$/;
+
+export function validateSubjectMarks(f: SubjectMarksForm): string | null {
+  if (!NUMBER.test(f.total.trim()) || Number(f.total) <= 0) return 'Enter the total marks (more than 0).';
+  if (!NUMBER.test(f.passing.trim())) return 'Enter the passing marks.';
+  if (Number(f.passing) > Number(f.total)) return 'The passing marks cannot be more than the total marks.';
+  return null;
+}
+
+export const subjectMarksPayload = (f: SubjectMarksForm) => ({ total_marks: Number(f.total), passing_marks: Number(f.passing) });
+
+export const newSubjectPayload = (examId: number, subjectId: number, f: SubjectMarksForm) => ({
+  exam: examId, subject: subjectId, ...subjectMarksPayload(f),
+});
+
+// Class subjects the exam does not have yet (each subject once).
+export function missingSubjects<T extends { subject: number }>(classSubjects: T[], have: Array<{ subject: number }>): T[] {
+  const taken = new Set(have.map((h) => h.subject));
+  const seen = new Set<number>();
+  return classSubjects.filter((c) => { if (taken.has(c.subject) || seen.has(c.subject)) return false; seen.add(c.subject); return true; });
+}
+
+export const removeSubjectText = (name: string) => `Remove "${name}" from this exam? Any marks already entered for it are deleted too.`;

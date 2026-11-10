@@ -27,6 +27,7 @@ export function useFeeStructureActions(kind: FeeKind) {
   const refresh = () => ['feeStructures', 'feePayments', 'feeSummary'].forEach((root) => qc.invalidateQueries({ predicate: (q) => q.queryKey[0] === root }));
   return {
     save: useMutation({ mutationFn: (d: object) => financeApi.bulkSetFeeStructures(d), onSuccess: refresh }),
+    stop: useMutation({ mutationFn: (id: number) => financeApi.retireFeeStructure(id), onSuccess: refresh }),
     createCategory: useMutation({
       mutationFn: (d: object) => (kind === 'MONTHLY' ? financeApi.createMonthlyCategory(d) : financeApi.createAnnualCategory(d)),
       onSuccess: () => qc.invalidateQueries({ predicate: (q) => q.queryKey[0] === 'feeCategories' }),

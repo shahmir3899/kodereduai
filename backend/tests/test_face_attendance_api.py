@@ -249,6 +249,33 @@ class TestSessionConfirm:
         assert absent_rec is not None
         assert absent_rec.status == 'ABSENT'
 
+    def test_session_detail_reports_who_was_marked_present(self, seed_data, api):
+        """Detail returns present_student_ids (what the review overlay shows as marked): only the
+        students this session recorded PRESENT — not the absent ones, and empty before confirm."""
+        session = FaceAttendanceSession.objects.create(
+            school=seed_data['school_a'],
+            class_obj=seed_data['classes'][0],
+            academic_year=seed_data['academic_year'],
+            date=date.today() + timedelta(days=3),
+            status=FaceAttendanceSession.Status.NEEDS_REVIEW,
+            image_url='https://example.com/photo-present.jpg',
+            created_by=seed_data['users']['admin'],
+        )
+        present, absent = seed_data['students'][0], seed_data['students'][1]
+        url = f'/api/face-attendance/sessions/{session.id}/'
+
+        before = api.get(url, seed_data['tokens']['admin'], seed_data['SID_A'])
+        assert before.status_code == 200
+        assert before.json()['present_student_ids'] == []
+
+        api.post(
+            f'{url}confirm/', {'present_student_ids': [present.id]},
+            seed_data['tokens']['admin'], seed_data['SID_A'],
+        )
+        after = api.get(url, seed_data['tokens']['admin'], seed_data['SID_A']).json()
+        assert present.id in after['present_student_ids']
+        assert absent.id not in after['present_student_ids']
+
     def test_confirm_sets_session_confirmed(self, seed_data, api):
         """C2c: Session status → CONFIRMED after confirm."""
         session = FaceAttendanceSession.objects.create(
@@ -475,15 +502,24 @@ class TestReprocess:
             bounding_box={'top': 0, 'right': 80, 'bottom': 80, 'left': 0},
         )
 
-        resp = api.post(
-            f'/api/face-attendance/sessions/{session.id}/reprocess/',
-            {}, seed_data['tokens']['admin'], seed_data['SID_A'],
-        )
+        # dispatch_background_task runs the pipeline inline when no Celery worker
+        # answers (always the case in tests), and the pipeline would then try to
+        # download the fake image URL over the network and mark the session FAILED.
+        # This test is about the reset + dispatch, so stub the dispatcher.
+        with patch('core.task_utils.dispatch_background_task') as dispatch:
+            dispatch.return_value = MagicMock(celery_task_id='task-1')
+            resp = api.post(
+                f'/api/face-attendance/sessions/{session.id}/reprocess/',
+                {}, seed_data['tokens']['admin'], seed_data['SID_A'],
+            )
         assert resp.status_code == 200
+        dispatch.assert_called_once()
+        assert dispatch.call_args.kwargs['task_args'] == (str(session.id),)
 
         session.refresh_from_db()
         assert session.status == 'PROCESSING'
         assert session.detections.count() == 0
+        assert session.celery_task_id == 'task-1'
 
     def test_reprocess_confirmed_fails(self, seed_data, api):
         """C4b: Status=CONFIRMED → 400."""

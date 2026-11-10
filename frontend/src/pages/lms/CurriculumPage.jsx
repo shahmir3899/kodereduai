@@ -21,6 +21,7 @@ import useTeacherScopedClasses from '../../hooks/useTeacherScopedClasses'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
 import { getClassSelectorScope, getResolvedMasterClassId } from '../../utils/classScope'
 import { compressImageForTocOcr } from '../../utils/compressImageForUpload'
+import { readFileAsDataUrl, createImageElement, getRotatedImageFile } from '../../utils/imageTransform'
 import AddBookModal from './AddBookModal'
 import Badge from '../../components/ui/Badge'
 
@@ -1823,24 +1824,6 @@ export default function CurriculumPage() {
     }))
   }
 
-  const readFileAsDataUrl = (file) => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader()
-      reader.onload = () => resolve(reader.result)
-      reader.onerror = reject
-      reader.readAsDataURL(file)
-    })
-  }
-
-  const createImageElement = (url) => {
-    return new Promise((resolve, reject) => {
-      const img = new Image()
-      img.onload = () => resolve(img)
-      img.onerror = reject
-      img.src = url
-    })
-  }
-
   const replaceTocImageFile = (file) => {
     if (tocImagePreview) URL.revokeObjectURL(tocImagePreview)
     setTocImageFile(file)
@@ -1984,34 +1967,6 @@ export default function CurriculumPage() {
     return new File([blob], file.name.replace(/\.[^/.]+$/, '.jpg'), { type: 'image/jpeg' })
   }
 
-  const getRotatedImageFile = async (file, rotation) => {
-    if (!rotation) return file
-
-    const imageUrl = await readFileAsDataUrl(file)
-    const img = await createImageElement(imageUrl)
-    const canvas = document.createElement('canvas')
-    const ctx = canvas.getContext('2d')
-    const normalizedRotation = ((rotation % 360) + 360) % 360
-
-    if (normalizedRotation === 90 || normalizedRotation === 270) {
-      canvas.width = img.height
-      canvas.height = img.width
-    } else {
-      canvas.width = img.width
-      canvas.height = img.height
-    }
-
-    ctx.translate(canvas.width / 2, canvas.height / 2)
-    ctx.rotate((normalizedRotation * Math.PI) / 180)
-    ctx.drawImage(img, -img.width / 2, -img.height / 2)
-
-    const blob = await new Promise((resolve) => {
-      canvas.toBlob(resolve, 'image/jpeg', 0.92)
-    })
-
-    return new File([blob], file.name.replace(/\.[^/.]+$/, '.jpg'), { type: 'image/jpeg' })
-  }
-
   const getSkewedImageFile = async (file, skewXDeg, skewYDeg) => {
     if (!skewXDeg && !skewYDeg) return file
 
@@ -2042,36 +1997,6 @@ export default function CurriculumPage() {
     })
 
     return new File([blob], file.name.replace(/\.[^/.]+$/, '.jpg'), { type: 'image/jpeg' })
-  }
-
-  const getCroppedImageFile = async (imageSrc, pixelCrop, rotation = 0, originalName = 'toc-image.jpg') => {
-    const image = await createImageElement(imageSrc)
-    const canvas = document.createElement('canvas')
-    const ctx = canvas.getContext('2d')
-
-    const rotRad = (rotation * Math.PI) / 180
-    const sin = Math.abs(Math.sin(rotRad))
-    const cos = Math.abs(Math.cos(rotRad))
-    const bBoxWidth = image.width * cos + image.height * sin
-    const bBoxHeight = image.width * sin + image.height * cos
-
-    canvas.width = bBoxWidth
-    canvas.height = bBoxHeight
-    ctx.translate(bBoxWidth / 2, bBoxHeight / 2)
-    ctx.rotate(rotRad)
-    ctx.translate(-image.width / 2, -image.height / 2)
-    ctx.drawImage(image, 0, 0)
-
-    const croppedData = ctx.getImageData(pixelCrop.x, pixelCrop.y, pixelCrop.width, pixelCrop.height)
-    canvas.width = pixelCrop.width
-    canvas.height = pixelCrop.height
-    ctx.putImageData(croppedData, 0, 0)
-
-    const blob = await new Promise((resolve) => {
-      canvas.toBlob(resolve, 'image/jpeg', 0.92)
-    })
-
-    return new File([blob], originalName.replace(/\.[^/.]+$/, '.jpg'), { type: 'image/jpeg' })
   }
 
   const handleSaveTocCrop = async () => {

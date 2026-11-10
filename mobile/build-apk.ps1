@@ -304,7 +304,13 @@ try {
     # ---------------------------------------------------------------- 6. dependencies
     Step 'JavaScript dependencies'
     $lockFile = Join-Path $MobileDir 'package-lock.json'
-    if (-not (Test-Path $lockFile)) { Stop-Build 'package-lock.json is missing. Restore it (git checkout -- package-lock.json) so the build uses the exact tested package versions.' }
+    if (-not (Test-Path $lockFile)) { Stop-Build ('package-lock.json is missing.' + [Environment]::NewLine +
+        '  Fix 1 (best, exact tested versions): find the last commit that had it, then restore it:' + [Environment]::NewLine +
+        '      git log --oneline -- mobile/package-lock.json' + [Environment]::NewLine +
+        '      git show <commit-before-deletion>:mobile/package-lock.json > package-lock.json   (run inside the mobile folder)' + [Environment]::NewLine +
+        '  Fix 2 (if it was never committed or Fix 1 fails): create a new one from package.json:' + [Environment]::NewLine +
+        '      npm install --package-lock-only      (run inside the mobile folder; then commit it)' + [Environment]::NewLine +
+        '  Then run build-apk.bat again.') }
     $nmMarker = Join-Path $MobileDir 'node_modules\.package-lock.json'
     $needInstall = $false
     if (-not (Test-Path (Join-Path $MobileDir 'node_modules'))) {

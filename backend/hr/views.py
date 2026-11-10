@@ -992,6 +992,39 @@ class PayslipViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
         return Response({'deleted': deleted_count})
 
     @action(detail=False, methods=['post'])
+    def bulk_approve(self, request):
+        """Approve many DRAFT payslips at once; other statuses are skipped."""
+        ids = request.data.get('ids', [])
+        if not ids:
+            return Response({'detail': 'No IDs provided.'}, status=400)
+        school_id = _resolve_school_id(request)
+        if not school_id:
+            return Response({'detail': 'No school associated.'}, status=400)
+
+        qs = Payslip.objects.filter(id__in=ids, school_id=school_id)
+        total = qs.count()
+        approved = qs.filter(status='DRAFT').update(status='APPROVED')
+        return Response({'approved': approved, 'skipped': total - approved})
+
+    @action(detail=False, methods=['post'])
+    def bulk_mark_paid(self, request):
+        """Mark many DRAFT/APPROVED payslips as paid; other statuses are skipped."""
+        ids = request.data.get('ids', [])
+        if not ids:
+            return Response({'detail': 'No IDs provided.'}, status=400)
+        school_id = _resolve_school_id(request)
+        if not school_id:
+            return Response({'detail': 'No school associated.'}, status=400)
+
+        payment_date = request.data.get('payment_date') or timezone.localdate()
+        qs = Payslip.objects.filter(id__in=ids, school_id=school_id)
+        total = qs.count()
+        paid = qs.filter(status__in=('DRAFT', 'APPROVED')).update(
+            status='PAID', payment_date=payment_date,
+        )
+        return Response({'paid': paid, 'skipped': total - paid})
+
+    @action(detail=False, methods=['post'])
     def generate_payslips(self, request):
         """Bulk generate payslips for all active staff."""
         school_id = _resolve_school_id(request)
@@ -2102,18 +2135,83 @@ class StaffDocumentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Mode
         serializer = self.get_serializer(instance, data=data, partial=partial)
         serializer.is_valid(raise_exception=True)
         self.perform_update(serializer)
-        if getattr(instance, '_prefetched_objects_cache', None):
-            instance._prefetched_objects_cache = {}
-        return Response(serializer.data)
+
+        from .document_intake import sync_qualification
+        doc = serializer.instance
+        # A person has now looked at this record, so it no longer needs review.
+        if doc.scan_status == StaffDocument.ScanStatus.NEEDS_REVIEW:
+            doc.scan_status, doc.scan_note = StaffDocument.ScanStatus.DONE, ''
+            doc.save(update_fields=['scan_status', 'scan_note'])
+        sync_qualification(doc, **{
+            name: data.get(name)
+            for name in ('institution', 'year_of_completion', 'grade_or_percentage') if name in data
+        })
+        return Response(self._full(doc.id))
 
     def partial_update(self, request, *args, **kwargs):
         kwargs['partial'] = True
         return self.update(request, *args, **kwargs)
 
+    def _full(self, doc_id):
+        doc = self.get_queryset().get(id=doc_id)
+        return StaffDocumentSerializer(doc, context=self.get_serializer_context()).data
+
+    def perform_destroy(self, instance):
+        from .document_intake import delete_document
+        delete_document(instance)
+
+    @action(detail=False, methods=['post'], url_path='scan', parser_classes=[MultiPartParser, FormParser])
+    def scan(self, request):
+        """Image-only upload: store the file, create the record, and read the rest
+        from the image. Body: staff_member, file, optional qualification (attach the
+        file to a qualification that was typed earlier with no file)."""
+        from core.storage import validate_document_upload
+        from .document_intake import intake
+
+        school_id = _resolve_school_id(request)
+        staff = StaffMember.objects.filter(
+            school_id=school_id, id=request.data.get('staff_member') or 0,
+        ).first() if school_id else None
+        if staff is None:
+            return Response({'error': 'Choose a staff member.'}, status=status.HTTP_400_BAD_REQUEST)
+        file = request.FILES.get('file')
+        if not file:
+            return Response({'error': 'A file is required.'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            validate_document_upload(file)
+        except ValueError as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+        qualification = None
+        if request.data.get('qualification'):
+            qualification = StaffQualification.objects.filter(
+                id=request.data.get('qualification'), staff_member=staff, document__isnull=True,
+            ).first()
+            if qualification is None:
+                return Response({'error': 'That qualification was not found.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            doc, duplicate = intake(staff, file, request.user, qualification=qualification)
+        except Exception as e:
+            return Response({'error': f'Failed to upload file: {e}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        return Response(
+            {'duplicate': duplicate, 'document': self._full(doc.id) if doc is not None else None},
+            status=status.HTTP_200_OK if duplicate else status.HTTP_201_CREATED,
+        )
+
+    @action(detail=True, methods=['post'], url_path='rescan')
+    def rescan(self, request, pk=None):
+        """Read the image again (a record stuck on Reading, or one that needs review)."""
+        from .document_intake import rescan
+
+        doc = rescan(self.get_object())
+        return Response({'duplicate': doc is None, 'document': self._full(doc.id) if doc is not None else None})
+
     def get_queryset(self):
         queryset = StaffDocument.objects.select_related(
-            'school', 'staff_member',
-        )
+            'school', 'staff_member', 'uploaded_by',
+        ).prefetch_related('qualifications')
         if _is_school_header_rejected(self.request):
             return queryset.none()
 
@@ -2134,6 +2232,10 @@ class StaffDocumentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Mode
         doc_type = self.request.query_params.get('document_type')
         if doc_type:
             queryset = queryset.filter(document_type=doc_type.upper())
+
+        scan_status = self.request.query_params.get('scan_status')
+        if scan_status:
+            queryset = queryset.filter(scan_status=scan_status.upper())
 
         search = self.request.query_params.get('search')
         if search:

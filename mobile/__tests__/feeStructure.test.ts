@@ -14,13 +14,13 @@ describe('saved rows', () => {
       fs({ id: 6, monthly_category: 11, monthly_amount: 9999 }), fs({ id: 7, fee_type: 'ANNUAL', annual_category: 3, monthly_category: null }),
     ], 5, 'MONTHLY');
     expect(rows).toEqual([
-      { category: 11, amount: '2500', saved: '2500' },
-      { category: 12, amount: '500', saved: '500' },
+      { id: expect.any(Number), category: 11, amount: '2500', saved: '2500' },
+      { id: expect.any(Number), category: 12, amount: '500', saved: '500' },
     ]);
   });
   it('reads the annual category for annual charges', () => {
     expect(savedRows([fs({ fee_type: 'ANNUAL', annual_category: 3, monthly_category: null, monthly_amount: 12000 })], 5, 'ANNUAL'))
-      .toEqual([{ category: 3, amount: '12000', saved: '12000' }]);
+      .toEqual([{ id: expect.any(Number), category: 3, amount: '12000', saved: '12000' }]);
   });
 });
 
@@ -72,5 +72,23 @@ describe('validation and payload', () => {
     expect(totalOf(rows)).toBe(3400);
     expect(changeSummary('Class 5', rows, '2026-11-01', { 11: 'Tuition', 14: 'Lab' })).toBe(
       'Class 5, from 2026-11-01\nTuition: 2,500 → 2,600\nLab: new, 300');
+  });
+});
+
+describe('stopping a saved charge', () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const m = require('../services/feeStructure');
+  it('keeps the structure id on each saved row, none on an added row', () => {
+    const rows = m.savedRows([{ id: 9, class_obj: 4, student: null, fee_type: 'MONTHLY', monthly_amount: '1500.00', monthly_category: 2, is_active: true }], 4, 'MONTHLY');
+    expect(rows).toEqual([{ id: 9, category: 2, amount: '1500', saved: '1500' }]);
+    expect(m.canStopCharge(rows[0])).toBe(true);
+    expect(m.canStopCharge(m.emptyRow())).toBe(false);
+  });
+  it('says what stopping does and does not change', () => {
+    const text = m.stopChargeText('Class 4', 'Tuition', '1500');
+    expect(text).toContain('Class 4');
+    expect(text).toContain('Tuition');
+    expect(text).toContain('1,500');
+    expect(text).toMatch(/already made are not changed/);
   });
 });

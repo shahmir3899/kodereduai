@@ -133,6 +133,57 @@ class EmbeddingService:
         )
 
     @staticmethod
+    def check_sample_consistency(student_id, embedding, embedding_version):
+        """
+        Compare a new enrollment sample with the student's existing active
+        samples of the same embedding version (different versions live in
+        incomparable vector spaces, so they are never compared).
+
+        Returns (status, nearest_distance): status is 'ok', 'inconsistent'
+        (probably a different person) or 'too_similar' (a repeated frame).
+        With no existing samples there is nothing to compare: ('ok', None).
+        """
+        existing = list(
+            StudentFaceEmbedding.objects.filter(
+                student_id=student_id, is_active=True, embedding_version=embedding_version,
+                embedding_vector__isnull=False,
+            ).values_list('embedding_vector', flat=True)
+        )
+        if not existing:
+            return 'ok', None
+        new = np.asarray(embedding, dtype=np.float64)
+        nearest = float(min(np.linalg.norm(np.asarray(v, dtype=np.float64) - new) for v in existing))
+        if nearest > FR_SETTINGS.get('SAMPLE_CONSISTENCY_MAX_DISTANCE', 0.60):
+            return 'inconsistent', nearest
+        if nearest < FR_SETTINGS.get('SAMPLE_DUPLICATE_MIN_DISTANCE', 0.03):
+            return 'too_similar', nearest
+        return 'ok', nearest
+
+    @staticmethod
+    def enforce_sample_cap(student_id, embedding_version, keep_id):
+        """
+        Keep at most MAX_SAMPLES_PER_STUDENT active samples per embedding
+        version by deactivating the lowest-quality extras (oldest first on
+        ties). Soft retire only — rows stay for audit. The sample that was
+        just stored (keep_id) is never the one retired, so a fresh enrollment
+        always takes effect.
+
+        Returns the list of deactivated ids.
+        """
+        cap = FR_SETTINGS.get('MAX_SAMPLES_PER_STUDENT', 5)
+        active = list(
+            StudentFaceEmbedding.objects.filter(
+                student_id=student_id, is_active=True, embedding_version=embedding_version,
+            ).order_by('quality_score', 'created_at')
+        )
+        excess = len(active) - cap
+        if excess <= 0:
+            return []
+        retire = [e.id for e in active if e.id != keep_id][:excess]
+        StudentFaceEmbedding.objects.filter(id__in=retire).update(is_active=False)
+        return retire
+
+    @staticmethod
     def _active_embedded_student_ids(student_ids, school_id, embedding_version):
         """Of the given student IDs, return those with an active embedding for this version."""
         if not student_ids:

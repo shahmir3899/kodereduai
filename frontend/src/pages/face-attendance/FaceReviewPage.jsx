@@ -7,6 +7,7 @@ import { useToast } from '../../components/Toast'
 import { faceAttendanceApi } from '../../services/api'
 import Spinner from '../../components/ui/Spinner'
 import LoadingState from '../../components/ui/LoadingState'
+import GroupPhotoOverlay from './GroupPhotoOverlay'
 
 export default function FaceReviewPage() {
   const { sessionId } = useParams()
@@ -16,7 +17,6 @@ export default function FaceReviewPage() {
 
   const [presentIds, setPresentIds] = useState(null) // null = not initialized yet
   const [removedDetections, setRemovedDetections] = useState(new Set())
-  const [imgNaturalSize, setImgNaturalSize] = useState(null) // {width, height} of session.image_url
   const [activeDetectionId, setActiveDetectionId] = useState(null) // box tapped/hovered — shows label + alt-match picker
   const [overrideMatches, setOverrideMatches] = useState({}) // detectionId -> {id, name, confidence} reassigned via alt-match picker
 
@@ -125,15 +125,6 @@ export default function FaceReviewPage() {
     setActiveDetectionId(null)
   }
 
-  const getBoxColors = (det) => {
-    if (!det.matched_student) return { border: 'border-red-500', bg: 'bg-red-500' }
-    if (det.match_status === 'FLAGGED') return { border: 'border-yellow-500', bg: 'bg-yellow-500' }
-    if (det.match_status === 'IGNORED' || det.match_status === 'REMOVED') {
-      return { border: 'border-gray-400', bg: 'bg-gray-400' }
-    }
-    return { border: 'border-green-500', bg: 'bg-green-500' } // AUTO_MATCHED / MANUALLY_MATCHED
-  }
-
   if (isLoading) return <LoadingState />
 
   if (!session) {
@@ -192,6 +183,9 @@ export default function FaceReviewPage() {
   )
   const classStudents = session.class_students || []
   const isConfirmed = session.status === 'CONFIRMED'
+  // Who is marked present: the operator's working set while reviewing, or what
+  // was actually recorded once the session is confirmed.
+  const markedIds = isConfirmed ? new Set(session.present_student_ids || []) : presentIds
 
   const getMatchBadge = (status) => {
     switch (status) {
@@ -232,69 +226,27 @@ export default function FaceReviewPage() {
         )}
       </div>
 
-      {/* Original image */}
+      {/* Photo with every face labelled (name, confidence, marked-present tick) */}
       <div className="bg-white rounded-lg border mb-6 overflow-hidden">
-        <div className="p-3 border-b bg-gray-50">
+        <div className="p-3 border-b bg-gray-50 flex items-center justify-between gap-2">
           <h3 className="text-sm font-medium text-gray-700">Captured Image</h3>
+          {markedIds && classStudents.length > 0 && (
+            <span className="text-xs text-gray-600" data-testid="marked-summary">
+              {markedIds.size} of {classStudents.length} students marked present
+              {isConfirmed ? ' (confirmed)' : ''}
+            </span>
+          )}
         </div>
-        <div className="p-4 flex justify-center bg-gray-100">
-          <div className="relative inline-block">
-            <img
-              src={session.image_url}
-              alt="Captured"
-              className="max-h-72 rounded-lg shadow-sm block"
-              onLoad={(e) => setImgNaturalSize({ width: e.target.naturalWidth, height: e.target.naturalHeight })}
-            />
-            {imgNaturalSize && detections.map((det) => {
-              if (!det.bounding_box) return null
-              const { top, left, right, bottom } = det.bounding_box
-              const colors = getBoxColors(det)
-              const displayed = overrideMatches[det.id] || det.matched_student
-              const displayedConfidence = overrideMatches[det.id]?.confidence ?? det.confidence
-              const isActive = activeDetectionId === det.id
-              return (
-                <div
-                  key={det.id || det.face_index}
-                  className="absolute group cursor-pointer"
-                  style={{
-                    left: `${(left / imgNaturalSize.width) * 100}%`,
-                    top: `${(top / imgNaturalSize.height) * 100}%`,
-                    width: `${((right - left) / imgNaturalSize.width) * 100}%`,
-                    height: `${((bottom - top) / imgNaturalSize.height) * 100}%`,
-                  }}
-                  onClick={() => setActiveDetectionId(isActive ? null : det.id)}
-                >
-                  <div className={`w-full h-full border-2 rounded-sm ${colors.border}`} />
-                  <div
-                    className={`absolute -top-6 left-0 whitespace-nowrap px-1.5 py-0.5 rounded text-[10px] font-medium text-white ${colors.bg} pointer-events-none transition-opacity ${
-                      isActive ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
-                    }`}
-                  >
-                    {displayed?.name || 'Unknown'}
-                    {displayedConfidence > 0 ? ` · ${displayedConfidence.toFixed(0)}%` : ''}
-                  </div>
-                  {isActive && (det.alternative_matches || []).length > 0 && (
-                    <div
-                      className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg p-1.5 z-10 w-44"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <div className="text-[10px] text-gray-400 px-1 pb-1">Other candidates</div>
-                      {det.alternative_matches.map((alt) => (
-                        <button
-                          key={alt.student_id}
-                          onClick={() => applyAlternativeMatch(det, alt)}
-                          className="w-full text-left text-xs px-1.5 py-1 rounded hover:bg-gray-100 flex justify-between gap-2"
-                        >
-                          <span className="truncate">{alt.name}</span>
-                          <span className="text-gray-400 flex-shrink-0">{alt.confidence?.toFixed(0)}%</span>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )
-            })}
-          </div>
+        <div className="p-4">
+          <GroupPhotoOverlay
+            imageUrl={session.image_url}
+            detections={detections}
+            overrideMatches={overrideMatches}
+            presentIds={markedIds}
+            activeId={activeDetectionId}
+            onSelect={setActiveDetectionId}
+            onPickAlternative={isConfirmed ? undefined : applyAlternativeMatch}
+          />
         </div>
       </div>
 
@@ -331,6 +283,7 @@ export default function FaceReviewPage() {
                       </div>
                     )}
                     <div className="text-xs font-medium truncate">
+                      <span className="text-gray-400 mr-1">#{(det.face_index ?? 0) + 1}</span>
                       {displayed?.name || 'Unknown'}
                     </div>
                     <div className="text-xs text-gray-500">
@@ -371,7 +324,7 @@ export default function FaceReviewPage() {
         <div className="p-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
             {classStudents.map((student) => {
-              const isPresent = presentIds?.has(student.id)
+              const isPresent = markedIds?.has(student.id)
               return (
                 <button
                   key={student.id}

@@ -341,8 +341,27 @@ export const studentsApi = {
   getEnrollmentHistory: (id) => api.get(`/api/students/${id}/enrollment_history/`),
   getDocuments: (id) => api.get(`/api/students/${id}/documents/`),
   getEarlierAssessments: (id) => api.get(`/api/students/${id}/earlier_assessments/`),
-  uploadDocument: (id, data) => api.post(`/api/students/${id}/documents/`, data),
+  // The real file goes up as multipart; the server stores it and saves its link.
+  uploadDocument: (id, file, fields = {}) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    Object.entries(fields).forEach(([k, v]) => formData.append(k, v))
+    return api.post(`/api/students/${id}/documents/`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+  },
   deleteDocument: (id, docId) => api.delete(`/api/students/${id}/documents/${docId}/`),
+  // Image-only upload: the server stores the file and reads the record from it.
+  // Resolves to { duplicate, document }.
+  scanDocument: (id, file) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    return api.post(`/api/students/${id}/documents/scan/`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+  },
+  rescanDocument: (id, docId) => api.post(`/api/students/${id}/documents/${docId}/rescan/`),
+  updateDocument: (id, docId, data) => api.patch(`/api/students/${id}/documents/${docId}/`, data),
   uploadPhoto: (id, file) => {
     const formData = new FormData()
     formData.append('file', file)
@@ -541,6 +560,8 @@ export const hrApi = {
   markPayslipPaid: (id, data) => api.post(`/api/hr/payslips/${id}/mark_paid/`, data),
   deletePayslip: (id) => api.delete(`/api/hr/payslips/${id}/`),
   bulkDeletePayslips: (data) => api.post('/api/hr/payslips/bulk_delete/', data),
+  bulkApprovePayslips: (data) => api.post('/api/hr/payslips/bulk_approve/', data),
+  bulkMarkPayslipsPaid: (data) => api.post('/api/hr/payslips/bulk_mark_paid/', data),
   downloadPayslipPdf: (id) => api.get(`/api/hr/payslips/${id}/download-pdf/`, { responseType: 'blob' }),
   getPayrollSummary: (params) => api.get('/api/hr/payslips/payroll_summary/', { params }),
 
@@ -589,6 +610,17 @@ export const hrApi = {
     headers: { 'Content-Type': 'multipart/form-data' },
   }),
   deleteDocument: (id) => api.delete(`/api/hr/documents/${id}/`),
+  // Image-only upload: the server stores the file and reads the record from it.
+  // Resolves to { duplicate, document }. `qualificationId` attaches the file to a
+  // qualification that was typed earlier with no file.
+  scanDocument: (staffId, file, qualificationId) => api.post(
+    '/api/hr/documents/scan/',
+    buildDocumentFormData({ staff_member: staffId, file, qualification: qualificationId }),
+    { headers: { 'Content-Type': 'multipart/form-data' } },
+  ),
+  rescanDocument: (id) => api.post(`/api/hr/documents/${id}/rescan/`),
+  // Field-only edit goes as JSON so a cleared date can be sent as null.
+  updateDocumentDetails: (id, data) => api.patch(`/api/hr/documents/${id}/`, data),
 
   // Staff Risk Predictor
   getStaffRisk: (params) => api.get('/api/hr/staff-risk/', { params }),
@@ -1437,6 +1469,18 @@ export const bootstrapApi = {
 }
 
 // ─── Face Attendance (Camera-Based) ──────────────────────────────────────────
+// Used by the in-browser "auto camera" (an unattended capture device). It authenticates
+// with a device key, NOT a user login, so it deliberately uses its own bare client:
+// the shared instance above would attach the signed-in user's token and, on a rejected
+// key, start the user token-refresh/logout flow.
+const deviceClient = axios.create({ baseURL: API_URL, headers: { 'Content-Type': 'application/json' } })
+
+export const faceDeviceApi = {
+  liveMatch: (deviceKey, data) => deviceClient.post('/api/face-attendance/live/match/', data, {
+    headers: { 'X-Device-Key': deviceKey },
+  }),
+}
+
 export const faceAttendanceApi = {
   // Upload face image to storage
   uploadImage: (file, schoolId, classId) => {
@@ -1474,6 +1518,9 @@ export const faceAttendanceApi = {
   // List enrolled faces
   getEnrollments: (params) => api.get('/api/face-attendance/enrollments/', { params }),
 
+  // Per-student enrollment strength (samples, not_enrolled/needs_more/refresh_due/ok)
+  getEnrollmentCoverage: (params) => api.get('/api/face-attendance/enrollments/coverage/', { params }),
+
   // Delete face enrollment
   deleteEnrollment: (id) => api.delete(`/api/face-attendance/enrollments/${id}/`),
 
@@ -1484,6 +1531,10 @@ export const faceAttendanceApi = {
   // Fixed Camera capture: devices (list/edit only — provisioning is admin-only, see Django admin)
   getDevices: (params) => api.get('/api/face-attendance/devices/', { params }),
   updateDevice: (id, data) => api.patch(`/api/face-attendance/devices/${id}/`, data),
+  // Register a device. The response carries the raw `api_key` exactly once.
+  createDevice: (data) => api.post('/api/face-attendance/devices/', data),
+  // Replace a lost/leaked key; the old one stops working at once. Returns the new raw `api_key` once.
+  rotateDeviceKey: (id) => api.post(`/api/face-attendance/devices/${id}/rotate_key/`, {}),
 
   // Fixed Camera capture: live-match troubleshooting log
   getLiveEvents: (params) => api.get('/api/face-attendance/live/events/', { params }),
@@ -1498,6 +1549,12 @@ export const faceAttendanceApi = {
   // Live Mobile capture: operator's correct/wrong label on a live-match
   // result — feeds future faceapi_v1 threshold tuning (only the capturing
   // operator can verify this, since no image is ever stored)
+  // Operator's "Yes" on an uncertain match: marks the chosen student present.
+  confirmLiveMatch: (eventId, studentId) => api.post(
+    `/api/face-attendance/live/events/${eventId}/confirm/`,
+    { student_id: studentId },
+  ),
+
   submitLiveMatchFeedback: (eventId, isCorrect) => api.post(
     `/api/face-attendance/live/events/${eventId}/feedback/`,
     { is_correct: isCorrect },

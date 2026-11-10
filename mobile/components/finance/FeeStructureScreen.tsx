@@ -7,7 +7,7 @@ import { useRefreshControl } from '../../hooks/useRefreshControl';
 import { todayString } from '../../services/attendanceEntry';
 import { inventoryErrorMessage } from '../../services/inventory';
 import {
-  buildFeePayload, changeSummary, emptyRow, feeClassOptions, savedRows, totalOf, validateRows, type ChargeRow, type FeeKind,
+  buildFeePayload, canStopCharge, changeSummary, emptyRow, stopChargeText, feeClassOptions, savedRows, totalOf, validateRows, type ChargeRow, type FeeKind,
 } from '../../services/feeStructure';
 import SegmentedTabs from '../ui/SegmentedTabs';
 import Select from '../ui/Select';
@@ -59,6 +59,18 @@ export default function FeeStructureScreen() {
   const taken = new Set(rows.map((r) => r.category).filter(Boolean));
   const className = classes.find((c) => c.id === classId)?.label ?? '';
 
+  // Stop a saved charge (a row just added is simply dropped).
+  const stopCharge = async (i: number) => {
+    const r = rows[i];
+    if (!canStopCharge(r)) return setRows((rs) => rs.filter((_, idx) => idx !== i));
+    const ok = await confirm({ title: 'Stop this charge?', message: stopChargeText(className, names[r.category as number] ?? 'this charge', r.saved), confirmLabel: 'Stop charge', destructive: true });
+    if (!ok) return;
+    try {
+      await actions.stop.mutateAsync(r.id as number);
+      toast.success('Charge stopped.');
+    } catch (e) { setError(inventoryErrorMessage(e)); }
+  };
+
   const setRow = (i: number, patch: Partial<ChargeRow>) => setRows((rs) => rs.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
 
   const save = async () => {
@@ -105,6 +117,7 @@ export default function FeeStructureScreen() {
               <View style={styles.amount}>
                 <Input label={i === 0 ? 'Amount (PKR)' : undefined} value={r.amount} onChangeText={(v) => setRow(i, { amount: v })} keyboardType="decimal-pad" placeholder="0" />
               </View>
+              <Button title={canStopCharge(r) ? 'Stop' : '✕'} size="sm" variant="ghost" onPress={() => stopCharge(i)} disabled={actions.stop.isPending} />
             </View>
           ))}
           <Button title="+ Add a charge" variant="ghost" size="sm" onPress={() => setRows((rs) => [...rs, emptyRow()])} />

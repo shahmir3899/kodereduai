@@ -245,3 +245,26 @@ class LoginEvent(models.Model):
 
     def __str__(self):
         return f"{self.username or 'unknown'} @ school {self.school_id} ({self.created_at:%Y-%m-%d %H:%M})"
+
+
+class ScannedDocumentMixin(models.Model):
+    """Fields for a document record that is filled in by reading the uploaded image
+    (core.document_scan) rather than typed. Rows that predate scanning, or were typed
+    by hand, sit at DONE with these fields empty."""
+
+    class ScanStatus(models.TextChoices):
+        PENDING = 'PENDING', 'Reading'
+        DONE = 'DONE', 'Done'
+        NEEDS_REVIEW = 'NEEDS_REVIEW', 'Needs review'
+
+    scan_status = models.CharField(max_length=15, choices=ScanStatus.choices, default=ScanStatus.DONE)
+    scan_note = models.CharField(max_length=255, blank=True, default='')
+    document_number = models.CharField(max_length=100, blank=True, default='')
+    issue_date = models.DateField(null=True, blank=True)
+    extracted_text = models.TextField(blank=True, default='')
+    extracted_data = models.JSONField(default=dict, blank=True)
+    # SHA-256 of the uploaded bytes: the same file sent twice for one person is a duplicate.
+    file_hash = models.CharField(max_length=64, blank=True, default='', db_index=True)
+
+    class Meta:
+        abstract = True

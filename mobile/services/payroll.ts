@@ -191,3 +191,30 @@ export function trendNote(bars: TrendBar[]): string | null {
   if (pct === 0) return `Same as ${prev.label}`;
   return `${pct > 0 ? 'Up' : 'Down'} ${Math.abs(pct)}% from ${prev.label}`;
 }
+
+// ─── Several payslips at once ───────────────────────────────────────────────────────────────
+
+export type BulkKind = 'approve' | 'paid' | 'delete';
+
+// Which of the ticked payslips each action can touch, as the server decides (it skips the others).
+export function eligibleIds(rows: Array<{ id: number; status: string }>, picked: number[], kind: BulkKind): number[] {
+  const set = new Set(picked);
+  return rows.filter((r) => set.has(r.id) && (kind === 'paid' ? payslipActions(r.status).markPaid : kind === 'approve' ? payslipActions(r.status).approve : payslipActions(r.status).remove)).map((r) => r.id);
+}
+
+const plural = (n: number) => `${n} payslip${n === 1 ? '' : 's'}`;
+
+export function bulkConfirmText(kind: BulkKind, eligible: number, picked: number, paidOn?: string): string {
+  const skipped = picked - eligible;
+  const tail = skipped > 0 ? ` ${plural(skipped)} in another state will be left alone.` : '';
+  if (kind === 'approve') return `Approve ${plural(eligible)}? Only drafts can be approved.${tail}`;
+  if (kind === 'paid') return `Mark ${plural(eligible)} as paid on ${paidOn ?? 'the chosen date'}? Drafts and approved payslips can be marked paid.${tail}`;
+  return `Delete ${plural(eligible)}? Only drafts are deleted, and this cannot be undone.${tail}`;
+}
+
+export function bulkDoneText(kind: BulkKind, data: { approved?: number; paid?: number; deleted?: number; skipped?: number } | undefined): string {
+  const n = (kind === 'approve' ? data?.approved : kind === 'paid' ? data?.paid : data?.deleted) ?? 0;
+  const verb = kind === 'approve' ? 'approved' : kind === 'paid' ? 'marked as paid' : 'deleted';
+  const skipped = data?.skipped ?? 0;
+  return `${plural(n)} ${verb}.${skipped ? ` ${skipped} skipped.` : ''}`;
+}

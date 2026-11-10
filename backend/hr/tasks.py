@@ -116,3 +116,23 @@ def generate_payslips_task(self, school_id, user_id, month, year):
         logger.exception(f"Payslip generation failed: {e}")
         mark_task_failed(task_id, str(e))
         raise
+
+
+@shared_task(bind=True, time_limit=180)
+def scan_staff_document(self, document_id):
+    """Read one uploaded staff document and fill in its record."""
+    from core import document_scan
+    from hr.document_intake import apply_scan
+    from hr.models import StaffDocument
+
+    doc = StaffDocument.objects.filter(id=document_id).first()
+    if doc is None:
+        return
+    try:
+        apply_scan(doc)
+    except Exception:
+        # Never leave a record stuck on "Reading": hand it to the user instead.
+        logger.exception('Staff document scan failed for %s', document_id)
+        StaffDocument.objects.filter(id=document_id).update(
+            scan_status=StaffDocument.ScanStatus.NEEDS_REVIEW, scan_note=document_scan.FAILED_NOTE,
+        )

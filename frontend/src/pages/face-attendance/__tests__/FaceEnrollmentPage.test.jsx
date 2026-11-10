@@ -44,6 +44,7 @@ vi.mock('react-router-dom', async () => {
 })
 
 const mockDetectSingleFace = vi.fn()
+const mockDetectSingleFaceLandmarks = vi.fn()
 const mockDetectAllFacesQuick = vi.fn()
 const mockGetFramingHint = vi.fn()
 const mockDetectAllFacesWithDescriptors = vi.fn()
@@ -51,6 +52,7 @@ let mockQualityScore = 0.82
 vi.mock('../../../utils/faceApiLoader', () => ({
   loadFaceApiModels: vi.fn(() => Promise.resolve()),
   detectSingleFace: (...args) => mockDetectSingleFace(...args),
+  detectSingleFaceLandmarks: (...args) => mockDetectSingleFaceLandmarks(...args),
   detectAllFacesQuick: (...args) => mockDetectAllFacesQuick(...args),
   getFramingHint: (...args) => mockGetFramingHint(...args),
   detectAllFacesWithDescriptors: (...args) => mockDetectAllFacesWithDescriptors(...args),
@@ -69,6 +71,7 @@ function mockGetUserMedia(implementation) {
 beforeEach(() => {
   mockNavigate.mockClear()
   mockDetectSingleFace.mockReset()
+  mockDetectSingleFaceLandmarks.mockReset().mockResolvedValue(null)
   mockQualityScore = 0.82
   // Default: no faces in the continuous tick scan, so the live "good
   // framing"/multi-face UI stays inert and tests drive capture manually via
@@ -84,7 +87,9 @@ describe('FaceEnrollmentPage', () => {
     renderWithProviders(<FaceEnrollmentPage />)
 
     expect(screen.getByText('Face Enrollment')).toBeInTheDocument()
-    expect(screen.getByText('Select class...')).toBeInTheDocument()
+    // For a non-teacher the selector's empty value reads "All Classes" (showAllOption)
+    // once the class list has loaded.
+    await waitFor(() => expect(screen.getByDisplayValue('All Classes')).toBeInTheDocument())
   })
 
   it('loads classes in dropdown', async () => {
@@ -92,7 +97,7 @@ describe('FaceEnrollmentPage', () => {
 
     // Classes load via MSW — check option elements inside the class select
     await waitFor(() => {
-      const classSelect = screen.getByDisplayValue('Select class...')
+      const classSelect = screen.getByDisplayValue('All Classes')
       const options = classSelect.querySelectorAll('option')
       const optionTexts = Array.from(options).map((o) => o.textContent)
       expect(optionTexts.some((t) => t.includes('Class 1A'))).toBe(true)
@@ -119,9 +124,6 @@ describe('FaceEnrollmentPage', () => {
       })
     )
 
-    // Mock window.confirm to return true
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
-
     const user = userEvent.setup()
     renderWithProviders(<FaceEnrollmentPage />)
 
@@ -130,15 +132,16 @@ describe('FaceEnrollmentPage', () => {
       expect(screen.getByText('Ali Hassan')).toBeInTheDocument()
     })
 
-    // Find and click the first Remove button
-    const removeButtons = screen.getAllByText('Remove')
-    await user.click(removeButtons[0])
+    // Removing asks for confirmation in the app's own modal (not window.confirm).
+    const rowButtons = screen.getAllByText('Remove')
+    await user.click(rowButtons[0])
+    await waitFor(() => expect(screen.getAllByText('Remove').length).toBe(rowButtons.length + 1))
+    const withModal = screen.getAllByText('Remove')
+    await user.click(withModal[withModal.length - 1]) // the modal renders last
 
     await waitFor(() => {
       expect(deleteCalled).toBe(true)
     })
-
-    confirmSpy.mockRestore()
   })
 
   it('student selector is disabled until class is selected', async () => {
@@ -155,13 +158,13 @@ describe('FaceEnrollmentPage', () => {
 
     // Wait for classes to load
     await waitFor(() => {
-      const classSelect = screen.getByDisplayValue('Select class...')
+      const classSelect = screen.getByDisplayValue('All Classes')
       const options = classSelect.querySelectorAll('option')
       expect(options.length).toBeGreaterThan(1)
     })
 
     // Select a class to trigger student and enrollment loading
-    const classSelect = screen.getByDisplayValue('Select class...')
+    const classSelect = screen.getByDisplayValue('All Classes')
     await user.selectOptions(classSelect, '1')
 
     // Wait for enrollment summary to appear
@@ -235,6 +238,8 @@ describe('FaceEnrollmentPage', () => {
       const studentSelect = screen.getByDisplayValue('Select student...')
       const studentOptionValue = studentSelect.querySelectorAll('option')[1].value
       await user.selectOptions(studentSelect, studentOptionValue)
+      // Default is 3 poses per student; this test covers the single-capture path.
+      await user.selectOptions(screen.getByLabelText('Poses per student'), '1')
 
       // LiveEnrollCapture now auto-requests the camera on mount (no manual
       // "Enable Camera" click needed) — just wait for it to grant and for
@@ -268,7 +273,106 @@ describe('FaceEnrollmentPage', () => {
       })
       const studentSelect = screen.getByDisplayValue('Select student...')
       await user.selectOptions(studentSelect, studentSelect.querySelectorAll('option')[1].value)
+      // Default is 3 poses per student; the tests using this helper cover the single-capture path.
+      await user.selectOptions(screen.getByLabelText('Poses per student'), '1')
     }
+
+    it('mirrors the live view, freezes on the captured frame, and warns when the head angle is wrong', async () => {
+      const videoWidth = Object.getOwnPropertyDescriptor(HTMLVideoElement.prototype, 'videoWidth')
+      const videoHeight = Object.getOwnPropertyDescriptor(HTMLVideoElement.prototype, 'videoHeight')
+      Object.defineProperty(HTMLVideoElement.prototype, 'videoWidth', { configurable: true, get: () => 640 })
+      Object.defineProperty(HTMLVideoElement.prototype, 'videoHeight', { configurable: true, get: () => 480 })
+      vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({ drawImage: vi.fn() })
+      vi.spyOn(HTMLCanvasElement.prototype, 'toDataURL').mockReturnValue('data:image/jpeg;base64,AAAA')
+
+      try {
+        // Pose 1 asks for a straight face; nose at 68% of the jaw width = turned to the student's left.
+        const positions = Array.from({ length: 68 }, () => ({ x: 50, y: 50 }))
+        positions[0] = { x: 0, y: 50 }
+        positions[16] = { x: 100, y: 50 }
+        positions[30] = { x: 68, y: 50 }
+        mockGetUserMedia(vi.fn(() => Promise.resolve({ getTracks: () => [] })))
+        mockDetectSingleFace.mockResolvedValue({ descriptor: new Float32Array(128).fill(0.01), landmarks: { positions } })
+
+        const user = userEvent.setup()
+        renderWithProviders(<FaceEnrollmentPage />)
+        await selectClassAndStudent(user)
+        await user.selectOptions(screen.getByLabelText('Poses per student'), '3')
+
+        const video = document.querySelector('video')
+        expect(video.style.transform).toBe('scaleX(-1)') // selfie-style mirror
+        expect(screen.queryByTestId('captured-still')).not.toBeInTheDocument()
+
+        await waitFor(() => expect(screen.getByText('Capture Face')).not.toBeDisabled())
+        await user.click(screen.getByText('Capture Face'))
+
+        const still = await screen.findByTestId('captured-still')
+        expect(still).toHaveAttribute('src', 'data:image/jpeg;base64,AAAA')
+        expect(still.style.transform).toBe('scaleX(-1)')
+        expect(screen.getByTestId('pose-mismatch')).toHaveTextContent(/doesn't look like the pose/i)
+
+        await user.click(screen.getByText('Retake'))
+        await waitFor(() => expect(screen.queryByTestId('captured-still')).not.toBeInTheDocument())
+      } finally {
+        vi.restoreAllMocks()
+        if (videoWidth) Object.defineProperty(HTMLVideoElement.prototype, 'videoWidth', videoWidth)
+        if (videoHeight) Object.defineProperty(HTMLVideoElement.prototype, 'videoHeight', videoHeight)
+      }
+    })
+
+    it('shows capture tips and a pose picture before the first pose', async () => {
+      mockGetUserMedia(vi.fn(() => Promise.resolve({ getTracks: () => [] })))
+      const user = userEvent.setup()
+      renderWithProviders(<FaceEnrollmentPage />)
+      await selectClassAndStudent(user)
+      await user.selectOptions(screen.getByLabelText('Poses per student'), '3')
+
+      expect(screen.getByTestId('capture-tips')).toHaveTextContent(/glasses/i)
+      expect(screen.getByRole('img', { name: 'front pose' })).toBeInTheDocument()
+      expect(screen.getByTestId('sample-progress')).toHaveTextContent('Look straight at the camera')
+    })
+
+    it('guides three poses by default and enrolls each as its own sample', async () => {
+      const posted = []
+      server.use(
+        http.post('/api/face-attendance/enroll/', async ({ request }) => {
+          posted.push(await request.json())
+          return HttpResponse.json({ id: posted.length, embedding_version: 'faceapi_v1' }, { status: 201 })
+        })
+      )
+      mockGetUserMedia(vi.fn(() => Promise.resolve({ getTracks: () => [] })))
+      mockDetectSingleFace.mockResolvedValue({ descriptor: new Float32Array(128).fill(0.01) })
+
+      const user = userEvent.setup()
+      renderWithProviders(<FaceEnrollmentPage />)
+      // Same steps as selectClassAndStudent, minus its switch to 1 pose.
+      await user.click(await screen.findByText('Live Capture'))
+      await waitFor(() => {
+        expect(screen.getByDisplayValue('All Classes').querySelectorAll('option').length).toBeGreaterThan(1)
+      })
+      await user.selectOptions(screen.getByDisplayValue('All Classes'), '1')
+      await waitFor(() => {
+        expect(screen.getByDisplayValue('Select student...').querySelectorAll('option').length).toBeGreaterThan(1)
+      })
+      const studentSelect = screen.getByDisplayValue('Select student...')
+      await user.selectOptions(studentSelect, studentSelect.querySelectorAll('option')[1].value)
+
+      expect(screen.getByTestId('sample-progress')).toHaveTextContent('Pose 1 of 3')
+      expect(screen.getByTestId('sample-progress')).toHaveTextContent('Look straight at the camera')
+
+      for (let pose = 1; pose <= 3; pose += 1) {
+        await waitFor(() => expect(screen.getByText('Capture Face')).not.toBeDisabled())
+        await user.click(screen.getByText('Capture Face'))
+        await user.click(await screen.findByText(pose < 3 ? 'Confirm & next pose' : 'Confirm & Enroll'))
+        if (pose < 3) {
+          await waitFor(() => expect(screen.getByTestId('sample-progress')).toHaveTextContent(`Pose ${pose + 1} of 3`))
+          expect(posted).toHaveLength(0) // nothing is sent until the last pose
+        }
+      }
+
+      await waitFor(() => expect(posted).toHaveLength(3))
+      expect(new Set(posted.map((p) => p.student_id)).size).toBe(1)
+    })
 
     it('auto-captures once framing is sustained "good", with no manual click', async () => {
       mockGetUserMedia(vi.fn(() => Promise.resolve({ getTracks: () => [] })))

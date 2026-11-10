@@ -498,12 +498,12 @@ class StaffQualificationSerializer(serializers.ModelSerializer):
             'id', 'school', 'staff_member', 'staff_member_name', 'staff_employee_id',
             'qualification_type', 'qualification_type_display',
             'qualification_name', 'institution',
-            'year_of_completion', 'grade_or_percentage',
+            'year_of_completion', 'grade_or_percentage', 'document',
             'created_at', 'updated_at',
         ]
         read_only_fields = [
             'id', 'school', 'staff_member_name', 'staff_employee_id',
-            'qualification_type_display',
+            'qualification_type_display', 'document',
             'created_at', 'updated_at',
         ]
 
@@ -523,6 +523,15 @@ class StaffDocumentSerializer(serializers.ModelSerializer):
     staff_member_name = serializers.CharField(source='staff_member.full_name', read_only=True)
     staff_employee_id = serializers.CharField(source='staff_member.employee_id', read_only=True, default=None)
     document_type_display = serializers.CharField(source='get_document_type_display', read_only=True)
+    scan_status_display = serializers.CharField(source='get_scan_status_display', read_only=True)
+    uploaded_by_name = serializers.CharField(source='uploaded_by.username', read_only=True, default=None)
+    name_on_document = serializers.SerializerMethodField()
+    # Degree-type documents carry a linked qualification; its details ride along here
+    # so the screen shows one row. The view prefetches `qualifications`.
+    qualification_id = serializers.SerializerMethodField()
+    institution = serializers.SerializerMethodField()
+    year_of_completion = serializers.SerializerMethodField()
+    grade_or_percentage = serializers.SerializerMethodField()
 
     class Meta:
         model = StaffDocument
@@ -530,16 +539,42 @@ class StaffDocumentSerializer(serializers.ModelSerializer):
             'id', 'school', 'staff_member', 'staff_member_name', 'staff_employee_id',
             'document_type', 'document_type_display',
             'title', 'file_url', 'notes', 'expiry_date',
+            'document_number', 'issue_date',
+            'scan_status', 'scan_status_display', 'scan_note', 'name_on_document',
+            'qualification_id', 'institution', 'year_of_completion', 'grade_or_percentage',
+            'uploaded_by', 'uploaded_by_name',
             'uploaded_at',
         ]
-        read_only_fields = [
-            'id', 'school', 'staff_member_name', 'staff_employee_id',
-            'document_type_display',
-            'uploaded_at',
-        ]
+        read_only_fields = fields
+
+    def _qualification(self, obj):
+        quals = list(obj.qualifications.all())
+        return quals[0] if quals else None
+
+    def get_name_on_document(self, obj):
+        return (obj.extracted_data or {}).get('person_name', '')
+
+    def get_qualification_id(self, obj):
+        qual = self._qualification(obj)
+        return qual.id if qual else None
+
+    def get_institution(self, obj):
+        qual = self._qualification(obj)
+        return qual.institution if qual else ''
+
+    def get_year_of_completion(self, obj):
+        qual = self._qualification(obj)
+        return qual.year_of_completion if qual else None
+
+    def get_grade_or_percentage(self, obj):
+        qual = self._qualification(obj)
+        return qual.grade_or_percentage if qual else ''
 
 
 class StaffDocumentCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = StaffDocument
-        fields = ['staff_member', 'document_type', 'title', 'file_url', 'notes', 'expiry_date']
+        fields = [
+            'staff_member', 'document_type', 'title', 'file_url', 'notes', 'expiry_date',
+            'document_number', 'issue_date',
+        ]

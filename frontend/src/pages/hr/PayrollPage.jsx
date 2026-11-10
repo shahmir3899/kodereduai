@@ -1,5 +1,5 @@
 import { schoolNowDate } from '../../utils/schoolTime'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Fragment } from 'react'
 import Modal from '../../components/ui/Modal'
 import Badge from '../../components/ui/Badge'
 import { TONE } from '../../components/ui/statusTones'
@@ -123,16 +123,54 @@ export default function PayrollPage() {
     onError: (err) => showError(err.response?.data?.detail || 'Failed to delete'),
   })
 
+  const [payConfirm, setPayConfirm] = useState(false)
+  const [payDate, setPayDate] = useState(() => new Date().toISOString().slice(0, 10))
+
+  const bulkApproveMutation = useMutation({
+    mutationFn: (data) => hrApi.bulkApprovePayslips(data),
+    onSuccess: (res) => {
+      invalidateAll()
+      setSelectedIds(new Set())
+      const { approved, skipped } = res.data
+      showSuccess(`${approved} payslip(s) approved${skipped ? `, ${skipped} skipped` : ''}`)
+    },
+    onError: (err) => showError(err.response?.data?.detail || 'Failed to approve'),
+  })
+
+  const bulkPaidMutation = useMutation({
+    mutationFn: (data) => hrApi.bulkMarkPayslipsPaid(data),
+    onSuccess: (res) => {
+      invalidateAll()
+      setSelectedIds(new Set())
+      setPayConfirm(false)
+      const { paid, skipped } = res.data
+      showSuccess(`${paid} payslip(s) marked as paid${skipped ? `, ${skipped} skipped` : ''}`)
+    },
+    onError: (err) => showError(err.response?.data?.detail || 'Failed to mark paid'),
+  })
+
   const allPayslips = payslipData?.data?.results || payslipData?.data || []
   const summary = summaryData?.data || {}
   const filteredPayslips = statusFilter
     ? allPayslips.filter((p) => p.status === statusFilter)
     : allPayslips
 
-  const draftPayslips = filteredPayslips.filter((p) => p.status === 'DRAFT')
+  // DRAFT and APPROVED rows are selectable (bulk approve / mark paid); PAID are final.
+  const draftPayslips = filteredPayslips.filter((p) => p.status === 'DRAFT' || p.status === 'APPROVED')
   const allDraftsSelected = draftPayslips.length > 0 && draftPayslips.every((p) => selectedIds.has(p.id))
+  const selectedSlips = allPayslips.filter((p) => selectedIds.has(p.id))
+  const allSelectedDraft = selectedSlips.length > 0 && selectedSlips.every((p) => p.status === 'DRAFT')
+
+  // The bulk bar renders under the last-ticked row so it sits where the user is
+  // looking and, being an inline row, never overlays a selected row.
+  const [lastToggledId, setLastToggledId] = useState(null)
+  const visibleSelected = filteredPayslips.filter((p) => selectedIds.has(p.id))
+  const barAnchorId = selectedIds.has(lastToggledId) && visibleSelected.some((p) => p.id === lastToggledId)
+    ? lastToggledId
+    : visibleSelected[visibleSelected.length - 1]?.id ?? null
 
   const toggleSelect = (id) => {
+    setLastToggledId(id)
     setSelectedIds((prev) => {
       const next = new Set(prev)
       if (next.has(id)) next.delete(id)
@@ -146,6 +184,7 @@ export default function PayrollPage() {
       setSelectedIds(new Set())
     } else {
       setSelectedIds(new Set(draftPayslips.map((p) => p.id)))
+      setLastToggledId(draftPayslips[draftPayslips.length - 1]?.id ?? null)
     }
   }
 
@@ -175,6 +214,41 @@ export default function PayrollPage() {
   // Year options
   const years = []
   for (let y = now.getFullYear() - 2; y <= now.getFullYear() + 1; y++) years.push(y)
+
+  const bulkBar = (
+    <div className="flex items-center gap-4 px-4 py-2 bg-red-50 border border-red-200 rounded-lg">
+      <span className="text-sm font-medium text-red-800">{selectedIds.size} selected</span>
+      {allSelectedDraft && (
+        <button
+          onClick={() => bulkApproveMutation.mutate({ ids: [...selectedIds] })}
+          disabled={bulkApproveMutation.isPending}
+          className="text-sm text-blue-600 hover:text-blue-800 font-medium"
+        >
+          {bulkApproveMutation.isPending ? 'Approving...' : 'Approve Selected'}
+        </button>
+      )}
+      <button
+        onClick={() => setPayConfirm(true)}
+        className="text-sm text-green-700 hover:text-green-900 font-medium"
+      >
+        Mark Paid Selected
+      </button>
+      {allSelectedDraft && (
+        <button
+          onClick={() => setDeleteConfirm('bulk')}
+          className="text-sm text-red-600 hover:text-red-800 font-medium"
+        >
+          Delete Selected
+        </button>
+      )}
+      <button
+        onClick={() => setSelectedIds(new Set())}
+        className="text-sm text-gray-500 hover:text-gray-700 ml-auto"
+      >
+        Clear
+      </button>
+    </div>
+  )
 
   return (
     <div>
@@ -244,24 +318,9 @@ export default function PayrollPage() {
         </div>
       )}
 
-      {/* Bulk Actions Bar */}
-      {selectedIds.size > 0 && (
-        <div className="flex items-center gap-4 mb-3 px-4 py-2 bg-red-50 border border-red-200 rounded-lg">
-          <span className="text-sm font-medium text-red-800">{selectedIds.size} selected</span>
-          <button
-            onClick={() => setDeleteConfirm('bulk')}
-            className="text-sm text-red-600 hover:text-red-800 font-medium"
-          >
-            Delete Selected
-          </button>
-          <button
-            onClick={() => setSelectedIds(new Set())}
-            className="text-sm text-gray-500 hover:text-gray-700 ml-auto"
-          >
-            Clear
-          </button>
-        </div>
-      )}
+      {/* Bulk Actions Bar — top placement is the fallback (card view / anchor row filtered out);
+          in table view it renders inline under the last-ticked row instead. */}
+      {selectedIds.size > 0 && (view !== 'table' || barAnchorId === null) && <div className="mb-3">{bulkBar}</div>}
 
       {/* Loading */}
       {isLoading ? (
@@ -334,9 +393,10 @@ export default function PayrollPage() {
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {filteredPayslips.map((p) => (
-                  <tr key={p.id} className="hover:bg-gray-50">
+                  <Fragment key={p.id}>
+                  <tr className="hover:bg-gray-50">
                     <td className="py-3 pr-2">
-                      {p.status === 'DRAFT' && (
+                      {(p.status === 'DRAFT' || p.status === 'APPROVED') && (
                         <input
                           type="checkbox"
                           checked={selectedIds.has(p.id)}
@@ -392,6 +452,12 @@ export default function PayrollPage() {
                       </div>
                     </td>
                   </tr>
+                  {p.id === barAnchorId && (
+                    <tr>
+                      <td colSpan={9} className="py-2">{bulkBar}</td>
+                    </tr>
+                  )}
+                  </Fragment>
                 ))}
               </tbody>
             </table>
@@ -419,6 +485,35 @@ export default function PayrollPage() {
               </button>
             </div>
           </Modal>
+      )}
+
+      {/* Bulk Mark Paid Modal */}
+      {payConfirm && (
+        <Modal open size="sm" closeOnBackdrop={false}>
+          <h2 className="text-xl font-bold text-gray-900 mb-2">Mark Payslips as Paid</h2>
+          <p className="text-gray-600 mb-4">
+            Mark {selectedIds.size} selected payslip(s) as paid?
+          </p>
+          <label className="block text-sm text-gray-600 mb-6">
+            Payment date
+            <input
+              type="date"
+              value={payDate}
+              onChange={(e) => setPayDate(e.target.value)}
+              className="input mt-1 w-full"
+            />
+          </label>
+          <div className="flex justify-end gap-3">
+            <button onClick={() => setPayConfirm(false)} className="btn btn-secondary">Cancel</button>
+            <button
+              onClick={() => bulkPaidMutation.mutate({ ids: [...selectedIds], payment_date: payDate })}
+              disabled={bulkPaidMutation.isPending || !payDate}
+              className="btn btn-primary"
+            >
+              {bulkPaidMutation.isPending ? 'Saving...' : 'Mark Paid'}
+            </button>
+          </div>
+        </Modal>
       )}
 
       {/* Delete Confirmation Modal */}

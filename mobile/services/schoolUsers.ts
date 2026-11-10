@@ -101,6 +101,6 @@ export const buildResetPayload = (mode: ResetMode, password: string, confirm: st
 
 export function activeToggleText(u: Pick<SchoolUser, 'is_active'>, name: string): { title: string; message: string; confirmLabel: string } {
   return u.is_active
-    ? { title: `Deactivate ${name}?`, message: 'They can no longer sign in. Their records are kept.', confirmLabel: 'Deactivate' }
+    ? { title: `Deactivate ${name}?`, message: 'They can no longer sign in. This is how a user is removed: the server never erases one, so their attendance, payments and history are kept, and you can activate them again.', confirmLabel: 'Deactivate' }
     : { title: `Activate ${name}?`, message: 'They can sign in again.', confirmLabel: 'Activate' };
 }

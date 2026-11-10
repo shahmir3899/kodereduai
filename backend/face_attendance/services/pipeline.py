@@ -340,6 +340,9 @@ class FaceEnrollmentPipeline:
             source_image_url=self.image_url,
             quality_score=quality_score,
         )
+        self.embedding_service.enforce_sample_cap(
+            student.id, EMBEDDING_VERSION, keep_id=emb_record.id,
+        )
 
         FaceAuditLog.objects.create(
             school_id=student.school_id,

@@ -343,6 +343,7 @@ export const studentsApi = {
   getReclassifyPreview: (id: number, params: Record<string, unknown>) => api.get(`/api/students/${id}/reclassify-preview/`, { params }),
   reclassifyStudent: (id: number, data: Record<string, unknown>) => api.post(`/api/students/${id}/reclassify/`, data),
   getDocuments: (id: number) => api.get(`/api/students/${id}/documents/`),
+  uploadDocument: (id: number, form: FormData) => api.post(`/api/students/${id}/documents/`, form, { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 60000 }),
   deleteDocument: (id: number, docId: number) => api.delete(`/api/students/${id}/documents/${docId}/`),
   // Status and history (admin and principal): which outcomes are allowed, Graduated or Repeat, enrollment history.
   getRemovalPreview: (id: number) => api.get(`/api/students/${id}/removal-preview/`),
@@ -445,6 +446,8 @@ export const financeApi = {
     api.get('/api/finance/fee-structures/', { params }),
   bulkSetFeeStructures: (data: object) =>
     api.post('/api/finance/fee-structures/bulk_set/', data),
+  // Stops one class charge: the server's own way of retiring a charge (is_active off); fee records already made stay as they are.
+  retireFeeStructure: (id: number) => api.patch(`/api/finance/fee-structures/${id}/`, { is_active: false }),
   // Amounts for single students in one class, replacing only the students sent.
   bulkSetStudentFeeStructures: (data: object) =>
     api.post('/api/finance/fee-structures/bulk_set_students/', data),
@@ -578,6 +581,12 @@ export const hrApi = {
   uploadStaffPhoto: (id: number, form: FormData) =>
     api.post(`/api/hr/staff/${id}/upload_photo/`, form, { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 60000 }),
   removeStaffPhoto: (id: number) => api.post(`/api/hr/staff/${id}/remove_photo/`),
+  // Sign-in accounts of staff (admin and principal): the server refuses roles above the caller's.
+  createStaffAccount: (id: number, data: object) => api.post(`/api/hr/staff/${id}/create-user-account/`, data),
+  linkStaffAccount: (id: number, data: object) => api.post(`/api/hr/staff/${id}/link-user-account/`, data),
+  unlinkStaffAccount: (id: number) => api.post(`/api/hr/staff/${id}/unlink-user-account/`),
+  updateStaffRole: (id: number, data: object) => api.post(`/api/hr/staff/${id}/update-user-role/`, data),
+  bulkCreateStaffAccounts: (data: object) => api.post('/api/hr/staff/bulk-create-accounts/', data),
   getDepartments: (params?: Record<string, unknown>) => api.get('/api/hr/departments/', { params }),
   createDepartment: (data: object) => api.post('/api/hr/departments/', data),
   updateDepartment: (id: number, data: object) => api.patch(`/api/hr/departments/${id}/`, data),
@@ -631,6 +640,10 @@ export const hrApi = {
   approvePayslip: (id: number) => api.post(`/api/hr/payslips/${id}/approve/`),
   markPayslipPaid: (id: number, data: object) => api.post(`/api/hr/payslips/${id}/mark_paid/`, data),
   deletePayslip: (id: number) => api.delete(`/api/hr/payslips/${id}/`),
+  // Several at once (admin and principal): the server skips any that are in the wrong state and says how many.
+  bulkApprovePayslips: (data: object) => api.post('/api/hr/payslips/bulk_approve/', data),
+  bulkMarkPayslipsPaid: (data: object) => api.post('/api/hr/payslips/bulk_mark_paid/', data),
+  bulkDeletePayslips: (data: object) => api.post('/api/hr/payslips/bulk_delete/', data),
   downloadPayslipPdf: (id: number) => api.get(`/api/hr/payslips/${id}/download-pdf/`, { responseType: 'arraybuffer' }),
   getAppraisals: (params?: Record<string, unknown>) => api.get('/api/hr/appraisals/', { params }),
   createAppraisal: (data: object) => api.post('/api/hr/appraisals/', data),
@@ -783,6 +796,15 @@ export const examinationsApi = {
     api.post('/api/examinations/marks/bulk_entry/', data),
   getExams: (params?: Record<string, unknown>) =>
     api.get('/api/examinations/exams/', { params }),
+  // Bulk deletes (admin and principal): the server deletes the exams or groups with their subjects and marks.
+  bulkDeleteExams: (ids: number[]) => api.post('/api/examinations/exams/bulk_delete/', { ids }),
+  bulkDeleteExamGroups: (ids: number[]) => api.post('/api/examinations/exam-groups/bulk_delete/', { ids }),
+  // One exam's subjects: marks and dates (edit), a subject added from the class, or one removed with its marks.
+  createExamSubject: (data: object) => api.post('/api/examinations/exam-subjects/', data),
+  updateExamSubject: (id: number, data: object) => api.patch(`/api/examinations/exam-subjects/${id}/`, data),
+  deleteExamSubject: (id: number) => api.delete(`/api/examinations/exam-subjects/${id}/`),
+  downloadDateSheetXlsx: (groupId: number) =>
+    api.get(`/api/examinations/exam-groups/${groupId}/download-date-sheet/`, { responseType: 'arraybuffer' }),
   // Exam groups: the date sheet and publishing (admin and principal).
   getExamGroups: (params?: Record<string, unknown>) =>
     api.get('/api/examinations/exam-groups/', { params }),

@@ -55,6 +55,17 @@ export async function detectSingleFace(mediaElement) {
 }
 
 /**
+ * Single face + 68 landmarks, no descriptor pass — cheap enough for the
+ * per-tick pose check during guided enrollment (head-turn comes from the
+ * landmark positions, see headTurnRatio in utils/enrollSamples).
+ */
+export async function detectSingleFaceLandmarks(mediaElement) {
+  const options = new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.5 })
+  const result = await faceapi.detectSingleFace(mediaElement, options).withFaceLandmarks()
+  return result || null
+}
+
+/**
  * 0-1 heuristic combining detector confidence and face-size-relative-to-frame,
  * mirroring the size/blur-style intent of the server-side quality_score used
  * by the legacy dlib enrollment path (design doc §5).

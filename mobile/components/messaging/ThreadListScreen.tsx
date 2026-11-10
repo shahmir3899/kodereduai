@@ -28,7 +28,7 @@ export default function ThreadListScreen() {
         keyExtractor={(t) => t.id}
         contentContainerStyle={styles.content}
         refreshControl={refreshControl}
-        ListEmptyComponent={<EmptyState title="No messages yet" message="Start a conversation with the school office." />}
+        ListEmptyComponent={<EmptyState title="No messages yet" message={base === '/(admin)' ? 'Start a conversation with a member of staff.' : 'Start a conversation with the school office.'} />}
         renderItem={({ item: t }) => {
           const unread = t.unread_count ?? 0;
           return (

@@ -9,7 +9,7 @@ import { useExamActions, useExamsPaged, useExamTypeList, useTermList } from '../
 import { useRefreshControl } from '../../hooks/useRefreshControl';
 import { feeClassOptions } from '../../services/feeStructure';
 import {
-  buildExamPayload, emptyExamForm, EXAM_FILTERS, EXAM_STATUSES, examShortcutParams, examToForm, isRemoved, marksProgress, populateText, reactivatePayload, statusTone, validateExam,
+  bulkDeleteDone, toggleId, buildExamPayload, emptyExamForm, EXAM_FILTERS, EXAM_STATUSES, examShortcutParams, examToForm, isRemoved, marksProgress, populateText, reactivatePayload, statusTone, validateExam,
   type ExamForm, type ExamRow,
 } from '../../services/examsAdmin';
 import { inventoryErrorMessage } from '../../services/inventory';
@@ -25,6 +25,8 @@ import StatusPill from '../ui/StatusPill';
 import { useToast } from '../ui/Toast';
 import { confirm } from '../ui/confirm';
 import FormSheet from '../inventory/FormSheet';
+import ExamSubjectsEditor from './ExamSubjectsEditor';
+import BulkDeleteSheet from './BulkDeleteSheet';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
 
 
@@ -75,6 +77,11 @@ export default function ExamsAdminScreen({ readOnly = false }: { readOnly?: bool
   const [form, setForm] = useState<ExamForm>(emptyExamForm());
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // Select mode: tick exams, then delete them together (admin and principal; the web has the same).
+  const [selecting, setSelecting] = useState(false);
+  const [picked, setPicked] = useState<number[]>([]);
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const [bulkError, setBulkError] = useState<string | null>(null);
   const set = <K extends keyof ExamForm>(k: K, v: ExamForm[K]) => setForm((f) => ({ ...f, [k]: v }));
 
   const save = async () => {
@@ -145,6 +152,15 @@ export default function ExamsAdminScreen({ readOnly = false }: { readOnly?: bool
     }
   };
 
+  const bulkDelete = async () => {
+    setBulkError(null);
+    try {
+      const res = await actions.bulkRemove.mutateAsync(picked);
+      toast.success(bulkDeleteDone('exam', res.data as { deleted_count?: number }, picked.length));
+      setBulkOpen(false); setSelecting(false); setPicked([]);
+    } catch (err) { setBulkError(inventoryErrorMessage(err, 'Could not delete the exams.')); }
+  };
+
   const header = (
     <View>
       <SegmentedTabs tabs={EXAM_FILTERS} value={status} onChange={setStatus} scrollable />
@@ -153,6 +169,13 @@ export default function ExamsAdminScreen({ readOnly = false }: { readOnly?: bool
         <Button title="+ New exams for several classes" size="sm" onPress={() => router.push('/(admin)/exam-wizard' as Href)} />
         <View style={{ height: Spacing.sm }} />
         <Button title="+ One exam for one class" size="sm" variant="outline" onPress={() => { setForm(emptyExamForm()); setError(null); setEditing('new'); }} />
+        <View style={{ height: Spacing.sm }} />
+        {selecting ? (
+          <View style={styles.selectBar}>
+            <Button title="Cancel" size="sm" variant="outline" onPress={() => { setSelecting(false); setPicked([]); }} />
+            <Button title={`Delete selected (${picked.length})`} size="sm" variant="danger" disabled={picked.length === 0} onPress={() => { setBulkError(null); setBulkOpen(true); }} />
+          </View>
+        ) : <Button title="Select exams to delete" size="sm" variant="ghost" onPress={() => setSelecting(true)} />}
       </>}
     </View>
   );
@@ -176,7 +199,8 @@ export default function ExamsAdminScreen({ readOnly = false }: { readOnly?: bool
         ListEmptyComponent={status === 'REMOVED' ? <EmptyState title="No removed exams" message="Exams you delete appear here, and can be brought back." /> : <EmptyState title="No exams" message="Create the first exam for this academic year." />}
         ListFooterComponent={query.isFetchingNextPage ? <ActivityIndicator color={Colors.primary} style={{ margin: Spacing.lg }} /> : null}
         renderItem={({ item: e }) => (
-          <TouchableOpacity accessibilityRole="button" style={styles.row} onPress={() => { if (readOnly) setOpen(open === e.id ? null : e.id); else { setForm(examToForm(e)); setError(null); setEditing(e); } }}>
+          <TouchableOpacity accessibilityRole="button" style={styles.row} onPress={() => { if (readOnly) setOpen(open === e.id ? null : e.id); else if (selecting) setPicked((p) => toggleId(p, e.id)); else { setForm(examToForm(e)); setError(null); setEditing(e); } }}>
+            {selecting ? <Text style={styles.tick} accessibilityLabel={picked.includes(e.id) ? 'Selected' : 'Not selected'}>{picked.includes(e.id) ? '☑' : '☐'}</Text> : null}
             <View style={styles.who}>
               <Text style={styles.name} numberOfLines={1}>{e.name}</Text>
               <Text style={styles.sub} numberOfLines={1}>{[e.class_name, e.exam_type_name, e.start_date ? `${e.start_date}${e.end_date ? ` to ${e.end_date}` : ''}` : ''].filter(Boolean).join('  ·  ')}</Text>
@@ -205,11 +229,13 @@ export default function ExamsAdminScreen({ readOnly = false }: { readOnly?: bool
         <Input label="Failed subjects that fail the exam" value={form.failThreshold} onChangeText={(v) => set('failThreshold', v)} keyboardType="number-pad" />
         {existing && !isRemoved(existing) ? <Button title="Enter marks" variant="outline" size="sm" onPress={() => openShortcut(existing, '/(admin)/marks-entry')} /> : null}
         {existing && !isRemoved(existing) ? <Button title="View results" variant="outline" size="sm" onPress={() => openShortcut(existing, '/(admin)/results')} /> : null}
+        {existing && !isRemoved(existing) ? <ExamSubjectsEditor examId={existing.id} classObj={existing.class_obj} sessionClass={existing.session_class} /> : null}
         {existing && !isRemoved(existing) ? <Button title="Sync subjects from the class" variant="outline" size="sm" onPress={() => sync(existing)} loading={busy} disabled={busy} /> : null}
         {existing && !isRemoved(existing) ? <Button title="Delete exam" variant="danger" size="sm" onPress={() => remove(existing)} /> : null}
         {existing && isRemoved(existing) ? <Button title="Reactivate exam" size="sm" onPress={() => reactivate(existing)} loading={actions.update.isPending} /> : null}
         <Text style={styles.sub}>Exam types and the grade scale are on the web.</Text>
       </FormSheet>}
+      {readOnly ? null : <BulkDeleteSheet visible={bulkOpen} kind="exam" count={picked.length} busy={actions.bulkRemove.isPending} error={bulkError} onClose={() => setBulkOpen(false)} onConfirm={bulkDelete} />}
     </View>
   );
 }
@@ -219,6 +245,8 @@ const styles = StyleSheet.create({
   content: { padding: Spacing.lg, paddingBottom: Spacing.xxxl },
   row: { flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.surface, borderRadius: BorderRadius.md, padding: Spacing.md, marginTop: Spacing.sm, gap: Spacing.md },
   who: { flex: 1 },
+  selectBar: { flexDirection: 'row', gap: Spacing.sm, justifyContent: 'space-between' },
+  tick: { fontSize: 22, color: Colors.primary },
   lines: { marginTop: Spacing.sm, gap: 6 },
   line: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: Colors.border, paddingTop: 6 },
   lineName: { fontSize: FontSize.sm, fontWeight: '600', color: Colors.text },

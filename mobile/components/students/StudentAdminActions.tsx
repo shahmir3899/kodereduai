@@ -21,17 +21,20 @@ import DateField from '../ui/DateField';
 import { useToast } from '../ui/Toast';
 import FormSheet from '../inventory/FormSheet';
 import { StudentMoveSheet, StudentRemoveSheet } from './StudentMoveSheets';
+import { StudentExitSheet, StudentReadmitSheet } from './StudentExitSheets';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
 
 interface Props {
-  student: { id: number; name: string; roll?: string | number | null; className?: string | null; status?: string | null; has_user_account?: boolean; sectionId?: number | null };
+  student: { id: number; name: string; roll?: string | number | null; className?: string | null; status?: string | null; has_user_account?: boolean; sectionId?: number | null; awaySince?: string | null };
 }
 
-type Open = 'status' | 'invite' | 'report' | 'move' | 'remove' | 'account' | null;
+type Open = 'status' | 'invite' | 'report' | 'move' | 'remove' | 'account' | 'exit' | 'readmit' | null;
+
+const HAS_LEFT = ['WITHDRAWN', 'TRANSFERRED'];
 
 // Admin and principal actions on one student: mark Graduated or Repeat, make a parent invite code,
-// and make the student report PDF. Leaving, transfer and re-admission go through a checklist that
-// stays on the web.
+// make the student report PDF, and start a leaving/transfer (with its clearance checklist) or a
+// re-admission.
 export default function StudentAdminActions({ student }: Props) {
   const toast = useToast();
   const qc = useQueryClient();
@@ -141,6 +144,9 @@ export default function StudentAdminActions({ student }: Props) {
     <View>
       <View style={styles.row}>
         <Button title="Change status" size="sm" variant="outline" onPress={() => openSheet('status')} />
+        {HAS_LEFT.includes(student.status ?? '')
+          ? <Button title="Re-admit" size="sm" variant="outline" onPress={() => openSheet('readmit')} />
+          : student.status !== 'GRADUATED' ? <Button title="Leaving / Transfer" size="sm" variant="outline" onPress={() => openSheet('exit')} /> : null}
         <Button title="Student report" size="sm" variant="outline" onPress={() => openSheet('report')} />
         {!student.has_user_account ? <Button title="Parent invite" size="sm" variant="outline" onPress={() => openSheet('invite')} /> : null}
         {!student.has_user_account ? <Button title="Create login" size="sm" variant="outline" onPress={() => openSheet('account')} /> : null}
@@ -150,6 +156,8 @@ export default function StudentAdminActions({ student }: Props) {
 
       <StudentMoveSheet visible={open === 'move'} onClose={close} student={student} currentSectionId={student.sectionId ?? null} />
       <StudentRemoveSheet visible={open === 'remove'} onClose={close} student={student} />
+      <StudentExitSheet visible={open === 'exit'} onClose={close} student={student} />
+      <StudentReadmitSheet visible={open === 'readmit'} onClose={close} student={student} awaySince={student.awaySince} />
 
       <FormSheet visible={open === 'status'} title="Change status" onClose={close} onSubmit={saveStatus} submitLabel="Save status"
         busy={setOutcomeMutation.isPending} error={error}>
@@ -164,7 +172,7 @@ export default function StudentAdminActions({ student }: Props) {
         ))}
         {preview.data && offered.length === 0 ? <Text style={styles.hint}>No status change can be made here for this student.</Text> : null}
         <Input label="Reason" value={reason} onChangeText={setReason} placeholder="Why is the status changing?" multiline style={styles.area} />
-        {webOnly.length > 0 ? <Text style={styles.hint}>{webOnly.join(', ')}: use the web app, where the checklist (fees, library books, gate passes) is shown.</Text> : null}
+        {webOnly.length > 0 ? <Text style={styles.hint}>{webOnly.join(', ')}: close this and use the Leaving / Transfer or Re-admit button, which shows the checklist (fees, library books, gate passes).</Text> : null}
       </FormSheet>
 
       <FormSheet visible={open === 'invite'} title="Parent invite" onClose={close} onSubmit={code ? shareInvite : makeInvite}

@@ -232,6 +232,13 @@ describe('admin', () => {
     const nav = navFor('SCHOOL_ADMIN');
     expect(nav).toEqual(expect.arrayContaining(['/face-attendance', '/finance/fees/setup', '/hr/payroll', '/admissions']));
   });
+  it('opens messages in the app and has no AI Analytics entry', () => {
+    for (const role of ['SCHOOL_ADMIN', 'PRINCIPAL']) {
+      expect(navFor(role)).toContain('/messages');
+      expect(navFor(role)).not.toContain('/academics/analytics');
+    }
+    expect(routeFor('admin', '/messages')).toBe('/(admin)/messages');
+  });
   it('sees recently deleted students only as school admin or principal', () => {
     expect(navFor('SCHOOL_ADMIN')).toContain('/students/deleted');
     expect(navFor('PRINCIPAL')).toContain('/students/deleted');

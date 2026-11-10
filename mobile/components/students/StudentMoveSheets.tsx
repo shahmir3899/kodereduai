@@ -26,7 +26,7 @@ interface Base { visible: boolean; onClose: () => void; student: { id: number; n
 
 // Hide a student from the school (soft delete). Nothing is erased: their records stay and an admin
 // can bring them back from Recently deleted. For a record entered by mistake only; a student who
-// left goes through Left or Transferred on the web.
+// left goes through Leaving / Transfer.
 export function StudentRemoveSheet({ visible, onClose, student }: Base) {
   const toast = useToast();
   const qc = useQueryClient();
@@ -57,7 +57,7 @@ export function StudentRemoveSheet({ visible, onClose, student }: Base) {
     <FormSheet visible={visible} title="Remove student" onClose={onClose} onSubmit={submit} submitLabel="Remove student" busy={remove.isPending} error={error}>
       <Text style={styles.text}>{student.name} will be hidden from the school. Their attendance, fees, marks and enrollments are kept, and an admin can bring them back from Recently deleted.</Text>
       <Text style={styles.text}>{counts.isLoading ? 'Checking their records...' : keptRecordsLine(counts.data)}</Text>
-      <Text style={styles.warn}>Use this only for a record entered by mistake. If the student has left the school, use Left or Transferred on the web instead.</Text>
+      <Text style={styles.warn}>Use this only for a record entered by mistake. If the student has left the school, use Leaving / Transfer instead.</Text>
       <Input label={`Type "${student.name}" to confirm`} value={typed} onChangeText={setTyped} autoCapitalize="none" autoCorrect={false} />
       <Input label="Reason" value={reason} onChangeText={setReason} placeholder="For example: duplicate entry" multiline style={styles.area} />
     </FormSheet>

@@ -2,7 +2,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { academicsApi, examinationsApi, sessionsApi } from '../services/api';
 import type { ClassSubjectDto } from '../services/examWizard';
 import { listOf } from '../services/academicYear';
-import { examListParams, type ExamRow } from '../services/examsAdmin';
+import { examListParams, type ExamRow, type ExamSubjectRow } from '../services/examsAdmin';
 import { useAcademicYear } from './useAcademicYear';
 import { useScopedPagedQuery, useScopedQuery } from './useScopedQuery';
 
@@ -39,6 +39,29 @@ export function useExamActions() {
     update: useMutation({ mutationFn: ({ id, data }: { id: number; data: object }) => examinationsApi.updateExam(id, data), onSuccess: refresh }),
     remove: useMutation({ mutationFn: (id: number) => examinationsApi.deleteExam(id), onSuccess: refresh }),
     populate: useMutation({ mutationFn: (id: number) => examinationsApi.populateExamSubjects(id), onSuccess: refresh }),
+    bulkRemove: useMutation({
+      mutationFn: (ids: number[]) => examinationsApi.bulkDeleteExams(ids),
+      onSuccess: () => { refresh(); qc.invalidateQueries({ predicate: (q) => q.queryKey[0] === 'examGroups' }); },
+    }),
+  };
+}
+
+// One exam's subjects. Editing marks or dates, adding or removing a subject changes what marks entry,
+// results and the date sheet show, so those lists are refreshed too.
+export function useExamSubjects(examId: number | null, enabled = true) {
+  return useScopedQuery('examSubjects', ['lines', examId], async () =>
+    listOf<ExamSubjectRow>((await examinationsApi.getExamSubjects({ exam: examId, page_size: 9999 })).data),
+  { enabled: enabled && examId != null, staleTime: 0 });
+}
+
+export function useExamSubjectActions() {
+  const qc = useQueryClient();
+  const refresh = () => ['examSubjects', 'examsAdmin', 'exams', 'examGroups', 'dateSheet', 'results']
+    .forEach((root) => qc.invalidateQueries({ predicate: (q) => q.queryKey[0] === root }));
+  return {
+    add: useMutation({ mutationFn: (d: object) => examinationsApi.createExamSubject(d), onSuccess: refresh }),
+    save: useMutation({ mutationFn: ({ id, data }: { id: number; data: object }) => examinationsApi.updateExamSubject(id, data), onSuccess: refresh }),
+    remove: useMutation({ mutationFn: (id: number) => examinationsApi.deleteExamSubject(id), onSuccess: refresh }),
   };
 }
 

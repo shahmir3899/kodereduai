@@ -59,6 +59,7 @@ const ADMIN_ROUTES: Record<string, string> = {
   '/hr/appraisals': '/(admin)/hr/appraisals',
   '/hr/letters': '/(admin)/hr/letters',
   '/notifications': '/(admin)/inbox',
+  '/messages': '/(admin)/messages',
   '/attendance/manual-entry': '/(admin)/attendance/manual',
   '/attendance/register': '/(admin)/attendance/register',
   '/transport': '/(admin)/transport',

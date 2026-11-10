@@ -91,6 +91,7 @@ class FaceAttendanceSessionDetailSerializer(serializers.ModelSerializer):
     class_obj = ClassMinimalSerializer(read_only=True)
     detections = FaceDetectionResultSerializer(many=True, read_only=True)
     class_students = serializers.SerializerMethodField()
+    present_student_ids = serializers.SerializerMethodField()
     created_by_name = serializers.CharField(source='created_by.get_full_name', read_only=True)
 
     class Meta:
@@ -99,11 +100,24 @@ class FaceAttendanceSessionDetailSerializer(serializers.ModelSerializer):
             'id', 'class_obj', 'date', 'status', 'image_url',
             'total_faces_detected', 'faces_matched', 'faces_flagged',
             'faces_ignored', 'thresholds_used', 'error_message',
-            'detections', 'class_students',
+            'detections', 'class_students', 'present_student_ids',
             'created_by_name', 'confirmed_by', 'confirmed_at',
             'created_at', 'updated_at',
         ]
         read_only_fields = fields
+
+    def get_present_student_ids(self, obj):
+        """
+        Students actually recorded present by this session (only populated once
+        it is confirmed) — what the review overlay shows as "marked".
+        """
+        from attendance.models import AttendanceRecord
+
+        return list(
+            AttendanceRecord.objects.filter(
+                face_session=obj, status=AttendanceRecord.AttendanceStatus.PRESENT,
+            ).values_list('student_id', flat=True)
+        )
 
     def get_class_students(self, obj):
         matched_ids = set(
@@ -235,6 +249,10 @@ class FaceEnrollWithEmbeddingSerializer(serializers.Serializer):
         required=False, default=False,
         help_text='Skip the duplicate-enrollment check — admin has confirmed this is a different person.',
     )
+    override_consistency = serializers.BooleanField(
+        required=False, default=False,
+        help_text="Skip the same-student consistency check — the student's appearance has genuinely changed.",
+    )
 
 
 class LiveMatchRequestSerializer(serializers.Serializer):
@@ -300,6 +318,42 @@ class FaceCaptureDeviceSerializer(serializers.ModelSerializer):
         return attrs
 
 
+class FaceCaptureDeviceCreateSerializer(serializers.Serializer):
+    """
+    Register a new capture device from the app. The raw API key is generated
+    by the view and shown exactly once in the response — only its hash is stored.
+
+    embedding_version says where the device runs: 'faceapi_v1' for a browser or
+    tablet (face-api.js), 'dlib_v1' for the on-prem mini PC (dlib). A device
+    only ever emits one embedding space, so it is fixed at creation.
+    """
+
+    name = serializers.CharField(max_length=100)
+    scope_type = serializers.ChoiceField(choices=FaceCaptureDevice.ScopeType.choices)
+    class_obj = serializers.PrimaryKeyRelatedField(
+        queryset=Class.objects.all(), required=False, allow_null=True,
+    )
+    embedding_version = serializers.ChoiceField(choices=['faceapi_v1', 'dlib_v1'], default='faceapi_v1')
+
+    def validate_name(self, value):
+        value = value.strip()
+        if not value:
+            raise serializers.ValidationError('Give the device a name, e.g. "Front Gate Camera".')
+        return value
+
+    def validate(self, attrs):
+        scope_type = attrs['scope_type']
+        class_obj = attrs.get('class_obj')
+        if scope_type == FaceCaptureDevice.ScopeType.CLASS and not class_obj:
+            raise serializers.ValidationError('A CLASS-scoped device must have a class selected.')
+        if scope_type == FaceCaptureDevice.ScopeType.SCHOOL:
+            attrs['class_obj'] = None  # a whole-school device never carries a class
+        school_id = self.context.get('school_id')
+        if class_obj and school_id and class_obj.school_id != school_id:
+            raise serializers.ValidationError('Selected class does not belong to this school.')
+        return attrs
+
+
 class FaceMatchFeedbackSerializer(serializers.Serializer):
     """
     Operator feedback on a single Live Mobile live-match result (design doc
@@ -310,6 +364,12 @@ class FaceMatchFeedbackSerializer(serializers.Serializer):
     """
 
     is_correct = serializers.BooleanField()
+
+
+class FaceMatchConfirmSerializer(serializers.Serializer):
+    """Operator's "Yes" on an uncertain live match: which student to mark present."""
+
+    student_id = serializers.IntegerField()
 
 
 class FaceLiveDetectionEventSerializer(serializers.ModelSerializer):

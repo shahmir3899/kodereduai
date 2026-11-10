@@ -37,6 +37,11 @@ export function useDateSheetActions(groupId: number) {
   };
 }
 
+export function useGroupBulkRemove() {
+  const qc = useQueryClient();
+  return useMutation({ mutationFn: (ids: number[]) => examinationsApi.bulkDeleteExamGroups(ids), onSuccess: () => refreshAll(qc) });
+}
+
 export function useGroupPublishing() {
   const qc = useQueryClient();
   const done = () => refreshAll(qc);

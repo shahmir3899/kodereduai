@@ -129,10 +129,8 @@ export function buildStaffNavigation(ctx: NavContext): NavGroup[] {
     }
 
     if (!isStaffLevel) {
-      add('Insights', [
-        item('AI Analytics', '/academics/analytics'),
-        ...(exams ? [item('Academic Risk', '/academics/academic-risk')] : []),
-      ]);
+      // The web's AI Analytics page is left out on purpose (owner decision 2026-11-10: web only).
+      add('Insights', exams ? [item('Academic Risk', '/academics/academic-risk')] : []);
     }
   }
 

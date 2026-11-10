@@ -17,7 +17,7 @@ const WEB_ONLY: Record<string, string> = { LEFT: 'Left school', TRANSFERRED: 'Tr
 export const offeredOutcomes = (allowed: string[] | undefined) =>
   SIMPLE_OUTCOMES.filter((o) => (allowed ?? []).includes(o.value));
 
-// The others go through a checklist (fees, library books, gate passes), which stays on the web.
+// The others go through a checklist (fees, library books, gate passes): the Leaving / Transfer and Re-admit sheets.
 export const webOnlyOutcomes = (allowed: string[] | undefined) =>
   Object.entries(WEB_ONLY).filter(([k]) => (allowed ?? []).includes(k)).map(([, label]) => label);
 

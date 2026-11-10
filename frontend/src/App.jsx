@@ -171,6 +171,7 @@ const FaceBulkEnrollmentPage = lazy(() => import('./pages/face-attendance/FaceBu
 // /face-attendance/live-capture below redirects there for old deep links.
 // Fixed Camera capture (fixed on-prem camera) — device management + live-match troubleshooting
 const FaceDevicesPage = lazy(() => import('./pages/face-attendance/FaceDevicesPage'))
+const FaceAutoCameraPage = lazy(() => import('./pages/face-attendance/FaceAutoCameraPage'))
 const FaceLiveEventsPage = lazy(() => import('./pages/face-attendance/FaceLiveEventsPage'))
 
 // Error Boundary to catch runtime crashes
@@ -565,6 +566,7 @@ function App() {
                 management pages (matches IsSchoolAdmin backend gate) — no enable/disable
                 gate; they show their own empty state when no device is registered. */}
             <Route path="face-attendance/devices" element={<SchoolRoute><AdminPrincipalRoute><FaceDevicesPage /></AdminPrincipalRoute></SchoolRoute>} />
+            <Route path="face-attendance/auto-camera/:deviceId" element={<SchoolRoute><AdminPrincipalRoute><FaceAutoCameraPage /></AdminPrincipalRoute></SchoolRoute>} />
             <Route path="face-attendance/live-events" element={<SchoolRoute><AdminPrincipalRoute><FaceLiveEventsPage /></AdminPrincipalRoute></SchoolRoute>} />
 
             {/* Redirects from old routes */}

@@ -15,6 +15,7 @@ vi.mock('../../contexts/AuthContext', () => ({
     user: { id: 1, role: mockRole, username: 'admin' },
     activeSchool: { id: 1, name: 'Test School', role: mockRole, is_default: true },
     isModuleEnabled: () => true,
+    isSchoolAdmin: ['SCHOOL_ADMIN', 'PRINCIPAL'].includes(mockRole),
   }),
 }))
 
@@ -494,8 +495,8 @@ describe('StudentProfilePage', () => {
       ])
       await openTab('Documents')
 
-      const oldRow = (await screen.findByText('Birth certificate')).closest('div.flex')
-      const newRow = screen.getByText('Admission form').closest('div.flex')
+      const oldRow = (await screen.findByText('Birth certificate')).closest('.rounded-xl')
+      const newRow = screen.getByText('Admission form').closest('.rounded-xl')
       expect(within(oldRow).queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument()
       expect(within(newRow).getByRole('button', { name: 'Delete' })).toBeInTheDocument()
     })

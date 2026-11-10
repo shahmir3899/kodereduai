@@ -1,14 +1,16 @@
 import React, { useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
 import { useRouter, type Href } from 'expo-router';
-import { useExamGroups, useGroupPublishing } from '../../hooks/useExamGroups';
+import { useExamGroups, useGroupBulkRemove, useGroupPublishing } from '../../hooks/useExamGroups';
 import { useRefreshControl } from '../../hooks/useRefreshControl';
 import {
   canAnnounce, groupProgress, progressText, progressTone, resultsReplyText, scheduleReplyText, type ExamGroupRow, type GroupExam,
 } from '../../services/examGroups';
 import { inventoryErrorMessage } from '../../services/inventory';
 import { examinationsApi } from '../../services/api';
-import { dateSheetFileName } from '../../services/pdfDownloads';
+import { dateSheetFileName, dateSheetXlsxFileName } from '../../services/pdfDownloads';
+import { shareReportFile } from '../../services/reportShare';
+import { bulkDeleteDone, toggleId } from '../../services/examsAdmin';
 import { usePdfShare } from '../../hooks/usePdfShare';
 import Button from '../ui/Button';
 import Card from '../ui/Card';
@@ -16,18 +18,52 @@ import QueryBoundary from '../ui/QueryBoundary';
 import StatusPill from '../ui/StatusPill';
 import { useToast } from '../ui/Toast';
 import { confirm } from '../ui/confirm';
+import BulkDeleteSheet from './BulkDeleteSheet';
 import { Colors, FontSize, Spacing } from '../../constants/colors';
 
 // Exam groups of the active year: edit the date sheet and publish the schedule or the results, for the
 // whole group or one class. Port of the Exams page on the web. Admin and principal only.
 export default function ExamGroupsScreen() {
   const q = useExamGroups();
+  const toast = useToast();
+  const remove = useGroupBulkRemove();
   const refreshControl = useRefreshControl(q.refetch);
+  const [selecting, setSelecting] = useState(false);
+  const [picked, setPicked] = useState<number[]>([]);
+  const [sheet, setSheet] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const bulkDelete = async () => {
+    setError(null);
+    try {
+      const res = await remove.mutateAsync(picked);
+      toast.success(bulkDeleteDone('group', res.data as { deleted_count?: number }, picked.length));
+      setSheet(false); setSelecting(false); setPicked([]);
+    } catch (e) { setError(inventoryErrorMessage(e, 'Could not delete the exam groups.')); }
+  };
+
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content} refreshControl={refreshControl}>
+      {(q.data?.length ?? 0) > 0 ? (selecting ? (
+        <View style={styles.pair}>
+          <Button title="Cancel" size="sm" variant="outline" style={styles.half} onPress={() => { setSelecting(false); setPicked([]); }} />
+          <Button title={`Delete selected (${picked.length})`} size="sm" variant="danger" style={styles.half} disabled={picked.length === 0} onPress={() => { setError(null); setSheet(true); }} />
+        </View>
+      ) : <Button title="Select groups to delete" size="sm" variant="ghost" onPress={() => setSelecting(true)} />) : null}
       <QueryBoundary query={q} emptyTitle="No exam groups" emptyMessage="Create exams for several classes first; they are grouped together.">
-        {(groups) => groups.map((g) => <GroupCard key={g.id} group={g} />)}
+        {(groups) => groups.map((g) => (
+          <View key={g.id}>
+            {selecting ? (
+              <TouchableOpacity accessibilityRole="checkbox" accessibilityState={{ checked: picked.includes(g.id) }} onPress={() => setPicked((p) => toggleId(p, g.id))} style={styles.pickRow}>
+                <Text style={styles.tick}>{picked.includes(g.id) ? '☑' : '☐'}</Text>
+                <Text style={styles.pickText}>Select {g.name}</Text>
+              </TouchableOpacity>
+            ) : null}
+            <GroupCard group={g} />
+          </View>
+        ))}
       </QueryBoundary>
+      <BulkDeleteSheet visible={sheet} kind="group" count={picked.length} busy={remove.isPending} error={error} onClose={() => setSheet(false)} onConfirm={bulkDelete} />
     </ScrollView>
   );
 }
@@ -38,6 +74,7 @@ function GroupCard({ group }: { group: ExamGroupRow }) {
   const pub = useGroupPublishing();
   const pdf = usePdfShare();
   const [open, setOpen] = useState(false);
+  const [xlsx, setXlsx] = useState(false);
   const exams = group.exams ?? [];
   const p = groupProgress(exams);
 
@@ -94,6 +131,13 @@ function GroupCard({ group }: { group: ExamGroupRow }) {
       <Button title="Edit date sheet" size="sm" variant="outline" onPress={() => router.push({ pathname: '/(admin)/date-sheet', params: { groupId: String(group.id) } } as unknown as Href)} />
       <Button title="Date sheet PDF" size="sm" variant="outline" loading={pdf.busy} disabled={pdf.busy} style={{ marginTop: Spacing.sm }}
         onPress={() => pdf.share(() => examinationsApi.downloadDateSheetPdf(group.id) as Promise<{ data: ArrayBuffer }>, dateSheetFileName(group.name))} />
+      <Button title="Date sheet Excel" size="sm" variant="outline" loading={xlsx} disabled={xlsx}
+        onPress={async () => {
+          setXlsx(true);
+          try { await shareReportFile(() => examinationsApi.downloadDateSheetXlsx(group.id) as Promise<{ data: ArrayBuffer }>, dateSheetXlsxFileName(group.name), 'xlsx'); }
+          catch (e) { fail(e, 'Could not make the Excel file.'); }
+          finally { setXlsx(false); }
+        }} />
       <View style={styles.pair}>
         <Button title="Publish schedule" size="sm" style={styles.half} onPress={() => schedule(true)} disabled={busy} />
         <Button title="Hide schedule" size="sm" variant="secondary" style={styles.half} onPress={() => schedule(false)} disabled={busy || p.schedule.done === 0} />
@@ -128,6 +172,9 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
   content: { padding: Spacing.lg, paddingBottom: Spacing.xxxl, gap: Spacing.md },
   card: { gap: Spacing.sm },
+  pickRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, minHeight: 44 },
+  tick: { fontSize: 22, color: Colors.primary },
+  pickText: { fontSize: FontSize.sm, color: Colors.text },
   name: { fontSize: FontSize.lg, fontWeight: '700', color: Colors.text },
   sub: { fontSize: FontSize.sm, color: Colors.textSecondary },
   pills: { gap: Spacing.xs, alignItems: 'flex-start' },

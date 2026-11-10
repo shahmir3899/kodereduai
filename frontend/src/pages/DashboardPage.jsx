@@ -15,6 +15,7 @@ import {
 import { Link } from 'react-router-dom'
 
 import SessionHealthWidget from '../components/SessionHealthWidget'
+import AcademicCalendarWidget from '../components/dashboard/AcademicCalendarWidget'
 import AIInsightsWidget from '../components/AIInsightsWidget'
 import StatCard from '../components/dashboard/StatCard'
 import AttendanceBreakdown from '../components/dashboard/AttendanceBreakdown'
@@ -409,6 +410,8 @@ export default function DashboardPage({ variant }) {
           loading={isModuleEnabled('hr') && loadingHR}
         />
       </div>
+
+      {isPrincipal && <div className="mb-6"><AcademicCalendarWidget /></div>}
 
       {(leadershipRosterGate || leadershipCurriculumGate) && (
         <LeadershipInsightsPanels

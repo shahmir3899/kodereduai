@@ -713,6 +713,24 @@ class TestPayslipsAPI:
         data = resp.json()
         assert data.get('created', 0) >= 1, "E4 Bulk generate payslips created"
 
+    def test_e4b_bulk_approve_and_mark_paid(self, seed_data, api):
+        from hr.models import Payslip
+        self._setup_staff_with_salary(seed_data, api)
+        token = seed_data['tokens']['admin']
+        sid = seed_data['SID_A']
+        api.post('/api/hr/payslips/generate_payslips/', {'month': 3, 'year': 2026}, token, sid)
+        ids = list(Payslip.objects.filter(school_id=sid, month=3, year=2026).values_list('id', flat=True))
+        assert ids
+        resp = api.post('/api/hr/payslips/bulk_approve/', {'ids': ids}, token, sid)
+        assert resp.status_code == 200 and resp.json()['approved'] == len(ids)
+        # Re-approving skips already-approved rows
+        resp = api.post('/api/hr/payslips/bulk_approve/', {'ids': ids}, token, sid)
+        assert resp.json()['approved'] == 0 and resp.json()['skipped'] == len(ids)
+        resp = api.post('/api/hr/payslips/bulk_mark_paid/',
+                        {'ids': ids, 'payment_date': '2026-03-31'}, token, sid)
+        assert resp.status_code == 200 and resp.json()['paid'] == len(ids)
+        assert Payslip.objects.filter(id__in=ids, status='PAID', payment_date='2026-03-31').count() == len(ids)
+
     def test_e5_bulk_generate_skips_existing(self, seed_data, api):
         self._setup_staff_with_salary(seed_data, api)
         token = seed_data['tokens']['admin']

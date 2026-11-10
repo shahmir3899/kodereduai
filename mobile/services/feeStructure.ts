@@ -21,6 +21,8 @@ export interface FeeStructure {
 export interface FeeCategory { id: number; name: string; description?: string; is_active?: boolean }
 
 export interface ChargeRow {
+  // The saved structure this row shows (to stop it); absent on a row the person added.
+  id?: number;
   category: number | null;
   amount: string;
   // The amount currently saved for this category on the server, '' for a row the person added.
@@ -38,7 +40,7 @@ export function savedRows(structures: FeeStructure[], classId: number, kind: Fee
     if (s.class_obj !== classId || s.student || s.fee_type !== kind || s.is_active === false || !cat || seen.has(cat)) continue;
     seen.add(cat);
     const amount = String(Number(s.monthly_amount));
-    rows.push({ category: cat, amount, saved: amount });
+    rows.push({ id: s.id, category: cat, amount, saved: amount });
   }
   return rows;
 }
@@ -94,3 +96,9 @@ export function changeSummary(className: string, rows: ChargeRow[], effectiveFro
   const lines = changedRows(rows).map((r) => `${names[r.category as number] ?? 'Charge'}: ${r.saved ? `${Number(r.saved).toLocaleString()} → ` : 'new, '}${Number(r.amount).toLocaleString()}`);
   return `${className}, from ${effectiveFrom}\n${lines.join('\n')}`;
 }
+
+// Stopping a saved charge: only a row that exists on the server can be stopped; a row just added is discarded.
+export const canStopCharge = (r: ChargeRow): boolean => r.id != null && r.saved !== '';
+
+export const stopChargeText = (className: string, categoryName: string, amount: string) =>
+  `${className} will no longer be charged ${categoryName} (PKR ${Number(amount).toLocaleString()}). Fee records already made are not changed; the charge is left out of the next generation.`;

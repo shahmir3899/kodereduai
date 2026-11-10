@@ -15,11 +15,17 @@ import { useSessionClasses } from '../../hooks/useSessionClasses'
 import useTeacherScopedClasses from '../../hooks/useTeacherScopedClasses'
 import { getClassSelectorScope, getResolvedMasterClassId, resolveSessionClassId } from '../../utils/classScope'
 import {
-  loadFaceApiModels, detectSingleFace, detectAllFacesQuick, detectAllFacesWithDescriptors,
+  loadFaceApiModels, detectSingleFace, detectSingleFaceLandmarks, detectAllFacesQuick, detectAllFacesWithDescriptors,
   estimateQualityScore, getFramingHint, MIN_ENROLL_QUALITY_SCORE, LIVE_MOBILE_EMBEDDING_VERSION,
 } from '../../utils/faceApiLoader'
+import PoseIcon from './PoseIcon'
 import useCameraStream, { cameraButtonLabel } from '../../hooks/useCameraStream'
 import CameraPermissionNotice from '../../components/CameraPermissionNotice'
+import {
+  DEFAULT_SAMPLES_REQUIRED, SAMPLE_POSES, CAPTURE_TIPS, POSE_CHANGE_PAUSE_MS,
+  enrollSamplesSequentially, enrollErrorMessage,
+  headTurnRatio, classifyHeadTurn, poseVerdict,
+} from '../../utils/enrollSamples'
 
 // How often the continuous lock-on/multi-face check runs while the preview
 // is live — faster than FaceLiveCapturePage's match-posting loop since this
@@ -57,6 +63,11 @@ export default function FaceEnrollmentPage() {
   // async (photo) path surfaces this via a plain error toast rather than a
   // structured dialog.
   const [overrideDuplicate, setOverrideDuplicate] = useState(false)
+  // Multi-sample live capture: poses per student, and the escape hatch for the
+  // server's same-student consistency check (see inconsistent_face).
+  const [samplesRequired, setSamplesRequired] = useState(DEFAULT_SAMPLES_REQUIRED)
+  const [overrideConsistency, setOverrideConsistency] = useState(false)
+  const [savingSamples, setSavingSamples] = useState(false)
   const { sessionClasses } = useSessionClasses(activeAcademicYear?.id, activeSchool?.id)
   const classSelectorScope = getClassSelectorScope(activeAcademicYear?.id)
   const resolvedSelectedClass = getResolvedMasterClassId(selectedClass, activeAcademicYear?.id, sessionClasses)
@@ -95,6 +106,30 @@ export default function FaceEnrollmentPage() {
     enabled: !!activeSchool,
   })
   const enrollments = enrollmentsData?.data?.results || enrollmentsData?.data || []
+
+  // Per-student enrollment strength (how many poses, whether a refresh is due)
+  const { data: coverageData } = useQuery({
+    queryKey: ['faceEnrollmentCoverage', activeSchool?.id, resolvedSelectedClass],
+    queryFn: () => faceAttendanceApi.getEnrollmentCoverage(
+      resolvedSelectedClass ? { class_obj: resolvedSelectedClass } : {}
+    ),
+    enabled: !!activeSchool && !!selectedClass,
+  })
+  const coverage = coverageData?.data
+  const coverageByStudent = useMemo(() => {
+    const map = new Map()
+    ;(coverage?.students || []).forEach((c) => map.set(c.student_id, c))
+    return map
+  }, [coverage])
+
+  const coverageLabel = (studentId) => {
+    const c = coverageByStudent.get(studentId)
+    if (!c || c.status === 'not_enrolled') return ''
+    const poses = `${c.samples} pose${c.samples === 1 ? '' : 's'}`
+    if (c.status === 'needs_more') return ` [${poses} - add more]`
+    if (c.status === 'refresh_due') return ` [${poses} - refresh due]`
+    return ` [${poses}]`
+  }
 
   const parseRollForSort = (rollValue) => {
     const parsed = Number.parseInt(String(rollValue ?? '').trim(), 10)
@@ -174,22 +209,60 @@ export default function FaceEnrollmentPage() {
       embedding_version: LIVE_MOBILE_EMBEDDING_VERSION,
       quality_score: qualityScore,
       override_duplicate: overrideDuplicate,
+      override_consistency: overrideConsistency,
     }),
     onSuccess: () => {
       showSuccess('Face enrolled (faceapi_v1).')
       setSelectedStudent('')
       setOverrideDuplicate(false)
+      setOverrideConsistency(false)
       queryClient.invalidateQueries({ queryKey: ['faceEnrollments'] })
+      queryClient.invalidateQueries({ queryKey: ['faceEnrollmentCoverage'] })
     },
     onError: (err) => {
       const data = err.response?.data
-      if (data?.error === 'duplicate_face') {
-        showError(`${data.message} Tick "Override duplicate check" below and retry if these are different people.`)
+      if (data?.error === 'inconsistent_face') {
+        showError(`${data.message} Tick "Override consistency check" below only if this really is the same student.`)
       } else {
-        showError(data?.error || data?.detail || 'Enrollment failed')
+        showError(enrollErrorMessage(err))
       }
     },
   })
+
+  // Multi-pose submit: sends each confirmed pose as its own enroll request so
+  // the server's duplicate / same-student checks run per sample.
+  const handleSubmitSamples = async (samples) => {
+    const studentId = parseInt(selectedStudent, 10)
+    setSavingSamples(true)
+    const { saved, skipped, error } = await enrollSamplesSequentially(samples, (s) => (
+      faceAttendanceApi.enrollWithEmbedding({
+        student_id: studentId,
+        embedding: s.embedding,
+        embedding_version: LIVE_MOBILE_EMBEDDING_VERSION,
+        quality_score: s.qualityScore,
+        override_duplicate: overrideDuplicate,
+        override_consistency: overrideConsistency,
+      })
+    ))
+    setSavingSamples(false)
+    queryClient.invalidateQueries({ queryKey: ['faceEnrollments'] })
+    queryClient.invalidateQueries({ queryKey: ['faceEnrollmentCoverage'] })
+    if (error) {
+      const msg = enrollErrorMessage(error)
+      const hint = error.response?.data?.error === 'inconsistent_face'
+        ? ' Tick "Override consistency check" below only if this really is the same student.' : ''
+      showError(saved > 0 ? `Saved ${saved} of ${samples.length} poses. ${msg}${hint}` : `${msg}${hint}`)
+      return
+    }
+    showSuccess(
+      skipped > 0
+        ? `Face enrolled (${saved} poses saved, ${skipped} skipped as near-identical).`
+        : `Face enrolled (${saved} pose${saved === 1 ? '' : 's'} saved).`,
+    )
+    setSelectedStudent('')
+    setOverrideDuplicate(false)
+    setOverrideConsistency(false)
+  }
 
   // Delete enrollment mutation
   const deleteMutation = useMutation({
@@ -333,7 +406,9 @@ export default function FaceEnrollmentPage() {
                 {sortedStudents.map((s) => (
                   <option key={s.id} value={s.id}>
                     {`${s.roll_number || '-'} - ${s.name}`}
-                    {enrolledStudentIds.has(s.id) ? ' [enrolled]' : ''}
+                    {coverageByStudent.has(s.id)
+                      ? coverageLabel(s.id)
+                      : (enrolledStudentIds.has(s.id) ? ' [enrolled]' : '')}
                   </option>
                 ))}
               </select>
@@ -353,15 +428,44 @@ export default function FaceEnrollmentPage() {
             </label>
 
             {enrollMode === 'live' ? (
-              <LiveEnrollCapture
-                selectedStudent={selectedStudent}
-                studentPhotoUrl={sortedStudents.find((s) => String(s.id) === String(selectedStudent))?.photo_url}
-                studentName={sortedStudents.find((s) => String(s.id) === String(selectedStudent))?.name}
-                onSubmit={(embedding, qualityScore) => enrollEmbeddingMutation.mutate({
-                  studentId: parseInt(selectedStudent, 10), embedding, qualityScore,
-                })}
-                submitting={enrollEmbeddingMutation.isPending}
-              />
+              <>
+                <div className="flex items-center gap-2 text-xs text-gray-600">
+                  <label htmlFor="samples-required" className="font-medium">Poses per student</label>
+                  <select
+                    id="samples-required"
+                    value={samplesRequired}
+                    onChange={(e) => setSamplesRequired(parseInt(e.target.value, 10))}
+                    className="border border-gray-300 rounded px-2 py-1 text-xs"
+                  >
+                    <option value={1}>1 (quick, less accurate)</option>
+                    <option value={3}>3 (recommended)</option>
+                    <option value={5}>5 (best)</option>
+                  </select>
+                </div>
+                <label className="flex items-start gap-2 text-xs text-gray-600">
+                  <input
+                    type="checkbox"
+                    checked={overrideConsistency}
+                    onChange={(e) => setOverrideConsistency(e.target.checked)}
+                    className="mt-0.5"
+                  />
+                  <span>
+                    Override consistency check — only after a pose was blocked for not looking like
+                    this student&apos;s earlier poses, and you&apos;ve confirmed it is them.
+                  </span>
+                </label>
+                <LiveEnrollCapture
+                  selectedStudent={selectedStudent}
+                  studentPhotoUrl={sortedStudents.find((s) => String(s.id) === String(selectedStudent))?.photo_url}
+                  studentName={sortedStudents.find((s) => String(s.id) === String(selectedStudent))?.name}
+                  onSubmit={(embedding, qualityScore) => enrollEmbeddingMutation.mutate({
+                    studentId: parseInt(selectedStudent, 10), embedding, qualityScore,
+                  })}
+                  samplesRequired={samplesRequired}
+                  onSubmitSamples={handleSubmitSamples}
+                  submitting={enrollEmbeddingMutation.isPending || savingSamples}
+                />
+              </>
             ) : (
               <>
             <div>
@@ -459,6 +563,17 @@ export default function FaceEnrollmentPage() {
                   ({sortedStudents.length - enrolledVisibleCount} missing)
                 </span>
               )}
+              {coverage && (
+                <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5" data-testid="coverage-summary">
+                  <span className="text-green-700">{coverage.summary.ok} fully enrolled ({coverage.recommended_samples}+ poses)</span>
+                  {coverage.summary.needs_more > 0 && (
+                    <span className="text-orange-600">{coverage.summary.needs_more} need more poses</span>
+                  )}
+                  {coverage.summary.refresh_due > 0 && (
+                    <span className="text-amber-600">{coverage.summary.refresh_due} due for refresh</span>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -478,7 +593,25 @@ export default function FaceEnrollmentPage() {
  * component through a whole class roster instead of one manually-selected
  * student — the capture/quality logic itself isn't duplicated there.
  */
-export function LiveEnrollCapture({ selectedStudent, studentPhotoUrl, studentName, onSubmit, submitting }) {
+export function LiveEnrollCapture({
+  selectedStudent, studentPhotoUrl, studentName, onSubmit, submitting,
+  // Guided multi-sample capture: with samplesRequired > 1 (and onSubmitSamples
+  // given) confirmed captures are collected locally, one pose at a time, and
+  // handed over together on the last one. samplesRequired = 1 keeps the
+  // original one-capture-per-onSubmit behaviour.
+  samplesRequired = 1, onSubmitSamples,
+}) {
+  const multi = samplesRequired > 1 && typeof onSubmitSamples === 'function'
+  const [samples, setSamples] = useState([]) // confirmed so far: [{ embedding, qualityScore, thumb }]
+  const samplesRef = useRef([])
+  const pauseUntilRef = useRef(0) // auto-capture stays quiet until this timestamp (ms)
+  // Current pose and the head direction it needs ('front'|'left'|'right'|null).
+  // Single-capture mode (samplesRequired = 1) never gates on head angle.
+  const currentPose = multi ? SAMPLE_POSES[samples.length % SAMPLE_POSES.length] : null
+  const poseNeedRef = useRef(null)
+  poseNeedRef.current = currentPose?.needs ?? null
+  const [poseHint, setPoseHint] = useState(null) // live "turn a bit more…" text while framing is good
+  const [poseOk, setPoseOk] = useState(true)
   const [modelStatus, setModelStatus] = useState('loading') // loading | ready | error
   const { videoRef, cameraStatus, requestCamera } = useCameraStream({ facingMode: 'user' })
   const [captured, setCaptured] = useState(null) // { descriptor, qualityScore } | error
@@ -509,6 +642,13 @@ export function LiveEnrollCapture({ selectedStudent, studentPhotoUrl, studentNam
   // see the empty selectedStudent from that first render and bail out.
   const selectedStudentRef = useRef(selectedStudent)
   selectedStudentRef.current = selectedStudent
+
+  // A different student means a fresh set of poses — never mix samples across students.
+  useEffect(() => {
+    samplesRef.current = []
+    setSamples([])
+    pauseUntilRef.current = 0
+  }, [selectedStudent])
 
   useEffect(() => {
     let cancelled = false
@@ -542,6 +682,8 @@ export function LiveEnrollCapture({ selectedStudent, studentPhotoUrl, studentNam
       setLiveFramingStatus('none')
       setLiveFaceBoxes([])
       setSelectedFaceBox(null)
+      setPoseHint(null)
+      setPoseOk(true)
       return
     }
     let cancelled = false
@@ -564,14 +706,40 @@ export function LiveEnrollCapture({ selectedStudent, studentPhotoUrl, studentNam
         setLiveFaceBoxes([])
         const status = getFramingHint(detections[0].box, videoRef.current).status
         setLiveFramingStatus(status)
-        if (status === 'good') {
-          goodStreak += 1
-          if (goodStreak >= AUTO_CAPTURE_GOOD_STREAK && !submittingRef.current) {
+        if (Date.now() < pauseUntilRef.current) {
+          goodStreak = 0 // still changing pose for the next sample
+          setPoseHint(null)
+          setPoseOk(true)
+        } else if (status === 'good') {
+          // Guided poses: only count a frame as "good" when the head is
+          // actually turned the way this pose asks (read from face landmarks).
+          let poseReady = true
+          const need = poseNeedRef.current
+          if (need) {
+            const found = await detectSingleFaceLandmarks(videoRef.current)
+            if (cancelled) return
+            const turn = found ? classifyHeadTurn(headTurnRatio(found.landmarks?.positions)) : null
+            const verdict = poseVerdict(need, turn)
+            poseReady = verdict.ok
+            setPoseHint(verdict.hint)
+            setPoseOk(verdict.ok)
+          } else {
+            setPoseHint(null)
+            setPoseOk(true)
+          }
+          if (poseReady) {
+            goodStreak += 1
+            if (goodStreak >= AUTO_CAPTURE_GOOD_STREAK && !submittingRef.current) {
+              goodStreak = 0
+              handleCapture()
+            }
+          } else {
             goodStreak = 0
-            handleCapture()
           }
         } else {
           goodStreak = 0
+          setPoseHint(null)
+          setPoseOk(true)
         }
       }
     }
@@ -581,8 +749,31 @@ export function LiveEnrollCapture({ selectedStudent, studentPhotoUrl, studentNam
     // eslint-disable-next-line react-hooks/exhaustive-deps -- handleCapture is stable enough here; including it would re-arm the loop on every render
   }, [cameraStatus, hasCapturedDescriptor])
 
+  // Snapshot of the frame being analysed, so the preview can freeze on exactly
+  // what was captured instead of continuing to show the live feed.
+  const grabFrame = () => {
+    const video = videoRef.current
+    if (!video || !video.videoWidth) return null
+    try {
+      const scale = Math.min(1, 640 / video.videoWidth)
+      const canvas = document.createElement('canvas')
+      canvas.width = Math.round(video.videoWidth * scale)
+      canvas.height = Math.round(video.videoHeight * scale)
+      const ctx = canvas.getContext('2d')
+      if (!ctx) return null
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
+      return canvas.toDataURL('image/jpeg', 0.8)
+    } catch {
+      return null
+    }
+  }
+
+  // Head turn of a captured detection — null when landmarks aren't available.
+  const turnOf = (detection) => classifyHeadTurn(headTurnRatio(detection?.landmarks?.positions))
+
   const handleCapture = async () => {
     if (!videoRef.current || modelStatusRef.current !== 'ready' || !selectedStudentRef.current) return
+    const frameUrl = grabFrame()
 
     if (liveFaceCountRef.current > 1) {
       if (!selectedFaceBox) {
@@ -606,6 +797,8 @@ export function LiveEnrollCapture({ selectedStudent, studentPhotoUrl, studentNam
       setCaptured({
         descriptor: nearest.detection.descriptor,
         qualityScore: estimateQualityScore(nearest.detection, videoRef.current),
+        frameUrl,
+        turn: turnOf(nearest.detection),
       })
       setSelectedFaceBox(null)
       return
@@ -619,13 +812,34 @@ export function LiveEnrollCapture({ selectedStudent, studentPhotoUrl, studentNam
     setCaptured({
       descriptor: detection.descriptor,
       qualityScore: estimateQualityScore(detection, videoRef.current),
+      frameUrl,
+      turn: turnOf(detection),
     })
   }
 
   const handleConfirm = () => {
     if (!captured?.descriptor || submittingRef.current) return
-    onSubmit(Array.from(captured.descriptor), captured.qualityScore)
+    const embedding = Array.from(captured.descriptor)
+    if (!multi) {
+      onSubmit(embedding, captured.qualityScore)
+      setCaptured(null)
+      return
+    }
+    const next = [...samplesRef.current, {
+      embedding, qualityScore: captured.qualityScore, thumb: captured.frameUrl || null,
+    }]
     setCaptured(null)
+    if (next.length < samplesRequired) {
+      samplesRef.current = next
+      setSamples(next)
+      pauseUntilRef.current = Date.now() + POSE_CHANGE_PAUSE_MS
+      return
+    }
+    // Last pose: hand everything over. Reset first — samples already saved
+    // server-side stay saved even if a later one fails.
+    samplesRef.current = []
+    setSamples([])
+    onSubmitSamples(next)
   }
 
   // Space capture-or-confirms, "r" retakes — lets an operator run through a
@@ -645,7 +859,7 @@ export function LiveEnrollCapture({ selectedStudent, studentPhotoUrl, studentNam
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
     // eslint-disable-next-line react-hooks/exhaustive-deps -- handleCapture/handleConfirm close over state already covered by these deps
-  }, [hasCapturedDescriptor, cameraStatus, selectedFaceBox])
+  }, [hasCapturedDescriptor, cameraStatus, selectedFaceBox, samplesRequired, samples.length])
 
   // Converts a face-api.js box (video's intrinsic pixel space) to the CSS
   // box needed to overlay it on the displayed <video>, accounting for
@@ -658,8 +872,11 @@ export function LiveEnrollCapture({ selectedStudent, studentPhotoUrl, studentNam
     const scale = Math.max(video.clientWidth / video.videoWidth, video.clientHeight / video.videoHeight)
     const offsetX = (video.clientWidth - video.videoWidth * scale) / 2
     const offsetY = (video.clientHeight - video.videoHeight * scale) / 2
+    // The preview is mirrored (see the video's scaleX(-1) below), so a box found
+    // at raw x must be drawn from the opposite edge to land on the same face.
+    const rawLeft = box.x * scale + offsetX
     return {
-      left: box.x * scale + offsetX,
+      left: video.clientWidth - rawLeft - box.width * scale,
       top: box.y * scale + offsetY,
       width: box.width * scale,
       height: box.height * scale,
@@ -697,28 +914,86 @@ export function LiveEnrollCapture({ selectedStudent, studentPhotoUrl, studentNam
         </div>
       )}
 
+      {multi && selectedStudent && currentPose && (
+        <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg space-y-2" data-testid="sample-progress">
+          <div className="flex items-start gap-3">
+            <PoseIcon pose={currentPose.id} className="w-14 h-14 shrink-0 text-blue-700 bg-white rounded-lg border border-blue-100" />
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center justify-between text-xs text-blue-900 font-medium">
+                <span>Pose {Math.min(samples.length + 1, samplesRequired)} of {samplesRequired}</span>
+                <span className="flex gap-1" aria-hidden="true">
+                  {Array.from({ length: samplesRequired }).map((_, i) => (
+                    <span key={i} className={`w-2 h-2 rounded-full ${i < samples.length ? 'bg-green-500' : 'bg-blue-200'}`} />
+                  ))}
+                </span>
+              </div>
+              <p className="text-sm text-blue-900 font-semibold mt-0.5">{currentPose.prompt}</p>
+              <p className="text-xs text-blue-800 mt-0.5">{currentPose.detail}</p>
+            </div>
+          </div>
+          {samples.length > 0 && (
+            <div className="flex gap-2" data-testid="pose-thumbs">
+              {samples.map((s, i) => (
+                <div key={i} className="text-center">
+                  {s.thumb ? (
+                    <img src={s.thumb} alt={`Pose ${i + 1} saved`} className="w-14 h-10 object-cover rounded border border-green-300" style={{ transform: 'scaleX(-1)' }} />
+                  ) : (
+                    <div className="w-14 h-10 rounded border border-green-300 bg-green-50 text-green-700 text-[10px] flex items-center justify-center">✓</div>
+                  )}
+                  <span className="text-[10px] text-blue-800">{SAMPLE_POSES[i % SAMPLE_POSES.length].id}</span>
+                </div>
+              ))}
+            </div>
+          )}
+          {samples.length === 0 && !hasCapturedDescriptor && (
+            <ul className="text-[11px] text-blue-800 list-disc pl-4 space-y-0.5" data-testid="capture-tips">
+              {CAPTURE_TIPS.map((tip) => <li key={tip}>{tip}</li>)}
+            </ul>
+          )}
+        </div>
+      )}
+
       <div className="relative bg-black rounded-lg overflow-hidden aspect-video flex items-center justify-center">
+        {/* Mirrored like a selfie view so left/right movements feel natural. Display
+            only: face-api reads the raw frame, so the saved embedding is unaffected. */}
         <video
           ref={videoRef}
           autoPlay
           playsInline
           muted
-          className={`w-full h-full object-cover ${cameraStatus === 'granted' ? '' : 'hidden'}`}
+          style={{ transform: 'scaleX(-1)' }}
+          className={`w-full h-full object-cover ${cameraStatus === 'granted' ? '' : 'hidden'} ${captured?.frameUrl ? 'invisible' : ''}`}
         />
+        {captured?.frameUrl && (
+          <>
+            <img
+              src={captured.frameUrl}
+              alt="Captured face"
+              className="absolute inset-0 w-full h-full object-cover"
+              style={{ transform: 'scaleX(-1)' }}
+              data-testid="captured-still"
+            />
+            <span className="absolute top-2 left-2 text-[11px] text-white bg-black/60 px-2 py-1 rounded">
+              Captured — confirm or retake
+            </span>
+          </>
+        )}
         {cameraStatus === 'granted' && !hasCapturedDescriptor && liveFramingStatus !== 'multi' && (
           <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
             <div
               className={`rounded-[50%] w-[46%] h-[80%] transition-colors ${
-                {
-                  none: 'border-2 border-dashed border-white/70',
-                  'too-small': 'border-2 border-dashed border-amber-400',
-                  'off-center': 'border-2 border-dashed border-amber-400',
-                  good: 'border-[3px] border-solid border-green-400',
-                }[liveFramingStatus]
+                liveFramingStatus === 'good' && !poseOk
+                  ? 'border-[3px] border-dashed border-amber-400'
+                  : {
+                    none: 'border-2 border-dashed border-white/70',
+                    'too-small': 'border-2 border-dashed border-amber-400',
+                    'off-center': 'border-2 border-dashed border-amber-400',
+                    good: 'border-[3px] border-solid border-green-400',
+                  }[liveFramingStatus]
               }`}
             />
             <span className="absolute bottom-2 text-[11px] text-white/90 bg-black/50 px-2 py-1 rounded">
-              {{
+              {liveFramingStatus === 'good' && poseHint ? poseHint : {
                 none: 'Fill the oval with your face, then capture',
                 'too-small': 'Move closer',
                 'off-center': 'Center your face',
@@ -759,6 +1034,13 @@ export function LiveEnrollCapture({ selectedStudent, studentPhotoUrl, studentNam
           {captured.error}
         </div>
       )}
+      {captured?.descriptor && currentPose?.needs && !poseVerdict(currentPose.needs, captured.turn).ok && (
+        <div className="p-2 bg-amber-50 border border-amber-200 rounded text-xs text-amber-800" data-testid="pose-mismatch">
+          {poseVerdict(currentPose.needs, captured.turn).unknown
+            ? `Couldn't check the head angle for "${currentPose.prompt}". Retake if unsure, or confirm anyway.`
+            : `This doesn't look like the pose asked for (${currentPose.prompt.toLowerCase()}) — retake recommended, or confirm anyway.`}
+        </div>
+      )}
       {captured?.descriptor && (
         captured.qualityScore < MIN_ENROLL_QUALITY_SCORE ? (
           <div className="p-2 bg-amber-50 border border-amber-200 rounded text-xs text-amber-800">
@@ -797,7 +1079,9 @@ export function LiveEnrollCapture({ selectedStudent, studentPhotoUrl, studentNam
                 captured.qualityScore < MIN_ENROLL_QUALITY_SCORE ? 'bg-amber-500 hover:bg-amber-600' : 'bg-blue-600 hover:bg-blue-700'
               }`}
             >
-              {submitting ? 'Saving...' : 'Confirm & Enroll'}
+              {submitting
+                ? 'Saving...'
+                : multi && samples.length + 1 < samplesRequired ? 'Confirm & next pose' : 'Confirm & Enroll'}
             </button>
           </>
         ) : (

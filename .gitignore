@@ -98,3 +98,6 @@ media/_upload/
 
 # Assistant baseline run output (generated)
 docs/ai_baseline_*_state.json
+
+# Face-eval datasets (hundreds of MB, regenerable)
+scripts/face_eval/data/

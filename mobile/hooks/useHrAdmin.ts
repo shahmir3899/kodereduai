@@ -1,7 +1,8 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { hrApi } from '../services/api';
+import { hrApi, usersApi } from '../services/api';
 import { listOf } from '../services/academicYear';
 import type { Department, Designation, HrStats, LeavePolicy, Qualification, StaffDocument, StaffRow } from '../services/hrAdmin';
+import { canSearchUsers, type LinkCandidate } from '../services/staffAccounts';
 import { useScopedPagedQuery, useScopedQuery } from './useScopedQuery';
 
 // Names, phone numbers and documents stay in memory only (not a persisted root). Every write
@@ -84,4 +85,31 @@ export function useHrActions() {
     updateDocument: useWrite(({ id, data }: { id: number; data: object }) => hrApi.updateDocument(id, data)),
     deleteDocument: useWrite((id: number) => hrApi.deleteDocument(id)),
   };
+}
+
+// Sign-in accounts of staff. A change shows in the staff profile and list, and in Users and roles.
+export function useStaffAccountActions() {
+  const qc = useQueryClient();
+  const done = () => { refresh(qc); qc.invalidateQueries({ predicate: (q) => ['schoolUsers', 'hrStaffMember', 'hrStaffAdmin', 'staffDirectory'].includes(q.queryKey[0] as string) }); };
+  return {
+    create: useMutation({ mutationFn: ({ id, data }: { id: number; data: object }) => hrApi.createStaffAccount(id, data), onSuccess: done }),
+    link: useMutation({ mutationFn: ({ id, userId }: { id: number; userId: number }) => hrApi.linkStaffAccount(id, { user_id: userId }), onSuccess: done }),
+    unlink: useMutation({ mutationFn: (id: number) => hrApi.unlinkStaffAccount(id), onSuccess: done }),
+    role: useMutation({ mutationFn: ({ id, role }: { id: number; role: string }) => hrApi.updateStaffRole(id, { user_role: role }), onSuccess: done }),
+  };
+}
+
+export function useBulkLogins() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (d: object) => hrApi.bulkCreateStaffAccounts(d),
+    onSuccess: () => { refresh(qc); qc.invalidateQueries({ predicate: (q) => ['schoolUsers', 'hrStaffAdmin', 'staffDirectory'].includes(q.queryKey[0] as string) }); },
+  });
+}
+
+// Users of the school matching a search, for linking one to a staff member (the web searches from 2 letters).
+export function useUserSearch(term: string, enabled: boolean) {
+  const t = term.trim();
+  return useScopedQuery('schoolUsers', ['search', t], async () =>
+    listOf<LinkCandidate>((await usersApi.getUsers({ search: t, page_size: 20 })).data), { enabled: enabled && canSearchUsers(t), staleTime: 0 });
 }
