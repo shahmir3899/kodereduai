@@ -8,9 +8,9 @@ import { useAcademicYear } from '../../../hooks/useAcademicYear';
 import {
   useAccountBalances, useAccountBalancesAll, useAnnualFeeSummary, useExpenseCategories, useFinanceSummary,
   useMonthlyCollection, useMonthlyTrend, useRecentEntries, useRecentTransfers,
-} from '../../../hooks/useAccountant';
+} from '../../../hooks/useFinanceManager';
 import { useRefreshControl } from '../../../hooks/useRefreshControl';
-import { PERIOD_LABELS, rangeFor, totalBalance, type AccountBalance, type DateRange, type Period } from '../../../services/accountant';
+import { PERIOD_LABELS, rangeFor, totalBalance, type AccountBalance, type DateRange, type Period } from '../../../services/financeManager';
 import { canSeeRecentEntries, hasMultipleSchools } from '../../../services/financeDashboard';
 import { formatMoney } from '../../../services/feeCollect';
 import { exportErrorMessage, financeSummaryFileName, financeSummaryRequest } from '../../../services/reports';

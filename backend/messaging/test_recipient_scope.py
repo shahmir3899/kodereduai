@@ -11,7 +11,7 @@ def _body(user_id, **extra):
 def test_staff_cannot_message_a_non_admin_by_id(seed_data, api):
     sid = seed_data['SID_A']
     token = seed_data['tokens']['staff']
-    target = seed_data['users']['accountant']
+    target = seed_data['users']['finance_manager']
     response = api.post('/api/messaging/threads/', _body(target.id), token, sid)
     assert response.status_code == 403, response.content[:200]
 

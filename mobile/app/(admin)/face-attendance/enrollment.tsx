@@ -8,6 +8,12 @@ import {
   TouchableOpacity,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
+import {
+  COVERAGE_FILTERS, COVERAGE_LABEL, COVERAGE_TONE, POLL_LIMIT, POLL_MS, PORTRAIT_TIPS, buildEnrollPayload, coverageLine, coverageSummaryLine, duplicateOf,
+  enrollErrorText, enrollOutcome, enrollTimeoutText, filterCoverage, overrideText, photoMime, photoName, photosToAdd, type Coverage, type CoverageState, type EnrollTask,
+} from '../../../services/faceEnroll';
+import SegmentedTabs from '../../../components/ui/SegmentedTabs';
+import StatusPill from '../../../components/ui/StatusPill';
 import { faceAttendanceApi, studentsApi } from '../../../services/api';
 import { listOf } from '../../../services/academicYear';
 import { saveFailureMessage } from '../../../services/errorKind';
@@ -31,9 +37,12 @@ interface Student {
   roll_number: string;
 }
 
+// The list sends the student as an id with student_name and student_roll beside it.
 interface Enrollment {
   id: number;
-  student: { id: number; name: string; roll_number: string };
+  student: number;
+  student_name?: string;
+  student_roll?: string | number | null;
   quality_score: number;
   source_image_url: string;
   created_at: string;
@@ -45,6 +54,8 @@ export default function FaceEnrollment() {
   const [selectedStudent, setSelectedStudent] = useState<number | null>(null);
   const [photo, setPhoto] = useState<string | null>(null);
   const [enrolling, setEnrolling] = useState(false);
+  const [progress, setProgress] = useState('');
+  const [filter, setFilter] = useState<'' | CoverageState>('');
 
   // Master classes are persisted reference data, so the picker still opens offline.
   const classesQ = useMasterClasses();
@@ -63,7 +74,13 @@ export default function FaceEnrollment() {
     listOf<Enrollment>((await faceAttendanceApi.getEnrollments({ class_id: selectedClass })).data),
   { enabled: !!selectedClass, staleTime: 0 });
   const enrollments = enrollQ.data ?? [];
-  const refreshControl = useRefreshControl(classesQ.refetch, enrollQ.refetch);
+  const coverageQ = useScopedQuery<Coverage>('faceCoverage', [selectedClass], async () =>
+    (await faceAttendanceApi.getEnrollmentCoverage({ class_id: selectedClass })).data as Coverage,
+  { enabled: !!selectedClass, staleTime: 0 });
+  const coverage = coverageQ.data;
+  const refreshControl = useRefreshControl(classesQ.refetch, enrollQ.refetch, coverageQ.refetch);
+  const recommended = coverage?.recommended_samples ?? 3;
+  const chosen = coverage?.students.find((c) => c.student_id === selectedStudent);
 
   const chooseClass = (id: number) => {
     setSelectedClass(id);
@@ -72,51 +89,66 @@ export default function FaceEnrollment() {
   };
 
   const pickPhoto = async () => {
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      quality: 0.8,
-      allowsEditing: true,
-      aspect: [1, 1],
-    });
-    if (!result.canceled && result.assets[0]) {
-      setPhoto(result.assets[0].uri);
+    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.8, allowsEditing: true, aspect: [1, 1] });
+    if (!result.canceled && result.assets[0]) setPhoto(result.assets[0].uri);
+  };
+
+  // The phone's camera, front-facing portrait: what most enrolments should use.
+  const takePhoto = async () => {
+    const perm = await ImagePicker.requestCameraPermissionsAsync();
+    if (!perm.granted) { toast.error('Allow the camera in your phone settings to take a photo.'); return; }
+    const result = await ImagePicker.launchCameraAsync({ quality: 0.8, allowsEditing: true, aspect: [1, 1], cameraType: ImagePicker.CameraType.front });
+    if (!result.canceled && result.assets[0]) setPhoto(result.assets[0].uri);
+  };
+
+  // The server works on the photo in the background: wait for its answer (a few seconds) and report it.
+  const waitForOutcome = async (taskId: string) => {
+    for (let i = 0; i < POLL_LIMIT; i++) {
+      await new Promise((r) => setTimeout(r, POLL_MS));
+      const t = (await faceAttendanceApi.getTask(taskId)).data as EnrollTask;
+      const o = enrollOutcome(t);
+      if (o.state !== 'running') return o;
     }
+    return null;
+  };
+
+  const enrollWith = async (imageUrl: string, name: string, override: boolean): Promise<boolean> => {
+    setProgress('Checking the photo...');
+    const res = await faceAttendanceApi.enrollFace(buildEnrollPayload(selectedStudent as number, imageUrl, override));
+    const taskId = (res.data as { task_id?: string })?.task_id;
+    if (!taskId) return true;
+    const outcome = await waitForOutcome(taskId);
+    if (!outcome) { toast.show(enrollTimeoutText, 'info'); return true; }
+    if (outcome.state === 'done') { toast.success(`${name}: photo added.`); return true; }
+    if (outcome.state === 'duplicate' && !override) {
+      const other = duplicateOf(outcome.message);
+      if (await confirm({ title: 'Different people?', message: overrideText(name, other), confirmLabel: 'They are different' })) return enrollWith(imageUrl, name, true);
+      return false;
+    }
+    toast.error(outcome.message);
+    return false;
   };
 
   const handleEnroll = async () => {
     if (!selectedStudent || !photo) {
-      toast.error('Choose a student and pick a photo first.');
+      toast.error('Choose a student and take or pick a photo first.');
       return;
     }
-
+    const name = studentsQ.data?.find((x) => x.id === selectedStudent)?.name ?? 'The student';
     setEnrolling(true);
     try {
-      // Upload image first
+      setProgress('Uploading the photo...');
       const formData = new FormData();
-      const filename = photo.split('/').pop() || 'enrollment.jpg';
-      formData.append('image', {
-        uri: photo,
-        type: 'image/jpeg',
-        name: filename,
-      } as unknown as Blob);
-
+      formData.append('image', { uri: photo, type: photoMime(photo), name: photoName(photo, 'enrollment.jpg') } as unknown as Blob);
       const uploadRes = await faceAttendanceApi.uploadImage(formData);
       const imageUrl = uploadRes.data.url || uploadRes.data.image_url;
-
-      // Enroll face
-      await faceAttendanceApi.enrollFace({
-        student_id: selectedStudent,
-        image_url: imageUrl,
-      });
-
-      toast.success('Face enrolled. The embedding is being generated.');
-      setPhoto(null);
-      setSelectedStudent(null);
-      enrollQ.refetch();
-    } catch (error: any) {
-      toast.error(error.response?.data?.error || error.response?.data?.detail || saveFailureMessage(error, 'Enrollment failed.'));
+      const ok = await enrollWith(imageUrl, name, false);
+      if (ok) setPhoto(null); // the student stays chosen, to add the next photo
+      enrollQ.refetch(); coverageQ.refetch();
+    } catch (error) {
+      toast.error(enrollErrorText(error, saveFailureMessage(error, 'Enrolment failed.')));
     } finally {
-      setEnrolling(false);
+      setEnrolling(false); setProgress('');
     }
   };
 
@@ -145,7 +177,7 @@ export default function FaceEnrollment() {
     >
       <Text style={styles.title}>Face Enrollment</Text>
       <Text style={styles.subtitle}>
-        Enroll student portrait photos for face attendance matching.
+        Take a few portrait photos of each student, in good light, for face attendance matching.
       </Text>
 
       {/* Class Selector */}
@@ -172,15 +204,23 @@ export default function FaceEnrollment() {
                 </TouchableOpacity>
               </View>
             ) : (
-              <Button title="Pick Portrait Photo" variant="outline" onPress={pickPhoto} />
+              <View style={styles.photoButtons}>
+                <Button title="Take a photo" variant="outline" onPress={takePhoto} />
+                <Button title="Pick from gallery" variant="ghost" size="sm" onPress={pickPhoto} />
+                {PORTRAIT_TIPS.map((t) => <Text key={t} style={styles.tip}>•  {t}</Text>)}
+              </View>
             )}
           </View>
         )}
 
         {/* Enroll Button */}
+        {selectedStudent && chosen ? (
+          <Text style={styles.tip}>{`${chosen.samples} of ${recommended} photos so far${photosToAdd(chosen.samples, recommended) > 0 ? `: add ${photosToAdd(chosen.samples, recommended)} more from slightly different angles.` : '.'}`}</Text>
+        ) : null}
+        {enrolling && progress ? <Text style={styles.tip}>{progress}</Text> : null}
         {selectedStudent && photo && (
           <Button
-            title="Enroll Face"
+            title="Add this photo"
             onPress={handleEnroll}
             loading={enrolling}
             fullWidth
@@ -188,6 +228,29 @@ export default function FaceEnrollment() {
           />
         )}
       </Card>
+
+      {/* Who still needs photos */}
+      {selectedClass ? (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Who needs photos</Text>
+          {coverageQ.isLoading ? <Skeleton /> : coverageQ.isError && !coverage ? <ErrorState error={coverageQ.error} onRetry={() => coverageQ.refetch()} /> : coverage ? (
+            <>
+              <Text style={styles.tip}>{coverageSummaryLine(coverage)}</Text>
+              <SegmentedTabs tabs={COVERAGE_FILTERS} value={filter} onChange={(v) => setFilter(v as '' | CoverageState)} scrollable />
+              {filterCoverage(coverage.students, filter).map((c) => (
+                <TouchableOpacity key={c.student_id} accessibilityRole="button" onPress={() => { setSelectedStudent(c.student_id); setPhoto(null); }} style={styles.coverRow}>
+                  <View style={styles.enrollmentInfo}>
+                    <Text style={styles.enrollmentName}>{c.name}</Text>
+                    <Text style={styles.enrollmentRoll}>{coverageLine(c, recommended)}</Text>
+                  </View>
+                  <StatusPill label={COVERAGE_LABEL[c.status]} tone={COVERAGE_TONE[c.status]} />
+                </TouchableOpacity>
+              ))}
+              {filterCoverage(coverage.students, filter).length === 0 ? <Text style={styles.tip}>Nobody in this view.</Text> : null}
+            </>
+          ) : null}
+        </View>
+      ) : null}
 
       {/* Enrolled Faces List */}
       {selectedClass && (
@@ -216,9 +279,9 @@ export default function FaceEnrollment() {
                     </View>
                   )}
                   <View style={styles.enrollmentInfo}>
-                    <Text style={styles.enrollmentName}>{enr.student.name}</Text>
+                    <Text style={styles.enrollmentName}>{enr.student_name ?? 'Student'}</Text>
                     <Text style={styles.enrollmentRoll}>
-                      Roll: {enr.student.roll_number || '—'}
+                      Roll: {enr.student_roll || '—'}
                     </Text>
                     <View style={styles.enrollmentMeta}>
                       <Badge
@@ -292,6 +355,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   removePhotoText: { color: Colors.textInverse, fontSize: 14, fontWeight: '700' },
+  photoButtons: { alignItems: 'stretch', gap: Spacing.sm, alignSelf: 'stretch' },
+  tip: { fontSize: FontSize.sm, color: Colors.textSecondary, marginTop: Spacing.xs },
+  coverRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, paddingVertical: Spacing.sm, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: Colors.border, minHeight: 52 },
   enrollmentCard: { marginBottom: Spacing.sm },
   enrollmentRow: { flexDirection: 'row', alignItems: 'center' },
   enrollmentThumb: {

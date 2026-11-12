@@ -25,7 +25,7 @@ class TestFinanceSummaryReport:
         assert resp['Content-Type'] == 'application/pdf'
         assert resp.content.startswith(b'%PDF')
 
-    @pytest.mark.parametrize('role', ['accountant', 'manager', 'teacher'])
+    @pytest.mark.parametrize('role', ['finance_manager', 'manager', 'teacher'])
     def test_other_roles_are_refused(self, seed_data, api, role):
         resp = api.post(INSTANT, BODY, seed_data['tokens'][role], seed_data['SID_A'])
         assert resp.status_code == 403

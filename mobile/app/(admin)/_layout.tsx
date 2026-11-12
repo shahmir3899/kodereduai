@@ -93,6 +93,7 @@ function AdminTabs() {
       <Tabs.Screen name="promotion-web" options={{ href: null, title: 'Promotion' }} />
       <Tabs.Screen name="school-setup-web" options={{ href: null, title: 'School Setup' }} />
       <Tabs.Screen name="settings" options={{ href: null, title: 'Settings' }} />
+      <Tabs.Screen name="past-reports" options={{ href: null, title: 'Past Reports' }} />
       <Tabs.Screen name="school-profile" options={{ href: null, title: 'School Profile' }} />
       <Tabs.Screen name="subjects" options={{ href: null, title: 'Subjects' }} />
       <Tabs.Screen name="users" options={{ href: null, title: 'Users and Roles' }} />

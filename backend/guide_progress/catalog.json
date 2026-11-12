@@ -33,7 +33,7 @@
       "5.1",
       "5.5"
     ],
-    "ACCOUNTANT": [
+    "FINANCE": [
       "1.3",
       "7.1",
       "7.13"
@@ -307,7 +307,7 @@
       "roles": [
         "SCHOOL_ADMIN",
         "PRINCIPAL",
-        "ACCOUNTANT"
+        "FINANCE"
       ]
     },
     {
@@ -371,7 +371,7 @@
       "roles": [
         "SCHOOL_ADMIN",
         "PRINCIPAL",
-        "ACCOUNTANT"
+        "FINANCE"
       ]
     },
     {
@@ -587,7 +587,7 @@
         "SCHOOL_ADMIN",
         "PRINCIPAL",
         "MANAGER",
-        "ACCOUNTANT",
+        "FINANCE",
         "TEACHER",
         "STAFF",
         "DRIVER"
@@ -619,7 +619,7 @@
         "SCHOOL_ADMIN",
         "PRINCIPAL",
         "MANAGER",
-        "ACCOUNTANT",
+        "FINANCE",
         "TEACHER",
         "STAFF",
         "DRIVER"
@@ -633,7 +633,7 @@
         "SCHOOL_ADMIN",
         "PRINCIPAL",
         "MANAGER",
-        "ACCOUNTANT",
+        "FINANCE",
         "TEACHER",
         "STAFF",
         "DRIVER"

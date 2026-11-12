@@ -71,7 +71,7 @@ export const pricingDetails: Record<PricingTierKey, TierDetail> = {
       'AI-powered curriculum question paper builder',
       'AI finance assistant and AI notification drafting',
       'Multi-branch / multi-school support',
-      'Role-based access (Admin, Principal, Teacher, HR, Accountant, Parent, Student)',
+      'Role-based access (Admin, Principal, Manager, Teacher, Staff, Parent, Student)',
       'Secure cloud storage for documents and images',
       'Mobile app for teachers and parents (Android)',
     ],

@@ -96,7 +96,7 @@ class TestReads:
         assert {e['reference'] for e in out['entries']} == {'R-1', 'R-2', 'R-3'}
 
     def test_roles(self, seed_data, fin):
-        assert 'data' in _run(seed_data, 'get_receipts', 'accountant', date_from='2025-04-01', date_to='2025-04-30')
+        assert 'data' in _run(seed_data, 'get_receipts', 'finance_manager', date_from='2025-04-01', date_to='2025-04-30')
         for role in ('teacher', 'staff'):
             assert _run(seed_data, 'get_student_ledger', role, student_id=fin['ali'].id) == NO_PERMISSION
 
@@ -157,5 +157,5 @@ class TestDefinitions:
         assert 'needs a value' in _run(seed_data, 'create_scholarship', name='y', scholarship_type='NEED', coverage='FIXED')['error']
 
     def test_only_admins_may_prepare_definitions(self, seed_data, fin):
-        for role in ('accountant', 'teacher', 'manager'):
+        for role in ('finance_manager', 'teacher', 'manager'):
             assert _run(seed_data, 'create_discount', role, name='x', discount_type='FIXED', value=1) == NO_PERMISSION, role

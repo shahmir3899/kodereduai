@@ -236,13 +236,13 @@ export function buildStaffNavigation(ctx: NavContext): NavGroup[] {
   return persona === 'staff' && isStaff ? groups.filter((g) => STAFF_GROUPS.has(g.name)) : groups;
 }
 
-// The accountant is read-only on every finance API (FinanceRoleAccessPermission), so unlike the
+// The finance manager is read-only on every finance API (FinanceRoleAccessPermission), so unlike the
 // web sidebar there is no Collect Payments entry, and the Academics, Management, Transport,
 // Library groups the web shows by accident of `!isStaff` are left out (decided
 // 2026-10-28). Own HR self-service is allowed by the API (HR_SELF_SERVICE_ROLES) even though the
 // web sidebar omits it.
-export function buildAccountantNavigation(isModuleEnabled: (key: ModuleKey) => boolean): NavGroup[] {
-  const item = (name: string, webPath: string): NavItem => ({ name, webPath, href: routeFor('accountant', webPath) });
+export function buildFinanceNavigation(isModuleEnabled: (key: ModuleKey) => boolean): NavGroup[] {
+  const item = (name: string, webPath: string): NavItem => ({ name, webPath, href: routeFor('finance', webPath) });
   const groups: NavGroup[] = [{ name: 'General', items: [item('Dashboard', '/dashboard')] }];
   if (isModuleEnabled('finance')) {
     groups.push({
@@ -257,7 +257,7 @@ export function buildAccountantNavigation(isModuleEnabled: (key: ModuleKey) => b
     });
   }
   if (isModuleEnabled('inventory')) {
-    // Read-only: the inventory API refuses every write for an accountant.
+    // Read-only: the inventory API refuses every write for a finance manager.
     groups.push({
       name: 'Inventory',
       items: [
@@ -282,7 +282,7 @@ export function buildAccountantNavigation(isModuleEnabled: (key: ModuleKey) => b
       items: [item('My Leave', '/hr/leave'), item('My Attendance', '/hr/attendance'), item('My Payslips', '/hr/payslips')],
     });
   }
-  groups.push({ name: 'Me', items: [item('Change Password', '/accountant/change-password')] });
+  groups.push({ name: 'Me', items: [item('Change Password', '/finance/change-password')] });
   return groups;
 }
 

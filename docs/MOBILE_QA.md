@@ -8,7 +8,7 @@ Record every failure in `docs/PHASE5_KNOWN_FAILURES.md` with role, screen, steps
 
 ## 1. Every role: sign in and land
 
-For each role (School Admin, Teacher, Manager, Driver, Student, Parent; Accountant, Staff and Principal once Phase 7 is final):
+For each role (School Admin, Teacher, Manager, Driver, Student, Parent; Finance manager, Staff and Principal once Phase 7 is final):
 
 1. Sign in. You land on that role's home tab, and the tabs match the role (no tab or More entry for something the web hides from that role).
 2. Open **More**. Every entry opens a screen or an "Open on web" page; none is a dead end. Entries marked "Soon" are expected only for unbuilt screens.
@@ -96,12 +96,12 @@ Follow the 12-step checklist in `docs/ANDROID_BACKGROUND_LOCATION.md`.
 - [ ] Messages: an open conversation shows the messages the right way up (it drew upside down in the browser preview), newest at the bottom.
 - [ ] Leave: Withdraw asks first, then the request shows Cancelled.
 
-## 6h. Batch 16 phone checks (accountant)
-- [ ] Accountant Home: Account Balance tile and the Account balances list show the real balances; the Income vs expense panel sits under the quick links.
-- [ ] Accountant Fees: the fee collection card steps back through months and the list below still works.
-- [ ] Accountant Accounts: PDF and Excel buttons open the share sheet and the file opens.
+## 6h. Batch 16 phone checks (finance)
+- [ ] Finance manager Home: Account Balance tile and the Account balances list show the real balances; the Income vs expense panel sits under the quick links.
+- [ ] Finance manager Fees: the fee collection card steps back through months and the list below still works.
+- [ ] Finance manager Accounts: PDF and Excel buttons open the share sheet and the file opens.
 
-## 6i. Batch 17 phone checks (accountant)
+## 6i. Batch 17 phone checks (finance)
 - [ ] Accounts: the Ledger button opens the ledger; From and To date pickers work; rows read well with long descriptions.
 - [ ] Expenses: the Expenses and Transfers tabs sit above the list; By month steps back and the list and the Category breakdown follow it.
 - [ ] Transfers (read only): rows do not open an edit sheet; with a real transfer the from, to, amount and date show.

@@ -5,7 +5,7 @@ import { pickAcademicYear, type AcademicYear } from './academicYear';
 // The academic year a person has chosen to look at, kept per person and school on this phone.
 // Only the roles below can choose; everyone else always works in the school's current year.
 export function canChooseYear(persona: Persona): boolean {
-  return persona === 'admin' || persona === 'manager' || persona === 'accountant';
+  return persona === 'admin' || persona === 'manager' || persona === 'finance';
 }
 
 // The chosen year when it still exists and this role may choose and the screen is not locked,

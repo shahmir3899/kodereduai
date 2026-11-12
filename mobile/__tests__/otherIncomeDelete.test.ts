@@ -1,4 +1,4 @@
-import { canDeleteIncome, incomeDescription } from '../services/accountant';
+import { canDeleteIncome, incomeDescription } from '../services/financeManager';
 
 describe('who may delete an income entry', () => {
   it('lets an admin delete any entry', () => {

@@ -110,3 +110,28 @@ class TestParentLeave:
                          {'status': 'APPROVED'}, parent['tokens']['admin'], parent['SID_A'])
         assert resp.status_code == 404
         assert ParentLeaveRequest.objects.get(id=leave_id).status == 'PENDING'
+
+
+@pytest.mark.django_db
+class TestTimetableTeacherWithoutLogin:
+    """Staff without a login have no user; the timetable and dashboard must not fail on them."""
+
+    def test_timetable_and_dashboard_name_the_teacher(self, api, student_user):
+        from datetime import time
+        from academics.models import TimetableEntry, TimetableSlot
+
+        place = student_user['place']
+        slot = TimetableSlot.objects.create(
+            school=student_user['school_b'], name='P1', slot_type='PERIOD',
+            start_time=time(8, 0), end_time=time(8, 40), order=1)
+        today = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'][timezone.localdate().weekday()]
+        subject, teacher = subjects(student_user)[1], teacher_for(student_user)
+        for day in {'MON', today}:
+            TimetableEntry.objects.create(
+                school=student_user['school_b'], academic_year=place['year'], class_obj=place['master'],
+                day=day, slot=slot, subject=subject, teacher=teacher)
+        resp = api.get(f'{PORTAL}/timetable/', student_user['token'], student_user['SID_B'])
+        assert resp.status_code == 200
+        assert {e['teacher'] for e in resp.json()['entries']} == {'Pytest Teacher'}
+        dash = api.get(f'{PORTAL}/dashboard/', student_user['token'], student_user['SID_B']).json()
+        assert all(e['teacher'] == 'Pytest Teacher' for e in dash['today_timetable'])

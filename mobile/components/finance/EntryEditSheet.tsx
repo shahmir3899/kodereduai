@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useUpdateEntry } from '../../hooks/useAccountant';
+import { useUpdateEntry } from '../../hooks/useFinanceManager';
 import { entryPayload, formFromRow, validateEntry, type EntryForm, type EntryKind, type EntryRow } from '../../services/financeEntry';
 import { staffLeaveErrorMessage } from '../../services/staffLeave';
 import { useToast } from '../ui/Toast';

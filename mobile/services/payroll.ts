@@ -1,8 +1,8 @@
 // Pure logic for Payroll (payslips) and Salary structures; port of frontend/src/pages/hr
 // (PayrollPage.jsx, SalaryManagementPage.jsx) and backend/hr. Admin and principal only
-// (HR_WRITE_ROLES); every other role reads only its own payslips (see services/accountant.ts).
+// (HR_WRITE_ROLES); every other role reads only its own payslips (see services/financeManager.ts).
 
-import type { Payslip } from './accountant';
+import type { Payslip } from './financeManager';
 
 const num = (v: number | string | null | undefined) => Number(v ?? 0) || 0;
 

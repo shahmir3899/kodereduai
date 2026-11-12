@@ -168,7 +168,7 @@ class TestRolesAndSections:
         assert 'not the class teacher' in _mark(other, reg)['error']
 
     def test_write_tool_visibility(self, seed_data, reg):
-        for who, expected in [(_admin(seed_data), True), (_teacher(reg), True), (_ctx(seed_data['users']['accountant']), False),
+        for who, expected in [(_admin(seed_data), True), (_teacher(reg), True), (_ctx(seed_data['users']['finance_manager']), False),
                               (_ctx(seed_data['users']['manager']), False), (_ctx(seed_data['users']['staff']), False)]:
             assert ('mark_attendance' in {t.name for t in registry.tools_for(who)}) is expected, who.role
 

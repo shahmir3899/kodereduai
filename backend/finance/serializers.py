@@ -6,7 +6,7 @@ from decimal import Decimal
 
 from rest_framework import serializers
 from core.mixins import ensure_tenant_school_id
-from core.permissions import ADMIN_ROLES, _is_data_restricted_user, get_effective_role
+from core.permissions import ADMIN_ROLES, _is_data_restricted_user, get_effective_role, has_finance_access
 from academic_sessions.roster import current_placement, placement_class_id, placement_label, placement_roll
 from .class_resolution import resolve_unambiguous_session_class
 from .models import (
@@ -25,7 +25,7 @@ def _serializer_school_id(serializer_instance):
     return ensure_tenant_school_id(request)
 
 
-BANK_DETAIL_ROLES = (*ADMIN_ROLES, 'ACCOUNTANT')
+BANK_DETAIL_ROLES = ADMIN_ROLES  # plus finance-enabled managers, checked via has_finance_access
 
 
 class AccountSerializer(serializers.ModelSerializer):
@@ -46,7 +46,7 @@ class AccountSerializer(serializers.ModelSerializer):
             fields.pop('staff_visible', None)
         # The title, number and IBAN are for the people who run the books; a teacher or driver who can
         # list accounts must not read them. The bank's name alone is harmless, so it stays.
-        if request and get_effective_role(request) not in BANK_DETAIL_ROLES:
+        if request and get_effective_role(request) not in BANK_DETAIL_ROLES and not has_finance_access(request):
             for hidden in ('account_title', 'account_number', 'iban'):
                 fields.pop(hidden, None)
         return fields

@@ -84,3 +84,18 @@ describe('handing over and page slots', () => {
     expect(newGroupId()).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
   });
 });
+
+describe('page photos', () => {
+  it('carries the page, box and uncertain digits of each question, and the page photos', () => {
+    const r = buildReview({
+      header: {},
+      sections: [{ title: 'A', question_type_guess: 'SHORT', shown_count: 2, counted_count: 2, marks_per_question: 2, questions: [
+        { question_text: 'One', question_type: 'SHORT', marks: 2, page_number: 1, box: { x0: 0.1, y0: 0.2, x1: 0.9, y1: 0.3 }, uncertain: ['82111 may be 82,111'] },
+        { question_text: 'Two', question_type: 'SHORT', marks: 2 },
+      ] }],
+    }, [1], [{ page_number: 1, image_url: 'https://img.test/p1.jpg' }]);
+    expect(r.photos).toEqual([{ page_number: 1, image_url: 'https://img.test/p1.jpg' }]);
+    expect(r.questions[0]).toMatchObject({ pageNumber: 1, box: { x0: 0.1, y0: 0.2, x1: 0.9, y1: 0.3 }, uncertain: ['82111 may be 82,111'] });
+    expect(r.questions[1]).toMatchObject({ pageNumber: null, box: null, uncertain: [] });
+  });
+});

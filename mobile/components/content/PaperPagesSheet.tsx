@@ -6,7 +6,7 @@ import { examinationsApi } from '../../services/api';
 import { captureImageProblem, type CaptureState } from '../../services/paperCapture';
 import {
   buildReview, changeQuestionType, clampPages, emptyPagesSession, missingBeforeAccept, needsCheck, newGroupId, POLL_MS, slotState, SLOT_LABEL,
-  toCaptureState, UPLOAD_CONCURRENCY, MAX_PAGES, type GroupStatus, type PagesSession,
+  toCaptureState, UPLOAD_CONCURRENCY, MAX_PAGES, type GroupStatus, type PagesSession, type PhotoBox,
 } from '../../services/paperPages';
 import { allocatedMarks } from '../../services/paperBuilder';
 import { QUESTION_TYPES, typeLabel } from '../../services/questionBank';
@@ -21,6 +21,7 @@ import { useToast } from '../ui/Toast';
 import { confirm } from '../ui/confirm';
 import FormSheet from '../inventory/FormSheet';
 import SectionsEditor from './SectionsEditor';
+import PaperPhotoViewer from './PaperPhotoViewer';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
 
 type LocalState = 'queued' | 'uploading' | 'failed';
@@ -45,6 +46,8 @@ export default function PaperPagesSheet({ visible, onClose, classId, subjectId, 
   const [countInput, setCountInput] = useState('1');
   const [locals, setLocals] = useState<Record<number, { state: LocalState; error?: string }>>({});
   const [step, setStep] = useState<Step>(1);
+  // The page photo opened from a question's "View photo" button.
+  const [viewer, setViewer] = useState<{ page: number; box: PhotoBox | null } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const queue = useRef<Array<{ page: number; asset: ImagePicker.ImagePickerAsset }>>([]);
@@ -67,7 +70,11 @@ export default function PaperPagesSheet({ visible, onClose, classId, subjectId, 
   useEffect(() => {
     const data = status.data;
     if (review || !data?.complete || !data.result) return;
-    setSession((s) => (s.review ? s : { ...s, review: buildReview(data.result as NonNullable<GroupStatus['result']>, data.pages.map((p) => p.upload_id).filter((x): x is number => !!x)) }));
+    setSession((s) => (s.review ? s : { ...s, review: buildReview(
+      data.result as NonNullable<GroupStatus['result']>,
+      data.pages.map((p) => p.upload_id).filter((x): x is number => !!x),
+      data.pages.filter((p) => !!p.image_url).map((p) => ({ page_number: p.page_number, image_url: p.image_url as string })),
+    ) }));
     setStep(1);
   }, [status.data, review, setSession]);
 
@@ -211,6 +218,7 @@ export default function PaperPagesSheet({ visible, onClose, classId, subjectId, 
       secondaryLabel={step > 1 ? 'Back' : undefined} onSecondary={step > 1 ? () => { setError(null); setStep((step - 1) as Step); } : undefined}>
       {step === 1 ? (
         <View style={styles.gap}>
+          {review.warning ? <Text style={styles.warn}>{review.warning}</Text> : null}
           <Text style={styles.hint}>
             {review.questions.length} question{review.questions.length === 1 ? '' : 's'} read from {totalPages} page{totalPages === 1 ? '' : 's'}, in paper order.
             {needsCheck(review) > 0 ? ` ${needsCheck(review)} to check: the type was a guess.` : ' Check each type; the sections are built from them.'}
@@ -221,6 +229,10 @@ export default function PaperPagesSheet({ visible, onClose, classId, subjectId, 
               <TouchableOpacity accessibilityRole="button" accessibilityLabel={`Question ${i + 1}`}>
                 <Text style={[styles.text, !q.text.trim() && styles.empty]} numberOfLines={3}>{plainText(q.text).trim() || '(no text read: edit it in the next steps or remove it)'}</Text>
               </TouchableOpacity>
+              {q.uncertain.length > 0 ? <Text style={styles.warn}>Check digits: {q.uncertain.join('; ')}</Text> : null}
+              {(review.photos ?? []).length > 0 ? (
+                <Button title="View photo" variant="outline" size="sm" onPress={() => { setViewer({ page: q.pageNumber ?? 1, box: q.box }); }} />
+              ) : null}
               <Select label="Type" value={q.type} onChange={(v) => patch(changeQuestionType(review, q.localId, String(v)))} options={QUESTION_TYPES.map((t) => ({ value: t.value as string, label: t.label }))} />
             </View>
           ))}
@@ -258,6 +270,10 @@ export default function PaperPagesSheet({ visible, onClose, classId, subjectId, 
       ) : null}
 
       <Button title="Start over" variant="ghost" size="sm" onPress={startOver} />
+      <PaperPhotoViewer
+        visible={!!viewer} photos={review.photos ?? []} page={viewer?.page ?? 1} box={viewer?.box ?? null}
+        onPageChange={(page) => setViewer((v) => (v ? { page, box: null } : v))} onClose={() => setViewer(null)}
+      />
     </FormSheet>
   );
 }

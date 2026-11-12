@@ -146,6 +146,34 @@ describe('ImageCapturePaperTab: declared page count, parallel upload, staged rev
     expect(screen.getAllByText('Check type')).toHaveLength(2)
   }, 15000)
 
+  it('shows the page photo beside the questions and jumps to the page of the selected question', async () => {
+    const withPhoto = (n) => ({ ...pageRow(n), image_url: `https://img.test/p${n}.jpg` })
+    const twoPages = {
+      ...result,
+      sections: [{
+        ...section('Objective', 'MCQ', 1),
+        questions: [
+          { question_text: 'First on page one', question_type: 'MCQ', marks: 2, page_number: 1, box: { x0: 0.1, y0: 0.2, x1: 0.9, y1: 0.3 } },
+          { question_text: 'Second on page two', question_type: 'MCQ', marks: 2, page_number: 2 },
+        ],
+      }],
+    }
+    mockGetPaperGroupStatus.mockResolvedValue(status([withPhoto(1), withPhoto(2)], twoPages))
+    localStorage.setItem('paper_builder_image_capture_1_1', JSON.stringify({ groupId: 'g', totalPages: 2 }))
+    const user = userEvent.setup()
+    renderWithProviders(<ImageCapturePaperTab classId={1} subjectId={1} onApplyPrefill={vi.fn()} />)
+
+    await screen.findByText('1. Questions')
+    expect(screen.getByAltText('Page 1 of the paper')).toHaveAttribute('src', 'https://img.test/p1.jpg')
+    await user.click(screen.getByText('First on page one'))
+    expect(screen.getByTestId('question-highlight')).toBeInTheDocument()
+    await user.click(screen.getByText('Second on page two'))
+    expect(screen.getByAltText('Page 2 of the paper')).toHaveAttribute('src', 'https://img.test/p2.jpg')
+    expect(screen.queryByTestId('question-highlight')).toBeNull()
+    await user.click(screen.getByRole('button', { name: 'Hide photo' }))
+    expect(screen.queryByAltText('Page 2 of the paper')).toBeNull()
+  }, 15000)
+
   it('requires title and total marks, hands class/subject hints to the builder, and sends the types the user corrected', async () => {
     mockGetPaperGroupStatus.mockResolvedValue(status([pageRow(1)], {
       ...result, header: { ...result.header, exam_title: null, detected_total_marks: null }, sections: [section('Objective', 'MCQ', 2)],

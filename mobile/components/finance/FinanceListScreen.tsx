@@ -2,8 +2,8 @@ import React, { useMemo, useState } from 'react';
 import { View, Text, FlatList, ActivityIndicator, StyleSheet, TouchableOpacity, type RefreshControlProps } from 'react-native';
 import { financeApi } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
-import { incomeDescription } from '../../services/accountant';
-import { useDeleteExpense, useDeleteOtherIncome } from '../../hooks/useAccountant';
+import { incomeDescription } from '../../services/financeManager';
+import { useDeleteExpense, useDeleteOtherIncome } from '../../hooks/useFinanceManager';
 import { canChangeEntry } from '../../services/financeEntry';
 import EntryEditSheet from './EntryEditSheet';
 import { useEntryCategories } from './EntryFields';
@@ -12,8 +12,8 @@ import { confirm } from '../ui/confirm';
 import { useToast } from '../ui/Toast';
 import { staffLeaveErrorMessage } from '../../services/staffLeave';
 import { balanceOf, formatMoney, type FeePayment, type FeeStatus } from '../../services/feeCollect';
-import { useExpenseCategories, useFinanceList } from '../../hooks/useAccountant';
-import { categoryShares, monthRange } from '../../services/accountant';
+import { useExpenseCategories, useFinanceList } from '../../hooks/useFinanceManager';
+import { categoryShares, monthRange } from '../../services/financeManager';
 import { schoolToday } from '../../services/schoolTime';
 import { useDebouncedValue } from '../../hooks/useDebouncedValue';
 import { useRefreshControl } from '../../hooks/useRefreshControl';
@@ -54,7 +54,7 @@ const FEE_TONE: Record<FeeStatus, 'error' | 'warning' | 'success' | 'info'> = {
   UNPAID: 'error', PARTIAL: 'warning', PAID: 'success', ADVANCE: 'info',
 };
 
-// Read-only lists for the Accountant: the finance API refuses every write for that role, so
+// Read-only lists for the finance manager: the finance API refuses every write for that role, so
 // there is deliberately no add, edit or collect control here.
 export default function FinanceListScreen({ kind }: { kind: 'fees' | 'expenses' | 'income' }) {
   if (kind === 'fees') return <FeesList />;
@@ -121,7 +121,7 @@ function FeesList() {
 
 // Other income with a Delete control on the entries the person may remove (an admin any, others their own).
 // Used by the admin's income screen. Edit and delete show for the admin roles only: the finance API is
-// read only for the accountant, so their lists have no controls.
+// read only for the finance manager, so their lists have no controls.
 export function OtherIncomeHistory() {
   return <LedgerList kind="income" />;
 }

@@ -312,5 +312,5 @@ class TestDeleteMarks:
 
     def test_roles(self, seed_data, exams):
         self._marked(exams)
-        for role in ('accountant', 'staff'):
+        for role in ('finance_manager', 'staff'):
             assert _run(seed_data, 'delete_marks', role, exam_id=exams['exam'].id, subject_name='Maths', students=['Ali']) == {'error': 'You do not have permission to use this tool.'}

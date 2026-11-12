@@ -95,7 +95,7 @@ export function useStaffAccountActions() {
     create: useMutation({ mutationFn: ({ id, data }: { id: number; data: object }) => hrApi.createStaffAccount(id, data), onSuccess: done }),
     link: useMutation({ mutationFn: ({ id, userId }: { id: number; userId: number }) => hrApi.linkStaffAccount(id, { user_id: userId }), onSuccess: done }),
     unlink: useMutation({ mutationFn: (id: number) => hrApi.unlinkStaffAccount(id), onSuccess: done }),
-    role: useMutation({ mutationFn: ({ id, role }: { id: number; role: string }) => hrApi.updateStaffRole(id, { user_role: role }), onSuccess: done }),
+    role: useMutation({ mutationFn: ({ id, role, canManageFinance }: { id: number; role: string; canManageFinance?: boolean }) => hrApi.updateStaffRole(id, { user_role: role, can_manage_finance: role === 'MANAGER' && !!canManageFinance }), onSuccess: done }),
   };
 }
 

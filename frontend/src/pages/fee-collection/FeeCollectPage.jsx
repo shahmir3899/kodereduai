@@ -30,7 +30,7 @@ export default function FeeCollectPage() {
   const { user, activeSchool, effectiveRole, isSchoolAdmin, isPrincipal, isSuperAdmin } = useAuth()
   const { activeAcademicYear } = useAcademicYear()
   const { showWarning } = useToast()
-  // Accountant is read-only in finance and a teacher may only update a single record
+  // Finance manager is read-only in finance and a teacher may only update a single record
   // (FinanceRoleAccessPermission): bulk update/delete and delete are admin/principal only.
   const canManageFeeRecords = isSuperAdmin || isSchoolAdmin || isPrincipal
   const canWrite = canManageFeeRecords || effectiveRole === 'TEACHER'

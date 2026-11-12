@@ -404,10 +404,11 @@ const SESSION_AWARE_PREFIXES = [
   '/academics/sessions',
   '/academics/calendar',
   '/school-setup',
+  '/student/fees', // student portal: fees follow the selected academic year
 ]
 
 export default function Layout() {
-  const { user, logout, activeSchool, effectiveRole, isSuperAdmin, isStaffMember, isPrincipal, isManager, isStaffLevel, isParent, isStudent, isModuleEnabled } = useAuth()
+  const { user, logout, activeSchool, effectiveRole, isSuperAdmin, isStaffMember, isPrincipal, isManager, canManageFinance, isStaffLevel, isParent, isStudent, isModuleEnabled } = useAuth()
   const assistantOn = isAssistantEnabled()
   const { showSuccess } = useToast()
   const location = useLocation()
@@ -494,7 +495,7 @@ export default function Layout() {
 
   const isSessionAwarePage = SESSION_AWARE_PREFIXES.some(
     prefix => location.pathname === prefix || location.pathname.startsWith(prefix + '/')
-  )
+  ) || /^\/parent\/children\/[^/]+\/fees\/?$/.test(location.pathname) // parent fees follow the selected year
 
   const isActive = (href) => {
     if (!href.includes('?')) {
@@ -512,8 +513,8 @@ export default function Layout() {
 
   // Navigation structure: memoized to avoid re-creating on every render
   const navigationGroups = useMemo(() => buildStaffNavigation({
-    effectiveRole, isModuleEnabled, isStaffLevel, isManager, isTeacher, isStaff, isDriver: effectiveRole === 'DRIVER', isSchoolAdminNav, hasInventoryAssignments,
-  }, NAV_ICONS), [effectiveRole, isModuleEnabled, isStaffLevel, isManager, isTeacher, isStaff, isSchoolAdminNav, hasInventoryAssignments])
+    effectiveRole, isModuleEnabled, isStaffLevel, isManager, canManageFinance, isTeacher, isStaff, isDriver: effectiveRole === 'DRIVER', isSchoolAdminNav, hasInventoryAssignments,
+  }, NAV_ICONS), [effectiveRole, isModuleEnabled, isStaffLevel, isManager, canManageFinance, isTeacher, isStaff, isSchoolAdminNav, hasInventoryAssignments])
 
   // SuperAdmin only sees the Admin Panel link — no school-internal nav
   // Portal menus are fixed lists, so the Notifications item follows the school's module switch here (staff menus do it in buildStaffNavigation).

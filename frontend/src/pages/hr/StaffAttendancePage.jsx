@@ -125,7 +125,7 @@ function MyAttendanceView() {
 export default function StaffAttendancePage() {
   const { isTeacher, isStaffMember, isManager, isStaffLevel } = useAuth()
   // Manager joined this self-service tier 2026-09 (see LeaveManagementPage.jsx).
-  // isStaffLevel also covers Accountant/Driver, who have no sidebar link but could
+  // isStaffLevel also covers Finance manager/Driver, who have no sidebar link but could
   // open the URL and got the admin marking grid, whose Save All is a 403 for them.
   if (isTeacher || isStaffMember || isManager || isStaffLevel) return <MyAttendanceView />
   return <StaffAttendanceAdminView />

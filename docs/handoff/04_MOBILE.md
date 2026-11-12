@@ -3,7 +3,7 @@
 ## Goal
 
 The same assistant in the mobile app (`mobile/`, Expo 54, React Native 0.81, TypeScript, expo-router): chat with live steps, preview cards with Approve / Edit /
-Reject, voice input (Whisper) and spoken replies, history. Roles in the app: admin, teacher, student, parent, manager, accountant (see `docs/MOBILE.md`).
+Reject, voice input (Whisper) and spoken replies, history. Roles in the app: admin, teacher, student, parent, manager, finance manager (see `docs/MOBILE.md`).
 
 ## What the backend already gives (no backend change should be needed)
 

@@ -542,7 +542,7 @@ const canEditTransfer = (tfr) => {
 
 **Note:** FeePayment deletion does NOT require "creator-only" restriction because:
 - It's a transactional record tied to student billing
-- Admins and accountants need flexibility to correct mistakes
+- Admins and finance managers need flexibility to correct mistakes
 - The `collected_by` field preserves accountability even if record is deleted (via audit logs)
 
 #### 2.5 Add Filtered Statistics to FeeCollectPage
@@ -796,8 +796,8 @@ class FinanceEditPermissionTests(TestCase):
         
         # Create users with different roles
         self.admin_user = User.objects.create_user(username='admin', password='pass', role='SCHOOL_ADMIN')
-        self.creator_user = User.objects.create_user(username='creator', password='pass', role='ACCOUNTANT')
-        self.other_user = User.objects.create_user(username='other', password='pass', role='ACCOUNTANT')
+        self.creator_user = User.objects.create_user(username='creator', password='pass', role='finance manager')
+        self.other_user = User.objects.create_user(username='other', password='pass', role='finance manager')
         
         # Create memberships
         for user in [self.admin_user, self.creator_user, self.other_user]:
@@ -890,7 +890,7 @@ class FinanceEditPermissionTests(TestCase):
 - [ ] Can edit any expense/income/transfer
 - [ ] Can delete any expense/income/transfer
 
-**Test Scenario 2: Creator (Accountant)**
+**Test Scenario 2: Creator (Finance manager)**
 - [ ] Can see audit fields
 - [ ] Can edit own entries
 - [ ] Can delete own entries

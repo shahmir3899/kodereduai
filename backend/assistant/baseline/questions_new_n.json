@@ -14,7 +14,7 @@
 {"id":"N13","agent":"family","role":"PARENT","lang":"ur_roman","q":"mere bachay ka timetable dikhao","expect":{"tool":"get_child_timetable","accept":["get_my_children"]}},
 {"id":"N14","agent":"hr","role":"STUDENT","lang":"en","q":"Show me the payroll summary for this month","expect":{"denied":true}},
 {"id":"N15","agent":"finance","role":"STUDENT","lang":"en","q":"Which students have not paid their fees?","expect":{"denied":true}},
-{"id":"N16","agent":"academics","role":"ACCOUNTANT","lang":"en","q":"Grade the essay homework of class 5A","expect":{"denied":true}},
+{"id":"N16","agent":"academics","role":"MANAGER_FINANCE","lang":"en","q":"Grade the essay homework of class 5A","expect":{"denied":true}},
 {"id":"N17","agent":"hr","role":"SCHOOL_ADMIN","lang":"en","q":"List the departments and how many staff each has","expect":{"tool":"list_departments"}},
 {"id":"N18","agent":"hr","role":"SCHOOL_ADMIN","lang":"ur_roman","q":"science department mein kaun kaun hai?","expect":{"tool":"list_staff","accept":["list_departments"]}},
 {"id":"N19","agent":"students","role":"SCHOOL_ADMIN","lang":"en","q":"Show Ahmad Farooq's fee ledger","expect":{"tool":"get_student_ledger","accept":["find_student","get_student_fees"]}},

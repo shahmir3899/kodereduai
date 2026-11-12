@@ -1,8 +1,5 @@
-import { schoolYMD } from '../../utils/schoolTime'
 import { useState } from 'react'
 import Modal from '../../components/ui/Modal'
-import { TONE } from '../../components/ui/statusTones'
-import KuickpayReceived from '../../components/KuickpayReceived'
 import KuickpayBillCard from '../../components/KuickpayBillCard'
 import PageHeader from '../../components/ui/PageHeader'
 import { useParams, Link, useNavigate } from 'react-router-dom'
@@ -10,35 +7,14 @@ import { useQuery, useMutation } from '@tanstack/react-query'
 import { parentsApi } from '../../services/api'
 import Spinner from '../../components/ui/Spinner'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
-import { LedgerCard, ViewToggle, TrendStrip } from '../../components/cards'
-import DataTable from '../../components/ui/DataTable'
-import Badge from '../../components/ui/Badge'
-import { useViewPreference } from '../../hooks/useViewPreference'
-
-const STATUS_COLORS = {
-  PAID: TONE.success,
-  PARTIAL: TONE.warning,
-  UNPAID: TONE.danger,
-  PENDING: TONE.danger,
-  ADVANCE: TONE.info,
-  OVERDUE: TONE.danger,
-}
-
-const TREND_TONE = {
-  PAID: 'success',
-  ADVANCE: 'success',
-  PARTIAL: 'warning',
-  UNPAID: 'danger',
-  PENDING: 'danger',
-  OVERDUE: 'danger',
-}
+import FeeLedger from '../../components/fees/FeeLedger'
+import { useAcademicYear } from '../../contexts/AcademicYearContext'
+import { feeLabel, feeTotals, groupByBranch } from '../../utils/portalFees'
 
 export default function ChildFees() {
   const { studentId } = useParams()
   const navigate = useNavigate()
-  const currentYear = schoolYMD().year
-  const [filterYear, setFilterYear] = useState(currentYear)
-  const [view, setView] = useViewPreference('child-fees')
+  const { activeAcademicYear, loading: yearLoading } = useAcademicYear()
   const [payingFeeId, setPayingFeeId] = useState(null)
   const [selectedGateway, setSelectedGateway] = useState('')
   const [showPayModal, setShowPayModal] = useState(false)
@@ -87,9 +63,11 @@ export default function ChildFees() {
     })
   }
 
+  // Every year's and every branch's rows come back as one plain list; FeeLedger applies the
+  // academic year to the current branch and gives each earlier branch its own tab.
   const { data: feesData, isLoading } = useQuery({
-    queryKey: ['childFees', studentId, filterYear],
-    queryFn: () => parentsApi.getChildFees(studentId, { year: filterYear }),
+    queryKey: ['childFees', studentId],
+    queryFn: () => parentsApi.getChildFees(studentId),
     enabled: !!studentId,
   })
 
@@ -100,31 +78,14 @@ export default function ChildFees() {
     enabled: !!studentId,
   })
 
-  const fees = feesData?.data
-  const payments = fees?.payments || fees?.records || (Array.isArray(fees) ? fees : [])
-  const summary = fees?.summary || {}
+  const rows = Array.isArray(feesData?.data) ? feesData.data : []
+  // What is owed at the current branch this year (monthly running balance + yearly fees); drives
+  // the pay banner below. Earlier branches are history and never payable here.
+  const payments = groupByBranch(rows, activeAcademicYear?.id)[0].rows
+  const outstanding = feeTotals(payments.filter((p) => p.fee_type === 'MONTHLY'), 'MONTHLY').balance
+    + feeTotals(payments.filter((p) => p.fee_type !== 'MONTHLY'), 'ANNUAL').balance
 
-  const trendPoints = payments
-    .slice()
-    .sort((a, b) => (a.year - b.year) || (a.month - b.month))
-    .slice(-6)
-    .map((p) => ({
-      label: (p.month_name || '').slice(0, 3) || `M${p.month}`,
-      value: parseFloat(p.amount_paid || 0),
-      tone: TREND_TONE[p.status] || 'neutral',
-    }))
-
-  const totalDue = summary.total_due ?? payments.reduce((sum, p) => sum + parseFloat(p.amount_due || 0), 0)
-  const totalPaid = summary.total_paid ?? payments.reduce((sum, p) => sum + parseFloat(p.amount_paid || 0), 0)
-  const outstanding = summary.outstanding ?? (totalDue - totalPaid)
-
-  // Year options for filter
-  const yearOptions = []
-  for (let y = currentYear; y >= currentYear - 3; y--) {
-    yearOptions.push(y)
-  }
-
-  if (isLoading) {
+  if (isLoading || yearLoading) {
     return (
       <div className="space-y-6">
         <Link to={`/parent/children/${studentId}`} className="inline-flex items-center text-sm text-gray-500 hover:text-gray-700">
@@ -151,128 +112,11 @@ export default function ChildFees() {
       </Link>
 
       {/* Header */}
-      <PageHeader title="Fee Details" subtitle="Payment history and outstanding balance" actions={<>
-<select
-            value={filterYear}
-            onChange={(e) => setFilterYear(Number(e.target.value))}
-            className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-          >
-            {yearOptions.map((y) => (
-              <option key={y} value={y}>{y}</option>
-            ))}
-          </select>
-</>} />
+      <PageHeader title="Fee Details" subtitle={`Payment history and balance · ${activeAcademicYear?.name || ''}`} />
 
       <KuickpayBillCard summary={kuickpayData?.data} />
 
-      {/* Summary Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-blue-100 text-blue-600 flex items-center justify-center">
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
-              </svg>
-            </div>
-            <div>
-              <p className="text-xs text-gray-500 uppercase tracking-wider">Total Due</p>
-              <p className="text-xl font-bold text-gray-900 mt-0.5">PKR {Number(totalDue).toLocaleString()}</p>
-            </div>
-          </div>
-        </div>
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-green-100 text-green-600 flex items-center justify-center">
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-            </div>
-            <div>
-              <p className="text-xs text-gray-500 uppercase tracking-wider">Total Paid</p>
-              <p className="text-xl font-bold text-green-700 mt-0.5">PKR {Number(totalPaid).toLocaleString()}</p>
-            </div>
-          </div>
-        </div>
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
-          <div className="flex items-center gap-3">
-            <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${outstanding > 0 ? TONE.danger : TONE.success}`}>
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-            </div>
-            <div>
-              <p className="text-xs text-gray-500 uppercase tracking-wider">Outstanding</p>
-              <p className={`text-xl font-bold mt-0.5 ${outstanding > 0 ? 'text-red-700' : 'text-green-700'}`}>
-                PKR {Number(Math.abs(outstanding)).toLocaleString()}
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Progress Bar */}
-      {totalDue > 0 && (
-        <div className="bg-white rounded-xl border border-gray-200 p-4">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-sm font-medium text-gray-700">Payment Progress</span>
-            <span className="text-sm font-medium text-gray-900">
-              {Math.round((totalPaid / totalDue) * 100)}%
-            </span>
-          </div>
-          <div className="w-full bg-gray-200 rounded-full h-3">
-            <div
-              className={`h-3 rounded-full transition-all ${
-                totalPaid >= totalDue ? 'bg-green-500' :
-                totalPaid >= totalDue * 0.5 ? 'bg-yellow-500' : 'bg-red-500'
-              }`}
-              style={{ width: `${Math.min(100, Math.round((totalPaid / totalDue) * 100))}%` }}
-            />
-          </div>
-        </div>
-      )}
-
-      {/* Fee Table */}
-      {payments.length === 0 ? (
-        <div className="bg-white rounded-xl border border-gray-200 p-10 text-center">
-          <svg className="w-12 h-12 mx-auto text-gray-300 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
-          </svg>
-          <h3 className="text-base font-medium text-gray-900 mb-1">No fee records found</h3>
-          <p className="text-sm text-gray-500">Fee records for {filterYear} will appear here once generated.</p>
-        </div>
-      ) : (
-        <>
-          <div className="flex justify-end mb-3">
-            <ViewToggle view={view} onChange={setView} />
-          </div>
-
-          <DataTable
-            view={view}
-            rows={payments}
-            rowKey={(p, i) => p.id || i}
-            columns={[
-              { key: 'period', header: 'Month / Type', mobile: 'title', cellClassName: 'font-medium', render: (p) => p.month_name || p.fee_type_name || `${p.month}/${p.year}` },
-              { key: 'due', header: 'Amount Due', align: 'right', render: (p) => `PKR ${parseFloat(p.amount_due || 0).toLocaleString()}` },
-              { key: 'paid', header: 'Amount Paid', align: 'right', cellClassName: 'text-green-700 font-medium', render: (p) => (<div>PKR {parseFloat(p.amount_paid || 0).toLocaleString()}<KuickpayReceived kuickpay={p.kuickpay} className="justify-end" /></div>) },
-              { key: 'status', header: 'Status', mobile: 'status', render: (p) => <Badge colors={STATUS_COLORS[p.status]}>{p.status}</Badge> },
-              { key: 'date', header: 'Payment Date', cellClassName: 'text-gray-500', render: (p) => (p.payment_date ? new Date(p.payment_date).toLocaleDateString() : '-') },
-            ]}
-            renderCard={(payment) => (
-              <LedgerCard
-                title={payment.month_name || payment.fee_type_name || `${payment.month}/${payment.year}`}
-                meta={payment.payment_date ? `Paid ${new Date(payment.payment_date).toLocaleDateString()}` : undefined}
-                status={<Badge colors={STATUS_COLORS[payment.status]}>{payment.status}</Badge>}
-                description={<KuickpayReceived kuickpay={payment.kuickpay} />}
-                breakdown={[
-                  { label: 'Due', value: parseFloat(payment.amount_due || 0) },
-                  { label: 'Paid', value: parseFloat(payment.amount_paid || 0), emphasis: true },
-                ]}
-                trend={<TrendStrip points={trendPoints} currentLabel={(payment.month_name || '').slice(0, 3)} formatValue={(v) => `${(v / 1000).toFixed(0)}k`} />}
-              />
-            )}
-          />
-        </>
-      )}
+      <FeeLedger rows={rows} activeYear={activeAcademicYear} viewKey="child-fees" />
 
       {/* Pay Now Banner */}
       {outstanding > 0 && (
@@ -304,7 +148,7 @@ export default function ChildFees() {
                 <div key={p.id || idx} className="flex items-center justify-between py-2 px-3 rounded-lg bg-gray-50">
                   <div>
                     <span className="text-sm font-medium text-gray-900">
-                      {p.month_name || p.fee_type_name || `${p.month}/${p.year}`}
+                      {feeLabel(p)}
                     </span>
                     <span className="text-sm text-gray-500 ml-2">— PKR {due.toLocaleString()} due</span>
                   </div>

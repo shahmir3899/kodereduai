@@ -11,7 +11,7 @@ from assistant.skills import load_all
 BASELINE = Path(__file__).resolve().parents[1] / 'baseline'
 QUESTIONS = json.loads((BASELINE / 'questions.json').read_text(encoding='utf-8'))
 LANGS = {'en', 'ur_roman'}
-ROLES = {'SUPER_ADMIN', 'SCHOOL_ADMIN', 'PRINCIPAL', 'MANAGER', 'ACCOUNTANT', 'TEACHER', 'STAFF', 'DRIVER', 'PARENT', 'STUDENT'}
+ROLES = {'SUPER_ADMIN', 'SCHOOL_ADMIN', 'PRINCIPAL', 'MANAGER', 'MANAGER_FINANCE', 'TEACHER', 'STAFF', 'DRIVER', 'PARENT', 'STUDENT'}
 
 
 @pytest.fixture(scope='module', autouse=True)

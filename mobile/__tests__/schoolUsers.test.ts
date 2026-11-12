@@ -2,12 +2,15 @@ import {
   activeToggleText, allowableRoles, buildResetPayload, buildUserPayload, canManageUser, emptyUserForm, filterUsers, fullName,
   passwordPairProblem, roleLabel, userToForm, validateReset, validateUser, type SchoolUser,
 } from '../services/schoolUsers';
+import { useRoleConfig } from './roleFixture';
+
+useRoleConfig(); // before the describe bodies below read allowableRoles()
 
 const u = (over: Partial<SchoolUser> = {}): SchoolUser => ({ id: 1, username: 'ali', first_name: 'Ali', last_name: 'Khan', email: 'ali@x.pk', role: 'TEACHER', is_active: true, ...over });
 
 describe('roles', () => {
   it('follows the role ladder', () => {
-    expect(allowableRoles('SCHOOL_ADMIN')).toEqual(['PRINCIPAL', 'MANAGER', 'ACCOUNTANT', 'TEACHER', 'STAFF', 'DRIVER']);
+    expect(allowableRoles('SCHOOL_ADMIN')).toEqual(['PRINCIPAL', 'MANAGER', 'TEACHER', 'STAFF', 'DRIVER']);
     expect(allowableRoles('PRINCIPAL')).not.toContain('PRINCIPAL');
     expect(allowableRoles('TEACHER')).toEqual([]);
     expect(allowableRoles('SCHOOL_ADMIN', true)).toContain('SUPER_ADMIN');
@@ -58,7 +61,7 @@ describe('form', () => {
 
   it('ignores the password and username when editing', () => {
     expect(validateUser({ ...emptyUserForm(), role: 'STAFF' }, false, allowed)).toBeNull();
-    expect(buildUserPayload({ ...ok, firstName: ' A ' }, false)).toEqual({ email: '', first_name: 'A', last_name: '', role: 'TEACHER', phone: '' });
+    expect(buildUserPayload({ ...ok, firstName: ' A ' }, false)).toEqual({ email: '', first_name: 'A', last_name: '', role: 'TEACHER', phone: '', can_manage_finance: false });
   });
 
   it('sends the password pair only on create', () => {
@@ -90,5 +93,16 @@ describe('reset password', () => {
   it('words the active toggle', () => {
     expect(activeToggleText(u(), 'Ali').confirmLabel).toBe('Deactivate');
     expect(activeToggleText(u({ is_active: false }), 'Ali').confirmLabel).toBe('Activate');
+  });
+});
+
+describe('finance capability', () => {
+  it('is sent only for a manager', () => {
+    const base = { ...emptyUserForm(), username: 'fin', password: 'abcd1234', confirm: 'abcd1234', canManageFinance: true };
+    expect(buildUserPayload({ ...base, role: 'MANAGER' }, true)).toMatchObject({ can_manage_finance: true });
+    expect(buildUserPayload({ ...base, role: 'TEACHER' }, true)).toMatchObject({ can_manage_finance: false });
+  });
+  it('is read back from the user when editing', () => {
+    expect(userToForm(u({ role: 'MANAGER', can_manage_finance: true })).canManageFinance).toBe(true);
   });
 });

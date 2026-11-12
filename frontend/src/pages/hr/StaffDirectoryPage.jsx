@@ -36,19 +36,13 @@ const typeBadge = {
   INTERN: TONE.teal,
 }
 
-const QUICK_ROLE_LABELS = { MANAGER: 'Manager', ACCOUNTANT: 'Accountant', TEACHER: 'Teacher', STAFF: 'Staff' }
-
-const TEACHING_DESIGNATION_PATTERN = /(teacher|lecturer|instructor|professor|tutor|faculty)/i
-
-const isTeachingMember = (member) => {
-  const designation = member?.designation_name || ''
-  return TEACHING_DESIGNATION_PATTERN.test(designation)
-}
+// Teaching staff is an explicit flag on the staff record (it used to be guessed from the job title).
+const isTeachingMember = (member) => !!member?.is_teaching
 
 export default function StaffDirectoryPage() {
   const queryClient = useQueryClient()
   const { showError, showSuccess } = useToast()
-  const { getAllowableRoles } = useAuth()
+  const { getAllowableRoles, getRoleLabel } = useAuth()
   const { confirm, ConfirmModalRoot } = useConfirmModal()
   const { validate: validatePassword, validateLength: validatePasswordLength } = usePasswordPolicy()
 
@@ -67,7 +61,7 @@ export default function StaffDirectoryPage() {
   const [quickErrors, setQuickErrors] = useState('')
   const [quickDuplicateWarning, setQuickDuplicateWarning] = useState(null) // { matches: [...] }
   const [quickCreateUser, setQuickCreateUser] = useState(false)
-  const [quickUserForm, setQuickUserForm] = useState({ username: '', password: '', confirm_password: '', user_role: 'STAFF' })
+  const [quickUserForm, setQuickUserForm] = useState({ username: '', password: '', confirm_password: '', user_role: 'STAFF', can_manage_finance: false })
   const quickStaffRoleOptions = getAllowableRoles().filter(r => !['SUPER_ADMIN', 'SCHOOL_ADMIN', 'PRINCIPAL'].includes(r))
 
   // Bulk import state
@@ -83,7 +77,7 @@ export default function StaffDirectoryPage() {
   const [selectedStaff, setSelectedStaff] = useState(new Set())
   const [showConvertModal, setShowConvertModal] = useState(false)
   const [convertMember, setConvertMember] = useState(null)
-  const [convertForm, setConvertForm] = useState({ username: '', password: '', confirm_password: '', user_role: 'STAFF' })
+  const [convertForm, setConvertForm] = useState({ username: '', password: '', confirm_password: '', user_role: 'STAFF', can_manage_finance: false })
   const [convertError, setConvertError] = useState('')
   const [showBulkConvertModal, setShowBulkConvertModal] = useState(false)
   const [bulkConvertPassword, setBulkConvertPassword] = useState('')
@@ -195,6 +189,7 @@ export default function StaffDirectoryPage() {
       payload.password = quickUserForm.password
       payload.confirm_password = quickUserForm.confirm_password
       payload.user_role = quickUserForm.user_role
+      payload.can_manage_finance = quickUserForm.user_role === 'MANAGER' && !!quickUserForm.can_manage_finance
     }
     return payload
   }
@@ -389,7 +384,7 @@ export default function StaffDirectoryPage() {
   const openConvertModal = (member) => {
     setConvertMember(member)
     const suggestedUsername = `${member.first_name}_${member.last_name}`.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '')
-    setConvertForm({ username: suggestedUsername, password: '', confirm_password: '', user_role: 'STAFF' })
+    setConvertForm({ username: suggestedUsername, password: '', confirm_password: '', user_role: 'STAFF', can_manage_finance: false })
     setConvertError('')
     setShowConvertModal(true)
   }
@@ -1247,8 +1242,14 @@ export default function StaffDirectoryPage() {
                       <div>
                         <label className="block text-xs font-medium text-gray-700 mb-1">Role *</label>
                         <select className="input text-sm" value={quickUserForm.user_role} onChange={e => setQuickUserForm(f => ({ ...f, user_role: e.target.value }))}>
-                          {quickStaffRoleOptions.map(r => <option key={r} value={r}>{QUICK_ROLE_LABELS[r] || r}</option>)}
+                          {quickStaffRoleOptions.map(r => <option key={r} value={r}>{getRoleLabel(r)}</option>)}
                         </select>
+                        {quickUserForm.user_role === 'MANAGER' && (
+                          <label className="mt-1 flex items-center gap-2 text-xs text-gray-700">
+                            <input type="checkbox" checked={!!quickUserForm.can_manage_finance} onChange={e => setQuickUserForm(f => ({ ...f, can_manage_finance: e.target.checked }))} />
+                            Can manage finance and fees
+                          </label>
+                        )}
                       </div>
                     </div>
                     <div className="grid grid-cols-2 gap-2">
@@ -1324,9 +1325,15 @@ export default function StaffDirectoryPage() {
                   onChange={(e) => setConvertForm(f => ({ ...f, user_role: e.target.value }))}
                 >
                   {convertRoleOptions.map(r => (
-                    <option key={r} value={r}>{QUICK_ROLE_LABELS[r] || r}</option>
+                    <option key={r} value={r}>{getRoleLabel(r)}</option>
                   ))}
                 </select>
+                {convertForm.user_role === 'MANAGER' && (
+                  <label className="mt-1 flex items-center gap-2 text-xs text-gray-700">
+                    <input type="checkbox" checked={!!convertForm.can_manage_finance} onChange={(e) => setConvertForm(f => ({ ...f, can_manage_finance: e.target.checked }))} />
+                    Can manage finance and fees
+                  </label>
+                )}
 </Field>
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -1553,7 +1560,7 @@ export default function StaffDirectoryPage() {
                       onChange={(e) => setBulkConvertRole(e.target.value)}
                     >
                       {convertRoleOptions.map(r => (
-                        <option key={r} value={r}>{QUICK_ROLE_LABELS[r] || r}</option>
+                        <option key={r} value={r}>{getRoleLabel(r)}</option>
                       ))}
                     </select>
 </Field>

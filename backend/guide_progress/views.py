@@ -83,7 +83,7 @@ def _my_counts(user, school_id, rows):
     if not member or user.is_super_admin:
         return None
     enabled = School.objects.values_list('enabled_modules', flat=True).get(pk=school_id) or {}
-    return catalog.person_counts(member.role, enabled, {(r.kind, r.key) for r in rows if r.completed_at})
+    return catalog.person_counts(catalog.guide_roles(member), enabled, {(r.kind, r.key) for r in rows if r.completed_at})
 
 
 class GuideProgressViewSet(viewsets.GenericViewSet):
@@ -214,7 +214,7 @@ class GuideProgressViewSet(viewsets.GenericViewSet):
         rows = {(r.kind, r.key): r for r in GuideProgress.objects.filter(school_id=school_id, user_id=user_id)}
         school = School.objects.get(pk=school_id)
         steps = []
-        for section_id, video_id in catalog.step_requirements(member.role, school.enabled_modules or {}):
+        for section_id, video_id in catalog.step_requirements(catalog.guide_roles(member), school.enabled_modules or {}):
             row = rows.get(('video', video_id)) if video_id else rows.get(('step', section_id))
             steps.append({
                 'section': section_id, 'video': video_id, 'done': bool(row and row.completed_at),
@@ -272,7 +272,7 @@ class GuideProgressViewSet(viewsets.GenericViewSet):
             if m.user.is_super_admin:
                 continue
             mine = progress.get(m.user_id, {})
-            counts = catalog.person_counts(m.role, enabled, {k for k, (completed, _) in mine.items() if completed})
+            counts = catalog.person_counts(catalog.guide_roles(m), enabled, {k for k, (completed, _) in mine.items() if completed})
             done, total, watched, total_videos = (
                 counts['steps_done'], counts['steps_total'], counts['videos_watched'], counts['videos_total'],
             )

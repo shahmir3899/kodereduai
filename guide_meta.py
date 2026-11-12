@@ -13,7 +13,8 @@ A missing `roles` means "every role"; a missing `module` means "no module".
 ADM = ['SCHOOL_ADMIN', 'PRINCIPAL']
 TCH = ['TEACHER']
 MGR = ['MANAGER']
-ACC = ['ACCOUNTANT']
+# Audience for a Manager whose membership has can_manage_finance (finance access is a capability, not a role).
+ACC = ['FINANCE']
 STF = ['STAFF']
 DRV = ['DRIVER']
 # Everyone with a staff-level login except Manager (Layout.jsx hides
@@ -50,7 +51,7 @@ START_HERE = {
     'PRINCIPAL': ['1.3', '2.7', '2.1', '2.2', '2.3', '2.4', '2.5', '3.1'],
     'TEACHER': ['1.3', '3.1', '3.2', '3.3', '6.4', '12.2'],
     'MANAGER': ['1.3', '5.1', '5.5'],
-    'ACCOUNTANT': ['1.3', '7.1', '7.3', '7.6', '7.9'],
+    'FINANCE': ['1.3', '7.1', '7.3', '7.6', '7.9'],
     'STAFF': ['1.3', '13.1'],
     'DRIVER': ['1.3', '10.4'],
     'PARENT': ['1.3', '15.2', '15.3'],

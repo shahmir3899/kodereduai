@@ -125,6 +125,13 @@ class StaffMember(models.Model):
         blank=True,
         related_name='staff_members',
     )
+    # Explicit teaching flag. Used to be guessed by a regex on the designation text.
+    # A TEACHER-role login ticks it by default, but it can be switched off (a teacher who
+    # currently teaches nothing) or on for staff whose login role is not TEACHER.
+    is_teaching = models.BooleanField(
+        default=False,
+        help_text='Teaching staff: appears in teacher pickers and the teaching headcount',
+    )
     employment_type = models.CharField(
         max_length=20,
         choices=EmploymentType.choices,

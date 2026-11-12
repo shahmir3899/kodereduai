@@ -19,7 +19,10 @@ from django.core.serializers.json import DjangoJSONEncoder
 logger = logging.getLogger(__name__)
 
 ADMINS = ('SUPER_ADMIN', 'SCHOOL_ADMIN', 'PRINCIPAL')
-FINANCE_ROLES = ADMINS + ('ACCOUNTANT',)
+# Marker (not a real role) for a MANAGER whose membership has can_manage_finance, the former
+# finance access. Tool role tuples name it; ToolContext.finance decides who matches.
+FINANCE_MANAGER = 'MANAGER_FINANCE'
+FINANCE_ROLES = ADMINS + (FINANCE_MANAGER,)
 
 # Parents and students never get write tools, whatever a tool declares.
 NO_WRITE_ROLES = ('PARENT', 'STUDENT')
@@ -39,6 +42,12 @@ class ToolContext:
     role: Optional[str]
     conversation: Any = None
     _school: Any = field(default=None, repr=False)
+
+    @property
+    def finance(self):
+        if self.role != 'MANAGER' or not self.school_id or getattr(self.user, 'pk', None) is None:
+            return False
+        return self.user.has_capability_for_school(self.school_id, 'can_manage_finance')
 
     @property
     def school(self):
@@ -104,7 +113,7 @@ def get_tool(name):
 
 
 def is_allowed(tool: Tool, ctx: ToolContext) -> bool:
-    if ctx.role not in tool.roles:
+    if ctx.role not in tool.roles and not (FINANCE_MANAGER in tool.roles and ctx.finance):
         return False
     if tool.kind == 'write' and ctx.role in NO_WRITE_ROLES:
         return False

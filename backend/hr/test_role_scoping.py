@@ -10,7 +10,7 @@ from hr.models import (
 )
 
 # Role -> can read the admin-only-readable HR sets (salary/appraisals/...). Manager is blocked from those outright.
-OWN_ONLY_ROLES = ['teacher', 'staff', 'accountant', 'driver']
+OWN_ONLY_ROLES = ['teacher', 'staff', 'driver']  # a finance Manager is a Manager here: admin-only HR data
 ALL_NON_ADMIN = OWN_ONLY_ROLES + ['manager']
 
 # (url, rows carry a staff_member id)

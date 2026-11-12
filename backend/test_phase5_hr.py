@@ -6,7 +6,7 @@ payslips, leave policies, leave applications, staff attendance, appraisals,
 qualifications, documents) with role-based access control.
 
 Write access: SCHOOL_ADMIN, PRINCIPAL, MANAGER
-Read-only: TEACHER, ACCOUNTANT
+Read-only: TEACHER, FINANCE_MANAGER
 
 Run:
     cd backend

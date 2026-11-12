@@ -115,7 +115,7 @@ describe('useDashboardBootstrap', () => {
     expect(result.current.settled).toBe(false)
   })
 
-  it.each(['TEACHER', 'ACCOUNTANT', 'STAFF', 'MANAGER'])('is a no-op for %s', async (role) => {
+  it.each(['TEACHER', 'FINANCE_MANAGER', 'STAFF', 'MANAGER'])('is a no-op for %s', async (role) => {
     auth.effectiveRole = role
     const { result } = renderHook(() => useDashboardBootstrap(), { wrapper: withClient(makeClient()) })
     expect(result.current).toMatchObject({ settled: true, waiting: false, feeReady: true, feeWaiting: false })

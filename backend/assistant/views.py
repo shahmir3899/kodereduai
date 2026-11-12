@@ -198,7 +198,7 @@ class PreferencesView(_AssistantView):
         accounts = []
         try:
             from .skills.finance_writes import _accounts
-            if get_effective_role(request) in ('SUPER_ADMIN', 'SCHOOL_ADMIN', 'PRINCIPAL', 'ACCOUNTANT'):
+            if ctx.role in ('SUPER_ADMIN', 'SCHOOL_ADMIN', 'PRINCIPAL') or ctx.finance:
                 accounts = [{'id': a['id'], 'name': a['name']} for a in _accounts(ctx)]
         except Exception:       # finance off or no permission: the sheet simply hides the account choice
             accounts = []

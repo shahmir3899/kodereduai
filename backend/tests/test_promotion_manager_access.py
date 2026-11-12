@@ -1,6 +1,6 @@
 """
 A Manager runs promotion end to end (owner's call, 2026-10-29), but only the promotion
-actions: plain enrollment writes stay admin/principal, and Accountant/Teacher stay out.
+actions: plain enrollment writes stay admin/principal, and Finance manager/Teacher stay out.
 
 Run:
     cd backend
@@ -21,7 +21,7 @@ class TestPromotionAccess:
         resp = api.post(BULK_PROMOTE, {}, seed_data['tokens'][role], seed_data['SID_A'])
         assert resp.status_code == 400
 
-    @pytest.mark.parametrize('role', ['accountant', 'teacher', 'staff'])
+    @pytest.mark.parametrize('role', ['teacher', 'staff'])
     def test_other_roles_are_denied(self, seed_data, api, role):
         resp = api.post(BULK_PROMOTE, {}, seed_data['tokens'][role], seed_data['SID_A'])
         assert resp.status_code == 403

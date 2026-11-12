@@ -41,6 +41,7 @@ const EMPTY_FORM = {
   designation: '',
   employee_id: '',
   employment_type: 'FULL_TIME',
+  is_teaching: false,
   employment_status: 'ACTIVE',
   date_of_joining: '',
   address: '',
@@ -54,7 +55,7 @@ export default function StaffFormPage() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { showError, showSuccess } = useToast()
-  const { getAllowableRoles } = useAuth()
+  const { getAllowableRoles, getRoleLabel } = useAuth()
   const { validate: validatePassword } = usePasswordPolicy()
   const isEdit = !!id
 
@@ -65,11 +66,9 @@ export default function StaffFormPage() {
   })
   const [staffUserError, setStaffUserError] = useState('')
   const [erpUserRole, setErpUserRole] = useState('')
+  const [erpCanManageFinance, setErpCanManageFinance] = useState(false)
   const staffRoleOptions = getAllowableRoles().filter(r => !['SUPER_ADMIN', 'SCHOOL_ADMIN', 'PRINCIPAL'].includes(r))
 
-  const ROLE_LABELS = {
-    MANAGER: 'Manager', ACCOUNTANT: 'Accountant', TEACHER: 'Teacher', STAFF: 'Staff', DRIVER: 'Driver',
-  }
 
   // Fetch existing staff member for edit
   const { data: staffData, isLoading: staffLoading } = useQuery({
@@ -118,6 +117,7 @@ export default function StaffFormPage() {
         designation: s.designation ? String(s.designation) : '',
         employee_id: s.employee_id || '',
         employment_type: s.employment_type || 'FULL_TIME',
+        is_teaching: !!s.is_teaching,
         employment_status: s.employment_status || 'ACTIVE',
         date_of_joining: s.date_of_joining || '',
         address: s.address || '',
@@ -126,6 +126,7 @@ export default function StaffFormPage() {
         notes: s.notes || '',
       })
       setErpUserRole(s.user_role || '')
+      setErpCanManageFinance(!!s.user_can_manage_finance)
     }
   }, [staffData])
 
@@ -254,6 +255,8 @@ export default function StaffFormPage() {
       payload.password = staffUserForm.password
       payload.confirm_password = staffUserForm.confirm_password
       payload.user_role = staffUserForm.user_role
+      payload.can_manage_finance = staffUserForm.user_role === 'MANAGER' && !!staffUserForm.can_manage_finance
+      if (staffUserForm.user_role === 'TEACHER') payload.is_teaching = true // a teacher login teaches by default
     }
 
     if (isEdit) {
@@ -418,21 +421,27 @@ export default function StaffFormPage() {
                       >
                         <option value="">Select Role</option>
                         {staffRoleOptions.map(role => (
-                          <option key={role} value={role}>{ROLE_LABELS[role] || role}</option>
+                          <option key={role} value={role}>{getRoleLabel(role)}</option>
                         ))}
                       </select>
 </Field>
                   </div>
+                  {erpUserRole === 'MANAGER' && (
+                    <label className="flex items-center gap-2 text-sm text-gray-700">
+                      <input type="checkbox" checked={erpCanManageFinance} onChange={(e) => setErpCanManageFinance(e.target.checked)} />
+                      Can manage finance and fees
+                    </label>
+                  )}
 
                   <div className="rounded-lg bg-blue-50 px-3 py-2 text-xs text-blue-700">
-                    <strong>Class Teacher Visibility:</strong> Staff appear in Class Teacher assignment only when their ERP role is TEACHER.
+                    <strong>Class Teacher Visibility:</strong> Staff appear in teacher pickers when "Teaching staff" is ticked. Setting the ERP role to Teacher ticks it automatically.
                   </div>
 
                   <div className="flex justify-end">
                     <button
                       type="button"
-                      onClick={() => updateUserRoleMutation.mutate({ user_role: erpUserRole })}
-                      disabled={!erpUserRole || updateUserRoleMutation.isPending || erpUserRole === (staffData?.data?.user_role || '')}
+                      onClick={() => updateUserRoleMutation.mutate({ user_role: erpUserRole, can_manage_finance: erpCanManageFinance })}
+                      disabled={!erpUserRole || updateUserRoleMutation.isPending || (erpUserRole === (staffData?.data?.user_role || '') && erpCanManageFinance === !!staffData?.data?.user_can_manage_finance)}
                       className="btn btn-primary"
                     >
                       {updateUserRoleMutation.isPending ? 'Updating Role...' : 'Update ERP Role'}
@@ -503,6 +512,16 @@ export default function StaffFormPage() {
                       <option value="INTERN">Intern</option>
                     </select>
 </Field>
+                  <Field label="Teaching staff">
+                    <label className="flex items-center gap-2 text-sm text-gray-700 pt-2">
+                      <input
+                        type="checkbox"
+                        checked={!!form.is_teaching}
+                        onChange={(e) => handleChange('is_teaching', e.target.checked)}
+                      />
+                      Teaches classes (shows in teacher pickers)
+                    </label>
+                  </Field>
                   <Field label="Employment Status">
 <select
                       className="input"
@@ -611,10 +630,16 @@ export default function StaffFormPage() {
                       onChange={(e) => setStaffUserForm(f => ({ ...f, user_role: e.target.value }))}
                     >
                       {staffRoleOptions.map(role => (
-                        <option key={role} value={role}>{ROLE_LABELS[role] || role}</option>
+                        <option key={role} value={role}>{getRoleLabel(role)}</option>
                       ))}
                     </select>
 </Field>
+                  {staffUserForm.user_role === 'MANAGER' && (
+                    <label className="flex items-center gap-2 text-sm text-gray-700">
+                      <input type="checkbox" checked={!!staffUserForm.can_manage_finance} onChange={(e) => setStaffUserForm(f => ({ ...f, can_manage_finance: e.target.checked }))} />
+                      Can manage finance and fees
+                    </label>
+                  )}
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>

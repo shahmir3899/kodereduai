@@ -17,6 +17,7 @@ import { MOBILE_CLIENT_HEADERS, refreshEndsSession } from '../services/sessionRu
 import { unregisterCurrentPushToken } from '../services/notifications';
 import { personaFor, type Persona } from '../navigation/personas';
 import { preferredSchool } from '../services/schoolFinder';
+import { roleGroup, setRoleConfig } from '../services/roleConfig';
 
 interface AuthContextType {
   user: User | null;
@@ -32,7 +33,7 @@ interface AuthContextType {
   isPrincipal: boolean;
   isTeacher: boolean;
   isManager: boolean;
-  isAccountant: boolean;
+  canManageFinance: boolean;
   isDriver: boolean;
   isParent: boolean;
   isStudent: boolean;
@@ -76,6 +77,7 @@ function resolveActiveSchool(userData: User, savedId?: string | null): School | 
 }
 
 function normalizeUser(userData: User): User {
+  setRoleConfig(userData.role_config);
   if (!userData.school_id && (userData as any).school) {
     userData.school_id = (userData as any).school;
   }
@@ -196,12 +198,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     !!user?.is_super_admin ||
     effectiveRole === 'SCHOOL_ADMIN' ||
     effectiveRole === 'PRINCIPAL';
-  const isStaffLevel = ['STAFF', 'TEACHER', 'MANAGER', 'ACCOUNTANT', 'DRIVER'].includes(
-    effectiveRole || ''
-  );
+  // Server-served role list (backend core/roles.py); nothing here keeps its own copy.
+  const isStaffLevel = roleGroup(effectiveRole) === 'staff';
+  const canManageFinance = effectiveRole === 'MANAGER' && !!activeSchool?.can_manage_finance;
   const isStaff = effectiveRole === 'STAFF';
   const isDriver = effectiveRole === 'DRIVER';
-  const persona = personaFor(effectiveRole, !!user?.is_super_admin);
+  const persona = personaFor(effectiveRole, !!user?.is_super_admin, canManageFinance);
   const isParent = effectiveRole === 'PARENT';
   const isStudent = effectiveRole === 'STUDENT';
 
@@ -228,7 +230,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     isPrincipal: effectiveRole === 'PRINCIPAL',
     isTeacher: effectiveRole === 'TEACHER',
     isManager: effectiveRole === 'MANAGER',
-    isAccountant: effectiveRole === 'ACCOUNTANT',
+    canManageFinance,
     isDriver,
     isParent,
     isStudent,

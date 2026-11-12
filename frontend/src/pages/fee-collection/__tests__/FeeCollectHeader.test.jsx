@@ -10,7 +10,7 @@ vi.mock('../../../contexts/AuthContext', () => ({
     user: { id: 1, role: 'SCHOOL_ADMIN' },
     activeSchool: { id: 1, name: 'Test School' },
     effectiveRole: 'SCHOOL_ADMIN',
-    isSchoolAdmin: true, isAccountant: false, isPrincipal: false, isSuperAdmin: false, isStaffMember: false,
+    isSchoolAdmin: true, canManageFinance: false, isPrincipal: false, isSuperAdmin: false, isStaffMember: false,
   }),
 }))
 vi.mock('../../../contexts/AcademicYearContext', () => ({

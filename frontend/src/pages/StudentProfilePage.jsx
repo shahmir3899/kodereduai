@@ -14,7 +14,7 @@ import Spinner from '../components/ui/Spinner'
 import StudentProfileHeader from './students/profile/StudentProfileHeader'
 import ProfileSections from './students/profile/ProfileSections'
 import StatusUpdateModal from './students/profile/StatusUpdateModal'
-import ParentInviteModal from './students/profile/ParentInviteModal'
+import ParentLinksDrawer from './students/parents/ParentLinksDrawer'
 import StudentExitWizard from './students/profile/StudentExitWizard'
 import ReadmitStudentModal from './students/profile/ReadmitStudentModal'
 import DeleteStudentModal from './students/components/DeleteStudentModal'
@@ -341,7 +341,7 @@ export default function StudentProfilePage() {
       {exitPrefill && <StudentExitWizard student={student} prefill={exitPrefill} onClose={() => setExitPrefill(null)} />}
       {readmitPrefill && <ReadmitStudentModal student={student} prefill={readmitPrefill} onClose={() => setReadmitPrefill(null)} />}
       {showReclassifyModal && <ReclassifyStudentModal student={student} onClose={() => setShowReclassifyModal(false)} />}
-      {showInviteModal && <ParentInviteModal student={student} onClose={() => setShowInviteModal(false)} />}
+      {showInviteModal && <ParentLinksDrawer student={student} onClose={() => setShowInviteModal(false)} />}
     </div>
   )
 }

@@ -22,7 +22,6 @@ const ROLE_BADGE_STYLES = {
   SCHOOL_ADMIN: TONE.accent,
   PRINCIPAL: TONE.accent,
   MANAGER: TONE.accent,
-  ACCOUNTANT: TONE.success,
   STAFF: TONE.neutral,
   DRIVER: TONE.orange,
 }
@@ -32,7 +31,6 @@ const ROLE_AVATAR_STYLES = {
   SCHOOL_ADMIN: TONE.accent,
   PRINCIPAL: TONE.accent,
   MANAGER: TONE.accent,
-  ACCOUNTANT: TONE.success,
   STAFF: TONE.neutral,
   DRIVER: TONE.orange,
 }
@@ -56,6 +54,7 @@ export default function StaffFilter({
   value,
   onChange,
   role,
+  teaching = false,
   status,
   options,
   placeholder = 'Select staff',
@@ -72,10 +71,11 @@ export default function StaffFilter({
   // page-level stat like "reviewed X / Y staff") pass it via `options` so we
   // don't issue a second, differently-keyed request for the same rows.
   const { data, isLoading } = useQuery({
-    queryKey: ['staffFilter', role, status],
+    queryKey: ['staffFilter', role, teaching, status],
     queryFn: async () => {
       const res = await hrApi.getStaff({
         ...(role && { role }),
+        ...(teaching && { is_teaching: true }),
         ...(status && { employment_status: status }),
         page_size: 9999,
       })
@@ -83,7 +83,8 @@ export default function StaffFilter({
       // teachers were added as StaffMember rows without a linked User
       // account (role lives on User, see hr/views.py get_queryset) — fall
       // back to the unfiltered list rather than showing an empty picker.
-      if (role) {
+      // `teaching` is the explicit flag on the staff record, so it needs no fallback.
+      if (role && !teaching) {
         const list = Array.isArray(res?.data) ? res.data : res?.data?.results ?? []
         if (list.length === 0) {
           return hrApi.getStaff({

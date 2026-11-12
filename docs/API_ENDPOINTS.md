@@ -331,7 +331,7 @@ Pagination: All list endpoints return `{count, next, previous, results}`. Defaul
 | POST | /api/notifications/{id}/mark-read/ | Mark as read |
 | POST | /api/notifications/mark-all-read/ | Mark all read |
 | POST | /api/notifications/send/ | Send notification to single recipient |
-| POST | /api/notifications/broadcast/ | Broadcast notification to all users of a role. Body: {event_type, channel, recipient_type, title, body, context?}. recipient_type: PARENT\|TEACHER\|STAFF\|SCHOOL_ADMIN\|PRINCIPAL\|MANAGER\|ACCOUNTANT\|STUDENT. Returns {sent, failed, skipped, total_recipients} |
+| POST | /api/notifications/broadcast/ | Broadcast notification to all users of a role. Body: {event_type, channel, recipient_type, title, body, context?}. recipient_type: PARENT\|TEACHER\|STAFF\|SCHOOL_ADMIN\|PRINCIPAL\|MANAGER\|finance manager\|STUDENT. Returns {sent, failed, skipped, total_recipients} |
 | GET | /api/notifications/analytics/ | Analytics. Params: days (7\|30\|90, default=all time) |
 | POST | /api/notifications/ai-chat/ | Parent Communication AI chat. Body: `{message}`. Multi-round tool calling (15 tools), conversation history. See BACKEND_APPS.md → AI Chatbot Agents |
 

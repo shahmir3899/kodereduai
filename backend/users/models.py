@@ -41,8 +41,8 @@ class User(AbstractUser):
         SUPER_ADMIN = 'SUPER_ADMIN', 'Super Admin'
         SCHOOL_ADMIN = 'SCHOOL_ADMIN', 'School Admin'
         PRINCIPAL = 'PRINCIPAL', 'Principal'
+        # Finance access is the can_manage_finance capability on a Manager (see core/roles.py).
         MANAGER = 'MANAGER', 'Manager'
-        ACCOUNTANT = 'ACCOUNTANT', 'Accountant'
         TEACHER = 'TEACHER', 'Teacher'
         STAFF = 'STAFF', 'Staff'
         DRIVER = 'DRIVER', 'Driver'
@@ -129,11 +129,6 @@ class User(AbstractUser):
         return self.role == self.Role.TEACHER
 
     @property
-    def is_accountant(self) -> bool:
-        """Check if user is an Accountant."""
-        return self.role == self.Role.ACCOUNTANT
-
-    @property
     def is_driver(self) -> bool:
         """Check if user is a Driver."""
         return self.role == self.Role.DRIVER
@@ -183,6 +178,12 @@ class User(AbstractUser):
             school_id=school_id, is_active=True,
         ).first()
         return mem.role if mem else None
+
+    def has_capability_for_school(self, school_id, flag):
+        """True if the active membership in this school carries the capability flag
+        (e.g. 'can_manage_finance'). Admins never need flags: they already have everything."""
+        mem = self.school_memberships.filter(school_id=school_id, is_active=True).first()
+        return bool(mem and getattr(mem, flag, False))
 
 
 class DevicePushToken(models.Model):

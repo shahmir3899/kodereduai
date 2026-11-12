@@ -10,6 +10,8 @@ handwriting detection optimized for document OCR.
 """
 
 import logging
+import re
+import time
 
 from assistant.usage import record_external
 import json
@@ -51,10 +53,38 @@ def _describe_http_error(response: 'requests.Response') -> str:
         body = response.json()
         message = body.get('error', {}).get('message')
         if message:
-            return f"{response.status_code}: {message}"
+            return f"{response.status_code}: {_mask_provider_ids(message)}"
     except (ValueError, AttributeError):
         pass
-    return f"{response.status_code}: {response.text[:300]}"
+    return f"{response.status_code}: {_mask_provider_ids(response.text[:300])}"
+
+
+def _mask_provider_ids(text: str) -> str:
+    """Groq 429 bodies embed the account's organization id; keep it out of logs and
+    stored error text."""
+    return re.sub(r'org_[A-Za-z0-9]+', 'org_***', text)
+
+
+# Shown to users in place of raw provider errors (which can carry account ids,
+# billing links and model names). The raw text stays in the server log.
+MSG_AI_BUSY = "The AI service is busy right now. Please try again in a minute."
+MSG_UNREADABLE = "We could not read enough text from this photo. Please retake it in good light, flat and fully in frame."
+MSG_GENERIC_FAILURE = "We could not process this photo. Please try again with a clearer photo."
+MSG_DEGRADED = (
+    "The AI step was unavailable, so questions were picked out with a basic method. "
+    "Some questions, marks or sections may be missing or wrong - please review carefully."
+)
+MIN_OCR_CHARS = 40
+
+
+def friendly_ocr_error(raw: Optional[str]) -> str:
+    """Maps a raw processing error to text that is safe to show a user."""
+    raw = raw or ''
+    if raw == MSG_UNREADABLE:
+        return MSG_UNREADABLE
+    if '429' in raw or 'rate limit' in raw.lower() or 'Groq' in raw:
+        return MSG_AI_BUSY
+    return MSG_GENERIC_FAILURE
 
 
 @dataclass
@@ -69,6 +99,9 @@ class QuestionExtractionResult:
     extraction_confidence: float = 0.0
     notes: str = ""
     error: Optional[str] = None
+    # Set when a weaker method produced this result (e.g. regex fallback after the
+    # LLM step failed) so the review screen can tell the user to check it closely.
+    warning: Optional[str] = None
 
     def __post_init__(self):
         if self.header is None:
@@ -92,6 +125,7 @@ class QuestionExtractionResult:
             'total_marks': self.total_marks,
             'extraction_confidence': self.extraction_confidence,
             'notes': self.notes,
+            'warning': self.warning,
         }
 
 
@@ -125,6 +159,41 @@ def _normalize_header(raw_header: Any) -> Dict[str, Any]:
     }
 
 
+LAYOUT_RULES = """
+Layout rules (the text above is a PAGE LAYOUT, not raw OCR):
+10. Every line starts with its id, like [L12]. For each question add "lines": [first_id, last_id] - the
+    first and last line ids it spans, including its options and numbered parts.
+11. [MARKS n] at the end of a line is a mark handwritten in the page margin for the question or section on
+    that row (or the heading just above). Use n as that question's marks (or the section's
+    marks_per_question). Never copy the [MARKS n] token into question text.
+12. " | " separates parts written side by side on one row. One heading with numbered parts, such as
+    "Find HCF using prime factorization." followed by "1) 15, 95, 35 | 2) 20, 30, 50", is ONE question:
+    put the heading first and each numbered part on its own line inside question_text.
+13. [BLANK] is an empty answer box or blank: write it as ____ in the text.
+14. "5/14" is a fraction written one number above the other. Keep it as 5/14.
+15. [FIGURE F1] is a drawing between two lines (no text to read). The question just above it owns the
+    figure: add "figure": "F1" to that question. Never invent what the drawing shows.
+16. Crossed-out words may still appear (for example an old instruction before the real one); keep the
+    instruction that makes sense and ignore the struck-out one.
+"""
+
+
+def _layout_references(raw_question: Dict[str, Any]) -> Dict[str, Any]:
+    """The line span and figure id the model returns in layout mode; the server turns them into a photo
+    box and a cropped figure (paper_layout_apply.attach_layout)."""
+    extra: Dict[str, Any] = {}
+    lines = raw_question.get('lines')
+    if (
+        isinstance(lines, (list, tuple)) and len(lines) == 2
+        and all(isinstance(n, int) and not isinstance(n, bool) for n in lines)
+    ):
+        extra['lines'] = [int(lines[0]), int(lines[1])]
+    figure = raw_question.get('figure')
+    if isinstance(figure, str) and re.fullmatch(r'F\d{1,2}', figure.strip()):
+        extra['figure'] = figure.strip()
+    return extra
+
+
 def _normalize_question(raw_question: Any) -> Dict[str, Any]:
     raw_question = raw_question if isinstance(raw_question, dict) else {}
 
@@ -133,7 +202,9 @@ def _normalize_question(raw_question: Any) -> Dict[str, Any]:
         question_type = 'SHORT'
 
     marks = _clean_optional_number(raw_question.get('marks'))
-    if marks is None:
+    # The layout prompt can make the model answer 0 for "no mark written"; a zero-mark question is never
+    # intended, so treat it like a missing value (section marks / 1 apply) and let the marks check flag it.
+    if marks is None or marks <= 0:
         marks = 1.0
 
     options = raw_question.get('options')
@@ -163,6 +234,7 @@ def _normalize_question(raw_question: Any) -> Dict[str, Any]:
         'marks': marks,
         'options': options,
         'type_data': type_data,
+        **_layout_references(raw_question),
     }
 
 
@@ -192,6 +264,8 @@ def _normalize_section(raw_section: Any, index: int) -> Dict[str, Any]:
         counted_count = shown_count
 
     marks_per_question = _clean_optional_number(raw_section.get('marks_per_question'))
+    if marks_per_question is not None and marks_per_question <= 0:
+        marks_per_question = None
     if marks_per_question is None and questions:
         # Grouped questions (fill-blank list, matching table, ...) carry their total
         # marks on the single question itself.
@@ -343,6 +417,7 @@ def _build_extraction_prompt(
     context: Optional[Dict[str, Any]] = None,
     ocr_text: Optional[str] = None,
     continuation_context: Optional[Dict[str, Any]] = None,
+    layout_mode: bool = False,
 ) -> str:
     """Builds the structured-extraction prompt shared by the text-based (Google Vision
     OCR text -> Groq LLM) and image-based (Groq Vision) pipelines."""
@@ -359,6 +434,15 @@ def _build_extraction_prompt(
 
     continuation_hint = _build_continuation_hint(continuation_context)
     text_block = f"\n\nRAW OCR TEXT:\n{ocr_text}\n" if ocr_text else ''
+    layout_rules = ''
+    layout_schema_fields = ''
+    if layout_mode:
+        layout_schema_fields = (
+            ',\n          "lines": [integer, integer],'
+            '\n          "figure": string|null'
+        )
+        text_block = f"\n\nPAGE LAYOUT (rebuilt from word positions, one line per row of writing):\n{ocr_text}\n"
+        layout_rules = LAYOUT_RULES
 
     return f"""You are extracting a school exam question paper into a strict JSON schema.
 {text_block}{context_hint}{continuation_hint}
@@ -389,7 +473,7 @@ Return ONLY a single valid JSON object (no markdown fences, no extra commentary)
           "type_confidence": number between 0 and 1,
           "marks": number,
           "options": {{"A": string, "B": string, "C": string, "D": string}} or null,
-          "type_data": object or null
+          "type_data": object or null{layout_schema_fields}
         }}
       ]
     }}
@@ -428,6 +512,7 @@ Rules:
 9. If a MULTI-PAGE CONTEXT block is present above, follow its instructions for whether
    to continue the previous page's last section or start fresh — otherwise ignore it.
 
+{layout_rules}
 Return ONLY the JSON object described above."""
 
 
@@ -515,13 +600,14 @@ class PaperOCRProcessor:
             # Step 1: Call Google Vision API
             api_url = f"https://vision.googleapis.com/v1/images:annotate?key={self.google_api_key}"
             
+            # DOCUMENT_TEXT_DETECTION alone: TEXT_DETECTION was a second billed feature whose
+            # output (a flat word list) was only ever a fallback for this one.
+            from .paper_layout_apply import vision_language_hints
             request_data = {
                 "requests": [{
                     "image": {"source": {"imageUri": image_url}},
-                    "features": [
-                        {"type": "DOCUMENT_TEXT_DETECTION"},
-                        {"type": "TEXT_DETECTION"}
-                    ]
+                    "features": [{"type": "DOCUMENT_TEXT_DETECTION"}],
+                    "imageContext": {"languageHints": vision_language_hints(context)},
                 }]
             }
             
@@ -566,12 +652,37 @@ class PaperOCRProcessor:
             
             logger.info(f"Google Vision extracted {len(full_text)} characters")
 
+            if len(full_text.strip()) < MIN_OCR_CHARS:
+                # A near-empty read is a bad photo (blank, blurred, cropped), not a
+                # one-question paper; fail loudly instead of guessing from a stub.
+                return QuestionExtractionResult(success=False, error=MSG_UNREADABLE)
+
+            # Step 1b: rebuild the page from word positions (behind PAPER_LAYOUT_V2). Any failure here
+            # falls back to the flat text, so this can only ever add information.
+            layout = None
+            if getattr(settings, 'PAPER_LAYOUT_V2', False):
+                try:
+                    from . import paper_layout
+                    from .paper_layout_apply import detect_direction
+                    layout = paper_layout.build_layout(vision_response, detect_direction(vision_response))
+                except Exception:
+                    logger.warning("Layout reconstruction failed; using the flat OCR text", exc_info=True)
+
             # Step 2: Use Groq LLM to parse header/sections/questions from text
             try:
-                parsed = self._parse_paper_with_llm(full_text, context, continuation_context)
+                parsed = self._parse_paper_with_llm(
+                    layout.text if layout else full_text, context, continuation_context,
+                    layout_mode=bool(layout), plain_text=full_text,
+                )
+                if layout:
+                    try:
+                        from .paper_layout_apply import attach_layout
+                        attach_layout(parsed, layout, image_url, (context or {}).get('school_id'))
+                    except Exception:
+                        logger.warning("Could not attach layout boxes/figures", exc_info=True)
             except LLMParsingError as e:
                 logger.error(f"LLM parsing failed for paper upload: {e}")
-                return QuestionExtractionResult(success=False, error=str(e))
+                return QuestionExtractionResult(success=False, error=friendly_ocr_error(str(e)))
 
             return QuestionExtractionResult(
                 success=True,
@@ -580,10 +691,12 @@ class PaperOCRProcessor:
                 questions=parsed['questions'],
                 computed_total_marks=parsed['computed_total_marks'],
                 total_marks=parsed['computed_total_marks'],
-                extraction_confidence=0.85,  # Base confidence for Google Vision
+                extraction_confidence=0.5 if parsed.get('degraded') else 0.85,  # Base confidence for Google Vision
+                warning=MSG_DEGRADED if parsed.get('degraded') else None,
                 notes=(
                     f"Extracted {len(parsed['questions'])} questions across "
-                    f"{len(parsed['sections'])} section(s) using Google Vision + Groq LLM"
+                    f"{len(parsed['sections'])} section(s) using Google Vision + "
+                    + ("regex fallback (LLM unavailable)" if parsed.get('degraded') else "Groq LLM")
                 )
             )
         
@@ -699,9 +812,15 @@ class PaperOCRProcessor:
         text: str,
         context: Dict[str, Any] = None,
         continuation_context: Optional[Dict[str, Any]] = None,
+        layout_mode: bool = False,
+        plain_text: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Use Groq LLM to parse header/sections/questions from OCR'd text.
+
+        layout_mode: ``text`` is the line-tagged layout rebuilt from word positions (see
+        paper_layout), not Vision's flat text; ``plain_text`` is the flat text the regex fallback
+        needs, since the line tags would hide question numbers from it.
 
         Args:
             text: Raw OCR text from Google Vision
@@ -724,7 +843,10 @@ class PaperOCRProcessor:
             "Content-Type": "application/json"
         }
 
-        prompt = _build_extraction_prompt(context, ocr_text=text, continuation_context=continuation_context)
+        prompt = _build_extraction_prompt(
+            context, ocr_text=text, continuation_context=continuation_context, layout_mode=layout_mode,
+        )
+        fallback_text = plain_text or text
 
         data = {
             "model": GROQ_MODEL,
@@ -742,24 +864,28 @@ class PaperOCRProcessor:
                 }
             ],
             "temperature": 0.1,
-            "max_tokens": 4000
+            # Groq counts max_tokens against the per-minute token limit up front, so a
+            # flat 4000 turned an ~850-token prompt into a 4845-token request and tripped
+            # the 8000 TPM cap. Size it from the input instead -- but gpt-oss spends ~2000
+            # hidden reasoning tokens before it writes the JSON and they count against this
+            # cap, so go much below ~2500 and the answer comes back empty (measured on the
+            # layout prompt: 2809 completion tokens at default effort).
+            "max_tokens": min(4000, max(2500, len(text) + 1800)),
         }
+        if 'gpt-oss' in (GROQ_MODEL or ''):
+            # Same setting the assistant uses; 'low' keeps the hidden reasoning short.
+            data['reasoning_effort'] = getattr(settings, 'GROQ_REASONING_EFFORT', 'low')
 
         try:
-            response = requests.post(
-                "https://api.groq.com/openai/v1/chat/completions",
-                headers=headers,
-                json=data,
-                timeout=60
-            )
+            response = self._post_groq_with_retry(headers, data)
         except requests.RequestException as e:
             logger.error(f"Groq API request failed: {e}", exc_info=True)
-            return self._fallback_or_raise(text, f"Could not reach Groq API: {e}")
+            return self._fallback_or_raise(fallback_text, f"Could not reach Groq API: {e}")
 
         if not response.ok:
             error_detail = _describe_http_error(response)
             logger.error(f"Groq API returned an error: {error_detail}")
-            return self._fallback_or_raise(text, f"Groq API error ({GROQ_MODEL}): {error_detail}")
+            return self._fallback_or_raise(fallback_text, f"Groq API error ({GROQ_MODEL}): {error_detail}")
 
         result = response.json()
         record_external('examinations.paper_ocr_processor.structure', result)
@@ -769,7 +895,23 @@ class PaperOCRProcessor:
             return _parse_structured_paper(content)
         except (json.JSONDecodeError, ValueError) as e:
             logger.error(f"Failed to parse Groq response as JSON: {content[:500]}")
-            return self._fallback_or_raise(text, f"Groq returned unparseable content: {e}")
+            return self._fallback_or_raise(fallback_text, f"Groq returned unparseable content: {e}")
+
+    def _post_groq_with_retry(self, headers: Dict[str, str], data: Dict[str, Any]) -> 'requests.Response':
+        """POST to Groq; on a 429 wait the 'try again in Ns' the API asks for (capped) and
+        retry once. A second 429 is returned to the caller like any other error."""
+        url = "https://api.groq.com/openai/v1/chat/completions"
+        response = requests.post(url, headers=headers, json=data, timeout=60)
+        if response.status_code == 429:
+            wait = 5.0
+            match = re.search(r'try again in ([\d.]+)\s*(ms|s)', response.text)
+            if match:
+                wait = float(match.group(1)) / (1000.0 if match.group(2) == 'ms' else 1.0)
+            wait = min(max(wait, 1.0) + 0.5, 10.0)
+            logger.warning(f"Groq 429 on paper structure step; retrying once in {wait:.1f}s")
+            time.sleep(wait)
+            response = requests.post(url, headers=headers, json=data, timeout=60)
+        return response
 
     def _fallback_or_raise(self, text: str, error_detail: str) -> Dict[str, Any]:
         """Tries the regex-based fallback extractor when the LLM step fails; only
@@ -781,7 +923,9 @@ class PaperOCRProcessor:
                 f"Groq LLM step failed ({error_detail}); falling back to regex-based "
                 f"extraction, which found {len(flat_questions)} question(s)."
             )
-            return _wrap_flat_as_structured(flat_questions)
+            structured = _wrap_flat_as_structured(flat_questions)
+            structured['degraded'] = True
+            return structured
         raise LLMParsingError(error_detail)
     
     def _fallback_question_extraction(self, text: str) -> List[Dict[str, Any]]:
@@ -802,11 +946,11 @@ class PaperOCRProcessor:
                 continue
             
             # Look for question numbers (Q1, 1., Question 1, etc.)
-            if any([
-                line.startswith('Q') and line[1:2].isdigit(),
-                line[0:2].replace('.', '').isdigit() and line[1:3] in ['. ', '.)'],
-                line.lower().startswith('question')
-            ]):
+            if (
+                re.match(r'^Q\.?\s*\d+', line, re.IGNORECASE)
+                or re.match(r'^\d{1,3}\s*[.)]\s*\S', line)
+                or line.lower().startswith('question')
+            ):
                 # Save previous question
                 if current_question:
                     questions.append(current_question)

@@ -180,7 +180,7 @@ class TestSignals:
         assert AgentGap.objects.filter(kind='clarify_loop').count() == 1
 
     def test_the_tool_is_offered_to_every_role(self, seed_data):
-        for uname in ('admin', 'teacher', 'accountant'):
+        for uname in ('admin', 'teacher', 'finance_manager'):
             assert 'report_missing_capability' in {t.name for t in registry.tools_for(_ctx(seed_data, uname))}
         for role in ('STUDENT', 'PARENT'):
             assert 'report_missing_capability' in {t.name for t in registry.tools_for(_ctx(seed_data, role=role))}

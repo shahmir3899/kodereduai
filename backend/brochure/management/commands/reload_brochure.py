@@ -37,7 +37,7 @@ SECTIONS = [
   <li><strong>Real-Time Fee Tracking</strong> — Automated payment reminders, overdue alerts, and financial dashboards that update the moment a payment lands.</li>
   <li><strong>Unified Parent Portal</strong> — Parents access attendance, marks, fee balances, and communicate with teachers — all from one mobile-friendly app.</li>
   <li><strong>Zero IT Overhead</strong> — Hosted, maintained, and updated by us. Your staff just logs in.</li>
-  <li><strong>Role-Based Security</strong> — Nine user roles with granular permissions. Teachers see only their classes; accountants see only finance.</li>
+  <li><strong>Role-Based Security</strong> — Nine user roles with granular permissions. Teachers see only their classes; finance managers see only finance.</li>
   <li><strong>All 18 Modules Included</strong> — No surprise add-ons. Every school gets students, finance, HR, LMS, transport, library, hostel, inventory, and more.</li>
 </ul>""",
     },

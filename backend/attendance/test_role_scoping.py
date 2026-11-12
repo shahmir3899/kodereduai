@@ -1,6 +1,6 @@
 """Student-level data (attendance, marks, results, roster) by role.
 
-Admins: everything. TEACHER: only the sections they are class teacher of. ACCOUNTANT keeps the roster
+Admins: everything. TEACHER: only the sections they are class teacher of. FINANCE_MANAGER keeps the roster
 (fees need it) but not attendance/marks/results. MANAGER keeps classes but no student-level data.
 STAFF/DRIVER: none. Uses the shared seed school (no per-test school)."""
 from datetime import date
@@ -10,7 +10,7 @@ import pytest
 from academics.models import ClassTeacherAssignment
 from attendance.models import AttendanceRecord
 
-NO_STUDENT_DATA = ['accountant', 'manager', 'staff', 'driver']
+NO_STUDENT_DATA = ['finance_manager', 'manager', 'staff', 'driver']
 
 # Student-level attendance, marks and results: admins + scoped teachers only.
 STUDENT_DATA = [
@@ -152,8 +152,8 @@ def test_admin_sees_every_section(api, world):
 
 
 @pytest.mark.django_db
-@pytest.mark.parametrize('role', ['accountant', 'teacher'])
-def test_roster_stays_for_accountant_and_teacher(api, world, role):
+@pytest.mark.parametrize('role', ['finance_manager', 'teacher'])
+def test_roster_stays_for_finance_manager_and_teacher(api, world, role):
     assert api.get('/api/students/', world['token'][role], world['sid']).status_code == 200
 
 

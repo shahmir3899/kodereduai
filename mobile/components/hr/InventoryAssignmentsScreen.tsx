@@ -2,7 +2,7 @@ import React, { useMemo } from 'react';
 import { FlatList, View, Text, StyleSheet } from 'react-native';
 import { useMyInventory } from '../../hooks/useStaff';
 import { useRefreshControl } from '../../hooks/useRefreshControl';
-import { sortAssignments } from '../../services/accountant';
+import { sortAssignments } from '../../services/financeManager';
 import Skeleton from '../ui/Skeleton';
 import ErrorState from '../ui/ErrorState';
 import EmptyState from '../ui/EmptyState';

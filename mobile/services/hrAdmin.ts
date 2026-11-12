@@ -2,6 +2,8 @@
 // policies, staff documents and qualifications, and the dashboard numbers. Port of the web pages
 // under frontend/src/pages/hr. Pure logic, no React Native imports.
 
+import { roleGroup } from './roleConfig';
+
 // ─── Staff ─────────────────────────────────────────────────────────────────────────────────
 
 export interface StaffRow {
@@ -29,6 +31,9 @@ export interface StaffRow {
   user?: number | null;
   user_username?: string | null;
   user_role?: string | null;
+  user_can_manage_finance?: boolean;
+  // Teaching staff (shows in teacher pickers); a teacher login ticks it by default.
+  is_teaching?: boolean;
 }
 
 export const GENDERS = [{ value: 'MALE', label: 'Male' }, { value: 'FEMALE', label: 'Female' }, { value: 'OTHER', label: 'Other' }];
@@ -56,29 +61,28 @@ export const staffSubtitle = (s: StaffRow) => [s.designation_name, s.department_
 export interface StaffForm {
   firstName: string; lastName: string; email: string; phone: string; gender: string; dob: string;
   department: number | null; designation: number | null; employeeId: string;
-  employmentType: string; employmentStatus: string; joined: string;
+  employmentType: string; employmentStatus: string; joined: string; isTeaching: boolean;
   address: string; emergencyName: string; emergencyPhone: string; notes: string;
   // Optional sign-in account, create only.
-  createAccount: boolean; username: string; password: string; confirm: string; userRole: string;
+  createAccount: boolean; username: string; password: string; confirm: string; userRole: string; canManageFinance: boolean;
 }
 
 export const emptyStaffForm = (nextEmployeeId = ''): StaffForm => ({
   firstName: '', lastName: '', email: '', phone: '', gender: '', dob: '', department: null, designation: null, employeeId: nextEmployeeId,
-  employmentType: 'FULL_TIME', employmentStatus: 'ACTIVE', joined: '', address: '', emergencyName: '', emergencyPhone: '', notes: '',
-  createAccount: false, username: '', password: '', confirm: '', userRole: 'STAFF',
+  employmentType: 'FULL_TIME', employmentStatus: 'ACTIVE', joined: '', isTeaching: false, address: '', emergencyName: '', emergencyPhone: '', notes: '',
+  createAccount: false, username: '', password: '', confirm: '', userRole: 'STAFF', canManageFinance: false,
 });
 
 export const staffToForm = (s: StaffRow): StaffForm => ({
   ...emptyStaffForm(s.employee_id ?? ''),
   firstName: s.first_name ?? '', lastName: s.last_name ?? '', email: s.email ?? '', phone: s.phone ?? '', gender: s.gender ?? '',
   dob: s.date_of_birth ?? '', department: s.department ?? null, designation: s.designation ?? null,
-  employmentType: s.employment_type || 'FULL_TIME', employmentStatus: s.employment_status || 'ACTIVE', joined: s.date_of_joining ?? '',
+  employmentType: s.employment_type || 'FULL_TIME', employmentStatus: s.employment_status || 'ACTIVE', joined: s.date_of_joining ?? '', isTeaching: !!s.is_teaching,
   address: s.address ?? '', emergencyName: s.emergency_contact_name ?? '', emergencyPhone: s.emergency_contact_phone ?? '', notes: s.notes ?? '',
 });
 
 // Roles a staff member's sign-in may have: the web hides the three admin-level ones here.
-export const STAFF_ACCOUNT_ROLES = ['MANAGER', 'ACCOUNTANT', 'TEACHER', 'STAFF', 'DRIVER'];
-export const staffAccountRoles = (allowed: string[]) => allowed.filter((r) => STAFF_ACCOUNT_ROLES.includes(r));
+export const staffAccountRoles = (allowed: string[]) => allowed.filter((r) => roleGroup(r) === 'staff');
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -104,10 +108,12 @@ export function buildStaffPayload(f: StaffForm, creating: boolean) {
     first_name: f.firstName.trim(), last_name: f.lastName.trim(), email: f.email.trim(), phone: f.phone.trim(), gender: f.gender,
     date_of_birth: f.dob || null, department: f.department, designation: f.designation, employee_id: f.employeeId.trim(),
     employment_type: f.employmentType, employment_status: f.employmentStatus, date_of_joining: f.joined || null,
+    // A teacher login teaches by default; the switch can still turn it off afterwards.
+    is_teaching: f.isTeaching || (creating && f.createAccount && f.userRole === 'TEACHER'),
     address: f.address.trim(), emergency_contact_name: f.emergencyName.trim(), emergency_contact_phone: f.emergencyPhone.trim(), notes: f.notes.trim(),
   };
   if (creating && f.createAccount) {
-    Object.assign(base, { create_user_account: true, username: f.username.trim(), password: f.password, confirm_password: f.confirm, user_role: f.userRole });
+    Object.assign(base, { create_user_account: true, username: f.username.trim(), password: f.password, confirm_password: f.confirm, user_role: f.userRole, can_manage_finance: f.userRole === 'MANAGER' && f.canManageFinance });
   }
   return base;
 }

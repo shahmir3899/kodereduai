@@ -5,7 +5,7 @@ import { useNetPayHistory, usePayrollActions, usePayrollSummary, usePayslipsPage
 import { useRefreshControl } from '../../hooks/useRefreshControl';
 import { todayString } from '../../services/attendanceEntry';
 import { monthLabel, stepMonth } from '../../services/register';
-import { payslipPeriod, payslipTone } from '../../services/accountant';
+import { payslipPeriod, payslipTone } from '../../services/financeManager';
 import {
   bulkConfirmText, bulkDoneText, eligibleIds, type BulkKind, breakdownLines, generationText, netPayTrend, trendNote, payslipActions, payslipFileName, STATUS_FILTERS, summaryLine, type PayslipFull,
 } from '../../services/payroll';

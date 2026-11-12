@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { useMyPayslips } from '../../hooks/useStaff';
 import { useMyAttendance, useMyLeaveApplications, useMyLeaveBalance } from '../../hooks/useMyHr';
-import { payslipPeriod, sortPayslips, type Payslip } from '../../services/accountant';
+import { payslipPeriod, sortPayslips, type Payslip } from '../../services/financeManager';
 import { attendanceTile, leaveRemaining, monthRange, usedPercent, type LeaveBalance } from '../../services/myHr';
 import { todayString } from '../../services/attendanceEntry';
 import { formatMoney } from '../../services/feeCollect';

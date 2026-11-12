@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Switch } from 'react-native';
 import { useAuth } from '../../contexts/AuthContext';
 import { useStaffAccountActions, useStaffPicker, useUserSearch } from '../../hooks/useHrAdmin';
 import type { StaffRow } from '../../services/hrAdmin';
@@ -32,8 +32,9 @@ export default function StaffAccountSection({ member }: { member: StaffRow }) {
   const [error, setError] = useState<string | null>(null);
   const [role, setRole] = useState<string>(member.user_role ?? '');
   const [term, setTerm] = useState('');
+  const [canFinance, setCanFinance] = useState<boolean>(!!member.user_can_manage_finance);
   // The role shown follows the saved one (it changes after a create, a link or a role change).
-  useEffect(() => { setRole(member.user_role ?? ''); }, [member.user_role, member.user]);
+  useEffect(() => { setRole(member.user_role ?? ''); setCanFinance(!!member.user_can_manage_finance); }, [member.user_role, member.user, member.user_can_manage_finance]);
   const search = useUserSearch(term, sheet === 'link');
   const staff = useStaffPicker();
   const candidates = useMemo(() => linkCandidates(search.data ?? [], (staff.data ?? []).map((s) => s.user)), [search.data, staff.data]);
@@ -79,7 +80,7 @@ export default function StaffAccountSection({ member }: { member: StaffRow }) {
     if (problem) return toast.error(problem);
     if (!(await confirm({ title: 'Change the role?', message: roleChangeText(who, roleLabel(role)), confirmLabel: 'Change role' }))) return;
     try {
-      await actions.role.mutateAsync({ id: member.id, role });
+      await actions.role.mutateAsync({ id: member.id, role, canManageFinance: canFinance });
       toast.success('Role changed.');
     } catch (e) { toast.error(accountErrorText(e, 'Could not change the role.')); }
   };
@@ -92,7 +93,14 @@ export default function StaffAccountSection({ member }: { member: StaffRow }) {
           <Text style={styles.hint}>{`Signs in as @${member.user_username ?? ''}${member.user_role ? ` (${roleLabel(member.user_role)})` : ''}.`}</Text>
           <Select label="Role" value={role || null} onChange={(v) => setRole(String(v))} placeholder="Choose a role"
             options={[...new Set([...(member.user_role ? [member.user_role] : []), ...allowed])].map((r) => ({ value: r, label: roleLabel(r), }))} />
-          <Button title="Change role" size="sm" variant="outline" onPress={changeRole} loading={actions.role.isPending} disabled={role === (member.user_role ?? '')} />
+          {role === 'MANAGER' ? (
+            <View style={styles.financeRow}>
+              <Text style={styles.hint}>Can manage finance and fees</Text>
+              <Switch value={canFinance} onValueChange={setCanFinance} accessibilityLabel="Can manage finance and fees" />
+            </View>
+          ) : null}
+          <Button title="Change role" size="sm" variant="outline" onPress={changeRole} loading={actions.role.isPending}
+            disabled={role === (member.user_role ?? '') && (role !== 'MANAGER' || canFinance === !!member.user_can_manage_finance)} />
           <Button title="Unlink account" size="sm" variant="danger" onPress={unlink} loading={actions.unlink.isPending} />
         </>
       ) : (
@@ -107,6 +115,12 @@ export default function StaffAccountSection({ member }: { member: StaffRow }) {
         <Text style={styles.hint}>For {who}.</Text>
         <Input label="Username" value={form.username} onChangeText={(v) => setForm((f) => ({ ...f, username: v }))} autoCapitalize="none" autoCorrect={false} />
         <Select label="Role" value={form.role} onChange={(v) => setForm((f) => ({ ...f, role: String(v) }))} options={allowed.map((r) => ({ value: r, label: roleLabel(r) }))} />
+        {form.role === 'MANAGER' ? (
+          <View style={styles.financeRow}>
+            <Text style={styles.hint}>Can manage finance and fees</Text>
+            <Switch value={form.canManageFinance} onValueChange={(v) => setForm((f) => ({ ...f, canManageFinance: v }))} accessibilityLabel="Can manage finance and fees" />
+          </View>
+        ) : null}
         <Input label="Password (8 or more characters)" value={form.password} onChangeText={(v) => setForm((f) => ({ ...f, password: v }))} secureTextEntry autoCapitalize="none" />
         <Input label="Confirm password" value={form.confirm} onChangeText={(v) => setForm((f) => ({ ...f, confirm: v }))} secureTextEntry autoCapitalize="none" />
       </FormSheet>
@@ -131,6 +145,7 @@ const styles = StyleSheet.create({
   card: { gap: Spacing.md },
   section: { fontSize: FontSize.md, fontWeight: '700', color: Colors.text },
   hint: { fontSize: FontSize.sm, color: Colors.textSecondary },
+  financeRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   pick: { borderWidth: 1, borderColor: Colors.border, borderRadius: BorderRadius.md, padding: Spacing.md },
   pickName: { fontSize: FontSize.md, fontWeight: '600', color: Colors.text },
 });

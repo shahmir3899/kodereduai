@@ -4,7 +4,7 @@ import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors'
 
 export interface Tile { label: string; value: string | number | null | undefined; route?: string }
 
-// Two-across number tiles for the manager, accountant and staff homes, so they read as one family.
+// Two-across number tiles for the manager, finance manager and staff homes, so they read as one family.
 // A tile with no route is not tappable; a missing value shows a dash, never a made-up 0.
 export default function StatTiles({ tiles, onPress }: { tiles: Tile[]; onPress: (route: string) => void }) {
   if (tiles.length === 0) return null;

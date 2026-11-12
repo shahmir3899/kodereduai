@@ -285,8 +285,8 @@ class TestPlanFromBook:
         with pytest.raises(engine.ActionError):
             engine.edit(card.id, ctx.user, ctx.school_id, edits)
 
-    def test_students_parents_and_accountants_do_not_get_the_tool(self, seed_data, lms):
-        for uname in ('accountant', 'manager', 'staff'):
+    def test_students_parents_and_finance_managers_do_not_get_the_tool(self, seed_data, lms):
+        for uname in ('finance_manager', 'manager', 'staff'):
             assert 'plan_lessons_from_book' not in {t.name for t in registry.tools_for(_ctx(seed_data['users'][uname]))}
         assert 'plan_lessons_from_book' in {t.name for t in registry.tools_for(_teacher_ctx(lms))}
 

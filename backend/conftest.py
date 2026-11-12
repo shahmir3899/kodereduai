@@ -155,7 +155,7 @@ def seed_data(api_client, db):
         ('principal', 'PRINCIPAL', school_a),
         ('manager', 'MANAGER', school_a),
         ('teacher', 'TEACHER', school_a),
-        ('accountant', 'ACCOUNTANT', school_a),
+        ('finance_manager', 'MANAGER', school_a),  # MANAGER + can_manage_finance, set below
         ('staff', 'STAFF', school_a),
     ]
     for uname, role, school in user_configs:
@@ -169,6 +169,7 @@ def seed_data(api_client, db):
         )
         UserSchoolMembership.objects.create(
             user=u, school=school, role=role, is_default=True,
+            can_manage_finance=(uname == 'finance_manager'),
         )
         users[uname] = u
 
@@ -368,7 +369,7 @@ def seed_data(api_client, db):
     # ---------- JWT Tokens ----------
     helper = APIHelper(api_client)
     tokens = {}
-    for uname in ['admin', 'principal', 'manager', 'teacher', 'accountant', 'staff', 'admin_b']:
+    for uname in ['admin', 'principal', 'manager', 'teacher', 'finance_manager', 'staff', 'admin_b']:
         tokens[uname] = helper.login(f"{SEED_PREFIX}{uname}")
 
     return {

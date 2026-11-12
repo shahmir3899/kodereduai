@@ -314,7 +314,7 @@ class TestLegacyAndOldPath:
 # ── access ───────────────────────────────────────────────────────────────────
 
 class TestAccess:
-    @pytest.mark.parametrize('who', ['teacher', 'manager', 'accountant', 'staff'])
+    @pytest.mark.parametrize('who', ['teacher', 'manager', 'finance_manager', 'staff'])
     def test_only_principal_and_admins_can_readmit(self, api, ctx, who):
         leave(api, ctx)
         assert readmit(api, ctx, who=who).status_code == 403

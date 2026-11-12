@@ -830,7 +830,7 @@ describe('StudentProfilePage', () => {
     expect(screen.queryByRole('button', { name: 'Change class' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Status & exit' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Reclassify' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /Generate Parent Invite/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Parent links/ })).not.toBeInTheDocument()
   })
 
   // ─── Status ──────────────────────────────────────────────────
@@ -1116,25 +1116,27 @@ describe('StudentProfilePage', () => {
     })
   })
 
-  // ─── Parent invite ───────────────────────────────────────────
+  // ─── Parent links ────────────────────────────────────────────
 
-  it('generates a parent invite and shows the code and registration link', async () => {
+  it('opens the parent links drawer and generates an invite from it', async () => {
     let body = null
-    server.use(http.post('/api/parents/admin/generate-invite/', async ({ request }) => {
-      body = await request.json()
-      return HttpResponse.json({ invite_code: 'ABC123XYZ' }, { status: 201 })
-    }))
+    server.use(
+      http.get('/api/parents/admin/parents/', () => HttpResponse.json([])),
+      http.get('/api/parents/admin/generate-invite/', () => HttpResponse.json([])),
+      http.post('/api/parents/admin/generate-invite/', async ({ request }) => {
+        body = await request.json()
+        return HttpResponse.json({ id: 1, invite_code: 'ABC123XYZ', relation: 'MOTHER' }, { status: 201 })
+      }),
+    )
     const user = await renderProfile()
 
-    await user.click(screen.getByRole('button', { name: /Generate Parent Invite/ }))
-    const modal = modalFor('Generate Parent Invite')
-    await user.selectOptions(modal.getByLabelText('Relation to Student'), 'MOTHER')
-    await user.click(modal.getByRole('button', { name: 'Generate Invite' }))
+    await user.click(screen.getByRole('button', { name: /Parent links/ }))
+    const drawer = await screen.findByRole('dialog', { name: 'Ali Hassan' })
+    await user.selectOptions(within(drawer).getByLabelText('Invite relation'), 'MOTHER')
+    await user.click(within(drawer).getByRole('button', { name: 'Generate invite' }))
 
     await waitFor(() => expect(body).toEqual({ student_id: 5, relation: 'MOTHER', parent_phone: '' }))
-    expect(await modal.findByLabelText('Invite Code')).toHaveValue('ABC123XYZ')
-    expect(modal.getByLabelText('Registration Link')).toHaveValue(`${window.location.origin}/parent/register?code=ABC123XYZ`)
-    await user.click(modal.getByRole('button', { name: 'Done' }))
-    expect(screen.queryByRole('heading', { name: 'Generate Parent Invite' })).not.toBeInTheDocument()
+    await user.click(within(drawer).getByRole('button', { name: 'Close' }))
+    expect(screen.queryByRole('dialog', { name: 'Ali Hassan' })).not.toBeInTheDocument()
   })
 })

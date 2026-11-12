@@ -11,8 +11,8 @@ describe('choices', () => {
     expect(CHANNELS.map((c) => c.value)).toEqual(['IN_APP', 'PUSH', 'EMAIL']);
   });
 
-  it('has the eight audiences the server knows', () => {
-    expect(AUDIENCES.map((a) => a.value).sort()).toEqual(['ACCOUNTANT', 'MANAGER', 'PARENT', 'PRINCIPAL', 'SCHOOL_ADMIN', 'STAFF', 'STUDENT', 'TEACHER']);
+  it('has the seven audiences the server knows', () => {
+    expect(AUDIENCES.map((a) => a.value).sort()).toEqual(['MANAGER', 'PARENT', 'PRINCIPAL', 'SCHOOL_ADMIN', 'STAFF', 'STUDENT', 'TEACHER']);
   });
 
   it('narrows to a section only for parents and students', () => {

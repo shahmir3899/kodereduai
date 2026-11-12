@@ -22,8 +22,25 @@ def step_ids():
     return {s for steps in load()['startHere'].values() for s in steps}
 
 
+def guide_roles(member):
+    """Guide audiences for a membership. The guide content has a FINANCE audience; a
+    Manager with can_manage_finance sees it on top of the Manager one."""
+    roles = [member.role]
+    if member.role == 'MANAGER' and getattr(member, 'can_manage_finance', False):
+        roles.append('FINANCE')
+    return tuple(roles)
+
+
+def _roles(role):
+    return (role,) if isinstance(role, str) else tuple(role)
+
+
 def steps_for_role(role):
-    return load()['startHere'].get(role, [])
+    start_here = load()['startHere']
+    steps = []
+    for r in _roles(role):
+        steps += [s for s in start_here.get(r, []) if s not in steps]
+    return steps
 
 
 def video_for_section(section_id):
@@ -54,7 +71,7 @@ def videos_for_role(role, enabled_modules):
     """
     return {
         v['id'] for v in load()['videos']
-        if (not v.get('roles') or role in v['roles']) and module_enabled(enabled_modules, v.get('module'))
+        if (not v.get('roles') or any(r in v['roles'] for r in _roles(role))) and module_enabled(enabled_modules, v.get('module'))
     }
 
 

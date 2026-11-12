@@ -59,6 +59,9 @@ from .term_periods import attendance_summaries, report_attendance_window as _rep
 
 logger = logging.getLogger(__name__)
 
+# Long edge of stored paper-page photos; matches the web uploader's 2000px.
+PAPER_IMAGE_MAX_DIMENSION = 2000
+
 
 def _resolve_school_id(request):
     school_id = ensure_tenant_school_id(request)
@@ -1478,7 +1481,11 @@ class ExamViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet)
             'school', 'academic_year', 'term', 'exam_type', 'class_obj', 'exam_group',
         ).annotate(
             subjects_count=Count('exam_subjects', filter=Q(exam_subjects__is_active=True)),
-        )
+        # Django ignores Meta.ordering on a query with an aggregate (GROUP BY), so the
+        # model's '-start_date' never applied here and pagination warned about an
+        # unordered queryset. id breaks ties between exams on the same start date so
+        # pages never repeat or skip rows.
+        ).order_by('-start_date', '-id')
         # The two correlated subqueries in _annotate_marks_completion are only
         # needed by ExamsPage's announce-results badges -- every other caller
         # (exam pickers on MarksEntryPage/ResultsPage/ReportCardPage/etc.) just
@@ -2298,7 +2305,7 @@ class StudentMarkViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelV
     # class-teacher or assigned-subject scope. IsSchoolAdminOrReadOnly would
     # block that, so scoping is enforced per-action via _can_manage_exam_scope
     # in perform_create/perform_update/perform_destroy/bulk_entry instead.
-    # CanViewStudentData keeps accountant/manager/staff/driver out of marks entirely.
+    # CanViewStudentData keeps finance_manager/manager/staff/driver out of marks entirely.
     permission_classes = [IsAuthenticated, CanViewStudentData, HasSchoolAccess]
 
     def get_serializer_class(self):
@@ -4572,6 +4579,18 @@ class ExamPaperViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVie
 
         exam_paper.paper_questions.exclude(id__in=retained_assignment_ids).delete()
 
+    @action(detail=True, methods=['get'], url_path='source-pages')
+    def source_pages(self, request, pk=None):
+        """The scanned photos a paper was built from, in page order (only for papers
+        created from an image capture). get_object() is school-scoped, so another
+        school's paper id is a 404."""
+        exam_paper = self.get_object()
+        uploads = exam_paper.uploads.order_by('group_id', 'page_number', 'id')
+        return Response([
+            {'upload_id': u.id, 'page_number': u.page_number, 'image_url': u.image_url}
+            for u in uploads
+        ])
+
     @action(detail=False, methods=['post'], url_path='ensure-draft')
     def ensure_draft(self, request):
         """Create or refresh a server-backed draft paper before autosave begins."""
@@ -4967,7 +4986,6 @@ class PaperUploadViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelV
         this group. page_number is auto-computed server-side when omitted.
         """
         from core.storage import SupabaseStorageService
-        from .tasks import process_paper_upload_ocr
         
         serializer = PaperUploadCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -5009,11 +5027,18 @@ class PaperUploadViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelV
             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
             folder_path = f"papers/{school_id}"
             
-            image_url = storage_service.upload_file(
-                file=image_file,
-                folder= folder_path,
-                filename=f"paper_{timestamp}_{image_file.name}"
-            )
+            # Always stored as a compressed JPEG (long edge 2000px), so the name says .jpg
+            # whatever the source format was.
+            stem = image_file.name.rsplit('.', 1)[0]
+            try:
+                image_url = storage_service.upload_file(
+                    file=image_file,
+                    folder=folder_path,
+                    filename=f"paper_{timestamp}_{stem}.jpg",
+                    max_image_dimension=PAPER_IMAGE_MAX_DIMENSION,
+                )
+            except ValueError as exc:
+                return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
             
             # Create PaperUpload record
             upload = PaperUpload.objects.create(
@@ -5028,17 +5053,19 @@ class PaperUploadViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelV
             )
             
             # Trigger async OCR processing
-            from core.task_utils import call_task
-            call_task(process_paper_upload_ocr, upload.id)
+            from .tasks import start_paper_ocr
+            start_paper_ocr(upload.id)
             
             return Response(
                 PaperUploadSerializer(upload).data,
                 status=status.HTTP_201_CREATED
             )
         
-        except Exception as e:
+        except Exception:
+            # Raw exception text stays in the log; it can carry provider/storage internals.
+            logger.exception("Paper image upload failed")
             return Response(
-                {'detail': f'Error uploading image: {str(e)}'},
+                {'detail': 'Could not upload the image. Please try again.'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
@@ -5073,6 +5100,7 @@ class PaperUploadViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelV
             pages.append({
                 'page_number': number,
                 'upload_id': upload.id if upload else None,
+                'image_url': upload.image_url if upload else None,
                 'status': upload.status if upload else 'MISSING',
                 'error_message': (upload.error_message or '') if upload else '',
             })
@@ -5082,6 +5110,14 @@ class PaperUploadViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelV
         result = None
         if complete:
             result = reconcile_pages([(n, latest[n].ai_extracted_json or {}) for n in range(1, total_pages + 1)])
+            # A page read by the regex fallback (AI step unavailable) is less reliable;
+            # pass that on so the review screen can say so instead of failing silently.
+            warnings = [
+                latest[n].ai_extracted_json.get('warning')
+                for n in range(1, total_pages + 1)
+                if (latest[n].ai_extracted_json or {}).get('warning')
+            ]
+            result['warning'] = warnings[0] if warnings else None
 
         return Response({
             'group_id': str(group_id),

@@ -56,7 +56,7 @@ describe('money', () => {
 
 describe('header rules', () => {
   it('shows the year only to the staff-type shells', () => {
-    expect(['admin', 'teacher', 'manager', 'accountant', 'staff'].every((p) => shouldShowYearChip(p as never))).toBe(true);
+    expect(['admin', 'teacher', 'manager', 'finance', 'staff'].every((p) => shouldShowYearChip(p as never))).toBe(true);
     expect(['parent', 'student', 'driver'].some((p) => shouldShowYearChip(p as never))).toBe(false);
   });
   it('labels the unread badge', () => {

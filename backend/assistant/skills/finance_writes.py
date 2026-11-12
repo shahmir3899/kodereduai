@@ -14,7 +14,7 @@ from decimal import Decimal, InvalidOperation
 from django.utils import timezone
 
 from ..internal_api import call
-from ..registry import ADMINS, ProposalError, Tool, register
+from ..registry import ADMINS, FINANCE_ROLES, ProposalError, Tool, register
 
 METHODS = ['CASH', 'BANK_TRANSFER', 'ONLINE', 'OTHER']
 MAX_ROWS = 200
@@ -312,7 +312,7 @@ register(Tool(
     description='List students with UNPAID or PARTIAL fees for a class and month, with names, amounts and ids. '
                 'Use this when the user asks who has not paid ("naam batao"). Defaults to the current month.',
     parameters={'type': 'object', 'properties': _SCOPE, 'additionalProperties': False},
-    handler=find_pending_fee_payments, sub_agent='finance', module='finance', roles=ADMINS + ('ACCOUNTANT',),
+    handler=find_pending_fee_payments, sub_agent='finance', module='finance', roles=FINANCE_ROLES,
 ))
 
 register(Tool(

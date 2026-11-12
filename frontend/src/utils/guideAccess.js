@@ -9,9 +9,11 @@ import {
   NO_ICONS,
 } from '../navigation/navigationConfig'
 
-export function isVisibleFor(tags, { role, isSuperAdmin, isModuleEnabled }) {
+export function isVisibleFor(tags, { role, isSuperAdmin, isModuleEnabled, canManageFinance }) {
   if (isSuperAdmin) return true
-  if (tags.roles && !tags.roles.includes(role)) return false
+  // The guide has a FINANCE audience: a Manager with the finance capability sees it too.
+  const sees = (r) => tags.roles.includes(r) || (canManageFinance && r === role && tags.roles.includes('FINANCE'))
+  if (tags.roles && !sees(role)) return false
   if (tags.module && !isModuleEnabled(tags.module)) return false
   return true
 }
@@ -34,6 +36,7 @@ const ADMIN_CTX = {
   isModuleEnabled: () => true,
   isStaffLevel: false,
   isManager: false,
+  canManageFinance: false,
   isTeacher: false,
   isStaff: false,
   isSchoolAdminNav: true,
@@ -43,7 +46,7 @@ const ADMIN_CTX = {
 // href -> can this user open it from their sidebar? Pages that appear in no
 // sidebar at all (for example links from dashboard widgets) are treated as
 // available; the route guards still apply when they click.
-export function buildAvailability({ effectiveRole, isSuperAdmin, isParent, isStudent, isModuleEnabled, isStaffLevel, isManager }) {
+export function buildAvailability({ effectiveRole, isSuperAdmin, isParent, isStudent, isModuleEnabled, isStaffLevel, isManager, canManageFinance }) {
   const everything = new Set([
     ...collectNavHrefs(buildStaffNavigation(ADMIN_CTX, NO_ICONS)),
     ...collectNavHrefs(buildParentNavigation(NO_ICONS)),
@@ -63,6 +66,7 @@ export function buildAvailability({ effectiveRole, isSuperAdmin, isParent, isStu
       isModuleEnabled,
       isStaffLevel,
       isManager,
+      canManageFinance,
       isTeacher: effectiveRole === 'TEACHER',
       isStaff: effectiveRole === 'STAFF',
       isDriver: effectiveRole === 'DRIVER',

@@ -110,12 +110,12 @@ const [view, setView] = useViewPreference('students')
 
 Compact numeric-preview tables embedded inside a dashboard/overview "card"
 widget (e.g. `DashboardPage.jsx`'s teacher/class lesson-plan-count grid,
-`AccountantDashboard.jsx`'s "Collection by Class") — capped to a handful of
+`FinanceManagerDashboard.jsx`'s "Collection by Class") — capped to a handful of
 rows, no per-row actions, a "View Details" link elsewhere for the full picture.
 These aren't browsable record lists; they're meant for quick at-a-glance
 scanning inside limited widget space, where `RecordCard`'s per-item layout
 would take more room than the numbers it's showing. Left as plain tables.
-Applies to `DashboardPage.jsx`, `AccountantDashboard.jsx`, `ManagerDashboard.jsx`,
+Applies to `DashboardPage.jsx`, `FinanceManagerDashboard.jsx`, `ManagerDashboard.jsx`,
 `FinanceDashboardPage.jsx`, `FinancialReportsPage.jsx`, `AccuracyDashboardPage.jsx`.
 
 ## Known exception: printable/document tables

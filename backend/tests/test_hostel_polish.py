@@ -184,7 +184,7 @@ class TestHostelPolish:
         assert stats["available_beds"] == 0
         assert stats["current_occupancy"] == 0
 
-    @pytest.mark.parametrize("role", ["teacher", "staff", "accountant"])
+    @pytest.mark.parametrize("role", ["teacher", "staff", "finance_manager"])
     def test_non_admin_roles_are_refused(self, seed_data, api, role):
         for path in ("hostels/", "rooms/", "allocations/", "gate-passes/", "dashboard/"):
             resp = api.get(f"/api/hostel/{path}", seed_data["tokens"][role], seed_data["SID_A"])

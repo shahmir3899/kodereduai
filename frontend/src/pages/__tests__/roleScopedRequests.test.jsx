@@ -74,8 +74,8 @@ describe('transport assignments page', () => {
 })
 
 describe('item assignments page', () => {
-  it('does not load the user list for an accountant', async () => {
-    role = 'ACCOUNTANT'
+  it('does not load the user list for a finance manager', async () => {
+    role = 'FINANCE_MANAGER'
     renderWithProviders(<ItemAssignmentsPage />)
     await settle()
     expect(called('/api/inventory/assignments')).toBe(true)

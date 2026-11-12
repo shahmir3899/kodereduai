@@ -612,7 +612,7 @@
       "roles": [
         "SCHOOL_ADMIN",
         "PRINCIPAL",
-        "ACCOUNTANT"
+        "FINANCE"
       ],
       "module": "finance",
       "seconds": {
@@ -774,7 +774,7 @@
       "roles": [
         "SCHOOL_ADMIN",
         "PRINCIPAL",
-        "ACCOUNTANT"
+        "FINANCE"
       ],
       "module": "finance",
       "seconds": {
@@ -1312,7 +1312,7 @@
         "SCHOOL_ADMIN",
         "PRINCIPAL",
         "MANAGER",
-        "ACCOUNTANT",
+        "FINANCE",
         "TEACHER",
         "STAFF",
         "DRIVER"
@@ -1386,7 +1386,7 @@
         "SCHOOL_ADMIN",
         "PRINCIPAL",
         "MANAGER",
-        "ACCOUNTANT",
+        "FINANCE",
         "TEACHER",
         "STAFF",
         "DRIVER"
@@ -1413,7 +1413,7 @@
         "SCHOOL_ADMIN",
         "PRINCIPAL",
         "MANAGER",
-        "ACCOUNTANT",
+        "FINANCE",
         "TEACHER",
         "STAFF",
         "DRIVER"

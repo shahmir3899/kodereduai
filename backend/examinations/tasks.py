@@ -79,6 +79,38 @@ def _build_continuation_context(upload: PaperUpload) -> dict | None:
     return {'page_number': upload.page_number, 'independent': True}
 
 
+def start_paper_ocr(upload_id: int) -> None:
+    """Run paper OCR once, off the request thread, without needing a Celery worker.
+
+    Same in-process daemon-thread approach as lms TOC OCR: the upload view returns
+    201 with status PENDING at once and the web/mobile clients poll the upload until it
+    is EXTRACTED or FAILED. Previously this went through call_task, which on this
+    deployment (no usable Redis) ran OCR inline and then ran it a second time, doubling
+    Google Vision and Groq usage. Under eager mode (local dev, tests) it runs inline.
+    """
+    import threading
+    from django.conf import settings
+    from django.db import connection
+
+    def _run():
+        try:
+            process_paper_upload_ocr(upload_id)
+        except Exception:
+            # The task already marks the upload FAILED; this only stops a retry
+            # request (meaningless outside a worker) from killing the thread noisily.
+            logger.exception("Paper OCR thread failed for PaperUpload %s", upload_id)
+        finally:
+            connection.close()
+
+    if getattr(settings, 'CELERY_TASK_ALWAYS_EAGER', False):
+        try:
+            process_paper_upload_ocr(upload_id)
+        except Exception:
+            logger.exception("Paper OCR failed for PaperUpload %s", upload_id)
+        return
+    threading.Thread(target=_run, name=f"paper-ocr-{upload_id}", daemon=True).start()
+
+
 @shared_task(bind=True, max_retries=2)
 def process_paper_upload_ocr(self, upload_id: int):
     """
@@ -115,8 +147,11 @@ def process_paper_upload_ocr(self, upload_id: int):
         # the AI still detects header text verbatim, this only nudges extraction.
         context = {
             'school_id': upload.school_id,
+            'class_id': upload.context_class_id,
             'class_name': upload.context_class.name if upload.context_class_id else None,
+            'subject_id': upload.context_subject_id,
             'subject_name': upload.context_subject.name if upload.context_subject_id else None,
+            'subject_code': upload.context_subject.code if upload.context_subject_id else None,
         }
         
         # Process the image -- continuation_context is None for page 1/standalone
@@ -148,7 +183,8 @@ def process_paper_upload_ocr(self, upload_id: int):
         else:
             # Update with error
             upload.status = PaperUpload.Status.FAILED
-            upload.error_message = result.error or "Unknown processing error"
+            from .paper_ocr_processor import friendly_ocr_error
+            upload.error_message = friendly_ocr_error(result.error)
             upload.processed_at = timezone.now()
             upload.save()
             
@@ -170,12 +206,13 @@ def process_paper_upload_ocr(self, upload_id: int):
         try:
             upload = PaperUpload.objects.get(id=upload_id)
             upload.status = PaperUpload.Status.FAILED
-            upload.error_message = f"Processing error: {str(e)}"
+            from .paper_ocr_processor import MSG_GENERIC_FAILURE
+            upload.error_message = MSG_GENERIC_FAILURE
             upload.processed_at = timezone.now()
             upload.save()
         except Exception:
             pass
-        
+
         # Retry if not exceeded max retries
         if self.request.retries < self.max_retries:
             logger.info(f"Retrying PaperUpload {upload_id} (attempt {self.request.retries + 1})")
@@ -244,7 +281,8 @@ def process_worksheet_upload_ocr(self, upload_id: int):
             }
         else:
             upload.status = WorksheetUpload.Status.FAILED
-            upload.error_message = result.error or "Unknown processing error"
+            from .paper_ocr_processor import friendly_ocr_error
+            upload.error_message = friendly_ocr_error(result.error)
             upload.processed_at = timezone.now()
             upload.save()
 

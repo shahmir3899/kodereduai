@@ -55,7 +55,7 @@ class TestScoping:
 
     def test_principal_may_read_but_other_roles_may_not(self, seed_data, api):
         assert _get(api, seed_data, 'principal').status_code == 200
-        for uname in ('teacher', 'accountant', 'manager', 'staff'):
+        for uname in ('teacher', 'finance_manager', 'manager', 'staff'):
             assert _get(api, seed_data, uname).status_code == 403, uname
 
     def test_school_admin_cannot_widen_scope_with_the_school_parameter(self, seed_data, api):

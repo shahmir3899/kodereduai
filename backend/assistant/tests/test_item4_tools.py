@@ -118,8 +118,8 @@ class TestSendMessages:
         out = _run(seed_data, 'send_message_to_parents', title='x', body='y', all_parents=True)
         assert 'error' in out and 'daily limit' in out['error']
 
-    def test_teachers_and_accountants_cannot_send(self, seed_data, fam):
-        for u in ('teacher', 'accountant'):
+    def test_teachers_and_finance_managers_cannot_send(self, seed_data, fam):
+        for u in ('teacher', 'finance_manager'):
             assert 'error' in _run(seed_data, 'send_message_to_parents', u, title='x', body='y', all_parents=True)
 
     def test_recent_messages(self, seed_data, fam):

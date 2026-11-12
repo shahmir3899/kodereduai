@@ -3,7 +3,7 @@
 Reads, edits and deletes go through ExpenseViewSet / OtherIncomeViewSet, so whatever the
 Finance screen hides (sensitive entries for a principal, hidden accounts) the assistant cannot
 see either, and closed months (MonthlyClosing) refuse changes exactly as they do in the UI.
-Only admins and principals can write there today (accountants are read-only), so the write
+Only admins and principals can write there today (finance managers are read-only), so the write
 tools are admin-only too.
 """
 import difflib

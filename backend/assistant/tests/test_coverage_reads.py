@@ -104,6 +104,3 @@ def test_roles_are_enforced(seed_data, modules):
     # a teacher may not read parents' leave requests, student documents or vendors
     for tool in ('list_parent_leave_requests', 'list_student_documents', 'list_vendors'):
         assert _run(seed_data, tool, 'teacher') == {'error': 'You do not have permission to use this tool.'}, tool
-    # an accountant has none of the six
-    for tool in NEW:
-        assert _run(seed_data, tool, 'accountant') == {'error': 'You do not have permission to use this tool.'}, tool

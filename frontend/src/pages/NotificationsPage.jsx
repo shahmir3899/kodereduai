@@ -53,7 +53,6 @@ const RECIPIENT_TYPES = [
   { value: 'SCHOOL_ADMIN', label: 'All Admins' },
   { value: 'PRINCIPAL', label: 'Principals' },
   { value: 'MANAGER', label: 'Managers' },
-  { value: 'ACCOUNTANT', label: 'Accountants' },
   { value: 'STUDENT', label: 'All Students' },
 ]
 

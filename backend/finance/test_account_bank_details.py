@@ -28,7 +28,7 @@ def _row(api, seed_data, who, account):
     return next(r for r in rows if r['id'] == account.id)
 
 
-@pytest.mark.parametrize('who', ['admin', 'principal', 'accountant'])
+@pytest.mark.parametrize('who', ['admin', 'principal', 'finance_manager'])
 def test_the_people_who_run_the_books_see_the_full_details(api, seed_data, bank, who):
     row = _row(api, seed_data, who, bank)
     assert (row['bank_name'], row['account_title'], row['account_number'], row['iban']) == (

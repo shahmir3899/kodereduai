@@ -34,7 +34,6 @@ const ROLE_BADGES = {
   PARENT: { label: 'Parent', color: TONE.success },
   STUDENT: { label: 'Student', color: TONE.warning },
   MANAGER: { label: 'Manager', color: TONE.danger },
-  ACCOUNTANT: { label: 'Accountant', color: TONE.teal },
   STAFF: { label: 'Staff', color: TONE.neutral },
 }
 
@@ -241,7 +240,7 @@ export default function MessagesPage() {
       } else if (recipient.role === 'STUDENT') {
         messageType = 'TEACHER_STUDENT'
         studentId = recipient.student_id || ''
-      } else if (['TEACHER', 'STAFF', 'MANAGER', 'ACCOUNTANT'].includes(recipient.role)) {
+      } else if (['TEACHER', 'STAFF', 'MANAGER'].includes(recipient.role)) {
         messageType = 'ADMIN_STAFF'
       }
     }

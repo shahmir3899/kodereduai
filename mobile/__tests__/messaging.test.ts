@@ -47,7 +47,7 @@ describe('message type', () => {
   it('files a thread the way the web does, from who it goes to', () => {
     expect(messageTypeFor({ role: 'PARENT' })).toBe('TEACHER_PARENT');
     expect(messageTypeFor({ role: 'STUDENT' })).toBe('TEACHER_STUDENT');
-    ['TEACHER', 'STAFF', 'MANAGER', 'ACCOUNTANT'].forEach((role) => expect(messageTypeFor({ role })).toBe('ADMIN_STAFF'));
+    ['TEACHER', 'STAFF', 'MANAGER'].forEach((role) => expect(messageTypeFor({ role })).toBe('ADMIN_STAFF'));
     expect(messageTypeFor({ role: 'SCHOOL_ADMIN' })).toBe('GENERAL');
     expect(messageTypeFor({})).toBe('GENERAL');
   });

@@ -9,7 +9,7 @@ import { canChooseYear, isPastYear, resolveYear, saveYearChoice, scopeKey, yearS
 // Both roots are on the persisted reference-data list (services/queryRules.ts), so the class
 // and year pickers still open when the phone is offline.
 //
-// `current` is the year the screen works in. Admin, manager and accountant can choose another year
+// `current` is the year the screen works in. Admin, manager and finance manager can choose another year
 // (kept per person and school); everyone else, and screens that pass `lockToCurrent` (attendance,
 // fee collection: they write today's records), always get the school's current year, `actual`.
 export function useAcademicYear(opts: { lockToCurrent?: boolean } = {}) {

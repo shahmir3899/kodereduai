@@ -12,8 +12,8 @@ import { canChooseYear, isPastYear, loadYearChoice, resolveYear, saveYearChoice,
 const years = [{ id: 1, name: '2024-25' }, { id: 2, name: '2025-26', is_current: true }, { id: 3, name: '2026-27' }];
 
 describe('canChooseYear', () => {
-  it('is for admin, manager and accountant only', () => {
-    expect(['admin', 'manager', 'accountant'].every((p) => canChooseYear(p as never))).toBe(true);
+  it('is for admin, manager and finance manager only', () => {
+    expect(['admin', 'manager', 'finance'].every((p) => canChooseYear(p as never))).toBe(true);
     expect(['teacher', 'staff', 'parent', 'student', 'driver'].some((p) => canChooseYear(p as never))).toBe(false);
   });
 });

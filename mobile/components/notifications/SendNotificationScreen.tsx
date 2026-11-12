@@ -8,7 +8,7 @@ import {
   buildPreviewPayload, buildSinglePayload, composePlaceholders, emptyCompose, previewLine, sendErrorMessage, validateCompose,
   type ComposeForm, type Mode, type RecipientPreview,
 } from '../../services/notificationSend';
-import { ROLE_LABELS } from '../../services/schoolUsers';
+import { roleLabel } from '../../services/schoolUsers';
 import Input from '../ui/Input';
 import Select from '../ui/Select';
 import Button from '../ui/Button';
@@ -105,7 +105,7 @@ export default function SendNotificationScreen() {
           </>
         ) : (
           <Select label="Send to" value={form.recipientId} searchable placeholder={users.isLoading ? 'Loading people...' : 'Choose a person'}
-            options={(users.data ?? []).filter((u) => u.is_active).map((u) => ({ value: u.id, label: `${userName(u)}  (${ROLE_LABELS[u.role] ?? u.role})` }))}
+            options={(users.data ?? []).filter((u) => u.is_active).map((u) => ({ value: u.id, label: `${userName(u)}  (${roleLabel(u.role)})` }))}
             onChange={pickUser} />
         )}
 

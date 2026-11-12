@@ -34,12 +34,12 @@ const typeColors = {
 
 export default function AccountsPage() {
   const queryClient = useQueryClient()
-  const { user, isStaffMember, isPrincipal, isAccountant } = useAuth()
+  const { user, isStaffMember, isPrincipal, canManageFinance } = useAuth()
   const toast = useToast()
   const { confirm, ConfirmModalRoot } = useConfirmModal()
   const canManageAccounts = !isStaffMember
-  // close_month is admin-only on the API (accountants are read-only in finance), so the button would only end in a 403.
-  const canCloseMonth = canManageAccounts && !isAccountant
+  // close_month is admin-only on the API (finance managers are read-only in finance), so the button would only end in a 403.
+  const canCloseMonth = canManageAccounts && !canManageFinance
   const canRecordTransactions = true // Staff can record transfers (backend limits to staff_visible accounts)
   const hasMultipleSchools = !isStaffMember && (user?.schools?.length > 1 || user?.is_super_admin)
   const [activeTab, setActiveTab] = useState(isPrincipal ? 'accounts' : (isStaffMember ? 'manage' : 'balances'))

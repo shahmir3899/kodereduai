@@ -61,11 +61,11 @@ class TestNoBareStatusChange:
 
 @pytest.mark.django_db
 class TestDepartedVisibleToReadRoles:
-    """Teachers and accountants are read-only, not blind: they see every filter, including
+    """Teachers and finance managers are read-only, not blind: they see every filter, including
     students who left or graduated. (Manager has no student-level data, see
     attendance/test_role_scoping.py.)"""
 
-    @pytest.mark.parametrize('token', ['teacher', 'accountant'])
+    @pytest.mark.parametrize('token', ['teacher', 'finance_manager'])
     def test_read_roles_can_list_departed_students(self, api, seed_data, token):
         student = seed_data['students'][0]
         StudentEnrollment.objects.update_or_create(
@@ -82,7 +82,7 @@ class TestDepartedVisibleToReadRoles:
         if token != 'teacher':
             assert student.id in {r['id'] for r in resp.json()['results']}
 
-    @pytest.mark.parametrize('token', ['teacher', 'manager', 'accountant'])
+    @pytest.mark.parametrize('token', ['teacher', 'manager', 'finance_manager'])
     def test_read_roles_cannot_change_status(self, api, seed_data, token):
         resp = api.post(
             f"/api/students/{seed_data['students'][0].id}/outcome/",

@@ -5,7 +5,7 @@ import Badge from '../ui/Badge';
 import { useAcademicYear } from '../../hooks/useAcademicYear';
 import { Colors, FontSize, Spacing } from '../../constants/colors';
 
-// Pick the academic year to look at (admin, manager and accountant). The choice is kept per person
+// Pick the academic year to look at (admin, manager and finance manager). The choice is kept per person
 // and school; attendance and fee collection ignore it and always use the current year.
 export default function YearSheet({ visible, onClose }: { visible: boolean; onClose: () => void }) {
   const { years, current, actual, isPast, choose } = useAcademicYear();

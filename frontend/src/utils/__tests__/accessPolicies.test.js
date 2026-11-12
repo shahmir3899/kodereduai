@@ -21,13 +21,17 @@ describe('accessPolicies', () => {
 
     it('allows admin roles', () => {
       expect(canAccessFinanceRoute('SCHOOL_ADMIN', { collectOnly: false })).toBe(true)
-      expect(canAccessFinanceRoute('ACCOUNTANT', { collectOnly: false })).toBe(true)
+      expect(canAccessFinanceRoute('MANAGER', { collectOnly: false, canManageFinance: true })).toBe(true)
+    })
+
+    it('keeps a manager without the finance capability out', () => {
+      expect(canAccessFinanceRoute('MANAGER', { collectOnly: false })).toBe(false)
     })
   })
 
   describe('canAccessLmsRoute', () => {
-    it('keeps accountant, driver and staff out of teaching pages', () => {
-      for (const r of ['ACCOUNTANT', 'DRIVER', 'STAFF']) expect(canAccessLmsRoute(r)).toBe(false)
+    it('keeps driver and staff out of teaching pages', () => {
+      for (const r of ['DRIVER', 'STAFF']) expect(canAccessLmsRoute(r)).toBe(false)
     })
 
     it('leaves admin, principal, manager and teacher in', () => {
@@ -40,8 +44,8 @@ describe('accessPolicies', () => {
       for (const r of ['SCHOOL_ADMIN', 'PRINCIPAL', 'MANAGER']) expect(canAccessPromotionRoute(r)).toBe(true)
     })
 
-    it('keeps accountant, driver, teacher and staff out', () => {
-      for (const r of ['ACCOUNTANT', 'DRIVER', 'TEACHER', 'STAFF']) expect(canAccessPromotionRoute(r)).toBe(false)
+    it('keeps driver, teacher and staff out', () => {
+      for (const r of ['DRIVER', 'TEACHER', 'STAFF']) expect(canAccessPromotionRoute(r)).toBe(false)
     })
   })
 

@@ -41,11 +41,11 @@ def attendance_records(student, segments=None):
 
 
 def attendance_totals(student, segments=None):
-    """Counts over the whole timeline. Leave days count as present, the same rule as the
-    risk assessment, so the Attendance card and the risk card never disagree."""
+    """Counts over the whole timeline. Late and leave days count as present, the same rule as
+    the risk assessment, so the Attendance card and the risk card never disagree."""
     totals = attendance_records(student, segments).aggregate(
         total=Count('id'),
-        present=Count('id', filter=Q(status='PRESENT')),
+        present=Count('id', filter=Q(status__in=('PRESENT', 'LATE'))),
         absent=Count('id', filter=Q(status='ABSENT')),
         leave=Count('id', filter=Q(status='LEAVE')),
     )
@@ -77,7 +77,7 @@ def attendance_months(student, segments=None):
     order = {(s.student_id, s.school_id): i for i, s in enumerate(segments)}
     months = []
     for r in sorted(rows, key=lambda r: (r['month'], order.get((r['student_id'], r['school_id']), 0)), reverse=True):
-        rate = round((r['present'] + r['leave']) / r['total'] * 100, 1) if r['total'] else 0.0
+        rate = round((r['present'] + r['late'] + r['leave']) / r['total'] * 100, 1) if r['total'] else 0.0
         months.append(_tagged({
             'month': r['month'].strftime('%B %Y') if r['month'] else None,
             'present': r['present'], 'absent': r['absent'], 'late': r['late'],

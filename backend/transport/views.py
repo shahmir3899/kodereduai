@@ -20,6 +20,7 @@ from core.mixins import TenantQuerySetMixin
 from .utils import resolve_school_id as _resolve_school_id, annotate_route_counts
 from core.mixins import ensure_tenant_school_id
 
+from .map_data import route_map
 from .models import (
     TransportRoute, TransportStop, TransportVehicle,
     TransportAssignment, TransportAttendance,
@@ -1046,6 +1047,7 @@ class RouteJourneyTrackView(APIView):
                 'id': assignment.stop_id,
                 'name': assignment.stop.name if assignment.stop else None,
             },
+            'map': route_map(assignment.route, assignment.stop),
         })
 
 

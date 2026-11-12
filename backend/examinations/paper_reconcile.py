@@ -130,6 +130,9 @@ def reconcile_pages(pages: List[Tuple[int, Dict[str, Any]]]) -> Dict[str, Any]:
             section = deepcopy(raw)
             section['pages'] = [page_number]
             section.setdefault('questions', [])
+            for question in section['questions']:
+                # Lets the review screen show the page photo a question was read from.
+                question['page_number'] = page_number
             if sections and _continues(section, sections[-1], position == 0):
                 _merge_into(sections[-1], section)
             else:

@@ -5,7 +5,7 @@
 
 export function buildStaffNavigation(ctx, I) {
   const {
-    effectiveRole, isModuleEnabled, isStaffLevel, isManager, isTeacher, isStaff,
+    effectiveRole, isModuleEnabled, isStaffLevel, isManager, canManageFinance, isTeacher, isStaff,
     isSchoolAdminNav, hasInventoryAssignments,
   } = ctx
   const isDriver = ctx.isDriver ?? effectiveRole === 'DRIVER'
@@ -34,7 +34,7 @@ export function buildStaffNavigation(ctx, I) {
     }] : []),
 
     // Finance group — Manager removed 2026-09 (see Attendance comment above).
-    ...(isModuleEnabled('finance') && !isStaff && !isManager ? [{
+    ...(isModuleEnabled('finance') && !isStaff && (!isManager || canManageFinance) ? [{
       type: 'group',
       name: 'Finance',
       icon: I.CurrencyIcon,
@@ -80,7 +80,7 @@ export function buildStaffNavigation(ctx, I) {
           ...(!isTeacher ? [{ name: 'Exams', href: '/academics/exams', icon: I.ClipboardIcon }] : []),
           ...(isTeacher ? [{ name: 'Exam Schedule', href: '/academics/exam-schedule', icon: I.CalendarIcon }] : []),
           // Matches AssessmentAccessRoute's allow-list (SCHOOL_ADMIN/PRINCIPAL/
-          // TEACHER/SUPER_ADMIN) -- keeps ACCOUNTANT/DRIVER from seeing a link
+          // TEACHER/SUPER_ADMIN) -- keeps DRIVER from seeing a link
           // that immediately redirects them away.
           ...(isSchoolAdminNav || isTeacher ? [{ name: 'Assessments', href: '/assessments', icon: I.DocumentIcon }] : []),
           ...(isSchoolAdminNav || isTeacher ? [{ name: 'Marks Entry', href: '/academics/marks-entry', icon: I.DocumentIcon }] : []),
@@ -91,7 +91,7 @@ export function buildStaffNavigation(ctx, I) {
             { name: 'Report Cards', href: '/academics/report-cards', icon: I.ReportIcon },
           ] : []),
         ] : []),
-        ...(isModuleEnabled('lms') && effectiveRole !== 'ACCOUNTANT' ? [
+        ...(isModuleEnabled('lms') ? [
           { name: 'Assignments', href: '/academics/assignments', icon: I.DocumentIcon },
         ] : []),
       ],
@@ -106,14 +106,14 @@ export function buildStaffNavigation(ctx, I) {
           { name: 'Question Bank', href: '/academics/questions', icon: I.PencilIcon },
           // Paper Builder/Question Papers/Worksheets match PaperBuilderRoute's
           // allow-list (SCHOOL_ADMIN/PRINCIPAL/TEACHER/MANAGER) -- keeps
-          // ACCOUNTANT/DRIVER from seeing links that redirect them away.
+          // DRIVER from seeing links that redirect them away.
           ...(isSchoolAdminNav || isTeacher || isManager ? [
             { name: 'Paper Builder', href: '/academics/paper-builder', icon: I.PencilIcon },
             { name: 'Question Papers', href: '/academics/papers', icon: I.DocumentIcon },
             { name: 'Worksheets', href: '/academics/worksheets', icon: I.DocumentIcon },
           ] : []),
         ] : []),
-        ...(isModuleEnabled('lms') && effectiveRole !== 'ACCOUNTANT' ? [
+        ...(isModuleEnabled('lms') ? [
           { name: 'Curriculum', href: '/academics/curriculum', icon: I.BookOpenIcon },
         ] : []),
       ],
@@ -128,7 +128,7 @@ export function buildStaffNavigation(ctx, I) {
         ...(isModuleEnabled('examinations') ? [
           { name: 'Curriculum Coverage', href: '/academics/curriculum-coverage', icon: I.ChartIcon },
         ] : []),
-        ...(isModuleEnabled('lms') && effectiveRole !== 'ACCOUNTANT' ? [
+        ...(isModuleEnabled('lms') ? [
           { name: 'Lesson Plans', href: '/academics/lesson-plans', icon: I.BookOpenIcon },
         ] : []),
       ],
@@ -212,7 +212,7 @@ export function buildStaffNavigation(ctx, I) {
           { type: 'divider', label: 'Academic Ops' },
           { name: 'Academic Calendar', href: '/academics/calendar', icon: I.CalendarIcon },
           { name: 'Sessions', href: '/academics/sessions', icon: I.CalendarIcon },
-          ...(effectiveRole !== 'ACCOUNTANT' && effectiveRole !== 'DRIVER' ? [{ name: 'Promotion', href: '/academics/promotion', icon: I.UsersIcon }] : []),
+          ...(effectiveRole !== 'DRIVER' ? [{ name: 'Promotion', href: '/academics/promotion', icon: I.UsersIcon }] : []),
         ] : []),
       ],
     }] : []),
@@ -277,7 +277,7 @@ export function buildStaffNavigation(ctx, I) {
     }] : []),
 
     // Inventory group — Manager removed 2026-09 (see Attendance comment above).
-    ...(isModuleEnabled('inventory') && !isManager && (!isTeacher && !isStaff ? true : hasInventoryAssignments) ? [{
+    ...(isModuleEnabled('inventory') && (!isManager || canManageFinance) && (!isTeacher && !isStaff ? true : hasInventoryAssignments) ? [{
       type: 'group',
       name: 'Inventory',
       icon: I.ClipboardCheckIcon,

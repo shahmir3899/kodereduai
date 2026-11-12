@@ -6,7 +6,7 @@ import { routeFor } from '../../navigation/routes';
 import { useMyInventory, useUnreadNotifications } from '../../hooks/useStaff';
 import { useUnreadMessages } from '../../hooks/useMessaging';
 import { useRefreshControl } from '../../hooks/useRefreshControl';
-import { sortAssignments } from '../../services/accountant';
+import { sortAssignments } from '../../services/financeManager';
 import Card from '../ui/Card';
 import SchoolSwitcher from '../nav/SchoolSwitcher';
 import StatTiles from '../dashboard/StatTiles';

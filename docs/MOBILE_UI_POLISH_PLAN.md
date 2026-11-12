@@ -53,15 +53,15 @@ Done when: a teacher or admin can generate, watch, cancel, fix and regenerate co
 
 ## Phase D: Dashboards - BUILT 2026-10-30 (trend strips not built), uncommitted, never run on a device
 
-Finished: `components/dashboard/LeadershipInsights.tsx` (admin home, opened on demand, calls `/api/bootstrap/leadership-academic-insights/`), `StatTiles` shared by manager, accountant and staff homes, recent notifications on accountant and staff homes. Tests `__tests__/leadershipInsights.test.ts`.
+Finished: `components/dashboard/LeadershipInsights.tsx` (admin home, opened on demand, calls `/api/bootstrap/leadership-academic-insights/`), `StatTiles` shared by manager, finance manager and staff homes, recent notifications on finance manager and staff homes. Tests `__tests__/leadershipInsights.test.ts`.
 
-Built: shared `components/dashboard/{HeroCard,AttendanceBreakdown,MonthlyFeeCard,RecentNotifications}.tsx`, logic and tests in `services/dashboardView.ts` / `__tests__/dashboardView.test.ts`. Admin home now has the day hero (percent present, or No school today), the four-state attendance bar, the monthly fee card (collected, pending, paid/partial/unpaid) and the latest notifications. The teacher home uses the shared hero (it already had section progress); the manager home uses the shared notifications block. Not done: leadership insight panels, a stat-card refresh on accountant and staff homes, trend strips (the dashboard API sends no history to draw).
+Built: shared `components/dashboard/{HeroCard,AttendanceBreakdown,MonthlyFeeCard,RecentNotifications}.tsx`, logic and tests in `services/dashboardView.ts` / `__tests__/dashboardView.test.ts`. Admin home now has the day hero (percent present, or No school today), the four-state attendance bar, the monthly fee card (collected, pending, paid/partial/unpaid) and the latest notifications. The teacher home uses the shared hero (it already had section progress); the manager home uses the shared notifications block. Not done: leadership insight panels, a stat-card refresh on finance manager and staff homes, trend strips (the dashboard API sends no history to draw).
 
 Compare with `AdminDashboard.jsx` (608 lines) vs `app/(admin)/dashboard.tsx` (198).
 
 - Admin and principal: stat card row with subtitles (present, absent, fee collected, staff on leave), attendance breakdown, monthly fee collection card, leadership insight panels, recent notifications, date stepper. Keep Needs attention and Quick actions.
 - Teacher: hero card for the current period (exists as a card, tidy it), attendance bars per section.
-- Manager, accountant, staff: same stat card style so every home screen looks like one family.
+- Manager, finance manager, staff: same stat card style so every home screen looks like one family.
 - Off-day handling ("OFF day") on every card, as on the web.
 
 ## Phase E: Header and shared components - BUILT 2026-10-30, uncommitted, never run on a device

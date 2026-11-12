@@ -6,22 +6,24 @@ from rest_framework import permissions
 from django.db.models import Q
 from core.mixins import ensure_tenant_schools, ensure_tenant_school_id
 
-# Roles that have admin-level access (full read + write).
-# Used across all permission classes to avoid repeating role tuples.
-ADMIN_ROLES = ('SUPER_ADMIN', 'SCHOOL_ADMIN', 'PRINCIPAL')
+# Role lists live in core/roles.py (single source of truth); re-exported here because most
+# of the codebase already imports them from core.permissions.
+from core.roles import (  # noqa: E402,F401
+    ADMIN_ROLES, STAFF_LEVEL_ROLES, PARENT_ROLES, STUDENT_ROLES, ROLE_HIERARCHY,
+)
 
-# Roles that are staff-level (non-admin). These get read-only access to
-# existing modules (finance, attendance) and are subject to sensitive-data filtering.
-STAFF_LEVEL_ROLES = ('STAFF', 'TEACHER', 'MANAGER', 'ACCOUNTANT', 'DRIVER')
-PARENT_ROLES = ('PARENT',)
-STUDENT_ROLES = ('STUDENT',)
 
-# Which roles each role is allowed to create
-ROLE_HIERARCHY = {
-    'SUPER_ADMIN': ['SUPER_ADMIN', 'SCHOOL_ADMIN', 'PRINCIPAL', 'MANAGER', 'ACCOUNTANT', 'TEACHER', 'STAFF', 'DRIVER'],
-    'SCHOOL_ADMIN': ['PRINCIPAL', 'MANAGER', 'ACCOUNTANT', 'TEACHER', 'STAFF', 'DRIVER'],
-    'PRINCIPAL': ['MANAGER', 'ACCOUNTANT', 'TEACHER', 'STAFF', 'DRIVER'],
-}
+def has_finance_access(request):
+    """True for a MANAGER whose membership has can_manage_finance (finance access is a capability, not a role).
+
+    Admins are not covered on purpose: callers already test ADMIN_ROLES first, and a flag on an
+    admin membership means nothing.
+    """
+    user = request.user
+    if not user.is_authenticated or get_effective_role(request) != 'MANAGER':
+        return False
+    school_id = ensure_tenant_school_id(request)
+    return bool(school_id) and user.has_capability_for_school(school_id, 'can_manage_finance')
 
 
 def get_parent_children_ids(request):
@@ -333,21 +335,21 @@ class IsSchoolAdmin(permissions.BasePermission):
         return role in ADMIN_ROLES
 
 
-class IsSchoolAdminOrAccountant(permissions.BasePermission):
+class IsSchoolAdminOrFinanceManager(permissions.BasePermission):
     """
-    School Admins, Principals, Super Admins and Accountants.
-    For read-only finance feeds the accountant dashboard needs; keeps Driver,
+    School Admins, Principals, Super Admins and Managers with finance access.
+    For read-only finance feeds the finance dashboard needs; keeps Driver,
     Teacher, Manager and Staff out (unlike FinanceRoleAccessPermission, which
     lets Driver read all finance data).
     """
-    message = "Only School Admins and Accountants can perform this action."
+    message = "Only School Admins and Managers with finance access can perform this action."
 
     def has_permission(self, request, view):
         if not request.user.is_authenticated:
             return False
 
         role = get_effective_role(request)
-        return role in ADMIN_ROLES or role == 'ACCOUNTANT'
+        return role in ADMIN_ROLES or has_finance_access(request)
 
 
 class IsSchoolAdminOrReadOnly(permissions.BasePermission):
@@ -427,7 +429,7 @@ class CanViewStudentRecords(permissions.BasePermission):
     bypassing the intended lockout entirely. This restricts read access to
     the roles the frontend actually intends to allow in:
     - SUPER_ADMIN/SCHOOL_ADMIN/PRINCIPAL: full read + write
-    - TEACHER/MANAGER/ACCOUNTANT: read only
+    - TEACHER and finance-enabled MANAGER: read only
     - STAFF/DRIVER/PARENT/STUDENT: no access — PARENT/STUDENT already have
       their own scoped self-service endpoints for their own/child's record
       and have no legitimate reason to hit the general roster.
@@ -436,7 +438,7 @@ class CanViewStudentRecords(permissions.BasePermission):
 
     # MANAGER is not here: it has no student-level data. A view that lists non-student
     # records (ClassViewSet) opts it back in with `extra_read_roles`.
-    READ_ROLES = ADMIN_ROLES + ('TEACHER', 'ACCOUNTANT')
+    READ_ROLES = ADMIN_ROLES + ('TEACHER',)
 
     def has_permission(self, request, view):
         if not request.user.is_authenticated:
@@ -445,7 +447,10 @@ class CanViewStudentRecords(permissions.BasePermission):
         role = get_effective_role(request)
 
         if request.method in permissions.SAFE_METHODS:
-            return role in self.READ_ROLES + tuple(getattr(view, 'extra_read_roles', ()))
+            return (
+                role in self.READ_ROLES + tuple(getattr(view, 'extra_read_roles', ()))
+                or has_finance_access(request)
+            )
 
         return role in ADMIN_ROLES
 
@@ -454,7 +459,7 @@ class CanViewStudentData(permissions.BasePermission):
     """Student-level attendance, marks and results: admins and teachers only.
 
     Teachers are narrowed to their own classes/sections by each view's queryset; this
-    class only keeps every other role (accountant, manager, staff, driver) out.
+    class only keeps every other role (manager, staff, driver) out.
     """
     message = "Only admins and teachers can view student attendance, marks and results."
 
@@ -620,10 +625,9 @@ class FinanceRoleAccessPermission(permissions.BasePermission):
     """
     Finance access policy:
     - SUPER_ADMIN/SCHOOL_ADMIN/PRINCIPAL: full access
-    - ACCOUNTANT/DRIVER: read-only
+    - finance-enabled MANAGER with finance access/DRIVER: read-only
     - TEACHER: only fee-collection scoped actions
-    - STAFF/MANAGER: no finance access (Manager removed 2026-09: nav access
-      scoped down to Dashboard/Academics/Content Creation/Management only)
+    - STAFF and MANAGER without can_manage_finance: no finance access
     """
     message = "You don't have permission to access this finance resource."
 
@@ -643,7 +647,7 @@ class FinanceRoleAccessPermission(permissions.BasePermission):
         if role in ADMIN_ROLES:
             return True
 
-        if role in ('ACCOUNTANT', 'DRIVER'):
+        if role == 'DRIVER' or has_finance_access(request):
             return request.method in permissions.SAFE_METHODS
 
         if role in ('STAFF', 'MANAGER'):
@@ -665,10 +669,9 @@ class InventoryRoleAccessPermission(permissions.BasePermission):
     """
     Inventory access policy:
     - SUPER_ADMIN/SCHOOL_ADMIN/PRINCIPAL: full access
-    - ACCOUNTANT/DRIVER: read-only
+    - finance-enabled MANAGER with finance access/DRIVER: read-only
     - TEACHER/STAFF: only their own assignment reads
-    - MANAGER: no access (removed 2026-09: nav access scoped down to
-      Dashboard/Academics/Content Creation/Management only)
+    - other MANAGERs: no access
     """
     message = "You don't have permission to access this inventory resource."
 
@@ -684,7 +687,7 @@ class InventoryRoleAccessPermission(permissions.BasePermission):
         if role in ADMIN_ROLES:
             return True
 
-        if role in ('ACCOUNTANT', 'DRIVER'):
+        if role == 'DRIVER' or has_finance_access(request):
             return request.method in permissions.SAFE_METHODS
 
         if role in ('TEACHER', 'STAFF'):

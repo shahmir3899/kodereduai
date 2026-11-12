@@ -4,6 +4,8 @@ import { useLocalSearchParams } from 'expo-router';
 import { useBusTracking } from '../../hooks/useParent';
 import { useRefreshControl } from '../../hooks/useRefreshControl';
 import { latestPoint, mapUrl } from '../../services/parentPortal';
+import { mapHtml, portalMarkers, withBus } from '../../services/routeMap';
+import RouteMap from '../map/RouteMap';
 import { timeAgo } from '../../services/messaging';
 import Skeleton from '../ui/Skeleton';
 import ErrorState from '../ui/ErrorState';
@@ -14,7 +16,7 @@ import StatusPill from '../ui/StatusPill';
 import { Colors, FontSize, Spacing } from '../../constants/colors';
 
 // Where the child's bus is while a journey is running. Refreshes every 15 seconds while open;
-// the position opens in the phone's maps app (no in-app map yet).
+// the map shows the route, your child's stop and the bus (older servers show the position only).
 export default function TrackBusScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const query = useBusTracking(Number(id), true);
@@ -29,6 +31,8 @@ export default function TrackBusScreen() {
 
   const point = latestPoint(t.locations);
   const url = mapUrl(point);
+  const markers = withBus(portalMarkers(t.map), point, point ? `Seen ${timeAgo(point.timestamp)} ago` : undefined);
+  const html = mapHtml({ markers });
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content} refreshControl={refreshControl}>
@@ -42,6 +46,8 @@ export default function TrackBusScreen() {
         </Text>
         {t.student_stop?.name ? <Text style={styles.meta}>Your child's stop: {t.student_stop.name}</Text> : null}
       </Card>
+
+      {markers.length > 0 ? <RouteMap html={html} height={300} /> : null}
 
       <Card style={styles.card}>
         <Text style={styles.label}>Last position</Text>

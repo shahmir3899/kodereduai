@@ -949,7 +949,7 @@ export default function AssignmentsPage() {
                 <div>
                   <label className="label">Teacher *</label>
                   <StaffFilter
-                    role="TEACHER"
+                    teaching
                     value={form.teacher}
                     onChange={(e) => setForm({ ...form, teacher: e.target.value })}
                     placeholder="Select Teacher"

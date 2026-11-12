@@ -106,7 +106,7 @@ class TestAccess:
         assert resp.status_code == 201, resp.content
         assert resp.json()['status'] == 'OPEN'
 
-    @pytest.mark.parametrize('who', ['teacher', 'manager', 'accountant', 'staff'])
+    @pytest.mark.parametrize('who', ['teacher', 'manager', 'finance_manager', 'staff'])
     def test_other_roles_are_refused(self, api, ctx, who):
         assert start(api, ctx, who).status_code == 403
         assert api.get(URL, ctx['tokens'][who], ctx['SID_A']).status_code == 403

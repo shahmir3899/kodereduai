@@ -2,6 +2,8 @@
 // ResetPasswordModal. Pure logic, no React Native imports. The server stays the authority on who
 // may create, edit or reset whom (users/views.py ROLE_HIERARCHY); this only hides what it would refuse.
 
+import { allRoleValues, creatableRoles, roleLabelFromConfig } from './roleConfig';
+
 export interface SchoolUser {
   id: number;
   username: string;
@@ -11,25 +13,19 @@ export interface SchoolUser {
   role: string;
   phone?: string | null;
   is_active: boolean;
+  // Managers only: the finance capability that replaced the finance manager role.
+  can_manage_finance?: boolean;
 }
 
-export const ROLE_LABELS: Record<string, string> = {
-  SUPER_ADMIN: 'Super Admin', SCHOOL_ADMIN: 'School Admin', PRINCIPAL: 'Principal', MANAGER: 'Manager',
-  ACCOUNTANT: 'Accountant', TEACHER: 'Teacher', STAFF: 'Staff', DRIVER: 'Driver', STUDENT: 'Student', PARENT: 'Parent',
-};
+// Labels and the "who can create whom" ladder come from the server's role list (services/roleConfig).
+export const roleLabel = roleLabelFromConfig;
 
-export const roleLabel = (role: string) => ROLE_LABELS[role] ?? role;
-
-// Roles the signed-in person may create or change (same ladder as AuthContext.getAllowableRoles on the web).
 export function allowableRoles(role: string | undefined, isSuperAdmin = false): string[] {
-  if (isSuperAdmin) return ['SUPER_ADMIN', 'SCHOOL_ADMIN', 'PRINCIPAL', 'MANAGER', 'ACCOUNTANT', 'TEACHER', 'STAFF', 'DRIVER'];
-  if (role === 'SCHOOL_ADMIN') return ['PRINCIPAL', 'MANAGER', 'ACCOUNTANT', 'TEACHER', 'STAFF', 'DRIVER'];
-  if (role === 'PRINCIPAL') return ['MANAGER', 'ACCOUNTANT', 'TEACHER', 'STAFF', 'DRIVER'];
-  return [];
+  return creatableRoles(isSuperAdmin ? 'SUPER_ADMIN' : role);
 }
 
 // Roles you can filter the list by: everything but Super Admin, who is not a school-level role.
-export const FILTER_ROLES = Object.keys(ROLE_LABELS).filter((r) => r !== 'SUPER_ADMIN');
+export const filterRoles = () => allRoleValues().filter((r) => r !== 'SUPER_ADMIN');
 
 export const fullName = (u: Pick<SchoolUser, 'first_name' | 'last_name' | 'username'>) =>
   `${u.first_name ?? ''} ${u.last_name ?? ''}`.trim() || u.username;
@@ -49,12 +45,13 @@ export const canManageUser = (u: Pick<SchoolUser, 'role'>, allowed: string[]) =>
 export interface UserForm {
   username: string; email: string; password: string; confirm: string;
   firstName: string; lastName: string; role: string; phone: string;
+  canManageFinance: boolean;
 }
 
-export const emptyUserForm = (): UserForm => ({ username: '', email: '', password: '', confirm: '', firstName: '', lastName: '', role: 'STAFF', phone: '' });
+export const emptyUserForm = (): UserForm => ({ username: '', email: '', password: '', confirm: '', firstName: '', lastName: '', role: 'STAFF', phone: '', canManageFinance: false });
 
 export const userToForm = (u: SchoolUser): UserForm => ({
-  username: u.username, email: u.email ?? '', password: '', confirm: '', firstName: u.first_name ?? '', lastName: u.last_name ?? '', role: u.role, phone: u.phone ?? '',
+  username: u.username, email: u.email ?? '', password: '', confirm: '', firstName: u.first_name ?? '', lastName: u.last_name ?? '', role: u.role, phone: u.phone ?? '', canManageFinance: !!u.can_manage_finance,
 });
 
 export const PASSWORD_MIN_LENGTH = 8;
@@ -84,6 +81,7 @@ export function validateUser(f: UserForm, creating: boolean, allowed: string[]):
 export function buildUserPayload(f: UserForm, creating: boolean) {
   const base = {
     email: f.email.trim(), first_name: f.firstName.trim(), last_name: f.lastName.trim(), role: f.role, phone: f.phone.trim(),
+    can_manage_finance: f.role === 'MANAGER' && f.canManageFinance,
   };
   return creating ? { ...base, username: f.username.trim(), password: f.password, confirm_password: f.confirm } : base;
 }

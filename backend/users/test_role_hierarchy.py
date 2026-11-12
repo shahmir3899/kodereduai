@@ -38,9 +38,9 @@ def test_admin_can_edit_and_deactivate_lower_roles(api, seed_data):
 
 @pytest.mark.django_db
 def test_role_edit_updates_the_school_membership_too(api, seed_data):
-    resp = _patch(api, seed_data, 'admin', 'accountant', {'role': 'MANAGER'})
+    resp = _patch(api, seed_data, 'admin', 'finance_manager', {'role': 'MANAGER'})
     assert resp.status_code == 200
-    user = User.objects.get(pk=seed_data['users']['accountant'].pk)
+    user = User.objects.get(pk=seed_data['users']['finance_manager'].pk)
     assert user.role == 'MANAGER'
     assert user.get_role_for_school(seed_data['SID_A']) == 'MANAGER'
 

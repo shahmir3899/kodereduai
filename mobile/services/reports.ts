@@ -2,7 +2,7 @@
 // server (POST /api/reports/generate-instant/ and the ledger exports), the same ones the web
 // downloads, so a PDF is identical on both.
 
-import type { DateRange } from './accountant';
+import type { DateRange } from './financeManager';
 
 export interface InstantReportRequest {
   report_type: 'FINANCE_SUMMARY' | 'FEE_COLLECTION' | 'FEE_DEFAULTERS';
@@ -87,4 +87,29 @@ export function exportErrorMessage(error: unknown): string {
     // Not JSON: fall through to the generic text.
   }
   return status && status >= 500 ? 'The server could not make the report. Try again in a moment.' : 'The report could not be created.';
+}
+
+// ── Past (stored) reports ─────────────────────────────────────────────────────────────────────
+
+export interface StoredReport { id: number; report_type: string; title: string; format?: string; created_at?: string; generated_by?: number | null }
+
+const REPORT_TYPE_LABEL: Record<string, string> = {
+  STUDENT_COMPREHENSIVE: 'Student report', FEE_COLLECTION: 'Fee collection', FEE_DEFAULTERS: 'Fee defaulters', FINANCE_SUMMARY: 'Finance summary',
+};
+
+export const reportTypeLabel = (t: string) => REPORT_TYPE_LABEL[t] ?? t.replace(/_/g, ' ').toLowerCase().replace(/^./, (c) => c.toUpperCase());
+
+export const storedReportLine = (r: StoredReport) => [reportTypeLabel(r.report_type), (r.format ?? 'PDF').toUpperCase(), r.created_at ? r.created_at.slice(0, 10) : ''].filter(Boolean).join('  ·  ');
+
+export const storedReportKind = (r: Pick<StoredReport, 'format'>): 'pdf' | 'xlsx' => ((r.format ?? 'PDF').toUpperCase() === 'XLSX' ? 'xlsx' : 'pdf');
+
+export function storedReportFileName(r: StoredReport): string {
+  return `${safeName(r.title || `report_${r.id}`)}.${storedReportKind(r) === 'xlsx' ? 'xlsx' : 'pdf'}`;
+}
+
+export function storedReportError(e: unknown): string {
+  const status = (e as { response?: { status?: number } })?.response?.status;
+  if (status === 403) return 'Only admin and principal can open stored reports.';
+  if (status === 404) return 'This report has no file any more.';
+  return (e as { response?: unknown })?.response ? 'Could not open the report.' : 'No connection. Check your internet and try again.';
 }

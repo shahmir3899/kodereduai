@@ -45,7 +45,7 @@ export default function InventoryItemsPage() {
   const { showSuccess, showWarning } = useToast()
   const { confirm, ConfirmModalRoot } = useConfirmModal()
   const { effectiveRole } = useAuth()
-  // Accountant and Driver can read inventory; every write returns 403 for them.
+  // Finance manager and Driver can read inventory; every write returns 403 for them.
   const canManage = ['SUPER_ADMIN', 'SCHOOL_ADMIN', 'PRINCIPAL'].includes(effectiveRole)
 
   // Filters

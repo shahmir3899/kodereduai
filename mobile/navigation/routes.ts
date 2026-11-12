@@ -63,7 +63,14 @@ const ADMIN_ROUTES: Record<string, string> = {
   '/attendance/manual-entry': '/(admin)/attendance/manual',
   '/attendance/register': '/(admin)/attendance/register',
   '/transport': '/(admin)/transport',
+  '/transport/routes': '/(admin)/transport/routes',
+  '/library': '/(admin)/library',
+  '/library/catalog': '/(admin)/library/catalog',
   '/library/issues': '/(admin)/library/issue',
+  '/library/overdue': '/(admin)/library/overdue',
+  '/hostel': '/(admin)/hostel',
+  '/hostel/rooms': '/(admin)/hostel/rooms',
+  '/hostel/allocations': '/(admin)/hostel/allocations',
   '/hostel/gate-passes': '/(admin)/hostel/gate-passes',
   '/face-attendance': '/(admin)/face-attendance/capture',
   '/face-attendance/enrollment': '/(admin)/face-attendance/enrollment',
@@ -94,6 +101,12 @@ const TEACHER_ROUTES: Record<string, string> = {
   '/academics/worksheets': '/(teacher)/worksheets',
   '/inventory/assignments': '/(teacher)/inventory',
   '/messages': '/(teacher)/messages',
+  '/library': '/(teacher)/library',
+  '/library/catalog': '/(teacher)/library/catalog',
+  '/library/issues': '/(teacher)/library/issue',
+  '/library/overdue': '/(teacher)/library/overdue',
+  '/transport': '/(teacher)/transport',
+  '/transport/routes': '/(teacher)/transport/routes',
 };
 
 const MANAGER_ROUTES: Record<string, string> = {
@@ -152,23 +165,23 @@ const DRIVER_ROUTES: Record<string, string> = {
   '/driver/change-password': '/(driver)/change-password',
 };
 
-const ACCOUNTANT_ROUTES: Record<string, string> = {
-  '/finance': '/(accountant)/reports',
-  '/finance/accounts': '/(accountant)/accounts',
-  '/finance/fees': '/(accountant)/fees',
-  '/finance/income': '/(accountant)/income',
-  '/finance/expenses': '/(accountant)/expenses',
-  '/inventory': '/(accountant)/inventory',
-  '/inventory/items': '/(accountant)/inventory-items',
-  '/inventory/transactions': '/(accountant)/inventory-movements',
-  '/inventory/assignments': '/(accountant)/inventory-assignments',
-  '/inventory/reorder-prediction': '/(accountant)/inventory-reorder',
-  '/messages': '/(accountant)/messages',
-  '/notifications': '/(accountant)/inbox',
-  '/hr/leave': '/(accountant)/leave',
-  '/hr/attendance': '/(accountant)/my-attendance',
-  '/hr/payslips': '/(accountant)/payslips',
-  '/accountant/change-password': '/(accountant)/change-password',
+const FINANCE_ROUTES: Record<string, string> = {
+  '/finance': '/(finance)/reports',
+  '/finance/accounts': '/(finance)/accounts',
+  '/finance/fees': '/(finance)/fees',
+  '/finance/income': '/(finance)/income',
+  '/finance/expenses': '/(finance)/expenses',
+  '/inventory': '/(finance)/inventory',
+  '/inventory/items': '/(finance)/inventory-items',
+  '/inventory/transactions': '/(finance)/inventory-movements',
+  '/inventory/assignments': '/(finance)/inventory-assignments',
+  '/inventory/reorder-prediction': '/(finance)/inventory-reorder',
+  '/messages': '/(finance)/messages',
+  '/notifications': '/(finance)/inbox',
+  '/hr/leave': '/(finance)/leave',
+  '/hr/attendance': '/(finance)/my-attendance',
+  '/hr/payslips': '/(finance)/payslips',
+  '/finance/change-password': '/(finance)/change-password',
 };
 
 const STAFF_ROUTES: Record<string, string> = {
@@ -187,7 +200,7 @@ const ROUTES: Partial<Record<Persona, Record<string, string>>> = {
   student: STUDENT_ROUTES,
   parent: PARENT_ROUTES,
   driver: DRIVER_ROUTES,
-  accountant: ACCOUNTANT_ROUTES,
+  finance: FINANCE_ROUTES,
   staff: STAFF_ROUTES,
 };
 

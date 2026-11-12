@@ -9,7 +9,7 @@
 | Phase | Scope | Status |
 |-------|-------|--------|
 | Phase 1 | Shared components + SCHOOL_ADMIN/PRINCIPAL | **COMPLETED** |
-| Phase 2 | Staff, Accountant, HR Manager dashboards | **COMPLETED** |
+| Phase 2 | Staff, Finance manager, HR Manager dashboards | **COMPLETED** |
 | Phase 3 | Teacher dashboard | **COMPLETED** |
 | Phase 4 | Student + Parent dashboards | **COMPLETED** |
 | Phase 5 | Super Admin overview tab | **NOT STARTED** |
@@ -22,7 +22,7 @@
 3. [STUDENT Dashboard](#3-student-dashboard)
 4. [PARENT Dashboard](#4-parent-dashboard)
 5. [MANAGER Dashboard](#5-manager-dashboard)
-6. [ACCOUNTANT Dashboard](#6-accountant-dashboard)
+6. [finance manager Dashboard](#6-finance-manager-dashboard)
 7. [STAFF Dashboard](#7-staff-dashboard)
 8. [SUPER_ADMIN Dashboard](#8-super_admin-dashboard)
 9. [Shared Components](#9-shared-components)
@@ -347,9 +347,9 @@ Action buttons per child:
 
 ---
 
-## 6. ACCOUNTANT Dashboard
+## 6. finance manager Dashboard
 
-**File**: `frontend/src/pages/AccountantDashboard.jsx`
+**File**: `frontend/src/pages/FinanceManagerDashboard.jsx`
 **Current state**: 4 KPI cards + quick actions + notifications. Very thin for a finance role.
 **Goal**: Rich financial overview with recent transactions, overdue fees, income/expense breakdown.
 
@@ -586,7 +586,7 @@ frontend/src/components/dashboard/
 
 ### Phase 2: Staff-level Dashboards (most improvement needed) — COMPLETED
 6. ~~Redesign `StaffDashboard.jsx`~~ ✅ — Was empty; now has 4 KPIs, mini attendance calendar, leave balance breakdown, recent payslips, assigned inventory
-7. ~~Redesign `AccountantDashboard.jsx`~~ ✅ — Now has enhanced KPIs, fee collection by class, recent transactions, overdue fees, income vs expense, per-account balances
+7. ~~Redesign `FinanceManagerDashboard.jsx`~~ ✅ — Now has enhanced KPIs, fee collection by class, recent transactions, overdue fees, income vs expense, per-account balances
 8. ~~Redesign `HRManagerDashboard.jsx`~~ ✅ — Now has 6 KPIs, department breakdown with bars, pending leave with inline approve/reject, top absentees, payroll overview
 
 ### Phase 3: Teacher Dashboard (good foundation, enhance) — COMPLETED
@@ -701,7 +701,7 @@ examinationsApi.getExamPapers({page_size: 1})   — count only
 notificationsApi.getMyNotifications({limit: 5})
 ```
 
-### ACCOUNTANT APIs Used
+### finance manager APIs Used
 ```
 financeApi.getAccountBalances()
 financeApi.getMonthlySummary({month, year})

@@ -12,7 +12,7 @@ import UserBadge from './UserBadge';
 import YearSheet from './YearSheet';
 import { Colors, FontSize, Spacing } from '../../constants/colors';
 
-// Academic year on staff screens. Admin, manager and accountant can tap it to choose another year
+// Academic year on staff screens. Admin, manager and finance manager can tap it to choose another year
 // (amber while a past year is shown); for everyone else it is display only.
 function YearChip() {
   const { current, isPast, canChoose } = useAcademicYear();

@@ -967,7 +967,7 @@ export default function LessonPlansPage() {
             <StaffFilter
               value={filterTeacher}
               onChange={(e) => setFilterTeacher(e.target.value)}
-              role="TEACHER"
+              teaching
               status="ACTIVE"
               showAllOption
               allOptionLabel="All teachers"
@@ -1441,7 +1441,7 @@ export default function LessonPlansPage() {
                       Teacher{isMinimal ? ' (no default found — please choose)' : ' *'}
                     </label>
                     <StaffFilter
-                      role="TEACHER"
+                      teaching
                       status="ACTIVE"
                       value={form.teacher}
                       onChange={(e) => setForm({ ...form, teacher: e.target.value })}

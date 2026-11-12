@@ -5,15 +5,15 @@ import Button from '../ui/Button';
 import SegmentedTabs from '../ui/SegmentedTabs';
 import ManageAccounts from './ManageAccounts';
 import { financeApi } from '../../services/api';
-import { periodRange } from '../../services/accountant';
+import { periodRange } from '../../services/financeManager';
 import { exportErrorMessage, ledgerFileName } from '../../services/reports';
 import { shareReportFile } from '../../services/reportShare';
 import { useToast } from '../ui/Toast';
-import { useAccountBalances } from '../../hooks/useAccountant';
+import { useAccountBalances } from '../../hooks/useFinanceManager';
 import { useClosings } from '../../hooks/useAccountsAdmin';
 import { lastClosing, monthLabel } from '../../services/accountsAdmin';
 import DateField from '../ui/DateField';
-import { totalBalance } from '../../services/accountant';
+import { totalBalance } from '../../services/financeManager';
 import { formatMoney } from '../../services/feeCollect';
 import { useRefreshControl } from '../../hooks/useRefreshControl';
 import Skeleton from '../ui/Skeleton';
@@ -24,7 +24,7 @@ import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors'
 
 // Account balances, read-only. The server already hides the accounts the school keeps private
 // from restricted roles.
-// `canManage` adds transfers and month closing (admin and principal); accountants only read.
+// `canManage` adds transfers and month closing (admin and principal); finance managers only read.
 export default function AccountsScreen({ canManage = false }: { canManage?: boolean }) {
   const [tab, setTab] = useState<'balances' | 'manage'>('balances');
   if (!canManage) return <AccountBalances canManage={false} />;
@@ -87,7 +87,7 @@ function AccountBalances({ canManage }: { canManage: boolean }) {
             <Text style={styles.totalValue}>{formatMoney(totalBalance(accounts))}</Text>
           </View>
           <View style={styles.manage}>
-            <Button title="Transfers" size="sm" variant="outline" style={styles.manageBtn} onPress={() => router.push((canManage ? '/(admin)/finance/transfers' : '/(accountant)/transfers') as Href)} />
+            <Button title="Transfers" size="sm" variant="outline" style={styles.manageBtn} onPress={() => router.push((canManage ? '/(admin)/finance/transfers' : '/(finance)/transfers') as Href)} />
             {canManage ? <Button title="Close month" size="sm" variant="outline" style={styles.manageBtn} onPress={() => router.push('/(admin)/finance/close-month' as Href)} /> : null}
           </View>
         </View>
@@ -104,7 +104,7 @@ function AccountBalances({ canManage }: { canManage: boolean }) {
             <View style={styles.exports}>
               <TouchableOpacity
                 accessibilityRole="button" accessibilityLabel={`Open ${a.name} ledger`} style={styles.export}
-                onPress={() => router.push({ pathname: canManage ? '/(admin)/finance/account-ledger' : '/(accountant)/account-ledger', params: { id: a.id, name: a.name } } as Href)}
+                onPress={() => router.push({ pathname: canManage ? '/(admin)/finance/account-ledger' : '/(finance)/account-ledger', params: { id: a.id, name: a.name } } as Href)}
               >
                 <Text style={styles.exportText}>Ledger</Text>
               </TouchableOpacity>

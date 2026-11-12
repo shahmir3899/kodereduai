@@ -16,7 +16,7 @@ from assistant.skills import load_all
 
 pytestmark = pytest.mark.django_db
 
-ROLES = ('SUPER_ADMIN', 'SCHOOL_ADMIN', 'PRINCIPAL', 'MANAGER', 'ACCOUNTANT', 'TEACHER', 'STAFF', 'DRIVER', 'PARENT', 'STUDENT')
+ROLES = ('SUPER_ADMIN', 'SCHOOL_ADMIN', 'PRINCIPAL', 'MANAGER', 'TEACHER', 'STAFF', 'DRIVER', 'PARENT', 'STUDENT')
 MARK_B = 'LEAKCHECK_B'
 # Appears only in school B's stored names, never in what a test sends: a tool that echoes the query back ("no class named ...") is not a leak.
 SECRET = 'SECRET9X'
@@ -221,7 +221,7 @@ class TestCrossRole:
         print(f'[student] {len(tools)} tools: {stats}')
         assert not leaks, leaks
 
-    @pytest.mark.parametrize('role', ['TEACHER', 'STAFF', 'MANAGER', 'ACCOUNTANT'])
+    @pytest.mark.parametrize('role', ['TEACHER', 'STAFF', 'MANAGER'])
     def test_non_admin_staff_never_see_a_colleagues_pay(self, seed_data, role):
         from decimal import Decimal
         from hr.models import SalaryStructure

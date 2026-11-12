@@ -78,7 +78,7 @@ class TestReads:
         assert 'error' in out and 'data' not in out
 
     def test_roles(self, seed_data, work):
-        for role in ('accountant', 'staff'):
+        for role in ('staff',):
             assert _run(seed_data, 'list_submissions', role, title='Essay') == NO_PERMISSION
 
 
@@ -124,5 +124,5 @@ class TestGradeAndReturn:
         assert AssignmentSubmission.objects.get().status == 'RETURNED'
 
     def test_only_admins_and_teachers_may_prepare_grading(self, seed_data, work):
-        for role in ('manager', 'accountant'):
+        for role in ('manager', 'finance_manager'):
             assert _run(seed_data, 'grade_submissions', role, assignment_id=work['assignment'].id, grades=[{'student_name': 'Ali', 'marks': 1}]) == NO_PERMISSION, role

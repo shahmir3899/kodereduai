@@ -64,15 +64,15 @@ Populates: `request.tenant_school`, `request.tenant_school_id`, `request.tenant_
 - **HasSchoolAccess** — User has membership in the school
 - **CanConfirmAttendance** — Admin only (confirms AI-processed attendance)
 - **IsParent / IsStudent** — Role via UserSchoolMembership
-- **CanViewStudentRecords** — Read access to Students/Classes limited to ADMIN_ROLES + TEACHER, MANAGER, ACCOUNTANT; blocks STAFF/DRIVER/PARENT/STUDENT reads (replaces `IsSchoolAdminOrReadOnly` on the Students app)
+- **CanViewStudentRecords** — Read access to Students/Classes limited to ADMIN_ROLES + TEACHER, MANAGER; blocks STAFF/DRIVER/PARENT/STUDENT reads (replaces `IsSchoolAdminOrReadOnly` on the Students app)
 - **get_parent_children_ids(request)** — Shared helper (lazy-imports `parents.models`) returning the requesting Parent's linked student IDs; used to scope Library/Transport querysets to a parent's own children
 - **ModuleAccessMixin** — Checks school's `enabled_modules`
 
 ### Role Hierarchy
 ```
-SUPER_ADMIN → can create: SCHOOL_ADMIN, PRINCIPAL, MANAGER, ACCOUNTANT, TEACHER, STAFF, DRIVER
-SCHOOL_ADMIN → can create: PRINCIPAL, MANAGER, ACCOUNTANT, TEACHER, STAFF, DRIVER
-PRINCIPAL → can create: MANAGER, ACCOUNTANT, TEACHER, STAFF, DRIVER
+SUPER_ADMIN → can create: SCHOOL_ADMIN, PRINCIPAL, MANAGER, TEACHER, STAFF, DRIVER
+SCHOOL_ADMIN → can create: PRINCIPAL, MANAGER, TEACHER, STAFF, DRIVER
+PRINCIPAL → can create: MANAGER, TEACHER, STAFF, DRIVER
 ```
 
 ### Storage (core/storage.py)
@@ -93,7 +93,7 @@ Path format: `attendance/{school_id}/{class_id}/{timestamp}_{uuid}.ext`
 | username | CharField | Unique |
 | email | EmailField | |
 | first_name, last_name | CharField | |
-| role | CharField | SUPER_ADMIN, SCHOOL_ADMIN, PRINCIPAL, MANAGER, ACCOUNTANT, TEACHER, STAFF, DRIVER |
+| role | CharField | SUPER_ADMIN, SCHOOL_ADMIN, PRINCIPAL, MANAGER, TEACHER, STAFF, DRIVER |
 | phone | CharField | Optional |
 | profile_photo_url | URLField | Optional |
 | school | FK → School | Legacy link (nullable) |

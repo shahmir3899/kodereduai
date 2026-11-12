@@ -8,7 +8,7 @@ import { useToast } from '../ui/Toast';
 import Button from '../ui/Button';
 import { useMyPayslips } from '../../hooks/useStaff';
 import { useRefreshControl } from '../../hooks/useRefreshControl';
-import { payslipPeriod, payslipTone, sortPayslips } from '../../services/accountant';
+import { payslipPeriod, payslipTone, sortPayslips } from '../../services/financeManager';
 import { formatMoney } from '../../services/feeCollect';
 import Skeleton from '../ui/Skeleton';
 import ErrorState from '../ui/ErrorState';

@@ -1,12 +1,12 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import { incomeVsExpense } from '../../services/accountant';
+import { incomeVsExpense } from '../../services/financeManager';
 import { formatMoney } from '../../services/feeCollect';
 import Card from '../ui/Card';
 import { Colors, FontSize, Spacing } from '../../constants/colors';
 
 // Income against expenses as two bars with the net underneath. Shared by the finance reports
-// and the accountant home so the two read the same.
+// and the finance manager home so the two read the same.
 export default function IncomeExpenseCard({ income, expenses }: { income: number; expenses: number }) {
   const { net, incomePct, expensePct } = incomeVsExpense(income, expenses);
   return (

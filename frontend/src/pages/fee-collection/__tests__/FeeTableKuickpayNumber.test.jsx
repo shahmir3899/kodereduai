@@ -45,7 +45,7 @@ describe('Staff fee table: Kuickpay consumer number column', () => {
     expect(headers).not.toContain('Kuickpay No.')
   })
 
-  it('still shows the column read-only (accountant and teacher views)', () => {
+  it('still shows the column read-only (finance manager and teacher views)', () => {
     renderTable({ canWrite: false })
     const headers = [...document.querySelectorAll('thead th')].map((th) => th.textContent.trim())
     expect(headers).toContain('Kuickpay No.')

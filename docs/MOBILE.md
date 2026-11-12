@@ -6,7 +6,7 @@ One Expo app (`mobile/`, React Native 0.81, Expo 54, expo-router) for every role
 
 | Path | What |
 |---|---|
-| `app/(admin\|teacher\|manager\|accountant\|staff\|parent\|student\|driver)` | Route group per persona (SUPER_ADMIN, SCHOOL_ADMIN and PRINCIPAL share `(admin)`) |
+| `app/(admin\|teacher\|manager\|finance\|staff\|parent\|student\|driver)` | Route group per persona (SUPER_ADMIN, SCHOOL_ADMIN and PRINCIPAL share `(admin)`) |
 | `navigation/{personas,navConfig,routes}.ts` | Role to persona, role/module-gated More menu, web path to mobile route table |
 | `components/` | Shared screens by area (`attendance`, `exams`, `lms`, `finance`, `hr`, `students`, `messaging`, `notifications`, `nav`, `ui`) |
 | `services/` | API clients and pure, unit-tested logic |
@@ -31,7 +31,7 @@ npx expo export --platform android --output-dir <scratch>   # bundle check
 - **Push taps:** the backend sends only `log_id`, so a tap opens the persona's notifications inbox (home if it has none). A `screen` in the payload is honoured only inside the user's own route group (`services/notificationRoute.ts`).
 - **Crashes:** a root error boundary shows a plain "Something went wrong" screen. Sentry reporting is on only when `EXPO_PUBLIC_SENTRY_DSN` is set in the EAS build env and the app env is not `development`; it sends no PII, request data or screenshots (`services/crashReporting.ts`). Never commit the DSN.
 - **Report files** (finance report, fee collection, defaulters, ledger PDF/Excel) are made by the server and shared through the phone's share sheet (`services/reportShare.ts`), so they are identical to the web downloads. Needs `expo-file-system` and `expo-sharing` (native: rebuild the APK).
-- **Accountant** is read-only on all finance APIs; **Staff** is HR self-service, messages, notifications and own inventory. See `MOBILE_PLAN.md` Phase 7.
+- **Finance manager** is read-only on all finance APIs; **Staff** is HR self-service, messages, notifications and own inventory. See `MOBILE_PLAN.md` Phase 7.
 
 ## Release
 
@@ -162,7 +162,7 @@ Compared by reading the web pages and components against the mobile screens (no 
 - Plan and what is next: `docs/MOBILE_UI_POLISH_PLAN.md` (phases D to F).
 - **D and E (dashboards, header):** admin home has the day hero, four-state attendance bar, monthly fee card and latest notifications; the header has the academic year chip (staff shells), a notification bell with unread count, and the user's photo; `RecordCard` is the shared list row; pickers with more than 8 options get a search box; teachers now have a notifications inbox. Code: `components/dashboard/*`, `components/nav/HeaderActions.tsx`, `components/ui/RecordCard.tsx`, `services/{dashboardView,headerView}.ts`.
 - **D finished, F done (2026-10-30, uncommitted, never run on a device):**
-  - **D:** admin home has a "School insights" section (admissions and departures, books, question bank, lesson plans by teacher) that loads only when opened; manager, accountant and staff homes share `StatTiles`; accountant and staff homes show the latest notifications. Trend strips are not built (the dashboard API sends no history).
+  - **D:** admin home has a "School insights" section (admissions and departures, books, question bank, lesson plans by teacher) that loads only when opened; manager, finance manager and staff homes share `StatTiles`; finance manager and staff homes show the latest notifications. Trend strips are not built (the dashboard API sends no history).
   - **F:** face attendance review, capture and enrollment now use `useScopedQuery`, `Skeleton`/`ErrorState`, the shared `Select` (searchable) and toasts; the review screen no longer resets the reviewer's ticks on a refetch. `__tests__/touchableA11y.test.ts` checks every touchable for a role and every symbol-only button for a label; 24 buttons were fixed (month and day steppers, remove and delete buttons, login links, the school switcher backdrop).
 
 ## Report card PDF and layout choice (rebuilt 2026-11-02: the phone draws it, no server endpoint)
@@ -179,9 +179,9 @@ The report card screen has a PDF layout picker (Enhanced or Traditional, remembe
 
 **Parent, Batch 15 (2026-11-02):** the parent Home has an attention strip (`components/parent/AttentionStrip.tsx`, `attentionItems` in `services/parentPortal.ts`, `useChildOverviews`). No new packages or native modules: no APK rebuild needed for this batch.
 
-**Accountant, Batch 16 (2026-11-02):** the Fees screen opens with the fee collection card (`FeeOverviewCard`); Home has an Income vs expense panel and an Account balances list (`components/finance/IncomeExpenseCard.tsx`, now also used by Reports); the accountant balances now load (`accountsOf` in `services/accountant.ts`; they read as empty before). No new packages or native modules: no APK rebuild needed for this batch.
+**Finance manager, Batch 16 (2026-11-02):** the Fees screen opens with the fee collection card (`FeeOverviewCard`); Home has an Income vs expense panel and an Account balances list (`components/finance/IncomeExpenseCard.tsx`, now also used by Reports); the finance manager balances now load (`accountsOf` in `services/finance manager.ts`; they read as empty before). No new packages or native modules: no APK rebuild needed for this batch.
 
-**Accountant, Batch 17 (2026-11-02):** Accounts has a Ledger view per account and a read-only Transfers list; Expenses has Expenses and Transfers tabs, a month filter and a category breakdown; Other Income has the month filter (`components/finance/{AccountLedgerScreen,MonthFilter}.tsx`, `TransfersScreen` got a `readOnly` prop). No new packages or native modules: no APK rebuild needed for this batch.
+**Finance manager, Batch 17 (2026-11-02):** Accounts has a Ledger view per account and a read-only Transfers list; Expenses has Expenses and Transfers tabs, a month filter and a category breakdown; Other Income has the month filter (`components/finance/{AccountLedgerScreen,MonthFilter}.tsx`, `TransfersScreen` got a `readOnly` prop). No new packages or native modules: no APK rebuild needed for this batch.
 
 **Manager, Batch 18 (2026-11-02):** the manager Exams screen is now a read-only list with each exam subjects (`ExamsAdminScreen` got a `readOnly` prop); Home has a Lesson Plans tile and the Question Bank, Paper Builder and Assignments quick actions. No new packages or native modules: no APK rebuild needed for this batch.
 

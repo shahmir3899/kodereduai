@@ -168,6 +168,13 @@ class TestStudentPortal:
         body = api.get(f'{PORTAL}/attendance/', student_user['token'], student_user['SID_B']).json()
         assert body['summary']['rate'] == 50.0
 
+    def test_late_counts_as_present_in_the_rate(self, api, student_user):
+        old_days(student_user, (date(2026, 2, 2), 'LATE'), (date(2026, 2, 3), 'ABSENT'))
+        body = api.get(f'{PORTAL}/attendance/', student_user['token'], student_user['SID_B']).json()
+        assert body['summary']['rate'] == 50.0
+        dash = api.get(f'{PORTAL}/dashboard/', student_user['token'], student_user['SID_B']).json()
+        assert dash['attendance']['rate'] == 50.0
+
     def test_fees_list_both_ledgers(self, api, student_user):
         with_history(student_user)
         assert len(api.get(f'{PORTAL}/fees/', student_user['token'], student_user['SID_B']).json()) == 2

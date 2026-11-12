@@ -4,7 +4,8 @@ import { studentPortalApi } from '../../services/api'
 import Spinner from '../../components/ui/Spinner'
 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
-const DAYS_SHORT = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+const DAY_BY_CODE = { MON: 'Monday', TUE: 'Tuesday', WED: 'Wednesday', THU: 'Thursday', FRI: 'Friday', SAT: 'Saturday' }
+const DAYS_SHORT =['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
 const SLOT_TYPE_STYLES = {
   PERIOD: 'bg-white',
@@ -60,7 +61,22 @@ export default function StudentTimetable() {
 
   const timetable = timetableData?.data
   const slots = timetable?.slots || []
-  const entries = timetable?.entries || timetable?.slots || (Array.isArray(timetable) ? timetable : [])
+  // Entries carry only slot_id; the times and slot type live on the slots, so join them here.
+  // A Break/Lunch/Assembly slot has no entries of its own, so it is added to every day that has
+  // lessons and that the slot applies to (applicable_days; empty means every day).
+  // The API names days by code (MON..SAT); the grid is keyed by full day name.
+  const slotById = Object.fromEntries(slots.map((s) => [s.id, s]))
+  const lessonEntries = (timetable?.entries || []).flatMap((e) => {
+    const s = slotById[e.slot_id]
+    return s ? [{ ...e, day: DAY_BY_CODE[e.day] || e.day, start_time: s.start_time, end_time: s.end_time, slot_type: s.slot_type }] : []
+  })
+  const lessonDays = [...new Set(lessonEntries.map((e) => e.day))]
+  const specialEntries = slots
+    .filter((s) => s.slot_type && s.slot_type !== 'PERIOD')
+    .flatMap((s) => lessonDays
+      .filter((d) => !s.applicable_days?.length || s.applicable_days.map((c) => DAY_BY_CODE[c] || c).includes(d))
+      .map((d) => ({ day: d, start_time: s.start_time, end_time: s.end_time, slot_type: s.slot_type, subject: s.name })))
+  const entries = [...lessonEntries, ...specialEntries]
 
   // Build structured data: { slot_time: { day: entry } }
   const subjectColorMap = {}

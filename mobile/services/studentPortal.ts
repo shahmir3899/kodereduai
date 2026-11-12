@@ -349,11 +349,15 @@ export function totalFines(list: LibraryIssue[]): number {
   return list.reduce((sum, i) => sum + (Number(i.fine_amount) || 0), 0);
 }
 
+import type { PortalMap } from './routeMap';
+
 export interface PortalTransport {
   transport_type?: string;
   route: { name: string; start_location?: string; end_location?: string; distance_km?: string | null; estimated_duration_minutes?: number | null };
   stop: { name: string; address?: string; stop_order?: number; pickup_time?: string; drop_time?: string };
   vehicle: { vehicle_number?: string; vehicle_type?: string; driver_name?: string; driver_phone?: string };
+  // Places only (backend/transport/map_data.py); absent from an older server.
+  map?: PortalMap | null;
 }
 
 // 'OFF day (Holiday, Weekend)' under the attendance tile; '' on a school day.

@@ -1,7 +1,7 @@
-export function canAccessFinanceRoute(role, { collectOnly = false } = {}) {
-  // Manager removed 2026-09: nav access scoped down to Dashboard/Academics/
-  // Content Creation/Management only — Finance is no longer part of that set.
-  if (role === 'STAFF' || role === 'MANAGER') return false
+export function canAccessFinanceRoute(role, { collectOnly = false, canManageFinance = false } = {}) {
+  // A Manager reaches Finance only with the can_manage_finance capability (the former Finance manager).
+  if (role === 'MANAGER') return !!canManageFinance
+  if (role === 'STAFF') return false
   if (role === 'TEACHER') return !!collectOnly
   return true
 }
@@ -12,22 +12,22 @@ export function canAccessManagementRoute(role, { teacherAllowed = false } = {}) 
   return true
 }
 
-// Promotion moves students between classes: Admin, Principal and Manager run it; Accountant and
-// Driver have no part in it (and Teacher/Staff are already outside management pages).
+// Promotion moves students between classes: Admin, Principal and Manager run it; Driver has no
+// part in it (and Teacher/Staff are already outside management pages).
 export function canAccessPromotionRoute(role) {
-  if (role === 'ACCOUNTANT' || role === 'DRIVER') return false
+  if (role === 'DRIVER') return false
   return canAccessManagementRoute(role)
 }
 
-// Curriculum, Lesson Plans and Assignments are teaching pages. Accountant and Driver have no
-// teaching role (and Staff is blocked already): their API calls would only return 403.
+// Curriculum, Lesson Plans and Assignments are teaching pages. Driver has no teaching role (and
+// Staff is blocked already): their API calls would only return 403.
 export function canAccessLmsRoute(role) {
-  return role !== 'ACCOUNTANT' && role !== 'DRIVER' && role !== 'STAFF'
+  return role !== 'DRIVER' && role !== 'STAFF'
 }
 
-export function canAccessInventoryRoute(role, { assignmentsOnly = false } = {}) {
-  // Manager removed 2026-09: same scope-down as Finance above.
-  if (role === 'MANAGER') return false
+export function canAccessInventoryRoute(role, { assignmentsOnly = false, canManageFinance = false } = {}) {
+  // Same rule as Finance above: a Manager needs the finance capability.
+  if (role === 'MANAGER') return !!canManageFinance
   if (role === 'TEACHER' || role === 'STAFF') return !!assignmentsOnly
   return true
 }

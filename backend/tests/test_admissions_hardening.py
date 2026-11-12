@@ -60,7 +60,7 @@ def test_admin_and_principal_read_the_likelihood_scores(api, seed_data, token):
     assert 'enquiries' in resp.json()
 
 
-@pytest.mark.parametrize('token', ['teacher', 'manager', 'accountant', 'staff'])
+@pytest.mark.parametrize('token', ['teacher', 'manager', 'finance_manager', 'staff'])
 def test_other_staff_cannot_read_the_likelihood_scores(api, seed_data, token):
     _enquiry(seed_data['school_a'])
 

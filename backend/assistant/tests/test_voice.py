@@ -147,7 +147,7 @@ class TestTranscribeEndpoint:
         with patch('assistant.providers.post_transcription', return_value=WHISPER):
             assert upload(api, seed_data, audio=clip()).status_code == 200
             assert upload(api, seed_data, audio=clip()).status_code == 429
-            assert upload(api, seed_data, uname='accountant', audio=clip()).status_code == 200
+            assert upload(api, seed_data, uname='finance_manager', audio=clip()).status_code == 200
 
     def test_groq_rate_limit_is_a_friendly_503(self, seed_data, modules, api):
         with patch('assistant.providers.post_transcription', side_effect=ProviderError('groq', 'rate_limit', 'x', 429)):

@@ -9,6 +9,8 @@ import Skeleton from '../ui/Skeleton';
 import ErrorState from '../ui/ErrorState';
 import EmptyState from '../ui/EmptyState';
 import Card from '../ui/Card';
+import RouteMap from '../map/RouteMap';
+import { mapHtml, portalMarkers } from '../../services/routeMap';
 import { Colors, FontSize, Spacing } from '../../constants/colors';
 
 // The student's bus route, stop and vehicle. Static info: live tracking is not part of the student app.
@@ -19,6 +21,8 @@ export function TransportView({ query }: { query: Q<PortalTransport | null> }) {
   if (query.isError && !query.data) return <ErrorState error={query.error} onRetry={() => query.refetch()} />;
   const t = query.data;
   if (!t) return <EmptyState title="No school transport" message="No bus route is assigned." />;
+  const markers = portalMarkers(t.map);
+  const html = mapHtml({ markers });
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content} refreshControl={refreshControl}>
@@ -40,6 +44,14 @@ export function TransportView({ query }: { query: Q<PortalTransport | null> }) {
           <View><Text style={styles.label}>Drop-off</Text><Text style={styles.time}>{formatSlotTime(t.stop.drop_time) || '–'}</Text></View>
         </View>
       </Card>
+
+      {markers.length > 0 ? (
+        <View style={styles.card}>
+          <Text style={styles.section}>Route map</Text>
+          <RouteMap html={html} height={280} />
+          <Text style={styles.meta}>Your stop is the orange marker. The map needs an internet connection.</Text>
+        </View>
+      ) : null}
 
       <Card style={styles.card}>
         <Text style={styles.section}>Vehicle</Text>

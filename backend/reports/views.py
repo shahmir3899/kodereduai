@@ -211,8 +211,11 @@ class InstantReportView(APIView):
 
 
 class ReportDownloadView(APIView):
-    """Download a previously generated report by ID."""
-    permission_classes = [IsAuthenticated, HasSchoolAccess]
+    """Download a previously generated report by ID.
+
+    Admin and principal only: a stored report can hold a whole student record, and the old gate
+    (any signed-in member of the school) let a teacher, parent or student fetch one by id."""
+    permission_classes = [IsAuthenticated, IsSchoolAdmin, HasSchoolAccess]
 
     def get(self, request, report_id):
         school_id = ensure_tenant_school_id(request)
@@ -242,8 +245,8 @@ class ReportDownloadView(APIView):
 
 
 class ReportListView(APIView):
-    """List previously generated reports."""
-    permission_classes = [IsAuthenticated, HasSchoolAccess]
+    """List previously generated reports (admin and principal only, like the download)."""
+    permission_classes = [IsAuthenticated, IsSchoolAdmin, HasSchoolAccess]
 
     def get(self, request):
         school_id = ensure_tenant_school_id(request)

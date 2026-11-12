@@ -288,6 +288,17 @@ def call_task(celery_task_func, *args, **kwargs):
         celery_task_func.delay(*args, **kwargs)
         return True
     except Exception as exc:
+        # In eager mode .delay() has already executed the task inline before
+        # anything raised (e.g. a result-backend/Redis URL error afterwards), so
+        # re-running it here would repeat the work -- for paper OCR that meant
+        # every upload hit Google Vision and Groq twice.
+        from django.conf import settings
+        if getattr(settings, 'CELERY_TASK_ALWAYS_EAGER', False):
+            logger.warning(
+                "call_task: %s already ran eagerly; not re-running it (%s)",
+                celery_task_func.__name__, exc,
+            )
+            return False
         logger.warning(
             "call_task: Celery unavailable (%s), running %s synchronously",
             exc,

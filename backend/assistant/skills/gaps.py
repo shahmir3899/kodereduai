@@ -27,6 +27,6 @@ register(Tool(
         'category': {'type': 'string', 'enum': CATEGORIES},
     }, 'required': ['summary'], 'additionalProperties': False},
     handler=report_missing_capability, sub_agent='directory', module=None,
-    roles=('SUPER_ADMIN', 'SCHOOL_ADMIN', 'PRINCIPAL', 'MANAGER', 'ACCOUNTANT', 'TEACHER', 'STAFF', 'DRIVER', 'PARENT', 'STUDENT'),
+    roles=('SUPER_ADMIN', 'SCHOOL_ADMIN', 'PRINCIPAL', 'MANAGER', 'TEACHER', 'STAFF', 'DRIVER', 'PARENT', 'STUDENT'),
     shared=True,
 ))

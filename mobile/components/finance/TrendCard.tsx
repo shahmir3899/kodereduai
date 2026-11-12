@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import { trendBars, type TrendMonth } from '../../services/accountant';
+import { trendBars, type TrendMonth } from '../../services/financeManager';
 import { formatMoney } from '../../services/feeCollect';
 import Card from '../ui/Card';
 import { Colors, FontSize, Spacing } from '../../constants/colors';

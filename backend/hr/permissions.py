@@ -11,7 +11,7 @@ HR_WRITE_ROLES = ('SUPER_ADMIN', 'SCHOOL_ADMIN', 'PRINCIPAL')
 # Roles that get self-service read/write (own record only, enforced in each
 # viewset's get_queryset) on the leave/attendance/payslip endpoints, even
 # though they have no write access to the rest of HR.
-HR_SELF_SERVICE_ROLES = ('TEACHER', 'STAFF', 'MANAGER', 'ACCOUNTANT', 'DRIVER')
+HR_SELF_SERVICE_ROLES = ('TEACHER', 'STAFF', 'MANAGER', 'DRIVER')
 
 
 def is_own_only(request):

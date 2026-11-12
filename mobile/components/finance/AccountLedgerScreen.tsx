@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import { View, Text, ScrollView, StyleSheet } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
-import { useAccountLedger } from '../../hooks/useAccountant';
+import { useAccountLedger } from '../../hooks/useFinanceManager';
 import { useRefreshControl } from '../../hooks/useRefreshControl';
-import { ledgerTypeLabel } from '../../services/accountant';
+import { ledgerTypeLabel } from '../../services/financeManager';
 import { formatMoney } from '../../services/feeCollect';
 import DateField from '../ui/DateField';
 import Button from '../ui/Button';

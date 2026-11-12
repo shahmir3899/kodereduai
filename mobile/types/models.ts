@@ -1,3 +1,5 @@
+import type { RoleConfig } from '../services/roleConfig';
+
 export interface School {
   id: number;
   name: string;
@@ -6,6 +8,8 @@ export interface School {
   enabled_modules: Record<string, boolean>;
   // IANA zone of the school; absent on old payloads (Asia/Karachi is assumed)
   timezone?: string;
+  // Managers only: the finance capability that replaced the finance manager role.
+  can_manage_finance?: boolean;
   // The school's code (its web address prefix); the login response sends it.
   subdomain?: string | null;
   // The school's logo URL; absent or null when none was uploaded.
@@ -28,6 +32,8 @@ export interface User {
   phone: string;
   profile_photo_url: string | null;
   schools: School[];
+  // Role list and who-can-create-whom, served by the backend (see services/roleConfig).
+  role_config?: RoleConfig;
 }
 
 export interface LoginResponse {
