@@ -6,7 +6,7 @@ rule) change theirs in the settings sheet instead."""
 from .. import prefs
 from ..registry import ProposalError, Tool, register
 
-WRITE_ROLES = ('SUPER_ADMIN', 'SCHOOL_ADMIN', 'PRINCIPAL', 'MANAGER', 'ACCOUNTANT', 'TEACHER', 'STAFF', 'DRIVER')
+WRITE_ROLES = ('SUPER_ADMIN', 'SCHOOL_ADMIN', 'PRINCIPAL', 'MANAGER', 'TEACHER', 'STAFF', 'DRIVER')
 ALL_ROLES = WRITE_ROLES + ('PARENT', 'STUDENT')
 LABELS = {'language': 'Reply language', 'default_class': 'Usual class', 'default_account_id': 'Usual fee account'}
 

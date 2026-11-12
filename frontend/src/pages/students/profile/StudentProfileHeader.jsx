@@ -200,7 +200,7 @@ export default function StudentProfileHeader({
                   className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-sky-50 text-sky-700 border border-sky-200 hover:bg-sky-100"
                 >
                   <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
-                  Generate Parent Invite
+                  Parent links
                 </button>
               )}
               {student.status && student.status !== 'ACTIVE' && student.status_reason && (

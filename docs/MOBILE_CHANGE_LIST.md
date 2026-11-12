@@ -17,7 +17,7 @@ There is no driver account in the dev database, so there is nothing to sign in a
 | ID | Change | Size | Risk | Notes |
 |---|---|---|---|---|
 | DR1 | **Home tiles**: Attendance this month, Leave balance, Last salary (the web's KPI row), above the vehicle and journey cards. Reuse the staff Home's logic (`attendanceTile`, `leaveRemaining`). | S | Low | Reads only |
-| DR2 | **My Payslips**: add the payslip screen to the driver app (the same `PayslipsScreen` the staff and accountant use, with Share PDF) and the **Recent payslips** and **Leave balance** panels on Home. | S | Low | Reads only; the server allows a driver their own payslips |
+| DR2 | **My Payslips**: add the payslip screen to the driver app (the same `PayslipsScreen` the staff and finance manager use, with Share PDF) and the **Recent payslips** and **Leave balance** panels on Home. | S | Low | Reads only; the server allows a driver their own payslips |
 | DR3 | **Notifications panel and quick actions** on Home: the recent notifications, and My Profile, Apply Leave, My Payslips, Notifications (unread count). | S | Low | |
 
 ## P2: low value, your call

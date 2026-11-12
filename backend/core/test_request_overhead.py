@@ -56,9 +56,9 @@ class TestEffectiveRoleIsLookedUpOnce:
         user = seed_data['users']['teacher']
         assert get_effective_role(self.make_request(seed_data)) == 'TEACHER'
 
-        UserSchoolMembership.objects.filter(user=user, school_id=seed_data['SID_A']).update(role='ACCOUNTANT')
+        UserSchoolMembership.objects.filter(user=user, school_id=seed_data['SID_A']).update(role='MANAGER')
 
-        assert get_effective_role(self.make_request(seed_data)) == 'ACCOUNTANT'
+        assert get_effective_role(self.make_request(seed_data)) == 'MANAGER'
 
     def test_the_fallback_to_the_users_own_role_is_unchanged(self, seed_data):
         request = APIRequestFactory().get('/')  # no school header, so no membership lookup

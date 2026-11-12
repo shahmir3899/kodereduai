@@ -1,11 +1,14 @@
 import fs from 'fs';
 import path from 'path';
 import { personaFor, homeRouteFor, type Persona } from '../navigation/personas';
-import { buildAccountantNavigation, buildDriverNavigation, buildParentNavigation, buildStaffNavigation, buildStudentNavigation, collectWebPaths, type NavContext } from '../navigation/navConfig';
+import { buildFinanceNavigation, buildDriverNavigation, buildParentNavigation, buildStaffNavigation, buildStudentNavigation, collectWebPaths, type NavContext } from '../navigation/navConfig';
 import { routeFor } from '../navigation/routes';
 
-function ctxFor(role: string, extra: Partial<NavContext> = {}): NavContext {
-  const persona = personaFor(role);
+// 'FINANCE_MANAGER' stands for a MANAGER whose membership has can_manage_finance (the role no longer exists).
+function ctxFor(testRole: string, extra: Partial<NavContext> = {}): NavContext {
+  const finance = testRole === 'FINANCE_MANAGER';
+  const role = finance ? 'MANAGER' : testRole;
+  const persona = personaFor(role, false, finance);
   return {
     persona,
     effectiveRole: role,
@@ -27,10 +30,16 @@ const navFor = (role: string, extra: Partial<NavContext> = {}) =>
 describe('personaFor', () => {
   it.each([
     ['SUPER_ADMIN', 'admin'], ['SCHOOL_ADMIN', 'admin'], ['PRINCIPAL', 'admin'],
-    ['TEACHER', 'teacher'], ['MANAGER', 'manager'], ['ACCOUNTANT', 'accountant'],
+    ['TEACHER', 'teacher'], ['MANAGER', 'manager'],
     ['STAFF', 'staff'], ['PARENT', 'parent'], ['STUDENT', 'student'], ['DRIVER', 'driver'],
   ])('%s -> %s', (role, persona) => {
     expect(personaFor(role)).toBe(persona);
+  });
+
+  it('gives a manager with the finance capability the finance shell', () => {
+    expect(personaFor('MANAGER', false, true)).toBe('finance');
+    expect(personaFor('MANAGER', false, false)).toBe('manager');
+    expect(personaFor('TEACHER', false, true)).toBe('teacher');
   });
 
   it('treats a super admin flag as admin whatever the school role', () => {
@@ -96,6 +105,11 @@ describe('teacher', () => {
     expect(nav).toContain('/inventory/assignments');
     expect(navFor('TEACHER', { hasInventoryAssignments: false })).not.toContain('/inventory/assignments');
   });
+  it('opens the read-only Library and Transport screens in the app, not as Soon', () => {
+    ['/library', '/library/catalog', '/library/issues', '/library/overdue', '/transport', '/transport/routes'].forEach((p) => expect(routeFor('teacher', p)).toMatch(/^\/\(teacher\)\//));
+    // The screens are the shared ones, so each teacher route has its own file in the teacher group.
+    expect(routeFor('manager', '/library')).toBeUndefined();
+  });
   it('opens messages, worksheets and its inventory in the app, not as Soon', () => {
     ['/messages', '/academics/worksheets', '/inventory/assignments'].forEach((p) => expect(routeFor('teacher', p)).toBeDefined());
   });
@@ -125,20 +139,8 @@ describe('driver', () => {
   });
 });
 
-describe('accountant', () => {
-  const nav = navFor('ACCOUNTANT');
-  it('gets the finance suite without admin-only setup', () => {
-    expect(nav).toEqual(expect.arrayContaining(['/finance', '/finance/fees/collect', '/finance/income', '/finance/expenses']));
-    expect(nav).not.toContain('/finance/fees/setup');
-    expect(nav).not.toContain('/finance/discounts');
-  });
-  it('has no student attendance', () => {
-    expect(nav).not.toContain('/attendance/manual-entry');
-  });
-});
-
-describe('accountant on mobile', () => {
-  const groups = buildAccountantNavigation(() => true);
+describe('finance manager on mobile', () => {
+  const groups = buildFinanceNavigation(() => true);
   const items = groups.flatMap((g) => g.items);
   const paths = items.map((i) => i.webPath);
 
@@ -155,18 +157,18 @@ describe('accountant on mobile', () => {
   });
   it('gets read-only inventory: dashboard, items, movements, assignments and reorder', () => {
     expect(paths).toEqual(expect.arrayContaining(['/inventory', '/inventory/items', '/inventory/transactions', '/inventory/assignments', '/inventory/reorder-prediction']));
-    expect(buildAccountantNavigation((k) => k !== 'inventory').flatMap((g) => g.items.map((i) => i.webPath))).not.toContain('/inventory');
+    expect(buildFinanceNavigation((k) => k !== 'inventory').flatMap((g) => g.items.map((i) => i.webPath))).not.toContain('/inventory');
   });
-  it('has a screen for every entry, inside the accountant shell', () => {
+  it('has a screen for every entry, inside the finance manager shell', () => {
     const appDir = path.join(__dirname, '..', 'app');
     expect(items.filter((i) => !i.href)).toEqual([]);
     for (const it of items) {
-      expect(it.href).toMatch(/^\/\(accountant\)\//);
+      expect(it.href).toMatch(/^\/\(finance\)\//);
       expect(['.tsx', '/index.tsx'].some((ext) => fs.existsSync(path.join(appDir, it.href as string) + ext))).toBe(true);
     }
   });
   it('drops finance and HR groups when the modules are off', () => {
-    const off = buildAccountantNavigation((k) => k !== 'finance' && k !== 'hr').flatMap((g) => g.items.map((i) => i.webPath));
+    const off = buildFinanceNavigation((k) => k !== 'finance' && k !== 'hr').flatMap((g) => g.items.map((i) => i.webPath));
     expect(off).not.toContain('/finance');
     expect(off).not.toContain('/hr/leave');
   });
@@ -260,7 +262,7 @@ describe('module gating', () => {
 });
 
 describe('routes', () => {
-  const personas: Persona[] = ['admin', 'teacher', 'manager', 'accountant', 'staff', 'parent', 'student', 'driver'];
+  const personas: Persona[] = ['admin', 'teacher', 'manager', 'finance', 'staff', 'parent', 'student', 'driver'];
 
   it('maps a dashboard route for every persona', () => {
     for (const p of personas) expect(routeFor(p, '/dashboard')).toBe(`/(${p})/dashboard`);
@@ -274,7 +276,7 @@ describe('routes', () => {
       return ['.tsx', '/index.tsx'].some((ext) => fs.existsSync(base + ext));
     };
     for (const p of personas) {
-      for (const role of ['SCHOOL_ADMIN', 'TEACHER', 'MANAGER', 'ACCOUNTANT', 'STAFF', 'DRIVER']) {
+      for (const role of ['SCHOOL_ADMIN', 'TEACHER', 'MANAGER', 'FINANCE_MANAGER', 'STAFF', 'DRIVER']) {
         for (const g of buildStaffNavigation({ ...ctxFor(role), persona: p })) {
           for (const it of g.items) if (it.href) expect(exists(it.href)).toBe(true);
         }
@@ -362,7 +364,7 @@ describe('admissions by role', () => {
     expect(collectWebPaths(groups).filter((p) => p.startsWith('/admissions'))).toEqual([]);
   });
   it('shows nothing to any other role (the server refuses their writes and the scores)', () => {
-    for (const role of ['TEACHER', 'MANAGER', 'ACCOUNTANT', 'STAFF', 'DRIVER']) {
+    for (const role of ['TEACHER', 'MANAGER', 'FINANCE_MANAGER', 'STAFF', 'DRIVER']) {
       expect(navFor(role).filter((p) => p.startsWith('/admissions'))).toEqual([]);
     }
   });

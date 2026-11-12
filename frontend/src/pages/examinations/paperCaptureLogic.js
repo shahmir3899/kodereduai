@@ -54,6 +54,12 @@ function toDraftQuestion(question, sectionKey) {
     options: { A: options?.A || '', B: options?.B || '', C: options?.C || '', D: options?.D || '' },
     // Kept only for the review list; the slot board ignores unknown fields.
     needs_review: Boolean(question?.needs_review),
+    // Where this question was read from, for the photo beside the review list.
+    page_number: question?.page_number ?? null,
+    box: question?.box ?? null,
+    uncertain: Array.isArray(question?.uncertain) ? question.uncertain : [],
+    // A drawing cropped from the page photo (same field the slot editor's diagram upload fills).
+    question_image_url: question?.question_image_url || null,
   }
 }
 

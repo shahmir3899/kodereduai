@@ -199,6 +199,8 @@ export interface TrackResponse {
   journey?: { id: number; route_name?: string; vehicle_number?: string | null; driver_name?: string | null; journey_type_display?: string; status_display?: string; started_at?: string };
   locations?: TrackPoint[];
   student_stop?: { id: number; name: string | null };
+  // The route's places, with the child's stop marked; absent from an older server.
+  map?: import('./routeMap').PortalMap | null;
 }
 
 // Newest point first (the API's order is not relied on).

@@ -10,7 +10,7 @@ import re
 
 from ..registry import ADMINS, Tool, register
 
-LOOKUP_ROLES = ADMINS + ('MANAGER', 'ACCOUNTANT')
+LOOKUP_ROLES = ADMINS + ('MANAGER',)
 MAX_RESULTS = 8
 
 

@@ -35,7 +35,7 @@ import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors'
 interface Props {
   // Teachers pass their own sections (and must pick one); admins leave it out and may see all.
   classOptions?: ClassOption[];
-  // Read-only roles (accountant) see the list but can't record.
+  // Read-only roles (finance) see the list but can't record.
   canRecord?: boolean;
   // Admin and principal: delete an unpaid record, and share the month's fee collection report.
   canManage?: boolean;

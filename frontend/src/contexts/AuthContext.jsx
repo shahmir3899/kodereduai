@@ -596,7 +596,7 @@ export function AuthProvider({ children }) {
         addPrefetch(['managerQuestionBankCount'], () => examinationsApi.getQuestions({ page_size: 1 }))
         addPrefetch(['managerExamPapersCount'], () => examinationsApi.getExamPapers({ page_size: 1 }))
       }
-    } else if (effectiveRole === 'ACCOUNTANT') {
+    } else if (effectiveRole === 'MANAGER' && activeSchool?.can_manage_finance) {
       if (isModuleAvailable({ moduleKey: 'finance', enabledModules, isSuperAdmin })) {
         const dateFrom = monthStart
         const dateTo = today
@@ -834,7 +834,11 @@ export function AuthProvider({ children }) {
 
   const effectiveRole = activeSchool?.role || user?.role
   const isSchoolAdmin = user?.is_super_admin || effectiveRole === 'SCHOOL_ADMIN' || effectiveRole === 'PRINCIPAL'
-  const isStaffLevel = ['STAFF', 'TEACHER', 'MANAGER', 'ACCOUNTANT', 'DRIVER'].includes(effectiveRole)
+  // The role list comes from the backend (core/roles.py) with the user payload; nothing here keeps its own copy.
+  const roleConfig = user?.role_config
+  const isStaffLevel = roleConfig?.roles?.find((r) => r.value === effectiveRole)?.group === 'staff'
+  // "Finance manager" is a Manager whose membership has the finance capability.
+  const canManageFinance = effectiveRole === 'MANAGER' && !!activeSchool?.can_manage_finance
   const isDriver = effectiveRole === 'DRIVER'
   const isParent = effectiveRole === 'PARENT'
   const isStudent = effectiveRole === 'STUDENT'
@@ -857,12 +861,16 @@ export function AuthProvider({ children }) {
   const isCapabilityEnabled = useCallback(() => true, [])
 
   // Role hierarchy: which roles can the current user create?
-  const getAllowableRoles = useCallback(() => {
-    if (user?.is_super_admin) return ['SUPER_ADMIN', 'SCHOOL_ADMIN', 'PRINCIPAL', 'MANAGER', 'ACCOUNTANT', 'TEACHER', 'STAFF', 'DRIVER']
-    if (effectiveRole === 'SCHOOL_ADMIN') return ['PRINCIPAL', 'MANAGER', 'ACCOUNTANT', 'TEACHER', 'STAFF', 'DRIVER']
-    if (effectiveRole === 'PRINCIPAL') return ['MANAGER', 'ACCOUNTANT', 'TEACHER', 'STAFF', 'DRIVER']
-    return []
-  }, [user?.is_super_admin, effectiveRole])
+  const getAllowableRoles = useCallback(
+    () => roleConfig?.creatable?.[effectiveRole] ?? [],
+    [roleConfig, effectiveRole],
+  )
+
+  // Display name for a role value, from the served list (falls back to the raw value).
+  const getRoleLabel = useCallback(
+    (value) => roleConfig?.roles?.find((r) => r.value === value)?.label ?? value,
+    [roleConfig],
+  )
 
   const value = useMemo(() => ({
     user,
@@ -880,7 +888,9 @@ export function AuthProvider({ children }) {
     isStaffMember: effectiveRole === 'STAFF',
     isManager: effectiveRole === 'MANAGER',
     isTeacher: effectiveRole === 'TEACHER',
-    isAccountant: effectiveRole === 'ACCOUNTANT',
+    canManageFinance,
+    roleConfig,
+    getRoleLabel,
     isDriver,
     isParent,
     isStudent,
@@ -891,7 +901,7 @@ export function AuthProvider({ children }) {
     moduleEntitlements,
     isCapabilityEnabled,
     getAllowableRoles,
-  }), [user, activeSchool, loading, isSwitchingSchool, effectiveRole, enabledModules, isModuleEnabled, getAllowableRoles, logout, switchSchool, refreshUser, isSchoolAdmin, isParent, isStudent, isStaffLevel])
+  }), [user, activeSchool, loading, isSwitchingSchool, effectiveRole, enabledModules, isModuleEnabled, getAllowableRoles, logout, switchSchool, refreshUser, isSchoolAdmin, isParent, isStudent, isStaffLevel, canManageFinance, roleConfig, getRoleLabel])
 
   return (
     <AuthContext.Provider value={value}>

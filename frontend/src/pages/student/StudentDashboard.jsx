@@ -8,6 +8,22 @@ import NotificationsFeed from '../../components/dashboard/NotificationsFeed'
 import Spinner from '../../components/ui/Spinner'
 import PhotoAvatar from '../../components/ui/PhotoAvatar'
 
+// The portal results endpoint returns exams with subject marks but no overall percentage, so
+// derive it here (absent/unmarked subjects are skipped), newest exam first, as mobile does.
+export function lastExamPct(exams) {
+  for (const exam of exams || []) {
+    let got = 0
+    let total = 0
+    for (const s of exam.subjects || []) {
+      if (s.is_absent || s.marks_obtained == null || !s.total_marks) continue
+      got += s.marks_obtained
+      total += s.total_marks
+    }
+    if (total > 0) return (got / total) * 100
+  }
+  return null
+}
+
 export default function StudentDashboard() {
   const { user } = useAuth()
 
@@ -18,13 +34,16 @@ export default function StudentDashboard() {
 
   const { data: resultsData } = useQuery({
     queryKey: ['studentExamResults'],
-    queryFn: () => studentPortalApi.getExamResults({ page_size: 5 }),
+    queryFn: () => studentPortalApi.getExamResults(),
     staleTime: 5 * 60 * 1000,
   })
 
   const dashboard = dashboardData?.data || {}
   const student = dashboard.student || {}
-  const stats = dashboard.stats || {}
+  // Backend sends top-level `attendance` / `fees`, not a `stats` object.
+  const attendance = dashboard.attendance || null
+  const attendanceRate = attendance && attendance.total_days > 0 ? attendance.rate : null
+  const feeOutstanding = dashboard.fees?.outstanding ?? null
   const today = schoolToday()
   const studentClassId = student.class_id || student.class_obj || student.class_obj_id || null
 
@@ -67,8 +86,7 @@ export default function StudentDashboard() {
   }
 
   // Derive last exam score from results
-  const lastResult = recentResults[0]
-  const lastExamScore = lastResult?.percentage ?? lastResult?.total_obtained_percentage ?? null
+  const lastExamScore = lastExamPct(recentResults)
 
   // Current time for timetable highlighting
   const now = new Date()
@@ -106,11 +124,11 @@ export default function StudentDashboard() {
               <p className="text-xs text-gray-500">Attendance</p>
               <p className={`text-lg font-bold ${
                 isOffDay ? 'text-gray-700' :
-                stats.attendance_rate == null ? 'text-gray-400' :
-                stats.attendance_rate >= 75 ? 'text-green-700' :
-                stats.attendance_rate >= 60 ? 'text-yellow-700' : 'text-red-700'
+                attendanceRate == null ? 'text-gray-400' :
+                attendanceRate >= 75 ? 'text-green-700' :
+                attendanceRate >= 60 ? 'text-yellow-700' : 'text-red-700'
               }`}>
-                {isOffDay ? 'N/A' : (stats.attendance_rate != null ? `${stats.attendance_rate}%` : 'N/A')}
+                {isOffDay ? 'N/A' : (attendanceRate != null ? `${attendanceRate}%` : 'N/A')}
               </p>
               {isOffDay && (
                 <p className="text-[11px] text-gray-500 mt-0.5">OFF day{offTypes.length ? ` (${offTypes.join(', ')})` : ''}</p>
@@ -129,9 +147,9 @@ export default function StudentDashboard() {
             <div className="min-w-0">
               <p className="text-xs text-gray-500">Fee Due</p>
               <p className={`text-lg font-bold ${
-                (stats.fee_outstanding ?? 0) > 0 ? 'text-red-700' : 'text-green-700'
+                Number(feeOutstanding ?? 0) > 0 ? 'text-red-700' : 'text-green-700'
               }`}>
-                {stats.fee_outstanding != null ? `PKR ${Number(stats.fee_outstanding).toLocaleString()}` : 'N/A'}
+                {feeOutstanding != null ? `PKR ${Number(feeOutstanding).toLocaleString()}` : 'N/A'}
               </p>
             </div>
           </div>
@@ -147,7 +165,7 @@ export default function StudentDashboard() {
             <div className="min-w-0">
               <p className="text-xs text-gray-500">Assignments</p>
               <p className="text-lg font-bold text-purple-700">
-                {stats.upcoming_assignments_count ?? upcomingAssignments.length}
+                {upcomingAssignments.length}
               </p>
             </div>
           </div>

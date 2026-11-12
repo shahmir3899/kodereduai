@@ -32,7 +32,7 @@ ADMIN_ROLES = ('SUPER_ADMIN', 'SCHOOL_ADMIN', 'PRINCIPAL')
 # Who could reach each old agent through its view's permission classes.
 LEGACY_ACCESS = {
     'finance': ADMIN_ROLES,
-    'academics': ADMIN_ROLES + ('MANAGER', 'ACCOUNTANT', 'TEACHER', 'STAFF'),
+    'academics': ADMIN_ROLES + ('MANAGER', 'MANAGER_FINANCE', 'TEACHER', 'STAFF'),
     'communication': ADMIN_ROLES,
 }
 
@@ -94,11 +94,13 @@ class Command(BaseCommand):
         users = {}
         linked = {'TEACHER': 'staff_profile', 'STAFF': 'staff_profile', 'STUDENT': 'student_profile', 'PARENT': 'parent_profile'}
         for m in UserSchoolMembership.objects.filter(school=school).select_related('user'):
+            # Questions name a finance Manager as MANAGER_FINANCE (a Manager with can_manage_finance).
+            key = 'MANAGER_FINANCE' if m.role == 'MANAGER' and m.can_manage_finance else m.role
             need = linked.get(m.role)
             has = bool(need) and hasattr(m.user, need)         # reverse one-to-one: missing link raises, so hasattr is False
             # Prefer a user whose account is linked to a staff / student / parent record, so "my leave" or "my child" can be answered.
-            if m.role not in users or (has and not users[m.role][1]):
-                users[m.role] = (m.user, has)
+            if key not in users or (has and not users[key][1]):
+                users[key] = (m.user, has)
         users = {role: pair[0] for role, pair in users.items()}
 
         todo = [q for q in questions if q['id'] not in done]
@@ -177,7 +179,7 @@ class Command(BaseCommand):
         # providers are "resting" for about 30s. That is a pause, not a wrong answer: wait it out and ask again instead of ending the batch.
         for attempt in range(UNAVAILABLE_RETRIES + 1):
             conv = AgentConversation.objects.create(school=school, user=user)
-            ctx = registry.ToolContext(user=user, school_id=school.id, role=q['role'], conversation=conv)
+            ctx = registry.ToolContext(user=user, school_id=school.id, role='MANAGER' if q['role'] == 'MANAGER_FINANCE' else q['role'], conversation=conv)
             result = orchestrator.run_turn(conv, q['q'], ctx)
             if result.content != orchestrator.UNAVAILABLE:
                 break

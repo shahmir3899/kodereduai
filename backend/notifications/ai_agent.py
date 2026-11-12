@@ -213,7 +213,7 @@ class ParentCommunicationAgent:
         from attendance.models import AttendanceRecord
 
         if student_id and not class_id:
-            # One student: every branch they have been at, leave counted as present.
+            # One student: every branch they have been at, late and leave counted as present.
             from students import history
 
             att = history.attendance_totals(self._student(student_id))

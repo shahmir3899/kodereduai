@@ -78,12 +78,13 @@ class StaffMemberSerializer(serializers.ModelSerializer):
     designation_name = serializers.CharField(source='designation.name', read_only=True, default=None)
     user_username = serializers.CharField(source='user.username', read_only=True, default=None)
     user_role = serializers.CharField(source='user.role', read_only=True, default=None)
+    user_can_manage_finance = serializers.SerializerMethodField()
 
     class Meta:
         model = StaffMember
         fields = [
             'id', 'school', 'user', 'user_username',
-            'user_role',
+            'user_role', 'user_can_manage_finance', 'is_teaching',
             'first_name', 'last_name', 'full_name',
             'email', 'phone', 'gender', 'date_of_birth', 'photo_url',
             'employee_id', 'department', 'department_name',
@@ -96,9 +97,14 @@ class StaffMemberSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = [
             'id', 'school', 'full_name', 'department_name',
-            'designation_name', 'user_username', 'user_role',
+            'designation_name', 'user_username', 'user_role', 'user_can_manage_finance',
             'created_at', 'updated_at',
         ]
+
+    def get_user_can_manage_finance(self, obj):
+        if not obj.user_id:
+            return False
+        return obj.user.has_capability_for_school(obj.school_id, 'can_manage_finance')
 
     # What a non-admin may see of a colleague. Everything else on the record
     # (contact details, DOB, address, emergency contact, notes, salary-adjacent

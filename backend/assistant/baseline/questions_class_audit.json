@@ -38,7 +38,7 @@
  {
   "id": "F04",
   "agent": "finance",
-  "role": "ACCOUNTANT",
+  "role": "MANAGER_FINANCE",
   "lang": "en",
   "q": "List students who haven't paid in 8B",
   "expect": {

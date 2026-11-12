@@ -50,7 +50,7 @@ Most seeded rows are foundational and kept fresh in place via `get_or_create`/`u
 | Academics | Real `Subject` rows (reuses existing "Mathematics"/"English" if present), `TimetableSlot`/`TimetableEntry` (both subjects), `ClassSubject`, one `ClassTeacherAssignment` per class |
 | Examinations | `ExamType`, per-class `Exam` (status `PUBLISHED` so it shows up on report cards), `ExamSubject` + `StudentMark` for every subject/student, `GradeScale` (A–F bands), `StudentTermAssessment` (skills/behaviour ratings + remarks) |
 | Finance | `Account` (Cash + Bank), `MonthlyFeeCategory`, `FeeStructure` per class, `FeePayment` for five billing months (`notes` marker), a few `Expense`/`OtherIncome` rows, one `Discount` and one `Scholarship` with a `StudentDiscount` each |
-| HR | `LeavePolicy`, sample `LeaveApplication`, `StaffAttendance`, `Payslip`, `SalaryStructure`, `StaffQualification`, `StaffDocument` per staff member, plus one non-teaching `StaffMember` (Accountant) |
+| HR | `LeavePolicy`, sample `LeaveApplication`, `StaffAttendance`, `Payslip`, `SalaryStructure`, `StaffQualification`, `StaffDocument` per staff member, plus one non-teaching `StaffMember` (Finance manager) |
 | LMS | `Book`/`Chapter`/`Topic` per class/subject, `LessonPlan` (mix of draft/published, topics/free-form), `Assignment` + `AssignmentSubmission`, a few `Tag` rows |
 | Attendance uploads | A few `AttendanceUpload` rows with distinct statuses and a marker `image_url` |
 

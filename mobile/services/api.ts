@@ -466,7 +466,7 @@ export const financeApi = {
   // Admins with several schools: balances grouped per school plus the organisation's shared accounts.
   getAccountBalancesAll: (params?: Record<string, unknown>) =>
     api.get('/api/finance/accounts/balances_all/', { params }),
-  // Transfers between accounts and month closing (admin and principal; accountants are read-only).
+  // Transfers between accounts and month closing (admin and principal; finance managers are read-only).
   getTransfers: (params?: Record<string, unknown>) =>
     api.get('/api/finance/transfers/', { params }),
   createTransfer: (data: object) => api.post('/api/finance/transfers/', data),
@@ -530,6 +530,8 @@ export const lettersApi = {
   getTemplates: () => api.get('/api/reports/custom-letters/templates/'),
   prefill: (data: object) => api.post('/api/reports/custom-letters/prefill/', data),
   generatePdf: (data: object) => api.post('/api/reports/custom-letters/generate-pdf/', data, { responseType: 'arraybuffer' }),
+  // The server writes the subject and body from a description; it answers with a template when the AI is down.
+  aiDraft: (data: object) => api.post('/api/reports/custom-letters/ai-draft/', data, { timeout: 60000 }),
 };
 
 // Insight cards (admin and principal): the same four risk scans the web pages use.
@@ -543,6 +545,9 @@ export const insightsApi = {
 export const reportsApi = {
   generateInstant: (data: object) =>
     api.post('/api/reports/generate-instant/', data, { responseType: 'arraybuffer' }),
+  // Stored reports (admin and principal only): the 50 newest, and one file by id.
+  getList: () => api.get('/api/reports/list/'),
+  download: (id: number) => api.get(`/api/reports/${id}/download/`, { responseType: 'arraybuffer' }),
 };
 
 // ─── Discounts and scholarships (admin and principal only) ───────────────────
@@ -656,7 +661,7 @@ export const hrApi = {
 };
 
 // ─── Inventory API ───────────────────────────────────────────────────────────
-// Admin and principal write; accountant reads; teacher and staff only list their own assignments.
+// Admin and principal write; finance manager reads; teacher and staff only list their own assignments.
 
 export const inventoryApi = {
   getDashboard: () => api.get('/api/inventory/dashboard/'),
@@ -964,6 +969,19 @@ export const parentsApi = {
   // A one-time code that links a parent's own login to the student (admin and principal).
   generateInvite: (data: Record<string, unknown>) =>
     api.post('/api/parents/admin/generate-invite/', data),
+  getStudentInvites: (studentId: number) =>
+    api.get('/api/parents/admin/generate-invite/', { params: { student_id: studentId } }),
+  revokeInvite: (id: number) =>
+    api.delete(`/api/parents/admin/invites/${id}/`),
+  // Every parent in the school with their children (admin and principal); one parent can have many children.
+  getParentsList: (params?: Record<string, unknown>) =>
+    api.get('/api/parents/admin/parents/', { params }),
+  linkChildren: (data: Record<string, unknown>) =>
+    api.post('/api/parents/admin/link-children/', data),
+  unlinkChild: (linkId: number) =>
+    api.delete(`/api/parents/admin/unlink-child/${linkId}/`),
+  getSiblingSuggestions: (params: Record<string, unknown>) =>
+    api.get('/api/parents/admin/sibling-suggestions/', { params }),
   register: (data: Record<string, unknown>) =>
     api.post('/api/parents/register/', data),
   getMyChildren: () =>
@@ -1050,6 +1068,15 @@ export const transportApi = {
     api.get('/api/transport/vehicles/my/'),
   getStops: (params?: Record<string, unknown>) =>
     api.get('/api/transport/stops/', { params }),
+  // Routes and stops (admin and principal): the server refuses everyone else and deleting what is in use.
+  createRoute: (data: object) => api.post('/api/transport/routes/', data),
+  updateRoute: (id: number, data: object) => api.patch(`/api/transport/routes/${id}/`, data),
+  deleteRoute: (id: number) => api.delete(`/api/transport/routes/${id}/`),
+  duplicateRoute: (id: number) => api.post(`/api/transport/routes/${id}/duplicate/`),
+  createStop: (data: object) => api.post('/api/transport/stops/', data),
+  updateStop: (id: number, data: object) => api.patch(`/api/transport/stops/${id}/`, data),
+  deleteStop: (id: number) => api.delete(`/api/transport/stops/${id}/`),
+  getAssignments: (params?: Record<string, unknown>) => api.get('/api/transport/assignments/', { params }),
   // Parents follow the route's bus (the legacy journey/track/ is the student's own sharing).
   trackStudent: (studentId: number) =>
     api.get(`/api/transport/route-journey/track/${studentId}/`),
@@ -1069,31 +1096,52 @@ export const transportApi = {
 // ─── Library API ─────────────────────────────────────────────────────────────
 
 export const libraryApi = {
-  getStats: () =>
-    api.get('/api/library/stats/'),
-  getBooks: (params?: Record<string, unknown>) =>
-    api.get('/api/library/books/', { params }),
-  createIssue: (data: Record<string, unknown>) =>
-    api.post('/api/library/issues/', data),
-  searchStudents: (params?: Record<string, unknown>) =>
-    api.get('/api/students/', { params }),
+  getStats: () => api.get('/api/library/stats/'),
+  // Catalog (admin and principal write; the server refuses everyone else)
+  getBooks: (params?: Record<string, unknown>) => api.get('/api/library/books/', { params }),
+  createBook: (data: object) => api.post('/api/library/books/', data),
+  updateBook: (id: number, data: object) => api.patch(`/api/library/books/${id}/`, data),
+  deleteBook: (id: number) => api.delete(`/api/library/books/${id}/`),
+  getCategories: (params?: Record<string, unknown>) => api.get('/api/library/categories/', { params }),
+  createCategory: (data: object) => api.post('/api/library/categories/', data),
+  updateCategory: (id: number, data: object) => api.patch(`/api/library/categories/${id}/`, data),
+  deleteCategory: (id: number) => api.delete(`/api/library/categories/${id}/`),
+  // Issue and return
+  getIssues: (params?: Record<string, unknown>) => api.get('/api/library/issues/', { params }),
+  createIssue: (data: object) => api.post('/api/library/issues/', data),
+  returnBook: (id: number) => api.post(`/api/library/issues/${id}/return_book/`, {}),
+  getOverdue: (params?: Record<string, unknown>) => api.get('/api/library/issues/overdue/', { params }),
+  getConfig: () => api.get('/api/library/config/'),
+  updateConfig: (data: object) => api.patch('/api/library/config/', data),
+  searchStudents: (params?: Record<string, unknown>) => api.get('/api/students/', { params }),
+  searchStaff: (params?: Record<string, unknown>) => api.get('/api/hr/staff/', { params }),
 };
 
 // ─── Hostel API ──────────────────────────────────────────────────────────────
 
 export const hostelApi = {
-  getDashboard: () =>
-    api.get('/api/hostel/dashboard/'),
-  getGatePasses: (params?: Record<string, unknown>) =>
-    api.get('/api/hostel/gate-passes/', { params }),
-  approveGatePass: (id: number, data?: Record<string, unknown>) =>
-    api.patch(`/api/hostel/gate-passes/${id}/approve/`, data),
-  rejectGatePass: (id: number, data?: Record<string, unknown>) =>
-    api.patch(`/api/hostel/gate-passes/${id}/reject/`, data),
-  checkoutGatePass: (id: number) =>
-    api.patch(`/api/hostel/gate-passes/${id}/checkout/`),
-  returnGatePass: (id: number) =>
-    api.patch(`/api/hostel/gate-passes/${id}/return/`),
+  getDashboard: () => api.get('/api/hostel/dashboard/'),
+  // Hostels and rooms (admin and principal)
+  getHostels: (params?: Record<string, unknown>) => api.get('/api/hostel/hostels/', { params }),
+  createHostel: (data: object) => api.post('/api/hostel/hostels/', data),
+  updateHostel: (id: number, data: object) => api.patch(`/api/hostel/hostels/${id}/`, data),
+  deleteHostel: (id: number) => api.delete(`/api/hostel/hostels/${id}/`),
+  getRooms: (params?: Record<string, unknown>) => api.get('/api/hostel/rooms/', { params }),
+  createRoom: (data: object) => api.post('/api/hostel/rooms/', data),
+  updateRoom: (id: number, data: object) => api.patch(`/api/hostel/rooms/${id}/`, data),
+  deleteRoom: (id: number) => api.delete(`/api/hostel/rooms/${id}/`),
+  // Which student sleeps where
+  getAllocations: (params?: Record<string, unknown>) => api.get('/api/hostel/allocations/', { params }),
+  createAllocation: (data: object) => api.post('/api/hostel/allocations/', data),
+  vacateAllocation: (id: number) => api.patch(`/api/hostel/allocations/${id}/vacate/`),
+  // Gate passes
+  getGatePasses: (params?: Record<string, unknown>) => api.get('/api/hostel/gate-passes/', { params }),
+  createGatePass: (data: object) => api.post('/api/hostel/gate-passes/', data),
+  approveGatePass: (id: number, data?: Record<string, unknown>) => api.patch(`/api/hostel/gate-passes/${id}/approve/`, data),
+  rejectGatePass: (id: number, data?: Record<string, unknown>) => api.patch(`/api/hostel/gate-passes/${id}/reject/`, data),
+  checkoutGatePass: (id: number) => api.patch(`/api/hostel/gate-passes/${id}/checkout/`),
+  returnGatePass: (id: number) => api.patch(`/api/hostel/gate-passes/${id}/return/`),
+  searchStudents: (params?: Record<string, unknown>) => api.get('/api/students/', { params }),
 };
 
 // Face Attendance (Camera-Based)
@@ -1120,6 +1168,12 @@ export const faceAttendanceApi = {
     api.get('/api/face-attendance/enrollments/', { params }),
   deleteEnrollment: (id: number) =>
     api.delete(`/api/face-attendance/enrollments/${id}/`),
+  // Every student of a class with how many photos they have and whether that is enough.
+  getEnrollmentCoverage: (params?: Record<string, unknown>) =>
+    api.get('/api/face-attendance/enrollments/coverage/', { params }),
+  // A photo is processed in the background; its outcome (or the server's reason for refusing it) is here.
+  getTask: (taskId: string) =>
+    api.get(`/api/tasks/tasks/${taskId}/`),
   getStatus: () =>
     api.get('/api/face-attendance/status/'),
 };

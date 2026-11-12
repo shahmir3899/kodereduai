@@ -110,7 +110,7 @@ const ITEM_ICONS: Record<string, IconName> = {
   '/student/study-helper': 'chatbubbles-outline',
   '/student/profile': 'person-outline',
 
-  '/accountant/change-password': 'key-outline',
+  '/finance/change-password': 'key-outline',
   '/driver/change-password': 'key-outline',
   '/parent/change-password': 'key-outline',
   '/staff/change-password': 'key-outline',

@@ -380,6 +380,7 @@ class ChildTransportView(APIView):
             )
 
         from transport.models import TransportAssignment
+        from transport.map_data import route_map
 
         assignment = TransportAssignment.objects.filter(
             student_id=student_id, is_active=True,
@@ -414,6 +415,7 @@ class ChildTransportView(APIView):
                 'driver_name': vehicle.driver_name,
                 'driver_phone': vehicle.driver_phone,
             } if vehicle else None,
+            'map': route_map(route, stop),
         })
 
 
@@ -757,7 +759,9 @@ class AdminParentListView(APIView):
                 parents_map[pid] = {
                     'parent': ParentProfileSerializer(link.parent).data,
                     'children': [],
+                    'child_count': 0,
                 }
+            parents_map[pid]['child_count'] += 1
             parents_map[pid]['children'].append({
                 'link_id': link.id,
                 'student_id': link.student_id,
@@ -769,7 +773,68 @@ class AdminParentListView(APIView):
                 'can_pickup': link.can_pickup,
             })
 
-        return Response(list(parents_map.values()))
+        results = list(parents_map.values())
+
+        search = (request.query_params.get('search') or '').strip().lower()
+        if search:
+            search_digits = _digits(search)
+
+            def _matches(entry):
+                p = entry['parent']
+                haystack = ' '.join(
+                    str(p.get(k) or '') for k in ('user_name', 'full_name', 'username', 'email', 'phone')
+                ).lower()
+                if search in haystack:
+                    return True
+                if search_digits and search_digits in _digits(p.get('phone') or ''):
+                    return True
+                return any(search in (c['student_name'] or '').lower() for c in entry['children'])
+
+            results = [r for r in results if _matches(r)]
+
+        # none can't occur here (the list is built from existing links), but
+        # parents whose children were all unlinked are simply absent; "multi"
+        # is the useful filter for spotting sibling groups.
+        children_filter = request.query_params.get('children')
+        if children_filter == 'multi':
+            results = [r for r in results if r['child_count'] >= 2]
+        elif children_filter == 'single':
+            results = [r for r in results if r['child_count'] == 1]
+
+        return Response(results)
+
+
+def _digits(value):
+    return ''.join(ch for ch in str(value or '') if ch.isdigit())
+
+
+def _norm_name(value):
+    return ' '.join(str(value or '').split()).lower()
+
+
+def _school_student_or_404(request, student_id):
+    """Student of the active school, or None. Link/unlink used to look records
+    up by bare id, so an admin of one school could touch another school's."""
+    school_id = _resolve_school_id(request)
+    if not school_id:
+        return None
+    return Student.objects.select_related('school').filter(id=student_id, school_id=school_id).first()
+
+
+def _school_parent_or_none(request, parent_profile_id):
+    """A parent profile reachable from the active school: already linked to a
+    child here, or holding an invite from here. Keeps the picker school-scoped."""
+    school_id = _resolve_school_id(request)
+    if not school_id:
+        return None
+    profile = ParentProfile.objects.filter(id=parent_profile_id).first()
+    if not profile:
+        return None
+    in_school = (
+        ParentChild.objects.filter(parent=profile, school_id=school_id).exists()
+        or ParentInvite.objects.filter(used_by=profile, school_id=school_id).exists()
+    )
+    return profile if in_school else None
 
 
 class AdminLinkChildView(APIView):
@@ -793,17 +858,15 @@ class AdminLinkChildView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        try:
-            profile = ParentProfile.objects.get(id=parent_profile_id)
-        except ParentProfile.DoesNotExist:
+        profile = _school_parent_or_none(request, parent_profile_id)
+        if not profile:
             return Response(
                 {'error': 'Parent profile not found.'},
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        try:
-            student = Student.objects.select_related('school').get(id=student_id)
-        except Student.DoesNotExist:
+        student = _school_student_or_404(request, student_id)
+        if not student:
             return Response(
                 {'error': 'Student not found.'},
                 status=status.HTTP_404_NOT_FOUND,
@@ -838,9 +901,8 @@ class AdminUnlinkChildView(APIView):
     permission_classes = [IsAuthenticated, IsSchoolAdmin]
 
     def delete(self, request, pk):
-        try:
-            link = ParentChild.objects.get(id=pk)
-        except ParentChild.DoesNotExist:
+        link = ParentChild.objects.filter(id=pk, school_id=_resolve_school_id(request)).first()
+        if not link:
             return Response(
                 {'error': 'Parent-child link not found.'},
                 status=status.HTTP_404_NOT_FOUND,
@@ -848,6 +910,158 @@ class AdminUnlinkChildView(APIView):
 
         link.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+def _clear_other_primary(link):
+    """One primary parent per child: promoting a link demotes the rest."""
+    ParentChild.objects.filter(student=link.student, is_primary=True).exclude(id=link.id).update(is_primary=False)
+
+
+class AdminLinkChildrenView(APIView):
+    """
+    POST admin/link-children/
+    Link one parent to several students (siblings) in one call. Already-linked
+    students are skipped rather than failing the whole batch.
+    Body: {parent_profile_id, student_ids[], relation, is_primary?, can_pickup?}
+    """
+    permission_classes = [IsAuthenticated, IsSchoolAdmin]
+
+    def post(self, request):
+        parent_profile_id = request.data.get('parent_profile_id')
+        student_ids = request.data.get('student_ids') or []
+        relation = request.data.get('relation', 'FATHER')
+        is_primary = bool(request.data.get('is_primary', False))
+        can_pickup = bool(request.data.get('can_pickup', True))
+
+        if not parent_profile_id or not isinstance(student_ids, list) or not student_ids:
+            return Response(
+                {'error': 'parent_profile_id and a non-empty student_ids list are required.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if relation not in dict(ParentChild.RELATION_CHOICES):
+            return Response({'error': 'Invalid relation.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        profile = _school_parent_or_none(request, parent_profile_id)
+        if not profile:
+            return Response({'error': 'Parent profile not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        school_id = _resolve_school_id(request)
+        students = {
+            s.id: s for s in Student.objects.filter(id__in=student_ids, school_id=school_id)
+        }
+        already = set(
+            ParentChild.objects.filter(parent=profile, student_id__in=students).values_list('student_id', flat=True)
+        )
+
+        linked, skipped = [], []
+        for sid in student_ids:
+            student = students.get(sid)
+            if not student:
+                skipped.append({'student_id': sid, 'reason': 'not_found'})
+            elif sid in already:
+                skipped.append({'student_id': sid, 'reason': 'already_linked'})
+            else:
+                link = ParentChild.objects.create(
+                    parent=profile, student=student, school_id=school_id,
+                    relation=relation, is_primary=is_primary, can_pickup=can_pickup,
+                )
+                if is_primary:
+                    _clear_other_primary(link)
+                linked.append(link)
+
+        return Response(
+            {'linked': ParentChildSerializer(linked, many=True).data, 'skipped': skipped},
+            status=status.HTTP_201_CREATED if linked else status.HTTP_200_OK,
+        )
+
+
+class AdminLinkUpdateView(APIView):
+    """
+    PATCH admin/links/<pk>/
+    Edit relation / primary / can-pickup on an existing link.
+    """
+    permission_classes = [IsAuthenticated, IsSchoolAdmin]
+
+    def patch(self, request, pk):
+        link = ParentChild.objects.filter(id=pk, school_id=_resolve_school_id(request)).first()
+        if not link:
+            return Response({'error': 'Parent-child link not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        if 'relation' in request.data:
+            if request.data['relation'] not in dict(ParentChild.RELATION_CHOICES):
+                return Response({'error': 'Invalid relation.'}, status=status.HTTP_400_BAD_REQUEST)
+            link.relation = request.data['relation']
+        if 'is_primary' in request.data:
+            link.is_primary = bool(request.data['is_primary'])
+        if 'can_pickup' in request.data:
+            link.can_pickup = bool(request.data['can_pickup'])
+        link.save()
+        if link.is_primary:
+            _clear_other_primary(link)
+        return Response(ParentChildSerializer(link).data)
+
+
+class AdminSiblingSuggestionsView(APIView):
+    """
+    GET admin/sibling-suggestions/?student_id=<id>[&parent_profile_id=<id>]
+    Students likely to be siblings of the given one: a guardian NAME and PHONE
+    on their record both match (a shared phone alone is not enough — one phone
+    often serves unrelated families). Already linked to parent_profile_id are
+    left out. Only a hint; nothing is linked from here.
+    """
+    permission_classes = [IsAuthenticated, IsSchoolAdmin]
+
+    def get(self, request):
+        student = _school_student_or_404(request, request.query_params.get('student_id'))
+        if not student:
+            return Response({'error': 'Student not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        def pairs(s):
+            out = set()
+            for name, phone in ((s.parent_name, s.parent_phone), (s.guardian_name, s.guardian_phone)):
+                n, p = _norm_name(name), _digits(phone)
+                if n and p:
+                    out.add((n, p))
+            return out
+
+        source_pairs = pairs(student)
+        if not source_pairs:
+            return Response([])
+
+        names = {n for n, _ in source_pairs}
+        candidates = Student.objects.filter(school_id=student.school_id, is_active=True).exclude(id=student.id)
+        # DB prefilter on the first name token only (stray inner whitespace
+        # defeats iexact); the exact name+phone check runs in Python below.
+        name_q = Q()
+        for n in names:
+            token = n.split(' ')[0]
+            name_q |= Q(parent_name__icontains=token) | Q(guardian_name__icontains=token)
+        candidates = candidates.filter(name_q)
+
+        already = set()
+        parent_profile_id = request.query_params.get('parent_profile_id')
+        if parent_profile_id:
+            already = set(
+                ParentChild.objects.filter(parent_id=parent_profile_id, school_id=student.school_id)
+                .values_list('student_id', flat=True)
+            )
+
+        from academic_sessions.roster import current_placements_for, placement_label
+
+        matched = [
+            c for c in candidates.select_related('class_obj')
+            if c.id not in already and pairs(c) & source_pairs
+        ]
+        placements = current_placements_for(student.school_id, [c.id for c in matched])
+        return Response([
+            {
+                'student_id': c.id,
+                'student_name': c.name,
+                'class_name': placement_label(placements.get(c.id), c),
+                'already_linked_to_other': c.parent_links.exists(),
+            }
+            for c in matched
+        ])
 
 
 class AdminGenerateInviteView(APIView):
@@ -864,11 +1078,66 @@ class AdminGenerateInviteView(APIView):
             context={'request': request},
         )
         serializer.is_valid(raise_exception=True)
+        if not _school_student_or_404(request, serializer.validated_data['student_id']):
+            return Response({'error': 'Student not found.'}, status=status.HTTP_404_NOT_FOUND)
         invite = serializer.save()
         return Response(
             ParentInviteSerializer(invite).data,
             status=status.HTTP_201_CREATED,
         )
+
+    def get(self, request):
+        """Open (unused, unexpired) invites for a student, so admins can see
+        and revoke them from the parent drawer."""
+        student = _school_student_or_404(request, request.query_params.get('student_id'))
+        if not student:
+            return Response({'error': 'Student not found.'}, status=status.HTTP_404_NOT_FOUND)
+        invites = ParentInvite.objects.filter(
+            student=student, school_id=student.school_id, is_used=False, expires_at__gt=timezone.now(),
+        ).order_by('-created_at')
+        return Response(ParentInviteSerializer(invites, many=True).data)
+
+
+class AdminParentStatusView(APIView):
+    """
+    GET admin/parent-status/
+    {student_id: {linked, pending}} for the active school, so the Students list
+    can show a portal pill per row without N requests. Students with neither
+    are omitted (the client treats a missing key as "not linked").
+    """
+    permission_classes = [IsAuthenticated, IsSchoolAdmin]
+
+    def get(self, request):
+        school_id = _resolve_school_id(request)
+        if not school_id:
+            return Response({'error': 'school_id is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        out = {}
+        for row in (
+            ParentChild.objects.filter(school_id=school_id)
+            .values('student_id').annotate(n=Count('id'))
+        ):
+            out.setdefault(row['student_id'], {'linked': 0, 'pending': 0})['linked'] = row['n']
+        for row in (
+            ParentInvite.objects.filter(school_id=school_id, is_used=False, expires_at__gt=timezone.now())
+            .values('student_id').annotate(n=Count('id'))
+        ):
+            out.setdefault(row['student_id'], {'linked': 0, 'pending': 0})['pending'] = row['n']
+        return Response(out)
+
+
+class AdminRevokeInviteView(APIView):
+    """DELETE admin/invites/<pk>/ — revoke an unused invite."""
+    permission_classes = [IsAuthenticated, IsSchoolAdmin]
+
+    def delete(self, request, pk):
+        invite = ParentInvite.objects.filter(
+            id=pk, school_id=_resolve_school_id(request), is_used=False,
+        ).first()
+        if not invite:
+            return Response({'error': 'Invite not found.'}, status=status.HTTP_404_NOT_FOUND)
+        invite.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class AdminLeaveRequestListView(APIView):

@@ -242,6 +242,6 @@ class TestFees:
     def test_missing_month_is_refused(self, seed_data, stu):
         assert 'error' in _run(seed_data, 'change_pending_fee', student_id=stu['a'].id, month=1, year=2026, new_amount=1)
 
-    def test_accountant_and_teacher_cannot_edit_fees(self, seed_data, stu):
-        for uname in ('accountant', 'teacher'):
+    def test_finance_manager_and_teacher_cannot_edit_fees(self, seed_data, stu):
+        for uname in ('finance_manager', 'teacher'):
             assert 'error' in _run(seed_data, 'set_student_monthly_fee', uname, student_id=stu['a'].id, amount=1)

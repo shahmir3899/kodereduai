@@ -24,6 +24,11 @@ from .views import (
     AdminLinkChildView,
     AdminUnlinkChildView,
     AdminGenerateInviteView,
+    AdminRevokeInviteView,
+    AdminParentStatusView,
+    AdminLinkChildrenView,
+    AdminLinkUpdateView,
+    AdminSiblingSuggestionsView,
     AdminLeaveRequestListView,
     AdminLeaveReviewView,
 )
@@ -68,6 +73,11 @@ urlpatterns = [
     path('admin/link-child/', AdminLinkChildView.as_view(), name='admin-link-child'),
     path('admin/unlink-child/<int:pk>/', AdminUnlinkChildView.as_view(), name='admin-unlink-child'),
     path('admin/generate-invite/', AdminGenerateInviteView.as_view(), name='admin-generate-invite'),
+    path('admin/parent-status/', AdminParentStatusView.as_view(), name='admin-parent-status'),
+    path('admin/invites/<int:pk>/', AdminRevokeInviteView.as_view(), name='admin-revoke-invite'),
+    path('admin/link-children/', AdminLinkChildrenView.as_view(), name='admin-link-children'),
+    path('admin/links/<int:pk>/', AdminLinkUpdateView.as_view(), name='admin-link-update'),
+    path('admin/sibling-suggestions/', AdminSiblingSuggestionsView.as_view(), name='admin-sibling-suggestions'),
     path('admin/leave-requests/', AdminLeaveRequestListView.as_view(), name='admin-leave-request-list'),
     path('admin/leave-requests/<int:pk>/review/', AdminLeaveReviewView.as_view(), name='admin-leave-review'),
 ]

@@ -18,7 +18,7 @@ const STATUS = {
 }
 
 const ROLE_LABEL = {
-  SCHOOL_ADMIN: 'School admin', PRINCIPAL: 'Principal', MANAGER: 'Manager', ACCOUNTANT: 'Accountant',
+  SCHOOL_ADMIN: 'School admin', PRINCIPAL: 'Principal', MANAGER: 'Manager',
   TEACHER: 'Teacher', STAFF: 'Staff', PARENT: 'Parent', STUDENT: 'Student', DRIVER: 'Driver',
 }
 

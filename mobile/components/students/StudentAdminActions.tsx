@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, Share, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { parentsApi, reportsApi, studentsApi } from '../../services/api';
+import { reportsApi, studentsApi } from '../../services/api';
 import { shareReportFile } from '../../services/reportShare';
 import { durationLabel, singleReportFileName } from '../../services/studentReportNames';
 import { todayString } from '../../services/attendanceEntry';
 import {
-  REPORT_PERIODS, RELATIONS, buildInvitePayload, buildOutcomePayload, buildReportRequest, inviteShareText, offeredOutcomes,
+  REPORT_PERIODS, buildOutcomePayload, buildReportRequest, offeredOutcomes,
   reportPeriodParams, validateOutcome, webOnlyOutcomes, type ReportPeriod,
 } from '../../services/studentLifecycle';
 import { saveFailureMessage } from '../../services/errorKind';
@@ -22,17 +22,18 @@ import { useToast } from '../ui/Toast';
 import FormSheet from '../inventory/FormSheet';
 import { StudentMoveSheet, StudentRemoveSheet } from './StudentMoveSheets';
 import { StudentExitSheet, StudentReadmitSheet } from './StudentExitSheets';
+import ParentLinksSheet from './ParentLinksSheet';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
 
 interface Props {
   student: { id: number; name: string; roll?: string | number | null; className?: string | null; status?: string | null; has_user_account?: boolean; sectionId?: number | null; awaySince?: string | null };
 }
 
-type Open = 'status' | 'invite' | 'report' | 'move' | 'remove' | 'account' | 'exit' | 'readmit' | null;
+type Open = 'status' | 'parents' | 'report' | 'move' | 'remove' | 'account' | 'exit' | 'readmit' | null;
 
 const HAS_LEFT = ['WITHDRAWN', 'TRANSFERRED'];
 
-// Admin and principal actions on one student: mark Graduated or Repeat, make a parent invite code,
+// Admin and principal actions on one student: mark Graduated or Repeat, manage parent links and invites,
 // make the student report PDF, and start a leaving/transfer (with its clearance checklist) or a
 // re-admission.
 export default function StudentAdminActions({ student }: Props) {
@@ -52,12 +53,6 @@ export default function StudentAdminActions({ student }: Props) {
       qc.invalidateQueries({ predicate: (q) => ['students', 'student', 'student-edit', 'studentProfileSummary', 'studentEnrollmentHistory'].includes(q.queryKey[0] as string) });
     },
   });
-
-  // invite
-  const [relation, setRelation] = useState('FATHER');
-  const [phone, setPhone] = useState('');
-  const [code, setCode] = useState<string | null>(null);
-  const invite = useMutation({ mutationFn: async () => (await parentsApi.generateInvite(buildInvitePayload(student.id, relation, phone))).data as { invite_code?: string } });
 
   // login for the student
   const [account, setAccount] = useState<AccountForm>(emptyAccountForm(student.name));
@@ -79,7 +74,6 @@ export default function StudentAdminActions({ student }: Props) {
   const openSheet = (which: Exclude<Open, null>) => {
     setError(null);
     if (which === 'status') { setOutcome(''); setReason(''); }
-    if (which === 'invite') { setRelation('FATHER'); setPhone(''); setCode(null); }
     if (which === 'report') { setPeriod('this_month'); setCustom({ from: '', to: '' }); }
     if (which === 'account') setAccount(emptyAccountForm(student.name));
     setOpen(which);
@@ -105,21 +99,6 @@ export default function StudentAdminActions({ student }: Props) {
       toast.success(`Login created for ${student.name}. Username: ${account.username.trim()}`);
       close();
     } catch (e) { setError(accountErrorText(e)); }
-  };
-
-  const makeInvite = async () => {
-    setError(null);
-    try {
-      const res = await invite.mutateAsync();
-      if (!res.invite_code) throw new Error('No code returned');
-      setCode(res.invite_code);
-    } catch (e) { setError(staffLeaveErrorMessage(e, 'Could not make the invite code.')); }
-  };
-
-  const shareInvite = async () => {
-    if (!code) return;
-    try { await Share.share({ message: inviteShareText(student.name, code) }); }
-    catch { toast.error('Could not open the share sheet.'); }
   };
 
   const makeReport = async () => {
@@ -148,7 +127,7 @@ export default function StudentAdminActions({ student }: Props) {
           ? <Button title="Re-admit" size="sm" variant="outline" onPress={() => openSheet('readmit')} />
           : student.status !== 'GRADUATED' ? <Button title="Leaving / Transfer" size="sm" variant="outline" onPress={() => openSheet('exit')} /> : null}
         <Button title="Student report" size="sm" variant="outline" onPress={() => openSheet('report')} />
-        {!student.has_user_account ? <Button title="Parent invite" size="sm" variant="outline" onPress={() => openSheet('invite')} /> : null}
+        <Button title="Parent links" size="sm" variant="outline" onPress={() => openSheet('parents')} />
         {!student.has_user_account ? <Button title="Create login" size="sm" variant="outline" onPress={() => openSheet('account')} /> : null}
         <Button title="Change class" size="sm" variant="outline" onPress={() => openSheet('move')} />
         <Button title="Remove" size="sm" variant="danger" onPress={() => openSheet('remove')} />
@@ -175,21 +154,7 @@ export default function StudentAdminActions({ student }: Props) {
         {webOnly.length > 0 ? <Text style={styles.hint}>{webOnly.join(', ')}: close this and use the Leaving / Transfer or Re-admit button, which shows the checklist (fees, library books, gate passes).</Text> : null}
       </FormSheet>
 
-      <FormSheet visible={open === 'invite'} title="Parent invite" onClose={close} onSubmit={code ? shareInvite : makeInvite}
-        submitLabel={code ? 'Share code' : 'Make invite code'} busy={invite.isPending} error={error}>
-        {code ? (
-          <>
-            <Text style={styles.hint}>Give this one-time code to the parent so they can create their own login for {student.name}.</Text>
-            <Text selectable style={styles.code}>{code}</Text>
-          </>
-        ) : (
-          <>
-            <Text style={styles.hint}>Makes a one-time code that links a parent or guardian login to {student.name}.</Text>
-            <Select label="Relation to the student" value={relation} options={RELATIONS} onChange={(v) => setRelation(String(v))} />
-            <Input label="Parent phone (optional)" value={phone} onChangeText={setPhone} keyboardType="phone-pad" placeholder="03001234567" />
-          </>
-        )}
-      </FormSheet>
+      <ParentLinksSheet visible={open === 'parents'} onClose={close} student={student} />
 
       <FormSheet visible={open === 'account'} title="Create login" onClose={close} onSubmit={saveAccount} submitLabel="Create login" busy={createAccount.isPending} error={error}>
         <Text style={styles.hint}>A login for {student.name} to use the student app. Give them the username and password yourself; the password is not shown again.</Text>
@@ -221,5 +186,4 @@ const styles = StyleSheet.create({
   optionTitle: { fontSize: FontSize.md, fontWeight: '700', color: Colors.text },
   optionHint: { fontSize: FontSize.sm, color: Colors.textSecondary, marginTop: 2 },
   area: { minHeight: 72, textAlignVertical: 'top' },
-  code: { fontSize: FontSize.xxl, fontWeight: '800', letterSpacing: 2, color: Colors.primary, textAlign: 'center', paddingVertical: Spacing.lg },
 });

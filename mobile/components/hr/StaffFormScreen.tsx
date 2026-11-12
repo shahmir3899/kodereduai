@@ -113,6 +113,13 @@ export default function StaffFormScreen({ id }: { id: number | null }) {
         <Select label="Employment type" value={form.employmentType} onChange={(v) => set('employmentType', String(v))} options={EMPLOYMENT_TYPES} />
         <Select label="Status" value={form.employmentStatus} onChange={(v) => set('employmentStatus', String(v))} options={EMPLOYMENT_STATUSES} />
         <DateField label="Date of joining" value={form.joined} onChange={(v) => set('joined', v)} />
+        <View style={styles.toggle}>
+          <View style={styles.flex}>
+            <Text style={styles.section}>Teaching staff</Text>
+            <Text style={styles.hint}>Shows in teacher pickers and the teaching headcount.</Text>
+          </View>
+          <Switch value={form.isTeaching} onValueChange={(v) => set('isTeaching', v)} accessibilityLabel="Teaching staff" />
+        </View>
       </Card>
 
       <Card style={styles.card}>
@@ -135,6 +142,12 @@ export default function StaffFormScreen({ id }: { id: number | null }) {
             <>
               <Input label="Username" value={form.username} onChangeText={(v) => set('username', v)} autoCapitalize="none" autoCorrect={false} />
               <Select label="Role" value={form.userRole} onChange={(v) => set('userRole', String(v))} options={accountRoles.map((r) => ({ value: r, label: roleLabel(r) }))} />
+              {form.userRole === 'MANAGER' ? (
+                <View style={styles.toggle}>
+                  <Text style={styles.hint}>Can manage finance and fees</Text>
+                  <Switch value={form.canManageFinance} onValueChange={(v) => set('canManageFinance', v)} accessibilityLabel="Can manage finance and fees" />
+                </View>
+              ) : null}
               <Input label="Password (8 or more characters)" value={form.password} onChangeText={(v) => set('password', v)} secureTextEntry autoCapitalize="none" />
               <Input label="Confirm password" value={form.confirm} onChangeText={(v) => set('confirm', v)} secureTextEntry autoCapitalize="none" />
             </>

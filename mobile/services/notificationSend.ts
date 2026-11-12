@@ -14,7 +14,6 @@ export const AUDIENCES: Choice[] = [
   { value: 'SCHOOL_ADMIN', label: 'All admins' },
   { value: 'PRINCIPAL', label: 'Principals' },
   { value: 'MANAGER', label: 'Managers' },
-  { value: 'ACCOUNTANT', label: 'Accountants' },
 ];
 
 // WhatsApp was switched off on the server in May 2026 and there is no SMS channel.

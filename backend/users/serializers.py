@@ -13,6 +13,7 @@ from django.conf import settings
 from django.contrib.auth import get_user_model
 from schools.models import School
 from core.models import LoginEvent
+from core.roles import role_config
 
 User = get_user_model()
 logger = logging.getLogger(__name__)
@@ -105,6 +106,7 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
                     'id': mem.school_id,
                     'name': mem.school.name,
                     'role': mem.role,
+                    'can_manage_finance': mem.can_manage_finance,
                     'is_default': mem.is_default,
                     'subdomain': mem.school.subdomain,
                     'timezone': mem.school.timezone,
@@ -143,6 +145,7 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
             'organization_id': user.organization_id,
             'organization_name': user.organization.name if user.organization else None,
             'schools': schools,
+            'role_config': role_config(),
         }
 
         # Login tracking is a side effect of a successful auth, not part of it —
@@ -202,16 +205,25 @@ class UserSerializer(serializers.ModelSerializer):
     """
     role_display = serializers.CharField(source='get_role_display', read_only=True)
     school_name = serializers.CharField(source='school.name', read_only=True)
+    can_manage_finance = serializers.SerializerMethodField()
 
     class Meta:
         model = User
         fields = [
             'id', 'username', 'email', 'first_name', 'last_name',
             'role', 'role_display', 'school', 'school_name',
-            'phone', 'profile_photo_url', 'is_active',
+            'phone', 'profile_photo_url', 'is_active', 'can_manage_finance',
             'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
+
+    def get_can_manage_finance(self, obj):
+        request = self.context.get('request')
+        if request is None:
+            return False
+        from core.mixins import ensure_tenant_school_id
+        school_id = ensure_tenant_school_id(request)
+        return bool(school_id) and obj.has_capability_for_school(school_id, 'can_manage_finance')
 
 
 class UserCreateSerializer(serializers.ModelSerializer):
@@ -220,12 +232,14 @@ class UserCreateSerializer(serializers.ModelSerializer):
     """
     password = serializers.CharField(write_only=True, min_length=8)
     confirm_password = serializers.CharField(write_only=True)
+    # Lives on the school membership, not on User; the view moves it there.
+    can_manage_finance = serializers.BooleanField(write_only=True, required=False, default=False)
 
     class Meta:
         model = User
         fields = [
             'username', 'email', 'password', 'confirm_password',
-            'first_name', 'last_name', 'role', 'school', 'phone'
+            'first_name', 'last_name', 'role', 'school', 'phone', 'can_manage_finance'
         ]
 
     def validate(self, attrs):
@@ -247,11 +261,13 @@ class UserUpdateSerializer(serializers.ModelSerializer):
     """
     Serializer for updating users (without password).
     """
+    can_manage_finance = serializers.BooleanField(write_only=True, required=False)
+
     class Meta:
         model = User
         fields = [
             'email', 'first_name', 'last_name',
-            'role', 'phone', 'profile_photo_url', 'is_active'
+            'role', 'phone', 'profile_photo_url', 'is_active', 'can_manage_finance'
         ]
 
 
@@ -376,18 +392,22 @@ class CurrentUserSerializer(serializers.ModelSerializer):
     school_details = serializers.SerializerMethodField()
     school_id = serializers.SerializerMethodField()
     schools = serializers.SerializerMethodField()
+    role_config = serializers.SerializerMethodField()
     organization_name = serializers.SerializerMethodField()
 
     class Meta:
         model = User
         fields = [
             'id', 'username', 'email', 'first_name', 'last_name',
-            'role', 'role_display', 'school', 'school_id', 'school_details',
+            'role', 'role_display', 'school', 'school_id', 'school_details', 'role_config',
             'phone', 'profile_photo_url', 'is_super_admin',
             'is_school_admin', 'is_staff_member',
             'organization', 'organization_name', 'schools',
             'created_at', 'last_login'
         ]
+
+    def get_role_config(self, obj):
+        return role_config()
 
     def get_school_id(self, obj):
         return obj.school_id
@@ -427,6 +447,7 @@ class CurrentUserSerializer(serializers.ModelSerializer):
                 'id': mem.school_id,
                 'name': mem.school.name,
                 'role': mem.role,
+                'can_manage_finance': mem.can_manage_finance,
                 'is_default': mem.is_default,
                 'subdomain': mem.school.subdomain,
                 'address': mem.school.address or '',

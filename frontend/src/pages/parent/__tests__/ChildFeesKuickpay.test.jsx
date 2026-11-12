@@ -9,15 +9,20 @@ vi.mock('../../../services/api', () => ({
 import { parentsApi } from '../../../services/api'
 import ChildFees from '../ChildFees'
 
+// The fee screens follow the selected academic year; rows below belong to year 7.
+vi.mock('../../../contexts/AcademicYearContext', () => ({
+  useAcademicYear: () => ({ activeAcademicYear: { id: 7, name: '2026-27' }, loading: false }),
+}))
+
 const year = new Date().getFullYear()
 const ROWS = [
-  { id: 1, month: 2, year, month_name: 'February', fee_type_name: 'Monthly', amount_due: '2000.00', amount_paid: '1000.00', status: 'PARTIAL',
+  { id: 1, fee_type: 'MONTHLY', academic_year: 7, branch: null, month: 2, year, month_name: 'February', fee_type_name: 'Monthly', amount_due: '2000.00', amount_paid: '1000.00', status: 'PARTIAL',
     payment_date: `${year}-02-10`, payment_method: 'ONLINE',
     kuickpay: { gateway: 'Kuickpay', received: '1000.00', coverage: 'PARTIAL', label: 'PKR 1,000 received via Kuickpay (partial payment)',
       reference_text: 'Ref 600001', payments: [{ reference: '600001', receipt: '00000000000000000301', date: `${year}-02-10`, amount: '1000.00' }] } },
-  { id: 2, month: 1, year, month_name: 'January', fee_type_name: 'Monthly', amount_due: '6500.00', amount_paid: '6500.00', status: 'PAID',
+  { id: 2, fee_type: 'MONTHLY', academic_year: 7, branch: null, month: 1, year, month_name: 'January', fee_type_name: 'Monthly', amount_due: '6500.00', amount_paid: '6500.00', status: 'PAID',
     payment_date: `${year}-01-12`, payment_method: 'CASH', kuickpay: null },
-  { id: 3, month: 3, year, month_name: 'March', fee_type_name: 'Monthly', amount_due: '1000.00', amount_paid: '1000.00', status: 'PAID',
+  { id: 3, fee_type: 'MONTHLY', academic_year: 7, branch: null, month: 3, year, month_name: 'March', fee_type_name: 'Monthly', amount_due: '1000.00', amount_paid: '1000.00', status: 'PAID',
     payment_date: `${year}-03-05`, payment_method: 'ONLINE',
     kuickpay: { gateway: 'Kuickpay', received: '1000.00', coverage: 'FULL', label: 'PKR 1,000 received via Kuickpay (paid in full)',
       reference_text: 'Ref 550727', payments: [{ reference: '550727', receipt: '00000000000000000226', date: `${year}-03-05`, amount: '1000.00' }] } },

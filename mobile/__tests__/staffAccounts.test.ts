@@ -27,7 +27,7 @@ describe('a new account', () => {
     expect(validateNewAccount({ ...ok, confirm: 'different1' }, ALLOWED)).toMatch(/do not match/);
   });
   it('sends what the server reads', () => {
-    expect(buildAccountPayload({ ...ok, username: ' sara_khan ' })).toEqual({ username: 'sara_khan', password: 'longenough', confirm_password: 'longenough', user_role: 'TEACHER' });
+    expect(buildAccountPayload({ ...ok, username: ' sara_khan ' })).toEqual({ username: 'sara_khan', password: 'longenough', confirm_password: 'longenough', user_role: 'TEACHER', can_manage_finance: false });
   });
 });
 

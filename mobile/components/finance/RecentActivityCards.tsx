@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import { entryAmount, entrySign, type RecentEntry } from '../../services/accountant';
-import type { TransferRow } from '../../hooks/useAccountant';
+import { entryAmount, entrySign, type RecentEntry } from '../../services/financeManager';
+import type { TransferRow } from '../../hooks/useFinanceManager';
 import { entryBadge } from '../../services/financeDashboard';
 import { formatMoney } from '../../services/feeCollect';
 import Card from '../ui/Card';

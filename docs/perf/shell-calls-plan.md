@@ -14,7 +14,7 @@ What it does for SCHOOL_ADMIN / PRINCIPAL, regardless of which URL the user land
 3. Tier B (after 1.2 s idle, 3 at a time): attendance `pending_review`, admissions `enquiries?status=NEW`,
    `examinations/exams?status=SCHEDULED`, transport / library / hostel / inventory dashboards,
    `bootstrap/leadership-academic-insights`, `tasks/ai-insights`, attendance `monthly_bulk`.
-Other roles (teacher, manager, accountant, staff, parent, student) get their own smaller preload sets.
+Other roles (teacher, manager, finance manager, staff, parent, student) get their own smaller preload sets.
 
 Other always-on calls: `auth/me`, `schools/by-subdomain` (init), `notifications/unread-count` and
 `tasks/ai-jobs` (Layout polling), `sessions/terms` (AcademicYearContext).

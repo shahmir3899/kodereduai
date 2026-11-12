@@ -3,14 +3,14 @@
 Status: **Scope agreed 2026-10-27 — awaiting go-ahead to start Phase 1. No code written.**
 
 Decision made: **one app for all roles** (credentials decide where the user lands, like the web).
-Role priority: **Admin → Teacher → Manager → Student → Parent → Driver → Others** (Principal, Accountant, Staff).
+Role priority: **Admin → Teacher → Manager → Student → Parent → Driver → Others** (Principal, Finance manager, Staff).
 
 ## 1. Where mobile stands today
 
 Snapshot from ~Feb 2026: ~55 screens / ~10.6k lines (Expo 54, expo-router, TypeScript, axios, no React Query, no tests).
 Since then web has had ~209 commits and backend ~202; mobile 9 (last real feature work Feb; Sept role rename; Oct branding/URL only).
 
-Existing route groups: `(admin)`, `(parent)`, `(student)`, `(driver)`, `(auth)`. Every non-parent/student/driver role (Teacher, Manager, Accountant, Staff, Principal) falls into `(admin)`, which exposes Finance/Students tabs to everyone — no role or module gating (`isModuleEnabled` exists but is unused).
+Existing route groups: `(admin)`, `(parent)`, `(student)`, `(driver)`, `(auth)`. Every non-parent/student/driver role (Teacher, Manager, Finance manager, Staff, Principal) falls into `(admin)`, which exposes Finance/Students tabs to everyone — no role or module gating (`isModuleEnabled` exists but is unused).
 
 Known defects to fix regardless of phase:
 - `payment-result.tsx` is a "Coming soon" stub; `parent/payment.tsx` depends on it.
@@ -28,7 +28,7 @@ Known defects to fix regardless of phase:
    - Teachers see only "Collect Payments" under Finance; Assessments/Marks Entry/Results/Report Cards are admin+teacher.
    - Paper Builder/Papers/Worksheets: admin, principal, teacher, manager.
    - Staff: no academics/attendance/finance; only self-service (HR) + messages.
-2. **Route groups by persona, not by every role**: `(admin)` (Admin/Principal/SuperAdmin), `(teacher)`, `(manager)`, `(accountant)`, `(staff)`, `(parent)`, `(student)`, `(driver)`. Each group has its own `_layout` with ≤5 bottom tabs + a "More" screen (grouped list) for the rest. A shared `navigation/` module feeds each layout.
+2. **Route groups by persona, not by every role**: `(admin)` (Admin/Principal/SuperAdmin), `(teacher)`, `(manager)`, `(finance)`, `(staff)`, `(parent)`, `(student)`, `(driver)`. Each group has its own `_layout` with ≤5 bottom tabs + a "More" screen (grouped list) for the rest. A shared `navigation/` module feeds each layout.
 3. **Route guard** in `app/index.tsx` + each group layout: wrong-role deep links redirect to the user's home (mirrors web `*AccessRoute` guards). Gate every module screen with `isModuleEnabled`.
 4. **Data layer**: add `@tanstack/react-query` (same patterns as web: `useQuery`/`useMutation`, invalidate on success), offline-tolerant caching + pull-to-refresh. Replace per-screen `useState/useEffect` fetching progressively (don't rewrite working screens in Phase 1).
 5. **Tenant/session context**: `X-School-ID` (exists), plus an `AcademicYearContext` equivalent; every class/exam/fee picker uses SessionClass per the class-scoping decision.
@@ -77,13 +77,13 @@ Payments touch real money: needs test-mode verification and your sign-off before
 Existing dashboard + journey: harden background location (permissions rationale, foreground-service notification, battery/offline resilience, resume after kill), route/stop view, student boarding attendance if web `transport/attendance` has a driver flow. Android background location store-review justification text prepared.
 
 ### Phase 7 — Other roles — ~2 sessions (BUILT 2026-10-28, uncommitted, never run on a device)
-- **Accountant:** READ-ONLY finance (`FinanceRoleAccessPermission` refuses every write for ACCOUNTANT): Home (balances, month fee summary, recent entries, overdue), Fees list, Reports (income vs expense by period), Accounts, Income, Expenses; plus Messages, Notifications, own HR (leave, attendance, payslips) and Change Password. No Collect Payments, no Academics/Management/Transport/Library/Inventory groups (the web shows those by accident of `!isStaff`; decided 2026-10-28). `buildAccountantNavigation` in `mobile/navigation/navConfig.ts`.
+- **Finance manager:** READ-ONLY finance (`FinanceRoleAccessPermission` refuses every write for finance manager): Home (balances, month fee summary, recent entries, overdue), Fees list, Reports (income vs expense by period), Accounts, Income, Expenses; plus Messages, Notifications, own HR (leave, attendance, payslips) and Change Password. No Collect Payments, no Academics/Management/Transport/Library/Inventory groups (the web shows those by accident of `!isStaff`; decided 2026-10-28). `buildFinance managerNavigation` in `mobile/navigation/navConfig.ts`.
 - **Staff:** Home, Self Service (leave + attendance tabs), Messages, More: My Payslips, My Inventory (only when something is assigned, as on the web), Notifications, Change Password. The web's Transport/Library groups for staff are left out of the phone.
 - **Principal:** admin shell. Verified: every web guard (`AdminPrincipalRoute`, `isSchoolAdminNav`) lets PRINCIPAL through, including face attendance, School Setup and Settings, so nothing is hidden on mobile. The differences are server-side only: finance hides `is_sensitive` expenses/income and non-visible accounts from PRINCIPAL and staff-level roles, and a principal cannot create another principal or admin. Mobile has no `is_sensitive` control.
 
 ### Phase 8 — Release hardening — ~2–3 sessions (BUILT 2026-10-28 except device results, store assets and the Play forms; uncommitted)
 Done: session lifecycle (refresh/logout/push token), offline and error states, UI-kit accessibility and contrast, list paging fixes, role x module nav test (`__tests__/navMatrix.test.ts`), `docs/MOBILE_QA.md`, release config, crash reporting, privacy page section for the app, parent attendance rate aligned with the student portal. Still open: device-test results, icons/screenshots/listing, Play data-safety form.
-- Full role × module matrix test using test accounts (SCHOOL_ADMIN, TEACHER, MANAGER, ACCOUNTANT, STAFF, PARENT, STUDENT, DRIVER on school 37 and demo school 42).
+- Full role × module matrix test using test accounts (SCHOOL_ADMIN, TEACHER, MANAGER, STAFF, PARENT, STUDENT, DRIVER on school 37 and demo school 42).
 - Error/offline states, empty states, session-expiry flow, accessibility (touch targets, font scaling), Urdu/RTL decision (web guide videos exist in EN/UR — see §9).
 - Performance (list virtualisation, image sizing), crash reporting, push-token lifecycle on logout.
 - Store assets: rename slug, icons/splash, privacy policy URL, data-safety form, screenshots, versioning policy, EAS production build + OTA channel strategy.
@@ -93,7 +93,7 @@ Approximate total: **23–27 sessions**, mostly sequential per phase but parts o
 
 ## 4. Screen coverage matrix (target for v1)
 
-| Area | Admin | Teacher | Manager | Student | Parent | Driver | Accountant | Staff |
+| Area | Admin | Teacher | Manager | Student | Parent | Driver | Finance manager | Staff |
 |---|---|---|---|---|---|---|---|---|
 | Dashboard | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ |
 | Attendance entry/register | ✔ | ✔ | – | view | view | boarding | – | – |
@@ -177,10 +177,10 @@ Total estimate: Phases 1–8 about 23–27 sessions + Phase 9 about 12–15 = **
 Phase 1 foundation, in this order (each reviewed with you before the next): (1) nav config + role route groups + guards with tests, (2) auth additions (school switcher, forgot password), (3) React Query + UI kit additions, (4) admin dashboard and Manual Entry attendance. No commits, pushes or PRs without your explicit approval.
 
 ### Phase 9.1 — Financial reports (BUILT 2026-10-28, uncommitted, never run on a device)
-Decided order: most-used module first (finance). One server-made PDF for web and mobile: new `FINANCE_SUMMARY` report type (`backend/reports/generators/finance.py`) via `POST /api/reports/generate-instant/`, admin/principal only; it reads the live finance views as the caller so role rules match the screens. The web Finance Dashboard export now downloads it (the jsPDF `financeReportExport.js` is removed; multi-school users now get the active school's report, not a combined one). Mobile: extended `FinanceReportsScreen` (periods incl. quarter and custom, summary, six-month trend, expense breakdown, PDF export of the finance report and the existing FEE_COLLECTION / FEE_DEFAULTERS reports), per-account ledger PDF/Excel on `AccountsScreen` (the existing `export-ledger*` endpoints, read-allowed for accountants), admin entry from the finance dashboard. New native modules `expo-file-system` and `expo-sharing`: needs a fresh APK. Migration `reports/0003` changes field choices only (not applied; no table change).
+Decided order: most-used module first (finance). One server-made PDF for web and mobile: new `FINANCE_SUMMARY` report type (`backend/reports/generators/finance.py`) via `POST /api/reports/generate-instant/`, admin/principal only; it reads the live finance views as the caller so role rules match the screens. The web Finance Dashboard export now downloads it (the jsPDF `financeReportExport.js` is removed; multi-school users now get the active school's report, not a combined one). Mobile: extended `FinanceReportsScreen` (periods incl. quarter and custom, summary, six-month trend, expense breakdown, PDF export of the finance report and the existing FEE_COLLECTION / FEE_DEFAULTERS reports), per-account ledger PDF/Excel on `AccountsScreen` (the existing `export-ledger*` endpoints, read-allowed for finance managers), admin entry from the finance dashboard. New native modules `expo-file-system` and `expo-sharing`: needs a fresh APK. Migration `reports/0003` changes field choices only (not applied; no table change).
 
 ### Phase 9.3 — Inventory (BUILT 2026-10-28, uncommitted, never run on a device)
-Admin and principal: Dashboard, Items (search, category and stock filters, add/edit, quick-add category), Stock Movements (record Purchase, Adjustment, Disposal; quick-add vendor), Assignments (assign, mark returned with condition), Reorder Prediction (last result kept 5 minutes plus a Refresh button; the server recomputes per request). Accountant: the same five screens read-only (the inventory API refuses its writes). Teacher and staff keep only their own assignments. Rules mirrored from `backend/inventory/serializers.py` in `mobile/services/inventory.ts` (sign by type, stock sufficiency, whole-number quantities). Editing an item never edits its stock; stock changes only through movements and assignments so the ledger adds up. **Barcode/SKU scanning is deferred to the end of the project (decided 2026-10-28).** No backend change.
+Admin and principal: Dashboard, Items (search, category and stock filters, add/edit, quick-add category), Stock Movements (record Purchase, Adjustment, Disposal; quick-add vendor), Assignments (assign, mark returned with condition), Reorder Prediction (last result kept 5 minutes plus a Refresh button; the server recomputes per request). Finance manager: the same five screens read-only (the inventory API refuses its writes). Teacher and staff keep only their own assignments. Rules mirrored from `backend/inventory/serializers.py` in `mobile/services/inventory.ts` (sign by type, stock sufficiency, whole-number quantities). Editing an item never edits its stock; stock changes only through movements and assignments so the ledger adds up. **Barcode/SKU scanning is deferred to the end of the project (decided 2026-10-28).** No backend change.
 
 ### Phase 9 — status (2026-10-29, all uncommitted, none run on a device)
 Built: 9.1 financial reports (above), 9.3 inventory (above), 9.4 discounts, scholarships and their assignments, fee structure (amounts per class per category, monthly and annual), 9.5 payroll (payslips with approve, mark paid, delete draft and the server PDF; salary structures; appraisals; letters with the server PDF), 9.6 exams (create, edit, sync subjects, delete; whole-class exams only), 9.7 curriculum (books, chapters, topics; scan a contents page: photo, background read, check text, outline, add), 9.8 lesson plans (write, publish; topics typed), 9.9 question bank (all types except matching and pictures) and question papers (build from the bank, reorder, marks per paper, status, server PDF), risk and analytics cards (student, attendance, marks, staff; last scan kept ten minutes plus a new-scan button), and "on the web" screens for exam types, grade scale, sessions, promotion and school setup.

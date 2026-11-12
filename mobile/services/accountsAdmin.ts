@@ -1,5 +1,5 @@
 // Transfers between accounts and closing a month; port of the Transfers tab, TransferModal and the
-// Close Month dialog on the web Accounts page. Admin and principal only (accountants are read-only).
+// Close Month dialog on the web Accounts page. Admin and principal only (finance managers are read-only).
 // Pure logic, no React Native imports.
 
 export interface AccountOption { id: number; name: string; is_active?: boolean; school?: number | null }

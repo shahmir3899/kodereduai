@@ -45,7 +45,7 @@ describe('Staff fee table: received via Kuickpay', () => {
     expect(document.body.textContent).not.toContain('Bilal Ahmed received via Kuickpay')
   })
 
-  it('shows the label read-only too (accountant and teacher views)', () => {
+  it('shows the label read-only too (finance manager and teacher views)', () => {
     renderTable({ canWrite: false })
     expect(screen.getAllByText('PKR 6,500 received via Kuickpay (paid in full)').length).toBeGreaterThan(0)
   })

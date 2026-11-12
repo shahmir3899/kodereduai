@@ -212,8 +212,8 @@ class TestInventory:
         assert 'error' in _run(seed_data, 'record_stock_in', lines=[{'item_name': 'Chair', 'quantity': 1, 'type': 'ISSUE'}])
         assert 'error' in _run(seed_data, 'record_stock_in', vendor_name='nobody', lines=[{'item_name': 'Chair', 'quantity': 1}])
 
-    def test_accountant_and_teacher_refused(self, seed_data, ops, inv):
-        for u in ('accountant', 'teacher'):
+    def test_finance_manager_and_teacher_refused(self, seed_data, ops, inv):
+        for u in ('finance_manager', 'teacher'):
             assert 'error' in _run(seed_data, 'record_stock_in', u, lines=[{'item_name': 'Chair', 'quantity': 1}])
             assert 'error' in _run(seed_data, 'get_inventory_stock', u)
 

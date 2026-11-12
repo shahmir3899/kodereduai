@@ -46,7 +46,7 @@ The `/dashboard` route uses **DashboardRouter.jsx** to render a role-specific da
 | PRINCIPAL | DashboardPage.jsx (variant="principal") | Same as admin but quick actions show Lesson Plans, Examinations, Class Management |
 | TEACHER | TeacherDashboard.jsx | 4 KPIs (Classes Today with "Now" indicator, Attendance to Mark, Pending Grading, Upcoming Exams), timetable with current period highlighting, Exams & Marks Entry, Lesson Plans progress bar, Quick Actions, NotificationsFeed |
 | MANAGER | ManagerDashboard.jsx | 6 HR KPIs (2 rows) + 4 content KPIs (Lesson Plans, Active Assignments, Question Bank, Exam Papers), department breakdown bars, pending leave with inline approve/reject, top absentees, payroll overview, Quick Actions (HR + content links), NotificationsFeed |
-| ACCOUNTANT | AccountantDashboard.jsx | 4 KPIs, fee collection by class (color-coded), recent transactions, overdue fees, income vs expense bars, per-account balances, Quick Actions, NotificationsFeed |
+| finance manager | FinanceManagerDashboard.jsx | 4 KPIs, fee collection by class (color-coded), recent transactions, overdue fees, income vs expense bars, per-account balances, Quick Actions, NotificationsFeed |
 | STAFF | StaffDashboard.jsx | 4 KPIs (Attendance, Leave, Salary, Notifications), mini attendance calendar, leave balance breakdown, recent payslips, assigned inventory, NotificationsFeed |
 | DRIVER | DriverDashboard.jsx | HR self-service section (attendance calendar, leave balance, payslips — same pattern as StaffDashboard) plus a Transport section (assigned vehicle, route, stops) | GET attendance/, leave-applications/, payslips/, transport my-vehicle/, route/{id}/, stops/ |
 

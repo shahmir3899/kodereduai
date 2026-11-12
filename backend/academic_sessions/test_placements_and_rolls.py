@@ -147,7 +147,7 @@ class TestRenumber:
         assert post(api, sections, self.url(a), {'action': 'apply', 'order': 'manual', 'student_ids': ids}).status_code == 200
         assert StudentEnrollment.objects.get(student_id=ids[0]).roll_number == '1'
 
-    @pytest.mark.parametrize('token', ['teacher', 'manager', 'accountant'])
+    @pytest.mark.parametrize('token', ['teacher', 'manager', 'finance_manager'])
     def test_only_admins_can_renumber(self, api, sections, token):
         assert post(api, sections, self.url(sections['section_a']), {'action': 'apply'}, token=token).status_code == 403
 

@@ -22,7 +22,7 @@ from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 from django.http import FileResponse
 
-from core.permissions import IsSchoolAdmin, IsSchoolAdminOrAccountant, FinanceRoleAccessPermission, HasSchoolAccess, get_effective_role, ModuleAccessMixin, ADMIN_ROLES, _is_data_restricted_user, get_teacher_class_scope, get_teacher_master_only_class_scope, get_teacher_session_class_scope, _get_session_class_student_ids
+from core.permissions import IsSchoolAdmin, IsSchoolAdminOrFinanceManager, FinanceRoleAccessPermission, HasSchoolAccess, get_effective_role, ModuleAccessMixin, ADMIN_ROLES, _is_data_restricted_user, get_teacher_class_scope, get_teacher_master_only_class_scope, get_teacher_session_class_scope, _get_session_class_student_ids
 from core.mixins import TenantQuerySetMixin, ensure_tenant_schools, ensure_tenant_school_id
 from core.class_scope import resolve_class_scope
 from students.models import Student, Class
@@ -3193,7 +3193,7 @@ class AccountViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
             'closed_at': closing.closed_at.isoformat(),
         })
 
-    @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated, IsSchoolAdminOrAccountant, HasSchoolAccess])
+    @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated, IsSchoolAdminOrFinanceManager, HasSchoolAccess])
     def closings(self, request):
         """List all monthly closings for the active school. Read-only: closing/reopening stays admin-only."""
         school_id = _resolve_school_id(request)
@@ -3228,9 +3228,9 @@ class AccountViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
         return Response({'detail': f'Month {year}/{month:02d} reopened.', 'year': year, 'month': month})
 
     @action(detail=False, methods=['get'], url_path='recent_entries',
-            permission_classes=[IsAuthenticated, IsSchoolAdminOrAccountant, HasSchoolAccess])
+            permission_classes=[IsAuthenticated, IsSchoolAdminOrFinanceManager, HasSchoolAccess])
     def recent_entries(self, request):
-        """Return recent finance entries across all transaction types. Admin+ and Accountant (dashboard feed)."""
+        """Return recent finance entries across all transaction types. Admin+ and Finance manager (dashboard feed)."""
         school_id = _resolve_school_id(request)
         if not school_id:
             return Response({'detail': 'No school associated.'}, status=400)

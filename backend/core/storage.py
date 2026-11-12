@@ -70,6 +70,39 @@ def _process_profile_photo(file_content: bytes, max_dimension: int = 480, qualit
     return output.getvalue()
 
 
+# A photo already at or under these limits (the web app compresses to 2000px / ~0.8
+# before upload) is stored as sent instead of being re-encoded, which would only
+# cost it a second round of JPEG loss.
+STORED_IMAGE_MAX_BYTES = 600 * 1024
+STORED_IMAGE_QUALITY = 78
+
+
+def _compress_if_needed(file_content: bytes, content_type: str, max_dimension: int):
+    """Shrinks an oversized or non-JPEG image with the same Pillow routine used for
+    profile photos (EXIF rotation, RGB, long-edge resize, JPEG). Returns
+    (bytes, content_type). Phones send the original camera photo (several MB); this
+    keeps what is stored, and what Vision downloads, small. Raises ValueError for a
+    file that is not a readable image so the caller can report it."""
+    import io
+    from PIL import Image, UnidentifiedImageError
+
+    try:
+        with Image.open(io.BytesIO(file_content)) as probe:
+            width, height = probe.size
+            image_format = probe.format
+    except (UnidentifiedImageError, OSError):
+        raise ValueError('The file is not a readable image.')
+
+    already_small = (
+        image_format == 'JPEG'
+        and max(width, height) <= max_dimension
+        and len(file_content) <= STORED_IMAGE_MAX_BYTES
+    )
+    if already_small:
+        return file_content, 'image/jpeg'
+    return _process_profile_photo(file_content, max_dimension, STORED_IMAGE_QUALITY), 'image/jpeg'
+
+
 class SupabaseStorageService:
     """
     Service for uploading files to Supabase Storage.
@@ -109,7 +142,7 @@ class SupabaseStorageService:
         """Check if Supabase is properly configured."""
         return bool(self.url and self.key and self.bucket)
 
-    def upload_file(self, file, folder: str, filename: str) -> str:
+    def upload_file(self, file, folder: str, filename: str, max_image_dimension: int = None) -> str:
         """
         Generic upload for callers that don't fit one of the purpose-specific
         methods below (e.g. exam-paper OCR image capture). Added because
@@ -135,20 +168,20 @@ class SupabaseStorageService:
             file_content = file.read()
             content_type = getattr(file, 'content_type', 'application/octet-stream')
 
+            if max_image_dimension:
+                file_content, content_type = _compress_if_needed(
+                    file_content, content_type, max_image_dimension,
+                )
+
             logger.info(f"Uploading file: {path} ({len(file_content)} bytes)")
 
-            # Try to remove existing file first (may not exist, that's OK) --
-            # matches upload_school_asset/_upload_profile_photo so a re-upload to
-            # the same path overwrites cleanly instead of erroring on conflict.
-            try:
-                self.client.storage.from_(self.bucket).remove([path])
-            except Exception:
-                pass
-
+            # upsert overwrites an existing object in the same call. The old
+            # remove-then-upload sent an extra DELETE on every upload, and for
+            # timestamped paper names that DELETE never had anything to remove.
             self.client.storage.from_(self.bucket).upload(
                 path=path,
                 file=file_content,
-                file_options={"content-type": content_type}
+                file_options={"content-type": content_type, "upsert": "true"}
             )
 
             public_url = self.client.storage.from_(self.bucket).get_public_url(path)

@@ -9,6 +9,8 @@ import PaperStructureBuilder, { calculateAllocatedMarks } from './PaperStructure
 import { QUESTION_TYPES } from './QuestionBankPicker'
 import { useAuth } from '../../contexts/AuthContext'
 import Spinner from '../../components/ui/Spinner'
+import { compressImageForUpload } from '../../utils/compressImageForUpload'
+import PaperPageViewer from './PaperPageViewer'
 import {
   MAX_PAGES,
   UPLOAD_CONCURRENCY,
@@ -67,6 +69,10 @@ export default function ImageCapturePaperTab({ classId, subjectId, readOnly = fa
   const [locals, setLocals] = useState({})
   const [review, setReview] = useState(null) // { header, structure, questions, paperFields, meta }
   const [reviewStep, setReviewStep] = useState(1)
+  // Photo beside the review: which page is shown, which question is selected, and whether it is on.
+  const [activePage, setActivePage] = useState(1)
+  const [activeQuestionId, setActiveQuestionId] = useState(null)
+  const [showPhoto, setShowPhoto] = useState(true)
 
   const queueRef = useRef([])
   const activeCountRef = useRef(0)
@@ -138,7 +144,11 @@ export default function ImageCapturePaperTab({ classId, subjectId, readOnly = fa
       meta: {
         marksCheck: groupStatus.result.marks_check,
         lowConfidence: groupStatus.result.low_confidence_count,
+        warning: groupStatus.result.warning || null,
         uploadIds: groupStatus.pages.map((p) => p.upload_id).filter(Boolean),
+        pages: groupStatus.pages
+          .filter((p) => p.image_url)
+          .map((p) => ({ page_number: p.page_number, image_url: p.image_url })),
       },
     })
     setReviewStep(1)
@@ -173,25 +183,13 @@ export default function ImageCapturePaperTab({ classId, subjectId, readOnly = fa
           pump()
         })
 
-      import('compressorjs')
-        .then(({ default: Compressor }) => {
-          new Compressor(file, {
-            quality: 0.8,
-            maxWidth: 2000,
-            maxHeight: 2000,
-            mimeType: 'image/jpeg',
-            success: (result) => send(new File([result], file.name, { type: 'image/jpeg' })),
-            error: () => {
-              patchLocal(pageNumber, { state: 'failed', error: 'Could not prepare this image' })
-              activeCountRef.current -= 1
-              showError('Error compressing image')
-              pump()
-            },
-          })
-        })
+      // The shared uploader helper (also used by document uploads): 2000px, JPEG, EXIF stripped.
+      compressImageForUpload(file)
+        .then((compressed) => send(compressed))
         .catch(() => {
           patchLocal(pageNumber, { state: 'failed', error: 'Could not prepare this image' })
           activeCountRef.current -= 1
+          showError('Error compressing image')
           pump()
         })
     }
@@ -246,7 +244,8 @@ export default function ImageCapturePaperTab({ classId, subjectId, readOnly = fa
       // Not found on the paper: the builder asks for these before anything is saved.
       detected: { class_label: review.header.class_label || '', subject_label: review.header.subject_label || '' },
       structure: review.structure,
-      questions: review.questions.map(({ needs_review: _flag, ...question }) => question),
+      // Review-only fields (type guess, photo position) stay out of the paper builder's slots.
+      questions: review.questions.map(({ needs_review: _flag, page_number: _page, box: _box, uncertain: _unsure, ...question }) => question),
     })
   }
 
@@ -344,11 +343,26 @@ export default function ImageCapturePaperTab({ classId, subjectId, readOnly = fa
     )
   }
 
+  const photoPages = review.meta?.pages || []
+  const photoOn = showPhoto && photoPages.length > 0
+  const selectedQuestion = review.questions.find((q) => q.local_id === activeQuestionId) || null
+  const viewerBox = selectedQuestion?.box ? { ...selectedQuestion.box, page_number: selectedQuestion.page_number } : null
+  const selectQuestion = (q) => {
+    setActiveQuestionId(q.local_id)
+    if (q.page_number) setActivePage(q.page_number)
+  }
+
   const capturedMarks = calculateAllocatedMarks(review.structure)
   const detectedTotal = Number(review.paperFields.total_marks) || null
 
   return (
-    <div className="space-y-5">
+    <div className={photoOn ? 'grid grid-cols-1 lg:grid-cols-2 gap-4 items-start' : ''}>
+    {photoOn && (
+      <div className="lg:sticky lg:top-2 h-[70vh] lg:h-[calc(100vh-6rem)]">
+        <PaperPageViewer pages={photoPages} activePage={activePage} onPageChange={setActivePage} box={viewerBox} />
+      </div>
+    )}
+    <div className="space-y-5 min-w-0">
       <div className="flex flex-wrap items-center gap-2">
         {REVIEW_STEPS.map((step) => (
           <button
@@ -360,11 +374,19 @@ export default function ImageCapturePaperTab({ classId, subjectId, readOnly = fa
             {step.id}. {step.label}
           </button>
         ))}
-        <button type="button" onClick={startOver} className="ml-auto text-sm text-gray-600 hover:text-gray-800 underline">Start over</button>
+        {photoPages.length > 0 && (
+          <button type="button" onClick={() => setShowPhoto((v) => !v)} className="ml-auto text-sm text-gray-600 hover:text-gray-800 underline">
+            {showPhoto ? 'Hide photo' : 'Show photo'}
+          </button>
+        )}
+        <button type="button" onClick={startOver} className={`${photoPages.length > 0 ? '' : 'ml-auto '}text-sm text-gray-600 hover:text-gray-800 underline`}>Start over</button>
       </div>
 
       {reviewStep === 1 && (
         <div className="space-y-3">
+          {review.meta?.warning && (
+            <p className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">{review.meta.warning}</p>
+          )}
           <p className="text-sm text-gray-700">
             {review.questions.length} question{review.questions.length === 1 ? '' : 's'} read from {totalPages} page{totalPages === 1 ? '' : 's'}, in paper order.
             {lowConfidenceLeft > 0
@@ -375,10 +397,14 @@ export default function ImageCapturePaperTab({ classId, subjectId, readOnly = fa
             {review.questions.map((q, i) => (
               <li
                 key={q.local_id}
-                className={`flex flex-col sm:flex-row sm:items-center gap-2 p-3 rounded-lg border ${q.needs_review ? 'border-amber-300 bg-amber-50' : 'border-gray-200 bg-white'}`}
+                onClick={() => selectQuestion(q)}
+                aria-current={q.local_id === activeQuestionId ? 'true' : undefined}
+                className={`flex flex-col sm:flex-row sm:items-center gap-2 p-3 rounded-lg border cursor-pointer ${q.local_id === activeQuestionId ? 'ring-2 ring-blue-500 ' : ''}${q.needs_review ? 'border-amber-300 bg-amber-50' : 'border-gray-200 bg-white'}`}
               >
                 <span className="text-sm text-gray-500 w-8 shrink-0">{i + 1}.</span>
-                <span className="flex-1 min-w-0 text-sm text-gray-800">{snippet(q.question_text) || <em className="text-gray-400">No text read</em>}</span>
+                <span className="flex-1 min-w-0 text-sm text-gray-800 whitespace-pre-line">
+                  {(q.local_id === activeQuestionId ? q.question_text : snippet(q.question_text)) || <em className="text-gray-400">No text read</em>}
+                </span>
                 <span className="text-xs text-gray-500 shrink-0">{q.marks} mark{Number(q.marks) === 1 ? '' : 's'}</span>
                 <select
                   aria-label={`Type of question ${i + 1}`}
@@ -388,7 +414,9 @@ export default function ImageCapturePaperTab({ classId, subjectId, readOnly = fa
                 >
                   {QUESTION_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
                 </select>
+                {q.question_image_url && <img src={q.question_image_url} alt={`Drawing for question ${i + 1}`} className="h-12 rounded border border-gray-200 shrink-0" />}
                 {q.needs_review && <span className="text-xs text-amber-800 shrink-0">Check type</span>}
+                {q.uncertain.length > 0 && <span className="text-xs text-amber-800 shrink-0" title={q.uncertain.join('; ')}>Check digits</span>}
               </li>
             ))}
           </ol>
@@ -470,6 +498,7 @@ export default function ImageCapturePaperTab({ classId, subjectId, readOnly = fa
           </div>
         </div>
       )}
+    </div>
     </div>
   )
 }

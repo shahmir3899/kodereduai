@@ -48,7 +48,7 @@ def test_return_requires_graded_submission(seed_data, api, submission):
 def test_non_teaching_role_cannot_grade(seed_data, api, submission):
     response = api.patch(
         f'/api/lms/submissions/{submission.id}/grade/', {'marks_obtained': 10},
-        seed_data['tokens']['accountant'], seed_data['SID_A'],
+        seed_data['tokens']['staff'], seed_data['SID_A'],
     )
     assert response.status_code == 403
     submission.refresh_from_db()

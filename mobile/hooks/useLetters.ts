@@ -20,5 +20,6 @@ export function useLetterActions() {
     update: useMutation({ mutationFn: ({ id, data }: { id: number; data: object }) => lettersApi.updateLetter(id, data), onSuccess: refresh }),
     remove: useMutation({ mutationFn: (id: number) => lettersApi.deleteLetter(id), onSuccess: refresh }),
     prefill: useMutation({ mutationFn: (d: object) => lettersApi.prefill(d) }),
+    aiDraft: useMutation({ mutationFn: (d: object) => lettersApi.aiDraft(d) }),
   };
 }

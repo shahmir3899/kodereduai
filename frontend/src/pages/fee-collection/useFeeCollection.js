@@ -23,7 +23,7 @@ export function useFeeCollection({ month, year, classFilter, statusFilter, searc
     staleTime: 0,
   })
 
-  // my_classes is a manual-attendance endpoint (admin + teacher only): accountants got a 403 and an
+  // my_classes is a manual-attendance endpoint (admin + teacher only): finance managers got a 403 and an
   // empty class filter. Only teachers need the assigned-classes scope; everyone else gets the school's classes.
   const { effectiveRole, activeSchool } = useAuth()
   const isTeacher = effectiveRole === 'TEACHER'

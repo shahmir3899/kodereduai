@@ -12,7 +12,7 @@ vi.mock('../../../contexts/AuthContext', () => ({
   useAuth: () => ({
     user: { id: 1, role: 'SCHOOL_ADMIN', schools: [{ id: 1 }] },
     activeSchool: { id: 1, name: 'Test School' },
-    isStaffMember: false, isPrincipal: false, isAccountant: false,
+    isStaffMember: false, isPrincipal: false, canManageFinance: false,
   }),
 }))
 vi.mock('../../../hooks/useBackgroundTask', () => ({ useBackgroundTask: () => ({ isSubmitting: false, submit: vi.fn() }) }))

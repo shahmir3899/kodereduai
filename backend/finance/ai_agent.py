@@ -135,7 +135,7 @@ class FinanceAIAgent:
 
     def __init__(self, school_id, role=None):
         """`role` is the asking user's effective role. Roles the Finance screens treat as
-        data-restricted (principal and staff-level roles, accountants included) never see
+        data-restricted (principal and staff-level roles, finance managers included) never see
         sensitive entries or accounts hidden from staff - through chat either. role=None keeps
         the unrestricted behaviour for internal callers."""
         from core.permissions import STAFF_LEVEL_ROLES

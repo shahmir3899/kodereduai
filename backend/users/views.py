@@ -264,6 +264,8 @@ class UserViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
         if role not in allowed_roles:
             raise ValidationError({'role': f'You cannot create users with the {role} role.'})
 
+        can_manage_finance = bool(serializer.validated_data.pop('can_manage_finance', False)) and role == 'MANAGER'
+
         if school_id:
             new_user = serializer.save(school_id=school_id)
         else:
@@ -275,7 +277,8 @@ class UserViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
             UserSchoolMembership.objects.get_or_create(
                 user=new_user,
                 school_id=school_id,
-                defaults={'role': role, 'is_default': True, 'is_active': True},
+                defaults={'role': role, 'is_default': True, 'is_active': True,
+                          'can_manage_finance': can_manage_finance},
             )
 
     def _assert_can_manage(self, target):
@@ -302,6 +305,7 @@ class UserViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
         self._assert_can_manage(target)
 
         new_role = serializer.validated_data.get('role')
+        finance_flag = serializer.validated_data.pop('can_manage_finance', None)
         if new_role and new_role != target.role and not self.request.user.is_super_admin:
             if new_role not in ROLE_HIERARCHY.get(get_effective_role(self.request), []):
                 raise ValidationError({'role': f'You cannot assign the {new_role} role.'})
@@ -310,11 +314,19 @@ class UserViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
 
         # Permissions read the school membership's role first, so a role edit that only
         # touched User.role changed nothing for that school.
-        if new_role:
+        if new_role or finance_flag is not None:
             from schools.models import UserSchoolMembership
             school_id = ensure_tenant_school_id(self.request) or self.request.user.school_id
             if school_id:
-                UserSchoolMembership.objects.filter(user=user, school_id=school_id).update(role=new_role)
+                mem = UserSchoolMembership.objects.filter(user=user, school_id=school_id).first()
+                if mem:
+                    if new_role:
+                        mem.role = new_role
+                    if finance_flag is not None or new_role:
+                        # The flag only means something on a MANAGER; clear it on any other role.
+                        keep = mem.can_manage_finance if finance_flag is None else finance_flag
+                        mem.can_manage_finance = bool(keep) and mem.role == 'MANAGER'
+                    mem.save(update_fields=['role', 'can_manage_finance'])
 
     def perform_destroy(self, instance):
         """Deactivate instead of deleting: the user's history (attendance marks,

@@ -88,7 +88,10 @@ export default function StudentAttendance() {
   const lateCount = summary.late_count ?? summary.late ?? Object.values(dayStatusMap).filter(s => s === 'LATE').length
   const leaveCount = summary.leave_count ?? summary.leave ?? Object.values(dayStatusMap).filter(s => s === 'LEAVE').length
   const totalDays = summary.total_days ?? ((presentCount + absentCount + lateCount + leaveCount) || 0)
-  const attendanceRate = totalDays > 0 ? Math.round(((presentCount + lateCount) / totalDays) * 100) : 0
+  // The backend's rate (late and leave count as present) is the one the dashboard shows too.
+  const attendanceRate = summary.rate != null
+    ? Math.round(summary.rate)
+    : totalDays > 0 ? Math.round(((presentCount + lateCount + leaveCount) / totalDays) * 100) : 0
 
   // Year options
   const currentYear = now.getFullYear()

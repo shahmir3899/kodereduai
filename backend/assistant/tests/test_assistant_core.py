@@ -75,7 +75,7 @@ class TestRegistry:
     def test_tool_visibility_follows_role(self, seed_data):
         _enable_finance(seed_data)
         assert registry.tools_for(_ctx(seed_data, 'admin'))
-        assert registry.tools_for(_ctx(seed_data, 'accountant'))
+        assert registry.tools_for(_ctx(seed_data, 'finance_manager'))
         assert _finance(_ctx(seed_data, 'teacher')) == []
         assert _finance(_ctx(seed_data, 'staff')) == []
 
@@ -94,7 +94,7 @@ class TestRegistry:
 
     def test_execute_runs_for_allowed_role_and_audits(self, seed_data):
         _enable_finance(seed_data)
-        result = registry.execute(_ctx(seed_data, 'accountant'), 'get_balance', {})
+        result = registry.execute(_ctx(seed_data, 'finance_manager'), 'get_balance', {})
         assert 'data' in result, result
         log = AgentAuditLog.objects.get(tool_name='get_balance')
         assert log.kind == AgentAuditLog.Kind.READ and log.ok

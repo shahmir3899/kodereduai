@@ -47,7 +47,7 @@
         "5.1",
         "5.5"
       ],
-      "ACCOUNTANT": [
+      "FINANCE": [
         "1.3",
         "7.1",
         "7.3",
@@ -124,7 +124,7 @@
                   "Academics content, curriculum, assignment drafts and classes"
                 ],
                 [
-                  "Accountant",
+                  "Manager with finance access",
                   "Fees, expenses and reports"
                 ],
                 [
@@ -1670,7 +1670,7 @@
           "roles": [
             "SCHOOL_ADMIN",
             "PRINCIPAL",
-            "ACCOUNTANT",
+            "FINANCE",
             "TEACHER"
           ]
         },
@@ -1934,7 +1934,7 @@
       "roles": [
         "SCHOOL_ADMIN",
         "PRINCIPAL",
-        "ACCOUNTANT"
+        "FINANCE"
       ],
       "module": "finance"
     },
@@ -2299,7 +2299,7 @@
           "roles": [
             "TEACHER",
             "MANAGER",
-            "ACCOUNTANT",
+            "FINANCE",
             "STAFF",
             "DRIVER"
           ]
@@ -2634,7 +2634,7 @@
         "SCHOOL_ADMIN",
         "PRINCIPAL",
         "TEACHER",
-        "ACCOUNTANT",
+        "FINANCE",
         "STAFF",
         "DRIVER"
       ],
@@ -3052,7 +3052,7 @@
             "SCHOOL_ADMIN",
             "PRINCIPAL",
             "MANAGER",
-            "ACCOUNTANT",
+            "FINANCE",
             "TEACHER",
             "STAFF",
             "DRIVER"
@@ -3873,14 +3873,14 @@
               "rows": [
                 [
                   "School Admin",
-                  "Principal, Manager, Accountant, Teacher, Staff, Driver"
+                  "Principal, Manager, Teacher, Staff, Driver"
                 ],
                 [
                   "Principal",
-                  "Manager, Accountant, Teacher, Staff, Driver"
+                  "Manager, Teacher, Staff, Driver"
                 ],
                 [
-                  "Manager, Accountant, Teacher, Staff, Driver",
+                  "Manager, Teacher, Staff, Driver",
                   "Nobody"
                 ],
                 [
@@ -3999,7 +3999,7 @@
             },
             {
               "type": "body_text",
-              "text": "When you add a staff member, tick 'Create User Account' and choose their role (Teacher, Staff, Manager, Accountant or Driver) to give them a login at the same time."
+              "text": "When you add a staff member, tick 'Create User Account' and choose their role (Teacher, Staff, Manager or Driver) to give them a login at the same time. For a Manager who handles fees, also tick 'Can manage finance and fees'."
             }
           ]
         },
@@ -4058,14 +4058,14 @@
           "content": [
             {
               "type": "body_text",
-              "text": "The dashboard lists what needs attention: red for urgent, amber for important, blue for reminders. Each one links to the page where you can act. Each role sees only its own area, so teachers see attendance and accountants see finance."
+              "text": "The dashboard lists what needs attention: red for urgent, amber for important, blue for reminders. Each one links to the page where you can act. Each role sees only its own area, so teachers see attendance and Managers with finance access see finance."
             }
           ],
           "roles": [
             "SCHOOL_ADMIN",
             "PRINCIPAL",
             "TEACHER",
-            "ACCOUNTANT"
+            "FINANCE"
           ]
         },
         {
@@ -4207,13 +4207,13 @@
           "content": [
             {
               "type": "body_text",
-              "text": "Store items, stock movements and who holds what. Available to School Admins, Principals and Accountants; only Admins and Principals can change things."
+              "text": "Store items, stock movements and who holds what. Available to School Admins, Principals and Managers with finance access; only Admins and Principals can change things."
             }
           ],
           "roles": [
             "SCHOOL_ADMIN",
             "PRINCIPAL",
-            "ACCOUNTANT"
+            "FINANCE"
           ]
         },
         {
@@ -4234,7 +4234,7 @@
           "roles": [
             "SCHOOL_ADMIN",
             "PRINCIPAL",
-            "ACCOUNTANT"
+            "FINANCE"
           ]
         },
         {
@@ -4348,7 +4348,7 @@
             },
             {
               "type": "body_text",
-              "text": "This page is for School Admins and Principals. Teachers and Staff see only their own items (see 'My Assigned Items'), and Accountants can only view."
+              "text": "This page is for School Admins and Principals. Teachers and Staff see only their own items (see 'My Assigned Items'), and Managers with finance access can only view."
             }
           ],
           "roles": [
@@ -4375,7 +4375,7 @@
           "roles": [
             "SCHOOL_ADMIN",
             "PRINCIPAL",
-            "ACCOUNTANT"
+            "FINANCE"
           ]
         },
         {
@@ -4402,7 +4402,7 @@
       "roles": [
         "SCHOOL_ADMIN",
         "PRINCIPAL",
-        "ACCOUNTANT",
+        "FINANCE",
         "TEACHER",
         "STAFF"
       ],

@@ -95,7 +95,7 @@ class TestStatusScope:
         assert resp.status_code == 200 and resp.json()['id'] == ctx['withdrawn'].id
 
     def test_every_role_can_use_the_left_view_within_its_own_scope(self, api, ctx):
-        for role in ('principal', 'accountant', 'staff'):
+        for role in ('principal', 'finance_manager', 'staff'):
             resp = api.get(f"{URL}?status_scope=left&academic_year={ctx['academic_year'].id}",
                            ctx['tokens'][role], ctx['SID_A'])
             assert resp.status_code in (200, 403), (role, resp.status_code)

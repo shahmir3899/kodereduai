@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import type { AccountBalance } from '../../services/accountant';
+import type { AccountBalance } from '../../services/financeManager';
 import { accountTypeTone, type BalanceGroup } from '../../services/financeDashboard';
 import { formatMoney } from '../../services/feeCollect';
 import Card from '../ui/Card';

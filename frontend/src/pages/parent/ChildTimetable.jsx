@@ -5,7 +5,8 @@ import { parentsApi } from '../../services/api'
 import Spinner from '../../components/ui/Spinner'
 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
-const DAYS_SHORT = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+const DAY_BY_CODE = { MON: 'Monday', TUE: 'Tuesday', WED: 'Wednesday', THU: 'Thursday', FRI: 'Friday', SAT: 'Saturday' }
+const DAYS_SHORT =['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
 const SUBJECT_COLORS = [
   'bg-blue-50 border-blue-200 text-blue-800',
@@ -43,8 +44,10 @@ export default function ChildTimetable() {
     enabled: !!studentId,
   })
 
+  // The endpoint returns a plain list. Check that first: on an array, `.entries` is the built-in
+  // Array method, which is truthy and not iterable with forEach, so the page used to crash.
   const timetable = timetableData?.data
-  const entries = timetable?.entries || timetable?.slots || (Array.isArray(timetable) ? timetable : [])
+  const entries = Array.isArray(timetable) ? timetable : []
 
   // Build structured data: { slot_time: { day: entry } }
   const subjectColorMap = {}
@@ -52,7 +55,8 @@ export default function ChildTimetable() {
   const allSlotTimes = new Set()
 
   entries.forEach((entry) => {
-    const day = entry.day || entry.day_of_week || ''
+    // The API names days by code (MON..SAT) with the full name in day_display; the grid uses full names.
+    const day = entry.day_display || DAY_BY_CODE[entry.day] || entry.day || ''
     const startTime = entry.start_time || entry.slot_start || ''
     const endTime = entry.end_time || entry.slot_end || ''
     const timeKey = `${startTime}-${endTime}`

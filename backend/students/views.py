@@ -22,7 +22,7 @@ from django.db.models.functions import Coalesce, Concat
 from core.permissions import (
     IsSchoolAdmin, CanViewStudentRecords, HasSchoolAccess, ModuleAccessMixin,
     IsStudent, IsStudentOrAdmin, CanManageStudentPhoto, CanEditStudentRecord,
-    CanCreateStudentAccount, get_effective_role, ADMIN_ROLES, ROLE_HIERARCHY,
+    CanCreateStudentAccount, get_effective_role, has_finance_access, ADMIN_ROLES, ROLE_HIERARCHY,
     get_teacher_combined_scope, get_teacher_master_only_class_scope, get_teacher_session_class_scope,
     _get_session_class_student_ids,
 )
@@ -1414,7 +1414,7 @@ class StudentViewSet(ModuleAccessMixin, TenantQuerySetMixin, AuditedDeleteMixin,
         from .ai_service import Student360Service, can_see_fees
         service = Student360Service(student.school_id, student.id)
         # Teachers and other non-finance roles get the profile without any fee detail.
-        profile = service.generate_profile(include_fees=can_see_fees(get_effective_role(request)))
+        profile = service.generate_profile(include_fees=can_see_fees(get_effective_role(request), has_finance_access(request)))
         return Response(profile)
 
 
@@ -1573,7 +1573,7 @@ class StudentDashboardView(APIView):
                     'start_time': str(e.slot.start_time),
                     'end_time': str(e.slot.end_time),
                     'subject': e.subject.name if e.subject else None,
-                    'teacher': e.teacher.user.get_full_name() if e.teacher else None,
+                    'teacher': (e.teacher.user.get_full_name() if e.teacher.user_id else e.teacher.full_name) if e.teacher else None,  # staff without a login have no user
                     'room': e.room,
                 }
                 for e in entries
@@ -1639,8 +1639,8 @@ class StudentAttendanceView(APIView):
                 'absent': counts['absent'],
                 'late': counts['late'],
                 'leave': counts['leave'],
-                # Leave counts as present, the same rule as the profile and the risk assessment.
-                'rate': round((counts['present'] + counts['leave']) / total * 100, 1) if total > 0 else 0,
+                # Late and leave count as present, the same rule as the profile and the risk assessment.
+                'rate': round((counts['present'] + counts['late'] + counts['leave']) / total * 100, 1) if total > 0 else 0,
             },
         })
 
@@ -1682,7 +1682,7 @@ class StudentTimetableView(APIView):
                 'day': e.day,
                 'slot_id': e.slot_id,
                 'subject': e.subject.name if e.subject else None,
-                'teacher': e.teacher.user.get_full_name() if e.teacher else None,
+                'teacher': (e.teacher.user.get_full_name() if e.teacher.user_id else e.teacher.full_name) if e.teacher else None,  # staff without a login have no user
                 'room': e.room,
             }
             for e in entries
@@ -1733,6 +1733,7 @@ class StudentTransportView(APIView):
             return Response({'error': 'No student profile linked.'}, status=404)
 
         from transport.models import TransportAssignment
+        from transport.map_data import route_map
 
         assignment = TransportAssignment.objects.filter(
             student=student, is_active=True,
@@ -1767,6 +1768,7 @@ class StudentTransportView(APIView):
                 'driver_name': vehicle.driver_name,
                 'driver_phone': vehicle.driver_phone,
             } if vehicle else None,
+            'map': route_map(route, stop),
         })
 
 

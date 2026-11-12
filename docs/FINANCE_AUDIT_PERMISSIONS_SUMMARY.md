@@ -176,19 +176,19 @@ const canEditIncome = (item) => {
   {payment.created_at && new Date(payment.created_at).toLocaleString()}
 </td>
 
-// No additional permission check - fees deletable by any accountant/admin (canWrite check already exists)
+// No additional permission check - fees deletable by any finance manager/admin (canWrite check already exists)
 ```
 
 ---
 
 ## Example Scenarios
 
-### Scenario 1: Accountant Records Expense
-1. Accountant "John" creates expense for PKR 5,000
+### Scenario 1: Finance manager Records Expense
+1. Finance manager "John" creates expense for PKR 5,000
 2. API sets `recorded_by = John's user ID`
 3. Table shows: "Recorded By: John" | "Created At: Mar 9, 02:15 PM"
 4. John can edit/delete this entry ✅
-5. Other accountant "Mary" cannot edit/delete ❌
+5. Other finance manager "Mary" cannot edit/delete ❌
 6. Admin "Principal" can edit/delete ✅
 
 ### Scenario 2: Admin Creates Income
@@ -196,7 +196,7 @@ const canEditIncome = (item) => {
 2. API sets `recorded_by = Principal's user ID`
 3. Table shows: "Recorded By: Principal" | "Created At: Mar 9, 03:30 PM"
 4. All admins can edit/delete ✅
-5. Accountants cannot edit/delete ❌
+5. Finance managers cannot edit/delete ❌
 
 ### Scenario 3: User Tries Unauthorized Edit
 1. Mary tries to edit John's expense via API
@@ -215,10 +215,10 @@ python manage.py test test_finance_edit_permissions -v 2
 ```
 
 ### Frontend Manual Test
-1. Login as Accountant "John"
+1. Login as Finance manager "John"
 2. Create an expense
 3. Try to edit → Should work ✅
-4. Logout, login as Accountant "Mary"
+4. Logout, login as Finance manager "Mary"
 5. Try to edit John's expense → Should fail ❌ (button disabled or error)
 6. Logout, login as Admin "Principal"
 7. Try to edit John's expense → Should work ✅

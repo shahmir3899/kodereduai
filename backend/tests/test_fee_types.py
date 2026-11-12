@@ -1262,17 +1262,17 @@ class TestFeeTypePermissions:
         assert resp.status_code == 200
         assert len(data) == 0, f"H2 School B isolation: expected 0, got {len(data)}"
 
-    def test_accountant_has_read_only_access(self, seed_data, api):
-        """H3 - Accountant (staff-level) gets read-only access to finance data."""
-        token = seed_data['tokens']['accountant']
+    def test_finance_manager_has_read_only_access(self, seed_data, api):
+        """H3 - Finance manager (staff-level) gets read-only access to finance data."""
+        token = seed_data['tokens']['finance_manager']
         sid = seed_data['SID_A']
         student = seed_data['students'][8]
 
-        # Accountant can READ fee payments
+        # Finance manager can READ fee payments
         resp_get = api.get('/api/finance/fee-payments/?year=2026', token, sid)
-        assert resp_get.status_code == 200, f"H3 Accountant read: {resp_get.status_code}"
+        assert resp_get.status_code == 200, f"H3 Finance manager read: {resp_get.status_code}"
 
-        # Accountant CANNOT create fee payments (staff = read-only)
+        # Finance manager CANNOT create fee payments (staff = read-only)
         resp_post = api.post('/api/finance/fee-payments/', {
             'school': sid,
             'student': student.id,
@@ -1283,7 +1283,7 @@ class TestFeeTypePermissions:
             'amount_paid': '0.00',
         }, token, sid)
 
-        assert resp_post.status_code == 403, f"H3 Accountant create: {resp_post.status_code} {resp_post.content[:300]}"
+        assert resp_post.status_code == 403, f"H3 Finance manager create: {resp_post.status_code} {resp_post.content[:300]}"
 
     def test_unauthenticated_rejected(self, seed_data, api):
         """H4 - Unauthenticated request to fee endpoints returns 401."""

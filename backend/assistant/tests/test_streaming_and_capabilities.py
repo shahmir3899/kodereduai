@@ -189,8 +189,9 @@ class TestCapabilities:
 
     def test_roles_see_only_their_agents(self, seed_data, modules, api):
         # HR and settings are self-service for everyone (own leave, own payslip, own preferences), so they show next to the role's own agents.
-        assert {a['name'] for a in self._caps(api, seed_data, 'accountant')['agents']} == {'finance', 'students', 'hr', 'settings'}      # students: the fee ledger of one student, which finance roles may read
-        assert [a['name'] for a in self._caps(api, seed_data, 'accountant')['agents'] if a['can_write'] and a['name'] not in ('hr', 'settings')] == []
+        # A finance Manager is a Manager plus finance, so it sees the finance agent next to the Manager ones and cannot write finance.
+        finance_agents = {a['name']: a for a in self._caps(api, seed_data, 'finance_manager')['agents']}
+        assert 'finance' in finance_agents and finance_agents['finance']['can_write'] is False
         assert {a['name'] for a in self._caps(api, seed_data, 'teacher')['agents']} == {'academics', 'attendance', 'exams', 'hr', 'students', 'settings'}
 
     def test_staff_only_get_the_self_service_hr_agent(self, seed_data, modules, api):

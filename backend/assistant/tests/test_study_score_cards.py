@@ -89,7 +89,7 @@ def test_the_topic_list_is_capped(student, chat):
 
 
 def test_only_students_get_these_tools(seed_data, chat):
-    for role in ('admin', 'teacher', 'accountant'):
+    for role in ('admin', 'teacher', 'finance_manager'):
         user = seed_data['users'][role]
         out = registry.execute(_ctx(user, chat, user.role), 'record_quiz_answer', {'subject': 'Maths', 'correct': True})
         assert out == {'error': 'You do not have permission to use this tool.'}

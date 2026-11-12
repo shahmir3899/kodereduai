@@ -1,6 +1,6 @@
 import {
   categoryShares, periodRange, rangeFor, totalBalance, trendBars, validRange,
-} from '../services/accountant';
+} from '../services/financeManager';
 import {
   exportErrorMessage, feeReportFileName, feeReportRequest, financeSummaryFileName, financeSummaryRequest,
   ledgerFileName, looksLikePdf, looksLikeXlsx, safeName,
@@ -87,5 +87,30 @@ describe('file checks and errors', () => {
     const body = new TextEncoder().encode(JSON.stringify({ error: 'account_id is required' }));
     expect(exportErrorMessage({ response: { status: 400, data: body.buffer } })).toBe('account_id is required');
     expect(exportErrorMessage({ response: { status: 500, data: new ArrayBuffer(0) } })).toMatch(/Try again/);
+  });
+});
+
+describe('stored reports', () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const m = require('../services/reports');
+  const r = { id: 7, report_type: 'STUDENT_COMPREHENSIVE', title: 'Sara Khan: report', format: 'PDF', created_at: '2026-07-09T17:23:23Z' };
+  it('names the type and shows the format and date on one line', () => {
+    expect(m.reportTypeLabel('STUDENT_COMPREHENSIVE')).toBe('Student report');
+    expect(m.reportTypeLabel('SOME_NEW_TYPE')).toBe('Some new type');
+    expect(m.storedReportLine(r)).toBe('Student report  ·  PDF  ·  2026-07-09');
+    expect(m.storedReportLine({ ...r, format: undefined, created_at: undefined })).toBe('Student report  ·  PDF');
+  });
+  it('shares an Excel report as xlsx and anything else as a PDF', () => {
+    expect(m.storedReportKind({ format: 'XLSX' })).toBe('xlsx');
+    expect(m.storedReportKind({ format: 'pdf' })).toBe('pdf');
+    expect(m.storedReportKind({})).toBe('pdf');
+    expect(m.storedReportFileName(r)).toBe('Sara_Khan_report.pdf');
+    expect(m.storedReportFileName({ ...r, title: '', format: 'XLSX' })).toBe('report_7.xlsx');
+  });
+  it('explains a refusal or a missing file', () => {
+    expect(m.storedReportError({ response: { status: 403 } })).toMatch(/admin and principal/);
+    expect(m.storedReportError({ response: { status: 404 } })).toMatch(/no file/);
+    expect(m.storedReportError({ response: { status: 500 } })).toMatch(/Could not open/);
+    expect(m.storedReportError(new Error('x'))).toMatch(/connection/i);
   });
 });

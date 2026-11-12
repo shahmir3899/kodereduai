@@ -80,7 +80,7 @@ Principles:
 4. The agent states its interpretation in the preview ("Mark 10 students paid in full"). If the account is missing, it asks.
 5. **Approve → API call.** At approval the records are re-checked as still unpaid. The API commits per record (not all-or-nothing), so the result card shows success/failure **per row**.
 
-**Access:** admin, principal, accountant only. A parent sees only their own child's dues (read).
+**Access:** admin, principal, finance manager only. A parent sees only their own child's dues (read).
 
 ## 6. Academics sub-agent
 
@@ -241,7 +241,7 @@ Environment (all in `docs/ENV_AND_DEPLOYMENT.md`): `EDU_CEREBRAS_API_KEY` (set i
 | Tools ported: Finance (19 + entries), Academics (21), Communication (15), Study Helper (8), lookups | Built |
 | Write engine: propose, preview, edit, approve/reject, stale-check, role re-check, audit | Built |
 | Writes: fee payments (bulk), expenses/income (add, edit, delete), lesson plans from book chapters / single draft / delete, diary and homework, attendance | Built |
-| Sensitive-data fix for principals/accountants in the Finance read tools | Built |
+| Sensitive-data fix for principals/finance managers in the Finance read tools | Built |
 | Streaming (server-sent events) and `capabilities` endpoint | Built |
 | Web orb: live steps by sub-agent, approval cards with edit, memory counter (switch: `VITE_ASSISTANT_ENABLED=true` or `localStorage.assistant_beta=1`) | Built, checked in a browser with fake data |
 | Cerebras lean gateway (§15) | Built; probe passes on a real key |

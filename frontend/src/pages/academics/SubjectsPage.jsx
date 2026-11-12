@@ -1118,7 +1118,7 @@ export default function SubjectsPage() {
                   <div>
                     <label className="label">Teacher *</label>
                     <StaffFilter
-                      role="TEACHER"
+                      teaching
                       status="ACTIVE"
                       value={classTeacherForm.teacher}
                       onChange={e => setClassTeacherForm(p => ({ ...p, teacher: e.target.value }))}

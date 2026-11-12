@@ -95,7 +95,6 @@ def _resolve_recipients_for_broadcast(school, role, filters):
         'SCHOOL_ADMIN': UserSchoolMembership.Role.SCHOOL_ADMIN,
         'PRINCIPAL': UserSchoolMembership.Role.PRINCIPAL,
         'MANAGER': UserSchoolMembership.Role.MANAGER,
-        'ACCOUNTANT': UserSchoolMembership.Role.ACCOUNTANT,
         'STUDENT': UserSchoolMembership.Role.STUDENT,
     }
 
@@ -459,7 +458,6 @@ class BroadcastNotificationView(ModuleAccessMixin, APIView):
         'SCHOOL_ADMIN': 'ADMIN',
         'PRINCIPAL': 'ADMIN',
         'MANAGER': 'STAFF',
-        'ACCOUNTANT': 'STAFF',
         'STUDENT': 'STAFF',
     }
 

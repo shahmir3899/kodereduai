@@ -21,12 +21,13 @@ logger = logging.getLogger(__name__)
 SUMMARY_CACHE_SECONDS = 24 * 60 * 60
 
 # Roles that may see a student's fee position (the finance module's own rule: the
-# admin roles plus the accountant). Everyone else gets a profile with no fee detail.
-FEE_VISIBLE_ROLES = ('SUPER_ADMIN', 'SCHOOL_ADMIN', 'PRINCIPAL', 'ACCOUNTANT')
+# admin roles plus a Manager with finance access). Everyone else gets a profile with no fee detail.
+FEE_VISIBLE_ROLES = ('SUPER_ADMIN', 'SCHOOL_ADMIN', 'PRINCIPAL')
 
 
-def can_see_fees(role):
-    return role in FEE_VISIBLE_ROLES
+def can_see_fees(role, finance_access=False):
+    """`finance_access` is True for a MANAGER with can_manage_finance (finance access)."""
+    return role in FEE_VISIBLE_ROLES or finance_access
 
 
 class Student360Service:
@@ -57,7 +58,7 @@ class Student360Service:
                 'risk': None,
                 'insufficient_data': True,
             }
-        present_days = entry['present_days']       # leave days are counted as present
+        present_days = entry['present_days']       # late and leave days are counted as present
         leave = entry.get('excused_leave_days', 0)
         return {
             'rate': entry['current_rate'],
@@ -187,7 +188,7 @@ class Student360Service:
             from assistant import llm
 
             lines = [
-                f"- Attendance: {attendance['rate']}% rate (leave days count as present), "
+                f"- Attendance: {attendance['rate']}% rate (late and leave days count as present), "
                 f"trend: {attendance['trend']}, {attendance['absent']} absences"
                 if not attendance['insufficient_data'] else "- Attendance: not enough data yet",
                 f"- Academics: last exam average {academic['avg_score']}%, trend: {academic['trend']}, "

@@ -1,10 +1,10 @@
 import React, { useMemo, useState } from 'react';
-import { View, Text, FlatList, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, FlatList, TouchableOpacity, StyleSheet, Switch } from 'react-native';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSchoolUserActions, useSchoolUsers } from '../../hooks/useSchoolUsers';
 import { useRefreshControl } from '../../hooks/useRefreshControl';
 import {
-  activeToggleText, allowableRoles, buildResetPayload, buildUserPayload, canManageUser, emptyUserForm, FILTER_ROLES, filterUsers, fullName,
+  activeToggleText, allowableRoles, buildResetPayload, buildUserPayload, canManageUser, emptyUserForm, filterRoles, filterUsers, fullName,
   roleLabel, userToForm, validateReset, validateUser, type ResetMode, type SchoolUser, type UserForm,
 } from '../../services/schoolUsers';
 import { inventoryErrorMessage } from '../../services/inventory';
@@ -107,7 +107,7 @@ export default function UsersScreen() {
       <Button title="+ Add user" size="sm" onPress={() => open('new')} />
       <SearchBar value={search} onChangeText={setSearch} placeholder="Search name, username or email" />
       <Select label="Role" value={role} onChange={(v) => setRole(String(v))} placeholder="All roles"
-        options={[{ value: '', label: 'All roles' }, ...FILTER_ROLES.map((r) => ({ value: r, label: roleLabel(r) }))]} />
+        options={[{ value: '', label: 'All roles' }, ...filterRoles().map((r) => ({ value: r, label: roleLabel(r) }))]} />
     </View>
   );
 
@@ -151,6 +151,12 @@ export default function UsersScreen() {
         <Input label="Email" value={form.email} onChangeText={(v) => set('email', v)} keyboardType="email-address" autoCapitalize="none" />
         <Input label="Phone" value={form.phone} onChangeText={(v) => set('phone', v)} keyboardType="phone-pad" />
         <Select label="Role" value={form.role} onChange={(v) => set('role', String(v))} options={allowed.map((r) => ({ value: r, label: roleLabel(r) }))} />
+        {form.role === 'MANAGER' ? (
+          <View style={styles.financeRow}>
+            <Text style={styles.hint}>Can manage finance and fees</Text>
+            <Switch value={form.canManageFinance} onValueChange={(v) => set('canManageFinance', v)} accessibilityLabel="Can manage finance and fees" />
+          </View>
+        ) : null}
         {editing === 'new' ? (
           <>
             <Input label="Password (8 or more characters)" value={form.password} onChangeText={(v) => set('password', v)} secureTextEntry autoCapitalize="none" />
@@ -183,6 +189,8 @@ const styles = StyleSheet.create({
   content: { padding: Spacing.lg, paddingBottom: Spacing.xxxl, gap: Spacing.sm },
   header: { gap: Spacing.md, marginBottom: Spacing.sm },
   note: { padding: Spacing.lg, fontSize: FontSize.sm, color: Colors.textSecondary },
+  hint: { fontSize: FontSize.sm, color: Colors.textSecondary },
+  financeRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   row: { flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.surface, borderRadius: BorderRadius.md, padding: Spacing.md, gap: Spacing.md, minHeight: 56 },
   who: { flex: 1 },
   name: { fontSize: FontSize.md, fontWeight: '600', color: Colors.text },

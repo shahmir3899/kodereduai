@@ -4,13 +4,14 @@ export type Persona =
   | 'admin'
   | 'teacher'
   | 'manager'
-  | 'accountant'
+  | 'finance'
   | 'staff'
   | 'parent'
   | 'student'
   | 'driver';
 
-export function personaFor(role: string | undefined, isSuperAdmin = false): Persona {
+// A Manager with the finance capability (the former Finance manager role) gets the finance shell.
+export function personaFor(role: string | undefined, isSuperAdmin = false, canManageFinance = false): Persona {
   if (isSuperAdmin) return 'admin';
   switch (role) {
     case 'SUPER_ADMIN':
@@ -20,9 +21,7 @@ export function personaFor(role: string | undefined, isSuperAdmin = false): Pers
     case 'TEACHER':
       return 'teacher';
     case 'MANAGER':
-      return 'manager';
-    case 'ACCOUNTANT':
-      return 'accountant';
+      return canManageFinance ? 'finance' : 'manager';
     case 'STAFF':
       return 'staff';
     case 'PARENT':

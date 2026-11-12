@@ -44,13 +44,13 @@ Rules: no new native packages, no edits to `services/api.ts`, `navigation/routes
 - Tested with `focus3899` (Branch 1 and Branch 2). I did not actually switch school, because that writes to the real database. The switch itself is old, unchanged code.
 
 ## U7 Academic year switcher - built 2026-11-01, browser-tested, uncommitted
-- Roles: admin (incl. principal and super admin), manager, accountant (`canChooseYear`). Teacher, staff, parent, student and driver keep the current year.
+- Roles: admin (incl. principal and super admin), manager, finance manager (`canChooseYear`). Teacher, staff, parent, student and driver keep the current year.
 - `services/yearChoice.ts` (+ `__tests__/yearChoice.test.ts`): `resolveYear`, saved choice per person and school, a small shared store so a change shows on every screen at once.
 - `hooks/useAcademicYear.ts` now returns `current` (the chosen year), `actual` (the school's current year), `isPast`, `canChoose`, `choose`. Option `lockToCurrent` ignores the choice.
 - Locked to the current year: the attendance class list (`useAttendanceClassOptions`), the fee collection screen and the fee payments list (`useFees.ts`).
 - UI: header chip is tappable for those roles and turns amber for a past year; `components/nav/YearSheet.tsx` (year list, "Current" tag, warning); `components/nav/YearRow.tsx` under the school block in the menu. The chip is now up to 130 px wide because "Academic Year 2026-27" was cut off.
 - Seen as `focus3899`: chose 2025-26, the dashboard changed from 232 to 217 students and the chip turned amber; the attendance register still asked for the current year's classes (year 33, not 11).
-- Not tested: the manager and accountant shells (the chip is shared, so it should appear there); the web's term badge is not included.
+- Not tested: the manager and finance manager shells (the chip is shared, so it should appear there); the web's term badge is not included.
 - Known: the choice is saved in the browser or phone only, and a school switch starts with that school's own saved choice.
 
 ## U8 Menu icons - built 2026-11-01, browser-tested, uncommitted

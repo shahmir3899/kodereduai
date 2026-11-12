@@ -93,7 +93,8 @@ class TestNotEnoughData:
 @pytest.mark.django_db
 class TestFeesHiddenFromOtherRoles:
     def test_the_roles_that_see_fees(self):
-        assert [can_see_fees(r) for r in ('SCHOOL_ADMIN', 'PRINCIPAL', 'ACCOUNTANT', 'SUPER_ADMIN')] == [True] * 4
+        assert [can_see_fees(r) for r in ('SCHOOL_ADMIN', 'PRINCIPAL', 'SUPER_ADMIN')] == [True] * 3
+        assert can_see_fees('MANAGER', finance_access=True)  # the former finance_manager
         assert [can_see_fees(r) for r in ('TEACHER', 'STAFF', 'MANAGER', 'PARENT', None)] == [False] * 5
 
     def test_without_fees_there_is_no_fee_detail_anywhere(self, ctx):
@@ -115,9 +116,9 @@ class TestFeesHiddenFromOtherRoles:
         three_months_owed(ctx)
         admin = api_profile(api, ctx, 'admin')
         assert admin.status_code == 200 and admin.json()['financial']['months_overdue'] == 3
-        accountant = api_profile(api, ctx, 'accountant')
-        if accountant.status_code == 200:
-            assert 'financial' in accountant.json()
+        finance_manager = api_profile(api, ctx, 'finance_manager')
+        if finance_manager.status_code == 200:
+            assert 'financial' in finance_manager.json()
         teacher = api_profile(api, ctx, 'teacher')
         if teacher.status_code == 200:
             assert 'financial' not in teacher.json() and teacher.json()['fees_hidden'] is True

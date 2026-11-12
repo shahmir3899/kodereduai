@@ -348,7 +348,7 @@ function StaffRestrictedRoute({ children }) {
 
 // Guard: finance access by role
 function FinanceRoute({ collectOnly = false, adminOnly = false, children }) {
-  const { effectiveRole } = useAuth()
+  const { effectiveRole, canManageFinance } = useAuth()
   if (adminOnly && effectiveRole !== 'SCHOOL_ADMIN' && effectiveRole !== 'PRINCIPAL') {
     return (
       <AccessRestrictedRedirect
@@ -358,7 +358,7 @@ function FinanceRoute({ collectOnly = false, adminOnly = false, children }) {
       />
     )
   }
-  if (!canAccessFinanceRoute(effectiveRole, { collectOnly })) {
+  if (!canAccessFinanceRoute(effectiveRole, { collectOnly, canManageFinance })) {
     return (
       <AccessRestrictedRedirect
         to={effectiveRole === 'TEACHER' ? '/finance/fees/collect' : '/dashboard'}
@@ -417,8 +417,8 @@ function LmsRoute({ children }) {
 }
 
 function InventoryRoute({ assignmentsOnly = false, children }) {
-  const { effectiveRole } = useAuth()
-  if (!canAccessInventoryRoute(effectiveRole, { assignmentsOnly })) {
+  const { effectiveRole, canManageFinance } = useAuth()
+  if (!canAccessInventoryRoute(effectiveRole, { assignmentsOnly, canManageFinance })) {
     return (
       <AccessRestrictedRedirect
         to="/inventory/assignments"
@@ -584,7 +584,7 @@ function App() {
             <Route path="classes" element={<SchoolRoute><ModuleRoute module="students"><ManagementRoute teacherAllowed><ClassesGradesPage /></ManagementRoute></ModuleRoute></SchoolRoute>} />
 
             {/* HR routes -- admin-only (matches nav's !isStaffLevel: only SCHOOL_ADMIN/
-                PRINCIPAL see these links, so STAFF/TEACHER/MANAGER/ACCOUNTANT/DRIVER
+                PRINCIPAL see these links, so STAFF/TEACHER/MANAGER/FINANCE_MANAGER/DRIVER
                 all need blocking here, not just MANAGER). */}
             <Route path="hr" element={<SchoolRoute><ModuleRoute module="hr"><AdminPrincipalRoute><HRDashboardPage /></AdminPrincipalRoute></ModuleRoute></SchoolRoute>} />
             <Route path="hr/staff" element={<SchoolRoute><ModuleRoute module="hr"><AdminPrincipalRoute><StaffDirectoryPage /></AdminPrincipalRoute></ModuleRoute></SchoolRoute>} />
@@ -620,7 +620,7 @@ function App() {
             <Route path="academics/report-cards" element={<SchoolRoute><ModuleRoute module="examinations"><StudentDataRoute><ReportCardPage /></StudentDataRoute></ModuleRoute></SchoolRoute>} />
             {/* Grade Scale: admin-only (matches nav's isSchoolAdminNav) -- backend
                 (IsSchoolAdmin, no read fallback) already enforces this, AssessmentManageRoute
-                was too loose (only blocked TEACHER/STAFF, let MANAGER/ACCOUNTANT/DRIVER through). */}
+                was too loose (only blocked TEACHER/STAFF, let MANAGER/FINANCE_MANAGER/DRIVER through). */}
             <Route path="academics/grade-scale" element={<SchoolRoute><ModuleRoute module="examinations"><AdminPrincipalRoute><GradeScalePage /></AdminPrincipalRoute></ModuleRoute></SchoolRoute>} />
             <Route path="academics/paper-builder" element={<SchoolRoute><CapabilityRoute module="examinations" capability="paper_builder"><PaperBuilderRoute><QuestionPaperBuilderPage /></PaperBuilderRoute></CapabilityRoute></SchoolRoute>} />
             <Route path="academics/papers" element={<SchoolRoute><CapabilityRoute module="examinations" capability="paper_builder"><PaperBuilderRoute><ExamPapersPage /></PaperBuilderRoute></CapabilityRoute></SchoolRoute>} />

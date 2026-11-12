@@ -134,11 +134,11 @@ class TestPorts:
         assert 'get_class_schedule' in names and 'get_teacher_schedule' in names
         assert not names & {'get_workload_analysis', 'find_substitute', 'get_balance', 'get_fee_status', 'find_student'}
 
-    def test_accountant_gets_finance_and_lookup_only(self, seed_data):
+    def test_finance_manager_gets_finance_and_lookup_only(self, seed_data):
         _enable(seed_data, 'finance', 'academics', 'notifications', 'students')
-        names = _names(_ctx(seed_data, 'accountant'))
+        names = _names(_ctx(seed_data, 'finance_manager'))
         assert 'get_pending_fees' in names and 'find_student' in names
-        assert not names & {'get_class_schedule', 'get_student_info'}
+        assert not names & {'get_my_marks', 'get_my_assignments'}  # no student-owned tools
 
     def test_student_sees_only_own_data_tools(self, seed_data):
         _enable(seed_data, 'finance', 'academics', 'notifications', 'students')

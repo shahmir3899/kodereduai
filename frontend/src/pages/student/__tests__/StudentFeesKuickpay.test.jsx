@@ -7,13 +7,18 @@ vi.mock('../../../services/api', () => ({ studentPortalApi: { getFees: vi.fn() }
 import { studentPortalApi } from '../../../services/api'
 import StudentFees from '../StudentFees'
 
+// The fee screens follow the selected academic year; rows below belong to year 7.
+vi.mock('../../../contexts/AcademicYearContext', () => ({
+  useAcademicYear: () => ({ activeAcademicYear: { id: 7, name: '2026-27' }, loading: false }),
+}))
+
 const year = new Date().getFullYear()
 const ROWS = [
-  { id: 1, month: 1, year, month_name: 'January', fee_type_name: 'Monthly', amount_due: '6500.00', amount_paid: '6500.00', status: 'PAID',
+  { id: 1, fee_type: 'MONTHLY', academic_year: 7, branch: null, month: 1, year, month_name: 'January', fee_type_name: 'Monthly', amount_due: '6500.00', amount_paid: '6500.00', status: 'PAID',
     payment_date: `${year}-01-12`, payment_method: 'ONLINE',
     kuickpay: { gateway: 'Kuickpay', received: '6500.00', coverage: 'FULL', label: 'PKR 6,500 received via Kuickpay (paid in full)',
       reference_text: 'Ref 550727', payments: [{ reference: '550727', receipt: '00000000000000000226', date: `${year}-01-12`, amount: '6500.00' }] } },
-  { id: 2, month: 2, year, month_name: 'February', fee_type_name: 'Monthly', amount_due: '6500.00', amount_paid: '0.00', status: 'UNPAID',
+  { id: 2, fee_type: 'MONTHLY', academic_year: 7, branch: null, month: 2, year, month_name: 'February', fee_type_name: 'Monthly', amount_due: '6500.00', amount_paid: '0.00', status: 'UNPAID',
     payment_date: null, payment_method: 'CASH', kuickpay: null },
 ]
 

@@ -94,7 +94,7 @@ class TestRemovalPreview:
         outcomes = preview(api, seed_data, fresh).json()['allowed_outcomes']
         assert 'READMIT' in outcomes and 'LEFT' not in outcomes
 
-    @pytest.mark.parametrize('token', ['teacher', 'accountant', 'manager', 'staff'])
+    @pytest.mark.parametrize('token', ['teacher', 'finance_manager', 'manager', 'staff'])
     def test_non_admins_are_refused(self, api, seed_data, fresh, token):
         assert preview(api, seed_data, token=token, student=fresh).status_code == 403
 
@@ -189,7 +189,7 @@ class TestManualOutcome:
         resp = outcome(api, seed_data, student, outcome='GRADUATED', reason='x')
         assert resp.status_code == 400 and resp.json()['code'] == 'student_departed'
 
-    @pytest.mark.parametrize('token', ['teacher', 'accountant', 'manager', 'staff'])
+    @pytest.mark.parametrize('token', ['teacher', 'finance_manager', 'manager', 'staff'])
     def test_non_admins_refused(self, api, seed_data, enrolled, token):
         resp = outcome(api, seed_data, enrolled[0], token=token, outcome='GRADUATED', reason='x')
         assert resp.status_code == 403

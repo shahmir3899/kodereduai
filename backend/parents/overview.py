@@ -56,7 +56,7 @@ def attendance_summary(student, academic_year_id, today, segments=None):
         records = records.filter(~Q(student_id=student.id) | Q(date__gte=start, date__lte=end))
 
     counts = {row['status']: row['n'] for row in records.values('status').annotate(n=Count('id'))}
-    present = counts.get('PRESENT', 0)
+    present = counts.get('PRESENT', 0) + counts.get('LATE', 0)  # late counts as present
     absent = counts.get('ABSENT', 0)
     leave = counts.get('LEAVE', 0)
     total = sum(counts.values())
@@ -68,7 +68,7 @@ def attendance_summary(student, academic_year_id, today, segments=None):
         'present': present,
         'absent': absent,
         'leave': leave,
-        # Leave counts as present: the student portal, the profile and the risk assessment use the
+        # Late and leave count as present: the student portal, the profile and the risk assessment use the
         # same rule, so a parent and the child see one number.
         'attendance_rate': round((present + leave) / total * 100, 1) if total else None,
         'today': today_row['status'] if today_row else None,

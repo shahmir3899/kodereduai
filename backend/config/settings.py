@@ -667,6 +667,10 @@ USE_VISION_PIPELINE = os.getenv('USE_VISION_PIPELINE', 'True').lower() in ('true
 # Vision provider: 'google' (recommended), 'groq'
 # Google Vision has specialized handwriting detection - best for handwritten registers
 VISION_PROVIDER = os.getenv('VISION_PROVIDER', 'google')
+# Paper OCR rebuilds the page from Google Vision's word positions (margin marks, stacked fractions, side-by-side
+# parts, drawings, boxes for the photo highlight) before the LLM reads it. Off by default; any failure in it
+# falls back to the flat OCR text.
+PAPER_LAYOUT_V2 = os.getenv('PAPER_LAYOUT_V2', 'false').lower() in ('1', 'true', 'yes')
 
 # Groq Vision model (if using groq provider)
 GROQ_VISION_MODEL = os.getenv('GROQ_VISION_MODEL', 'llama-3.2-11b-vision-preview')

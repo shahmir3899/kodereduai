@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import { categoryShares, type ExpenseCategory } from '../../services/accountant';
+import { categoryShares, type ExpenseCategory } from '../../services/financeManager';
 import { formatMoney } from '../../services/feeCollect';
 import Card from '../ui/Card';
 import { Colors, FontSize, Spacing } from '../../constants/colors';

@@ -18,6 +18,7 @@ import Spinner from '../../../components/ui/Spinner';
 import Select from '../../../components/ui/Select';
 import { useToast } from '../../../components/ui/Toast';
 import { saveFailureMessage } from '../../../services/errorKind';
+import { GROUP_TIPS, photoMime, photoName } from '../../../services/faceEnroll';
 import { useMasterClasses } from '../../../hooks/useAcademicYear';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../../constants/colors';
 
@@ -69,11 +70,10 @@ export default function FaceAttendanceCapture() {
     try {
       // Upload image
       const formData = new FormData();
-      const filename = photo.split('/').pop() || 'face_attendance.jpg';
       formData.append('image', {
         uri: photo,
-        type: 'image/jpeg',
-        name: filename,
+        type: photoMime(photo),
+        name: photoName(photo, 'face_attendance.jpg'),
       } as unknown as Blob);
 
       const uploadRes = await faceAttendanceApi.uploadImage(formData);
@@ -157,7 +157,7 @@ export default function FaceAttendanceCapture() {
       <CameraView ref={cameraRef} style={styles.camera} facing="back">
         <View style={styles.overlay}>
           <Text style={styles.overlayText}>
-            Point at students for face attendance
+            {GROUP_TIPS.join('\n')}
           </Text>
         </View>
       </CameraView>

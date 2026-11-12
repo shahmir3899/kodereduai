@@ -12,7 +12,7 @@ const TABS: TabSpec[] = [
 // Reached from More or from other screens; no tab of their own.
 const HIDDEN = ['my-profile', 'inbox', 'register', 'results', 'assessments', 'exam-schedule', 'report-cards', 'fees', 'leave', 'my-attendance', 'classes', 'lesson-plans', 'questions', 'papers', 'paper-builder', 'worksheets', 'worksheet-builder', 'inventory', 'coverage'];
 
-const STACKS = ['assignments', 'students', 'curriculum', 'messages'];
+const STACKS = ['assignments', 'students', 'curriculum', 'messages', 'library', 'transport'];
 
 const TITLES: Record<string, string> = {
   'my-profile': 'My Profile',

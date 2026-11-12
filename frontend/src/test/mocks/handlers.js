@@ -194,19 +194,19 @@ const mockTransportAttendance = [
 // Students with user account status
 const mockStudentsWithAccounts = [
   {
-    id: 1, school: 1, school_name: 'Test School', class_obj: 1, class_name: 'Class 1A',
+    id: 1, school: 1, school_name: 'Test School', class_obj: 1, session_class_obj: 1, class_name: 'Class 1A',
     roll_number: '1', name: 'Ali Hassan', parent_phone: '0300-1111111', parent_name: 'Hassan Sr',
     is_active: true, status: 'ACTIVE', has_user_account: true, user_username: 'ali_hassan',
     created_at: '2025-01-01', updated_at: '2025-01-01',
   },
   {
-    id: 2, school: 1, school_name: 'Test School', class_obj: 1, class_name: 'Class 1A',
+    id: 2, school: 1, school_name: 'Test School', class_obj: 1, session_class_obj: 1, class_name: 'Class 1A',
     roll_number: '2', name: 'Sara Khan', parent_phone: '0300-2222222', parent_name: 'Khan Sr',
     is_active: true, status: 'ACTIVE', has_user_account: false, user_username: null,
     created_at: '2025-01-01', updated_at: '2025-01-01',
   },
   {
-    id: 3, school: 1, school_name: 'Test School', class_obj: 1, class_name: 'Class 1A',
+    id: 3, school: 1, school_name: 'Test School', class_obj: 1, session_class_obj: 1, class_name: 'Class 1A',
     roll_number: '3', name: 'Usman Ahmed', parent_phone: '0300-3333333', parent_name: 'Ahmed Sr',
     is_active: true, status: 'ACTIVE', has_user_account: false, user_username: null,
     created_at: '2025-01-01', updated_at: '2025-01-01',

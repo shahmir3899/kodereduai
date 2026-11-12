@@ -137,23 +137,23 @@ function SearchResultItem({ result, onNavigate }) {
 // --- Videos tab ---
 export default function UserGuidePage() {
   const [searchParams, setSearchParams] = useSearchParams()
-  const { user, activeSchool, effectiveRole, isSuperAdmin, isParent, isStudent, isStaffLevel, isManager, isModuleEnabled } = useAuth()
+  const { user, activeSchool, effectiveRole, isSuperAdmin, isParent, isStudent, isStaffLevel, isManager, canManageFinance, isModuleEnabled } = useAuth()
   const progress = useGuideProgress(user?.id, { api: guideProgressApi, schoolId: activeSchool?.id })
 
   // Default view follows the user's role and the school's enabled modules;
   // ?view=all shows the whole guide. A deep link to a hidden chapter switches to "all".
   const requestedChapter = parseInt(searchParams.get('chapter')) || null
   const roleChapters = useMemo(
-    () => filterGuideChapters(guideData.chapters, { role: effectiveRole, isSuperAdmin, isModuleEnabled }),
-    [effectiveRole, isSuperAdmin, isModuleEnabled]
+    () => filterGuideChapters(guideData.chapters, { role: effectiveRole, isSuperAdmin, isModuleEnabled, canManageFinance }),
+    [effectiveRole, isSuperAdmin, isModuleEnabled, canManageFinance]
   )
   const roleViewUsable = roleChapters.length > 0
     && (!requestedChapter || roleChapters.some((c) => c.id === requestedChapter))
   const viewAll = searchParams.get('view') === 'all' || !roleViewUsable || isSuperAdmin
   const chapters = viewAll ? guideData.chapters : roleChapters
   const canOpen = useMemo(
-    () => buildAvailability({ effectiveRole, isSuperAdmin, isParent, isStudent, isModuleEnabled, isStaffLevel, isManager }),
-    [effectiveRole, isSuperAdmin, isParent, isStudent, isModuleEnabled, isStaffLevel, isManager]
+    () => buildAvailability({ effectiveRole, isSuperAdmin, isParent, isStudent, isModuleEnabled, isStaffLevel, isManager, canManageFinance }),
+    [effectiveRole, isSuperAdmin, isParent, isStudent, isModuleEnabled, isStaffLevel, isManager, canManageFinance]
   )
   const setView = (view) => {
     const next = new URLSearchParams(searchParams)
@@ -173,7 +173,7 @@ export default function UserGuidePage() {
   const visibleVideos = useMemo(
     () => videoData.videos
       .filter((v) => v.status !== 'planned')
-      .filter((v) => viewAll || isVisibleFor(v, { role: effectiveRole, isSuperAdmin, isModuleEnabled })),
+      .filter((v) => viewAll || isVisibleFor(v, { role: effectiveRole, isSuperAdmin, isModuleEnabled, canManageFinance })),
     [viewAll, effectiveRole, isSuperAdmin, isModuleEnabled]
   )
   const updateParams = (changes) => {
@@ -211,7 +211,8 @@ export default function UserGuidePage() {
   const startSteps = useMemo(() => {
     const byId = {}
     chapters.forEach((chapter) => chapter.sections.forEach((section) => { byId[section.id] = { section, chapterId: chapter.id } }))
-    return (START_HERE[isSuperAdmin ? 'SCHOOL_ADMIN' : effectiveRole] || [])
+    const audiences = isSuperAdmin ? ['SCHOOL_ADMIN'] : [effectiveRole, ...(canManageFinance ? ['FINANCE'] : [])]
+    return [...new Set(audiences.flatMap((a) => START_HERE[a] || []))]
       .map((id) => byId[id])
       .filter(Boolean)
       .map(({ section, chapterId }) => ({
@@ -220,7 +221,7 @@ export default function UserGuidePage() {
         title: plainTitle(section.title),
         videoId: section.video && VIDEOS_BY_ID[section.video]?.status === 'ready' ? section.video : null,
       }))
-  }, [chapters, effectiveRole, isSuperAdmin])
+  }, [chapters, effectiveRole, isSuperAdmin, canManageFinance])
   const startVideos = useMemo(
     () => startSteps.map((step) => visibleVideos.find((v) => v.id === step.videoId)).filter(Boolean),
     [startSteps, visibleVideos],

@@ -1,6 +1,6 @@
 import { hrApi, inventoryApi, notificationsApi } from '../services/api';
 import { listOf } from '../services/academicYear';
-import type { InventoryAssignment, Payslip } from '../services/accountant';
+import type { InventoryAssignment, Payslip } from '../services/financeManager';
 import { useAuth } from '../contexts/AuthContext';
 import { useScopedQuery } from './useScopedQuery';
 

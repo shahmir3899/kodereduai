@@ -4,7 +4,7 @@ import { MODULES, type ModuleKey } from '../constants/modules';
 
 // Role x module matrix. navConfig.test.ts spells out what each role sees; this walks every role
 // against every module switched off and checks the rules that must hold for ALL of them.
-// Accountant, Staff and Principal are left out until Phase 7 is final.
+// Finance manager, Staff and Principal are left out until Phase 7 is final.
 
 const ROLES = ['SCHOOL_ADMIN', 'TEACHER', 'MANAGER', 'DRIVER'] as const;
 const ALL_MODULES = Object.values(MODULES) as ModuleKey[];

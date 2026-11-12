@@ -4,9 +4,8 @@ import { lettersApi } from '../../services/api';
 import { useLetterActions, useLetters, useLetterTemplates } from '../../hooks/useLetters';
 import { useStaffOptions } from '../../hooks/usePayroll';
 import { useRefreshControl } from '../../hooks/useRefreshControl';
-import {
-  applyTemplate, buildLetterPayload, buildPdfPayload, emptyLetterForm, hasText, LINE_SPACINGS, letterFileName, letterToForm,
-  validateLetter, type Letter, type LetterForm,
+import { applyTemplate, buildLetterPayload, buildPdfPayload, emptyLetterForm, hasText, LINE_SPACINGS, letterFileName, letterToForm,
+  validateLetter, type Letter, type LetterForm, AI_PROMPT_MAX, aiDraftDone, aiDraftEmpty, aiErrorText, applyAiDraft, buildAiPayload, validateAiPrompt, type AiDraftReply, type AiStaff,
 } from '../../services/letters';
 import { exportErrorMessage } from '../../services/reports';
 import { shareReportFile } from '../../services/reportShare';
@@ -23,7 +22,8 @@ import FormSheet from '../inventory/FormSheet';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
 
 // Port of the Letter Composer for admin and principal: pick a template, fill it for a staff member,
-// save it, and share the server-made PDF (identical to the web's). AI drafting stays on the web.
+// save it, and share the server-made PDF (identical to the web's). "Draft with AI" writes the subject and
+// body from a description.
 export default function LettersScreen() {
   const toast = useToast();
   const actions = useLetterActions();
@@ -36,6 +36,9 @@ export default function LettersScreen() {
   const [employee, setEmployee] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [drafting, setDrafting] = useState(false);
+  const [aiPrompt, setAiPrompt] = useState('');
+  const [aiError, setAiError] = useState<string | null>(null);
   const set = <K extends keyof LetterForm>(k: K, v: LetterForm[K]) => setForm((f) => ({ ...f, [k]: v }));
 
   const pickTemplate = async (key: string) => {
@@ -57,6 +60,24 @@ export default function LettersScreen() {
     } finally {
       setBusy(null);
     }
+  };
+
+  const openDraft = () => { setAiPrompt(''); setAiError(null); setDrafting(true); };
+
+  const draft = async () => {
+    const problem = validateAiPrompt(aiPrompt);
+    if (problem) return setAiError(problem);
+    if (hasText(form) && !(await confirm({ title: 'Replace the text?', message: 'The drafted subject and body replace what is written now.', confirmLabel: 'Replace' }))) return;
+    setAiError(null);
+    try {
+      const person = (staff.data ?? []).find((m) => m.id === employee);
+      const res = await actions.aiDraft.mutateAsync(buildAiPayload(aiPrompt, form.template, person as AiStaff | undefined));
+      const reply = res.data as AiDraftReply;
+      if (aiDraftEmpty(reply)) return setAiError('The AI sent nothing back. Try describing the letter again.');
+      setForm((f) => applyAiDraft(f, reply));
+      toast.show(aiDraftDone(reply), reply.fallback ? 'info' : 'success');
+      setDrafting(false);
+    } catch (e) { setAiError(aiErrorText(e)); }
   };
 
   const save = async () => {
@@ -128,12 +149,18 @@ export default function LettersScreen() {
           <Select label="Fill from staff record" searchable value={employee} onChange={fillFromStaff} placeholder="Choose a staff member"
             options={(staff.data ?? []).map((m) => ({ value: m.id, label: `${m.full_name ?? m.name}${m.employee_id ? ` (${m.employee_id})` : ''}` }))} />
         ) : null}
+        <Button title="Draft with AI" variant="outline" size="sm" onPress={openDraft} />
         <Input label="Addressed to" value={form.recipient} onChangeText={(v) => set('recipient', v)} />
         <Input label="Subject" value={form.subject} onChangeText={(v) => set('subject', v)} />
         <Input label="Letter" value={form.body} onChangeText={(v) => set('body', v)} multiline style={styles.body} />
         <Select label="Line spacing" value={form.spacing} onChange={(v) => set('spacing', v)} options={LINE_SPACINGS.map((l) => ({ value: l.value, label: l.label }))} />
         <Button title="Share as PDF" variant="outline" onPress={share} loading={busy === 'pdf'} disabled={busy !== null} />
         {editing && editing !== 'new' ? <Button title="Delete letter" variant="danger" size="sm" onPress={() => remove(editing)} /> : null}
+      </FormSheet>
+      <FormSheet visible={drafting} title="Draft with AI" onClose={() => setDrafting(false)} onSubmit={draft} submitLabel="Draft the letter" busy={actions.aiDraft.isPending} error={aiError}>
+        <Text style={styles.sub}>{`Say what the letter is for${employee ? ', and it will use the chosen staff member\'s details' : ''}. ${form.template !== 'custom' ? 'It follows the chosen template type. ' : ''}You can edit the result before saving.`}</Text>
+        <Input label="What should the letter say?" value={aiPrompt} onChangeText={setAiPrompt} multiline style={styles.body} placeholder="e.g. Experience certificate for 3 years of service as a maths teacher" />
+        <Text style={styles.sub}>{`${aiPrompt.trim().length} of ${AI_PROMPT_MAX} characters`}</Text>
       </FormSheet>
     </View>
   );

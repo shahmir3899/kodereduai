@@ -187,13 +187,13 @@ class TestAddIncome:
 class TestRoles:
     def test_only_admins_and_principals_get_the_write_tools(self, seed_data, books):
         writes = {'record_expenses', 'record_other_income', 'edit_finance_entry', 'delete_finance_entries'}
-        for uname, expected in [('admin', True), ('principal', True), ('accountant', False), ('teacher', False), ('staff', False)]:
+        for uname, expected in [('admin', True), ('principal', True), ('finance_manager', False), ('teacher', False), ('staff', False)]:
             names = {t.name for t in registry.tools_for(_ctx(seed_data, uname))}
             assert (writes <= names) is expected, uname
 
-    def test_accountant_can_read_but_not_propose(self, seed_data, books):
-        assert 'data' in _run(seed_data, 'list_expenses', 'accountant')
-        assert _run(seed_data, 'record_expenses', 'accountant', entries=E)['error'].startswith('You do not have permission')
+    def test_finance_manager_can_read_but_not_propose(self, seed_data, books):
+        assert 'data' in _run(seed_data, 'list_expenses', 'finance_manager')
+        assert _run(seed_data, 'record_expenses', 'finance_manager', entries=E)['error'].startswith('You do not have permission')
 
     def test_principal_never_sees_sensitive_categories_or_entries(self, seed_data, books):
         from finance.models import Expense

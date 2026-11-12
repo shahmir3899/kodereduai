@@ -2,8 +2,8 @@ import React from 'react';
 import { ScrollView, View, Text, StyleSheet } from 'react-native';
 import BottomSheet from '../ui/BottomSheet';
 import Button from '../ui/Button';
-import type { AccountBalance } from '../../services/accountant';
-import { useLedgerPreview } from '../../hooks/useAccountant';
+import type { AccountBalance } from '../../services/financeManager';
+import { useLedgerPreview } from '../../hooks/useFinanceManager';
 import { formatMoney } from '../../services/feeCollect';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
 

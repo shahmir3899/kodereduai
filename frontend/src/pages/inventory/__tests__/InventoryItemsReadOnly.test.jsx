@@ -4,7 +4,7 @@ import { renderWithProviders } from '../../../test/utils'
 import InventoryItemsPage from '../InventoryItemsPage'
 import ToastProvider from '../../../components/Toast'
 
-let mockRole = 'ACCOUNTANT'
+let mockRole = 'MANAGER'
 vi.mock('../../../contexts/AuthContext', () => ({
   useAuth: () => ({ user: { id: 2, role: mockRole }, effectiveRole: mockRole, activeSchool: { id: 1 } }),
 }))
@@ -19,8 +19,8 @@ vi.mock('../../../services/api', () => ({
 }))
 
 describe('Inventory Items write controls', () => {
-  it('are hidden from an accountant, who can only read', async () => {
-    mockRole = 'ACCOUNTANT'
+  it('are hidden from a finance manager, who can only read', async () => {
+    mockRole = 'MANAGER'
     renderWithProviders(<ToastProvider><InventoryItemsPage /></ToastProvider>)
     await waitFor(() => expect(screen.getByText('Chalk Box')).toBeInTheDocument())
     expect(screen.queryByText('+ Add Item')).not.toBeInTheDocument()

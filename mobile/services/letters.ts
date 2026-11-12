@@ -70,3 +70,48 @@ export function letterFileName(subject: string): string {
   const base = (subject || 'Letter').replace(/[^a-zA-Z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 60) || 'Letter';
   return `${base}.pdf`;
 }
+
+// ── Draft with AI ─────────────────────────────────────────────────────────────────────────────
+
+export const AI_PROMPT_MAX = 1000;
+
+export interface AiDraftReply { subject?: string; body_text?: string; fallback?: boolean }
+
+export function validateAiPrompt(prompt: string): string | null {
+  const p = prompt.trim();
+  if (!p) return 'Describe the letter you want drafted.';
+  if (p.length > AI_PROMPT_MAX) return `Keep the description under ${AI_PROMPT_MAX} characters (now ${p.length}).`;
+  return null;
+}
+
+// What the server is told about the person the letter is about (the same fields the web sends).
+export interface AiStaff { full_name?: string; first_name?: string; last_name?: string; employee_id?: string | null; department_name?: string | null; designation_name?: string | null; date_of_joining?: string | null }
+
+export function aiContext(s: AiStaff | null | undefined) {
+  if (!s) return null;
+  return {
+    name: s.full_name || `${s.first_name ?? ''} ${s.last_name ?? ''}`.trim(),
+    employee_id: s.employee_id ?? '', department: s.department_name ?? '', designation: s.designation_name ?? '', date_of_joining: s.date_of_joining ?? '',
+  };
+}
+
+// The template key goes along unless the letter is blank, so the AI follows that kind of letter.
+export const buildAiPayload = (prompt: string, template: string, staff: AiStaff | null | undefined) => ({
+  prompt: prompt.trim(), template_type: template !== 'custom' ? template : '', employee_context: aiContext(staff),
+});
+
+// Puts the drafted text into the form; the subject and body are replaced, the recipient and spacing stay.
+export function applyAiDraft(form: LetterForm, reply: AiDraftReply | undefined): LetterForm {
+  return { ...form, subject: reply?.subject || form.subject, body: reply?.body_text || form.body };
+}
+
+export const aiDraftDone = (reply: AiDraftReply | undefined) =>
+  reply?.fallback ? 'The AI is unavailable, so a template was loaded. Edit it as needed.' : 'Drafted by AI. Read it and edit as needed.';
+
+export const aiDraftEmpty = (reply: AiDraftReply | undefined) => !(reply?.subject || reply?.body_text);
+
+export function aiErrorText(e: unknown): string {
+  const data = (e as { response?: { data?: { error?: string } } })?.response?.data;
+  if (data?.error) return data.error;
+  return (e as { response?: unknown })?.response ? 'AI drafting failed. Try again.' : 'No connection. Check your internet and try again.';
+}

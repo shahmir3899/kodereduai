@@ -8,7 +8,7 @@ Nothing here has been run on a phone yet. It needs a **new APK** (new native mod
 - Test school: 37 (`SEED_TEST_School_Alpha`), admin `SEED_TEST_admin`.
 
 ## Checks
-1. **Button.** Each role (admin, teacher, manager, accountant, staff, parent, student) sees the floating "Aura" button on its home. A driver, or a school with Aura off, sees none.
+1. **Button.** Each role (admin, teacher, manager, finance manager, staff, parent, student) sees the floating "Aura" button on its home. A driver, or a school with Aura off, sees none.
 2. **Live steps.** Ask "who is absent today?". You see "Thinking", then step lines with a colour per agent, then the answer. A table answer scrolls sideways.
 3. **Stream fallback.** On a network that holds streams back, the answer still arrives (without live steps).
 4. **Choices.** Ask about a name with several matches: "which one?" buttons appear on the latest reply only; tapping one sends it.

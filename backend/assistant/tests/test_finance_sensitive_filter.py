@@ -1,6 +1,6 @@
 """The Finance chat tools must hide what the Finance screens hide.
 
-Principals and staff-level roles (accountants included) never see sensitive entries or accounts
+Principals and staff-level roles (finance managers included) never see sensitive entries or accounts
 hidden from staff - not on the Expenses screen, and not by asking the assistant either. Before
 this fix the aggregate tools (totals, balance, breakdown, top expenses...) ignored the flag.
 """
@@ -54,8 +54,9 @@ def ledger(seed_data):
 
 
 def _tool(seed, role, name, **args):
-    user = seed['users']['principal' if role == 'PRINCIPAL' else 'accountant' if role == 'ACCOUNTANT' else 'admin']
-    out = registry.execute(registry.ToolContext(user=user, school_id=seed['SID_A'], role=role), name, args)
+    user = seed['users']['principal' if role == 'PRINCIPAL' else 'finance_manager' if role == 'FINANCE_MANAGER' else 'admin']
+    # 'FINANCE_MANAGER' is the finance-enabled MANAGER now.
+    out = registry.execute(registry.ToolContext(user=user, school_id=seed['SID_A'], role='MANAGER' if role == 'FINANCE_MANAGER' else role), name, args)
     assert 'data' in out, out
     return out['data']
 
@@ -64,7 +65,7 @@ class TestExpenseSideTools:
     def test_total_expenses(self, seed_data, ledger):
         assert _tool(seed_data, 'SCHOOL_ADMIN', 'get_total_expenses')['total_expenses'] == 2400.0
         assert _tool(seed_data, 'PRINCIPAL', 'get_total_expenses')['total_expenses'] == 1000.0
-        assert _tool(seed_data, 'ACCOUNTANT', 'get_total_expenses')['total_expenses'] == 1000.0
+        assert _tool(seed_data, 'FINANCE_MANAGER', 'get_total_expenses')['total_expenses'] == 1000.0
 
     def test_breakdown_and_top_expenses_hide_sensitive_rows(self, seed_data, ledger):
         admin = _tool(seed_data, 'SCHOOL_ADMIN', 'get_expense_breakdown')
@@ -101,7 +102,7 @@ class TestAccountBalances:
         assert set(self._names(seed_data, 'PRINCIPAL')) == {'Cash', 'Private'}
 
     def test_staff_level_roles_see_only_staff_visible_accounts_without_sensitive_rows(self, seed_data, ledger):
-        acct = self._names(seed_data, 'ACCOUNTANT')
+        acct = self._names(seed_data, 'FINANCE_MANAGER')
         assert set(acct) == {'Cash', 'Org shared'}
         assert acct['Cash']['payments'] == 1000.0 and acct['Cash']['receipts'] == 300.0      # no 900 sensitive expense, no 200 income
         assert acct['Cash']['transfers_out'] == 40.0

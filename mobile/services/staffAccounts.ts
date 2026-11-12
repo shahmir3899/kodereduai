@@ -5,7 +5,7 @@
 
 export const PASSWORD_MIN = 8;
 
-export interface NewAccountForm { username: string; role: string; password: string; confirm: string }
+export interface NewAccountForm { username: string; role: string; password: string; confirm: string; canManageFinance: boolean }
 
 // The web suggests first_last, lower case, letters, digits and underscores only.
 export function suggestUsername(first: string | null | undefined, last: string | null | undefined): string {
@@ -13,7 +13,7 @@ export function suggestUsername(first: string | null | undefined, last: string |
 }
 
 export const emptyAccountForm = (first?: string | null, last?: string | null, role = 'STAFF'): NewAccountForm => ({
-  username: suggestUsername(first, last), role, password: '', confirm: '',
+  username: suggestUsername(first, last), role, password: '', confirm: '', canManageFinance: false,
 });
 
 export function validateNewAccount(f: NewAccountForm, allowed: string[]): string | null {
@@ -26,6 +26,7 @@ export function validateNewAccount(f: NewAccountForm, allowed: string[]): string
 
 export const buildAccountPayload = (f: NewAccountForm) => ({
   username: f.username.trim(), password: f.password, confirm_password: f.confirm, user_role: f.role,
+  can_manage_finance: f.role === 'MANAGER' && f.canManageFinance,
 });
 
 // ── Link an existing user ─────────────────────────────────────────────────────────────────────

@@ -10,7 +10,7 @@ Related: `MOBILE_WEB_GAP_REPORT.md` (first, code-reading pass on admin pages, no
 |---|---|---|---|
 | 1 | **API coverage**: every endpoint the web calls, and whether the mobile app calls it | This file, section "Phase 1", plus `MOBILE_API_GAP_APPENDIX.md` | **Done 2026-11-01** (automated) |
 | 2 | **Classify the missing endpoints**: needed for v1, version 2, web only by design, or not applicable | Table in Phase 1 below | Draft done; needs your confirmation |
-| 3 | **Screen inventory and comparison** for the endpoints both sides use: for each web page, list its features (fields, filters, tabs, actions, empty and error states, exports) and compare with the matching mobile screen; screenshots only for visual checks | `MOBILE_AUDIT_SCREENS.md`, one table per area, admin first, then teacher, parent, student, driver, accountant, manager, staff | **Admin and principal done 2026-11-01**; other roles not started |
+| 3 | **Screen inventory and comparison** for the endpoints both sides use: for each web page, list its features (fields, filters, tabs, actions, empty and error states, exports) and compare with the matching mobile screen; screenshots only for visual checks | `MOBILE_AUDIT_SCREENS.md`, one table per area, admin first, then teacher, parent, student, driver, finance manager, manager, staff | **Admin and principal done 2026-11-01**; other roles not started |
 | 4 | **Highlight missing front-end features** found in phase 3 | Same file, "Missing" column | Not started |
 | 5 | **One change list**: every gap from phases 2 to 4 with size, risk and priority; you pick what goes into the next release; then build and test in batches | `MOBILE_CHANGE_LIST.md` | Not started |
 
@@ -68,7 +68,7 @@ Key: **V1** = should be built for the first release; **V2** = already decided fo
 
 ## Phase 2 decisions needed from you
 1. Confirm or change the **V1 / V2 / WEB / N/A** column above, especially: worksheets (V2?), staff attendance (V1?), notification broadcast (V1?), face attendance devices (V2?).
-2. Roles: this audit starts with **admin and principal**. Which role next? Default order: teacher, parent, student, accountant, manager, staff, driver.
+2. Roles: this audit starts with **admin and principal**. Which role next? Default order: teacher, parent, student, finance manager, manager, staff, driver.
 
 ## Next steps
 Phase 3 starts with the admin screens in this order: Students, Dashboard, Attendance, Finance, Academics and exams, HR, Notifications, Settings, Admissions, Inventory. Output goes to `MOBILE_AUDIT_SCREENS.md`.
@@ -80,8 +80,8 @@ Phase 3 starts with the admin screens in this order: Students, Dashboard, Attend
 | Admin, principal | Done (Batches 1 to 10) |
 | Teacher | Audit done 2026-11-01. Batches 11 and 12 built (all items on the teacher change list except Library and Transport read-only, which wait for your call). Needs your phone test. Next role: student |
 | Student | Audit done 2026-11-01 (screens table + change list S1-S7, V1-V6). Batch 13 built (dashboard, attendance off days, results Pass/Fail; needs your phone test). Batch 14 built (fees year filter, profile email, study helper starters, timetable break rows; needs your phone test). Student role done except optional F1 / F2. Next role: parent |
-| Parent | Audit done 2026-11-02 (screens table + change list: V1-V8 verify, A1 attention strip; child pages already lifted by student Batches 13-14). Batch 15 built (attention strip; needs your phone test). Parent role done except optional H1 / H2. Next role: accountant |
-| Accountant | Audit done 2026-11-02 (screens table + change list: V1-V7 verify, AC1-AC4; role is read-only on the server). Batch 16 built (fee overview card, home panels, balances bug fix; needs your phone test). Batch 17 built (ledger, transfers, expenses and income filters; needs your phone test). Accountant role done except the optional P1, P2, L1 to L3. Next role: manager |
+| Parent | Audit done 2026-11-02 (screens table + change list: V1-V8 verify, A1 attention strip; child pages already lifted by student Batches 13-14). Batch 15 built (attention strip; needs your phone test). Parent role done except optional H1 / H2. Next role: finance manager |
+| Finance manager | Audit done 2026-11-02 (screens table + change list: V1-V7 verify, AC1-AC4; role is read-only on the server). Batch 16 built (fee overview card, home panels, balances bug fix; needs your phone test). Batch 17 built (ledger, transfers, expenses and income filters; needs your phone test). Finance manager role done except the optional P1, P2, L1 to L3. Next role: manager |
 | Manager | Audit done 2026-11-02 (screens table + change list: V1-V6 verify, M1-M4; server writes limited to curriculum, assignments, question bank, papers, worksheets, promotion). Batch 18 built (read-only Exams, Lesson Plans tile, quick actions; needs your phone test). Batch 19 built (assignment drafts for the manager, server + web + mobile + guide; needs your phone test). Manager role done except the optional P1 to P3. Next role: staff |
 | Staff | Audit done 2026-11-02 (screens table + change list: V1-V7 verify, SF1-SF3; the role is small and mostly done). Batch 20 built in code (Home tiles, panels, quick actions, and a fix for the attendance cards that always read 0); waiting for a working staff login to check it in a browser; needs your phone test. Next role: driver |
 | Driver | Audit done 2026-11-02 (screens table + change list: DR1-DR3; no driver account exists in the dev database, so no browser check is possible without your decision). Batch 21 built (Home tiles, panels, quick actions, My Payslips; checked with a seed driver; needs your phone test). Driver role done except the optional L1 and P1. **Every role is now audited.** |

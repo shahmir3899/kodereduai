@@ -1,6 +1,6 @@
 import base64
 import json
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -2133,3 +2133,593 @@ class WorksheetUploadTests(TestCase):
             **self.school_header,
         )
         self.assertEqual(response.status_code, 400)
+
+# ---------------------------------------------------------------------------
+# Paper OCR reliability: single run, user-safe errors, 429 retry, degraded flag
+# ---------------------------------------------------------------------------
+from django.test import SimpleTestCase, override_settings
+
+
+class PaperOcrReliabilityTests(SimpleTestCase):
+    def test_call_task_does_not_rerun_when_eager_delay_already_ran(self):
+        """.delay() in eager mode runs the task inline; an error raised afterwards (bad
+        result-backend URL) must not trigger a second run -- that doubled OCR cost."""
+        from core.task_utils import call_task
+
+        calls = []
+
+        def task_body(upload_id):
+            calls.append(upload_id)
+
+        task_body.delay = lambda *a, **k: (task_body(*a, **k), (_ for _ in ()).throw(RuntimeError('bad rediss url')))
+        with override_settings(CELERY_TASK_ALWAYS_EAGER=True):
+            self.assertFalse(call_task(task_body, 5))
+        self.assertEqual(calls, [5])
+
+    @patch('examinations.tasks.process_paper_upload_ocr')
+    def test_start_paper_ocr_runs_once_when_eager(self, mock_task):
+        from examinations.tasks import start_paper_ocr
+
+        with override_settings(CELERY_TASK_ALWAYS_EAGER=True):
+            start_paper_ocr(7)
+        mock_task.assert_called_once_with(7)
+
+    def test_friendly_error_hides_provider_details(self):
+        from examinations.paper_ocr_processor import (
+            friendly_ocr_error, MSG_AI_BUSY, MSG_GENERIC_FAILURE,
+        )
+
+        raw = "Groq API error (m): 429: Rate limit ... organization `org_01abc` ... console.groq.com/settings/billing"
+        self.assertEqual(friendly_ocr_error(raw), MSG_AI_BUSY)
+        self.assertEqual(friendly_ocr_error("Google Vision API error: key xyz"), MSG_GENERIC_FAILURE)
+        self.assertNotIn('org_', friendly_ocr_error(raw))
+
+    def test_org_ids_are_masked_in_provider_errors(self):
+        from examinations.paper_ocr_processor import _mask_provider_ids
+
+        self.assertEqual(_mask_provider_ids('organization `org_01kffk1mhce8` x'), 'organization `org_***` x')
+
+    def test_regex_fallback_handles_two_digit_and_paren_numbering(self):
+        from examinations.paper_ocr_processor import QuestionReviewAI  # noqa: F401
+        from examinations.paper_ocr_processor import PaperOCRProcessor
+
+        processor = PaperOCRProcessor.__new__(PaperOCRProcessor)
+        text = "1) What is a noun?\n9. Define verb\n10. Name a pronoun\nQ11 Write an essay"
+        questions = processor._fallback_question_extraction(text)
+        self.assertEqual(len(questions), 4)
+
+    def test_fallback_result_is_marked_degraded(self):
+        from examinations.paper_ocr_processor import PaperOCRProcessor
+
+        processor = PaperOCRProcessor.__new__(PaperOCRProcessor)
+        parsed = processor._fallback_or_raise("1. What is a noun?\n2. Define verb", "429: busy")
+        self.assertTrue(parsed['degraded'])
+        self.assertEqual(len(parsed['questions']), 2)
+
+    def test_groq_429_is_retried_once_after_the_requested_wait(self):
+        from examinations.paper_ocr_processor import PaperOCRProcessor
+
+        processor = PaperOCRProcessor.__new__(PaperOCRProcessor)
+        busy = MagicMock(status_code=429, text='Please try again in 3.5025s.')
+        ok = MagicMock(status_code=200, text='{}')
+        with patch('examinations.paper_ocr_processor.requests.post', side_effect=[busy, ok]) as post,                 patch('examinations.paper_ocr_processor.time.sleep') as sleep:
+            response = processor._post_groq_with_retry({}, {})
+        self.assertIs(response, ok)
+        self.assertEqual(post.call_count, 2)
+        sleep.assert_called_once()
+        self.assertAlmostEqual(sleep.call_args[0][0], 4.0025, places=2)
+
+    def test_near_empty_ocr_text_fails_as_unreadable(self):
+        from examinations.paper_ocr_processor import PaperOCRProcessor, MSG_UNREADABLE
+
+        processor = PaperOCRProcessor.__new__(PaperOCRProcessor)
+        processor.google_api_key = 'test-key'
+        vision = MagicMock(ok=True)
+        vision.json.return_value = {'responses': [{'fullTextAnnotation': {'text': 'Q1 name'}}]}
+        with patch('examinations.paper_ocr_processor.requests.post', return_value=vision):
+            result = processor._process_with_google_vision('https://example.test/p.jpg')
+        self.assertFalse(result.success)
+        self.assertEqual(result.error, MSG_UNREADABLE)
+
+
+# ---------------------------------------------------------------------------
+# Paper page photos: compressed storage, page photos in group-status, source-pages,
+# cleanup of unsaved pages
+# ---------------------------------------------------------------------------
+import io
+from datetime import timedelta
+from unittest.mock import PropertyMock
+
+from django.core.management import call_command
+from django.utils import timezone
+from PIL import Image
+
+
+def _image_bytes(size, fmt='JPEG', mode='RGB', exif_orientation=None):
+    image = Image.new(mode, size, (200, 120, 40) if mode == 'RGB' else (200, 120, 40, 255))
+    buffer = io.BytesIO()
+    kwargs = {}
+    if exif_orientation:
+        exif = Image.Exif()
+        exif[0x0112] = exif_orientation
+        kwargs['exif'] = exif
+    image.save(buffer, format=fmt, **kwargs)
+    return buffer.getvalue()
+
+
+class PaperImageCompressionTests(SimpleTestCase):
+    def _compress(self, data, content_type='image/jpeg'):
+        from core.storage import _compress_if_needed
+        return _compress_if_needed(data, content_type, 2000)
+
+    def test_oversized_photo_is_scaled_down_and_stored_as_jpeg(self):
+        data, content_type = self._compress(_image_bytes((4000, 3000), 'PNG'), 'image/png')
+        image = Image.open(io.BytesIO(data))
+        self.assertEqual(content_type, 'image/jpeg')
+        self.assertEqual(image.format, 'JPEG')
+        self.assertEqual(max(image.size), 2000)
+
+    def test_small_jpeg_is_stored_untouched(self):
+        original = _image_bytes((1200, 900))
+        data, content_type = self._compress(original)
+        self.assertEqual(data, original)
+        self.assertEqual(content_type, 'image/jpeg')
+
+    def test_camera_rotation_is_applied(self):
+        # Landscape pixels with EXIF orientation 6 (rotate 90 clockwise) must come out portrait.
+        data, _ = self._compress(_image_bytes((3000, 2000), exif_orientation=6))
+        width, height = Image.open(io.BytesIO(data)).size
+        self.assertGreater(height, width)
+
+    def test_transparent_png_is_flattened_to_rgb(self):
+        data, _ = self._compress(_image_bytes((2500, 1800), 'PNG', mode='RGBA'), 'image/png')
+        self.assertEqual(Image.open(io.BytesIO(data)).mode, 'RGB')
+
+    def test_a_file_that_is_not_an_image_is_rejected(self):
+        with self.assertRaises(ValueError):
+            self._compress(b'not an image at all', 'application/pdf')
+
+    def test_upload_file_sends_the_compressed_bytes(self):
+        from core.storage import SupabaseStorageService
+
+        bucket = MagicMock()
+        client = MagicMock()
+        client.storage.from_.return_value = bucket
+        bucket.get_public_url.return_value = 'https://example.test/p.jpg'
+        service = SupabaseStorageService.__new__(SupabaseStorageService)
+        service.bucket = 'b'
+        with patch.object(SupabaseStorageService, 'is_configured', return_value=True), \
+                patch.object(SupabaseStorageService, 'client', new_callable=PropertyMock, return_value=client):
+            upload = SimpleUploadedFile('big.png', _image_bytes((4000, 3000), 'PNG'), content_type='image/png')
+            url = service.upload_file(upload, 'papers/1', 'paper_x.jpg', max_image_dimension=2000)
+        self.assertEqual(url, 'https://example.test/p.jpg')
+        kwargs = bucket.upload.call_args.kwargs
+        self.assertEqual(kwargs['file_options']['content-type'], 'image/jpeg')
+        self.assertEqual(kwargs['file_options']['upsert'], 'true')
+        self.assertEqual(max(Image.open(io.BytesIO(kwargs['file'])).size), 2000)
+        bucket.remove.assert_not_called()  # the pre-upload DELETE is gone
+
+
+class PaperPagePhotoApiTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.school = _make_school(suffix='-photo')
+        cls.other_school = _make_school(suffix='-photo2')
+        cls.class_obj = Class.objects.create(school=cls.school, name='Class 5', grade_level=5)
+        cls.subject = Subject.objects.create(school=cls.school, name='Maths', code='MTH')
+        cls.user = get_user_model().objects.create_superuser(
+            username='photo_admin', email='photo_admin@test.com', password='test12345',
+        )
+
+    def setUp(self):
+        import uuid
+        self.group_id = uuid.uuid4()
+        self.client = APIClient()
+        self.client.force_authenticate(self.user)
+        self.header = {'HTTP_X_SCHOOL_ID': str(self.school.id)}
+
+    def _page(self, number, **extra):
+        return PaperUpload.objects.create(
+            school=self.school, uploaded_by=self.user, image_url=f'https://example.test/p{number}.jpg',
+            group_id=self.group_id, page_number=number, status=PaperUpload.Status.EXTRACTED,
+            ai_extracted_json={'sections': [{
+                'title': f'S{number}', 'question_type_guess': 'SHORT', 'marks_per_question': 1,
+                'shown_count': 1, 'counted_count': 1,
+                'questions': [{'question_text': f'q{number}', 'question_type': 'SHORT', 'marks': 1}]}]},
+            **extra,
+        )
+
+    def test_group_status_returns_each_pages_photo_and_each_questions_page(self):
+        self._page(1)
+        self._page(2)
+        body = self.client.get(
+            '/api/examinations/paper-uploads/group-status/',
+            {'group_id': str(self.group_id), 'total_pages': 2}, **self.header,
+        ).json()
+        self.assertEqual([p['image_url'] for p in body['pages']],
+                         ['https://example.test/p1.jpg', 'https://example.test/p2.jpg'])
+        self.assertEqual([q['page_number'] for q in body['result']['questions']], [1, 2])
+
+    def test_source_pages_lists_the_photos_of_a_saved_paper_in_page_order(self):
+        paper = ExamPaper.objects.create(
+            school=self.school, class_obj=self.class_obj, subject=self.subject, paper_title='Scanned',
+        )
+        self._page(2, exam_paper=paper)
+        self._page(1, exam_paper=paper)
+        response = self.client.get(f'/api/examinations/exam-papers/{paper.id}/source-pages/', **self.header)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual([p['page_number'] for p in response.json()], [1, 2])
+        self.assertEqual(response.json()[0]['image_url'], 'https://example.test/p1.jpg')
+
+    def test_source_pages_is_not_readable_from_another_school(self):
+        paper = ExamPaper.objects.create(
+            school=self.school, class_obj=self.class_obj, subject=self.subject, paper_title='Scanned',
+        )
+        other_header = {'HTTP_X_SCHOOL_ID': str(self.other_school.id)}
+        response = self.client.get(f'/api/examinations/exam-papers/{paper.id}/source-pages/', **other_header)
+        self.assertEqual(response.status_code, 404)
+
+    def test_upload_rejects_a_file_that_is_not_an_image_with_a_clear_message(self):
+        from core.storage import SupabaseStorageService
+
+        class _Bucket:
+            def upload(self, *a, **k):
+                raise AssertionError('must not upload a non-image')
+
+            def get_public_url(self, *a, **k):
+                return ''
+
+        client = MagicMock()
+        client.storage.from_.return_value = _Bucket()
+        with patch.object(SupabaseStorageService, 'is_configured', return_value=True), \
+                patch.object(SupabaseStorageService, 'client', new_callable=PropertyMock, return_value=client):
+            response = self.client.post(
+                '/api/examinations/paper-uploads/upload-image/',
+                {'image': SimpleUploadedFile('x.png', b'definitely not a png', content_type='image/png')},
+                format='multipart', **self.header,
+            )
+        # Either the serializer's image validation or the storage guard rejects it: a 400, never a 500.
+        self.assertEqual(response.status_code, 400)
+
+
+class CleanupPaperUploadsCommandTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.school = _make_school(suffix='-clean')
+        cls.class_obj = Class.objects.create(school=cls.school, name='Class 5', grade_level=5)
+        cls.subject = Subject.objects.create(school=cls.school, name='Maths', code='MTH')
+
+    def _upload(self, status_value, days_old, exam_paper=None):
+        upload = PaperUpload.objects.create(
+            school=self.school, image_url='https://x.supabase.co/storage/v1/object/public/atten-reg/papers/1/a.jpg',
+            status=status_value, exam_paper=exam_paper,
+        )
+        PaperUpload.objects.filter(pk=upload.pk).update(created_at=timezone.now() - timedelta(days=days_old))
+        return upload
+
+    def test_dry_run_changes_nothing(self):
+        stale = self._upload(PaperUpload.Status.FAILED, 40)
+        out = io.StringIO()
+        call_command('cleanup_paper_uploads', stdout=out)
+        self.assertTrue(PaperUpload.objects.filter(pk=stale.pk).exists())
+        self.assertIn('Dry run', out.getvalue())
+
+    def test_apply_deletes_only_old_unsaved_pages(self):
+        paper = ExamPaper.objects.create(
+            school=self.school, class_obj=self.class_obj, subject=self.subject, paper_title='Kept',
+        )
+        old_failed = self._upload(PaperUpload.Status.FAILED, 40)
+        old_unsaved = self._upload(PaperUpload.Status.EXTRACTED, 40)
+        recent = self._upload(PaperUpload.Status.FAILED, 5)
+        confirmed = self._upload(PaperUpload.Status.CONFIRMED, 90, exam_paper=paper)
+        linked_odd_status = self._upload(PaperUpload.Status.EXTRACTED, 90, exam_paper=paper)
+
+        with patch('examinations.management.commands.cleanup_paper_uploads.SupabaseStorageService') as service_cls:
+            service = service_cls.return_value
+            service._extract_storage_path.return_value = 'papers/1/a.jpg'
+            service.delete_file.return_value = True
+            call_command('cleanup_paper_uploads', '--apply', stdout=io.StringIO())
+
+        remaining = set(PaperUpload.objects.values_list('pk', flat=True))
+        self.assertEqual(remaining, {recent.pk, confirmed.pk, linked_odd_status.pk})
+        self.assertNotIn(old_failed.pk, remaining)
+        self.assertNotIn(old_unsaved.pk, remaining)
+        self.assertEqual(service.delete_file.call_count, 2)
+
+    def test_a_photo_that_could_not_be_deleted_keeps_its_row_for_the_next_run(self):
+        stale = self._upload(PaperUpload.Status.FAILED, 40)
+        with patch('examinations.management.commands.cleanup_paper_uploads.SupabaseStorageService') as service_cls:
+            service = service_cls.return_value
+            service._extract_storage_path.return_value = 'papers/1/a.jpg'
+            service.delete_file.return_value = False
+            call_command('cleanup_paper_uploads', '--apply', stdout=io.StringIO())
+        self.assertTrue(PaperUpload.objects.filter(pk=stale.pk).exists())
+
+
+# ---------------------------------------------------------------------------
+# Paper layout (Vision v2): the three real handwritten maths pages are the fixtures
+# ---------------------------------------------------------------------------
+import os
+from django.test import override_settings
+
+_FIXTURE_DIR = os.path.join(os.path.dirname(__file__), 'fixtures_paper_layout')
+
+
+def _vision_fixture(number):
+    with open(os.path.join(_FIXTURE_DIR, f'page{number}.json'), encoding='utf-8') as handle:
+        return json.load(handle)
+
+
+class PaperLayoutRealPageTests(SimpleTestCase):
+    """The pages are the MCQ page (1), the written-answers page (2) and the HCF/LCM/fractions page (3)."""
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        from examinations import paper_layout
+        cls.layouts = {n: paper_layout.build_layout(_vision_fixture(n)) for n in (1, 2, 3)}
+
+    def test_page_tilt_is_found_from_the_words(self):
+        self.assertLess(self.layouts[3].skew_degrees, -2.5)
+        self.assertGreater(self.layouts[3].skew_degrees, -6.0)
+
+    def test_side_by_side_parts_stay_on_one_row_in_reading_order(self):
+        text = self.layouts[3].text
+        self.assertIn('Find HCF using prime factorization.', text)
+        self.assertIn('15, 95, 35 | 2) 20, 30, 50', text)
+        self.assertIn('13,65 | 2) 50,60', text)
+
+    def test_stacked_fractions_are_joined(self):
+        text = self.layouts[3].text
+        self.assertIn('5/14 + 11/42', text)
+        self.assertIn('13/16', text)
+        self.assertIn('14/32', text)
+
+    def test_numbers_in_running_text_lists_and_options_are_not_taken_for_fractions(self):
+        page2, page1 = self.layouts[2].text, self.layouts[1].text
+        self.assertNotIn('295/364', page2)           # "295 sweets ... 364 packets"
+        self.assertNotIn('21/75', page2)             # the pattern rows 21, 42, 63 / 75, 63, 51
+        self.assertIn('There are 295 sweets in a packet', page2)
+        self.assertNotIn('610/10', page1)            # a question and the option row under it
+        self.assertIn('Dividing 610 by 10 is', page1)
+
+    def test_handwritten_margin_marks_move_onto_their_question_row(self):
+        self.assertRegex(self.layouts[3].text, r'LCM using division method\. \[MARKS 34\]')
+        self.assertIn('[MARKS 10]', self.layouts[1].text)
+        # An answer option that happens to sit at the page edge is not a mark.
+        self.assertIn('99,999', self.layouts[1].text)
+        self.assertNotIn('[MARKS 99', self.layouts[1].text)
+
+    def test_text_from_the_neighbouring_sheet_and_the_page_label_are_dropped(self):
+        self.assertNotIn('HCF', self.layouts[2].text)     # rotated "Find HCF 15, 95" at the page edge
+        self.assertNotIn('Page 3', self.layouts[3].text)
+
+    def test_an_empty_answer_box_in_a_number_pattern_is_marked(self):
+        self.assertRegex(self.layouts[2].text, r'63, \[BLANK\] .*105')
+        self.assertRegex(self.layouts[1].text, r'14, 28 \[BLANK\]')
+
+    def test_drawings_are_found_and_cut_between_the_lines_of_writing(self):
+        layout = self.layouts[3]
+        self.assertEqual([f.id for f in layout.figures], ['F1', 'F2'])
+        first, second = layout.figures
+        fractions_row = next(ln for ln in layout.lines if 'QFractions' in ln.text)
+        label_row = next(ln for ln in layout.lines if ln.text == 'Q13')
+        self.assertEqual((first.after_line, second.after_line), (fractions_row.id, label_row.id))
+        # The first row of circles starts under "QFractions." and ends above the "Q13" label.
+        self.assertGreaterEqual(first.box['y0'], fractions_row.box['y1'])
+        self.assertLessEqual(first.box['y1'], label_row.box['y0'])
+        self.assertGreater(first.box['y1'] - first.box['y0'], 0.15)
+        self.assertGreater(second.box['y1'] - second.box['y0'], 0.08)
+        # A page with no drawings gets none.
+        self.assertEqual(self.layouts[2].figures, [])
+
+    def test_every_line_has_a_box_on_the_photo(self):
+        for layout in self.layouts.values():
+            for line in layout.lines:
+                self.assertTrue(0 <= line.box['x0'] < line.box['x1'] <= 1, line.text)
+                self.assertTrue(0 <= line.box['y0'] < line.box['y1'] <= 1, line.text)
+
+    def test_uncertain_digits_are_reported_for_the_lines_they_are_on(self):
+        from examinations import paper_layout
+        layout = self.layouts[3]
+        fractions_row = next(ln for ln in layout.lines if '5/14' in ln.text)
+        notes = paper_layout.uncertain_notes(layout, fractions_row.id, fractions_row.id)
+        self.assertIn('"11/42" may be misread', notes)  # the numerator read at 0.5 confidence
+        # A line of confidently read words reports nothing.
+        confident = next(ln for ln in layout.lines if ln.text == 'Find HCF using division method.')
+        self.assertEqual(paper_layout.uncertain_notes(layout, confident.id, confident.id), [])
+
+    def test_a_response_with_no_words_gives_no_layout(self):
+        from examinations import paper_layout
+        self.assertIsNone(paper_layout.build_layout({}))
+        self.assertIsNone(paper_layout.build_layout({'fullTextAnnotation': {'pages': [{'width': 10, 'height': 10, 'blocks': []}]}}))
+
+
+def _synthetic_page(words, width=1000, height=1000):
+    """words: [(text, x, y, w, h)] -> a Vision-shaped response with upright boxes."""
+    vertices = lambda x, y, w, h: [{'x': x, 'y': y}, {'x': x + w, 'y': y}, {'x': x + w, 'y': y + h}, {'x': x, 'y': y + h}]
+    return {'fullTextAnnotation': {'text': ' '.join(t for t, *_ in words), 'pages': [{
+        'width': width, 'height': height,
+        'blocks': [{'paragraphs': [{'words': [
+            {'boundingBox': {'vertices': vertices(x, y, w, h)}, 'confidence': 0.9, 'symbols': [{'text': t}]}
+            for t, x, y, w, h in words
+        ]}]}],
+    }]}}
+
+
+class PaperLayoutRulesTests(SimpleTestCase):
+    def test_list_labels_stacked_in_a_column_are_not_a_fraction(self):
+        from examinations import paper_layout
+        page = _synthetic_page([
+            ('1', 50, 100, 20, 30), (')', 72, 100, 10, 30), ('red', 120, 100, 60, 30),
+            ('2', 50, 150, 20, 30), (')', 72, 150, 10, 30), ('blue', 120, 150, 60, 30),
+            ('3', 50, 200, 20, 30), (')', 72, 200, 10, 30), ('green', 120, 200, 60, 30),
+            ('4', 50, 250, 20, 30), (')', 72, 250, 10, 30), ('pink', 120, 250, 60, 30),
+        ])
+        text = paper_layout.build_layout(page).text
+        self.assertNotIn('1/2', text)
+        self.assertIn('1) red', text)
+
+    def test_a_real_stacked_fraction_in_a_row_of_numbers_is_joined(self):
+        from examinations import paper_layout
+        filler = [(w, 50 + i * 40, 600, 30, 30) for i, w in enumerate('abcdefgh')]
+        page = _synthetic_page(filler + [
+            ('3', 200, 100, 22, 30), ('+', 240, 118, 20, 20), ('1', 280, 100, 22, 30),
+            ('4', 200, 140, 22, 30), ('5', 280, 140, 22, 30),
+        ])
+        self.assertIn('3/4 + 1/5', paper_layout.build_layout(page).text)
+
+    def test_right_to_left_papers_read_right_to_left_and_keep_the_mark_on_the_left(self):
+        from examinations import paper_layout
+        words = [('اول', 700, 100, 80, 30), ('دوم', 500, 100, 80, 30), ('سوم', 300, 100, 80, 30), ('5', 30, 100, 20, 30)]
+        filler = [(w, 100 + i * 80, 300 + 50 * (i % 2), 60, 30) for i, w in enumerate(['الف', 'ب', 'ج', 'د', 'ه', 'و'])]
+        layout = paper_layout.build_layout(_synthetic_page(words + filler), direction='rtl')
+        first = layout.lines[0]
+        self.assertEqual(first.text, 'اول دوم سوم')
+        self.assertEqual(first.marks, '5')
+
+    def test_direction_follows_the_script_of_the_page_not_the_subject(self):
+        from examinations.paper_layout_apply import detect_direction
+        self.assertEqual(detect_direction({'fullTextAnnotation': {'text': 'سوال نمبر ایک اردو'}}), 'rtl')
+        self.assertEqual(detect_direction({'fullTextAnnotation': {'text': 'Islamiyat paper question 1'}}), 'ltr')
+        self.assertEqual(detect_direction({}), 'ltr')
+
+
+class PaperLayoutApplyTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        from lms.models import Book
+        cls.school = _make_school(suffix='-layout')
+        cls.class_obj = Class.objects.create(school=cls.school, name='Class 5', grade_level=5)
+        cls.urdu = Subject.objects.create(school=cls.school, name='Urdu', code='URD')
+        cls.maths = Subject.objects.create(school=cls.school, name='Maths', code='MTH')
+        cls.islamiyat = Subject.objects.create(school=cls.school, name='Islamiyat', code='ISL')
+        cls.book_subject = Subject.objects.create(school=cls.school, name='Reading', code='RDG')
+        Book.objects.create(
+            school=cls.school, class_obj=cls.class_obj, subject=cls.book_subject, title='Sindhi Reader', language='sd',
+        )
+
+    def _context(self, subject):
+        return {'school_id': self.school.id, 'class_id': self.class_obj.id, 'subject_id': subject.id,
+                'subject_name': subject.name, 'subject_code': subject.code}
+
+    def test_language_hints_come_from_the_subject_with_english_always_included(self):
+        from examinations.paper_layout_apply import vision_language_hints
+        self.assertEqual(vision_language_hints(self._context(self.urdu)), ['ur', 'en'])
+        self.assertEqual(vision_language_hints(self._context(self.islamiyat)), ['ur', 'en'])
+        self.assertEqual(vision_language_hints(self._context(self.maths)), ['en'])
+        self.assertEqual(vision_language_hints(None), ['en'])
+
+    def test_a_curriculum_book_language_wins_over_the_subject_name(self):
+        from examinations.paper_layout_apply import vision_language_hints
+        self.assertEqual(vision_language_hints(self._context(self.book_subject)), ['sd', 'en'])
+
+    def test_line_references_become_a_photo_box_and_a_figure_crop(self):
+        from examinations import paper_layout
+        from examinations.paper_layout_apply import attach_layout
+
+        layout = paper_layout.build_layout(_vision_fixture(3))
+        fractions_row = next(ln for ln in layout.lines if 'QFractions' in ln.text)
+        add_row = next(ln for ln in layout.lines if '5/14' in ln.text)
+        parsed = {'sections': [{'questions': [
+            {'question_text': 'Add the following fractions', 'lines': [add_row.id - 1, add_row.id]},
+            {'question_text': 'Fractions.', 'lines': [fractions_row.id, fractions_row.id], 'figure': 'F1'},
+            {'question_text': 'no lines given'},
+        ]}]}
+        cut = {}
+
+        def fake_crop(image, box, school_id):
+            cut['box'], cut['school_id'] = box, school_id
+            return 'https://example.test/figures/f1.jpg'
+
+        with patch('examinations.paper_layout_apply._download_image', return_value=object()), \
+                patch('examinations.paper_layout_apply._crop_and_store', side_effect=fake_crop):
+            attach_layout(parsed, layout, 'https://example.test/p.jpg', 7)
+
+        add_q, figure_q, plain_q = parsed['sections'][0]['questions']
+        rows = [layout.line(add_row.id - 1), layout.line(add_row.id)]
+        self.assertEqual(add_q['box']['y0'], min(r.box['y0'] for r in rows))
+        self.assertEqual(add_q['box']['y1'], max(r.box['y1'] for r in rows))
+        self.assertNotIn('figure_url', add_q)
+        self.assertEqual(figure_q['question_image_url'], 'https://example.test/figures/f1.jpg')
+        self.assertEqual(cut['box'], layout.figures[0].box)
+        self.assertEqual(cut['school_id'], 7)
+        self.assertNotIn('box', plain_q)
+
+    def test_no_figure_means_the_photo_is_never_downloaded(self):
+        from examinations import paper_layout
+        from examinations.paper_layout_apply import attach_layout
+
+        layout = paper_layout.build_layout(_vision_fixture(2))
+        parsed = {'sections': [{'questions': [{'question_text': 'q', 'lines': [1, 2]}]}]}
+        with patch('examinations.paper_layout_apply._download_image') as download:
+            attach_layout(parsed, layout, 'https://example.test/p.jpg', 7)
+        download.assert_not_called()
+        self.assertIn('box', parsed['sections'][0]['questions'][0])
+
+
+class PaperLayoutPipelineTests(TestCase):
+    """The Vision -> layout -> LLM path of PaperOCRProcessor with both external calls mocked."""
+
+    def _run(self, llm_sections, context=None):
+        vision = MagicMock(ok=True)
+        vision.json.return_value = {'responses': [_vision_fixture(3)]}
+        groq = MagicMock(ok=True, status_code=200)
+        groq.json.return_value = {'choices': [{'message': {'content': json.dumps({'header': {}, 'sections': llm_sections})}}]}
+        processor = PaperOCRProcessor.__new__(PaperOCRProcessor)
+        processor.google_api_key = 'test-key'
+        processor.groq_api_key = 'test-key'
+        with patch('examinations.paper_ocr_processor.requests.post', side_effect=[vision, groq]) as post, \
+                patch('examinations.paper_layout_apply._download_image', return_value=None):
+            result = processor._process_with_google_vision('https://example.test/p.jpg', context or {})
+        return result, post
+
+    @override_settings(PAPER_LAYOUT_V2=True)
+    def test_layout_mode_sends_the_tagged_layout_and_returns_boxes(self):
+        sections = [{'title': 'Q1', 'question_type_guess': 'SHORT', 'marks_per_question': 4, 'shown_count': 1, 'counted_count': 1,
+                     'questions': [{'question_text': 'Find HCF using prime factorization.\n1) 15, 95, 35', 'question_type': 'SHORT',
+                                    'marks': 4, 'lines': [1, 2]}]}]
+        result, post = self._run(sections, {'school_id': 1, 'subject_name': 'Urdu'})
+
+        self.assertTrue(result.success)
+        vision_body = post.call_args_list[0].kwargs['json']['requests'][0]
+        self.assertEqual(vision_body['features'], [{'type': 'DOCUMENT_TEXT_DETECTION'}])
+        self.assertEqual(vision_body['imageContext']['languageHints'], ['ur', 'en'])
+        prompt = post.call_args_list[1].kwargs['json']['messages'][1]['content']
+        self.assertIn('PAGE LAYOUT', prompt)
+        self.assertIn('[L1] Find HCF using prime factorization.', prompt)
+        self.assertIn('[MARKS 34]', prompt)
+        self.assertIn('"lines": [first_id, last_id]', prompt)
+        question = result.questions[0]
+        self.assertEqual(question['lines'], [1, 2])
+        self.assertTrue(0 <= question['box']['y0'] < question['box']['y1'] <= 1)
+
+    @override_settings(PAPER_LAYOUT_V2=False)
+    def test_with_the_flag_off_the_flat_text_path_is_unchanged_apart_from_the_slimmer_request(self):
+        sections = [{'title': 'Q1', 'question_type_guess': 'SHORT', 'marks_per_question': 1, 'shown_count': 1, 'counted_count': 1,
+                     'questions': [{'question_text': 'Find HCF', 'question_type': 'SHORT', 'marks': 1}]}]
+        result, post = self._run(sections)
+        self.assertTrue(result.success)
+        prompt = post.call_args_list[1].kwargs['json']['messages'][1]['content']
+        self.assertIn('RAW OCR TEXT', prompt)
+        self.assertNotIn('PAGE LAYOUT', prompt)
+        self.assertNotIn('box', result.questions[0])
+
+    @override_settings(PAPER_LAYOUT_V2=True)
+    def test_a_layout_failure_falls_back_to_the_flat_text(self):
+        sections = [{'title': 'Q1', 'question_type_guess': 'SHORT', 'marks_per_question': 1, 'shown_count': 1, 'counted_count': 1,
+                     'questions': [{'question_text': 'Find HCF', 'question_type': 'SHORT', 'marks': 1}]}]
+        with patch('examinations.paper_layout.build_layout', side_effect=RuntimeError('boom')):
+            result, post = self._run(sections)
+        self.assertTrue(result.success)
+        self.assertIn('RAW OCR TEXT', post.call_args_list[1].kwargs['json']['messages'][1]['content'])
+
+
+class PaperMarksNormalisationTests(SimpleTestCase):
+    def test_zero_marks_from_the_model_mean_unknown_not_a_zero_mark_question(self):
+        from examinations.paper_ocr_processor import _parse_structured_paper
+        parsed = _parse_structured_paper(json.dumps({'header': {}, 'sections': [{
+            'title': 'A', 'question_type_guess': 'SHORT', 'marks_per_question': 0, 'shown_count': 1, 'counted_count': 1,
+            'questions': [{'question_text': 'q', 'question_type': 'SHORT', 'marks': 0}]}]}))
+        self.assertEqual(parsed['questions'][0]['marks'], 1.0)
+        self.assertEqual(parsed['sections'][0]['marks_per_question'], 1.0)

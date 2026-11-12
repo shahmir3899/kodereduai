@@ -48,7 +48,7 @@ export function useSubjectList() {
 export function useTeacherStaff(enabled = true) {
   return useScopedQuery('staff', ['teachers'], async () => {
     const asTeachers = listOf<{ id: number; user?: number | null; full_name?: string }>(
-      (await hrApi.getStaff({ role: 'TEACHER', page_size: 9999 })).data,
+      (await hrApi.getStaff({ is_teaching: true, page_size: 9999 })).data,
     );
     if (asTeachers.length > 0) return asTeachers;
     return listOf<{ id: number; user?: number | null; full_name?: string }>((await hrApi.getStaff({ page_size: 9999 })).data);

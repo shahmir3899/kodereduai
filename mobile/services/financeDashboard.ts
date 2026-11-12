@@ -1,4 +1,4 @@
-import type { AccountBalance, RecentEntry } from './accountant';
+import type { AccountBalance, RecentEntry } from './financeManager';
 import type { Tone } from '../components/ui/StatusPill';
 
 // Pure helpers for the admin Finance dashboard; shapes follow the endpoints the web

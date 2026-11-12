@@ -364,7 +364,7 @@ def build_guide():
             ["Principal", "School operations; creates staff users"],
             ["Teacher", "Attendance, marks and lesson plans for their classes"],
             ["Manager", "Academics, content, classes and students"],
-            ["Accountant", "Fees, expenses and reports"],
+            ["Manager with finance access", "Fees, expenses and reports"],
             ["Driver", "Transport attendance and routes"],
             ["Staff", "Basic access and notifications"],
             ["Parent", "Their child's attendance, fees and results"],
@@ -1273,9 +1273,9 @@ def build_guide():
     pdf.simple_table(
         ["Role", "Can create"],
         [
-            ["School Admin", "Principal, Manager, Accountant, Teacher, Staff, Driver"],
-            ["Principal", "Manager, Accountant, Teacher, Staff, Driver"],
-            ["Manager, Accountant, Teacher, Staff, Driver", "Nobody"],
+            ["School Admin", "Principal, Manager, Teacher, Staff, Driver"],
+            ["Principal", "Manager, Teacher, Staff, Driver"],
+            ["Manager, Teacher, Staff, Driver", "Nobody"],
             ["Parent, Student", "Nobody (they get accounts through the school)"],
         ],
         [70, 120],
@@ -1304,7 +1304,7 @@ def build_guide():
 
     pdf.section_title("Creating Staff User Accounts")
     pdf.nav_path("Sidebar > HR & Staff > Staff Directory")
-    pdf.body_text("When you add a staff member, tick 'Create User Account' and choose their role (Teacher, Staff, Manager, Accountant or Driver) to give them a login at the same time.")
+    pdf.body_text("When you add a staff member, tick 'Create User Account' and choose their role (Teacher, Staff, Manager or Driver) to give them a login at the same time. For a Manager who handles fees, also tick 'Can manage finance and fees'.")
 
     pdf.section_title("Converting Existing Staff to Users")
     pdf.body_text("Staff without a login show 'No Account'. Click 'Create Account' beside one, or tick several and use 'Create Accounts', then choose the role and a starting password.")
@@ -1322,7 +1322,7 @@ def build_guide():
     pdf.body_text("AI helps with everyday work: dashboard insights, timetables, report card comments, letters and early warnings. Always read AI output before you share it.")
 
     pdf.section_title("AI Dashboard Insights")
-    pdf.body_text("The dashboard lists what needs attention: red for urgent, amber for important, blue for reminders. Each one links to the page where you can act. Each role sees only its own area, so teachers see attendance and accountants see finance.")
+    pdf.body_text("The dashboard lists what needs attention: red for urgent, amber for important, blue for reminders. Each one links to the page where you can act. Each role sees only its own area, so teachers see attendance and Managers with finance access see finance.")
 
     pdf.section_title("OR-Tools Timetable Optimization")
     pdf.nav_path("Sidebar > Academics > Timetable > Auto-Generate")
@@ -1355,7 +1355,7 @@ def build_guide():
     # =========================================================================
     pdf.chapter_title("Inventory & Store")
 
-    pdf.body_text("Store items, stock movements and who holds what. Available to School Admins, Principals and Accountants; only Admins and Principals can change things.")
+    pdf.body_text("Store items, stock movements and who holds what. Available to School Admins, Principals and Managers with finance access; only Admins and Principals can change things.")
 
     pdf.section_title("Inventory Dashboard")
     pdf.nav_path("Sidebar > Inventory > Dashboard")
@@ -1382,7 +1382,7 @@ def build_guide():
     pdf.step("Click 'Assign'. The item is dated today and its stock goes down.")
     pdf.step("When an item comes back, click 'Return' on its row, choose its condition and confirm. The stock is restored.")
     pdf.step("Open the 'Returned' tab to see items that came back, with the date and condition. Search by person or item.")
-    pdf.body_text("Accountants, Teachers and Staff can only view assignments; Teachers and Staff see just the items assigned to them.")
+    pdf.body_text("Managers with finance access, Teachers and Staff can only view assignments; Teachers and Staff see just the items assigned to them.")
 
     pdf.section_title("Reorder Prediction")
     pdf.nav_path("Sidebar > Inventory > Reorder Prediction")

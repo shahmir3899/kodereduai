@@ -540,7 +540,7 @@ export default function BulkLessonPlansModal({ onClose, onSuccess, onCreateSingl
                     Teacher {isMinimal ? '(no default found — please choose)' : '*'}
                   </label>
                   <StaffFilter
-                    role="TEACHER"
+                    teaching
                     status="ACTIVE"
                     value={selectedTeacher}
                     onChange={(e) => setSelectedTeacher(e.target.value)}

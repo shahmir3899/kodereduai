@@ -7,6 +7,7 @@ import { getLifecycleLabel, getLifecycleStyle } from '../../../utils/studentLife
 import StudentAvatar from './StudentAvatar'
 import { formatDate } from '../profile/profileUtils'
 import { hasLeft } from '../studentListUtils'
+import { parentStatusPill } from '../parents/parentLinkUtils'
 
 const TH = 'px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase'
 
@@ -54,7 +55,18 @@ export default function StudentsList({
   onEdit,
   onConvert,
   onOpenTransferred,
+  parentStatus,
+  onManageParents,
 }) {
+  const showParents = !!parentStatus && !!onManageParents
+  const parentPill = (student) => {
+    const pill = parentStatusPill(parentStatus[student.id])
+    return (
+      <button type="button" onClick={() => onManageParents(student)} title="Manage parent links" data-testid={`parent-pill-${student.id}`}>
+        <Badge tone={pill.tone}>{pill.label}</Badge>
+      </button>
+    )
+  }
   return (
     <div className="card">
       {!isLoading && totalCount > 0 && (
@@ -78,11 +90,12 @@ export default function StudentsList({
                 <th className={TH}>Class</th>
                 <th className={TH}>Parent Phone</th>
                 <th className={TH}>Account</th>
+                {showParents && <th className={TH}>Parent portal</th>}
                 <th className={TH}>Lifecycle</th>
                 <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
               </tr>
             </thead>
-            <SkeletonTable rows={6} cols={8} />
+            <SkeletonTable rows={6} cols={showParents ? 9 : 8} />
           </table>
         </div>
       ) : students.length === 0 ? (
@@ -127,6 +140,7 @@ export default function StudentsList({
                     ? <span className="inline-flex items-center">{student.parent_phone}<WhatsAppTick phone={student.parent_phone} /></span>
                     : <span className="text-gray-400 italic">Not set</span>,
                 },
+                ...(showParents ? [{ label: 'Parent portal', value: parentPill(student) }] : []),
                 {
                   label: 'Account',
                   value: student.has_user_account
@@ -161,6 +175,7 @@ export default function StudentsList({
                 <th className={TH}>Class</th>
                 <th className={TH}>Parent Phone</th>
                 <th className={TH}>Account</th>
+                {showParents && <th className={TH}>Parent portal</th>}
                 <th className={TH}>Lifecycle</th>
                 <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
               </tr>
@@ -198,6 +213,7 @@ export default function StudentsList({
                       <span className="text-xs text-gray-400">No Account</span>
                     )}
                   </td>
+                  {showParents && <td className="px-4 py-3">{parentPill(student)}</td>}
                   <td className="px-4 py-3">
                     <span className={`px-2 py-1 rounded-full text-xs font-medium ${getLifecycleStyle(student.status)}`}>
                       {getLifecycleLabel(student.status)}

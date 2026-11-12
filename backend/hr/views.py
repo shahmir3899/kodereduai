@@ -96,6 +96,14 @@ def _is_school_header_rejected(request):
 
 # ── Department ViewSet ────────────────────────────────────────────────────────
 
+
+def _finance_flag(request, role, key='can_manage_finance'):
+    """The finance capability only exists on MANAGER memberships (finance access is a capability, not a role)."""
+    raw = request.data.get(key)
+    on = raw is True or str(raw).lower() in ('1', 'true', 'yes', 'on')
+    return on and role == 'MANAGER'
+
+
 class StaffDepartmentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet):
     """CRUD for staff departments."""
     required_module = 'hr'
@@ -252,6 +260,10 @@ class StaffMemberViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelV
         if role:
             queryset = queryset.filter(user__role=role.upper())
 
+        is_teaching = self.request.query_params.get('is_teaching')
+        if is_teaching is not None:
+            queryset = queryset.filter(is_teaching=is_teaching.lower() == 'true')
+
         # The self-lookup the Staff/Driver dashboards and the login prefetch make
         # (?user=<me>); this filter did not exist, so they got the school's first row.
         user_param = self.request.query_params.get('user')
@@ -345,10 +357,15 @@ class StaffMemberViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelV
             UserSchoolMembership.objects.get_or_create(
                 user=linked_user,
                 school_id=school_id,
-                defaults={'role': user_role, 'is_default': True, 'is_active': True},
+                defaults={'role': user_role, 'is_default': True, 'is_active': True,
+                          'can_manage_finance': _finance_flag(self.request, user_role)},
             )
 
-        staff = serializer.save(school_id=school_id, user=linked_user) if linked_user else serializer.save(school_id=school_id)
+        extra = {}
+        # A TEACHER login implies teaching staff unless the form said otherwise.
+        if linked_user and linked_user.role == 'TEACHER' and 'is_teaching' not in self.request.data:
+            extra['is_teaching'] = True
+        staff = serializer.save(school_id=school_id, user=linked_user, **extra) if linked_user else serializer.save(school_id=school_id)
 
     def perform_destroy(self, instance):
         instance.is_active = False
@@ -428,7 +445,8 @@ class StaffMemberViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelV
         UserSchoolMembership.objects.get_or_create(
             user=user,
             school_id=staff.school_id,
-            defaults={'role': user_role, 'is_default': True, 'is_active': True},
+            defaults={'role': user_role, 'is_default': True, 'is_active': True,
+                          'can_manage_finance': _finance_flag(request, user_role)},
         )
 
         staff.user = user
@@ -546,7 +564,12 @@ class StaffMemberViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelV
         staff.user.save(update_fields=['role'])
 
         from schools.models import UserSchoolMembership
-        UserSchoolMembership.objects.filter(user=staff.user, school_id=staff.school_id).update(role=user_role)
+        UserSchoolMembership.objects.filter(user=staff.user, school_id=staff.school_id).update(
+            role=user_role, can_manage_finance=_finance_flag(request, user_role),
+        )
+        if user_role == 'TEACHER' and not staff.is_teaching:
+            staff.is_teaching = True
+            staff.save(update_fields=['is_teaching'])
 
         return Response({
             'message': 'User role updated successfully.',
@@ -681,7 +704,9 @@ class StaffMemberViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelV
                 )
 
                 staff.user = user
-                staff.save(update_fields=['user'])
+                if default_role == 'TEACHER':
+                    staff.is_teaching = True
+                staff.save(update_fields=['user', 'is_teaching'])
 
                 created.append({
                     'staff_id': staff.id,
@@ -956,7 +981,7 @@ class PayslipViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
             queryset = queryset.filter(staff_member_id=staff_member)
 
         # Self-service: every non-admin role only ever sees their own payslips
-        # (was Manager only; Teacher/Staff/Accountant/Driver could read all).
+        # (was Manager only; Teacher/Staff/Driver could read all).
         if is_own_only(self.request):
             queryset = queryset.filter(staff_member__user=self.request.user)
 

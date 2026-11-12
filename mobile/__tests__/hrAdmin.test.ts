@@ -5,6 +5,9 @@ import {
   staffToForm, validateDepartment, validateDocument, validateLeavePolicy, validateQualification, validateStaff, withDepartment,
   withDesignation, EMPLOYMENT_STATUSES, type HrStats, type StaffRow,
 } from '../services/hrAdmin';
+import { useRoleConfig } from './roleFixture';
+
+beforeAll(useRoleConfig);
 
 const staff = (over: Partial<StaffRow> = {}): StaffRow => ({
   id: 1, full_name: 'Ali Khan', first_name: 'Ali', last_name: 'Khan', department: 2, department_name: 'Science', designation: 5, designation_name: 'Teacher',

@@ -5,11 +5,11 @@ import { useAuth } from '../../contexts/AuthContext';
 import { routeFor } from '../../navigation/routes';
 import { reportsApi } from '../../services/api';
 import { useAcademicYear } from '../../hooks/useAcademicYear';
-import { useExpenseCategories, useFinanceSummary, useMonthlyTrend } from '../../hooks/useAccountant';
+import { useExpenseCategories, useFinanceSummary, useMonthlyTrend } from '../../hooks/useFinanceManager';
 import { useRefreshControl } from '../../hooks/useRefreshControl';
 import {
   PERIOD_LABELS, rangeFor, type DateRange, type Period,
-} from '../../services/accountant';
+} from '../../services/financeManager';
 import {
   exportErrorMessage, feeReportFileName, feeReportRequest, financeSummaryFileName, financeSummaryRequest,
 } from '../../services/reports';

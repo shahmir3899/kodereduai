@@ -1043,6 +1043,12 @@ export const parentsApi = {
   linkChild: (data) => api.post('/api/parents/admin/link-child/', data),
   unlinkChild: (id) => api.delete(`/api/parents/admin/unlink-child/${id}/`),
   generateInvite: (data) => api.post('/api/parents/admin/generate-invite/', data),
+  getStudentInvites: (studentId) => api.get('/api/parents/admin/generate-invite/', { params: { student_id: studentId } }),
+  revokeInvite: (id) => api.delete(`/api/parents/admin/invites/${id}/`),
+  linkChildren: (data) => api.post('/api/parents/admin/link-children/', data),
+  updateLink: (id, data) => api.patch(`/api/parents/admin/links/${id}/`, data),
+  getSiblingSuggestions: (params) => api.get('/api/parents/admin/sibling-suggestions/', { params }),
+  getParentStatus: () => api.get('/api/parents/admin/parent-status/'),
   getAdminLeaveRequests: (params) => api.get('/api/parents/admin/leave-requests/', { params }),
   reviewLeaveRequest: (id, data) => api.patch(`/api/parents/admin/leave-requests/${id}/review/`, data),
 }

@@ -585,7 +585,7 @@ export default function LessonPlanWizard({ onClose, onSuccess, editingPlan }) {
               <div>
                 <label className="label">Teacher</label>
                 <StaffFilter
-                  role="TEACHER"
+                  teaching
                   status="ACTIVE"
                   value={selectedTeacher}
                   onChange={(e) => setSelectedTeacher(e.target.value)}

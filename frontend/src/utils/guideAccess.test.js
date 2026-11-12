@@ -3,7 +3,7 @@ import { filterGuideChapters, buildAvailability } from './guideAccess'
 import guideData from '../data/userGuide.json'
 
 const allModules = () => true
-const staffLevel = (role) => ['STAFF', 'TEACHER', 'MANAGER', 'ACCOUNTANT', 'DRIVER'].includes(role)
+const staffLevel = (role) => ['STAFF', 'TEACHER', 'MANAGER', 'DRIVER'].includes(role)
 
 const accessFor = (role, isModuleEnabled = allModules) => ({ role, isSuperAdmin: false, isModuleEnabled })
 const titles = (role, isModuleEnabled) =>
@@ -31,8 +31,10 @@ describe('filterGuideChapters', () => {
   it('narrows a chapter by section tags (teacher keeps Collect Payments sections only in finance)', () => {
     const finance = filterGuideChapters(guideData.chapters, accessFor('TEACHER')).find((c) => c.title === 'Finance Module')
     expect(finance).toBeUndefined()
-    const accountant = filterGuideChapters(guideData.chapters, accessFor('ACCOUNTANT')).find((c) => c.title === 'Finance Module')
-    expect(accountant).toBeDefined()
+    // The guide has a FINANCE audience; a Manager with the finance capability sees it.
+    const financeView = filterGuideChapters(guideData.chapters, { ...accessFor('MANAGER'), canManageFinance: true }).find((c) => c.title === 'Finance Module')
+    expect(financeView).toBeDefined()
+    expect(filterGuideChapters(guideData.chapters, accessFor('MANAGER')).find((c) => c.title === 'Finance Module')).toBeUndefined()
   })
 
   it('gives parents only parent-facing and shared chapters', () => {

@@ -168,7 +168,7 @@ Closing and reopening are **admin-only** (`IsSchoolAdmin`). Closing an already-c
 | Role | Access |
 |---|---|
 | `SUPER_ADMIN`, `SCHOOL_ADMIN`, `PRINCIPAL` | Full access. `PRINCIPAL` sees only their own school's accounts, not org-shared ones. |
-| `ACCOUNTANT`, `DRIVER` | Read-only. |
+| `DRIVER` | Read-only. |
 | `TEACHER` | Only fee collection for assigned classes, plus reading accounts and categories. |
 | `STAFF`, `MANAGER` | No finance access. |
 

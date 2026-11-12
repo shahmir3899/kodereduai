@@ -3,7 +3,10 @@ import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../contexts/AuthContext'
 import { useAcademicYear } from '../contexts/AcademicYearContext'
-import { studentsApi, schoolsApi } from '../services/api'
+import { studentsApi, schoolsApi, parentsApi } from '../services/api'
+import ParentsTab from './students/parents/ParentsTab'
+import ParentLinksDrawer from './students/parents/ParentLinksDrawer'
+import { PARENT_STATUS_FILTERS, parentStatusPill } from './students/parents/parentLinkUtils'
 import { useToast } from '../components/Toast'
 import { useSessionClasses } from '../hooks/useSessionClasses'
 import { useClasses } from '../hooks/useClasses'
@@ -71,6 +74,11 @@ export default function StudentsPage() {
 
   const [view, setView] = useViewPreference('students')
 
+  // 'students' list or 'parents' (parent-centred sibling linking); parent drawer target; portal filter.
+  const [tab, setTab] = useState('students')
+  const [parentDrawerStudent, setParentDrawerStudent] = useState(null)
+  const [parentFilter, setParentFilter] = useState('all')
+
   // Convert existing students to portal users (the modals own their form state)
   const [convertStudent, setConvertStudent] = useState(null)
   const [showBulkConvertModal, setShowBulkConvertModal] = useState(false)
@@ -117,6 +125,13 @@ export default function StudentsPage() {
       status_scope: statusScope,
     }),
     enabled: !!selectedSchoolId,
+  })
+
+  // Parent-portal link status per student (admin/principal only: the endpoint is admin-gated).
+  const { data: parentStatus = {} } = useQuery({
+    queryKey: ['parent-status', selectedSchoolId],
+    queryFn: async () => (await parentsApi.getParentStatus()).data,
+    enabled: canManageLifecycle && !!selectedSchoolId,
   })
 
   // Photo upload/remove — only available once a student exists (edit mode)
@@ -361,7 +376,7 @@ export default function StudentsPage() {
     [classSelectorScope, sessionClasses, classes],
   )
 
-  const students = useMemo(() => {
+  const classFilteredStudents = useMemo(() => {
     const filtered = filterStudents({
       students: allStudents,
       selectedClassIds,
@@ -374,6 +389,13 @@ export default function StudentsPage() {
     })
     return sortStudents(filtered, { selectedClassIds, resolvedSelectedClasses, classGradeMap })
   }, [allStudents, resolvedSelectedClasses, debouncedSearch, classGradeMap, classSelectorScope, selectedClassIds, sessionClasses, statusScope])
+
+  const students = useMemo(
+    () => (parentFilter === 'all'
+      ? classFilteredStudents
+      : classFilteredStudents.filter((s) => parentStatusPill(parentStatus[s.id]).key === parentFilter)),
+    [classFilteredStudents, parentFilter, parentStatus],
+  )
 
   // Students without accounts are the ones bulk "Create Accounts" applies to
   const studentsWithoutAccounts = useMemo(() => students.filter((s) => !s.has_user_account), [students])
@@ -551,12 +573,37 @@ export default function StudentsPage() {
         </div>
       )}
 
-      {selectedSchoolId && (
+      {selectedSchoolId && canManageLifecycle && (
+        <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
+          <div className="inline-flex rounded-lg border border-gray-200 bg-white p-0.5" role="tablist">
+            {[['students', 'Students'], ['parents', 'Parents']].map(([key, label]) => (
+              <button
+                key={key} type="button" role="tab" aria-selected={tab === key}
+                onClick={() => setTab(key)}
+                className={`px-4 py-1.5 text-sm rounded-md ${tab === key ? 'bg-primary-600 text-white' : 'text-gray-600 hover:bg-gray-50'}`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          {tab === 'students' && (
+            <select className="input w-auto" aria-label="Parent portal filter" value={parentFilter} onChange={(e) => setParentFilter(e.target.value)}>
+              {PARENT_STATUS_FILTERS.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
+            </select>
+          )}
+        </div>
+      )}
+
+      {selectedSchoolId && canManageLifecycle && tab === 'parents' && <ParentsTab students={allStudents} />}
+
+      {selectedSchoolId && !(canManageLifecycle && tab === 'parents') && (
         <StudentsList
+          parentStatus={canManageLifecycle ? parentStatus : null}
+          onManageParents={setParentDrawerStudent}
           isLoading={isLoading}
           students={students}
           totalCount={allStudents.length}
-          isFiltered={selectedClassIds.length > 0 || !!search}
+          isFiltered={selectedClassIds.length > 0 || !!search || parentFilter !== 'all'}
           view={view}
           onViewChange={setView}
           selectedIds={selectedIds}
@@ -632,6 +679,10 @@ export default function StudentsPage() {
           onDownloadReports={handleDownloadSelectedReports}
           onClear={selection.clear}
         />
+      )}
+
+      {parentDrawerStudent && (
+        <ParentLinksDrawer student={parentDrawerStudent} onClose={() => setParentDrawerStudent(null)} />
       )}
 
       {convertStudent && (

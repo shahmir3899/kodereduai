@@ -1,6 +1,6 @@
 """Single source for the fee-collection numbers shown on the dashboards.
 
-The admin dashboard, finance dashboard, accountant dashboard and the dashboard
+The admin dashboard, finance dashboard, finance_manager dashboard and the dashboard
 bootstrap each used to re-implement this aggregation with slightly different
 filters (one of them MONTHLY-only), so the same month showed different rates on
 different screens. Everything now goes through ``month_payments`` +

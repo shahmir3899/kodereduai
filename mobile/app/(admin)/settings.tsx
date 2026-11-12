@@ -5,7 +5,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { allowableRoles } from '../../services/schoolUsers';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
 
-// The two tabs of the web Settings page: School profile, and Users and roles.
+// The two tabs of the web Settings page (School profile, and Users and roles), and the stored reports.
 export default function Settings() {
   const router = useRouter();
   const { effectiveRole, isSuperAdmin } = useAuth();
@@ -25,6 +25,13 @@ export default function Settings() {
         <View style={styles.who}>
           <Text style={styles.name}>School profile</Text>
           <Text style={styles.sub}>Logo, letterhead, time zone, exam and attendance settings</Text>
+        </View>
+        <Text style={styles.arrow}>›</Text>
+      </TouchableOpacity>
+      <TouchableOpacity accessibilityRole="button" style={styles.row} onPress={() => router.push('/(admin)/past-reports' as Href)}>
+        <View style={styles.who}>
+          <Text style={styles.name}>Past reports</Text>
+          <Text style={styles.sub}>Reports the server stored earlier, to share as PDF or Excel</Text>
         </View>
         <Text style={styles.arrow}>›</Text>
       </TouchableOpacity>

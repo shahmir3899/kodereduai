@@ -22,7 +22,7 @@ import { useViewPreference } from '../hooks/useViewPreference'
 
 export default function SettingsPage() {
   const queryClient = useQueryClient()
-  const { isSchoolAdmin, isSuperAdmin, getAllowableRoles, refreshUser } = useAuth()
+  const { isSchoolAdmin, isSuperAdmin, getAllowableRoles, refreshUser, roleConfig } = useAuth()
   const { confirm, ConfirmModalRoot } = useConfirmModal()
   const { showError, showSuccess } = useToast()
   const { validate: validatePassword } = usePasswordPolicy()
@@ -60,7 +60,7 @@ export default function SettingsPage() {
   const [resetUser, setResetUser] = useState(null)
   const [userSearch, setUserSearch] = useState('')
   const [userRoleFilter, setUserRoleFilter] = useState('')
-  const EMPTY_USER_FORM = { username: '', email: '', password: '', confirm_password: '', first_name: '', last_name: '', role: 'STAFF', phone: '' }
+  const EMPTY_USER_FORM = { username: '', email: '', password: '', confirm_password: '', first_name: '', last_name: '', role: 'STAFF', phone: '', can_manage_finance: false }
   const [userForm, setUserForm] = useState(EMPTY_USER_FORM)
   const [userError, setUserError] = useState('')
 
@@ -226,6 +226,7 @@ export default function SettingsPage() {
       last_name: user.last_name || '',
       role: user.role,
       phone: user.phone || '',
+      can_manage_finance: !!user.can_manage_finance,
     })
     setUserError('')
     setShowUserModal(true)
@@ -257,25 +258,14 @@ export default function SettingsPage() {
   // surfaces one — it's just excluded from the filter dropdown below,
   // since Super Admin isn't a role that's assignable or filterable at the
   // school level).
-  const ROLE_LABELS = {
-    SUPER_ADMIN: 'Super Admin',
-    SCHOOL_ADMIN: 'School Admin',
-    PRINCIPAL: 'Principal',
-    MANAGER: 'Manager',
-    ACCOUNTANT: 'Accountant',
-    TEACHER: 'Teacher',
-    STAFF: 'Staff',
-    DRIVER: 'Driver',
-    STUDENT: 'Student',
-    PARENT: 'Parent',
-  }
+  // Labels come from the backend role list (core/roles.py), not a copy kept here.
+  const ROLE_LABELS = Object.fromEntries((roleConfig?.roles || []).map((r) => [r.value, r.label]))
 
   const ROLE_COLORS = {
     SUPER_ADMIN: TONE.danger,
     SCHOOL_ADMIN: TONE.accent,
     PRINCIPAL: TONE.indigo,
     MANAGER: TONE.orange,
-    ACCOUNTANT: 'bg-cyan-100 text-cyan-800',
     TEACHER: TONE.success,
     STAFF: TONE.neutral,
     DRIVER: TONE.teal,
@@ -735,6 +725,12 @@ export default function SettingsPage() {
                     ))}
                   </select>
 </Field>
+                {userForm.role === 'MANAGER' && (
+                  <label className="flex items-center gap-2 text-sm text-gray-700">
+                    <input type="checkbox" checked={!!userForm.can_manage_finance} onChange={(e) => setUserForm(f => ({ ...f, can_manage_finance: e.target.checked }))} />
+                    Can manage finance and fees
+                  </label>
+                )}
                 <Field label="Phone">
 <input type="text" value={userForm.phone} onChange={(e) => setUserForm(f => ({ ...f, phone: e.target.value }))} className="input-field" placeholder="Phone number" />
 </Field>

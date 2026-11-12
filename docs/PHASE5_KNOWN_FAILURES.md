@@ -374,15 +374,15 @@ Notes: the `test_*.py` scripts in the backend root (`test_phase1.py`, `test_audi
 - **Push deep links are unused.** The mobile tap handler reads `data.screen`, but no backend notification sets a `screen` field.
 - **Push token is unregistered after logout clears the session**, so the call is likely unauthenticated (mobile `NotificationContext`). Check in release hardening.
 
-## Found while building the mobile Accountant/Staff apps (2026-10-28, not fixed)
-- **Web shows the accountant "Collect Payments" and the finance quick actions, but every write returns 403.** `FinanceRoleAccessPermission` allows ACCOUNTANT only `GET/HEAD/OPTIONS`. Either hide those controls on the web or allow ACCOUNTANT to write `FeePaymentViewSet` (a backend decision). Mobile shows the accountant a read-only finance suite.
-- **Web sidebar shows accountants and staff groups they cannot use.** Academics, Management, Transport and Library are gated on `!isStaff` / `!isManager`, so ACCOUNTANT sees them (and STAFF sees Transport and Library). The accountant also has no HR self-service link although `HR_SELF_SERVICE_ROLES` allows it.
+## Found while building the mobile Finance manager/Staff apps (2026-10-28, not fixed)
+- **Web shows the finance manager "Collect Payments" and the finance quick actions, but every write returns 403.** `FinanceRoleAccessPermission` allows finance manager only `GET/HEAD/OPTIONS`. Either hide those controls on the web or allow finance manager to write `FeePaymentViewSet` (a backend decision). Mobile shows the finance manager a read-only finance suite.
+- **Web sidebar shows finance managers and staff groups they cannot use.** Academics, Management, Transport and Library are gated on `!isStaff` / `!isManager`, so finance manager sees them (and STAFF sees Transport and Library). The finance manager also has no HR self-service link although `HR_SELF_SERVICE_ROLES` allows it.
 - **Web has no payslip page for staff.** Only the staff dashboard lists the last three. Mobile adds My Payslips (own record, read-only).
 
 
 ## Found while checking mobile list performance (2026-10-28, not fixed)
 - **Legacy admin lists show only the first page (20 rows).** `(admin)/hostel/gate-passes`, `(admin)/transport/index` (routes), `(admin)/hr/leave-approvals` and `(admin)/inbox` fetch once with no paging, so rows past the first page never appear. Move them onto `useScopedPagedQuery` + `FlatList` like the students list. (`(admin)/hr/staff` was fixed the same way in step 5.)
-- **Phase 7 bug fixed in 9.1:** the accountant app read `balance` from `accounts/balances/`, but the endpoint sends `net_balance`, so total balance showed 0. Now reads `net_balance` first.
+- **Phase 7 bug fixed in 9.1:** the finance manager app read `balance` from `accounts/balances/`, but the endpoint sends `net_balance`, so total balance showed 0. Now reads `net_balance` first.
 - **Web finance export changed (9.1):** the Finance Dashboard PDF is now the server's FINANCE_SUMMARY report. Multi-school admins previously got a combined total with no account table; they now get the active school's report. Not run in a browser (frontend deps are not installed here); the vitest export-lazy-loading test entry for the removed file was dropped.
 
 ## Found while building mobile Admissions (2026-10-29)
@@ -410,5 +410,5 @@ Notes: the `test_*.py` scripts in the backend root (`test_phase1.py`, `test_audi
 - **Web manager Exams page** is open to a manager, but every exam write is refused for that role (exam views are admin and principal only); whether it shows create controls was not checked in a browser.
 
 ## Found while building mobile staff Batch 20 (2026-11-02, not fixed on the web)
-- **Web own-attendance cards read the wrong keys.** `StaffAttendancePage.jsx` `MyAttendanceView` takes `summary.PRESENT`, `ABSENT`, `LATE`, `HALF_DAY`, `ON_LEAVE`, but `GET /api/hr/attendance/summary/` answers lowercase `present`, `absent`, `late`, `half_day`, `on_leave`, so those cards show 0 for a teacher, manager, staff, accountant and driver (the Rate card reads `attendance_rate`, which is right). The mobile screen had the same mistake and is fixed. The web staff Dashboard reads the lowercase keys correctly.
+- **Web own-attendance cards read the wrong keys.** `StaffAttendancePage.jsx` `MyAttendanceView` takes `summary.PRESENT`, `ABSENT`, `LATE`, `HALF_DAY`, `ON_LEAVE`, but `GET /api/hr/attendance/summary/` answers lowercase `present`, `absent`, `late`, `half_day`, `on_leave`, so those cards show 0 for a teacher, manager, staff, finance manager and driver (the Rate card reads `attendance_rate`, which is right). The mobile screen had the same mistake and is fixed. The web staff Dashboard reads the lowercase keys correctly.
 - **Test account:** `SEED_TEST_staff_e2e` (school 37) no longer accepts the dev password `Abcd1234`.

@@ -5,20 +5,24 @@ import AdminDashboard from './admin-dashboard/AdminDashboard'
 
 const TeacherDashboard = lazy(() => import('./teacher/TeacherDashboard'))
 const ManagerDashboard = lazy(() => import('./ManagerDashboard'))
-const AccountantDashboard = lazy(() => import('./AccountantDashboard'))
+const FinanceManagerDashboard = lazy(() => import('./FinanceManagerDashboard'))
 const StaffDashboard = lazy(() => import('./staff/StaffDashboard'))
 const DriverDashboard = lazy(() => import('./driver/DriverDashboard'))
 
 export default function DashboardRouter() {
-  const { effectiveRole } = useAuth()
+  const { effectiveRole, canManageFinance } = useAuth()
 
   switch (effectiveRole) {
     case 'TEACHER':
       return <TeacherDashboard />
     case 'MANAGER':
-      return <ManagerDashboard />
-    case 'ACCOUNTANT':
-      return <AccountantDashboard />
+      // A Manager with the finance capability (the former Finance manager) also gets the finance tiles.
+      return canManageFinance ? (
+        <>
+          <ManagerDashboard />
+          <FinanceManagerDashboard />
+        </>
+      ) : <ManagerDashboard />
     case 'STAFF':
       return <StaffDashboard />
     case 'DRIVER':

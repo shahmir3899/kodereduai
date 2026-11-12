@@ -56,9 +56,9 @@ class UserSchoolMembership(models.Model):
         SCHOOL_ADMIN = 'SCHOOL_ADMIN', 'School Admin'
         PRINCIPAL = 'PRINCIPAL', 'Principal'
         MANAGER = 'MANAGER', 'Manager'
-        ACCOUNTANT = 'ACCOUNTANT', 'Accountant'
         TEACHER = 'TEACHER', 'Teacher'
         STAFF = 'STAFF', 'Staff'
+        DRIVER = 'DRIVER', 'Driver'
         PARENT = 'PARENT', 'Parent'
         STUDENT = 'STUDENT', 'Student'
 
@@ -80,6 +80,11 @@ class UserSchoolMembership(models.Model):
     is_default = models.BooleanField(
         default=False,
         help_text="Which school loads on login",
+    )
+    # Finance access is a capability on a MANAGER membership, not a role of its own.
+    can_manage_finance = models.BooleanField(
+        default=False,
+        help_text="Managers only: grants finance and fee access",
     )
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)

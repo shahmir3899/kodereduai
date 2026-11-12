@@ -36,7 +36,7 @@ export default function StockTransactionsPage() {
   const queryClient = useQueryClient()
   const { showSuccess } = useToast()
   const { effectiveRole } = useAuth()
-  // Recording is admin-only on the API; accountants and drivers only read.
+  // Recording is admin-only on the API; finance managers and drivers only read.
   const canRecord = ['SUPER_ADMIN', 'SCHOOL_ADMIN', 'PRINCIPAL'].includes(effectiveRole)
 
   // Filters

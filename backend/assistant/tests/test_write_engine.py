@@ -145,14 +145,14 @@ class TestProposal:
 
 class TestRoles:
     def test_only_admins_are_offered_the_write_tool(self, seed_data, fees):
-        for uname, expected in [('admin', True), ('principal', True), ('accountant', False),
+        for uname, expected in [('admin', True), ('principal', True), ('finance_manager', False),
                                 ('teacher', False), ('manager', False), ('staff', False)]:
             names = {t.name for t in registry.tools_for(_ctx(seed_data, uname))}
             assert ('record_fee_payments' in names) is expected, uname
 
-    def test_accountant_can_read_but_not_propose(self, seed_data, fees):
-        assert 'data' in registry.execute(_ctx(seed_data, 'accountant'), 'find_pending_fee_payments', {})
-        out = _propose(seed_data, fees, uname='accountant')
+    def test_finance_manager_can_read_but_not_propose(self, seed_data, fees):
+        assert 'data' in registry.execute(_ctx(seed_data, 'finance_manager'), 'find_pending_fee_payments', {})
+        out = _propose(seed_data, fees, uname='finance_manager')
         assert out['error'].startswith('You do not have permission')
 
     def test_write_tools_cannot_be_given_to_parents_or_students(self):
@@ -361,7 +361,7 @@ class TestEndToEnd:
         assert all(v[0] == 0 for v in _paid(fees).values())
 
     def test_model_gets_no_card_for_a_non_admin_even_if_it_asks(self, seed_data, fees):
-        conv = _conv(seed_data, 'accountant')
+        conv = _conv(seed_data, 'finance_manager')
         args = {'class_name': fees['class_name'], 'account_id': fees['account'].id}
         script = iter([
             llm.LLMReply(tool_calls=[{'id': 'c1', 'name': 'record_fee_payments', 'arguments': args,
@@ -369,6 +369,6 @@ class TestEndToEnd:
             llm.LLMReply(content='Sorry, I cannot record payments for you.'),
         ])
         with patch('assistant.llm.complete', lambda *a, **k: next(script)):
-            result = orchestrator.run_turn(conv, 'record fees', _ctx(seed_data, 'accountant', conv))
+            result = orchestrator.run_turn(conv, 'record fees', _ctx(seed_data, 'finance_manager', conv))
         assert result.proposals == [] and AgentAction.objects.count() == 0
         assert result.tool_calls[0]['ok'] is False

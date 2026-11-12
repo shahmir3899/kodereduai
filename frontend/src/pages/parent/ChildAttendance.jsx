@@ -78,20 +78,18 @@ export default function ChildAttendance() {
     enabled: !!studentId,
   })
 
-  const attendance = attendanceData?.data
-  const records = attendance?.records || attendance?.days || []
-  const summary = attendance?.summary || attendance || {}
+  // The endpoint returns a plain list of {date, status, branch, ...}; there is no summary object,
+  // so every count below is derived from these records.
+  const records = Array.isArray(attendanceData?.data) ? attendanceData.data : []
+  const summary = {}
 
-  // Build a map of day -> status
+  // Build a map of day -> status. date is YYYY-MM-DD, so read the day from the string (new Date()
+  // would parse it as UTC).
   const dayStatusMap = {}
-  if (Array.isArray(records)) {
-    records.forEach((r) => {
-      const day = r.day || (r.date ? new Date(r.date).getDate() : null)
-      if (day) {
-        dayStatusMap[day] = r.status || r.attendance_status || 'PRESENT'
-      }
-    })
-  }
+  records.forEach((r) => {
+    const day = r.date ? Number(String(r.date).slice(8, 10)) : null
+    if (day) dayStatusMap[day] = r.status || 'PRESENT'
+  })
 
   const calendarDays = getCalendarDays(selectedYear, selectedMonth)
   const dayStatusByDate = dayStatusRes?.data?.days || {}
@@ -106,7 +104,8 @@ export default function ChildAttendance() {
   const lateCount = summary.late_count ?? summary.late ?? Object.values(dayStatusMap).filter(s => s === 'LATE').length
   const leaveCount = summary.leave_count ?? summary.leave ?? Object.values(dayStatusMap).filter(s => s === 'LEAVE').length
   const totalDays = summary.total_days ?? ((presentCount + absentCount + lateCount + leaveCount) || 0)
-  const attendanceRate = totalDays > 0 ? Math.round(((presentCount + lateCount) / totalDays) * 100) : 0
+  // Late and leave count as present: the same rule as the dashboard and the backend.
+  const attendanceRate = totalDays > 0 ? Math.round(((presentCount + lateCount + leaveCount) / totalDays) * 100) : 0
 
   const goToPrevMonth = () => {
     if (selectedMonth === 1) {

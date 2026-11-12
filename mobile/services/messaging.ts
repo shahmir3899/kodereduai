@@ -49,7 +49,7 @@ export type MessageType = 'GENERAL' | 'TEACHER_PARENT' | 'TEACHER_STUDENT' | 'AD
 export function messageTypeFor(r: Pick<Recipient, 'role'>): MessageType {
   if (r.role === 'PARENT') return 'TEACHER_PARENT';
   if (r.role === 'STUDENT') return 'TEACHER_STUDENT';
-  if (r.role && ['TEACHER', 'STAFF', 'MANAGER', 'ACCOUNTANT'].includes(r.role)) return 'ADMIN_STAFF';
+  if (r.role && ['TEACHER', 'STAFF', 'MANAGER'].includes(r.role)) return 'ADMIN_STAFF';
   return 'GENERAL';
 }
 

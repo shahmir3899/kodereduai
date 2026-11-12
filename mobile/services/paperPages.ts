@@ -10,11 +10,16 @@ export const MAX_PAGES = 30;
 export const UPLOAD_CONCURRENCY = 3;
 export const POLL_MS = 2500;
 
-export interface ServerPage { page_number: number; upload_id: number | null; status: string; error_message: string }
+export interface ServerPage { page_number: number; upload_id: number | null; status: string; error_message: string; image_url?: string | null }
+
+/** A question's area on its page photo, as 0-1 fractions of the image. */
+export interface PhotoBox { x0: number; y0: number; x1: number; y1: number }
+export interface PagePhoto { page_number: number; image_url: string }
 
 export interface ReconciledQuestion {
   question_text?: string; question_type?: string; options?: { A?: string; B?: string; C?: string; D?: string } | null;
   marks?: number | string | null; type_data?: Record<string, unknown> | null; needs_review?: boolean;
+  page_number?: number | null; box?: PhotoBox | null; uncertain?: string[];
 }
 
 export interface ReconciledSection {
@@ -27,17 +32,24 @@ export interface Reconciled {
   sections?: ReconciledSection[];
   marks_check?: { detected: number | null; computed: number; matches: boolean | null };
   low_confidence_count?: number;
+  warning?: string | null;
 }
 
 export interface GroupStatus { complete: boolean; pages: ServerPage[]; failed_pages: number[]; result: Reconciled | null }
 
-export interface PageQuestion extends ReviewQuestion { needsReview: boolean }
+export interface PageQuestion extends ReviewQuestion {
+  needsReview: boolean;
+  // Where the question was read from, for the photo viewer.
+  pageNumber: number | null; box: PhotoBox | null; uncertain: string[];
+}
 
 export interface PagesReview {
   title: string; totalMarks: string; duration: string;
   classLabel: string; subjectLabel: string;
   sections: Section[]; questions: PageQuestion[];
   uploadIds: number[];
+  warning?: string | null;
+  photos?: PagePhoto[];
 }
 
 export interface PagesSession { groupId: string | null; totalPages: number | null; review: PagesReview | null }
@@ -62,7 +74,7 @@ let counter = 0;
 const uid = (prefix: string) => `${prefix}_${Date.now()}_${(counter += 1)}`;
 
 // The reconciled paper -> sections, questions in paper order and the paper details.
-export function buildReview(result: Reconciled, uploadIds: number[]): PagesReview {
+export function buildReview(result: Reconciled, uploadIds: number[], photos: PagePhoto[] = []): PagesReview {
   const header = result.header ?? {};
   const sections: Section[] = [];
   const questions: PageQuestion[] = [];
@@ -81,6 +93,7 @@ export function buildReview(result: Reconciled, uploadIds: number[]): PagesRevie
         options: { A: q.options?.A || '', B: q.options?.B || '', C: q.options?.C || '', D: q.options?.D || '' },
         typeData: q.type_data && typeof q.type_data === 'object' ? q.type_data : {},
         needsReview: Boolean(q.needs_review),
+        pageNumber: q.page_number ?? null, box: q.box ?? null, uncertain: Array.isArray(q.uncertain) ? q.uncertain : [],
       });
     });
   });
@@ -90,7 +103,7 @@ export function buildReview(result: Reconciled, uploadIds: number[]): PagesRevie
     totalMarks: header.detected_total_marks != null ? String(header.detected_total_marks) : '',
     duration: String(parseDurationMinutes(header.duration_label) ?? 60),
     classLabel: header.class_label || '', subjectLabel: header.subject_label || '',
-    sections, questions, uploadIds,
+    sections, questions, uploadIds, warning: result.warning ?? null, photos,
   };
 }
 
@@ -147,7 +160,7 @@ export function toCaptureState(review: PagesReview): CaptureState {
     pages: review.uploadIds.map((id, i) => ({ pageNumber: i + 1, uploadId: id, status: 'extracted' as const, questionCount: 0, marks: 0, error: '' })),
     header: { title: review.title, totalMarks: review.totalMarks, duration: review.duration },
     sections: review.sections,
-    questions: review.questions.map(({ needsReview: _flag, ...q }) => q),
+    questions: review.questions.map(({ needsReview: _flag, pageNumber: _page, box: _box, uncertain: _unsure, ...q }) => q),
   };
 }
 

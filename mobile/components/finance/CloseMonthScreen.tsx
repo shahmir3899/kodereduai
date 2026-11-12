@@ -17,7 +17,7 @@ import { confirm } from '../ui/confirm';
 import { Colors, FontSize, Spacing } from '../../constants/colors';
 
 // Closing a month snapshots every account balance and locks that month: no payment, expense, income
-// or transfer can be added or edited in it afterwards. Admin and principal only (not accountants).
+// or transfer can be added or edited in it afterwards. Admin and principal only (not finance managers).
 // There is no reopen on the server, so the screen asks twice and only offers finished, open months.
 export default function CloseMonthScreen() {
   const toast = useToast();

@@ -15,7 +15,7 @@ from ..registry import ADMINS, ProposalError, Tool, register
 from . import lms_common as lc
 
 STAFF_STATUSES = ['PRESENT', 'ABSENT', 'LATE', 'HALF_DAY', 'ON_LEAVE']
-SELF_ROLES = ('TEACHER', 'STAFF', 'MANAGER', 'ACCOUNTANT', 'DRIVER')
+SELF_ROLES = ('TEACHER', 'STAFF', 'MANAGER', 'DRIVER')
 DIRECTORY_ROLES = ADMINS + ('TEACHER', 'STAFF')          # the staff API blocks Manager outright
 SALARY_ROLES = ADMINS                                     # owner decision 2026-11-08: principal sees salary too
 LIST_LIMIT = 40
