@@ -13,6 +13,7 @@ import {
 } from '../../services/worksheets';
 import { inventoryErrorMessage } from '../../services/inventory';
 import { exportErrorMessage } from '../../services/reports';
+import { sharePaperPdf } from '../../services/paperPrint';
 import { shareReportFile } from '../../services/reportShare';
 import SearchBar from '../ui/SearchBar';
 import Select from '../ui/Select';
@@ -68,7 +69,10 @@ export default function WorksheetsScreen() {
   const share = async (w: Worksheet, kind: 'pdf' | 'docx') => {
     setBusy(`${w.id}-${kind}`);
     try {
-      await shareReportFile(() => (kind === 'pdf' ? examinationsApi.generateWorksheetPdf(w.id) : examinationsApi.generateWorksheetDocx(w.id)), worksheetFileName(w.title, kind), kind);
+      // Every worksheet's PDF is made on the phone from print-html (old ones are converted by the server); Word comes
+      // from the server.
+      if (kind === 'pdf') await sharePaperPdf(w.id, w.title, 'worksheet');
+      else await shareReportFile(() => examinationsApi.generateWorksheetDocx(w.id), worksheetFileName(w.title, kind), kind);
     } catch (e) {
       toast.error((e as { response?: unknown }).response ? exportErrorMessage(e) : (e as Error).message);
     } finally {
@@ -149,8 +153,8 @@ export default function WorksheetsScreen() {
         <Input label="Title" value={form.title} onChangeText={(v) => setForm((f) => ({ ...f, title: v }))} placeholder="e.g. Fractions Practice Sheet" />
         <Select label="Class" searchable value={form.classObj} onChange={(v) => setForm((f) => ({ ...f, classObj: Number(v), subject: null }))} placeholder="Choose a class"
           options={(classes.data ?? []).map((c) => ({ value: Number(c.id), label: String(c.name) }))} />
-        <Select label="Subject (optional)" searchable value={form.subject ?? -1} onChange={(v) => setForm((f) => ({ ...f, subject: v === -1 ? null : Number(v) }))} placeholder="No specific subject"
-          options={[{ value: -1, label: 'No specific subject' }, ...(subjects.data ?? []).map((s) => ({ value: s.id, label: s.name }))]} />
+        <Select label="Subject" searchable value={form.subject} onChange={(v) => setForm((f) => ({ ...f, subject: Number(v) }))} placeholder="Choose the subject"
+          options={(subjects.data ?? []).map((s) => ({ value: s.id, label: s.name }))} />
       </FormSheet>
     </View>
   );

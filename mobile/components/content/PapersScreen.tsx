@@ -6,13 +6,14 @@ import { usePaperActions, usePapersPaged } from '../../hooks/usePapers';
 import { usePersonaBase } from '../../hooks/usePersonaBase';
 import { useDebouncedValue } from '../../hooks/useDebouncedValue';
 import { useRefreshControl } from '../../hooks/useRefreshControl';
-import { PAPER_STATUSES, paperFileName, paperTone, type Paper } from '../../services/paperBuilder';
+import { PAPER_STATUSES, paperTone, type Paper } from '../../services/paperBuilder';
 import { bulkDeleteMessage, bulkDeleteResult, docxFileName, selectedAll, toggleAll, toggleId } from '../../services/questionExtras';
 import { useMasterClasses } from '../../hooks/useAcademicYear';
 import { useSubjectsList } from '../../hooks/useManager';
 import { inventoryErrorMessage } from '../../services/inventory';
 import { exportErrorMessage } from '../../services/reports';
 import { shareReportFile } from '../../services/reportShare';
+import { sharePaperPdf } from '../../services/paperPrint';
 import SearchBar from '../ui/SearchBar';
 import Select from '../ui/Select';
 import Button from '../ui/Button';
@@ -24,8 +25,9 @@ import { useToast } from '../ui/Toast';
 import { confirm } from '../ui/confirm';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
 
-// Question papers: open one in the builder, share its PDF (the server's own file, the same one the
-// web downloads), delete, or start a new one.
+// Question papers: open one in the builder, share its PDF, delete, or start a new one. A block paper (Paper
+// Builder v2) is printed on the phone from the server's page, as the web prints it in the browser; an old paper
+// still shares the server's own PDF file.
 export default function PapersScreen() {
   const router = useRouter();
   const base = usePersonaBase();
@@ -54,7 +56,9 @@ export default function PapersScreen() {
   const share = async (p: Paper) => {
     setBusy(p.id);
     try {
-      await shareReportFile(() => examinationsApi.generatePaperPdf(p.id), paperFileName(p.paper_title), 'pdf');
+      // Every paper, old or block, is printed on the phone from print-html (the server converts an old one); the
+      // server PDF was removed in Paper Builder v2 Phase 7.
+      await sharePaperPdf(p.id, p.paper_title);
     } catch (e) {
       toast.error((e as { response?: unknown }).response ? exportErrorMessage(e) : (e as Error).message);
     } finally {

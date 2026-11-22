@@ -304,6 +304,15 @@ class StudentMark(models.Model):
         blank=True,
         help_text="Null means not entered yet",
     )
+    # Who last entered this mark. Information only (the performance report scores the subject
+    # teacher); null for marks entered before this column existed.
+    entered_by = models.ForeignKey(
+        'users.User',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='entered_student_marks',
+    )
     is_absent = models.BooleanField(default=False)
     remarks = models.CharField(max_length=200, blank=True)
     ai_comment = models.TextField(
@@ -410,6 +419,9 @@ class QuestionType(models.TextChoices):
     TRUE_FALSE = 'TRUE_FALSE', 'True/False'
     MATCHING = 'MATCHING', 'Matching'
     FILL_BLANK = 'FILL_BLANK', 'Fill in the Blanks'
+    # A drawing-based block from the block-based Paper Builder (count and write, colour the picture...).
+    # type_data holds the whole block: {"block": {"type", "title", "marks", "data"}}.
+    ACTIVITY = 'ACTIVITY', 'Activity'
 
 
 class DifficultyLevel(models.TextChoices):
@@ -691,6 +703,14 @@ class ExamPaper(models.Model):
         blank=True,
         default=dict,
         help_text='Paper render options (e.g., answer_lines).',
+    )
+    # Block-based Paper Builder (examinations/paper_blocks): the paper as an ordered list of blocks.
+    # Empty for papers made with the old wizard; those keep their structure + paper questions and
+    # are converted when first opened in the new editor (paper_document.document_for_editor).
+    document = models.JSONField(
+        blank=True,
+        default=dict,
+        help_text='Block list for the block-based Paper Builder; empty for old-style papers.',
     )
     total_marks = models.DecimalField(
         max_digits=6,
@@ -1089,8 +1109,8 @@ class Worksheet(models.Model):
     duration_minutes: worksheets carry no exam-lifecycle or grading semantics,
     and forcing those through ExamPaper would mean nullable fields everywhere
     plus a confusing status vocabulary. Manual authoring, question-bank reuse,
-    and image-scan capture all build the same `structure`/WorksheetItem shape
-    the exam Paper Builder uses, so export (paper_export_layout.py) is shared.
+    and image-scan capture all build the same block list (`document`) the exam
+    Paper Builder uses, so paper_document.py and the block renderers serve both.
     """
 
     class Status(models.TextChoices):
@@ -1140,6 +1160,13 @@ class Worksheet(models.Model):
         default=dict,
         help_text='Render options (e.g., answer_lines).',
     )
+    # Same block list as ExamPaper.document (Paper Builder v2 Phase 6b). Empty for worksheets made with
+    # the old builder; those are converted when first opened (paper_document.document_for_editor).
+    document = models.JSONField(
+        blank=True,
+        default=dict,
+        help_text='Block list for the block-based builder; empty for old-style worksheets.',
+    )
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.DRAFT)
     source = models.CharField(max_length=20, choices=Source.choices, default=Source.MANUAL)
     questions = models.ManyToManyField(
@@ -1176,8 +1203,8 @@ class Worksheet(models.Model):
 
 class WorksheetItem(models.Model):
     """Through model for ordering questions on a worksheet -- field names and
-    helper methods deliberately mirror PaperQuestion so the shared rendering
-    body in paper_export_layout.py can treat either as the same shape."""
+    helper methods deliberately mirror PaperQuestion so paper_document._Owner
+    can treat either as the same shape."""
 
     worksheet = models.ForeignKey(
         Worksheet,
@@ -1252,8 +1279,8 @@ class WorksheetUpload(models.Model):
     """Stores uploaded images of worksheets for OCR extraction. Kept as its own
     model rather than a nullable `worksheet` FK bolted onto PaperUpload --
     that would blur "exam paper capture" and "worksheet capture" in one table.
-    The OCR extraction itself (PaperOCRProcessor) is shared code; only this
-    thin Django model differs from PaperUpload.
+    No longer written since Paper Builder v2 Phase 7 (worksheets scan through
+    PaperUpload with mode=blocks); the table is kept for its existing rows.
     """
 
     class Status(models.TextChoices):
@@ -1470,3 +1497,39 @@ class ReportCardOverride(models.Model):
 
     class Meta:
         unique_together = ('student', 'exam')
+
+
+class PaperPicture(models.Model):
+    """A school's own picture for the block-based Paper Builder (examinations/paper_blocks).
+
+    Library pictures ship with the app as files; this table holds only what a school uploads
+    through "Browse". A paper refers to a row as ``{"upload": <id>}``. The stored file is always
+    a PNG already cleaned and shrunk by ``paper_blocks.uploads.prepare_upload``.
+    """
+
+    school = models.ForeignKey(
+        'schools.School',
+        on_delete=models.CASCADE,
+        related_name='paper_pictures',
+    )
+    label = models.CharField(max_length=120, help_text="What the picture shows, e.g. 'Mango'")
+    image_url = models.URLField(max_length=500, help_text="Supabase storage URL of the PNG")
+    width = models.PositiveIntegerField()
+    height = models.PositiveIntegerField()
+    uploaded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='paper_pictures',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['school', '-created_at']),
+        ]
+
+    def __str__(self):
+        return f"{self.label} (school {self.school_id})"

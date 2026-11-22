@@ -663,6 +663,17 @@ export const hrApi = {
 // ─── Inventory API ───────────────────────────────────────────────────────────
 // Admin and principal write; finance manager reads; teacher and staff only list their own assignments.
 
+// Teacher performance report (docs/TEACHER_PERFORMANCE_PLAN.md). params: { start, end } as YYYY-MM-DD.
+export const teacherPerformanceApi = {
+  getReport: (params: { start: string; end: string }) => api.get('/api/hr/teacher-performance/', { params }),
+  getTeacher: (staffId: number, params: { start: string; end: string }) =>
+    api.get(`/api/hr/teacher-performance/${staffId}/`, { params }),
+  getMine: (params: { start: string; end: string }) => api.get('/api/hr/teacher-performance/my/', { params }),
+  getExplainer: () => api.get('/api/hr/teacher-performance/explainer/', { params: { include_mine: 0 } }),
+  exportReport: (data: { start: string; end: string; format: 'PDF' | 'XLSX' }) =>
+    api.post('/api/hr/teacher-performance/export/', data, { responseType: 'arraybuffer', timeout: 60000 }),
+};
+
 export const inventoryApi = {
   getDashboard: () => api.get('/api/inventory/dashboard/'),
   getCategories: (params?: Record<string, unknown>) => api.get('/api/inventory/categories/', { params }),
@@ -851,15 +862,12 @@ export const examinationsApi = {
     Object.entries(extra).forEach(([k, v]) => { if (v !== undefined && v !== null && v !== '') sp.append(k, String(v)); });
     return api.get(`/api/examinations/questions/?${sp.toString()}`);
   },
-  // Picture extraction: a photo is read in the background (OCR and an AI reading); poll the upload until it is EXTRACTED or FAILED.
+  // Photo scan (block editor): every page goes up with mode=blocks and is read in the background; poll group-status.
   // Pages after the first send the group_id the first page returned. Papers and worksheets share the contract.
   uploadPaperImage: (form: FormData) => api.post('/api/examinations/paper-uploads/upload-image/', form, { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 120000 }),
-  getPaperUpload: (id: number) => api.get(`/api/examinations/paper-uploads/${id}/`, { timeout: 30000 }),
   confirmPaperUpload: (id: number, data: object) => api.post(`/api/examinations/paper-uploads/${id}/confirm/`, data),
   // Progress of a paper whose page count was declared up front; once every page is read it also carries the joined paper.
   getPaperGroupStatus: (groupId: string, totalPages: number) => api.get('/api/examinations/paper-uploads/group-status/', { params: { group_id: groupId, total_pages: totalPages }, timeout: 30000 }),
-  uploadWorksheetImage: (form: FormData) => api.post('/api/examinations/worksheet-uploads/upload-image/', form, { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 120000 }),
-  getWorksheetUpload: (id: number) => api.get(`/api/examinations/worksheet-uploads/${id}/`, { timeout: 30000 }),
   // Search by meaning (needs a class), and subject tags on a question (add_tag, with remove). Same calls as the web.
   semanticSearchQuestions: (params?: Record<string, unknown>) => api.get('/api/examinations/questions/semantic_search/', { params }),
   addQuestionTag: (id: number, tagId: number, remove = false) =>
@@ -879,7 +887,25 @@ export const examinationsApi = {
   // structure and the questions in order (draft papers only).
   ensurePaperDraft: (data: object) => api.post('/api/examinations/exam-papers/ensure-draft/', data),
   autosavePaperDraft: (id: number, data: object) => api.post(`/api/examinations/exam-papers/${id}/autosave/`, data),
-  generatePaperPdf: (id: number) => api.get(`/api/examinations/exam-papers/${id}/generate-pdf/`, { responseType: 'arraybuffer' }),
+  // Block papers (Paper Builder v2, docs/PAPER_BUILDER_V2_PLAN.md): the same calls the web block editor makes.
+  getPaperBlockTypes: () => api.get('/api/examinations/paper-blocks/'),
+  getPaperDocument: (id: number) => api.get(`/api/examinations/exam-papers/${id}/document/`),
+  savePaperDocument: (id: number, document: object) => api.post(`/api/examinations/exam-papers/${id}/autosave/`, { document }),
+  // embed=1: library pictures inside the page, as for printing. The browser preview's frame is sandboxed and
+  // Chrome will not let it load pictures from a local API address; the phone's WebView then needs no network.
+  // show: the question the page opens scrolled to (each edit loads a new preview page).
+  previewPaperDocument: (id: number, document: object, show?: string | null) =>
+    api.post(`/api/examinations/exam-papers/${id}/preview/`, { document }, { params: { embed: 1, ...(show ? { show } : {}) }, responseType: 'text', transformResponse: (d) => d, timeout: 60000 }),
+  // embed=1: library pictures inside the page, so expo-print never makes the PDF before they load.
+  getPaperPrintHtml: (id: number, embed = false) =>
+    api.get(`/api/examinations/exam-papers/${id}/print-html/`, { params: embed ? { embed: 1 } : undefined, responseType: 'text', transformResponse: (d) => d, timeout: 60000 }),
+  // The answer key (step 7b): only for those who may edit the paper (403 otherwise). It has no pictures to embed.
+  getPaperAnswerKeyHtml: (id: number) =>
+    api.get(`/api/examinations/exam-papers/${id}/print-html/`, { params: { answer_key: 1 }, responseType: 'text', transformResponse: (d) => d, timeout: 60000 }),
+  getPictureCatalog: (search: string) => api.get('/api/examinations/paper-pictures/catalog/', { params: search ? { search } : undefined }),
+  getPaperPictures: (params?: Record<string, unknown>) => api.get('/api/examinations/paper-pictures/', { params }),
+  uploadPaperPicture: (form: FormData) => api.post('/api/examinations/paper-pictures/', form, { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 120000 }),
+  deletePaperPicture: (id: number) => api.delete(`/api/examinations/paper-pictures/${id}/`),
   getWorksheets: (params?: Record<string, unknown>) =>
     api.get('/api/examinations/worksheets/', { params }),
   // Worksheet authoring (same calls as the web): a draft is made first, then autosaved whole.
@@ -888,8 +914,17 @@ export const examinationsApi = {
   autosaveWorksheetDraft: (id: number, data: object) => api.post(`/api/examinations/worksheets/${id}/autosave/`, data),
   deleteWorksheet: (id: number) => api.delete(`/api/examinations/worksheets/${id}/`),
   duplicateWorksheet: (id: number) => api.post(`/api/examinations/worksheets/${id}/duplicate/`, {}),
-  generateWorksheetPdf: (id: number) => api.get(`/api/examinations/worksheets/${id}/generate-pdf/`, { responseType: 'arraybuffer' }),
   generateWorksheetDocx: (id: number) => api.get(`/api/examinations/worksheets/${id}/generate-docx/`, { responseType: 'arraybuffer' }),
+  // Block worksheets (Paper Builder v2 Phase 6b): the same endpoints as block papers.
+  getWorksheetDocument: (id: number) => api.get(`/api/examinations/worksheets/${id}/document/`),
+  saveWorksheetDocument: (id: number, document: object) => api.post(`/api/examinations/worksheets/${id}/autosave/`, { document }),
+  // show: the question the page opens scrolled to (each edit loads a new preview page).
+  previewWorksheetDocument: (id: number, document: object, show?: string | null) =>
+    api.post(`/api/examinations/worksheets/${id}/preview/`, { document }, { params: { embed: 1, ...(show ? { show } : {}) }, responseType: 'text', transformResponse: (d) => d, timeout: 60000 }),
+  getWorksheetPrintHtml: (id: number, embed = false) =>
+    api.get(`/api/examinations/worksheets/${id}/print-html/`, { params: embed ? { embed: 1 } : undefined, responseType: 'text', transformResponse: (d) => d, timeout: 60000 }),
+  getWorksheetAnswerKeyHtml: (id: number) =>
+    api.get(`/api/examinations/worksheets/${id}/print-html/`, { params: { answer_key: 1 }, responseType: 'text', transformResponse: (d) => d, timeout: 60000 }),
   getExamResults: (id: number, params?: Record<string, unknown>) =>
     api.get(`/api/examinations/exams/${id}/results/`, { params }),
   getStudentTermAssessmentRoster: (params?: Record<string, unknown>) =>

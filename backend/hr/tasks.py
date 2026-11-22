@@ -136,3 +136,14 @@ def scan_staff_document(self, document_id):
         StaffDocument.objects.filter(id=document_id).update(
             scan_status=StaffDocument.ScanStatus.NEEDS_REVIEW, scan_note=document_scan.FAILED_NOTE,
         )
+
+
+@shared_task(time_limit=1800)
+def freeze_teacher_performance(school_ids=None, notify=True):
+    """1st of each month (Celery Beat): freeze last month's teacher performance report for every
+    school with HR, then tell each teacher. Manual fallback: run_scheduled_jobs --teacher-performance."""
+    from hr.performance.snapshots import freeze_previous_month_for_all
+
+    done = freeze_previous_month_for_all(school_ids=school_ids, notify=notify)
+    logger.info('Teacher performance frozen for %s schools', len(done))
+    return done

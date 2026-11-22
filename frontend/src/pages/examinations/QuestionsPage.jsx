@@ -19,6 +19,7 @@ import useTeacherScopedClasses from '../../hooks/useTeacherScopedClasses'
 import { getClassSelectorScope, getResolvedMasterClassId } from '../../utils/classScope'
 import { useDebounce } from '../../hooks/useDebounce'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
+import { matchingToBank } from './matchingData'
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -133,8 +134,9 @@ function buildPayload(form) {
   return base
 }
 
-function formFromQuestion(q) {
-  const td = q.type_data || {}
+// Exported for tests. A matching question is read in either stored shape (matchingToBank).
+export function formFromQuestion(q) {
+  const td = q.question_type === 'MATCHING' ? matchingToBank(q.type_data) : (q.type_data || {})
   const sourceContentBlockId = typeof q.source_content_block === 'object'
     ? q.source_content_block?.id
     : q.source_content_block

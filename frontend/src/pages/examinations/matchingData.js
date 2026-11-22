@@ -51,6 +51,21 @@ export function matchingFromComposer(typeData) {
   }
 }
 
+// Either stored shape -> the question bank's (two lists linked by index). Older block-editor questions were saved as text
+// pairs ({ pairs: [{ left: 'Fish', right: 'Water' }] }); the bank form only understands the lists, so it opened them empty.
+export function matchingToBank(typeData) {
+  const td = typeData || {}
+  if (Array.isArray(td.left_items) && Array.isArray(td.right_items)) return td
+  const pairs = (Array.isArray(td.pairs) ? td.pairs : []).filter((p) => p && typeof p === 'object' && !Number.isInteger(p.left))
+  if (!pairs.length) return td
+  return {
+    ...td,
+    left_items: pairs.map((p) => String(p.left ?? '')),
+    right_items: pairs.map((p) => String(p.right ?? '')),
+    pairs: pairs.map((_, i) => ({ left: i, right: i })),
+  }
+}
+
 // The same rule the server enforces: two or more complete pairs.
 export const MATCHING_MIN_PAIRS = 2
 export const matchingProblem = (typeData) => ((typeData?.pairs || []).filter(isCompletePair).length < MATCHING_MIN_PAIRS

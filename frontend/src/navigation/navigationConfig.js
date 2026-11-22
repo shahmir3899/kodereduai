@@ -167,6 +167,7 @@ export function buildStaffNavigation(ctx, I) {
             { name: 'Leave', href: '/hr/leave', icon: I.CalendarIcon },
             { name: 'Attendance', href: '/hr/attendance', icon: I.ClipboardCheckIcon },
             { name: 'Performance', href: '/hr/appraisals', icon: I.StarIcon },
+            { name: 'Teacher Performance', href: '/hr/teacher-performance', icon: I.ChartIcon },
             { name: 'Documents', href: '/hr/documents', icon: I.DocumentIcon },
             { name: 'Letter Composer', href: '/hr/letters', icon: I.DocumentIcon },
             { name: 'Staff Risk', href: '/hr/risk', icon: I.ExclamationIcon },
@@ -184,6 +185,11 @@ export function buildStaffNavigation(ctx, I) {
           { type: 'item', name: 'My Leave', href: '/hr/leave', icon: I.CalendarIcon },
           { type: 'item', name: 'My Attendance', href: '/hr/attendance', icon: I.ClipboardCheckIcon },
         ]
+      : []),
+
+    // Teachers only: the performance report scores teaching staff (hr/performance).
+    ...(isModuleEnabled('hr') && isTeacher
+      ? [{ type: 'item', name: 'My Performance', href: '/my-performance', icon: I.ChartIcon }]
       : []),
 
     // Staff gets one consolidated "Self Service" hub (Leave + Attendance

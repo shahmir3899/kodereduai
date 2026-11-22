@@ -130,6 +130,13 @@ Follow the 12-step checklist in `docs/ANDROID_BACKGROUND_LOCATION.md`.
 - [ ] A long multi-exam card: it runs to a second page without cutting a table row.
 - [ ] Driver: no Boarding tab; Home, Journey, Messages and More still work.
 
+## 6o. Teacher performance report (2026-11-17)
+- [ ] Teacher Home: the "My performance" card shows this month's score, band, own position ("5th of 22", or none if the school hides it) and up to three quickest wins; the (i) button opens a sheet with the school's own rules (cut-off time, deadlines, weights) and the wins; Details opens My Performance.
+- [ ] More > My HR > My Performance: the month arrows move back and stop at this month; bars, "items to fix" lists and the "For information, not scored" panel show; a past frozen month says "Frozen on …".
+- [ ] A teacher who is not teaching staff (or a manager): no card on Home, no My Performance in More.
+- [ ] Admin or principal: More > HR & Staff > Teacher Performance lists teachers by rank with score and band; tapping one opens the breakdown; the (i) sheet opens; Share PDF and Share Excel open the share sheet and both files open on the phone.
+- [ ] Read the info sheet and long lists with the font size turned up: nothing is cut off and the sheet scrolls.
+
 ## 7. Performance feel
 
 1. Students list with the largest class: scrolling is smooth, more rows load near the end.

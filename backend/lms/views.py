@@ -1063,9 +1063,12 @@ class ContentBlockViewSet(ModuleAccessMixin, viewsets.ModelViewSet):
         return queryset.order_by('sequence_order', 'id')
 
     def perform_create(self, serializer):
-        serializer.save()
+        serializer.save(created_by=self.request.user)
 
     def perform_update(self, serializer):
+        # The revision signal reads this to fill ContentRevision.changed_by, which is how edits are
+        # credited in the teacher performance report.
+        serializer.instance._revision_changed_by = self.request.user
         serializer.save()
 
     def perform_destroy(self, instance):

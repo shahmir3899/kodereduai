@@ -1,13 +1,11 @@
 import fs from 'fs';
 import path from 'path';
-import {
-  buildAutosavePayload, buildEnsurePayload, emptyPaperForm, hydrateStructure, type PickedQuestion,
-} from '../services/paperBuilder';
 import { buildQuestionPayload, emptyQuestionForm, type QuestionForm } from '../services/questionBank';
 
-// Web is the reference (frontend/.../paperPayload.js, pinned by paperPayload.contract.test.js on the same file).
-// Every difference mobile still has is listed in KNOWN_GAPS: when a phase fixes one, delete it from the list;
-// a new or changed difference fails this test.
+// Web is the reference: docs/paper-contract/fixtures.json pins what web sent for each question. Since Paper Builder v2
+// Phase 7 the paper itself is a block list on both (the old picked-questions builder is gone), so only the question
+// bank payload is compared here: the phone's question form must send the same fields as the web.
+// Every difference mobile still has is listed in KNOWN_GAPS; a new or changed difference fails this test.
 const { fixtures } = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../../docs/paper-contract/fixtures.json'), 'utf8'));
 
 const strip = (v: unknown): unknown => JSON.parse(JSON.stringify(v ?? null));
@@ -17,17 +15,6 @@ function diff(a: unknown, b: unknown, at: string, out: string[]) {
   if (x && y && typeof x === 'object' && typeof y === 'object' && !Array.isArray(x) && !Array.isArray(y)) {
     for (const k of new Set([...Object.keys(x), ...Object.keys(y)])) diff(x[k], y[k], `${at}.${k}`, out);
   } else if (JSON.stringify(x) !== JSON.stringify(y)) out.push(at);
-}
-
-function mobileFor(f: any) {
-  const s = f.setup;
-  const form = { ...emptyPaperForm(), title: s.paper_title, classObj: s.class_obj, subject: s.subject, exam: s.exam, duration: s.duration_minutes,
-    instructions: s.instructions, answerLines: !!s.render_options.answer_lines, totalMarks: s.total_marks };
-  const sections = hydrateStructure(f.expected.ensure.structure);
-  const picked: PickedQuestion[] = f.questions.map((q: any, i: number) => ({
-    question: i + 1, text: q.question_text, type: q.question_type, bankMarks: q.marks, override: '', sectionKey: q.section_key, bloom: null,
-  }));
-  return { form, sections, picked };
 }
 
 function formFor(q: any): QuestionForm {
@@ -44,15 +31,7 @@ const QUESTION_FIELDS = ['question_text', 'question_type', 'difficulty_level', '
 function gaps(): string[] {
   const out: string[] = [];
   for (const f of fixtures) {
-    const { form, sections, picked } = mobileFor(f);
-    const ensure = buildEnsurePayload(form, picked, sections);
-    const d: string[] = [];
-    diff(ensure, f.expected.ensure, 'ensure', d);
-    out.push(...d.map((x) => `${f.name}:${x}`));
-    const mq = buildAutosavePayload(form, picked, sections).manual_questions;
     f.expected.manual_questions.forEach((exp: any, i: number) => {
-      const got: any = mq[i] ?? {};
-      for (const k of ['question_order', 'section_key', 'marks_override']) { const dd: string[] = []; diff(got[k], exp[k], k, dd); if (dd.length) out.push(`${f.name}:manual_questions.${k}`); }
       const sent = buildQuestionPayload(formFor(f.questions[i])) as any;
       // An empty type_data and no type_data are the same thing to the server.
       for (const o of [sent, exp]) if (o.type_data && !Object.keys(o.type_data).length) delete o.type_data;

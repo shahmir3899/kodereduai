@@ -8,6 +8,7 @@ import EmptyState from '../../components/ui/EmptyState'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { worksheetApi } from '../../services/api'
+import { printAnswerKey, printPaper } from './blocks/printPaper'
 import ClassSelector from '../../components/ClassSelector'
 import { useToast } from '../../components/Toast'
 import { useConfirmModal } from '../../components/ConfirmModal'
@@ -119,13 +120,19 @@ export default function WorksheetsPage() {
     const key = `${worksheet.id}-${format}`
     setDownloadingKey(key)
     try {
-      const isPdf = format === 'pdf'
-      const res = isPdf
-        ? await worksheetApi.generatePDF(worksheet.id)
-        : await worksheetApi.generateDOCX(worksheet.id)
-      const mimeType = isPdf
-        ? 'application/pdf'
-        : 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+      if (format === 'key') {
+        // The answer key (step 7b) prints on the device like the worksheet; the server refuses it to anyone who may not edit it.
+        await printAnswerKey(worksheet.id, worksheet.title, 'worksheet')
+        return
+      }
+      if (format === 'pdf') {
+        // Every worksheet is printed by the browser from the server's page (old ones are converted there); the
+        // PDF is made on the device. The server PDF was removed in Paper Builder v2 Phase 7.
+        await printPaper(worksheet.id, worksheet.title, 'worksheet')
+        return
+      }
+      const res = await worksheetApi.generateDOCX(worksheet.id)
+      const mimeType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
       const blob = new Blob([res.data], { type: mimeType })
       const url = window.URL.createObjectURL(blob)
       const link = document.createElement('a')
@@ -136,7 +143,11 @@ export default function WorksheetsPage() {
       link.remove()
       window.URL.revokeObjectURL(url)
     } catch (err) {
-      showError(err.response?.data?.detail || `Failed to generate ${format.toUpperCase()}. Please try again.`)
+      if (format === 'key' && err.response?.status === 403) {
+        showError('Only the school admin, the principal and this class’s teachers can see the answer key.')
+        return
+      }
+      showError(err.response?.data?.detail || `Failed to generate ${format === 'key' ? 'the answer key' : format.toUpperCase()}. Please try again.`)
     } finally {
       setDownloadingKey((current) => (current === key ? null : current))
     }
@@ -269,6 +280,7 @@ export default function WorksheetsPage() {
                     { label: 'Duplicate', tone: 'muted', disabled: duplicateMutation.isPending, onClick: () => duplicateMutation.mutate(worksheet.id) },
                     { label: downloadingKey === `${worksheet.id}-pdf` ? 'Generating…' : 'PDF', tone: 'muted', disabled: downloadingKey === `${worksheet.id}-pdf`, onClick: () => handleDownload(worksheet, 'pdf') },
                     { label: downloadingKey === `${worksheet.id}-docx` ? 'Generating…' : 'DOCX', tone: 'muted', disabled: downloadingKey === `${worksheet.id}-docx`, onClick: () => handleDownload(worksheet, 'docx') },
+                    { label: downloadingKey === `${worksheet.id}-key` ? 'Generating…' : 'Answer key', tone: 'muted', disabled: downloadingKey === `${worksheet.id}-key`, onClick: () => handleDownload(worksheet, 'key') },
                     { label: 'Delete', tone: 'danger', disabled: deleteMutation.isPending, onClick: () => handleDeleteOne(worksheet) },
                   ]}
                 />
@@ -335,6 +347,14 @@ export default function WorksheetsPage() {
                             className="px-3 py-1.5 rounded border border-gray-300 text-gray-700 text-xs hover:bg-gray-100 disabled:opacity-50 disabled:cursor-wait"
                           >
                             {downloadingKey === `${worksheet.id}-docx` ? 'Generating…' : 'DOCX'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDownload(worksheet, 'key')}
+                            disabled={downloadingKey === `${worksheet.id}-key`}
+                            className="px-3 py-1.5 rounded border border-gray-300 text-gray-700 text-xs hover:bg-gray-100 disabled:opacity-50 disabled:cursor-wait"
+                          >
+                            {downloadingKey === `${worksheet.id}-key` ? 'Generating…' : 'Answer key'}
                           </button>
                           <button
                             type="button"

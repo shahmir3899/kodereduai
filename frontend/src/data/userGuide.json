@@ -2303,6 +2303,95 @@
             "STAFF",
             "DRIVER"
           ]
+        },
+        {
+          "id": "8.13",
+          "title": "Teacher Performance Report",
+          "slug": "teacher-performance-report",
+          "roles": [
+            "SCHOOL_ADMIN",
+            "PRINCIPAL"
+          ],
+          "content": [
+            {
+              "type": "nav_path",
+              "path": "Sidebar > HR & Staff > Teacher Performance",
+              "href": "/hr/teacher-performance"
+            },
+            {
+              "type": "body_text",
+              "text": "Every teacher gets a score from 0 to 100 for work done against work due: class attendance, lesson plans, exam marks, own attendance, homework, grading, messages, question papers, book content and login days. A teacher with more classes is compared fairly because each measure is done divided by due. Holidays and approved leave never count against anyone."
+            },
+            {
+              "type": "step",
+              "number": 1,
+              "text": "Pick a month, or choose 'Custom range' and set the dates. Teachers are listed by rank with their score, band and the three measures where they can gain the most."
+            },
+            {
+              "type": "step",
+              "number": 2,
+              "text": "Click a teacher to see one bar per measure (due, done, on time and weight) and the exact items to fix, such as days attendance was marked late or lessons with no plan. Figures marked 'For information, not scored' (syllabus on schedule, class results, leave) are shown but never change the score."
+            },
+            {
+              "type": "step",
+              "number": 3,
+              "text": "Click the (i) button next to any score to read the rules with your school's own numbers."
+            },
+            {
+              "type": "step",
+              "number": 4,
+              "text": "Use 'Export PDF' or 'Export Excel' to download the list. The Excel file also has the information-only columns."
+            },
+            {
+              "type": "step",
+              "number": 5,
+              "text": "On a teacher's page, click 'Start appraisal from this report' to open a new appraisal with the teacher, period, a suggested rating (score divided by 20) and the quickest wins filled in. Change anything before saving."
+            },
+            {
+              "type": "step",
+              "number": 6,
+              "text": "Open the 'Settings' tab to change weights (they must total 100), the attendance cut-off time, deadlines, targets, bands, and whether teachers see their own position."
+            },
+            {
+              "type": "info_box",
+              "title": "Monthly snapshot",
+              "text": "On the 1st of each month the previous month is frozen, so its figures stay the same even if class or subject assignments change later. Each teacher gets a message with their score when teachers are allowed to see it."
+            }
+          ]
+        },
+        {
+          "id": "8.14",
+          "title": "My Performance",
+          "slug": "my-performance",
+          "roles": [
+            "TEACHER"
+          ],
+          "content": [
+            {
+              "type": "nav_path",
+              "path": "Sidebar > My Performance",
+              "href": "/my-performance"
+            },
+            {
+              "type": "body_text",
+              "text": "Your Dashboard shows a 'My performance' card with this month's score, band and the three quickest ways to raise it. Your school may also show your position, for example '5th of 22'. You never see other teachers' names or scores."
+            },
+            {
+              "type": "step",
+              "number": 1,
+              "text": "Click 'Details' on the card, or open My Performance, to see each measure, what was due, what you did, and the exact items to fix."
+            },
+            {
+              "type": "step",
+              "number": 2,
+              "text": "Click the (i) button to read the rules: the attendance cut-off time, the deadlines for marks, grading and messages, and the targets."
+            },
+            {
+              "type": "step",
+              "number": 3,
+              "text": "Pick another month to look back. A finished month is frozen on the 1st and shows 'Frozen on' with the date."
+            }
+          ]
         }
       ],
       "roles": [

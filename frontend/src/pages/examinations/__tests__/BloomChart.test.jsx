@@ -51,75 +51,33 @@ vi.mock('../../../components/ClassSelector', () => ({
 }))
 
 vi.mock('../ImageCapturePaperTab', () => ({ default: () => <div>Image Tab</div> }))
-vi.mock('../ManualEntryPaperTab', () => ({
-  default: function MockManualEntryPaperTab({ draftData, onDraftDataChange }) {
-    return (
-      <div>
-        <button
-          type="button"
-          onClick={() =>
-            onDraftDataChange({
-              ...draftData,
-              questions: [
-                ...(draftData.questions || []),
-                {
-                  local_id: 'remember-q',
-                  question_text: 'Recall law',
-                  question_type: 'SHORT',
-                  difficulty_level: 'EASY',
-                  marks: 1,
-                  bloom_level: 'remember',
-                },
-              ],
-            })
-          }
-        >
-          Add Remember
-        </button>
-        <button
-          type="button"
-          onClick={() =>
-            onDraftDataChange({
-              ...draftData,
-              questions: [
-                ...(draftData.questions || []),
-                {
-                  local_id: 'unc-q',
-                  question_text: 'No bloom',
-                  question_type: 'SHORT',
-                  difficulty_level: 'MEDIUM',
-                  marks: 1,
-                },
-              ],
-            })
-          }
-        >
-          Add Unclassified
-        </button>
-        <button
-          type="button"
-          onClick={() =>
-            onDraftDataChange({
-              ...draftData,
-              questions: [
-                { local_id: 'r1', question_text: 'r1', question_type: 'SHORT', difficulty_level: 'EASY', marks: 1, bloom_level: 'remember' },
-                { local_id: 'r2', question_text: 'r2', question_type: 'SHORT', difficulty_level: 'EASY', marks: 1, bloom_level: 'remember' },
-                { local_id: 'r3', question_text: 'r3', question_type: 'SHORT', difficulty_level: 'EASY', marks: 1, bloom_level: 'remember' },
-                { local_id: 'r4', question_text: 'r4', question_type: 'SHORT', difficulty_level: 'EASY', marks: 1, bloom_level: 'remember' },
-                { local_id: 'u1', question_text: 'u1', question_type: 'SHORT', difficulty_level: 'EASY', marks: 1, bloom_level: 'understand' },
-                { local_id: 'u2', question_text: 'u2', question_type: 'SHORT', difficulty_level: 'EASY', marks: 1, bloom_level: 'understand' },
-                { local_id: 'u3', question_text: 'u3', question_type: 'SHORT', difficulty_level: 'EASY', marks: 1, bloom_level: 'understand' },
-                { local_id: 'a1', question_text: 'a1', question_type: 'SHORT', difficulty_level: 'MEDIUM', marks: 1, bloom_level: 'apply' },
-              ],
-            })
-          }
-        >
-          Make Surface Heavy
-        </button>
-      </div>
-    )
-  },
-}))
+// The block editor reports each save with the paper's questions; the chart is drawn from those.
+vi.mock('../blocks/BlockPaperEditor', () => {
+  const savedRow = (id, bloom, type = 'SHORT') => ({
+    question: id, question_order: id, question_text: `q${id}`, question_type: type, difficulty_level: 'EASY',
+    marks: 1, bloom_level: bloom || '', question_snapshot: {},
+  })
+  const base = [savedRow(1, 'apply'), savedRow(2, 'analyze')]
+  return {
+    default: function MockBlockPaperEditor({ onSaved }) {
+      const save = (rows) => onSaved?.({ id: 1, total_marks: rows.length, overused_questions: [], paper_questions: rows })
+      return (
+        <div>
+          <button type="button" onClick={() => save([...base, savedRow(3, 'remember')])}>Add Remember</button>
+          <button type="button" onClick={() => save([...base, savedRow(4, '')])}>Add Unclassified</button>
+          <button type="button" onClick={() => save([...base, savedRow(5, null, 'ACTIVITY')])}>Add Activity</button>
+          <button
+            type="button"
+            onClick={() => save(['remember', 'remember', 'remember', 'remember', 'understand', 'understand', 'understand', 'apply']
+              .map((bloom, i) => savedRow(10 + i, bloom)))}
+          >
+            Make Surface Heavy
+          </button>
+        </div>
+      )
+    },
+  }
+})
 
 vi.mock('../../../services/api', () => ({
   questionPaperApi: {
@@ -144,7 +102,7 @@ vi.mock('../../../services/api', () => ({
             difficulty_level: 'MEDIUM',
             marks: 2,
             bloom_level: 'apply',
-            question_snapshot: { bloom_level: 'apply' },
+            question_snapshot: {},
           },
           {
             question: 2,
@@ -154,7 +112,7 @@ vi.mock('../../../services/api', () => ({
             difficulty_level: 'MEDIUM',
             marks: 2,
             bloom_level: 'analyze',
-            question_snapshot: { bloom_level: 'analyze' },
+            question_snapshot: {},
           },
         ],
       },
@@ -252,6 +210,17 @@ describe('Bloom Distribution Chart in Paper Builder', () => {
     await user.click(screen.getByRole('button', { name: 'Make Surface Heavy' }))
     await waitFor(() => {
       expect(screen.getByText(/Warning:/)).toBeInTheDocument()
+    })
+  })
+
+  it('drawing activities are left out of the chart', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(<QuestionPaperBuilderPage />)
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Add Activity' })).toBeInTheDocument())
+    await user.click(screen.getByRole('button', { name: 'Add Activity' }))
+    await waitFor(() => {
+      expect(screen.getByText('Unclassified (0)')).toBeInTheDocument()
+      expect(screen.getByText('Apply (1)')).toBeInTheDocument()
     })
   })
 

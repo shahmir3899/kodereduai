@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "direction": "ltr",
+  "footer": "2nd Term Paper — Class: Play Group (Math)",
+  "header": {
+    "school_name": "THE FOCUS MONTESSORI & SCHOOL",
+    "exam_title": "2nd Term Examination 2026-27",
+    "subject": "Math",
+    "class_name": "Play Group",
+    "marks_table": true,
+    "sign_label": "Teacher’s Sign"
+  },
+  "blocks": [
+    {"type": "writing_grid", "title": "Write counting from 1 to 20?", "marks": 10,
+     "data": {"rows": 4, "cols": 5}},
+    {"type": "missing_sequence", "title": "Write missing numbers?", "marks": 5,
+     "data": {"shape": "cloud", "per_row": 4, "items": ["1", "", "3", "", "5", "", "7", "", "9", ""]}},
+    {"type": "count_write", "title": "Count and write?", "marks": 5,
+     "data": {"rows": [
+       {"picture": "butterfly", "count": 3},
+       {"picture": "flower", "count": 2},
+       {"picture": "pencil", "count": 4},
+       {"picture": "apple", "count": 1},
+       {"picture": "star", "count": 5}
+     ]}},
+    {"type": "compare_objects", "title": "Circle the small object?", "marks": 4,
+     "data": {"mode": "size", "picture": "fish", "scales": [1, 0.5]}},
+    {"type": "find_colour", "title": "Search the number ‘4’ & colour it?", "marks": 4,
+     "data": {"target": "4", "items": ["4", "5", "2", "4", "3", "3", "2", "4", "5", "4"]}},
+    {"type": "compare_objects", "title": "Colour the long object?", "marks": 4,
+     "data": {"mode": "length", "scales": [1, 0.5]}},
+    {"type": "colour_picture", "title": "Colour the pictures?", "marks": 5,
+     "data": {"picture": "tree_scene", "height": 400, "frame": "dashed"}},
+    {"type": "match_columns", "title": "Match the shapes?", "marks": 5,
+     "data": {"dots": true,
+              "left": [{"picture": "sign"}, {"picture": "window"}, {"picture": "party_hat"}, {"picture": "door"}, {"picture": "star"}],
+              "right": [{"picture": "square"}, {"picture": "triangle"}, {"picture": "circle"}, {"picture": "star"}, {"picture": "rectangle"}]}},
+    {"type": "oral", "title": "Oral", "marks": 8,
+     "data": {"items": [
+       {"text": "Counting 1 to 20", "marks": 4},
+       {"text": "Shapes names", "marks": 2},
+       {"text": "Colours names", "marks": 2}
+     ]}}
+  ]
+}

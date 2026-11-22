@@ -327,6 +327,17 @@ class AttendanceRecord(models.Model):
     )
     notification_sent_at = models.DateTimeField(null=True, blank=True)
 
+    # Who saved the record. Information only: the teacher performance report scores the class
+    # teacher who owns the section, not whoever pressed the button. Null for rows written before
+    # this column existed and for the fixed camera, which has no person behind it.
+    marked_by = models.ForeignKey(
+        'users.User',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='marked_attendance_records',
+    )
+
     # Timestamps
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

@@ -6,7 +6,7 @@ from lms.models import Topic
 from .models import (
     ExamType, ExamGroup, Exam, ExamSubject, StudentMark, GradeScale,
     Question, ExamPaper, PaperQuestion, StudentResponse, QuestionStats, PaperUpload, PaperFeedback,
-    StudentTermAssessment, Worksheet, WorksheetItem, WorksheetUpload,
+    StudentTermAssessment, Worksheet, WorksheetItem,
 )
 
 
@@ -36,6 +36,18 @@ def _coerce_bool(value):
             return False
     return bool(value)
 
+
+
+def check_leaving_draft(instance, data):
+    """A paper or worksheet still being written (empty parts, allowed while it is a draft since the Structure
+    step) cannot become Ready or Published until those parts are filled."""
+    new_status = data.get('status')
+    if instance is None or not new_status or new_status == 'DRAFT' or getattr(instance, 'status', None) != 'DRAFT':
+        return
+    from .paper_document import document_for_editor, print_problems
+    problems = print_problems(instance, document_for_editor(instance)[0])
+    if problems:
+        raise serializers.ValidationError({'status': ['Some questions are still to fill.'] + problems[:20]})
 
 class PaperStructureValidationMixin:
     """Shared normalization for ExamPaper structure/render options payloads."""
@@ -779,6 +791,7 @@ class PaperQuestionSerializer(serializers.ModelSerializer):
     type_data = serializers.SerializerMethodField()
     question_snapshot = serializers.JSONField(read_only=True)
     marks = serializers.SerializerMethodField()
+    bloom_level = serializers.SerializerMethodField()
 
     class Meta:
         model = PaperQuestion
@@ -786,9 +799,13 @@ class PaperQuestionSerializer(serializers.ModelSerializer):
             'id', 'question', 'question_order', 'section_key', 'marks_override', 'marks',
             'question_text', 'question_type', 'option_a', 'option_b',
             'option_c', 'option_d', 'question_image_url', 'answer_text',
-            'correct_answer', 'difficulty_level', 'type_data',
+            'correct_answer', 'difficulty_level', 'type_data', 'bloom_level',
             'question_snapshot', 'created_at',
         ]
+
+    def get_bloom_level(self, obj):
+        # Not in the question snapshot; read from the bank question (the paper's Bloom chart uses it).
+        return obj.question.bloom_level or ''
 
     def get_marks(self, obj):
         """Return override marks or default question marks."""
@@ -842,6 +859,7 @@ class ExamPaperSerializer(serializers.ModelSerializer):
     calculated_total_marks = serializers.DecimalField(max_digits=6, decimal_places=2, read_only=True)
     structure_marks_total = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
     marks_reconciled = serializers.SerializerMethodField()
+    uses_blocks = serializers.SerializerMethodField()
 
     # NEW: Curriculum alignment - read-only expanded details
     lesson_plans_details = serializers.SerializerMethodField()
@@ -850,8 +868,12 @@ class ExamPaperSerializer(serializers.ModelSerializer):
     overused_questions = serializers.SerializerMethodField()
 
     def get_class_name(self, obj):
-        from .paper_export_layout import resolve_exam_paper_class_name
+        from .paper_document import resolve_exam_paper_class_name
         return resolve_exam_paper_class_name(obj)
+
+    def get_uses_blocks(self, obj):
+        """Made with the block-based editor: printed on the device, not by generate-pdf."""
+        return bool((obj.document or {}).get('blocks'))
 
     def get_marks_reconciled(self, obj):
         """Whether structure_marks_total matches total_marks -- mirrors the
@@ -908,14 +930,15 @@ class ExamPaperSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'school', 'exam', 'exam_name', 'exam_subject',
             'class_obj', 'class_name', 'subject', 'subject_name',
-            'paper_title', 'instructions', 'structure', 'render_options', 'total_marks', 'duration_minutes',
+            'paper_title', 'instructions', 'structure', 'render_options', 'document', 'uses_blocks',
+            'total_marks', 'duration_minutes',
             'paper_questions', 'question_count', 'calculated_total_marks',
             'structure_marks_total', 'marks_reconciled',
             'lesson_plans_details', 'covered_topics', 'question_topics_summary', 'overused_questions',
             'status', 'generated_by', 'generated_by_name',
             'is_active', 'created_at', 'updated_at',
         ]
-        read_only_fields = ['id', 'school', 'generated_by', 'generated_by_name', 'created_at', 'updated_at', 
+        read_only_fields = ['id', 'school', 'document', 'generated_by', 'generated_by_name', 'created_at', 'updated_at', 
                            'lesson_plans_details', 'covered_topics', 'question_topics_summary', 'overused_questions']
 
 
@@ -937,6 +960,7 @@ class ExamPaperCreateUpdateSerializer(serializers.ModelSerializer):
         ]
 
     def validate(self, data):
+        check_leaving_draft(self.instance, data)
         # Ensure class and subject are consistent
         class_obj = data.get('class_obj')
         subject = data.get('subject')
@@ -1003,6 +1027,7 @@ class ExamPaperDraftEnsureSerializer(PaperStructureValidationMixin, serializers.
         ]
 
     def validate(self, data):
+        check_leaving_draft(self.instance, data)
         exam_subject = data.get('exam_subject') or getattr(self.instance, 'exam_subject', None)
         exam = data.get('exam') or getattr(self.instance, 'exam', None)
         if exam_subject and exam and exam_subject.exam != exam:
@@ -1046,8 +1071,14 @@ class ExamPaperDraftAutosaveSerializer(PaperStructureValidationMixin, serializer
         required=False,
         help_text='Full list of manual draft questions to upsert into the paper and question bank.',
     )
+    document = serializers.JSONField(
+        required=False,
+        help_text='Block-based Paper Builder: the whole block list. Checked and synced to the question bank.',
+    )
 
     def validate(self, data):
+        if 'document' in data and 'manual_questions' in data:
+            raise serializers.ValidationError('Send either document or manual_questions, not both.')
         exam_subject = data.get('exam_subject')
         exam = data.get('exam')
         if exam_subject and exam and exam_subject.exam != exam:
@@ -1207,6 +1238,11 @@ class WorksheetSerializer(serializers.ModelSerializer):
     items = WorksheetItemSerializer(many=True, read_only=True)
     item_count = serializers.IntegerField(read_only=True)
     tested_topics_details = serializers.SerializerMethodField()
+    uses_blocks = serializers.SerializerMethodField()
+
+    def get_uses_blocks(self, obj):
+        """Made with the block-based editor: printed on the device, not by generate-pdf."""
+        return bool((obj.document or {}).get('blocks'))
 
     def get_class_name(self, obj):
         from academic_sessions.utils import resolve_class_display_name, resolve_current_academic_year_id
@@ -1229,12 +1265,12 @@ class WorksheetSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'school', 'class_obj', 'class_name', 'subject', 'subject_name',
             'title', 'tested_topics', 'tested_topics_details', 'instructions',
-            'structure', 'render_options', 'items', 'item_count',
+            'structure', 'render_options', 'document', 'uses_blocks', 'items', 'item_count',
             'status', 'source', 'created_by', 'created_by_name',
             'is_active', 'created_at', 'updated_at',
         ]
         read_only_fields = [
-            'id', 'school', 'created_by', 'created_by_name', 'created_at', 'updated_at',
+            'id', 'school', 'document', 'created_by', 'created_by_name', 'created_at', 'updated_at',
             'tested_topics_details',
         ]
 
@@ -1252,6 +1288,7 @@ class WorksheetDraftEnsureSerializer(PaperStructureValidationMixin, serializers.
         ]
 
     def validate(self, data):
+        check_leaving_draft(self.instance, data)
         if 'structure' in data:
             data['structure'] = self._normalize_structure(data.get('structure'))
         if 'render_options' in data:
@@ -1282,8 +1319,15 @@ class WorksheetDraftAutosaveSerializer(PaperStructureValidationMixin, serializer
         required=False,
         help_text='Full list of manual draft items to upsert into the worksheet and question bank.',
     )
+    document = serializers.JSONField(
+        required=False,
+        help_text='Block-based builder: the whole block list. Checked and synced to the question bank.',
+    )
 
     def validate(self, data):
+        check_leaving_draft(self.instance, data)
+        if 'document' in data and 'manual_items' in data:
+            raise serializers.ValidationError('Send either document or manual_items, not both.')
         if 'structure' in data:
             data['structure'] = self._normalize_structure(data.get('structure'))
         if 'render_options' in data:
@@ -1304,40 +1348,6 @@ class WorksheetDraftAutosaveSerializer(PaperStructureValidationMixin, serializer
             data['manual_items'] = normalized_items
 
         return data
-
-
-class WorksheetUploadSerializer(serializers.ModelSerializer):
-    """Serializer for WorksheetUpload."""
-    uploaded_by_name = serializers.CharField(source='uploaded_by.username', read_only=True, allow_null=True)
-    worksheet_title = serializers.CharField(source='worksheet.title', read_only=True, allow_null=True)
-    context_class_name = serializers.CharField(source='context_class.name', read_only=True, allow_null=True)
-    context_subject_name = serializers.CharField(source='context_subject.name', read_only=True, allow_null=True)
-
-    class Meta:
-        model = WorksheetUpload
-        fields = [
-            'id', 'school', 'worksheet', 'worksheet_title',
-            'uploaded_by', 'uploaded_by_name', 'image_url',
-            'group_id', 'page_number',
-            'context_class', 'context_class_name', 'context_subject', 'context_subject_name',
-            'ai_extracted_json', 'extraction_confidence', 'extraction_notes',
-            'status', 'error_message', 'created_at', 'processed_at',
-        ]
-        read_only_fields = [
-            'id', 'school', 'uploaded_by', 'context_class', 'context_subject',
-            'ai_extracted_json', 'extraction_confidence', 'extraction_notes', 'status',
-            'error_message', 'created_at', 'processed_at',
-            'group_id', 'page_number',
-        ]
-
-
-class WorksheetUploadCreateSerializer(serializers.Serializer):
-    """Serializer for uploading a worksheet image."""
-    image = serializers.ImageField(required=True)
-    class_obj = serializers.IntegerField(required=False, help_text="Class ID for context")
-    subject = serializers.IntegerField(required=False, help_text="Subject ID for context")
-    group_id = serializers.UUIDField(required=False, help_text="Reuse the group_id returned from page 1's upload to add a page to the same multi-page capture.")
-    page_number = serializers.IntegerField(required=False, min_value=1)
 
 
 class QuestionReviewSerializer(serializers.Serializer):

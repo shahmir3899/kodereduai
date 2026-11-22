@@ -349,6 +349,15 @@ class ContentBlock(models.Model):
 
     is_ai_generated = models.BooleanField(default=False)
     is_active = models.BooleanField(default=True)
+    # Who added the block, for the teacher performance report's book-content measure. Edits are
+    # credited through ContentRevision.changed_by. Null for blocks made before this column existed.
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='created_content_blocks',
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

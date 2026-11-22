@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import Modal from '../../components/ui/Modal'
 import PageHeader from '../../components/ui/PageHeader'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
@@ -64,6 +65,20 @@ export default function PerformanceAppraisalPage() {
   const [form, setForm] = useState(EMPTY_FORM)
   const [errors, setErrors] = useState({})
   const [detailAppraisal, setDetailAppraisal] = useState(null)
+  const location = useLocation()
+  const navigate = useNavigate()
+
+  // "Start appraisal from this report" (teacher performance detail) arrives with the form pre-filled
+  // in router state. Open it once, then clear the state so a refresh or Back does not reopen it.
+  const prefill = location.state?.appraisalPrefill
+  useEffect(() => {
+    if (!prefill) return
+    setForm({ ...EMPTY_FORM, ...prefill })
+    setEditId(null)
+    setErrors({})
+    setShowModal(true)
+    navigate(location.pathname, { replace: true, state: null })
+  }, [prefill]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const { data: appraisalRes, isLoading } = useQuery({
     queryKey: ['hrAppraisals', debouncedSearch],

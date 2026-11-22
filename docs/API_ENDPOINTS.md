@@ -207,6 +207,12 @@ Pagination: All list endpoints return `{count, next, previous, results}`. Defaul
 | POST | /api/hr/attendance/bulk_mark/ | |
 | GET | /api/hr/attendance/summary/ | |
 | GET/POST | /api/hr/appraisals/ | |
+| GET | /api/hr/teacher-performance/ | start, end (YYYY-MM-DD; default this month). Admin, principal. Ranked list, no missed items. A whole past month that was frozen returns the snapshot (`snapshot: true`, `frozen_at`) |
+| GET | /api/hr/teacher-performance/{staff_id}/ | start, end. Admin, principal. One teacher with per-measure missed items and `info` (not scored) |
+| GET | /api/hr/teacher-performance/my/ | start, end. The signed-in teacher's own breakdown; rank and out_of are null when the school hides positions; `{enabled: false}` when switched off for teachers; 404 when not on the report |
+| GET/PUT | /api/hr/teacher-performance/config/ | Admin, principal. Weights (must total 100), cut-off time, deadlines, targets, bands, show_rank_to_teachers, enabled |
+| GET | /api/hr/teacher-performance/explainer/ | Any staff. Info-button text built from the school's settings; `quickest_wins` for a teacher (this month) unless include_mine=0 |
+| POST | /api/hr/teacher-performance/export/ | Admin, principal. Body: {start, end, format: PDF\|XLSX}. Returns the file (Excel adds the information columns) |
 | GET/POST | /api/hr/qualifications/ | |
 | GET/POST | /api/hr/documents/ | |
 

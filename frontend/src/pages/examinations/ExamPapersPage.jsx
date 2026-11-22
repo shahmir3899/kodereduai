@@ -17,6 +17,7 @@ import { useClassSubjects } from '../../hooks/useClassSubjects'
 import useTeacherScopedClasses from '../../hooks/useTeacherScopedClasses'
 import { getClassSelectorScope, getResolvedMasterClassId } from '../../utils/classScope'
 import { useDebounce } from '../../hooks/useDebounce'
+import { printAnswerKey, printPaper } from './blocks/printPaper'
 import { RecordCard, CardGrid, ViewToggle } from '../../components/cards'
 import { useViewPreference } from '../../hooks/useViewPreference'
 
@@ -168,13 +169,19 @@ export default function ExamPapersPage() {
     const key = `${paper.id}-${format}`
     setDownloadingKey(key)
     try {
-      const isPdf = format === 'pdf'
-      const res = isPdf
-        ? await questionPaperApi.generatePDF(paper.id)
-        : await questionPaperApi.generateDOCX(paper.id)
-      const mimeType = isPdf
-        ? 'application/pdf'
-        : 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+      if (format === 'key') {
+        // The answer key (step 7b) prints on the device like the paper; the server refuses it to anyone who may not edit it.
+        await printAnswerKey(paper.id, paper.paper_title)
+        return
+      }
+      if (format === 'pdf') {
+        // Every paper is printed by the browser from the server's page (old ones are converted there); the
+        // PDF is made on the device. The server PDF was removed in Paper Builder v2 Phase 7.
+        await printPaper(paper.id, paper.paper_title)
+        return
+      }
+      const res = await questionPaperApi.generateDOCX(paper.id)
+      const mimeType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
       const blob = new Blob([res.data], { type: mimeType })
       const url = window.URL.createObjectURL(blob)
       const link = document.createElement('a')
@@ -185,7 +192,11 @@ export default function ExamPapersPage() {
       link.remove()
       window.URL.revokeObjectURL(url)
     } catch (err) {
-      showError(err.response?.data?.detail || `Failed to generate ${format.toUpperCase()}. Please try again.`)
+      if (format === 'key' && err.response?.status === 403) {
+        showError('Only the school admin, the principal and this class’s teachers can see the answer key.')
+        return
+      }
+      showError(err.response?.data?.detail || `Failed to generate ${format === 'key' ? 'the answer key' : format.toUpperCase()}. Please try again.`)
     } finally {
       setDownloadingKey((current) => (current === key ? null : current))
     }
@@ -328,6 +339,7 @@ export default function ExamPapersPage() {
                     { label: 'Responses', tone: 'success', onClick: () => navigate(`/academics/papers/${paper.id}/responses`) },
                     { label: downloadingKey === `${paper.id}-pdf` ? 'Generating…' : 'PDF', tone: 'muted', disabled: downloadingKey === `${paper.id}-pdf`, onClick: () => handleDownload(paper, 'pdf') },
                     { label: downloadingKey === `${paper.id}-docx` ? 'Generating…' : 'DOCX', tone: 'muted', disabled: downloadingKey === `${paper.id}-docx`, onClick: () => handleDownload(paper, 'docx') },
+                    { label: downloadingKey === `${paper.id}-key` ? 'Generating…' : 'Answer key', tone: 'muted', disabled: downloadingKey === `${paper.id}-key`, onClick: () => handleDownload(paper, 'key') },
                     { label: 'Delete', tone: 'danger', disabled: deleteMutation.isPending, onClick: () => handleDeleteOne(paper) },
                   ]}
                 />
@@ -410,6 +422,14 @@ export default function ExamPapersPage() {
                             className="px-3 py-1.5 rounded border border-gray-300 text-gray-700 text-xs hover:bg-gray-100 disabled:opacity-50 disabled:cursor-wait"
                           >
                             {downloadingKey === `${paper.id}-docx` ? 'Generating…' : 'DOCX'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDownload(paper, 'key')}
+                            disabled={downloadingKey === `${paper.id}-key`}
+                            className="px-3 py-1.5 rounded border border-gray-300 text-gray-700 text-xs hover:bg-gray-100 disabled:opacity-50 disabled:cursor-wait"
+                          >
+                            {downloadingKey === `${paper.id}-key` ? 'Generating…' : 'Answer key'}
                           </button>
                           <button
                             type="button"

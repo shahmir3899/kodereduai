@@ -57,6 +57,15 @@ export function unwrapLanguage(html) {
   return { language: 'en', inner: html }
 }
 
+// The language a text box opens in. Text with no language wrapper (new, or read by the scan) opens in Urdu
+// when it contains Urdu or when the paper is an Urdu paper (defaultLanguage).
+export function openLanguage(html, defaultLanguage) {
+  const parsed = unwrapLanguage(html)
+  if (WRAPPER_RE.test(html || '')) return parsed
+  if (/[؀-ۿ]/.test(html || '')) return { ...parsed, language: 'ur' }
+  return { ...parsed, language: defaultLanguage || parsed.language }
+}
+
 export function wrapLanguage(innerHtml, language) {
   const rtl = isRTLLanguage(language)
   return `<div dir="${rtl ? 'rtl' : 'ltr'}" lang="${language}" class="${rtl ? 'font-rtl' : ''}">${innerHtml}</div>`

@@ -1,0 +1,51 @@
+{
+  "version": 1,
+  "direction": "ltr",
+  "footer": "2nd Term Paper — Class: Play Group (English)",
+  "header": {
+    "school_name": "THE FOCUS MONTESSORI & SCHOOL",
+    "exam_title": "2nd Term Examination 2026-27",
+    "subject": "English",
+    "class_name": "Play Group",
+    "marks_table": true,
+    "sign_label": "Teacher’s Sig"
+  },
+  "blocks": [
+    {"type": "handwriting_lines", "title": "Write capital and small letters Aa to Mm.", "marks": 10,
+     "data": {"rows": 4, "cols": 4}},
+    {"type": "missing_sequence", "title": "Fill in the missing letters.", "marks": 4,
+     "data": {"shape": "train", "per_row": 4, "items": ["A", "", "C", "", "E", "", "G", ""]}},
+    {"type": "picture_choice", "title": "Circle the correct letter.", "marks": 6,
+     "data": {"per_row": 3, "items": [
+       {"picture": "ant", "options": ["A", "B"]},
+       {"picture": "dog", "options": ["C", "D"]},
+       {"picture": "fan", "options": ["S", "F"]},
+       {"picture": "igloo", "options": ["i", "H"]},
+       {"picture": "mouse", "options": ["M", "B"]},
+       {"picture": "grapes", "options": ["G", "A"]}
+     ]}},
+    {"type": "match_columns", "title": "Match the capital letters with their small letters.", "marks": 5,
+     "data": {"left": [{"text": "B"}, {"text": "H"}, {"text": "J"}, {"text": "M"}, {"text": "C"}],
+              "right": [{"text": "j"}, {"text": "b"}, {"text": "h"}, {"text": "c"}, {"text": "m"}]}},
+    {"type": "letter_grid", "title": "Circle the letter only “C”.", "marks": 4,
+     "data": {"picture": "cat", "rows": [
+       ["A", "C", "D", "B", "C"],
+       ["H", "j", "C", "K", "M"],
+       ["F", "C", "O", "E", "C"]
+     ]}},
+    {"type": "find_colour", "title": "Find and colour letter “A”.", "marks": 4,
+     "data": {"target": "A", "items": ["A", "B", "D", "C", "D", "A", "C", "A", "E", "B"]}},
+    {"type": "match_columns", "title": "Match the column.", "marks": 5,
+     "data": {"left_box": "dashed", "right_box": "solid",
+              "left": [{"picture": "grapes"}, {"picture": "jelly"}, {"picture": "ant"}, {"picture": "football"}, {"picture": "egg"}],
+              "right": [{"text": "A"}, {"text": "G"}, {"text": "J"}, {"text": "E"}, {"text": "B"}]}},
+    {"type": "colour_picture", "title": "Colour the picture.", "marks": 4,
+     "data": {"picture": "mango", "height": 300, "frame": "solid"}},
+    {"type": "oral", "title": "Oral.", "marks": 8,
+     "data": {"items": [
+       {"text": "Book Reading with Sound.", "marks": 4},
+       {"text": "Poem: Early to bed."},
+       {"text": "Animal name: Any “5”.", "marks": 4}
+     ]}}
+  ]
+}

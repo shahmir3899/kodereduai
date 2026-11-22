@@ -1,0 +1,91 @@
+{
+  "version": 1,
+  "direction": "rtl",
+  "footer": "Higher Secondary Examination — Urdu Paper I (XII)",
+  "header": {
+    "school_name": "Directorate of Government Examinations",
+    "exam_title": "Higher Secondary Examination, March 2019",
+    "subject": "اردو — Paper I",
+    "class_name": "XII",
+    "time_label": "2 گھنٹے 30 منٹ",
+    "show_time_marks": true,
+    "marks_table": true,
+    "sign_label": "Teacher’s Sign",
+    "instructions": "Check the question paper for fairness of printing. If there is any lack of fairness, inform the Hall Supervisor immediately.\nUse Blue or Black ink to write and underline and pencil to draw diagrams."
+  },
+  "blocks": [
+    {"id": "sec1", "type": "section_heading", "title": "نثر و نظم / Prose and Poetry"},
+    {
+      "id": "q1", "type": "mcq", "marks": 6,
+      "title": "ذیل کے صحیح جواب کا انتخاب کرکے اپنے جوابی پرچے پر لکھیے۔ Choose the correct answer from the given option.",
+      "data": {
+        "numbering": "number",
+        "items": [
+          {"text": "<div dir=\"rtl\" lang=\"ur\" class=\"font-rtl\"><p>ذیل کے اشعار کو ترتیب وار مکمل کیجیے۔</p><table><tr><td>(i) پاس جو پونجی اجالوں کی</td><td>تھی سب کچھ بانٹ کر</td></tr><tr><td>(ii) وہ اچانک چل دیا</td><td>گویا سفر تھا مختصر</td></tr><tr><td>(iii) چھاؤں میں افلاک کی</td><td>پلٹتا رہا ڈھلتا رہا</td></tr><tr><td>(iv) زندگی بھر جو سفر</td><td>کرتا رہا چلتا رہا</td></tr></table></div>",
+           "options": [{"text": "(ii), (iii), (iv), (i)"}, {"text": "(iv), (i), (ii), (iii)"}, {"text": "(i), (ii), (iii), (iv)"}, {"text": "(ii), (iv), (iii), (i)"}]},
+          {"text": "سلام آتا ہے مجھے ان کا ______ کے بعد",
+           "options": [{"text": "پیام"}, {"text": "انعام"}, {"text": "کلام"}, {"text": "قیام"}]},
+          {"text": "مرے ہوئے آدمی کے اوصاف بیان کیے جاتے ہیں۔",
+           "options": [{"text": "مرثیہ"}, {"text": "نعت"}, {"text": "رباعی"}, {"text": "قصیدہ"}]},
+          {"text": "خدا کی نعمتیں میں چوتھا بند ______ آیت کا ترجمہ ہے",
+           "options": [{"text": "سورۂ یٰسین"}, {"text": "سورۂ ملک"}, {"text": "سورۂ رحمٰن"}, {"text": "سورۂ واقعہ"}]},
+          {"text": "انسان کی پہلی ایجاد",
+           "options": [{"text": "جراثیم"}, {"text": "فون"}, {"text": "بجلی"}, {"text": "پہیہ"}]},
+          {"text": "سائنس اور ہمارا معاشرہ مضمون ہے",
+           "options": [{"text": "اسلامی"}, {"text": "مذہبی"}, {"text": "سائنس"}, {"text": "تحقیق"}]}
+        ]
+      }
+    },
+    {"id": "sec2", "type": "section_heading", "title": "گرامر، نان ڈیٹیل، ترجمہ (Grammar - Non - detailed - Composition & Translation)"},
+    {
+      "id": "q2", "type": "mcq", "marks": 6,
+      "title": "ذیل کے صحیح جواب کا انتخاب کرکے اپنے جوابی پرچے پر لکھیے۔",
+      "data": {
+        "numbering": "number",
+        "items": [
+          {"text": "<div dir=\"rtl\" lang=\"ur\" class=\"font-rtl\"><p>صبح ہوتی ہے شام ہوتی ہے</p><p>عمر یوں ہی تمام ہوتی ہے</p><p>اس میں کونسی صفت پائی جاتی ہے۔</p></div>",
+           "options": [{"text": "استعارہ"}, {"text": "مخمس"}, {"text": "مجاز"}, {"text": "تضاد"}]},
+          {"text": "ابوالبیان حماد پیدا ہوئے",
+           "options": [{"text": "کیرلا"}, {"text": "کرشنگری"}, {"text": "کولار"}, {"text": "مالور"}]},
+          {"text": "ملک کی بربادی کا ذکر کیا جاتا ہے",
+           "options": [{"text": "مرثیہ"}, {"text": "شہر آشوب"}, {"text": "مثنوی"}, {"text": "قصیدہ"}]},
+          {"text": "غزل کا آخری شعر ______",
+           "options": [{"text": "قافیہ"}, {"text": "مقطع"}, {"text": "مطلع"}, {"text": "ردیف"}]},
+          {"text": "جگر کا نام",
+           "options": [{"text": "حاجی مراد"}, {"text": "محمد ابراہیم"}, {"text": "مولوی نظیر"}, {"text": "علی سکندر"}]},
+          {"text": "پرویز سید عظمت کا لقب",
+           "options": [{"text": "مدہانی"}, {"text": "حسن نظامی"}, {"text": "سہ صدی"}, {"text": "حماد"}]}
+        ]
+      }
+    },
+    {
+      "id": "q4", "type": "short_answer", "marks": 14,
+      "title": "کسی سات سوالات کے جوابات مختصر لکھیے۔ Answer any seven question.",
+      "data": {
+        "numbering": "number", "lines": 3,
+        "items": [
+          {"text": "<div dir=\"rtl\" lang=\"ur\" class=\"font-rtl\"><p>مختصر جواب لکھیے۔</p><p>(الف) علم بیان کی تعریف کیجیے؟</p><p>(ب) تضاد کی تعریف کیجیے اور مثالوں کے ساتھ لکھیے؟</p></div>"},
+          {"text": "<div dir=\"rtl\" lang=\"ur\" class=\"font-rtl\"><p>املا درست کیجیے:</p><p>(الف) سنم آ قر قدا نہیں ہوتا</p><p>(ب) حمیدہ قرآن پڑھتا ہے</p></div>"},
+          {"text": "<div dir=\"rtl\" lang=\"ur\" class=\"font-rtl\"><p>صحیح اردو میں لکھیے:</p><p>(الف) تمے کاں جاتیں سو</p><p>(ب) کیکو بولتیں سو</p></div>"},
+          {"text": "<div dir=\"rtl\" lang=\"ur\" class=\"font-rtl\"><p>ذیل کے مختصر جواب لکھیے:</p><p>(الف) ابو خاں کو کس چیز کا شوق تھا؟</p><p>(ب) ترانہ کس قسم کی لڑکی تھی؟</p></div>"},
+          {"text": "<div dir=\"rtl\" lang=\"ur\" class=\"font-rtl\"><p>الفاظ کے الٹ پھیر کو درست کریں۔</p><p>(الف) لڑکی تھی خاندان کی اچھے ایک</p><p>(ب) بچوں میں مہارت تھی کے علاج کرنے نام دیو کو</p></div>"},
+          {"text": "<div dir=\"rtl\" lang=\"ur\" class=\"font-rtl\"><p>ذیل کے جملوں کو فعل مستقبل میں بدلیں</p><p>(الف) فہد مدراس جا رہا ہے۔</p><p>(ب) دانش قرآن پڑھ رہا ہے۔</p></div>"},
+          {"text": "<div dir=\"rtl\" lang=\"ur\" class=\"font-rtl\"><p>مختصر لکھیے:</p><p>(الف) نام دیو کس مزاج کا آدمی تھا؟</p><p>(ب) ابو خاں کہاں رہتے تھے؟</p></div>"}
+        ]
+      }
+    },
+    {
+      "id": "q6", "type": "long_answer", "marks": 12,
+      "title": "ذیل میں کسی تین سوالات کے جواب دیجیے۔ Answer any three question.",
+      "data": {
+        "numbering": "number", "lines": 6, "attempt": 3,
+        "items": [
+          {"text": "<div dir=\"rtl\" lang=\"ur\" class=\"font-rtl\"><p>ذیل کے اشعار کی بحوالۂ متن تشریح کیجیے:</p><table><tr><td>محبت ہے خاک وطن سے ہمیں</td><td>محبت ہے اپنے چمن سے ہمیں</td></tr><tr><td>ہمیں اپنے قصبوں سے شاموں سے پیار</td><td>ہمیں اپنے شہروں کے ناموں سے پیار</td></tr><tr><td>ہمیں پیار اپنے ہر اک گاؤں سے</td><td>گھنے برگدوں کی گھنی چھاؤں میں</td></tr></table></div>"},
+          {"text": "<div dir=\"rtl\" lang=\"ur\" class=\"font-rtl\"><p>ذیل کی عبارت کو غور سے پڑھیے اور نیچے دیے گئے سوالوں کے مختصر جواب لکھیے: Read the paragraph and answer the Questions given below it.</p><p>اچھی عزت وہی ہے جو گناہوں کے بغیر حاصل ہو۔ دولت کے دروازے سے عزت آتی ہے۔ اس میں بہت سے ظلم کرنے پڑتے ہیں۔ دنیا میں بادشاہوں کی عزت تو سب کو نظر آتی ہے۔ اس عزت کو حاصل کرنے کے لیے انھوں نے بہت ظلم کیا ہے۔ اس عزت کو برقرار رکھنے کے لیے ان کو پریشانی اٹھانی پڑی۔ [خواجہ حسن نظامی]</p><p>(i) بادشاہوں کی عزت کس طرح حاصل ہوتی ہے؟</p><p>(ii) دولت کے دروازے سے جو عزت آتی ہے وہ کس طرح آتی ہے؟</p><p>(iii) سب سے اچھی عزت کونسی ہے؟</p><p>(iv) ’عزت‘ کے مصنف کون ہیں؟</p></div>"},
+          {"text": "<div dir=\"rtl\" lang=\"ur\" class=\"font-rtl\"><p>چاندنی نے بھیڑیے کا مقابلہ کیا سوچ کر کیا</p><p><strong>یا</strong></p><p>نام دیو کے کردار پر روشنی ڈالیے</p></div>"},
+          {"text": "<div dir=\"rtl\" lang=\"ur\" class=\"font-rtl\"><p>ثریا نے اپنی محرومیوں کی داستان پرویز کو کیوں سنائی</p><p><strong>یا</strong></p><p>جب دل کا موسم خوش گوار ہوتا ہے تو کیا نظر آتا ہے</p></div>"}
+        ]
+      }
+    }
+  ]
+}

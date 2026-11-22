@@ -412,3 +412,27 @@ Notes: the `test_*.py` scripts in the backend root (`test_phase1.py`, `test_audi
 ## Found while building mobile staff Batch 20 (2026-11-02, not fixed on the web)
 - **Web own-attendance cards read the wrong keys.** `StaffAttendancePage.jsx` `MyAttendanceView` takes `summary.PRESENT`, `ABSENT`, `LATE`, `HALF_DAY`, `ON_LEAVE`, but `GET /api/hr/attendance/summary/` answers lowercase `present`, `absent`, `late`, `half_day`, `on_leave`, so those cards show 0 for a teacher, manager, staff, finance manager and driver (the Rate card reads `attendance_rate`, which is right). The mobile screen had the same mistake and is fixed. The web staff Dashboard reads the lowercase keys correctly.
 - **Test account:** `SEED_TEST_staff_e2e` (school 37) no longer accepts the dev password `Abcd1234`.
+
+## Found while building Paper Builder v2 Phase 3a (2026-11-15; gone 2026-11-17)
+- **Gone with Paper Builder v2 Phase 7 (2026-11-17):** the old ReportLab PDF and python-docx Word exporters were removed, and these 2 tests with them. Every paper now prints from `print-html`; an old paper's diagram is covered by `test_paper_document.py::TestOldPapersAfterPhase7`. Original note kept below.
+- **`DiagramModeExportRenderingTests` (2 tests) fail offline:** `test_pdf_generation_embeds_question_and_option_diagrams` and `test_docx_generation_embeds_question_and_option_diagrams`. The tests mock `requests.get` but use the made-up host `https://cdn.test/...`; `core.url_safety.assert_safe_external_url` does a real DNS lookup first, cannot resolve it, and refuses the download, so `requests.get` is never called (0 calls, test wants 2). The exporters and `url_safety.py` were not changed by Phase 3a. Fix: also patch `assert_safe_external_url` in the test (or `socket.getaddrinfo`).
+
+## Found while building the teacher performance report Phase 3 (2026-11-17, not fixed)
+- **`tests/test_no_celery_migration.py::TestCallTask::test_falls_back_to_sync_when_delay_raises` fails.** `core/task_utils.call_task` was changed (commit 22e1ccc6, 2026-11-12) to skip the sync re-run when `CELERY_TASK_ALWAYS_EAGER` is on, because eager `.delay()` already ran the task; tests run eager, so the test's broken task never runs (`recorded == []`). The code change is deliberate; the test needs to patch `CELERY_TASK_ALWAYS_EAGER` to False.
+
+## Removed with Paper Builder v2 Phase 7 (2026-11-17)
+The old paper export, old scan and old item editors were removed, and their tests went with them (none were failing apart from the 2 above).
+- **Server, `examinations/tests.py`:** `PaperOCRSchemaParsingTests`, `PaperOCRProcessorLLMTests`, `MultiPageContinuationPromptTests`, `BuildContinuationContextTests`, `ReconcilePagesTests`, `PaperExportLayoutTests`, `DiagramModeExportRenderingTests`, `WorksheetUploadTests`, `PaperLayoutRealPageTests`, `PaperLayoutRulesTests`, `PaperLayoutPipelineTests`, `PaperMarksNormalisationTests`, the two attach-layout tests of `PaperLayoutApplyTests` (its two language-hint tests stay as `ScanLanguageHintTests`), 5 old-scan tests of `PaperOcrReliabilityTests`, and the legacy-confirm test. The `fixtures_paper_layout/` Vision pages went too.
+- **Rewritten, not lost:** paper and worksheet autosave tests now check the 409 an old app gets; the snapshot, duplicate, Word and group-status tests build old-style rows directly or use block results.
+- **Web:** `QuestionSlotEditor.bankFill.test.jsx`, `QuestionSlotEditor.formats.test.jsx`, `marksMismatch.test.js`; `paperCaptureLogic.test.js`, `paperPayload.contract.test.js` and `ImageCapturePaperTabMultiPage.test.jsx` trimmed or rewritten for the block scan. New: `ExamPapersPagePrint.test.jsx`.
+- **Phone:** `paperCapture.test.ts`; `paperBuilder.test.ts`, `paperPages.test.ts`, `worksheets.test.ts` and `paperContract.test.ts` cut down to what is left (paper details, page slots, the question-bank payload contract).
+- **Not tested on a phone:** the photo scan sheet's "scan again" message for pages read by the old scanner, and printing an old paper or worksheet with expo-print (checked only in Metro web, which calls `print-html?embed=1`).
+
+## Found while building the answer key, Paper Builder v2 step 7b (2026-11-17)
+- **Fixed:** old matching questions (question bank form: `left_items` / `right_items` / index `pairs`) printed with empty
+  pairs on old papers and came into the block editor empty from the bank picker, since Phase 3. Both readers now take both
+  shapes (`paper_document.matching_pairs`, `blockDocument.matchingPairs`).
+- **Fixed 2026-11-17 (user approved):** the block editor saved matching questions to the bank as `pairs` of texts, which
+  the question bank forms could not read, and every unchanged pick from the bank made a copy. The editor now writes the bank
+  shape, "edited?" compares pairs, and both forms read either shape (plan: "Matching format fix").
+

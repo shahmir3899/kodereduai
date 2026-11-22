@@ -8,6 +8,7 @@ export default function SelectionBar({
   activeAcademicYearId,
   onCreateAccounts,
   onDownloadReports,
+  onDelete, // only passed for admin roles; omitted hides the button
   onClear,
 }) {
   return (
@@ -31,6 +32,15 @@ export default function SelectionBar({
         buttonClassName="bg-white text-purple-700 px-4 py-1.5 rounded-full text-sm font-semibold hover:bg-purple-50 disabled:opacity-50 flex items-center gap-1"
         openUpward
       />
+      {onDelete && (
+        <button
+          onClick={onDelete}
+          disabled={isGeneratingReports}
+          className="bg-red-500 text-white px-4 py-1.5 rounded-full text-sm font-semibold hover:bg-red-600 disabled:opacity-50"
+        >
+          Remove
+        </button>
+      )}
       <button
         onClick={onClear}
         disabled={isGeneratingReports}

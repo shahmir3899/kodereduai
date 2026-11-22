@@ -324,6 +324,8 @@ export const studentsApi = {
   deleteStudent: (id, reason = '') => api.delete(`/api/students/${id}/`, { data: { reason } }),
   getDeletedStudents: () => api.get('/api/students/deleted/'),
   restoreStudent: (id, data = {}) => api.post(`/api/students/${id}/restore/`, data),
+  // Admin-only soft delete of up to 100 students; returns { deleted: [ids], skipped: [{id, name, code, detail}] }.
+  bulkDeleteStudents: (data) => api.post('/api/students/bulk_delete/', data),
   // Records the student owns + the outcomes open to them (drives Status & exit / Remove).
   getRemovalPreview: (id) => api.get(`/api/students/${id}/removal-preview/`),
   // Graduated / Repeat for an academic year; reason is required.
@@ -624,6 +626,18 @@ export const hrApi = {
 
   // Staff Risk Predictor
   getStaffRisk: (params) => api.get('/api/hr/staff-risk/', { params }),
+}
+
+// Teacher performance report (docs/TEACHER_PERFORMANCE_PLAN.md). params: { start, end } as YYYY-MM-DD.
+export const teacherPerformanceApi = {
+  getReport: (params) => api.get('/api/hr/teacher-performance/', { params }),
+  getTeacher: (staffId, params) => api.get(`/api/hr/teacher-performance/${staffId}/`, { params }),
+  getMine: (params) => api.get('/api/hr/teacher-performance/my/', { params }),
+  getConfig: () => api.get('/api/hr/teacher-performance/config/'),
+  updateConfig: (data) => api.put('/api/hr/teacher-performance/config/', data),
+  getExplainer: (params) => api.get('/api/hr/teacher-performance/explainer/', { params }),
+  // data: { start, end, format: 'PDF' | 'XLSX' }
+  exportReport: (data) => api.post('/api/hr/teacher-performance/export/', data, { responseType: 'blob' }),
 }
 
 // Academics (Subjects & Timetable) API
@@ -1628,8 +1642,35 @@ export const questionPaperApi = {
     api.post(`/api/examinations/exam-papers/${paperId}/link_lesson_plans/`, data),
   getCoverageStats: (paperId) =>
     api.get(`/api/examinations/exam-papers/${paperId}/coverage_stats/`),
-  generatePDF: (id) => api.get(`/api/examinations/exam-papers/${id}/generate-pdf/`, { responseType: 'blob' }),
+  // PDF: every paper prints on this device from getPrintHtml (blocks/printPaper.js); Word comes from the server.
   generateDOCX: (id) => api.get(`/api/examinations/exam-papers/${id}/generate-docx/`, { responseType: 'blob' }),
+
+  // Block-based Paper Builder (backend examinations/paper_blocks, docs/PAPER_BUILDER_V2_PLAN.md)
+  getBlockTypes: () => api.get('/api/examinations/paper-blocks/'),
+  getPaperDocument: (id) => api.get(`/api/examinations/exam-papers/${id}/document/`),
+  saveDocument: (id, document) => api.post(`/api/examinations/exam-papers/${id}/autosave/`, { document }),
+  // embed=1: library pictures inside the page. The preview frame is sandboxed (no origin), and Chrome
+  // will not let it load pictures from a local API address such as the dev or scratch server.
+  // show: the block the page opens scrolled to (every edit loads a new preview page).
+  previewDocument: (id, document, show) =>
+    api.post(`/api/examinations/exam-papers/${id}/preview/`, { document }, { params: { embed: 1, ...(show ? { show } : {}) }, responseType: 'text' }),
+  getPrintHtml: (id) => api.get(`/api/examinations/exam-papers/${id}/print-html/`, { responseType: 'text' }),
+  // The paper's answer key (step 7b); the server only gives it to those who may edit the paper.
+  getAnswerKeyHtml: (id) => api.get(`/api/examinations/exam-papers/${id}/print-html/`, { params: { answer_key: 1 }, responseType: 'text' }),
+  getPictureCatalog: (search) =>
+    api.get('/api/examinations/paper-pictures/catalog/', { params: search ? { search } : {} }),
+  getPaperPictures: (params) => api.get('/api/examinations/paper-pictures/', { params }),
+  uploadPaperPicture: ({ file, label, clean = true }) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    if (label) formData.append('label', label)
+    formData.append('clean', clean ? 'true' : 'false')
+    return api.post('/api/examinations/paper-pictures/', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+  },
+  deletePaperPicture: (id) => api.delete(`/api/examinations/paper-pictures/${id}/`),
+
   reviewQuestions: (questions) => api.post('/api/examinations/exam-papers/review-questions/', { questions }),
   getStudentResponses: (params) => api.get('/api/examinations/student-responses/', { params }),
   submitStudentResponses: (data) => api.post('/api/examinations/student-responses/', data),
@@ -1640,8 +1681,10 @@ export const questionPaperApi = {
   // groupId/pageNumber tie the pages of one capture together. The client makes the group
   // id (a uuid) and sends every page with its own page number, so pages can go up at the
   // same time; omit both for a single standalone upload.
+  // mode=blocks: the page is read straight into blocks (the only scan since Paper Builder v2 Phase 7).
   uploadPaperImage: (file, classObj, subject, groupId, pageNumber) => {
     const formData = new FormData()
+    formData.append('mode', 'blocks')
     formData.append('image', file)
     if (classObj) formData.append('class_obj', classObj)
     if (subject) formData.append('subject', subject)
@@ -1653,7 +1696,7 @@ export const questionPaperApi = {
   },
   confirmPaperUpload: (id, data) => api.post(`/api/examinations/paper-uploads/${id}/confirm/`, data),
   // Progress of a multi-page capture whose page count was declared up front; once every page
-  // is extracted it also carries the reconciled paper (sections joined across page breaks).
+  // is extracted it also carries the pages' blocks joined into one result.
   getPaperGroupStatus: (groupId, totalPages) => api.get('/api/examinations/paper-uploads/group-status/', { params: { group_id: groupId, total_pages: totalPages } }),
 
   // Paper Feedback (for learning loop)
@@ -1661,8 +1704,9 @@ export const questionPaperApi = {
 }
 
 // Worksheets -- sibling of questionPaperApi's exam-paper group, same shapes
-// (ensure-draft/autosave/generate-pdf/generate-docx/upload-image/confirm) minus
-// exam-lifecycle fields, plus a duplicate action exam papers don't have.
+// (ensure-draft/autosave/document/preview/print-html/generate-docx) minus
+// exam-lifecycle fields, plus a duplicate action exam papers don't have. A worksheet's scan goes
+// through questionPaperApi.uploadPaperImage like a paper's.
 export const worksheetApi = {
   getWorksheets: (params) => api.get('/api/examinations/worksheets/', { params }),
   getWorksheet: (id) => api.get(`/api/examinations/worksheets/${id}/`),
@@ -1671,24 +1715,16 @@ export const worksheetApi = {
   updateWorksheet: (id, data) => api.patch(`/api/examinations/worksheets/${id}/`, data),
   deleteWorksheet: (id) => api.delete(`/api/examinations/worksheets/${id}/`),
   duplicateWorksheet: (id) => api.post(`/api/examinations/worksheets/${id}/duplicate/`, {}),
-  generatePDF: (id) => api.get(`/api/examinations/worksheets/${id}/generate-pdf/`, { responseType: 'blob' }),
   generateDOCX: (id) => api.get(`/api/examinations/worksheets/${id}/generate-docx/`, { responseType: 'blob' }),
 
-  // Worksheet Uploads (image capture for OCR) -- same contract as paper-uploads.
-  getWorksheetUploads: (params) => api.get('/api/examinations/worksheet-uploads/', { params }),
-  getWorksheetUpload: (id) => api.get(`/api/examinations/worksheet-uploads/${id}/`),
-  uploadWorksheetImage: (file, classObj, subject, groupId, pageNumber) => {
-    const formData = new FormData()
-    formData.append('image', file)
-    if (classObj) formData.append('class_obj', classObj)
-    if (subject) formData.append('subject', subject)
-    if (groupId) formData.append('group_id', groupId)
-    if (pageNumber) formData.append('page_number', pageNumber)
-    return api.post('/api/examinations/worksheet-uploads/upload-image/', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    })
-  },
-  confirmWorksheetUpload: (id, data) => api.post(`/api/examinations/worksheet-uploads/${id}/confirm/`, data),
+  // Block worksheets (Paper Builder v2 Phase 6b): the same endpoints as block papers.
+  getDocument: (id) => api.get(`/api/examinations/worksheets/${id}/document/`),
+  saveDocument: (id, document) => api.post(`/api/examinations/worksheets/${id}/autosave/`, { document }),
+  // show: the block the page opens scrolled to (every edit loads a new preview page).
+  previewDocument: (id, document, show) =>
+    api.post(`/api/examinations/worksheets/${id}/preview/`, { document }, { params: { embed: 1, ...(show ? { show } : {}) }, responseType: 'text' }),
+  getPrintHtml: (id) => api.get(`/api/examinations/worksheets/${id}/print-html/`, { responseType: 'text' }),
+  getAnswerKeyHtml: (id) => api.get(`/api/examinations/worksheets/${id}/print-html/`, { params: { answer_key: 1 }, responseType: 'text' }),
 }
 
 export const aiJobsApi = {

@@ -63,7 +63,7 @@ function ToastContainer({ toasts, removeToast }) {
 
   return (
     <div
-      className="fixed top-4 right-4 left-4 sm:left-auto z-50 space-y-2 max-w-sm sm:max-w-md"
+      className="fixed top-4 right-4 left-4 sm:left-auto z-[80] space-y-2 max-w-sm sm:max-w-md"
       role="alert"
       aria-live="polite"
       aria-atomic="false"

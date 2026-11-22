@@ -147,12 +147,18 @@ export function buildStaffNavigation(ctx: NavContext): NavGroup[] {
         item('Leave', '/hr/leave'),
         item('Attendance', '/hr/attendance'),
         item('Performance', '/hr/appraisals'),
+        item('Teacher Performance', '/hr/teacher-performance'),
         item('Documents', '/hr/documents'),
         item('Letter Composer', '/hr/letters'),
         item('Staff Risk', '/hr/risk'),
       ]);
     } else if (isTeacher || isManager) {
-      add('My HR', [item('My Leave', '/hr/leave'), item('My Attendance', '/hr/attendance')]);
+      add('My HR', [
+        item('My Leave', '/hr/leave'),
+        item('My Attendance', '/hr/attendance'),
+        // Teachers only: the performance report scores teaching staff (backend/hr/performance).
+        ...(isTeacher ? [item('My Performance', '/my-performance')] : []),
+      ]);
     }
     if (isStaff || isDriver) {
       // Payslips are read from the same own-record API the web staff dashboard uses; the web

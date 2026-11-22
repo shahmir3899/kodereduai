@@ -1,7 +1,6 @@
-import { calculateAllocatedMarks } from './PaperStructureBuilder'
-
-// Pure builders for the Question Paper Builder's server payloads. Kept out of the page so the same
-// fixtures (docs/paper-contract/) can pin what web sends, and the mobile app can be tested against it.
+// Pure builders for the Question Paper Builder's paper-details payload (ensure-draft). The questions are the
+// block list, saved by the block editor. The old paper's `structure` is passed through unchanged, so an old
+// paper that is never saved in the editor keeps it.
 
 export function hydrateStructure(structure) {
   if (!Array.isArray(structure)) return []
@@ -50,61 +49,6 @@ export function serializeStructure(sections) {
   })
 }
 
-/**
- * Flattens draft questions into autosave order: sections in structure order first
- * (preserving each question's relative position within its section), then any
- * questions not linked to a section key.
- */
-export function orderQuestionsForAutosave(questions, structure) {
-  const orderedKeys = (structure || [])
-    .filter((section) => section.type !== 'divider')
-    .map((section) => section.key)
-    .filter(Boolean)
-  const bySection = new Map()
-  const unassigned = []
-
-  ;(questions || []).forEach((question) => {
-    const sectionKey = question.section_key || ''
-    if (sectionKey && orderedKeys.includes(sectionKey)) {
-      if (!bySection.has(sectionKey)) bySection.set(sectionKey, [])
-      bySection.get(sectionKey).push(question)
-    } else {
-      unassigned.push(question)
-    }
-  })
-
-  const ordered = []
-  orderedKeys.forEach((key) => {
-    ordered.push(...(bySection.get(key) || []))
-  })
-  ordered.push(...unassigned)
-  return ordered
-}
-
-export function buildManualAutosaveQuestions(questions, structure = []) {
-  return orderQuestionsForAutosave(questions, structure).map((question, index) => ({
-    question_id: question.question_id || undefined,
-    question_order: index + 1,
-    section_key: question.section_key || '',
-    marks_override: Number(question.marks_override ?? question.marks ?? 1) || 1,
-    question_text: question.question_text || '',
-    question_type: question.question_type || 'SHORT',
-    difficulty_level: question.difficulty_level || 'MEDIUM',
-    bloom_level: question.bloom_level || undefined,
-    marks: Number(question.marks ?? 1) || 1,
-    option_a: question.options?.A || '',
-    option_b: question.options?.B || '',
-    option_c: question.options?.C || '',
-    option_d: question.options?.D || '',
-    correct_answer: question.correct_answer || '',
-    answer_text: question.answer_text || '',
-    type_data: question.type_data || {},
-    tested_topics: Array.isArray(question.tested_topics) ? question.tested_topics : [],
-    local_id: question.local_id,
-  }))
-}
-
-
 export function buildPaperEnsurePayload({ classObj, subject, exam, manualDraft, structure, renderOptions }) {
   const payload = {
     class_obj: classObj || undefined,
@@ -127,14 +71,4 @@ export function buildPaperEnsurePayload({ classObj, subject, exam, manualDraft, 
   }
 
   return payload
-}
-
-// Step 2 -> 3 check: do the sections add up to the typed Total Marks? Advisory only. With no sections there is nothing to
-// compare, so no warning (the page used to warn "Allocated marks (0)..." on every free-form paper).
-export function marksMismatch(structure, totalMarks) {
-  const sections = (structure || []).filter((section) => section.type !== 'divider')
-  const total = Number(totalMarks) || 0
-  if (sections.length === 0 || total <= 0) return null
-  const allocated = calculateAllocatedMarks(structure)
-  return allocated !== total ? { allocated, total } : null
 }

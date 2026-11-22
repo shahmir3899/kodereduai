@@ -370,6 +370,7 @@ class FaceAttendanceSessionViewSet(ModuleAccessMixin, TenantQuerySetMixin, views
                     academic_year=session.academic_year,
                     attendance_status=student_status,
                     face_session=session,
+                    marked_by=request.user,
                 )
                 if record is None:
                     continue  # left the school by this date

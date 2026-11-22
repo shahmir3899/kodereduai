@@ -1,0 +1,64 @@
+{
+  "version": 1,
+  "direction": "ltr",
+  "footer": "Text blocks demo — Class: Eight (Science)",
+  "header": {
+    "school_name": "THE FOCUS MONTESSORI & SCHOOL",
+    "exam_title": "2nd Term Examination 2026-27",
+    "subject": "General Science",
+    "class_name": "Eight",
+    "marks_table": true,
+    "show_time_marks": true,
+    "time_label": "2 hours",
+    "instructions": "Attempt all questions in Section A.\nWrite neatly and draw diagrams with a pencil.",
+    "sign_label": "Teacher’s Sign"
+  },
+  "blocks": [
+    {"type": "section_heading", "title": "Section A (Objective)"},
+    {"id": "b-mcq", "type": "mcq", "title": "Choose the correct option.", "marks": 5,
+     "data": {"numbering": "roman", "items": [
+       {"text": "<p>Which part of the plant makes food?</p>", "answer": "B",
+        "options": [{"text": "Root"}, {"text": "Leaf"}, {"text": "Stem"}, {"text": "Flower"}]},
+       {"text": "<p>The value of <span class=\"katex\"><span class=\"katex-mathml\"><math><annotation encoding=\"application/x-tex\">x^2</annotation></math></span><span class=\"katex-html\">x2</span></span> when x = 3 is:</p>", "answer": "C",
+        "options": [{"text": "6"}, {"text": "5"}, {"text": "9"}, {"text": "12"}]},
+       {"text": "<p>Water boils at <b>100 °C</b> at sea level. This is an example of a:</p>", "answer": "A",
+        "options": [{"text": "physical change that can be reversed"}, {"text": "chemical change"},
+                    {"text": "change that makes a new substance"}, {"text": "none of these"}]},
+       {"text": "<p>Which animal is a mammal?</p>", "answer": "D",
+        "options": [{"picture": "frog"}, {"picture": "eagle"}, {"picture": "snake"}, {"picture": "elephant"}]},
+       {"text": "<p>The Sun is a:</p>", "answer": "A",
+        "options": [{"text": "star"}, {"text": "planet"}, {"text": "moon"}, {"text": "comet"}]}
+     ]}},
+    {"id": "b-tf", "type": "true_false", "title": "Write True or False.", "marks": 3,
+     "data": {"items": [
+       {"text": "Plants need sunlight to make food.", "answer": "TRUE"},
+       {"text": "Sound travels faster than light.", "answer": "FALSE"},
+       {"text": "Ice is the solid form of water.", "answer": "TRUE"}
+     ]}},
+    {"id": "b-fill", "type": "fill_blank", "title": "Fill in the blanks.", "marks": 3,
+     "data": {"items": [
+       {"text": "The ___ is the control centre of the cell.", "answers": ["nucleus"]},
+       {"text": "Green plants take in carbon dioxide and give out ___.", "answers": ["oxygen"]},
+       {"text": "A magnet has two poles", "answers": ["north and south"]}
+     ]}},
+    {"id": "b-match", "type": "matching", "title": "Match column A with column B.", "marks": 4,
+     "data": {"items": [
+       {"left": "Heart", "right": "Pumps blood"},
+       {"left": "Lungs", "right": "Breathing"},
+       {"left": "Stomach", "right": "Digests food"},
+       {"left": "Brain", "right": "Controls the body"}
+     ]}},
+    {"type": "section_heading", "title": "Section B (Subjective)"},
+    {"id": "b-short", "type": "short_answer", "title": "Answer the following questions briefly.", "marks": 9,
+     "data": {"attempt": 3, "lines": 3, "items": [
+       {"text": "What is photosynthesis?"},
+       {"text": "Name two sources of light."},
+       {"text": "Why do we see lightning before we hear thunder?"},
+       {"text": "Label the parts of this flower.", "picture": "rose"}
+     ]}},
+    {"id": "b-long", "type": "long_answer", "title": "Answer the following question in detail.", "marks": 6,
+     "data": {"lines": 7, "items": [
+       {"text": "Describe the water cycle. Draw a labelled diagram to support your answer."}
+     ]}}
+  ]
+}

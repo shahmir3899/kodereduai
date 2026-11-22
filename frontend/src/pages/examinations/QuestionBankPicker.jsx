@@ -5,7 +5,7 @@ import { questionPaperApi, lmsApi } from '../../services/api'
 import { useDebounce } from '../../hooks/useDebounce'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
 
-export const QUESTION_TYPES = [
+const QUESTION_TYPES = [
   { value: 'MCQ', label: 'Multiple Choice' },
   { value: 'SHORT', label: 'Short Answer' },
   { value: 'LONG', label: 'Long Answer' },
@@ -26,37 +26,10 @@ export function getQuestionReuseCount(question, overusedQuestionCounts = {}) {
   return Number.isFinite(mappedCount) ? mappedCount : 0
 }
 
-/** Converts a question-bank record into a draft-question shape compatible with toQuestionDraft. */
-export function toDraftQuestionFromBank(question, overrides = {}) {
-  return {
-    local_id: `bank_${question.id}_${Date.now()}_${Math.random()}`,
-    question_id: question.id,
-    section_key: '',
-    paper_use_count: getQuestionReuseCount(question),
-    question_text: question.question_text || '',
-    question_type: question.question_type || 'SHORT',
-    difficulty_level: question.difficulty_level || 'MEDIUM',
-    bloom_level: question.bloom_level || '',
-    marks: Number(question.marks ?? 1) || 1,
-    marks_override: Number(question.marks ?? 1) || 1,
-    correct_answer: question.correct_answer || '',
-    answer_text: question.answer_text || '',
-    type_data: question.type_data || {},
-    tested_topics: Array.isArray(question.tested_topics) ? question.tested_topics : [],
-    options: {
-      A: question.option_a || '',
-      B: question.option_b || '',
-      C: question.option_c || '',
-      D: question.option_d || '',
-    },
-    ...overrides,
-  }
-}
-
 /**
  * QuestionBankPicker - shared modal for searching and multi-selecting questions
- * from the question bank. Consumed by ManualEntryPaperTab (unassigned attach)
- * and QuestionSlotEditor's bank source (per-slot attach).
+ * from the question bank. Consumed by the block editor (blocks/BlockPaperEditor.jsx), which turns the
+ * picked questions into blocks.
  */
 export default function QuestionBankPicker({
   open,

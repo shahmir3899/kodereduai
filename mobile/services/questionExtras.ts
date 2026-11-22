@@ -92,7 +92,8 @@ export function bulkDeleteResult(data: unknown): string {
 }
 
 export function docxFileName(title: string): string {
-  const base = (title || 'Paper').replace(/[^a-zA-Z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 60) || 'Paper';
+  // Letters of any script are kept, so an Urdu paper's file is named in Urdu.
+  const base = (title || 'Paper').replace(/[^\p{L}\p{M}\p{N}]+/gu, '_').replace(/^_+|_+$/g, '').slice(0, 60) || 'Paper';
   return `${base}.docx`;
 }
 

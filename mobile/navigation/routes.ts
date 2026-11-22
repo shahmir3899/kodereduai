@@ -57,6 +57,7 @@ const ADMIN_ROUTES: Record<string, string> = {
   '/hr/payroll': '/(admin)/hr/payroll',
   '/hr/salary': '/(admin)/hr/salary',
   '/hr/appraisals': '/(admin)/hr/appraisals',
+  '/hr/teacher-performance': '/(admin)/hr/teacher-performance',
   '/hr/letters': '/(admin)/hr/letters',
   '/notifications': '/(admin)/inbox',
   '/messages': '/(admin)/messages',
@@ -91,6 +92,7 @@ const TEACHER_ROUTES: Record<string, string> = {
   '/students': '/(teacher)/students',
   '/classes': '/(teacher)/classes',
   '/hr/attendance': '/(teacher)/my-attendance',
+  '/my-performance': '/(teacher)/my-performance',
   '/academics/exam-schedule': '/(teacher)/exam-schedule',
   '/academics/curriculum': '/(teacher)/curriculum',
   '/academics/lesson-plans': '/(teacher)/lesson-plans',
@@ -214,5 +216,45 @@ export function routeFor(persona: Persona, webPath: string): string | undefined 
 export function ownRouteForPath(persona: Persona, pathname: string): string | undefined {
   const candidate = `/(${persona})${pathname}`;
   if (pathname === '/dashboard') return candidate;
-  return Object.values(ROUTES[persona] ?? {}).includes(candidate) ? candidate : undefined;
+  if (Object.values(ROUTES[persona] ?? {}).includes(candidate)) return candidate;
+  return (LINKED_SCREENS[persona] ?? []).includes(pathname) ? candidate : undefined;
+}
+
+// Screens opened from inside another screen (a list row, with an id) that have no row in the route maps above, so a
+// link or a reload of one ("/worksheet-builder?id=1") would otherwise fall back to Home. Per persona, only screens its
+// own group has (__tests__/ownRoute.test.ts checks the files exist).
+export const LINKED_SCREENS: Partial<Record<Persona, string[]>> = {
+  admin: ['/worksheet-builder', '/curriculum/book', '/curriculum/topic', '/messages/thread', '/transport/route', '/date-sheet',
+    '/finance/account-ledger', '/session-terms'],
+  teacher: ['/worksheet-builder', '/curriculum/book', '/curriculum/topic', '/messages/thread', '/transport/route'],
+  manager: ['/worksheet-builder', '/curriculum/book', '/curriculum/topic', '/messages/thread'],
+  student: ['/assignments/detail'],
+  parent: ['/messages/thread'],
+  driver: ['/messages/thread'],
+  finance: ['/messages/thread'],
+  staff: ['/messages/thread'],
+};
+
+type SearchParams = Record<string, string | string[] | undefined>;
+
+// The role guard bounces a link that opened another persona's copy of a screen to "/" with the wanted
+// screen in `next`. The query must ride along too, or "/paper-builder?id=16" opens an empty new paper.
+export function nextWithQuery(pathname: string, params: SearchParams): string {
+  const query = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (key === 'next' || value === undefined) return;
+    (Array.isArray(value) ? value : [value]).forEach((v) => query.append(key, String(v)));
+  });
+  const text = query.toString();
+  return text ? `${pathname}?${text}` : pathname;
+}
+
+/** Where `next` opens for the signed-in persona: its own copy of the screen, with the same query. */
+export function ownTargetForNext(persona: Persona, next: string): { pathname: string; params: Record<string, string> } | undefined {
+  const [path, query = ''] = next.split('?', 2);
+  const pathname = ownRouteForPath(persona, path);
+  if (!pathname) return undefined;
+  const params: Record<string, string> = {};
+  new URLSearchParams(query).forEach((value, key) => { if (key !== 'next') params[key] = value; });
+  return { pathname, params };
 }

@@ -11,7 +11,8 @@ from attendance.models import AttendanceRecord
 
 
 def upsert_attendance_record(*, student, date, school, academic_year, attendance_status,
-                              source=AttendanceRecord.Source.FACE_CAMERA, face_session=None):
+                              source=AttendanceRecord.Source.FACE_CAMERA, face_session=None,
+                              marked_by=None):
     """
     Idempotently create/update a student's AttendanceRecord for a date.
 
@@ -37,5 +38,7 @@ def upsert_attendance_record(*, student, date, school, academic_year, attendance
             'status': attendance_status,
             'source': source,
             'face_session': face_session,
+            # Only the reviewed group-photo confirm passes a person; the fixed camera leaves it null.
+            'marked_by': marked_by,
         },
     )

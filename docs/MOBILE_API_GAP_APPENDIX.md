@@ -1,7 +1,7 @@
 # Mobile app and web API coverage
 
-Generated 2026-11-03 by `python scripts/mobile_api_gap.py` (rerun it after each batch).
-The web calls **768** distinct endpoints. The mobile app calls **493** of them (**275 not called**). Mobile-only endpoints (the web never calls them): **2**.
+Generated 2026-11-17 by `python scripts/mobile_api_gap.py` (rerun it after each batch).
+The web calls **800** distinct endpoints. The mobile app calls **589** of them (**211 not called**). Mobile-only endpoints (the web never calls them): **2**.
 
 A call whose URL is a bare variable is not seen (none exist today, checked 2026-11-02); nested template strings are handled. This file is a reference; the plan is `MOBILE_CHANGE_LIST.md`.
 
@@ -24,7 +24,7 @@ Each row groups related endpoints. "Used" is how many of the web's endpoints for
 | Academic sessions | Academic years | 6 of 8 | Mostly used | Web only |
 | Academic sessions | Enrollments and promotion | 1 of 15 | Partly used | Web only (promotion) |
 | Academic sessions | Risk scores | 2 of 2 | Fully used |  |
-| Academic sessions | Sections | 5 of 7 | Mostly used |  |
+| Academic sessions | Sections | 6 of 7 | Mostly used |  |
 | Academic sessions | Session health | 1 of 2 | Partly used | Version 2 |
 | Academic sessions | Setup wizard | 0 of 1 | Not used | Web only |
 | Academic sessions | Terms | 6 of 7 | Mostly used | Web only |
@@ -40,7 +40,7 @@ Each row groups related endpoints. "Used" is how many of the web's endpoints for
 | Admissions | Follow-ups | 2 of 2 | Fully used |  |
 | Attendance | Anomalies | 2 of 3 | Mostly used |  |
 | Attendance | Daily attendance and register | 7 of 13 | Partly used |  |
-| Attendance | Face attendance | 11 of 16 | Mostly used | Capture and review built; devices and live feed are version 2 |
+| Attendance | Face attendance | 12 of 20 | Mostly used | Capture and review built; devices and live feed are version 2 |
 | Attendance | Photo register (OCR, parked) | 9 of 10 | Mostly used | Parked (OCR switched off) |
 | Content | Assignments | 10 of 11 | Mostly used |  |
 | Content | Curriculum | 23 of 30 | Mostly used |  |
@@ -49,19 +49,19 @@ Each row groups related endpoints. "Used" is how many of the web's endpoints for
 | Dashboard | Admin dashboard | 1 of 1 | Fully used |  |
 | Dashboard | Leadership insights | 1 of 1 | Fully used |  |
 | Exams | Academic risk | 1 of 1 | Fully used |  |
-| Exams | Exam groups and date sheets | 10 of 14 | Mostly used |  |
-| Exams | Exam subjects | 1 of 4 | Partly used |  |
+| Exams | Exam groups and date sheets | 12 of 14 | Mostly used |  |
+| Exams | Exam subjects | 4 of 4 | Fully used |  |
 | Exams | Exam types | 4 of 4 | Fully used |  |
-| Exams | Exams | 16 of 20 | Mostly used |  |
+| Exams | Exams | 17 of 20 | Mostly used |  |
 | Exams | Grade scale | 4 of 4 | Fully used |  |
 | Exams | Marks entry | 2 of 6 | Partly used |  |
-| Exams | Paper photo scan | 3 of 4 | Mostly used | Version 2 |
+| Exams | Paper photo scan | 3 of 5 | Mostly used | Version 2 |
 | Exams | Question bank | 8 of 11 | Mostly used |  |
-| Exams | Question papers | 12 of 15 | Mostly used | Partly built; AI and Word export on the web |
+| Exams | Question papers | 14 of 17 | Mostly used | Partly built; AI and Word export on the web |
 | Exams | Report cards | 1 of 4 | Partly used |  |
 | Exams | Skills and behaviour assessment | 3 of 5 | Mostly used |  |
 | Exams | Student responses | 0 of 2 | Not used | Version 2 |
-| Exams | Worksheets | 10 of 13 | Mostly used | Version 2 |
+| Exams | Worksheets | 10 of 11 | Mostly used | Version 2 |
 | Finance | AI assistant | 3 of 3 | Fully used |  |
 | Finance | AI fee predictor | 0 of 1 | Not used | Web only |
 | Finance | Accounts and ledger | 12 of 13 | Mostly used |  |
@@ -69,37 +69,37 @@ Each row groups related endpoints. "Used" is how many of the web's endpoints for
 | Finance | Expense and income categories | 8 of 8 | Fully used |  |
 | Finance | Expenses | 5 of 5 | Fully used |  |
 | Finance | Fee categories | 10 of 10 | Fully used |  |
-| Finance | Fee collection | 12 of 16 | Mostly used |  |
-| Finance | Fee setup | 3 of 6 | Partly used |  |
+| Finance | Fee collection | 15 of 16 | Mostly used |  |
+| Finance | Fee setup | 4 of 6 | Mostly used |  |
 | Finance | Fees of one student | 0 of 2 | Not used |  |
 | Finance | Financial reports | 1 of 1 | Fully used |  |
-| Finance | Other income | 2 of 4 | Partly used |  |
+| Finance | Other income | 4 of 4 | Fully used |  |
 | Finance | Transfers between accounts | 4 of 4 | Fully used |  |
 | HR | Departments | 8 of 8 | Fully used |  |
 | HR | Leave policies | 4 of 4 | Fully used |  |
-| HR | Payroll and payslips | 8 of 10 | Mostly used |  |
+| HR | Payroll and payslips | 11 of 12 | Mostly used |  |
 | HR | Performance reviews | 4 of 5 | Mostly used |  |
 | HR | Salary | 4 of 6 | Mostly used |  |
 | HR | Staff attendance | 3 of 5 | Mostly used | Built (batch 1) |
-| HR | Staff directory | 10 of 15 | Mostly used |  |
-| HR | Staff documents | 8 of 8 | Fully used |  |
+| HR | Staff directory | 15 of 15 | Fully used |  |
+| HR | Staff documents | 8 of 10 | Mostly used |  |
 | HR | Staff leave | 6 of 6 | Fully used |  |
 | HR | Staff risk | 1 of 1 | Fully used |  |
-| Hostel | Gate passes | 5 of 6 | Mostly used |  |
+| Hostel | Gate passes | 6 of 6 | Fully used |  |
 | Hostel | Hostel overview | 1 of 1 | Fully used |  |
-| Hostel | Hostels | 0 of 5 | Not used | Version 2 |
-| Hostel | Room allocations | 0 of 3 | Not used | Version 2 |
-| Hostel | Rooms | 0 of 5 | Not used | Version 2 |
+| Hostel | Hostels | 4 of 5 | Mostly used | Version 2 |
+| Hostel | Room allocations | 3 of 3 | Fully used |  |
+| Hostel | Rooms | 4 of 5 | Mostly used | Version 2 |
 | Inventory | AI suggestions | 0 of 1 | Not used |  |
 | Inventory | Inventory overview | 1 of 1 | Fully used |  |
 | Inventory | Items given to staff | 3 of 4 | Mostly used |  |
 | Inventory | Items, categories, vendors | 7 of 15 | Partly used |  |
 | Inventory | Reorder prediction | 1 of 1 | Fully used |  |
 | Inventory | Stock movements | 2 of 2 | Fully used |  |
-| Library | Book catalog | 1 of 9 | Partly used | Version 2 |
-| Library | Issue and return | 1 of 4 | Partly used |  |
+| Library | Book catalog | 8 of 9 | Mostly used | Version 2 |
+| Library | Issue and return | 4 of 4 | Fully used |  |
 | Library | Library overview | 1 of 1 | Fully used |  |
-| Library | Library settings | 0 of 2 | Not used | Version 2 |
+| Library | Library settings | 2 of 2 | Fully used |  |
 | Messages | Staff messages | 6 of 7 | Mostly used |  |
 | Notifications | AI assistant | 1 of 1 | Fully used |  |
 | Notifications | Automatic notification settings | 0 of 3 | Not used | Web only |
@@ -111,15 +111,18 @@ Each row groups related endpoints. "Used" is how many of the web's endpoints for
 | Notifications | Send to a group | 2 of 2 | Fully used |  |
 | Notifications | Send to one person | 1 of 1 | Fully used |  |
 | Notifications | Templates | 1 of 5 | Partly used | Web only (management) |
-| Other | Background tasks | 1 of 6 | Partly used | Internal |
+| Other | Background tasks | 2 of 6 | Partly used | Internal |
 | Other | User guide progress | 0 of 7 | Not used | Web only |
-| Parents | Parent admin tools | 3 of 6 | Partly used | Web only |
+| Other | examinations paper-blocks | 1 of 1 | Fully used |  |
+| Other | examinations paper-pictures | 4 of 4 | Fully used |  |
+| Other | hr teacher-performance | 6 of 7 | Mostly used |  |
+| Parents | Parent admin tools | 9 of 12 | Mostly used | Web only |
 | Parents | Parent sign-up | 1 of 1 | Fully used |  |
 | Parents | Parent: leave requests | 3 of 3 | Fully used |  |
 | Parents | Parent: messages (old) | 0 of 4 | Not used | Replaced by staff messages |
-| Parents | Parent: my children | 9 of 11 | Mostly used |  |
-| Reports | Letters | 7 of 9 | Mostly used | Built (letter composer) |
-| Reports | Report PDFs | 1 of 4 | Partly used | Partly: finance and student reports built |
+| Parents | Parent: my children | 10 of 12 | Mostly used |  |
+| Reports | Letters | 8 of 9 | Mostly used | Built (letter composer) |
+| Reports | Report PDFs | 3 of 4 | Mostly used | Partly: finance and student reports built |
 | School settings | Attendance settings | 1 of 6 | Partly used | Web only |
 | School settings | Exam settings | 1 of 2 | Partly used |  |
 | School settings | School logo and letterhead | 2 of 2 | Fully used |  |
@@ -132,13 +135,13 @@ Each row groups related endpoints. "Used" is how many of the web's endpoints for
 | Sign in | Login | 1 of 1 | Fully used |  |
 | Sign in | My profile | 4 of 4 | Fully used |  |
 | Sign in | Switch school | 1 of 1 | Fully used |  |
-| Students | Bulk import and accounts | 0 of 2 | Not used | Web only |
+| Students | Bulk import and accounts | 1 of 2 | Partly used | Web only |
 | Students | Classes | 5 of 5 | Fully used |  |
-| Students | Leaving and re-admission | 0 of 13 | Not used | Web only (checklist) |
+| Students | Leaving and re-admission | 13 of 13 | Fully used |  |
 | Students | Remove and restore | 1 of 1 | Fully used |  |
-| Students | Student list and form | 3 of 3 | Fully used |  |
+| Students | Student list and form | 3 of 4 | Mostly used |  |
 | Students | Student portal (own view) | 15 of 15 | Fully used |  |
-| Students | Student profile and actions | 17 of 22 | Mostly used |  |
+| Students | Student profile and actions | 21 of 25 | Mostly used |  |
 | Super admin | Activity log | 0 of 1 | Not used | Not for mobile |
 | Super admin | Brochure | 0 of 6 | Not used | Not for mobile |
 | Super admin | Memberships | 0 of 4 | Not used | Not for mobile |
@@ -146,8 +149,8 @@ Each row groups related endpoints. "Used" is how many of the web's endpoints for
 | Super admin | Schools | 0 of 12 | Not used | Not for mobile (super admin) |
 | Transport | Boarding attendance | 0 of 3 | Not used |  |
 | Transport | Bus journey tracking | 6 of 6 | Fully used |  |
-| Transport | Routes and stops | 2 of 10 | Partly used | Version 2 |
-| Transport | Student transport | 0 of 5 | Not used | Version 2 |
+| Transport | Routes and stops | 9 of 10 | Mostly used | Version 2 |
+| Transport | Student transport | 1 of 5 | Partly used | Version 2 |
 | Transport | Transport overview | 1 of 1 | Fully used |  |
 | Transport | Vehicles | 2 of 6 | Partly used | Version 2 |
 
@@ -181,10 +184,9 @@ Each row groups related endpoints. "Used" is how many of the web's endpoints for
 - `POST /api/sessions/promotion-advisor/`
 - `POST /api/sessions/section-allocator/`
 
-### Academic sessions: Sections (2)
+### Academic sessions: Sections (1)
 
 - `POST /api/sessions/session-classes/{}/assign-unassigned/`
-- `POST /api/sessions/session-classes/{}/renumber/`
 
 ### Academic sessions: Session health (1)
 
@@ -245,11 +247,14 @@ Each row groups related endpoints. "Used" is how many of the web's endpoints for
 - `GET /api/attendance/records/threshold_status/`
 - `POST /api/attendance/records/tune_thresholds/`
 
-### Attendance: Face attendance (5)
+### Attendance: Face attendance (8)
 
 - `GET /api/face-attendance/devices/`
 - `GET /api/face-attendance/live/events/`
 - `PATCH /api/face-attendance/devices/{}/`
+- `POST /api/face-attendance/devices/`
+- `POST /api/face-attendance/devices/{}/rotate_key/`
+- `POST /api/face-attendance/live/events/{}/confirm/`
 - `POST /api/face-attendance/live/events/{}/feedback/`
 - `POST /api/face-attendance/live/match/`
 
@@ -280,25 +285,16 @@ Each row groups related endpoints. "Used" is how many of the web's endpoints for
 - `GET /api/lms/lesson-plans/my_classes/`
 - `GET /api/lms/lesson-plans/{}/`
 
-### Exams: Exam groups and date sheets (4)
+### Exams: Exam groups and date sheets (2)
 
 - `DELETE /api/examinations/exam-groups/{}/`
-- `GET /api/examinations/exam-groups/{}/download-date-sheet/`
 - `PATCH /api/examinations/exam-groups/{}/`
-- `POST /api/examinations/exam-groups/bulk_delete/`
 
-### Exams: Exam subjects (3)
-
-- `DELETE /api/examinations/exam-subjects/{}/`
-- `PATCH /api/examinations/exam-subjects/{}/`
-- `POST /api/examinations/exam-subjects/`
-
-### Exams: Exams (4)
+### Exams: Exams (3)
 
 - `GET /api/examinations/exams/{}/`
 - `POST /api/examinations/exams/bulk-test-apply/`
 - `POST /api/examinations/exams/bulk-test-preview/`
-- `POST /api/examinations/exams/bulk_delete/`
 
 ### Exams: Marks entry (4)
 
@@ -307,9 +303,10 @@ Each row groups related endpoints. "Used" is how many of the web's endpoints for
 - `PATCH /api/examinations/marks/{}/`
 - `POST /api/examinations/marks/`
 
-### Exams: Paper photo scan (1)
+### Exams: Paper photo scan (2)
 
 - `GET /api/examinations/paper-uploads/`
+- `GET /api/examinations/paper-uploads/{}/`
 
 ### Exams: Question bank (3)
 
@@ -339,11 +336,9 @@ Each row groups related endpoints. "Used" is how many of the web's endpoints for
 - `GET /api/examinations/student-responses/`
 - `POST /api/examinations/student-responses/`
 
-### Exams: Worksheets (3)
+### Exams: Worksheets (1)
 
-- `GET /api/examinations/worksheet-uploads/`
 - `PATCH /api/examinations/worksheets/{}/`
-- `POST /api/examinations/worksheet-uploads/{}/confirm/`
 
 ### Finance: AI fee predictor (1)
 
@@ -353,17 +348,13 @@ Each row groups related endpoints. "Used" is how many of the web's endpoints for
 
 - `DELETE /api/finance/accounts/{}/reopen/`
 
-### Finance: Fee collection (4)
+### Finance: Fee collection (1)
 
-- `GET /api/finance/fee-payments/resolve_amount/`
-- `POST /api/finance/fee-payments/bulk_delete/`
-- `POST /api/finance/fee-payments/bulk_update/`
 - `POST /api/finance/fee-payments/generate_onetime_fees/`
 
-### Finance: Fee setup (3)
+### Finance: Fee setup (2)
 
 - `DELETE /api/finance/fee-structures/{}/`
-- `PATCH /api/finance/fee-structures/{}/`
 - `POST /api/finance/fee-structures/`
 
 ### Finance: Fees of one student (2)
@@ -371,15 +362,9 @@ Each row groups related endpoints. "Used" is how many of the web's endpoints for
 - `GET /api/finance/fee-breakdown/{}/`
 - `GET /api/finance/siblings/{}/`
 
-### Finance: Other income (2)
-
-- `DELETE /api/finance/other-income/{}/`
-- `PATCH /api/finance/other-income/{}/`
-
-### HR: Payroll and payslips (2)
+### HR: Payroll and payslips (1)
 
 - `GET /api/hr/payslips/{}/`
-- `POST /api/hr/payslips/bulk_delete/`
 
 ### HR: Performance reviews (1)
 
@@ -395,39 +380,18 @@ Each row groups related endpoints. "Used" is how many of the web's endpoints for
 - `PATCH /api/hr/attendance/{}/`
 - `POST /api/hr/attendance/`
 
-### HR: Staff directory (5)
+### HR: Staff documents (2)
 
-- `POST /api/hr/staff/bulk-create-accounts/`
-- `POST /api/hr/staff/{}/create-user-account/`
-- `POST /api/hr/staff/{}/link-user-account/`
-- `POST /api/hr/staff/{}/unlink-user-account/`
-- `POST /api/hr/staff/{}/update-user-role/`
+- `POST /api/hr/documents/scan/`
+- `POST /api/hr/documents/{}/rescan/`
 
-### Hostel: Gate passes (1)
+### Hostel: Hostels (1)
 
-- `POST /api/hostel/gate-passes/`
-
-### Hostel: Hostels (5)
-
-- `DELETE /api/hostel/hostels/{}/`
-- `GET /api/hostel/hostels/`
 - `GET /api/hostel/hostels/{}/`
-- `PATCH /api/hostel/hostels/{}/`
-- `POST /api/hostel/hostels/`
 
-### Hostel: Room allocations (3)
+### Hostel: Rooms (1)
 
-- `GET /api/hostel/allocations/`
-- `PATCH /api/hostel/allocations/{}/vacate/`
-- `POST /api/hostel/allocations/`
-
-### Hostel: Rooms (5)
-
-- `DELETE /api/hostel/rooms/{}/`
-- `GET /api/hostel/rooms/`
 - `GET /api/hostel/rooms/{}/`
-- `PATCH /api/hostel/rooms/{}/`
-- `POST /api/hostel/rooms/`
 
 ### Inventory: AI suggestions (1)
 
@@ -448,27 +412,9 @@ Each row groups related endpoints. "Used" is how many of the web's endpoints for
 - `PATCH /api/inventory/categories/{}/`
 - `PATCH /api/inventory/vendors/{}/`
 
-### Library: Book catalog (8)
+### Library: Book catalog (1)
 
-- `DELETE /api/library/books/{}/`
-- `DELETE /api/library/categories/{}/`
 - `GET /api/library/books/{}/`
-- `GET /api/library/categories/`
-- `PATCH /api/library/books/{}/`
-- `PATCH /api/library/categories/{}/`
-- `POST /api/library/books/`
-- `POST /api/library/categories/`
-
-### Library: Issue and return (3)
-
-- `GET /api/library/issues/`
-- `GET /api/library/issues/overdue/`
-- `POST /api/library/issues/{}/return_book/`
-
-### Library: Library settings (2)
-
-- `GET /api/library/config/`
-- `PATCH /api/library/config/`
 
 ### Messages: Staff messages (1)
 
@@ -505,11 +451,10 @@ Each row groups related endpoints. "Used" is how many of the web's endpoints for
 - `PATCH /api/notifications/templates/{}/`
 - `POST /api/notifications/templates/`
 
-### Other: Background tasks (5)
+### Other: Background tasks (4)
 
 - `GET /api/tasks/ai-jobs/`
 - `GET /api/tasks/tasks/`
-- `GET /api/tasks/tasks/{}/`
 - `PATCH /api/tasks/ai-jobs/{}/`
 - `POST /api/tasks/tasks/{}/cancel/`
 
@@ -523,10 +468,14 @@ Each row groups related endpoints. "Used" is how many of the web's endpoints for
 - `POST /api/guide/progress/sync/`
 - `POST /api/guide/progress/video/`
 
+### Other: hr teacher-performance (1)
+
+- `PUT /api/hr/teacher-performance/config/`
+
 ### Parents: Parent admin tools (3)
 
-- `DELETE /api/parents/admin/unlink-child/{}/`
-- `GET /api/parents/admin/parents/`
+- `GET /api/parents/admin/parent-status/`
+- `PATCH /api/parents/admin/links/{}/`
 - `POST /api/parents/admin/link-child/`
 
 ### Parents: Parent: messages (old) (4)
@@ -541,15 +490,12 @@ Each row groups related endpoints. "Used" is how many of the web's endpoints for
 - `GET /api/parents/children/{}/pay-fee/`
 - `POST /api/parents/children/{}/pay-fee/`
 
-### Reports: Letters (2)
+### Reports: Letters (1)
 
 - `GET /api/reports/custom-letters/{}/`
-- `POST /api/reports/custom-letters/ai-draft/`
 
-### Reports: Report PDFs (3)
+### Reports: Report PDFs (1)
 
-- `GET /api/reports/list/`
-- `GET /api/reports/{}/download/`
 - `POST /api/reports/generate/`
 
 ### School settings: Attendance settings (5)
@@ -580,33 +526,19 @@ Each row groups related endpoints. "Used" is how many of the web's endpoints for
 - `POST /api/auth/password-reset/confirm/`
 - `POST /api/auth/password-reset/validate-token/`
 
-### Students: Bulk import and accounts (2)
+### Students: Bulk import and accounts (1)
 
-- `POST /api/students/bulk-create-accounts/`
 - `POST /api/students/bulk_create/`
 
-### Students: Leaving and re-admission (13)
+### Students: Student list and form (1)
 
-- `GET /api/student-exits/`
-- `GET /api/student-exits/destination-classes/`
-- `GET /api/student-exits/destinations/`
-- `GET /api/student-exits/{}/`
-- `PATCH /api/student-exits/{}/`
-- `POST /api/student-exits/`
-- `POST /api/student-exits/readmit/`
-- `POST /api/student-exits/{}/cancel/`
-- `POST /api/student-exits/{}/finalize/`
-- `POST /api/student-exits/{}/items/{}/carry/`
-- `POST /api/student-exits/{}/items/{}/unwaive/`
-- `POST /api/student-exits/{}/items/{}/waive/`
-- `POST /api/student-exits/{}/refresh/`
+- `POST /api/students/bulk_delete/`
 
-### Students: Student profile and actions (5)
+### Students: Student profile and actions (4)
 
-- `GET /api/students/{}/ai-profile/`
-- `GET /api/students/{}/earlier_assessments/`
-- `POST /api/students/{}/create-user-account/`
-- `POST /api/students/{}/documents/`
+- `PATCH /api/students/{}/documents/{}/`
+- `POST /api/students/{}/documents/scan/`
+- `POST /api/students/{}/documents/{}/rescan/`
 - `POST /api/students/{}/purge/`
 
 ### Super admin: Activity log (1)
@@ -657,21 +589,13 @@ Each row groups related endpoints. "Used" is how many of the web's endpoints for
 - `POST /api/transport/attendance/`
 - `POST /api/transport/attendance/bulk_mark/`
 
-### Transport: Routes and stops (8)
+### Transport: Routes and stops (1)
 
-- `DELETE /api/transport/routes/{}/`
-- `DELETE /api/transport/stops/{}/`
 - `GET /api/transport/routes/{}/`
-- `PATCH /api/transport/routes/{}/`
-- `PATCH /api/transport/stops/{}/`
-- `POST /api/transport/routes/`
-- `POST /api/transport/routes/{}/duplicate/`
-- `POST /api/transport/stops/`
 
-### Transport: Student transport (5)
+### Transport: Student transport (4)
 
 - `DELETE /api/transport/assignments/{}/`
-- `GET /api/transport/assignments/`
 - `PATCH /api/transport/assignments/{}/`
 - `POST /api/transport/assignments/`
 - `POST /api/transport/assignments/bulk_assign/`

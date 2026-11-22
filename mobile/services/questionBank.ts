@@ -20,7 +20,22 @@ export const BLOOM_LEVELS = [
   { value: 'analyze', label: 'Analyze' }, { value: 'evaluate', label: 'Evaluate' }, { value: 'create', label: 'Create' },
 ] as const;
 
-export interface MatchingData { items?: string[]; left_items?: string[]; right_items?: string[]; pairs?: Array<{ left: number; right: number }>; accepted_answers?: string[] }
+// pairs link left_items to right_items by index. Matching questions made in the block editor before the fix were stored as
+// text pairs ({ left: 'Fish', right: 'Water' }); bankMatching reads both.
+export interface MatchingData { items?: string[]; left_items?: string[]; right_items?: string[]; pairs?: Array<{ left: number | string; right: number | string }>; accepted_answers?: string[] }
+
+/** Either stored shape -> the question bank's (two lists linked by index). Port of the web's matchingToBank. */
+export function bankMatching(td: MatchingData): MatchingData {
+  if (Array.isArray(td.left_items) && Array.isArray(td.right_items)) return td;
+  const pairs = (td.pairs ?? []).filter((p) => p && typeof p === 'object' && typeof p.left !== 'number');
+  if (!pairs.length) return td;
+  return {
+    ...td,
+    left_items: pairs.map((p) => String(p.left ?? '')),
+    right_items: pairs.map((p) => String(p.right ?? '')),
+    pairs: pairs.map((_, i) => ({ left: i, right: i })),
+  };
+}
 
 export interface Question {
   id: number;
@@ -83,9 +98,12 @@ export const emptyQuestionForm = (): QuestionForm => ({
 const idOf = (t: number | { id: number }) => (typeof t === 'number' ? t : t.id);
 
 export function questionToForm(q: Question): QuestionForm {
-  const td = q.type_data ?? {};
+  const td = q.question_type === 'MATCHING' ? bankMatching(q.type_data ?? {}) : (q.type_data ?? {});
   const left = td.left_items?.length ? td.left_items : ['', ''];
-  const pairs: Array<number | null> = left.map((_, i) => td.pairs?.find((p) => p.left === i)?.right ?? null);
+  const pairs: Array<number | null> = left.map((_, i) => {
+    const right = td.pairs?.find((p) => p.left === i)?.right;
+    return typeof right === 'number' ? right : null;
+  });
   return {
     subject: q.subject, type: q.question_type, text: q.question_text, marks: String(Number(q.marks)), difficulty: q.difficulty_level,
     bloom: q.bloom_level ?? null, a: q.option_a ?? '', b: q.option_b ?? '', c: q.option_c ?? '', d: q.option_d ?? '',
@@ -164,7 +182,8 @@ export function buildQuestionPayload(f: QuestionForm) {
   return base;
 }
 
-export const typeLabel = (t: string) => QUESTION_TYPES.find((x) => x.value === t)?.label ?? t;
+// ACTIVITY (a paper's drawing block kept in the bank) is shown but never offered as a type to pick or edit.
+export const typeLabel = (t: string) => QUESTION_TYPES.find((x) => x.value === t)?.label ?? (t === 'ACTIVITY' ? 'Activity' : t);
 
 export function difficultyTone(d: string): 'success' | 'warning' | 'error' | 'neutral' {
   return d === 'EASY' ? 'success' : d === 'MEDIUM' ? 'warning' : d === 'HARD' ? 'error' : 'neutral';

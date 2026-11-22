@@ -173,7 +173,7 @@ class StudentViewSet(ModuleAccessMixin, TenantQuerySetMixin, AuditedDeleteMixin,
             return [IsAuthenticated(), CanManageStudentPhoto(), HasSchoolAccess()]
         if self.action in ('create_user_account', 'bulk_create_accounts'):
             return [IsAuthenticated(), CanCreateStudentAccount(), HasSchoolAccess()]
-        if self.action in ('deleted', 'restore', 'removal_preview', 'outcome', 'purge', 'reclassify', 'reclassify_preview'):
+        if self.action in ('deleted', 'restore', 'removal_preview', 'outcome', 'purge', 'reclassify', 'reclassify_preview', 'bulk_delete'):
             return [IsAuthenticated(), IsSchoolAdmin(), HasSchoolAccess()]
         if self.action in ('update', 'partial_update'):
             return [IsAuthenticated(), CanEditStudentRecord(), HasSchoolAccess()]
@@ -549,6 +549,50 @@ class StudentViewSet(ModuleAccessMixin, TenantQuerySetMixin, AuditedDeleteMixin,
             log_admin_action(request, 'student_purge', student, metadata={'snapshot': snapshot_instance(student)})
             student.hard_delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+    BULK_DELETE_MAX = 100
+
+    @action(detail=False, methods=['post'])
+    def bulk_delete(self, request):
+        """Soft-delete (Remove, entered by mistake) several students at once. Each one goes
+        through the same path as a single remove (audit entry, Recently deleted, restorable);
+        one that cannot be removed is reported back and the rest still go through."""
+        raw_ids = request.data.get('student_ids')
+        reason = str(request.data.get('reason') or '').strip()
+        if not isinstance(raw_ids, list) or not raw_ids:
+            return Response({'code': 'ids_required', 'detail': 'Select at least one student.'},
+                            status=status.HTTP_400_BAD_REQUEST)
+        if len(raw_ids) > self.BULK_DELETE_MAX:
+            return Response({'code': 'too_many',
+                             'detail': f'At most {self.BULK_DELETE_MAX} students can be removed in one request.'},
+                            status=status.HTTP_400_BAD_REQUEST)
+        if not reason:
+            return Response({'code': 'reason_required', 'detail': 'A reason is required.'},
+                            status=status.HTTP_400_BAD_REQUEST)
+        try:
+            ids = list(dict.fromkeys(int(i) for i in raw_ids))
+        except (TypeError, ValueError):
+            return Response({'code': 'bad_ids', 'detail': 'student_ids must be a list of numbers.'},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        # get_queryset is the tenant-scoped list, so an id from another school is simply not found.
+        found = {s.id: s for s in self.get_queryset().filter(pk__in=ids)}
+        deleted, skipped = [], []
+        for student_id in ids:
+            student = found.get(student_id)
+            if student is None:
+                skipped.append({'id': student_id, 'name': None, 'code': 'not_found',
+                                'detail': 'Student not found in this school.'})
+            elif student.transferred_from_id or student.transferred_to.exists():
+                skipped.append({
+                    'id': student.id, 'name': student.name, 'code': 'transfer_linked',
+                    'detail': 'Part of a branch transfer, so the record is history and cannot be deleted. '
+                              'Mark them as withdrawn instead.',
+                })
+            else:
+                self.perform_destroy(student)  # audit entry + soft_delete, same as the single remove
+                deleted.append(student.id)
+        return Response({'deleted': deleted, 'skipped': skipped})
 
     @action(detail=True, methods=['post'], url_path='restore')
     def restore(self, request, pk=None):

@@ -4,8 +4,8 @@ import PageHeader from '../../components/ui/PageHeader'
 import LoadingState from '../../components/ui/LoadingState'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { questionPaperApi, examinationsApi, lmsApi } from '../../services/api'
 import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
+import { questionPaperApi, examinationsApi, lmsApi } from '../../services/api'
 import { useToast } from '../../components/Toast'
 import { useConfirmModal } from '../../components/ConfirmModal'
 import ClassSelector from '../../components/ClassSelector'
@@ -16,14 +16,10 @@ import { useClassSubjects } from '../../hooks/useClassSubjects'
 import { useDebounce } from '../../hooks/useDebounce'
 import useTeacherScopedClasses from '../../hooks/useTeacherScopedClasses'
 import { getClassSelectorScope, getResolvedMasterClassId } from '../../utils/classScope'
-import ImageCapturePaperTab from './ImageCapturePaperTab'
-import ManualEntryPaperTab from './ManualEntryPaperTab'
-import PaperStructureBuilder from './PaperStructureBuilder'
+import BlockPaperEditor from './blocks/BlockPaperEditor'
 import {
-  buildManualAutosaveQuestions,
   buildPaperEnsurePayload,
   hydrateStructure,
-  marksMismatch,
 } from './paperPayload'
 
 const RENDER_OPTIONS_DEFAULT = { answer_lines: false }
@@ -49,10 +45,14 @@ function extractAutosaveErrorMessage(error, fallback) {
   return fallback
 }
 
+// Steps 2 and 3 are one block editor (blocks/BlockPaperEditor.jsx): Structure plans the paper's questions and
+// marks and makes them with empty parts, Fill questions writes them (docs/PAPER_BUILDER_STRUCTURE_PLAN.md).
+const STRUCTURE_STEP = 2
+const FILL_STEP = 3
 const WIZARD_STEPS = [
   { id: 1, label: 'Paper Setup' },
-  { id: 2, label: 'Paper Structure' },
-  { id: 3, label: 'Add Questions' },
+  { id: STRUCTURE_STEP, label: 'Structure' },
+  { id: FILL_STEP, label: 'Fill questions' },
 ]
 
 const MANUAL_DRAFT_DEFAULT = {
@@ -143,7 +143,6 @@ export default function QuestionPaperBuilderPage() {
   const [manualDraft, setManualDraft] = useState(MANUAL_DRAFT_DEFAULT)
   const [manualDirty, setManualDirty] = useState(false)
   // Class / subject labels read off an uploaded paper; shown on Setup until both are chosen.
-  const [ocrHints, setOcrHints] = useState(null)
   const [saveState, setSaveState] = useState('idle')
   const [lastSavedAt, setLastSavedAt] = useState(null)
   const [coverageCollapsed, setCoverageCollapsed] = useState(false)
@@ -154,7 +153,9 @@ export default function QuestionPaperBuilderPage() {
   // a brand-new paper with no structure yet doesn't show a false mismatch warning.
   const [marksReconciled, setMarksReconciled] = useState(true)
   const [overusedQuestionCounts, setOverusedQuestionCounts] = useState({})
-  const [wizardStep, setWizardStep] = useState(location.state?.lessonPlanId ? 3 : 1)
+  const [wizardStep, setWizardStep] = useState(location.state?.lessonPlanId ? STRUCTURE_STEP : 1)
+  // Total marks come from the blocks; the server stores them when the editor saves.
+  const [paperTotal, setPaperTotal] = useState(null)
   const [structure, setStructure] = useState([])
   const [renderOptions, setRenderOptions] = useState(RENDER_OPTIONS_DEFAULT)
   const hasJumpedToStep3Ref = useRef(false)
@@ -268,11 +269,12 @@ export default function QuestionPaperBuilderPage() {
     setSaveState('saved')
     setLastSavedAt(paper.updated_at || new Date().toISOString())
     setMarksReconciled(paper.marks_reconciled !== false)
+    setPaperTotal(paper.total_marks ?? null)
     hydrateOverusedQuestionCounts(paper)
 
     if (!hasJumpedToStep3Ref.current) {
       hasJumpedToStep3Ref.current = true
-      setWizardStep(3)
+      setWizardStep(FILL_STEP)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resumeDraftRes])
@@ -303,7 +305,7 @@ export default function QuestionPaperBuilderPage() {
       setActiveTab('manual')
     }
     if (isReadOnlyPaper) {
-      setWizardStep(3)
+      setWizardStep(FILL_STEP)
     }
   }, [activeTab, isReadOnlyPaper])
 
@@ -344,6 +346,12 @@ export default function QuestionPaperBuilderPage() {
     setSaveState((prev) => (prev === 'saving' ? prev : 'pending'))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoPaperTitle])
+
+  // A class with one subject (usual in Play Group) needs no extra pick (demo findings B4).
+  useEffect(() => {
+    if (!resolvedClassObj || paperMetadata.subject || classSubjectsLoading || classSubjects.length !== 1) return
+    setPaperMetadata((prev) => (prev.subject ? prev : { ...prev, subject: String(classSubjects[0].id) }))
+  }, [resolvedClassObj, paperMetadata.subject, classSubjectsLoading, classSubjects])
 
   // Coverage only actually changes server-side when an autosave lands (new/removed
   // questions or lesson-plan links), so it's refetched explicitly from
@@ -402,43 +410,28 @@ export default function QuestionPaperBuilderPage() {
     ? Math.min(100, Math.round((coveredSLOCount / totalSLOCount) * 100))
     : 0
 
+  // Written questions only: drawing activities (Play Group papers) carry no thinking level.
   const bloomDistribution = useMemo(() => {
-    const counts = {
-      remember: 0,
-      understand: 0,
-      apply: 0,
-      analyze: 0,
-      evaluate: 0,
-      create: 0,
-      unclassified: 0,
-    }
-    const questionRows = Array.isArray(manualDraft.questions) ? manualDraft.questions : []
+    const counts = Object.fromEntries(BLOOM_LEVELS.map((level) => [level.key, 0]))
+    const questionRows = (manualDraft.questions || []).filter((question) => question?.question_type !== 'ACTIVITY')
     questionRows.forEach((question) => {
       const key = String(question?.bloom_level || '').toLowerCase()
-      if (counts[key] !== undefined) {
-        counts[key] += 1
-      } else {
-        counts.unclassified += 1
-      }
+      counts[counts[key] !== undefined ? key : 'unclassified'] += 1
     })
-
     const total = questionRows.length
-    const percentages = BLOOM_LEVELS.reduce((acc, level) => {
-      acc[level.key] = total > 0 ? Number(((counts[level.key] / total) * 100).toFixed(1)) : 0
-      return acc
-    }, {})
-
+    const percentages = Object.fromEntries(BLOOM_LEVELS.map((level) => [
+      level.key, total > 0 ? Number(((counts[level.key] / total) * 100).toFixed(1)) : 0,
+    ]))
     const surfaceHeavyPercent = percentages.remember + percentages.understand
-
     return {
       total,
       counts,
-      percentages,
       surfaceHeavyPercent,
       isSurfaceHeavy: surfaceHeavyPercent > 70,
       stackData: [{ name: 'Bloom', ...percentages }],
     }
   }, [manualDraft.questions])
+
   const recoveryKey = useMemo(() => {
     const schoolId = activeSchool?.id || 'school'
     const userId = user?.id || 'user'
@@ -464,7 +457,11 @@ export default function QuestionPaperBuilderPage() {
       setDraftId(paper.id)
       setSaveState('saved')
       setLastSavedAt(new Date().toISOString())
+      setPaperTotal(paper.total_marks ?? null)
       localStorage.removeItem(recoveryKey)
+      // A refresh should reopen this paper. replaceState (not navigate) keeps this page mounted;
+      // the two routes render the same page.
+      if (!routePaperId) window.history.replaceState(window.history.state, '', `/examinations/papers/${paper.id}`)
     },
     onError: (error) => {
       setSaveState('error')
@@ -496,11 +493,11 @@ export default function QuestionPaperBuilderPage() {
         // used to silently revert a subject/exam the user had just cleared mid-selection.
         setManualDraft((prev) => ({
           ...prev,
-          paper_title: paper.paper_title || prev.paper_title,
+          // The title box is never refilled from the reply: emptying it to type a new title sent '' and the
+          // reply's old title came back mid-typing, mixing the two (demo findings 2026-11-18).
+          paper_title: prev.paper_title,
           instructions: paper.instructions || '',
-          total_marks: String(paper.total_marks ?? prev.total_marks),
           duration_minutes: String(paper.duration_minutes ?? prev.duration_minutes),
-          questions: (paper.paper_questions || []).map(toQuestionDraft),
         }))
         setStructure(hydrateStructure(paper.structure))
         setRenderOptions({ ...RENDER_OPTIONS_DEFAULT, ...(paper.render_options || {}) })
@@ -597,18 +594,15 @@ export default function QuestionPaperBuilderPage() {
     manualDraft: {
       paper_title: manualDraft.paper_title,
       instructions: manualDraft.instructions,
-      total_marks: manualDraft.total_marks,
       duration_minutes: manualDraft.duration_minutes,
     },
     structure,
     renderOptions,
-  }), [manualDraft.duration_minutes, manualDraft.instructions, manualDraft.paper_title, manualDraft.total_marks, paperMetadata.exam, paperMetadata.subject, renderOptions, resolvedClassObj, structure])
+  }), [manualDraft.duration_minutes, manualDraft.instructions, manualDraft.paper_title, paperMetadata.exam, paperMetadata.subject, renderOptions, resolvedClassObj, structure])
 
-  const buildAutosavePayload = useCallback(() => {
-    const payload = buildEnsurePayload()
-    payload.manual_questions = buildManualAutosaveQuestions(manualDraft.questions, structure)
-    return payload
-  }, [buildEnsurePayload, manualDraft.questions, structure])
+  // Paper details only: the block editor saves the questions itself (never send manual_questions
+  // from here, the server would replace the paper's questions with them).
+  const buildAutosavePayload = useCallback(() => buildEnsurePayload(), [buildEnsurePayload])
 
   useEffect(() => {
     if (activeTab !== 'manual') return
@@ -672,102 +666,6 @@ export default function QuestionPaperBuilderPage() {
     }
   }, [saveState])
 
-  const handleStructureChange = useCallback((nextStructure) => {
-    setStructure(nextStructure)
-    setManualDirty(true)
-    if (saveState !== 'saving') {
-      setSaveState('pending')
-    }
-  }, [saveState])
-
-  const handleRenderOptionsChange = useCallback((nextRenderOptions) => {
-    setRenderOptions(nextRenderOptions)
-    setManualDirty(true)
-    if (saveState !== 'saving') {
-      setSaveState('pending')
-    }
-  }, [saveState])
-
-  // Marks mismatch is advisory only — never a hard block — but it should at least
-  // interrupt the "Next" click with a confirmation instead of silently sailing past it.
-  const handleGoToAddQuestions = useCallback(async () => {
-    const mismatch = marksMismatch(structure, manualDraft.total_marks)
-
-    if (mismatch) {
-      const proceed = await confirm({
-        title: 'Marks mismatch',
-        message: `Allocated marks (${mismatch.allocated}) don't match the paper's total marks (${mismatch.total}). Continue to Add Questions anyway?`,
-        variant: 'warning',
-        confirmLabel: 'Continue',
-      })
-      if (!proceed) return
-    }
-    setWizardStep(3)
-  }, [structure, manualDraft.total_marks, confirm])
-
-  const handleManualSubmit = useCallback(async () => {
-    if (!(manualDraft.paper_title || '').trim()) {
-      showError('Paper title is required before opening draft.')
-      return
-    }
-    if (!resolvedClassObj || !paperMetadata.subject) {
-      showError('Select class and subject before opening draft.')
-      return
-    }
-    if ((manualDraft.questions || []).length === 0) {
-      showError('Add at least one question.')
-      return
-    }
-
-    try {
-      let finalDraftId = draftId
-      if (!finalDraftId) {
-        setSaveState('saving')
-        const ensured = await ensureDraftMutation.mutateAsync(buildEnsurePayload())
-        finalDraftId = ensured?.data?.id
-      }
-
-      if (!finalDraftId) {
-        setSaveState('error')
-        showError('Draft could not be created.')
-        return
-      }
-
-      const payload = buildAutosavePayload()
-      const payloadHash = JSON.stringify(payload)
-      await autosaveMutation.mutateAsync({
-        id: finalDraftId,
-        data: payload,
-        payloadHash,
-      })
-
-      // When we're already sitting on this draft's own URL (routePaperId === finalDraftId),
-      // navigating to the same path is a no-op for React Router -- nothing re-renders, so
-      // the "Open Draft" click otherwise looks like it did nothing. Surface a toast instead.
-      if (routePaperId === String(finalDraftId)) {
-        showSuccess('Draft saved.')
-      } else {
-        navigate(`/examinations/papers/${finalDraftId}`)
-      }
-    } catch {
-      setSaveState('error')
-    }
-  }, [
-    autosaveMutation,
-    buildAutosavePayload,
-    buildEnsurePayload,
-    draftId,
-    ensureDraftMutation,
-    manualDraft.paper_title,
-    manualDraft.questions,
-    navigate,
-    paperMetadata.subject,
-    routePaperId,
-    resolvedClassObj,
-    showError,
-    showSuccess,
-  ])
-
   // Feedback-only confirm call for image-capture uploads: records the PaperFeedback
   // learning-loop row and links/marks the upload CONFIRMED, but never creates
   // ExamPaper/Question rows itself — those already exist via ensure-draft + autosave.
@@ -781,7 +679,7 @@ export default function QuestionPaperBuilderPage() {
   const [pendingImageConfirm, setPendingImageConfirm] = useState(null)
   useEffect(() => {
     if (!draftId || !pendingImageConfirm) return
-    const { uploadIds, questions } = pendingImageConfirm
+    const { uploadIds, questions, blocks } = pendingImageConfirm
     setPendingImageConfirm(null)
     // A multi-page capture confirms every page's PaperUpload row that contributed
     // to this accepted paper (each accumulated equally into the one merged
@@ -790,45 +688,17 @@ export default function QuestionPaperBuilderPage() {
     uploadIds.forEach((uploadId) => {
       confirmPaperUploadMutation.mutate({
         uploadId,
-        payload: { exam_paper_id: draftId, confirmed_data: { questions } },
+        // A block scan records the blocks the teacher kept, for comparing with what the AI read.
+        payload: { exam_paper_id: draftId, confirmed_data: blocks ? { blocks } : { questions } },
       })
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [draftId, pendingImageConfirm])
 
-  // Commits the reviewed image-extraction prefill (paper fields, structure, slotted
-  // questions) into the same wizard state manual entry uses — it then autosaves
-  // through the normal draft path exactly like typed/bank questions.
-  const handleApplyImagePrefill = useCallback((prefill) => {
-    if ((prefill.paperFields.paper_title || '').trim()) {
-      // The detected title is a real suggestion from the paper itself — stop the
-      // Exam/Class/Subject auto-title from overwriting it later.
-      titleIsAutoRef.current = false
-    }
-    setManualDraft((prev) => ({
-      ...prev,
-      paper_title: prefill.paperFields.paper_title || prev.paper_title,
-      total_marks: prefill.paperFields.total_marks || prev.total_marks,
-      duration_minutes: prefill.paperFields.duration_minutes || prev.duration_minutes,
-      questions: [...prev.questions, ...prefill.questions],
-    }))
-    setManualDirty(true)
-    setSaveState((prev) => (prev === 'saving' ? prev : 'pending'))
-    setStructure((prev) => [...prev, ...prefill.structure])
-    setActiveTab('manual')
-    setPendingImageConfirm({ uploadIds: prefill.uploadIds || [prefill.uploadId], questions: prefill.questions })
-    if (!resolvedClassObj || !paperMetadata.subject) {
-      // The paper's class/subject could not be taken from the page for us (they are labels,
-      // never ids): ask for them on Setup, with what was read as a hint. The questions are
-      // already in the draft and autosave only starts once both are chosen.
-      setOcrHints(prefill.detected || { class_label: '', subject_label: '' })
-      setWizardStep(1)
-      showSuccess('Questions read. Choose the class and subject to continue; nothing is saved before that.')
-    } else {
-      setWizardStep(3)
-      showSuccess('Prefilled from your uploaded paper — review and edit; it autosaves as you go.')
-    }
-  }, [showSuccess, resolvedClassObj, paperMetadata.subject])
+  // A photographed paper added in the editor: record the OCR feedback rows for its uploads.
+  const handleCapturedPaper = useCallback((prefill) => {
+    setPendingImageConfirm({ uploadIds: prefill.uploadIds || [prefill.uploadId], questions: prefill.questions, blocks: prefill.blocks })
+  }, [])
 
   const linkLessonPlansMutation = useMutation({
     mutationFn: ({ id, lessonPlanIds }) => questionPaperApi.linkLessonPlans(id, { lesson_plan_ids: lessonPlanIds }),
@@ -871,16 +741,20 @@ export default function QuestionPaperBuilderPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [draftId, selectedLessonPlanIds])
 
+  // Build Paper has three columns (questions, preview, form); held to 6xl the preview was only ~400 px wide on a
+  // 1920 px screen (demo findings A4), so that step uses the wider page.
+  const pageWidth = wizardStep === FILL_STEP ? 'max-w-[1700px]' : 'max-w-6xl'
+
   return (
     <div className="min-h-screen bg-gray-50">
       <ConfirmModalRoot />
       {/* Header */}
       <div className="bg-white border-b border-gray-200 px-4 sm:px-6 py-4 sm:py-6">
-        <PageHeader className="max-w-6xl mx-auto" title="Question Paper Builder" subtitle="Create exam papers by uploading handwritten questions or typing manually" />
+        <PageHeader className={`${pageWidth} mx-auto`} title="Question Paper Builder" subtitle="Build papers from activities and written questions, the question bank or a photo of a paper" />
       </div>
 
       {/* Main Content */}
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
+      <div className={`${pageWidth} mx-auto px-4 sm:px-6 py-6 sm:py-8`}>
         {/* Wizard step nav */}
         <div className="flex items-center gap-1 sm:gap-2 mb-6">
           {WIZARD_STEPS.map((step, index) => (
@@ -915,30 +789,6 @@ export default function QuestionPaperBuilderPage() {
         {wizardStep === 1 && (
           <div className="bg-white rounded-lg shadow-sm p-4 sm:p-6 mb-6 border border-gray-200">
             <h2 className="text-lg font-semibold text-gray-800 mb-4">Paper Setup</h2>
-
-            {!isReadOnlyPaper && (
-              <div className="flex items-center justify-between gap-3 mb-6 rounded-lg border border-dashed border-blue-300 bg-blue-50 px-4 py-3">
-                <p className="text-sm text-blue-800">
-                  📄 Have a printed/handwritten paper? Upload it and we'll pre-fill this form.
-                </p>
-                <button
-                  type="button"
-                  onClick={() => { setActiveTab('image'); setWizardStep(3) }}
-                  className="shrink-0 px-3 py-1.5 border border-blue-300 text-blue-700 rounded-lg text-sm hover:bg-blue-100"
-                >
-                  Upload paper image
-                </button>
-              </div>
-            )}
-
-            {ocrHints && (!resolvedClassObj || !paperMetadata.subject) && (
-              <div className="mb-6 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-                Your questions are read and kept. Choose the class and subject below to continue — nothing is saved until both are chosen.
-                <span className="block mt-1">
-                  On the paper: class <strong>{ocrHints.class_label || 'not found'}</strong>, subject <strong>{ocrHints.subject_label || 'not found'}</strong>.
-                </span>
-              </div>
-            )}
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
               <div>
@@ -1026,7 +876,7 @@ export default function QuestionPaperBuilderPage() {
                     titleIsAutoRef.current = e.target.value.trim() === ''
                     handleManualDraftChange({ ...manualDraft, paper_title: e.target.value })
                   }}
-                  placeholder="e.g., Physics Mid-Term 2026"
+                  placeholder={autoPaperTitle || 'e.g., Physics Mid-Term 2026'}
                   disabled={isReadOnlyPaper}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
@@ -1035,15 +885,13 @@ export default function QuestionPaperBuilderPage() {
                 )}
               </div>
 
-              <Field label="Total Marks">
-<input
-                  type="number"
-                  value={manualDraft.total_marks || '100'}
-                  onChange={(e) => handleManualDraftChange({ ...manualDraft, total_marks: e.target.value })}
-                  disabled={isReadOnlyPaper}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-</Field>
+              <div>
+                <span className="label">Total Marks</span>
+                <p className="px-3 py-2 border border-gray-200 bg-gray-50 rounded-lg text-gray-800">
+                  {paperTotal !== null && paperTotal !== undefined ? Number(paperTotal) : '—'}
+                </p>
+                <p className="text-xs text-gray-500 mt-1">Adds up from the questions in Build Paper.</p>
+              </div>
 
               <Field label="Duration (minutes)">
 <input
@@ -1070,214 +918,94 @@ export default function QuestionPaperBuilderPage() {
               />
             </div>
 
-            <div className="flex items-center gap-2 mb-6">
-              <input
-                type="checkbox"
-                id="answer-lines"
-                checked={Boolean(renderOptions.answer_lines)}
-                disabled={isReadOnlyPaper}
-                onChange={(e) => handleRenderOptionsChange({ ...renderOptions, answer_lines: e.target.checked })}
-              />
-              <label htmlFor="answer-lines" className="text-sm text-gray-700">
-                Add answer lines in exported paper
-              </label>
-            </div>
-
             <div className="flex justify-end">
               <button
                 type="button"
-                onClick={() => setWizardStep(2)}
+                onClick={() => setWizardStep(STRUCTURE_STEP)}
                 className="px-6 py-2 bg-primary-600 text-white rounded-lg font-medium hover:bg-primary-700"
               >
-                Next: Paper Structure
+                Next: Structure
               </button>
             </div>
           </div>
         )}
 
-        {/* Step 2: Paper Structure */}
-        {wizardStep === 2 && (
-          <div className="bg-white rounded-lg shadow-sm p-4 sm:p-6 mb-6 border border-gray-200">
-            <h2 className="text-lg font-semibold text-gray-800 mb-4">Paper Structure</h2>
-            <PaperStructureBuilder
-              sections={structure}
-              onChange={handleStructureChange}
-              totalMarks={manualDraft.total_marks}
+        {/* Steps 2 and 3: Structure and Fill questions (one block editor) */}
+        {wizardStep >= STRUCTURE_STEP && (
+          <>
+            <BlockPaperEditor
+              mode={wizardStep === STRUCTURE_STEP ? 'structure' : 'fill'}
+              onModeChange={(next) => setWizardStep(next === 'structure' ? STRUCTURE_STEP : FILL_STEP)}
+              paperId={draftId}
+              paperTitle={manualDraft.paper_title}
               readOnly={isReadOnlyPaper}
+              classId={resolvedClassObj}
+              subjectId={paperMetadata.subject}
+              lessonPlanIds={selectedLessonPlanIds}
+              onLessonPlanIdsChange={handleLessonPlanIdsChange}
+              onCapturedPaper={handleCapturedPaper}
+              onSaved={(paper) => {
+                setPaperTotal(paper?.total_marks ?? null)
+                hydrateOverusedQuestionCounts(paper)
+                setManualDraft((prev) => ({ ...prev, questions: (paper?.paper_questions || []).map(toQuestionDraft) }))
+                // Coverage follows the paper's questions, which the server updates on each block save.
+                queryClient.invalidateQueries({ queryKey: ['paperCoverageStats', draftId] })
+              }}
             />
 
-            <div className="flex justify-between mt-6">
-              <button
-                type="button"
-                onClick={() => setWizardStep(1)}
-                className="px-6 py-2 border border-gray-300 rounded-lg font-medium text-gray-700 hover:bg-gray-50"
-              >
-                Back: Paper Setup
-              </button>
-              <button
-                type="button"
-                onClick={handleGoToAddQuestions}
-                className="px-6 py-2 bg-primary-600 text-white rounded-lg font-medium hover:bg-primary-700"
-              >
-                Next: Add Questions
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Step 3: Add Questions + Coverage */}
-        {wizardStep === 3 && (
-        <div className="grid grid-cols-1 xl:grid-cols-4 gap-6">
-          {/* Source chooser + content */}
-          <div className="xl:col-span-3 bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-            <div className="p-4 sm:p-6 lg:p-8">
-              {structure.length === 0 && (
-                <div className="mb-6 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
-                  Define sections in Step 2, or add questions freely.
+            {draftId && wizardStep === FILL_STEP && (
+              <section className="mt-6 bg-white rounded-lg shadow-sm border border-gray-200">
+                <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+                  <h3 className="text-sm font-semibold text-gray-800">Curriculum Coverage</h3>
+                  <button type="button" onClick={() => setCoverageCollapsed((prev) => !prev)} className="text-xs text-gray-500 hover:text-gray-700">
+                    {coverageCollapsed ? 'Expand' : 'Collapse'}
+                  </button>
                 </div>
-              )}
-
-              {activeTab === 'image' && !isReadOnlyPaper && (
-                <>
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="text-sm text-gray-600">
-                      Source: <span className="font-medium text-gray-800">Capture from image</span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setActiveTab('manual')}
-                      className="text-sm text-blue-600 hover:text-blue-800"
-                    >
-                      Back to question slots
-                    </button>
-                  </div>
-                  <ImageCapturePaperTab
-                    classId={resolvedClassObj}
-                    subjectId={paperMetadata.subject}
-                    readOnly={isReadOnlyPaper}
-                    onApplyPrefill={handleApplyImagePrefill}
-                  />
-                </>
-              )}
-
-              {activeTab === 'manual' && (
-                <ManualEntryPaperTab
-                  draftData={manualDraft}
-                  onDraftDataChange={handleManualDraftChange}
-                  onSubmitDraft={handleManualSubmit}
-                  isLoading={
-                    saveState === 'saving'
-                    || ensureDraftMutation.isPending
-                    || autosaveMutation.isPending
-                  }
-                  saveState={saveState}
-                  lastSavedAt={lastSavedAt}
-                  draftReady={!!draftId}
-                  draftAlreadyOpen={!!draftId && routePaperId === String(draftId)}
-                  classId={resolvedClassObj}
-                  subjectId={paperMetadata.subject}
-                  structure={structure}
-                  overusedQuestionCounts={overusedQuestionCounts}
-                  readOnly={isReadOnlyPaper}
-                  lessonPlanIds={selectedLessonPlanIds}
-                  onLessonPlanIdsChange={handleLessonPlanIdsChange}
-                />
-              )}
-            </div>
-          </div>
-
-          {/* Curriculum Coverage Panel */}
-          <aside className="xl:col-span-1 bg-white rounded-lg shadow-sm border border-gray-200 h-fit">
-            <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-gray-800">Curriculum Coverage</h3>
-              <button
-                type="button"
-                onClick={() => setCoverageCollapsed((prev) => !prev)}
-                className="text-xs text-gray-500 hover:text-gray-700"
-              >
-                {coverageCollapsed ? 'Expand' : 'Collapse'}
-              </button>
-            </div>
-
-            {!coverageCollapsed && (
-              <div className="p-4 space-y-3">
-                {!draftId ? (
-                  <p className="text-xs text-gray-500">Start building a draft to see coverage stats.</p>
-                ) : coverageLoading ? (
-                  <LoadingState label="Loading coverage data..." compact />
-                ) : coverageError ? (
-                  <p className="text-xs text-red-600">Failed to load coverage stats.</p>
-                ) : (
-                  <>
-                    {!marksReconciled && (
-                      <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1">
-                        ⚠️ Allocated marks (Paper Structure) don't match the paper's total marks.
-                      </p>
+                {!coverageCollapsed && (
+                  <div className="p-4">
+                    {coverageLoading ? (
+                      <LoadingState label="Loading coverage data..." compact />
+                    ) : coverageError ? (
+                      <p className="text-xs text-red-600">Failed to load coverage stats.</p>
+                    ) : totalSLOCount === 0 ? (
+                      <p className="text-xs text-gray-500 mb-3">Link lesson plans (in “From question bank”) to see which learning outcomes this paper covers.</p>
+                    ) : (
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div>
+                          <div className="flex items-center justify-between mb-1">
+                            <p className="text-xs text-gray-600">Covered {coveredSLOCount} of {totalSLOCount} SLOs</p>
+                            <p className="text-xs font-medium text-gray-700">{coveragePercent}%</p>
+                          </div>
+                          <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+                            <div className="h-2 bg-emerald-500 rounded-full transition-all duration-500" style={{ width: `${coveragePercent}%` }} />
+                          </div>
+                        </div>
+                        <div>
+                          <p className="text-xs font-medium text-gray-700 mb-1">Covered SLOs</p>
+                          <div className="space-y-1 max-h-28 overflow-y-auto">
+                            {coveredSLOs.length === 0 ? <p className="text-xs text-gray-500">None yet.</p> : coveredSLOs.map((slo) => (
+                              <div key={slo.id} className="text-xs text-emerald-700 flex items-start gap-1"><span>✓</span><span className="truncate">{slo.code || `SLO-${slo.id}`} {slo.statement}</span></div>
+                            ))}
+                          </div>
+                        </div>
+                        <div>
+                          <p className="text-xs font-medium text-gray-700 mb-1">Not covered yet</p>
+                          <div className="space-y-1 max-h-28 overflow-y-auto">
+                            {uncoveredSLOs.length === 0 ? <p className="text-xs text-gray-500">All covered.</p> : uncoveredSLOs.map((slo) => (
+                              <div key={slo.id} className="text-xs text-gray-600 flex items-start gap-1"><span>•</span><span className="truncate">{slo.code || `SLO-${slo.id}`} {slo.statement}</span></div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
                     )}
 
-                    <div className="grid grid-cols-2 gap-2 text-xs">
-                      <div className="rounded-md bg-gray-50 p-2">
-                        <p className="text-gray-500">Total SLOs</p>
-                        <p className="text-gray-900 font-semibold">{totalSLOCount}</p>
-                      </div>
-                      <div className="rounded-md bg-emerald-50 p-2">
-                        <p className="text-emerald-700">Covered</p>
-                        <p className="text-emerald-800 font-semibold">{coveredSLOCount}</p>
-                      </div>
-                    </div>
-
-                    <div>
-                      <div className="flex items-center justify-between mb-1">
-                        <p className="text-xs text-gray-600">Coverage</p>
-                        <p className="text-xs font-medium text-gray-700">{coveragePercent}%</p>
-                      </div>
-                      <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
-                        <div
-                          className="h-2 bg-emerald-500 rounded-full transition-all duration-500"
-                          style={{ width: `${coveragePercent}%` }}
-                        />
-                      </div>
-                    </div>
-
-                    <div>
-                      <p className="text-xs font-medium text-gray-700 mb-1">Covered SLOs</p>
-                      {coveredSLOs.length === 0 ? (
-                        <p className="text-xs text-gray-500">No covered SLOs yet.</p>
-                      ) : (
-                        <div className="space-y-1 max-h-28 overflow-y-auto">
-                          {coveredSLOs.map((slo) => (
-                            <div key={slo.id} className="text-xs text-emerald-700 flex items-start gap-1">
-                              <span className="mt-0.5">✓</span>
-                              <span className="truncate">{slo.code || `SLO-${slo.id}`} {slo.statement}</span>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-
-                    <div>
-                      <p className="text-xs font-medium text-gray-700 mb-1">Uncovered SLOs</p>
-                      {uncoveredSLOs.length === 0 ? (
-                        <p className="text-xs text-gray-500">No uncovered SLOs in linked lesson-plan scope.</p>
-                      ) : (
-                        <div className="space-y-1 max-h-28 overflow-y-auto">
-                          {uncoveredSLOs.map((slo) => (
-                            <div key={slo.id} className="text-xs text-gray-600 flex items-start gap-1">
-                              <span className="mt-0.5">•</span>
-                              <span className="truncate">{slo.code || `SLO-${slo.id}`} {slo.statement}</span>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="pt-2 border-t border-gray-100">
+                    <div className="pt-3 mt-3 border-t border-gray-100">
                       <p className="text-xs font-medium text-gray-700 mb-2">Bloom Distribution</p>
                       {bloomDistribution.total === 0 ? (
-                        <p className="text-xs text-gray-500">Add questions to view Bloom distribution.</p>
+                        <p className="text-xs text-gray-500">Set a thinking level on written questions to see the mix.</p>
                       ) : (
                         <>
-                          <div className="h-20">
+                          <div className="h-16">
                             <ResponsiveContainer width="100%" height="100%">
                               <BarChart data={bloomDistribution.stackData} layout="vertical" margin={{ top: 4, right: 8, left: 8, bottom: 4 }}>
                                 <XAxis type="number" domain={[0, 100]} hide />
@@ -1289,9 +1017,9 @@ export default function QuestionPaperBuilderPage() {
                               </BarChart>
                             </ResponsiveContainer>
                           </div>
-                          <div className="flex flex-wrap gap-1 mt-2">
+                          <div className="flex flex-wrap gap-2 mt-2">
                             {BLOOM_LEVELS.map((level) => (
-                              <span key={level.key} className="inline-flex items-center gap-1 text-[10px] text-gray-600">
+                              <span key={level.key} className="inline-flex items-center gap-1 text-[11px] text-gray-600">
                                 <span className="w-2 h-2 rounded-full" style={{ backgroundColor: level.color }} />
                                 {level.label} ({bloomDistribution.counts[level.key]})
                               </span>
@@ -1305,37 +1033,11 @@ export default function QuestionPaperBuilderPage() {
                         </>
                       )}
                     </div>
-                  </>
+                  </div>
                 )}
-              </div>
+              </section>
             )}
-          </aside>
-        </div>
-        )}
-
-        {/* Help text */}
-        {wizardStep === 3 && (
-        <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
-            <h4 className="font-semibold text-blue-900 mb-2">💡 Manual Entry Tips</h4>
-            <ul className="text-sm text-blue-800 space-y-1 list-disc pl-4">
-              <li>Use the rich editor for formatting</li>
-              <li>Add questions one by one for better control</li>
-              <li>MCQ requires at least options A and B</li>
-              <li>Review all questions before creating the paper</li>
-            </ul>
-          </div>
-
-          <div className="bg-green-50 p-4 rounded-lg border border-green-200">
-            <h4 className="font-semibold text-green-900 mb-2">🎯 Image Capture Tips</h4>
-            <ul className="text-sm text-green-800 space-y-1 list-disc pl-4">
-              <li>Take a clear photo of the handwritten paper</li>
-              <li>Ensure good lighting and no shadows</li>
-              <li>AI will extract and parse questions automatically</li>
-              <li>Review and correct any extraction errors before confirming</li>
-            </ul>
-          </div>
-        </div>
+          </>
         )}
       </div>
     </div>

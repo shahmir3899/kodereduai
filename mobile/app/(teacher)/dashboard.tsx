@@ -19,6 +19,7 @@ import StatusPill from '../../components/ui/StatusPill';
 import Hero from '../../components/dashboard/HeroCard';
 import SchoolSwitcher from '../../components/nav/SchoolSwitcher';
 import RecentNotifications from '../../components/dashboard/RecentNotifications';
+import MyPerformanceCard from '../../components/hr/performance/MyPerformanceCard';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
 
 const TONE_COLOR = { red: Colors.error, amber: Colors.warning } as const;
@@ -119,6 +120,8 @@ export default function TeacherDashboard() {
       <Text style={styles.greeting}>Welcome back, {name}</Text>
       <SchoolSwitcher />
       {off.label ? <Text style={styles.off}>{off.label}</Text> : null}
+
+      {isModuleEnabled('hr') ? <MyPerformanceCard /> : null}
 
       <Text style={styles.section}>Needs attention</Text>
       {attention.length === 0 ? (

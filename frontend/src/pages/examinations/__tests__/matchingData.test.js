@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { matchingFromComposer, matchingProblem, matchingToComposer } from '../matchingData'
+import { matchingFromComposer, matchingProblem, matchingToBank, matchingToComposer } from '../matchingData'
 
 describe('matching data (composer text pairs <-> the server shape)', () => {
   it('saves complete pairs as left_items, right_items and index pairs', () => {
@@ -48,3 +48,19 @@ describe('matching data (composer text pairs <-> the server shape)', () => {
     expect(matchingProblem(undefined)).toBe('Add at least two complete pairs.')
   })
 })
+
+describe('matchingToBank (either stored shape -> the bank form, Paper Builder v2)', () => {
+  it('turns block-editor text pairs into two lists linked by index', () => {
+    expect(matchingToBank({ pairs: [{ left: 'Fish', right: 'Water' }, { left: 'Bird', right: 'Nest' }] })).toEqual({
+      left_items: ['Fish', 'Bird'], right_items: ['Water', 'Nest'], pairs: [{ left: 0, right: 0 }, { left: 1, right: 1 }],
+    })
+  })
+
+  it('leaves the bank shape and empty data as they are', () => {
+    const bank = { left_items: ['a', 'b'], right_items: ['x', 'y', 'z'], pairs: [{ left: 0, right: 1 }] }
+    expect(matchingToBank(bank)).toBe(bank)
+    expect(matchingToBank(null)).toEqual({})
+    expect(matchingToBank({ pairs: [] })).toEqual({ pairs: [] })
+  })
+})
+

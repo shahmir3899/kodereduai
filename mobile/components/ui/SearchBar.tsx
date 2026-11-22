@@ -6,10 +6,12 @@ interface SearchBarProps {
   value: string;
   onChangeText: (text: string) => void;
   placeholder?: string;
+  /** The keyboard's search key. */
+  onSubmitEditing?: () => void;
 }
 
 // Controlled input only; pair with useDebouncedValue so a request isn't sent per keystroke.
-export default function SearchBar({ value, onChangeText, placeholder = 'Search...' }: SearchBarProps) {
+export default function SearchBar({ value, onChangeText, placeholder = 'Search...', onSubmitEditing }: SearchBarProps) {
   return (
     <View style={styles.wrap}>
       <TextInput
@@ -22,6 +24,7 @@ export default function SearchBar({ value, onChangeText, placeholder = 'Search..
         autoCapitalize="none"
         autoCorrect={false}
         returnKeyType="search"
+        onSubmitEditing={onSubmitEditing}
       />
       {value ? (
         <TouchableOpacity onPress={() => onChangeText('')} hitSlop={12} accessibilityRole="button" accessibilityLabel="Clear search">

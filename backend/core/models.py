@@ -247,6 +247,34 @@ class LoginEvent(models.Model):
         return f"{self.username or 'unknown'} @ school {self.school_id} ({self.created_at:%Y-%m-%d %H:%M})"
 
 
+class UserActiveDay(models.Model):
+    """
+    One row per user per school-calendar day on which they used the app.
+
+    LoginEvent is not enough for "days active": a session refreshes its token silently (web every
+    hour, phone for 30 days after it was last opened), so a teacher who opens the app daily may log
+    in once a month. This is written on login and on token refresh, at most once per user per day.
+    """
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='active_days',
+    )
+    school_id = models.IntegerField(null=True, blank=True)
+    date = models.DateField()
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=['user', 'date'], name='unique_user_active_day'),
+        ]
+        indexes = [
+            models.Index(fields=['school_id', 'date']),
+        ]
+
+    def __str__(self):
+        return f"user {self.user_id} active {self.date}"
+
+
 class ScannedDocumentMixin(models.Model):
     """Fields for a document record that is filled in by reading the uploaded image
     (core.document_scan) rather than typed. Rows that predate scanning, or were typed

@@ -2050,7 +2050,9 @@ class AttendanceRecordViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.R
                 continue
             to_save[student_id] = entry['status']
 
-        created, updated = _save_attendance_rows(school_id, academic_year, date, to_save, errors)
+        created, updated = _save_attendance_rows(
+            school_id, academic_year, date, to_save, errors, marked_by=request.user,
+        )
 
         # Event-driven absence digest: check just this cohort now that its
         # register was (re)saved, instead of waiting on the old 8/9/10 Celery
@@ -2098,7 +2100,7 @@ def _run_absence_digest_in_thread(*args):
         connection.close()
 
 
-def _save_attendance_rows(school_id, academic_year, date, to_save, errors):
+def _save_attendance_rows(school_id, academic_year, date, to_save, errors, marked_by=None):
     """Write a register as one upsert instead of update_or_create per student.
 
     update_or_create costs 3-4 round trips a row, and every round trip to the
@@ -2114,6 +2116,7 @@ def _save_attendance_rows(school_id, academic_year, date, to_save, errors):
         AttendanceRecord(
             student_id=sid, date=date, school_id=school_id, academic_year=academic_year,
             status=att_status, source=AttendanceRecord.Source.MANUAL, upload=None,
+            marked_by=marked_by,
         )
         for sid, att_status in to_save.items()
     ]
@@ -2121,14 +2124,14 @@ def _save_attendance_rows(school_id, academic_year, date, to_save, errors):
         with transaction.atomic():
             AttendanceRecord.objects.bulk_create(
                 rows, update_conflicts=True, unique_fields=['student', 'date'],
-                update_fields=['school', 'academic_year', 'status', 'source', 'upload', 'updated_at'],
+                update_fields=['school', 'academic_year', 'status', 'source', 'upload', 'marked_by', 'updated_at'],
             )
     except Exception:
-        return _save_attendance_rows_one_by_one(school_id, academic_year, date, to_save, errors)
+        return _save_attendance_rows_one_by_one(school_id, academic_year, date, to_save, errors, marked_by)
     return len(to_save) - len(existing), len(existing)
 
 
-def _save_attendance_rows_one_by_one(school_id, academic_year, date, to_save, errors):
+def _save_attendance_rows_one_by_one(school_id, academic_year, date, to_save, errors, marked_by=None):
     created = updated = 0
     for student_id, att_status in to_save.items():
         try:
@@ -2141,6 +2144,7 @@ def _save_attendance_rows_one_by_one(school_id, academic_year, date, to_save, er
                     'status': att_status,
                     'source': AttendanceRecord.Source.MANUAL,
                     'upload': None,
+                    'marked_by': marked_by,
                 },
             )
             if was_created:

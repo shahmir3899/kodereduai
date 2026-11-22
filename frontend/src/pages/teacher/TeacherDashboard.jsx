@@ -13,6 +13,7 @@ import HeroCard from '../../components/dashboard/HeroCard'
 import AttentionStrip from '../../components/dashboard/AttentionStrip'
 import StudentsAtRiskCard from '../../components/dashboard/StudentsAtRiskCard'
 import TeacherScopeSummary from '../../components/teacher/TeacherScopeSummary'
+import MyPerformanceCard from '../../components/teacher/MyPerformanceCard'
 import useOffDay from '../../hooks/useOffDay'
 import useNow from '../../hooks/useNow'
 import {
@@ -422,6 +423,7 @@ export default function TeacherDashboard() {
 
         {/* Right column */}
         <div className="lg:col-span-2 space-y-6">
+          {isModuleEnabled('hr') && <MyPerformanceCard />}
           <div>
             <h2 className="text-sm font-semibold text-gray-900 mb-3">Quick Actions</h2>
             <QuickActionGrid actions={quickActions} />

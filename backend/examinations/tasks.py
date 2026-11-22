@@ -9,7 +9,7 @@ from django.utils import timezone
 
 from core.embeddings import generate_text_embedding
 
-from .models import PaperUpload, Question, QuestionStats, StudentResponse, WorksheetUpload
+from .models import PaperUpload, Question, QuestionStats, StudentResponse
 
 logger = logging.getLogger(__name__)
 
@@ -67,18 +67,6 @@ def recompute_question_stats(question_id: int):
     }
 
 
-def _build_continuation_context(upload: PaperUpload) -> dict | None:
-    """Context for page 2+ of a multi-page capture. Pages of one paper are read at the
-    same time (the user declares the page count up front), so a page can no longer be
-    told what earlier pages contained; it only learns its own number and is asked to
-    flag a section that continues from the previous page. paper_reconcile.reconcile_pages
-    joins the pieces once every page is in. None for page 1 / a standalone upload.
-    """
-    if not upload.group_id or upload.page_number <= 1:
-        return None
-    return {'page_number': upload.page_number, 'independent': True}
-
-
 def start_paper_ocr(upload_id: int) -> None:
     """Run paper OCR once, off the request thread, without needing a Celery worker.
 
@@ -111,23 +99,34 @@ def start_paper_ocr(upload_id: int) -> None:
     threading.Thread(target=_run, name=f"paper-ocr-{upload_id}", daemon=True).start()
 
 
-@shared_task(bind=True, max_retries=2)
-def process_paper_upload_ocr(self, upload_id: int):
-    """
-    Process uploaded paper image with OCR to extract questions.
-    
-    Args:
-        upload_id: ID of the PaperUpload instance
-    
-    Returns:
-        dict: Processing result with success status and data
-    """
-    from .paper_ocr_processor import PaperOCRProcessor
+def _scan_upload_to_blocks(upload, context):
+    """Paper Builder v2: the photo becomes blocks for the block editor (see paper_scan_blocks)."""
+    from .paper_scan_blocks import ScanError, scan_page
 
     try:
-        logger.info(f"Starting OCR processing for PaperUpload {upload_id}")
-        
-        # Fetch the upload
+        result = scan_page(upload.image_url, context)
+    except ScanError as exc:
+        upload.status = PaperUpload.Status.FAILED
+        upload.error_message = str(exc)
+        upload.processed_at = timezone.now()
+        upload.save(update_fields=['status', 'error_message', 'processed_at'])
+        return {'success': False, 'upload_id': upload.id, 'error': str(exc)}
+    upload.ai_extracted_json = result
+    upload.extraction_notes = (
+        f"{len(result['blocks'])} block(s) read with {result.get('provider')} {result.get('model')}; "
+        f"pictures: {result['pictures']['library']} from the library, {result['pictures']['cropped']} cut from the photo"
+    )
+    upload.status = PaperUpload.Status.EXTRACTED
+    upload.processed_at = timezone.now()
+    upload.save(update_fields=['ai_extracted_json', 'extraction_notes', 'status', 'processed_at'])
+    return {'success': True, 'upload_id': upload.id, 'blocks_count': len(result['blocks'])}
+
+
+@shared_task(bind=True, max_retries=2)
+def process_paper_upload_ocr(self, upload_id: int):
+    """Read one uploaded page into blocks for the block editor (Paper Builder v2). The old questions-only
+    scan (PaperOCRProcessor) was removed in Phase 7; an upload is always a block scan now."""
+    try:
         try:
             upload = PaperUpload.objects.select_related(
                 'school', 'context_class', 'context_subject',
@@ -136,15 +135,10 @@ def process_paper_upload_ocr(self, upload_id: int):
             logger.error(f"PaperUpload {upload_id} not found")
             return {'success': False, 'error': 'Upload not found'}
 
-        # Update status to processing
         upload.status = PaperUpload.Status.PROCESSING
         upload.save(update_fields=['status'])
 
-        # Initialize processor
-        processor = PaperOCRProcessor()
-
-        # Prepare context (if available) — the uploader's optional class/subject hints;
-        # the AI still detects header text verbatim, this only nudges extraction.
+        # The uploader's optional class/subject hints; the AI still reads the header text itself.
         context = {
             'school_id': upload.school_id,
             'class_id': upload.context_class_id,
@@ -153,56 +147,10 @@ def process_paper_upload_ocr(self, upload_id: int):
             'subject_name': upload.context_subject.name if upload.context_subject_id else None,
             'subject_code': upload.context_subject.code if upload.context_subject_id else None,
         }
-        
-        # Process the image -- continuation_context is None for page 1/standalone
-        # uploads (group_id null), or built from prior pages in the same group for
-        # page 2+ so the LLM can decide whether this page continues the last section.
-        continuation_context = _build_continuation_context(upload)
-        result = processor.process_paper_image(upload.image_url, context, continuation_context)
-        
-        if result.success:
-            # Update upload with extracted data
-            upload.ai_extracted_json = result.to_json()
-            upload.extraction_confidence = result.extraction_confidence
-            upload.extraction_notes = result.notes
-            upload.status = PaperUpload.Status.EXTRACTED
-            upload.processed_at = timezone.now()
-            upload.save()
-            
-            logger.info(
-                f"Successfully processed PaperUpload {upload_id}: "
-                f"{len(result.questions)} questions extracted"
-            )
-            
-            return {
-                'success': True,
-                'upload_id': upload_id,
-                'questions_count': len(result.questions),
-                'confidence': result.extraction_confidence
-            }
-        else:
-            # Update with error
-            upload.status = PaperUpload.Status.FAILED
-            from .paper_ocr_processor import friendly_ocr_error
-            upload.error_message = friendly_ocr_error(result.error)
-            upload.processed_at = timezone.now()
-            upload.save()
-            
-            logger.error(f"Failed to process PaperUpload {upload_id}: {result.error}")
-            
-            return {
-                'success': False,
-                'upload_id': upload_id,
-                'error': result.error
-            }
-    
+        return _scan_upload_to_blocks(upload, context)
+
     except Exception as e:
-        logger.error(
-            f"Unexpected error processing PaperUpload {upload_id}: {str(e)}",
-            exc_info=True
-        )
-        
-        # Try to update upload status
+        logger.error(f"Unexpected error processing PaperUpload {upload_id}: {str(e)}", exc_info=True)
         try:
             upload = PaperUpload.objects.get(id=upload_id)
             upload.status = PaperUpload.Status.FAILED
@@ -213,108 +161,8 @@ def process_paper_upload_ocr(self, upload_id: int):
         except Exception:
             pass
 
-        # Retry if not exceeded max retries
         if self.request.retries < self.max_retries:
             logger.info(f"Retrying PaperUpload {upload_id} (attempt {self.request.retries + 1})")
-            raise self.retry(exc=e, countdown=60)  # Retry after 60 seconds
-
-        return {
-            'success': False,
-            'upload_id': upload_id,
-            'error': str(e)
-        }
-
-
-@shared_task(bind=True, max_retries=2)
-def process_worksheet_upload_ocr(self, upload_id: int):
-    """Process an uploaded worksheet image with OCR to extract questions.
-
-    Deliberately skips the multi-page continuation-context building that
-    process_paper_upload_ocr does for exam papers -- worksheets are almost
-    always a single page, so that extra prompt-context plumbing isn't worth
-    duplicating here; group_id/page_number are still stored for the rare
-    multi-page case, they just don't inform this call's extraction prompt.
-    """
-    from .paper_ocr_processor import PaperOCRProcessor
-
-    try:
-        logger.info(f"Starting OCR processing for WorksheetUpload {upload_id}")
-
-        try:
-            upload = WorksheetUpload.objects.select_related(
-                'school', 'context_class', 'context_subject',
-            ).get(id=upload_id)
-        except WorksheetUpload.DoesNotExist:
-            logger.error(f"WorksheetUpload {upload_id} not found")
-            return {'success': False, 'error': 'Upload not found'}
-
-        upload.status = WorksheetUpload.Status.PROCESSING
-        upload.save(update_fields=['status'])
-
-        processor = PaperOCRProcessor()
-        context = {
-            'school_id': upload.school_id,
-            'class_name': upload.context_class.name if upload.context_class_id else None,
-            'subject_name': upload.context_subject.name if upload.context_subject_id else None,
-        }
-
-        result = processor.process_paper_image(upload.image_url, context, None)
-
-        if result.success:
-            upload.ai_extracted_json = result.to_json()
-            upload.extraction_confidence = result.extraction_confidence
-            upload.extraction_notes = result.notes
-            upload.status = WorksheetUpload.Status.EXTRACTED
-            upload.processed_at = timezone.now()
-            upload.save()
-
-            logger.info(
-                f"Successfully processed WorksheetUpload {upload_id}: "
-                f"{len(result.questions)} questions extracted"
-            )
-
-            return {
-                'success': True,
-                'upload_id': upload_id,
-                'questions_count': len(result.questions),
-                'confidence': result.extraction_confidence,
-            }
-        else:
-            upload.status = WorksheetUpload.Status.FAILED
-            from .paper_ocr_processor import friendly_ocr_error
-            upload.error_message = friendly_ocr_error(result.error)
-            upload.processed_at = timezone.now()
-            upload.save()
-
-            logger.error(f"Failed to process WorksheetUpload {upload_id}: {result.error}")
-
-            return {
-                'success': False,
-                'upload_id': upload_id,
-                'error': result.error,
-            }
-
-    except Exception as e:
-        logger.error(
-            f"Unexpected error processing WorksheetUpload {upload_id}: {str(e)}",
-            exc_info=True
-        )
-
-        try:
-            upload = WorksheetUpload.objects.get(id=upload_id)
-            upload.status = WorksheetUpload.Status.FAILED
-            upload.error_message = f"Processing error: {str(e)}"
-            upload.processed_at = timezone.now()
-            upload.save()
-        except Exception:
-            pass
-
-        if self.request.retries < self.max_retries:
-            logger.info(f"Retrying WorksheetUpload {upload_id} (attempt {self.request.retries + 1})")
             raise self.retry(exc=e, countdown=60)
 
-        return {
-            'success': False,
-            'upload_id': upload_id,
-            'error': str(e)
-        }
+        return {'success': False, 'upload_id': upload_id, 'error': str(e)}

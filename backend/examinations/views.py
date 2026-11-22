@@ -30,7 +30,7 @@ from lms.models import Tag, QuestionTag
 from .models import (
     ExamType, ExamGroup, Exam, ExamSubject, StudentMark, GradeScale,
     Question, ExamPaper, PaperQuestion, StudentResponse, PaperUpload, PaperFeedback,
-    StudentTermAssessment, Worksheet, WorksheetItem, WorksheetUpload, StudentExamComment,
+    StudentTermAssessment, Worksheet, WorksheetItem, StudentExamComment,
     ReportCardPromotion, ReportCardOverride,
 )
 from .serializers import (
@@ -51,7 +51,6 @@ from .serializers import (
     StudentTermAssessmentSerializer,
     PaperFeedbackSerializer, QuestionReviewSerializer,
     WorksheetSerializer, WorksheetDraftEnsureSerializer, WorksheetDraftAutosaveSerializer,
-    WorksheetUploadSerializer, WorksheetUploadCreateSerializer,
 )
 from .tasks import recompute_question_stats
 from .overall_result import calculate_overall_pass, subject_is_pass
@@ -2274,7 +2273,7 @@ def _save_student_marks(school_id, exam_subject, to_save, errors):
         with transaction.atomic():
             StudentMark.objects.bulk_create(
                 rows, update_conflicts=True, unique_fields=['school', 'exam_subject', 'student'],
-                update_fields=['marks_obtained', 'is_absent', 'remarks', 'enrollment', 'updated_at'],
+                update_fields=['marks_obtained', 'is_absent', 'remarks', 'entered_by', 'enrollment', 'updated_at'],
             )
     except Exception:
         return _save_student_marks_one_by_one(school_id, exam_subject, to_save, enrollment_by_student, errors)
@@ -2341,6 +2340,7 @@ class StudentMarkViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelV
         exam_subject = serializer.validated_data.get('exam_subject')
         self._check_exam_subject_scope(exam_subject, school_id)
         self._refuse_departed(exam_subject, serializer.validated_data.get('student'), school_id)
+        serializer.validated_data['entered_by'] = self.request.user
         # TenantQuerySetMixin.perform_create resolves/validates school_id and saves.
         super().perform_create(serializer)
 
@@ -2351,7 +2351,7 @@ class StudentMarkViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelV
         self._refuse_departed(
             exam_subject, serializer.validated_data.get('student', serializer.instance.student), school_id,
         )
-        serializer.save()
+        serializer.save(entered_by=self.request.user)
 
     def perform_destroy(self, instance):
         school_id = _resolve_school_id(self.request)
@@ -2456,6 +2456,7 @@ class StudentMarkViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelV
                 'marks_obtained': None if is_absent else marks_obtained,
                 'is_absent': is_absent,
                 'remarks': remarks,
+                'entered_by': request.user,
             }
 
         created, updated = _save_student_marks(school_id, exam_subject, to_save, errors)
@@ -4366,7 +4367,127 @@ Respond with ONLY a JSON array, no extra text:
         return Response({'slot': slot, 'message': 'Diagram removed.'})
 
 
-class ExamPaperViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet):
+class BlockDocumentActionsMixin:
+    """The block editor's read endpoints, shared by papers and worksheets (Paper Builder v2; worksheets
+    since Phase 6b): ``document/``, ``preview/``, ``print-html/``. ``paper_document`` handles either kind."""
+
+    @staticmethod
+    def _picture_store(request, document, owner, embed=False):
+        # Uploads are looked up for the paper's own school, never the one named in the request.
+        # embed: library pictures go inside the page instead of being linked. The phone asks for this
+        # when it prints, because Android's expo-print can make the PDF before linked pictures load.
+        from .paper_pictures import LIBRARY_URL, build_picture_store
+        link_base = '' if embed else request.build_absolute_uri(LIBRARY_URL)
+        return build_picture_store(document, owner.school_id, link_base=link_base)
+
+    @staticmethod
+    def _html_response(html):
+        response = HttpResponse(html, content_type='text/html; charset=utf-8')
+        # Teacher text is cleaned before it reaches the page; this stops the page itself from loading
+        # anything but pictures and the maths script, if it is ever opened on its own.
+        response['Content-Security-Policy'] = (
+            "default-src 'none'; img-src https: data:; style-src 'unsafe-inline' https://cdn.jsdelivr.net; "
+            "font-src https://cdn.jsdelivr.net; script-src https://cdn.jsdelivr.net 'unsafe-inline'"
+        )
+        response['X-Content-Type-Options'] = 'nosniff'
+        return response
+
+    @action(detail=True, methods=['get'], url_path='document')
+    def block_document(self, request, pk=None):
+        """The paper (or worksheet) as blocks for the editor. An old-style one is converted on the fly
+        (nothing is saved until the editor autosaves it)."""
+        from .paper_document import document_for_editor, render_document
+        owner = self.get_object()
+        document, converted = document_for_editor(owner)
+        return Response({
+            'document': document,
+            'converted': converted,
+            'header': render_document(owner, document)['header'],
+        })
+
+    @action(detail=True, methods=['post'], url_path='preview')
+    def block_preview(self, request, pk=None):
+        """HTML of an unsaved block list with this paper's header, for the editor's live preview.
+        ``?embed=1``: library pictures inside the page. The editors ask for it because their preview frame is
+        sandboxed (no origin), and Chrome will not let such a frame load pictures from a local API address;
+        it adds only the pictures the paper uses (about 10-15 KB), and each file is read once (pictures._encode)."""
+        from .paper_blocks.html_renderer import render_html
+        from .paper_document import check_document, render_document
+        owner = self.get_object()
+        document = request.data.get('document')
+        problems = check_document(document)
+        if problems:
+            return Response({'document': problems}, status=status.HTTP_400_BAD_REQUEST)
+        embed = request.query_params.get('embed') in ('1', 'true')
+        show = str(request.query_params.get('show') or '')[:40]
+        return self._html_response(render_html(render_document(owner, document),
+                                               self._picture_store(request, document, owner, embed=embed),
+                                               interactive=True, show=show))
+
+    @staticmethod
+    def _wants_answer_key(request):
+        return request.query_params.get('answer_key') in ('1', 'true')
+
+    def _check_answer_key_access(self, owner):
+        # The key is for the people who may edit this paper or worksheet, never for every user who can open it.
+        if not _can_manage_exam_scope(self.request, class_id=owner.class_obj_id, subject_id=owner.subject_id,
+                                      school_id=_resolve_school_id(self.request)):
+            raise PermissionDenied('Only School Admin, Principal, or the assigned teachers can see the answer key.')
+
+    @action(detail=True, methods=['get'], url_path='print-html')
+    def block_print_html(self, request, pk=None):
+        """The saved paper (or worksheet) as one HTML page, printed to PDF on the device.
+        ``?answer_key=1``: its answer key instead (Paper Builder v2 step 7b), for those who may edit it."""
+        from .paper_blocks.html_renderer import render_html
+        from .paper_document import document_for_editor, render_document
+        owner = self.get_object()
+        document, _ = document_for_editor(owner)
+        unfinished = _unfinished_response(owner, document)
+        if unfinished is not None:
+            return unfinished
+        if self._wants_answer_key(request):
+            from .paper_blocks.answer_key import render_key_html
+            self._check_answer_key_access(owner)
+            return self._html_response(render_key_html(render_document(owner, document)))
+        embed = request.query_params.get('embed') in ('1', 'true')
+        return self._html_response(render_html(render_document(owner, document), self._picture_store(request, document, owner, embed=embed)))
+
+
+# Paper Builder v2 Phase 7: every paper and worksheet is printed on the device from print-html and its Word file
+# comes from the block renderer. Only an app build from before Phase 6 still calls the removed paths.
+UPDATE_APP_DETAIL = 'This was removed in the new paper builder. Update the app, or open it on the website.'
+
+
+def _block_docx_bytes(owner, answer_key=False):
+    """Word file from the block list; an old-style paper or worksheet is converted first (not saved).
+    answer_key: its answer key instead (the caller checks who may have it)."""
+    from .paper_blocks.docx_renderer import render_docx
+    from .paper_document import document_for_editor, render_document
+    from .paper_pictures import build_picture_store
+    document = render_document(owner, document_for_editor(owner)[0])
+    if answer_key:
+        from .paper_blocks.answer_key import render_key_docx
+        return render_key_docx(document)
+    return render_docx(document, build_picture_store(document, owner.school_id))
+
+
+def _unfinished_response(owner, document):
+    """400 listing what is still empty, for a draft that is printed or downloaded before it is written in full
+    (autosave takes a half-written paper since the Structure step). None when it can be printed."""
+    from .paper_document import print_problems
+    problems = print_problems(owner, document)
+    if not problems:
+        return None
+    return Response({'detail': 'Some questions are still to fill.', 'document': problems},
+                    status=status.HTTP_400_BAD_REQUEST)
+
+
+def _block_document_problems(owner, document):
+    from .paper_document import check_document, owner_problems
+    return check_document(document) or owner_problems(owner, document)
+
+
+class ExamPaperViewSet(BlockDocumentActionsMixin, ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet):
     """ViewSet for ExamPaper management."""
     required_module = 'examinations'
     queryset = ExamPaper.objects.all()
@@ -4507,78 +4628,6 @@ class ExamPaperViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVie
             raise PermissionDenied('Only School Admin, Principal, or assigned class teachers can create or edit exam papers.')
         return school_id
 
-    def _save_manual_draft_questions(self, exam_paper, manual_questions):
-        existing_assignments = {
-            paper_question.question_id: paper_question
-            for paper_question in exam_paper.paper_questions.select_related('question').all()
-        }
-        retained_assignment_ids = set()
-
-        for index, raw_question in enumerate(manual_questions, start=1):
-            question_payload = dict(raw_question)
-            question_id = question_payload.pop('question_id', None)
-            question_order = question_payload.pop('question_order', index)
-            marks_override = question_payload.pop('marks_override', None)
-            section_key = question_payload.pop('section_key', '') or ''
-            question_payload.pop('local_id', None)
-
-            assignment = None
-            question_instance = None
-            if question_id is not None:
-                assignment = existing_assignments.get(question_id)
-                if assignment is not None:
-                    question_instance = assignment.question
-                else:
-                    # Not yet linked to this paper (e.g. just attached from the question
-                    # bank picker) — reuse the existing bank question instead of raising or
-                    # creating a duplicate Question row.
-                    question_instance = Question.objects.filter(
-                        id=question_id, school=exam_paper.school,
-                    ).first()
-                    if question_instance is None:
-                        raise ValidationError({
-                            'manual_questions': [f'question_id {question_id} was not found.']
-                        })
-
-            if question_instance is not None:
-                # Attach-by-reference: the manual/bank-picker UI never lets the user
-                # edit an already-existing question's content inline here -- it always
-                # carries the bank question's own current content through unchanged
-                # (see toDraftQuestionFromBank on the frontend). Re-validating it
-                # against today's content-completeness rules (e.g. "SHORT requires
-                # answer_text") wrongly blocked reusing any older/legitimate question
-                # that predates those rules. Attaching an existing question must always
-                # succeed regardless of its own content state -- only genuinely new
-                # questions go through full validation below.
-                question = question_instance
-            else:
-                question_payload['subject'] = exam_paper.subject_id
-                serializer = QuestionCreateUpdateSerializer(
-                    instance=None,
-                    data=question_payload,
-                    context={'request': self.request},
-                )
-                serializer.is_valid(raise_exception=True)
-                question = serializer.save(
-                    school=exam_paper.school,
-                    created_by=self.request.user,
-                )
-
-            if assignment is None:
-                assignment = PaperQuestion(
-                    exam_paper=exam_paper,
-                    question=question,
-                )
-
-            assignment.question_order = question_order
-            assignment.section_key = str(section_key)[:50]
-            assignment.marks_override = marks_override
-            assignment.save()
-            assignment.sync_question_snapshot()
-            retained_assignment_ids.add(assignment.id)
-
-        exam_paper.paper_questions.exclude(id__in=retained_assignment_ids).delete()
-
     @action(detail=True, methods=['get'], url_path='source-pages')
     def source_pages(self, request, pk=None):
         """The scanned photos a paper was built from, in page order (only for papers
@@ -4634,7 +4683,7 @@ class ExamPaperViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVie
 
     @action(detail=True, methods=['post'])
     def autosave(self, request, pk=None):
-        """Autosave draft metadata and manual-entry questions into the question bank."""
+        """Autosave draft details and the block list (questions are kept in the bank by save_document)."""
         exam_paper = self.get_object()
         if exam_paper.status != ExamPaper.Status.DRAFT:
             return Response(
@@ -4646,59 +4695,57 @@ class ExamPaperViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVie
         serializer.is_valid(raise_exception=True)
         validated = serializer.validated_data
         manual_questions = validated.pop('manual_questions', None)
+        document = validated.pop('document', None)
 
         class_obj = validated.get('class_obj', exam_paper.class_obj)
         subject = validated.get('subject', exam_paper.subject)
         self._validate_paper_manage_scope(class_obj, subject)
+
+        if manual_questions is not None:
+            # Only an app build from before Phase 6 still sends the old question list; the block list is the paper now.
+            return Response({'detail': UPDATE_APP_DETAIL}, status=status.HTTP_409_CONFLICT)
+
+        if document is not None:
+            from .paper_document import check_document
+            problems = check_document(document)
+            if problems:
+                return Response({'document': problems}, status=status.HTTP_400_BAD_REQUEST)
 
         with transaction.atomic():
             for attr, value in validated.items():
                 setattr(exam_paper, attr, value)
             exam_paper.save()
 
-            if manual_questions is not None:
-                self._save_manual_draft_questions(exam_paper, manual_questions)
+            if document is not None:
+                from .paper_document import save_document
+                save_document(exam_paper, document, request.user)
 
         exam_paper.refresh_from_db()
         return Response(ExamPaperSerializer(exam_paper).data)
 
     @action(detail=True, methods=['get'], url_path='generate-pdf')
     def generate_pdf(self, request, pk=None):
-        """Generate and download PDF for this exam paper."""
-        from .pdf_generator import ExamPaperPDFGenerator
-        
-        exam_paper = self.get_object()
-        
-        try:
-            generator = ExamPaperPDFGenerator(exam_paper)
-            pdf_bytes = generator.generate()
-            
-            # Create filename
-            filename = f"{exam_paper.paper_title.replace(' ', '_')}.pdf"
-            
-            response = HttpResponse(pdf_bytes, content_type='application/pdf')
-            response['Content-Disposition'] = f'attachment; filename="{filename}"'
-            
-            return response
-        
-        except Exception as e:
-            return Response(
-                {'detail': f'Error generating PDF: {str(e)}'},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
+        """Removed in Phase 7: papers print on the device from print-html. An app build from Phase 6 on prints on
+        the phone when it gets this 409; older builds show the message."""
+        self.get_object()
+        return Response({'detail': UPDATE_APP_DETAIL}, status=status.HTTP_409_CONFLICT)
 
     @action(detail=True, methods=['get'], url_path='generate-docx')
     def generate_docx(self, request, pk=None):
         """Generate and download DOCX for this exam paper."""
-        from .docx_generator import ExamPaperDOCXGenerator
-
         exam_paper = self.get_object()
+        answer_key = self._wants_answer_key(request)
+        if answer_key:
+            self._check_answer_key_access(exam_paper)
 
+        from .paper_document import document_for_editor
+        unfinished = _unfinished_response(exam_paper, document_for_editor(exam_paper)[0])
+        if unfinished is not None:
+            return unfinished
         try:
-            generator = ExamPaperDOCXGenerator(exam_paper)
-            docx_bytes = generator.generate()
+            docx_bytes = _block_docx_bytes(exam_paper, answer_key=answer_key)
 
-            filename = f"{exam_paper.paper_title.replace(' ', '_')}.docx"
+            filename = f"{exam_paper.paper_title.replace(' ', '_')}{'_answer_key' if answer_key else ''}.docx"
 
             response = HttpResponse(
                 docx_bytes,
@@ -5000,6 +5047,10 @@ class PaperUploadViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelV
                 {'detail': 'School ID is required'},
                 status=status.HTTP_400_BAD_REQUEST
             )
+        if request.data.get('mode') != 'blocks':
+            # The old questions-only scan was removed in Paper Builder v2 Phase 7; only an app build from
+            # before Phase 6 still sends no mode.
+            return Response({'detail': UPDATE_APP_DETAIL}, status=status.HTTP_409_CONFLICT)
 
         # Multi-page capture: no group_id means this is page 1 of a new session --
         # generate one for the frontend to echo back on subsequent pages. When a
@@ -5049,7 +5100,9 @@ class PaperUploadViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelV
                 page_number=page_number,
                 context_class_id=context_class_id,
                 context_subject_id=context_subject_id,
-                status=PaperUpload.Status.PENDING
+                status=PaperUpload.Status.PENDING,
+                # Kept in the JSON field (no migration); the task reads it to know the page is a block scan.
+                ai_extracted_json={'scan_mode': 'blocks'},
             )
             
             # Trigger async OCR processing
@@ -5075,11 +5128,9 @@ class PaperUploadViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelV
 
         Query: group_id (uuid) and total_pages (1..30). Returns one row per expected page
         (latest upload wins when a page was retried), which pages are missing or failed,
-        and -- once every page is EXTRACTED -- the reconciled paper (sections joined across
-        page breaks, mixed-type sections split, marks and header checks).
+        and -- once every page is EXTRACTED -- the pages' blocks joined into one result.
         """
         import uuid as uuid_lib
-        from .paper_reconcile import reconcile_pages
 
         try:
             group_id = uuid_lib.UUID(str(request.query_params.get('group_id', '')))
@@ -5108,16 +5159,11 @@ class PaperUploadViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelV
         extra_pages = sorted(n for n in latest if n > total_pages)
         complete = all(p['status'] == PaperUpload.Status.EXTRACTED for p in pages)
         result = None
-        if complete:
-            result = reconcile_pages([(n, latest[n].ai_extracted_json or {}) for n in range(1, total_pages + 1)])
-            # A page read by the regex fallback (AI step unavailable) is less reliable;
-            # pass that on so the review screen can say so instead of failing silently.
-            warnings = [
-                latest[n].ai_extracted_json.get('warning')
-                for n in range(1, total_pages + 1)
-                if (latest[n].ai_extracted_json or {}).get('warning')
-            ]
-            result['warning'] = warnings[0] if warnings else None
+        # A group read by the old questions scan (before Phase 7) has no result any more; it is never complete
+        # as a block scan, so the client asks the teacher to scan again.
+        if complete and all((latest[n].ai_extracted_json or {}).get('scan_mode') == 'blocks' for n in range(1, total_pages + 1)):
+            from .paper_scan_blocks import merge_pages
+            result = merge_pages([(n, latest[n].ai_extracted_json or {}) for n in range(1, total_pages + 1)])
 
         return Response({
             'group_id': str(group_id),
@@ -5134,14 +5180,9 @@ class PaperUploadViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelV
     def confirm_extraction(self, request, pk=None):
         """Confirm extracted questions.
 
-        Two modes:
-        - exam_paper_id provided (current draft-pipeline flow): the paper and its
-          questions were already created via ensure-draft + autosave, using the same
-          manual_questions path as typed entry. This call only records the
-          PaperFeedback learning-loop row and marks/links the upload — it never
-          creates ExamPaper/Question/PaperQuestion rows itself.
-        - exam_paper_id absent (legacy one-shot flow, kept for API compatibility):
-          creates the ExamPaper and its Questions directly from confirmed_data.
+        The editor has already added the scanned blocks to the paper (exam_paper_id) or worksheet
+        (worksheet_id); this only records the PaperFeedback learning-loop row and marks/links the upload.
+        It never creates papers or questions itself (the old one-shot flow was removed in Phase 7).
         """
         upload = self.get_object()
 
@@ -5165,6 +5206,33 @@ class PaperUploadViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelV
         try:
             school_id = _resolve_school_id(request)
 
+            worksheet_id = request.data.get('worksheet_id')
+            if worksheet_id and not exam_paper_id:
+                # A block worksheet scanned through the paper scan (Phase 6b): the editor already added the
+                # blocks; this records the feedback row. PaperUpload has no worksheet link (no new column),
+                # so the upload is only marked confirmed.
+                worksheet = Worksheet.objects.filter(id=worksheet_id, school_id=school_id, is_active=True).first()
+                if worksheet is None:
+                    return Response({'detail': 'worksheet_id was not found for this school.'}, status=status.HTTP_404_NOT_FOUND)
+                if not _can_manage_exam_scope(request, class_id=worksheet.class_obj_id, subject_id=worksheet.subject_id,
+                                              school_id=school_id):
+                    return Response(
+                        {'detail': 'Only School Admin, Principal, or assigned class teachers can confirm worksheets.'},
+                        status=status.HTTP_403_FORBIDDEN,
+                    )
+                blocks = confirmed_json.get('blocks') or confirmed_json.get('questions') or []
+                PaperFeedback.objects.create(
+                    paper_upload=upload,
+                    ai_extracted_json=upload.ai_extracted_json,
+                    user_confirmed_json=confirmed_json,
+                    accuracy_metrics={'total_questions': len(blocks), 'extraction_confidence': upload.extraction_confidence,
+                                      'worksheet_id': worksheet.id},
+                    confirmed_by=request.user,
+                )
+                upload.status = PaperUpload.Status.CONFIRMED
+                upload.save(update_fields=['status'])
+                return Response({'detail': 'Worksheet scan confirmed', 'worksheet_id': worksheet.id}, status=status.HTTP_200_OK)
+
             if exam_paper_id:
                 exam_paper = ExamPaper.objects.filter(id=exam_paper_id, school_id=school_id).first()
                 if exam_paper is None:
@@ -5184,7 +5252,8 @@ class PaperUploadViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelV
                         status=status.HTTP_403_FORBIDDEN,
                     )
 
-                questions = confirmed_json.get('questions', [])
+                # A block scan (Paper Builder v2) sends the kept blocks instead of questions.
+                questions = confirmed_json.get('questions') or confirmed_json.get('blocks') or []
 
                 # Feedback-only: the draft pipeline already created the paper/questions.
                 PaperFeedback.objects.create(
@@ -5211,84 +5280,7 @@ class PaperUploadViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelV
                     status=status.HTTP_200_OK
                 )
 
-            # Legacy one-shot flow: no exam_paper_id, so create everything here.
-            if not _can_manage_exam_scope(
-                request,
-                class_id=paper_metadata.get('class_obj'),
-                subject_id=paper_metadata.get('subject'),
-                school_id=school_id,
-            ):
-                return Response(
-                    {'detail': 'Only School Admin, Principal, or assigned class teachers can create exam papers.'},
-                    status=status.HTTP_403_FORBIDDEN,
-                )
-
-            # Create ExamPaper
-            exam_paper = ExamPaper.objects.create(
-                school_id=school_id,
-                class_obj_id=paper_metadata.get('class_obj'),
-                subject_id=paper_metadata.get('subject'),
-                exam_id=paper_metadata.get('exam'),
-                exam_subject_id=paper_metadata.get('exam_subject'),
-                paper_title=paper_metadata.get('paper_title', 'Untitled Paper'),
-                instructions=paper_metadata.get('instructions', ''),
-                total_marks=paper_metadata.get('total_marks', 100),
-                duration_minutes=paper_metadata.get('duration_minutes', 60),
-                status=ExamPaper.Status.DRAFT,
-                generated_by=request.user
-            )
-
-            # Create Questions from confirmed data
-            questions = confirmed_json.get('questions', [])
-            for idx, q_data in enumerate(questions, start=1):
-                question = Question.objects.create(
-                    school_id=school_id,
-                    subject_id=paper_metadata.get('subject'),
-                    question_text=q_data.get('question_text', ''),
-                    question_type=q_data.get('question_type', 'SHORT'),
-                    difficulty_level=q_data.get('difficulty_level', 'MEDIUM'),
-                    marks=q_data.get('marks', 1),
-                    option_a=q_data.get('options', {}).get('A', ''),
-                    option_b=q_data.get('options', {}).get('B', ''),
-                    option_c=q_data.get('options', {}).get('C', ''),
-                    option_d=q_data.get('options', {}).get('D', ''),
-                    created_by=request.user,
-                )
-
-                # Link question to paper
-                paper_question = PaperQuestion.objects.create(
-                    exam_paper=exam_paper,
-                    question=question,
-                    question_order=idx,
-                    marks_override=q_data.get('marks')
-                )
-                paper_question.sync_question_snapshot()
-
-            # Create feedback record for learning loop
-            PaperFeedback.objects.create(
-                paper_upload=upload,
-                ai_extracted_json=upload.ai_extracted_json,
-                user_confirmed_json=confirmed_json,
-                accuracy_metrics={
-                    'total_questions': len(questions),
-                    'extraction_confidence': upload.extraction_confidence
-                },
-                confirmed_by=request.user
-            )
-
-            # Update upload status
-            upload.status = PaperUpload.Status.CONFIRMED
-            upload.exam_paper = exam_paper
-            upload.save()
-
-            return Response(
-                {
-                    'detail': 'Paper successfully confirmed',
-                    'exam_paper_id': exam_paper.id,
-                    'questions_created': len(questions)
-                },
-                status=status.HTTP_200_OK
-            )
+            return Response({'detail': 'exam_paper_id or worksheet_id is required.'}, status=status.HTTP_400_BAD_REQUEST)
 
         except Exception as e:
             return Response(
@@ -5297,7 +5289,7 @@ class PaperUploadViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelV
             )
 
 
-class WorksheetViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet):
+class WorksheetViewSet(BlockDocumentActionsMixin, ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet):
     """ViewSet for Worksheet management -- sibling of ExamPaperViewSet, reusing
     the same manage-scope check (_can_manage_exam_scope is generic to
     class/subject, not exam-paper specific) but with no exam-lifecycle fields."""
@@ -5383,73 +5375,6 @@ class WorksheetViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVie
         instance.is_active = False
         instance.save()
 
-    def _save_manual_draft_items(self, worksheet, manual_items):
-        existing_assignments = {
-            item.question_id: item
-            for item in worksheet.items.select_related('question').all()
-        }
-        retained_ids = set()
-
-        for index, raw_item in enumerate(manual_items, start=1):
-            item_payload = dict(raw_item)
-            question_id = item_payload.pop('question_id', None)
-            item_order = item_payload.pop('item_order', item_payload.pop('question_order', index))
-            marks_override = item_payload.pop('marks_override', None)
-            section_key = item_payload.pop('section_key', '') or ''
-            item_payload.pop('local_id', None)
-
-            assignment = None
-            question_instance = None
-            if question_id is not None:
-                assignment = existing_assignments.get(question_id)
-                if assignment is not None:
-                    question_instance = assignment.question
-                else:
-                    # Not yet linked to this worksheet (e.g. attached from the question
-                    # bank picker) -- reuse the existing bank question rather than raising
-                    # or creating a duplicate Question row.
-                    question_instance = Question.objects.filter(
-                        id=question_id, school=worksheet.school,
-                    ).first()
-                    if question_instance is None:
-                        raise ValidationError({
-                            'manual_items': [f'question_id {question_id} was not found.']
-                        })
-
-            if question_instance is not None:
-                # Attach-by-reference: never re-validate an already-existing question's
-                # content against today's completeness rules -- see the identical
-                # comment in ExamPaperViewSet._save_manual_draft_questions.
-                question = question_instance
-            else:
-                item_payload['subject'] = item_payload.get('subject') or worksheet.subject_id
-                if not item_payload['subject']:
-                    raise ValidationError({
-                        'manual_items': ['subject is required for a new question when the worksheet has no subject.']
-                    })
-                serializer = QuestionCreateUpdateSerializer(
-                    instance=None,
-                    data=item_payload,
-                    context={'request': self.request},
-                )
-                serializer.is_valid(raise_exception=True)
-                question = serializer.save(
-                    school=worksheet.school,
-                    created_by=self.request.user,
-                )
-
-            if assignment is None:
-                assignment = WorksheetItem(worksheet=worksheet, question=question)
-
-            assignment.item_order = item_order
-            assignment.section_key = str(section_key)[:50]
-            assignment.marks_override = marks_override
-            assignment.save()
-            assignment.sync_item_snapshot()
-            retained_ids.add(assignment.id)
-
-        worksheet.items.exclude(id__in=retained_ids).delete()
-
     @action(detail=False, methods=['post'], url_path='ensure-draft')
     def ensure_draft(self, request):
         """Create or refresh a server-backed draft worksheet before autosave begins."""
@@ -5493,7 +5418,7 @@ class WorksheetViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVie
 
     @action(detail=True, methods=['post'])
     def autosave(self, request, pk=None):
-        """Autosave draft metadata and manual-entry items into the question bank."""
+        """Autosave draft details and the block list (questions are kept in the bank by save_document)."""
         worksheet = self.get_object()
         if worksheet.status != Worksheet.Status.DRAFT:
             return Response(
@@ -5506,21 +5431,34 @@ class WorksheetViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVie
         validated = serializer.validated_data
         manual_items = validated.pop('manual_items', None)
         tested_topics = validated.pop('tested_topics', None)
+        document = validated.pop('document', None)
 
         class_obj = validated.get('class_obj', worksheet.class_obj)
         subject = validated.get('subject', worksheet.subject)
         self._validate_manage_scope(class_obj, subject)
+
+        if manual_items is not None:
+            # Only an app build from before Phase 6 still sends the old item list.
+            return Response({'detail': UPDATE_APP_DETAIL}, status=status.HTTP_409_CONFLICT)
 
         with transaction.atomic():
             for attr, value in validated.items():
                 setattr(worksheet, attr, value)
             worksheet.save()
 
+            if document is not None:
+                # After the details, so a subject chosen in the same request counts.
+                problems = _block_document_problems(worksheet, document)
+                if problems:
+                    transaction.set_rollback(True)
+                    return Response({'document': problems}, status=status.HTTP_400_BAD_REQUEST)
+
             if tested_topics is not None:
                 worksheet.tested_topics.set(tested_topics)
 
-            if manual_items is not None:
-                self._save_manual_draft_items(worksheet, manual_items)
+            if document is not None:
+                from .paper_document import save_document
+                save_document(worksheet, document, request.user)
 
         worksheet.refresh_from_db()
         return Response(WorksheetSerializer(worksheet).data)
@@ -5541,6 +5479,7 @@ class WorksheetViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVie
                 instructions=source.instructions,
                 structure=source.structure,
                 render_options=source.render_options,
+                document=source.document,
                 status=Worksheet.Status.DRAFT,
                 source=source.source,
                 created_by=request.user,
@@ -5560,35 +5499,24 @@ class WorksheetViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVie
 
     @action(detail=True, methods=['get'], url_path='generate-pdf')
     def generate_pdf(self, request, pk=None):
-        """Generate and download PDF for this worksheet."""
-        from .pdf_generator import WorksheetPDFGenerator
-
-        worksheet = self.get_object()
-        try:
-            generator = WorksheetPDFGenerator(worksheet)
-            pdf_bytes = generator.generate()
-
-            filename = f"{worksheet.title.replace(' ', '_')}.pdf"
-            response = HttpResponse(pdf_bytes, content_type='application/pdf')
-            response['Content-Disposition'] = f'attachment; filename="{filename}"'
-            return response
-        except Exception as e:
-            return Response(
-                {'detail': f'Error generating PDF: {str(e)}'},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
+        """Removed in Phase 7: worksheets print on the device from print-html (see the paper's generate_pdf)."""
+        self.get_object()
+        return Response({'detail': UPDATE_APP_DETAIL}, status=status.HTTP_409_CONFLICT)
 
     @action(detail=True, methods=['get'], url_path='generate-docx')
     def generate_docx(self, request, pk=None):
-        """Generate and download DOCX for this worksheet."""
-        from .docx_generator import WorksheetDOCXGenerator
-
+        """Word file of this worksheet from the block renderer (an old worksheet is converted first)."""
         worksheet = self.get_object()
+        answer_key = self._wants_answer_key(request)
+        if answer_key:
+            self._check_answer_key_access(worksheet)
+        from .paper_document import document_for_editor
+        unfinished = _unfinished_response(worksheet, document_for_editor(worksheet)[0])
+        if unfinished is not None:
+            return unfinished
         try:
-            generator = WorksheetDOCXGenerator(worksheet)
-            docx_bytes = generator.generate()
-
-            filename = f"{worksheet.title.replace(' ', '_')}.docx"
+            docx_bytes = _block_docx_bytes(worksheet, answer_key=answer_key)
+            filename = f"{worksheet.title.replace(' ', '_')}{'_answer_key' if answer_key else ''}.docx"
             response = HttpResponse(
                 docx_bytes,
                 content_type='application/vnd.openxmlformats-officedocument.wordprocessingml.document',
@@ -5600,145 +5528,6 @@ class WorksheetViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVie
                 {'detail': f'Error generating DOCX: {str(e)}'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
-
-
-class WorksheetUploadViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet):
-    """ViewSet for WorksheetUpload management (image uploads for OCR) -- mirrors
-    PaperUploadViewSet, minus the exam_paper_id draft-pipeline branch of confirm
-    (worksheets have no answer-key/feedback-learning-loop requirement)."""
-    required_module = 'examinations'
-    queryset = WorksheetUpload.objects.all()
-    permission_classes = [IsAuthenticated, HasSchoolAccess]
-    serializer_class = WorksheetUploadSerializer
-
-    def get_queryset(self):
-        qs = super().get_queryset()
-
-        upload_status = self.request.query_params.get('status')
-        if upload_status:
-            qs = qs.filter(status=upload_status)
-
-        if self.request.query_params.get('my_uploads') == 'true':
-            qs = qs.filter(uploaded_by=self.request.user)
-
-        return qs.select_related('school', 'worksheet', 'uploaded_by').order_by('-created_at')
-
-    @action(detail=False, methods=['post'], url_path='upload-image')
-    def upload_image(self, request):
-        """Upload worksheet image and trigger OCR processing."""
-        from core.storage import SupabaseStorageService
-        from .tasks import process_worksheet_upload_ocr
-
-        serializer = WorksheetUploadCreateSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-
-        image_file = serializer.validated_data['image']
-        context_class_id = serializer.validated_data.get('class_obj')
-        context_subject_id = serializer.validated_data.get('subject')
-        school_id = _resolve_school_id(request)
-
-        if not school_id:
-            return Response(
-                {'detail': 'School ID is required'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        import uuid as uuid_lib
-        group_id = serializer.validated_data.get('group_id')
-        page_number = serializer.validated_data.get('page_number')
-        if group_id is None:
-            group_id = uuid_lib.uuid4()
-            page_number = 1
-        elif page_number is None:
-            last_page_number = WorksheetUpload.objects.filter(
-                school_id=school_id, group_id=group_id
-            ).order_by('-page_number').values_list('page_number', flat=True).first()
-            page_number = (last_page_number or 0) + 1
-
-        try:
-            storage_service = SupabaseStorageService()
-
-            from datetime import datetime
-            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-            folder_path = f"worksheets/{school_id}"
-
-            image_url = storage_service.upload_file(
-                file=image_file,
-                folder=folder_path,
-                filename=f"worksheet_{timestamp}_{image_file.name}"
-            )
-
-            upload = WorksheetUpload.objects.create(
-                school_id=school_id,
-                uploaded_by=request.user,
-                image_url=image_url,
-                group_id=group_id,
-                page_number=page_number,
-                context_class_id=context_class_id,
-                context_subject_id=context_subject_id,
-                status=WorksheetUpload.Status.PENDING
-            )
-
-            from core.task_utils import call_task
-            call_task(process_worksheet_upload_ocr, upload.id)
-
-            return Response(
-                WorksheetUploadSerializer(upload).data,
-                status=status.HTTP_201_CREATED
-            )
-
-        except Exception as e:
-            return Response(
-                {'detail': f'Error uploading image: {str(e)}'},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
-
-    @action(detail=True, methods=['post'], url_path='confirm')
-    def confirm_extraction(self, request, pk=None):
-        """Confirm extracted questions -- records confirmation and links the
-        worksheet (already created via ensure-draft + autosave, same as the
-        manual-entry path). No feedback-learning-loop row: PaperFeedback is
-        scoped to PaperUpload and worksheets deliberately don't get an
-        equivalent (see the "no answer key" scoping decision for this feature)."""
-        upload = self.get_object()
-
-        if upload.status != WorksheetUpload.Status.EXTRACTED:
-            return Response(
-                {'detail': 'Upload must be in EXTRACTED status'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        worksheet_id = request.data.get('worksheet_id')
-        if not worksheet_id:
-            return Response(
-                {'detail': 'worksheet_id is required'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        school_id = _resolve_school_id(request)
-        worksheet = Worksheet.objects.filter(id=worksheet_id, school_id=school_id).first()
-        if worksheet is None:
-            return Response(
-                {'detail': 'worksheet_id was not found for this school.'},
-                status=status.HTTP_404_NOT_FOUND,
-            )
-
-        if not _can_manage_exam_scope(
-            request,
-            class_id=worksheet.class_obj_id,
-            subject_id=worksheet.subject_id,
-            school_id=school_id,
-        ):
-            return Response(
-                {'detail': 'Only School Admin, Principal, or assigned class teachers can confirm worksheets.'},
-                status=status.HTTP_403_FORBIDDEN,
-            )
-
-        upload.status = WorksheetUpload.Status.CONFIRMED
-        upload.worksheet = worksheet
-        upload.save()
-
-        return Response(WorksheetUploadSerializer(upload).data)
 
 
 class PaperFeedbackViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ReadOnlyModelViewSet):

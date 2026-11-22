@@ -28,33 +28,6 @@ vi.mock('../../../components/Toast', () => ({
   useToast: () => ({ showError: mockShowError, showSuccess: mockShowSuccess }),
 }))
 
-// Isolates this test from PaperStructureBuilder/QuestionSlotEditor's own internals
-// (data fetching, rich editing UI) -- we only need to see how many accumulated
-// rows/questions they were handed across pages.
-vi.mock('../PaperStructureBuilder', () => ({
-  default: function MockPaperStructureBuilder({ sections }) {
-    return <div data-testid="structure-sections-count">{sections.length}</div>
-  },
-  calculateAllocatedMarks: (sections) => (sections || []).reduce((sum, s) => {
-    if (s.type === 'divider') return sum
-    return sum + (Number(s.slots_counted) || 0) * (Number(s.marks_per_question) || 0)
-  }, 0),
-  makeDefaultSection: (index, overrides = {}) => ({
-    local_id: overrides.key || `sec_${index}`,
-    key: overrides.key || `sec_${index}`,
-    type: 'question_group',
-    title: overrides.title,
-    instruction: overrides.instruction || '',
-    question_type: overrides.question_type || 'SHORT',
-    slots_shown: overrides.slots_shown || 0,
-    slots_counted: overrides.slots_counted || 0,
-    marks_per_question: overrides.marks_per_question || 0,
-  }),
-}))
-
-
-
-
 const mockUploadPaperImage = vi.fn()
 const mockGetPaperGroupStatus = vi.fn()
 
@@ -65,11 +38,6 @@ vi.mock('../../../services/api', () => ({
   },
 }))
 
-const section = (title, type, n, extra = {}) => ({
-  title, instruction: null, question_type_guess: type, marks_per_question: 2, shown_count: n, counted_count: n,
-  questions: Array.from({ length: n }, (_, i) => ({ question_text: `${title} question ${i + 1}`, question_type: type, marks: 2, options: null, type_data: null, ...extra })),
-})
-
 const status = (pages, result = null) => ({
   data: {
     group_id: 'g', total_pages: pages.length, pages, missing_pages: [], failed_pages: [], extra_pages: [],
@@ -78,11 +46,14 @@ const status = (pages, result = null) => ({
 })
 const pageRow = (n, s = 'EXTRACTED') => ({ page_number: n, upload_id: n, status: s, error_message: '' })
 
+// A merged block scan, as group-status returns it once every page is read.
 const result = {
-  header: { exam_title: 'Mid Term', class_label: 'FIFTH', subject_label: 'SS', detected_total_marks: 8, duration_label: '90 minutes' },
-  sections: [section('Objective', 'MCQ', 2), section('Short', 'SHORT', 2, { needs_review: true })],
-  marks_check: { detected: 8, computed: 8, matches: true },
-  low_confidence_count: 2,
+  scan_mode: 'blocks', direction: 'ltr', header: { subject: 'SS' }, notes: [],
+  pictures: { library: 0, cropped: 0, missing: 0 },
+  blocks: [
+    { id: 'a', type: 'short_answer', title: 'Answer these.', marks: 4, page_number: 1, data: { items: [{ text: 'Why is the sky blue?' }] } },
+    { id: 'b', type: 'true_false', title: 'True or false.', marks: 2, page_number: 2, data: { items: [{ text: 'The sun is a star.' }] } },
+  ],
 }
 
 async function chooseCount(user, n) {
@@ -92,7 +63,7 @@ async function chooseCount(user, n) {
   await user.click(screen.getByRole('button', { name: 'Continue' }))
 }
 
-describe('ImageCapturePaperTab: declared page count, parallel upload, staged review', () => {
+describe('ImageCapturePaperTab: declared page count, parallel upload, block review', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     localStorage.clear()
@@ -132,75 +103,38 @@ describe('ImageCapturePaperTab: declared page count, parallel upload, staged rev
     expect(calls[0][2]).toBe(6)
   })
 
-  it('opens the review only after every declared page is read, questions first', async () => {
+  it('opens the block review only after every declared page is read', async () => {
     mockGetPaperGroupStatus
       .mockResolvedValueOnce(status([pageRow(1), pageRow(2, 'PROCESSING')]))
       .mockResolvedValue(status([pageRow(1), pageRow(2)], result))
-    localStorage.setItem('paper_builder_image_capture_1_1', JSON.stringify({ groupId: 'g', totalPages: 2 }))
+    localStorage.setItem('paper_builder_image_capture_1_1_blocks', JSON.stringify({ groupId: 'g', totalPages: 2 }))
     renderWithProviders(<ImageCapturePaperTab classId={1} subjectId={1} onApplyPrefill={vi.fn()} />)
     expect(await screen.findByText((_, el) => el?.tagName === 'P' && /^1 of 2 pages read/.test(el.textContent))).toBeInTheDocument()
-    expect(screen.queryByText('1. Questions')).toBeNull()
-    expect(await screen.findByText('1. Questions', {}, { timeout: 6000 })).toBeInTheDocument()
-    expect(screen.getByText('Objective question 1')).toBeInTheDocument()
-    expect(screen.getByText('Short question 1')).toBeInTheDocument()
-    expect(screen.getAllByText('Check type')).toHaveLength(2)
+    expect(screen.queryByText(/Answer these\./)).toBeNull()
+    expect(await screen.findByText(/Answer these\./, {}, { timeout: 6000 })).toBeInTheDocument()
+    expect(screen.getByText(/True or false\./)).toBeInTheDocument()
   }, 15000)
 
-  it('shows the page photo beside the questions and jumps to the page of the selected question', async () => {
-    const withPhoto = (n) => ({ ...pageRow(n), image_url: `https://img.test/p${n}.jpg` })
-    const twoPages = {
-      ...result,
-      sections: [{
-        ...section('Objective', 'MCQ', 1),
-        questions: [
-          { question_text: 'First on page one', question_type: 'MCQ', marks: 2, page_number: 1, box: { x0: 0.1, y0: 0.2, x1: 0.9, y1: 0.3 } },
-          { question_text: 'Second on page two', question_type: 'MCQ', marks: 2, page_number: 2 },
-        ],
-      }],
-    }
-    mockGetPaperGroupStatus.mockResolvedValue(status([withPhoto(1), withPhoto(2)], twoPages))
-    localStorage.setItem('paper_builder_image_capture_1_1', JSON.stringify({ groupId: 'g', totalPages: 2 }))
-    const user = userEvent.setup()
-    renderWithProviders(<ImageCapturePaperTab classId={1} subjectId={1} onApplyPrefill={vi.fn()} />)
-
-    await screen.findByText('1. Questions')
-    expect(screen.getByAltText('Page 1 of the paper')).toHaveAttribute('src', 'https://img.test/p1.jpg')
-    await user.click(screen.getByText('First on page one'))
-    expect(screen.getByTestId('question-highlight')).toBeInTheDocument()
-    await user.click(screen.getByText('Second on page two'))
-    expect(screen.getByAltText('Page 2 of the paper')).toHaveAttribute('src', 'https://img.test/p2.jpg')
-    expect(screen.queryByTestId('question-highlight')).toBeNull()
-    await user.click(screen.getByRole('button', { name: 'Hide photo' }))
-    expect(screen.queryByAltText('Page 2 of the paper')).toBeNull()
-  }, 15000)
-
-  it('requires title and total marks, hands class/subject hints to the builder, and sends the types the user corrected', async () => {
-    mockGetPaperGroupStatus.mockResolvedValue(status([pageRow(1)], {
-      ...result, header: { ...result.header, exam_title: null, detected_total_marks: null }, sections: [section('Objective', 'MCQ', 2)],
-    }))
-    localStorage.setItem('paper_builder_image_capture_1_1', JSON.stringify({ groupId: 'g', totalPages: 1 }))
+  it('hands the kept blocks, the direction and every page upload to the editor', async () => {
+    mockGetPaperGroupStatus.mockResolvedValue(status([pageRow(1), pageRow(2)], result))
+    localStorage.setItem('paper_builder_image_capture_1_1_blocks', JSON.stringify({ groupId: 'g', totalPages: 2 }))
     const onApplyPrefill = vi.fn()
     const user = userEvent.setup()
-    renderWithProviders(<ImageCapturePaperTab onApplyPrefill={onApplyPrefill} />)
-
-    await screen.findByText('1. Questions')
-    await user.selectOptions(screen.getByLabelText('Type of question 2'), 'TRUE_FALSE')
-    await user.click(screen.getByRole('button', { name: '3. Details & accept' }))
-    expect(screen.getByText(/Fill in before continuing: Paper title, Total marks/)).toBeInTheDocument()
-    const accept = screen.getByRole('button', { name: 'Accept & continue' })
-    expect(accept).toBeDisabled()
-
-    await user.type(screen.getByLabelText('Paper title *'), 'Unit Test')
-    await user.type(screen.getByLabelText('Total marks *'), '4')
-    expect(accept).not.toBeDisabled()
-    await user.click(accept)
-
+    renderWithProviders(<ImageCapturePaperTab classId={1} subjectId={1} onApplyPrefill={onApplyPrefill} />)
+    await screen.findByText(/Answer these\./)
+    await user.click(screen.getByRole('button', { name: 'Add 2 to the paper' }))
     const prefill = onApplyPrefill.mock.calls[0][0]
-    expect(prefill.paperFields.paper_title).toBe('Unit Test')
-    expect(prefill.detected).toEqual({ class_label: 'FIFTH', subject_label: 'SS' })
-    expect(prefill.structure).toHaveLength(2) // the MCQ section split when one question became True/False
-    expect(prefill.questions.map((q) => q.question_type)).toEqual(['MCQ', 'TRUE_FALSE'])
-    expect(prefill.questions.every((q) => !('needs_review' in q))).toBe(true)
-    expect(prefill.uploadIds).toEqual([1])
+    expect(prefill.blocks.map((b) => b.type)).toEqual(['short_answer', 'true_false'])
+    expect(prefill.direction).toBe('ltr')
+    expect(prefill.uploadIds).toEqual([1, 2])
+    expect(localStorage.getItem('paper_builder_image_capture_1_1_blocks')).toBeNull()
+  })
+
+  it('asks to scan again when the pages were read by the old scanner (no result)', async () => {
+    mockGetPaperGroupStatus.mockResolvedValue(status([pageRow(1)], null))
+    localStorage.setItem('paper_builder_image_capture_1_1_blocks', JSON.stringify({ groupId: 'g', totalPages: 1 }))
+    renderWithProviders(<ImageCapturePaperTab classId={1} subjectId={1} onApplyPrefill={vi.fn()} />)
+    expect(await screen.findByText(/read by the old scanner/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Start over' })).toBeInTheDocument()
   })
 })

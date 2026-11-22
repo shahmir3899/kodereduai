@@ -59,6 +59,8 @@ const PerformanceAppraisalPage = lazy(() => import('./pages/hr/PerformanceApprai
 const StaffDocumentsPage = lazy(() => import('./pages/hr/StaffDocumentsPage'))
 const LetterComposerPage = lazy(() => import('./pages/hr/LetterComposerPage'))
 const StaffRiskPage = lazy(() => import('./pages/hr/StaffRiskPage'))
+const TeacherPerformancePage = lazy(() => import('./pages/hr/TeacherPerformancePage'))
+const MyPerformancePage = lazy(() => import('./pages/teacher/MyPerformancePage'))
 
 // Academics pages
 const SubjectsPage = lazy(() => import('./pages/academics/SubjectsPage'))
@@ -602,6 +604,9 @@ function App() {
             <Route path="hr/documents" element={<SchoolRoute><ModuleRoute module="hr"><AdminPrincipalRoute><StaffDocumentsPage /></AdminPrincipalRoute></ModuleRoute></SchoolRoute>} />
             <Route path="hr/letters" element={<SchoolRoute><ModuleRoute module="hr"><AdminPrincipalRoute><LetterComposerPage /></AdminPrincipalRoute></ModuleRoute></SchoolRoute>} />
             <Route path="hr/risk" element={<SchoolRoute><ModuleRoute module="hr"><AdminPrincipalRoute><StaffRiskPage /></AdminPrincipalRoute></ModuleRoute></SchoolRoute>} />
+            {/* Any staff member may open it; the server answers 404 to anyone not on the report. */}
+            <Route path="my-performance" element={<SchoolRoute><ModuleRoute module="hr"><MyPerformancePage /></ModuleRoute></SchoolRoute>} />
+            <Route path="hr/teacher-performance" element={<SchoolRoute><ModuleRoute module="hr"><AdminPrincipalRoute><TeacherPerformancePage /></AdminPrincipalRoute></ModuleRoute></SchoolRoute>} />
 
             {/* Academics routes */}
             <Route path="academics/subjects" element={<SchoolRoute><ModuleRoute module="academics"><ManagementRoute><SubjectsPage /></ManagementRoute></ModuleRoute></SchoolRoute>} />

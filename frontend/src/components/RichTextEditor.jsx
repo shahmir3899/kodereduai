@@ -1,6 +1,6 @@
 import { useEditor, EditorContent } from '@tiptap/react'
 import { useState } from 'react'
-import { createExtensions, isRTLLanguage, LANGUAGE_OPTIONS, unwrapLanguage, wrapLanguage } from './richEditorCore'
+import { createExtensions, isRTLLanguage, LANGUAGE_OPTIONS, openLanguage, wrapLanguage } from './richEditorCore'
 import DiagramCanvas from './DiagramCanvas'
 import 'katex/dist/katex.min.css'
 
@@ -17,8 +17,8 @@ import 'katex/dist/katex.min.css'
  * `imageUrl` is a plain image URL (or object URL for an not-yet-uploaded draft), rendered
  * as a small attached-diagram preview under the toolbar when the panel is closed.
  */
-export default function RichTextEditor({ value, onChange, placeholder = 'Enter text...', diagram }) {
-  const [{ language, inner: initialInner }] = useState(() => unwrapLanguage(value))
+export default function RichTextEditor({ value, onChange, placeholder = 'Enter text...', diagram, defaultLanguage }) {
+  const [{ language, inner: initialInner }] = useState(() => openLanguage(value, defaultLanguage))
   const [currentLanguage, setCurrentLanguage] = useState(language)
   const [diagramOpen, setDiagramOpen] = useState(false)
   const rtl = isRTLLanguage(currentLanguage)

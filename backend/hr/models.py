@@ -1,3 +1,4 @@
+import datetime
 from django.db import models
 from core.models import ScannedDocumentMixin
 from django.core.validators import MinValueValidator, MaxValueValidator
@@ -607,3 +608,104 @@ class PerformanceAppraisal(models.Model):
 
     def __str__(self):
         return f"{self.staff_member.full_name} — Rating: {self.rating}/5"
+
+
+def default_performance_weights():
+    # Plan section 3. Must total 100; a measure that does not apply to a teacher is dropped and the
+    # rest are rescaled, so these are the weights for a teacher to whom every measure applies.
+    return {
+        'attendance_marking': 20,
+        'lesson_plans': 15,
+        'marks_entry': 15,
+        'own_attendance': 10,
+        'homework': 10,
+        'grading': 10,
+        'messages_answered': 5,
+        'question_papers': 5,
+        'book_content': 5,
+        'login_days': 5,
+    }
+
+
+def default_performance_bands():
+    # Lowest score for each band, checked from the top.
+    return [
+        {'key': 'EXCELLENT', 'label': 'Excellent', 'min': 90},
+        {'key': 'GOOD', 'label': 'Good', 'min': 75},
+        {'key': 'FAIR', 'label': 'Fair', 'min': 60},
+        {'key': 'NEEDS_ATTENTION', 'label': 'Needs attention', 'min': 0},
+    ]
+
+
+class TeacherPerformanceConfig(models.Model):
+    """One row per school: every weight, target and deadline the teacher performance report uses.
+    Created with defaults the first time a school's report or config is read."""
+    school = models.OneToOneField(
+        'schools.School',
+        on_delete=models.CASCADE,
+        related_name='teacher_performance_config',
+    )
+    weights = models.JSONField(default=default_performance_weights)
+    attendance_cutoff_time = models.TimeField(default=datetime.time(11, 0))
+    marks_deadline_days = models.PositiveSmallIntegerField(default=7)
+    grading_deadline_days = models.PositiveSmallIntegerField(default=3)
+    message_reply_hours = models.PositiveSmallIntegerField(default=24)
+    homework_per_week = models.PositiveSmallIntegerField(default=2)
+    papers_per_month = models.PositiveSmallIntegerField(default=1)
+    content_blocks_per_month = models.PositiveSmallIntegerField(default=10)
+    bands = models.JSONField(default=default_performance_bands)
+    show_rank_to_teachers = models.BooleanField(default=True)
+    enabled = models.BooleanField(default=True)
+    updated_by = models.ForeignKey(
+        'users.User',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='+',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Teacher Performance Config'
+
+    def __str__(self):
+        return f"Teacher performance config for school {self.school_id}"
+
+
+class TeacherPerformanceSnapshot(models.Model):
+    """A frozen result for one teacher and one period (filled by the monthly task, Phase 3), so a
+    past month keeps the figures it had even after class or subject assignments change."""
+    school = models.ForeignKey(
+        'schools.School',
+        on_delete=models.CASCADE,
+        related_name='teacher_performance_snapshots',
+    )
+    staff_member = models.ForeignKey(
+        StaffMember,
+        on_delete=models.CASCADE,
+        related_name='performance_snapshots',
+    )
+    period_start = models.DateField()
+    period_end = models.DateField()
+    overall_score = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
+    rank = models.PositiveIntegerField(null=True, blank=True)
+    out_of = models.PositiveIntegerField(default=0)
+    breakdown = models.JSONField(default=dict)
+    config_used = models.JSONField(default=dict)
+    computed_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-period_start', 'rank']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['school', 'staff_member', 'period_start', 'period_end'],
+                name='unique_teacher_performance_snapshot',
+            ),
+        ]
+        indexes = [
+            models.Index(fields=['school', 'period_start', 'period_end']),
+        ]
+
+    def __str__(self):
+        return f"{self.staff_member_id} {self.period_start}..{self.period_end}: {self.overall_score}"

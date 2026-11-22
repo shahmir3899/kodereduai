@@ -17,11 +17,13 @@ interface Props {
   placeholder?: string;
   // Bump to load `value` into the editor again (a sheet that was reset, or opened for another question).
   resetKey?: number | string;
+  // An empty box opens in this language (an Urdu paper's boxes open in Urdu, as on the web).
+  defaultLanguage?: string;
 }
 
 // The question-text editor, the same one the web uses: it runs in a WebView built from the web's own editor
 // definition (an iframe on Expo web), so both write identical HTML. This component is the toolbar and the bridge.
-export default function RichTextField({ label, value, onChange, placeholder = 'Write the question…', resetKey }: Props) {
+export default function RichTextField({ label, value, onChange, placeholder = 'Write the question…', resetKey, defaultLanguage }: Props) {
   const webview = useRef<WebView>(null);
   const frame = useRef<HTMLIFrameElement | null>(null);
   const [ready, setReady] = useState(false);
@@ -38,11 +40,15 @@ export default function RichTextField({ label, value, onChange, placeholder = 'W
 
   const handle = useCallback((msg: PageMessage | null) => {
     if (!msg) return;
-    if (msg.type === 'ready') { setReady(true); send(initMessage(latest.current, placeholder)); }
+    if (msg.type === 'ready') {
+      setReady(true);
+      send(initMessage(latest.current, placeholder));
+      if (defaultLanguage && defaultLanguage !== 'en' && !String(latest.current ?? '').trim()) send(languageMessage(defaultLanguage));
+    }
     else if (msg.type === 'change') { latest.current = msg.html; onChange(msg.html); }
     else if (msg.type === 'state') { setActive(msg.active); setLanguage(msg.language); }
     else if (msg.type === 'height') setHeight(clampEditorHeight(msg.px));
-  }, [onChange, placeholder, send]);
+  }, [defaultLanguage, onChange, placeholder, send]);
 
   // Expo web: the page is an iframe and talks through window messages.
   useEffect(() => {

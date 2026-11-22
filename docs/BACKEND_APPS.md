@@ -432,6 +432,15 @@ school(FK), staff(FK), date, status (PRESENT/ABSENT/LATE/LEAVE), check_in, check
 ### PerformanceAppraisal
 school(FK), staff(FK), academic_year(FK), review_period, scores(JSON), comments, overall_rating, reviewed_by(FK), status
 
+### TeacherPerformanceConfig
+school(OneToOne), weights(JSON, total 100), attendance_cutoff_time (default 11:00), marks_deadline_days, grading_deadline_days, message_reply_hours, homework_per_week, papers_per_month, content_blocks_per_month, bands(JSON), show_rank_to_teachers, enabled (teachers can see their own score), updated_by(FK). Created with defaults on first read.
+
+### TeacherPerformanceSnapshot
+school(FK), staff_member(FK), period_start, period_end, overall_score, rank, out_of, breakdown(JSON: the full per-teacher result), config_used(JSON), computed_at. Unique (school, staff_member, period_start, period_end). Written by the monthly freeze (`hr.tasks.freeze_teacher_performance`, Beat 03:15 on the 1st; manual `run_scheduled_jobs --teacher-performance`).
+
+### Teacher performance report (hr/performance/)
+`periods.py` (calendar, leave, pro-rating), `metrics.py` (ten scored measures, whole-school grouped queries), `info.py` (information-only figures), `scoring.py`, `explain.py`, `service.py` (compute), `snapshots.py` (freeze / read / notify), `export.py` (PDF, Excel). Plan: `docs/TEACHER_PERFORMANCE_PLAN.md`. Related new columns: `attendance.AttendanceRecord.marked_by`, `examinations.StudentMark.entered_by`, `lms.ContentBlock.created_by`, and `core.UserActiveDay` (one row per user per day, written on sign-in and token refresh).
+
 ### Permissions (hr/permissions.py)
 - **IsManagerOrAdminOrReadOnly** — Full write access for ADMIN_ROLES + MANAGER; read-only otherwise (renamed from `IsHRManagerOrAdminOrReadOnly`)
 - **CanManageOwnLeaveApplication** — Leave self-service: HR_WRITE_ROLES get full CRUD; a TEACHER may only `create`/`cancel` their own `LeaveApplication` (object-level check on `obj.staff_member.user_id`), and cannot approve/reject. `LeaveApplicationViewSet.get_queryset()` additionally scopes a TEACHER to their own applications, and `perform_create()` forces `staff_member` to the requesting teacher's `staff_profile`.

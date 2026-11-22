@@ -1,5 +1,5 @@
 import {
-  buildQuestionPayload, difficultyTone, emptyQuestionForm, hasPicture, isEditableType, matchingPairs, pictureProblem, questionToForm, slotsFor,
+  bankMatching, buildQuestionPayload, difficultyTone, emptyQuestionForm, hasPicture, isEditableType, matchingPairs, pictureProblem, questionToForm, slotsFor,
   typeLabel, validateQuestion, type Question,
 } from '../services/questionBank';
 
@@ -95,3 +95,18 @@ describe('matching, fill in the blank, topics and pictures', () => {
     expect(pictureProblem('image/png', 1024)).toBeNull();
   });
 });
+
+describe('matching questions in either stored shape (Paper Builder v2)', () => {
+  it('opens a block-editor text-pair question with its pairs', () => {
+    const q = { id: 1, subject: 4, question_type: 'MATCHING', question_text: 'Match.', marks: '2', difficulty_level: 'MEDIUM',
+      type_data: { pairs: [{ left: 'Fish', right: 'Water' }, { left: 'Bird', right: 'Nest' }] } } as unknown as Parameters<typeof questionToForm>[0];
+    expect(questionToForm(q)).toMatchObject({ left: ['Fish', 'Bird'], right: ['Water', 'Nest'], pairs: [0, 1] });
+  });
+
+  it('leaves the bank shape as it is', () => {
+    const bank = { left_items: ['a', 'b'], right_items: ['x', 'y'], pairs: [{ left: 0, right: 1 }] };
+    expect(bankMatching(bank)).toBe(bank);
+    expect(bankMatching({})).toEqual({});
+  });
+});
+

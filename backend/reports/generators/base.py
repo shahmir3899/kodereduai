@@ -241,6 +241,7 @@ class BaseReportGenerator:
         try:
             from openpyxl import Workbook
             from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+            from openpyxl.utils import get_column_letter
 
             wb = Workbook()
             ws = wb.active
@@ -290,13 +291,14 @@ class BaseReportGenerator:
                         cell = ws.cell(row=row_idx, column=col_idx, value=value)
                         cell.border = thin_border
 
-                # Auto-width columns
-                for col in ws.columns:
+                # Auto-width columns. The letter comes from the index: row 1 is merged
+                # (A1:F1), so col[0] in B-F is a MergedCell with no column_letter.
+                for col_idx, col in enumerate(ws.columns, 1):
                     max_length = 0
                     for cell in col:
                         if cell.value:
                             max_length = max(max_length, len(str(cell.value)))
-                    ws.column_dimensions[col[0].column_letter].width = min(max_length + 2, 40)
+                    ws.column_dimensions[get_column_letter(col_idx)].width = min(max_length + 2, 40)
 
             buffer = io.BytesIO()
             wb.save(buffer)

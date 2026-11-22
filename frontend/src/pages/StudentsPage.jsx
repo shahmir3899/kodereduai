@@ -40,6 +40,8 @@ import StudentFilters from './students/components/StudentFilters'
 import StudentsList from './students/components/StudentsList'
 import SelectionBar from './students/components/SelectionBar'
 import BulkUploadModal from './students/components/BulkUploadModal'
+import BulkDeleteStudentsModal from './students/components/BulkDeleteStudentsModal'
+import { importStudentsInBatches } from './students/bulkImport'
 import ConvertAccountModal from './students/components/ConvertAccountModal'
 import BulkConvertModal from './students/components/BulkConvertModal'
 
@@ -70,6 +72,9 @@ export default function StudentsPage() {
   const [showBulkModal, setShowBulkModal] = useState(false)
   const [bulkData, setBulkData] = useState({ class_id: '', students: [] })
   const [isUploading, setIsUploading] = useState(false)
+  const [bulkProgress, setBulkProgress] = useState(null)
+  const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false)
+  const [bulkResult, setBulkResult] = useState(null)
   const [cropImageSrc, setCropImageSrc] = useState(null)
 
   const [view, setView] = useViewPreference('students')
@@ -283,11 +288,6 @@ export default function StudentsPage() {
         return
       }
 
-      if (issues.length > 0) {
-        showWarning(`Found ${issues.length} issues. Check console for details.`)
-        console.log('Upload Issues:', issues)
-      }
-
       const totalStudents = Object.values(studentsByClass).flat().length
       if (totalStudents === 0) {
         showError('No valid students found in file')
@@ -298,7 +298,9 @@ export default function StudentsPage() {
         studentsByClass,
         totalStudents,
         classCount: Object.keys(studentsByClass).length,
+        issues, // rows skipped by the parser (unknown class); shown in the dialog, not the console
       })
+      setBulkResult(null)
       setShowBulkModal(true)
     } catch (err) {
       showError('Failed to parse file. Make sure it is a valid Excel or CSV file.')
@@ -306,55 +308,57 @@ export default function StudentsPage() {
     }
   }
 
-  // Handle bulk upload confirm
+  // "classId" or "classId:sessionClassId" -> the name the user sees in the sheet.
+  const bulkLabelFor = (key) => {
+    const [classId, sessionClassId] = key.split(':')
+    const section = sessionClassId && sessionClasses.find((sc) => sc.id === parseInt(sessionClassId))
+    if (section) return section.label || section.display_name
+    return classesList.find((c) => c.id === parseInt(classId))?.name || `Class ${classId}`
+  }
+
+  // Handle bulk upload confirm. Batching, per-row failures and retry rows live in importStudentsInBatches.
   const handleBulkUpload = async () => {
-    const { studentsByClass } = bulkData
-
     setIsUploading(true)
+    setBulkProgress(null)
     try {
-      let totalCreated = 0
-      let totalUpdated = 0
-      let totalErrors = []
-
-      for (const [key, students] of Object.entries(studentsByClass)) {
-        // Key is "classId" or "classId:sessionClassId" (see parseStudentRows).
-        const [classId, sessionClassId] = key.split(':')
-        const response = await studentsApi.bulkCreateStudents({
-          school_id: selectedSchoolId,
-          class_id: parseInt(classId),
-          ...(sessionClassId && { session_class_id: parseInt(sessionClassId) }),
-          students,
-        })
-        totalCreated += response.data.created_count || 0
-        totalUpdated += response.data.updated_count || 0
-        if (response.data.errors?.length > 0) {
-          totalErrors.push(...response.data.errors)
-        }
-      }
-
+      const result = await importStudentsInBatches({
+        schoolId: selectedSchoolId,
+        studentsByClass: bulkData.studentsByClass,
+        labelFor: bulkLabelFor,
+        onProgress: setBulkProgress,
+      })
       queryClient.invalidateQueries({ queryKey: ['students'] })
       queryClient.invalidateQueries({ queryKey: ['classes'] })
-      setShowBulkModal(false)
-      setBulkData({ class_id: '', students: [] })
 
-      if (totalErrors.length > 0) {
-        showWarning(`Created ${totalCreated}, updated ${totalUpdated} students. ${totalErrors.length} failed.`)
-        console.log('Upload errors:', totalErrors)
+      const parts = []
+      if (result.added > 0) parts.push(`${result.added} added`)
+      if (result.updated > 0) parts.push(`${result.updated} updated`)
+      const summary = parts.join(', ') || 'Nothing saved'
+
+      if (result.failedCount === 0) {
+        setShowBulkModal(false)
+        setBulkData({ class_id: '', students: [] })
+        setBulkResult(null)
+        showSuccess(`${summary}!`)
       } else {
-        const parts = []
-        if (totalCreated > 0) parts.push(`${totalCreated} created`)
-        if (totalUpdated > 0) parts.push(`${totalUpdated} updated`)
-        showSuccess(`Successfully ${parts.join(', ')}!`)
+        // Keep the dialog open on just the failed rows so the user can retry (saved rows are not resent).
+        const remaining = result.failedRows
+        setBulkData((prev) => ({
+          ...prev,
+          studentsByClass: remaining,
+          totalStudents: result.failedCount,
+          classCount: Object.keys(remaining).length,
+          issues: [],
+        }))
+        setBulkResult({ summary, failures: result.failures })
+        showWarning(`${summary}. ${result.failedCount} failed.`)
       }
     } catch (error) {
       console.error('Bulk upload error:', error)
-      const message = error.response?.data?.detail ||
-                      error.response?.data?.error ||
-                      error.message ||
-                      'Failed to upload students. Please try again.'
-      showError(message)
+      showError(error.message || 'Failed to upload students. Please try again.')
     } finally {
       setIsUploading(false)
+      setBulkProgress(null)
     }
   }
 
@@ -661,8 +665,11 @@ export default function StudentsPage() {
           classes={classes}
           sessionClasses={sessionClasses}
           isUploading={isUploading}
+          progress={bulkProgress}
+          result={bulkResult}
           onCancel={() => {
             setShowBulkModal(false)
+            setBulkResult(null)
             setBulkData({ class_id: '', students: [] })
           }}
           onConfirm={handleBulkUpload}
@@ -677,7 +684,16 @@ export default function StudentsPage() {
           activeAcademicYearId={activeAcademicYear?.id}
           onCreateAccounts={() => setShowBulkConvertModal(true)}
           onDownloadReports={handleDownloadSelectedReports}
+          onDelete={canManageLifecycle ? () => setShowBulkDeleteModal(true) : undefined}
           onClear={selection.clear}
+        />
+      )}
+
+      {showBulkDeleteModal && (
+        <BulkDeleteStudentsModal
+          students={allStudents.filter((s) => selectedIds.has(s.id))}
+          onDone={selection.clear}
+          onClose={() => setShowBulkDeleteModal(false)}
         />
       )}
 

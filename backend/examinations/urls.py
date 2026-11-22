@@ -1,4 +1,4 @@
-from django.urls import path, include
+from django.urls import path, include, re_path
 from rest_framework.routers import DefaultRouter
 from .views import (
     ExamTypeViewSet, ExamGroupViewSet, ExamViewSet, ExamSubjectViewSet,
@@ -6,8 +6,9 @@ from .views import (
     QuestionViewSet, ExamPaperViewSet, PaperUploadViewSet, PaperFeedbackViewSet,
     StudentTermAssessmentView, StudentTermAssessmentRosterView, StudentTermAssessmentBulkSaveView,
     StudentTermAssessmentAIRemarkView, AcademicRiskView,
-    WorksheetViewSet, WorksheetUploadViewSet,
+    WorksheetViewSet,
 )
+from .paper_pictures import PaperBlockTypesView, PaperPictureViewSet, library_picture
 
 router = DefaultRouter()
 router.register(r'exam-types', ExamTypeViewSet, basename='exam-type')
@@ -26,7 +27,9 @@ router.register(r'paper-feedback', PaperFeedbackViewSet, basename='paper-feedbac
 
 # Worksheets
 router.register(r'worksheets', WorksheetViewSet, basename='worksheet')
-router.register(r'worksheet-uploads', WorksheetUploadViewSet, basename='worksheet-upload')
+
+# Block-based Paper Builder: school picture uploads, library catalog
+router.register(r'paper-pictures', PaperPictureViewSet, basename='paper-picture')
 
 urlpatterns = [
     path('', include(router.urls)),
@@ -38,4 +41,6 @@ urlpatterns = [
     path('student-term-assessment/bulk-save/', StudentTermAssessmentBulkSaveView.as_view(), name='student-term-assessment-bulk-save'),
     path('student-term-assessment/ai-remark/', StudentTermAssessmentAIRemarkView.as_view(), name='student-term-assessment-ai-remark'),
     path('academic-risk/', AcademicRiskView.as_view(), name='academic-risk'),
+    path('paper-blocks/', PaperBlockTypesView.as_view(), name='paper-blocks'),
+    re_path(r'^paper-picture-library/(?P<name>[a-z0-9_]{1,60})/$', library_picture, name='paper-picture-library'),
 ]

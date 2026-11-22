@@ -15,6 +15,7 @@ Run individual jobs:
     python manage.py run_scheduled_jobs --notification-queue
     python manage.py run_scheduled_jobs --dispatch-scheduled
     python manage.py run_scheduled_jobs --toc-stale-cleanup
+    python manage.py run_scheduled_jobs --teacher-performance [--school ID] [--month YYYY-MM]   (monthly; not in --all)
 
 Why this exists
 ---------------
@@ -37,6 +38,12 @@ class Command(BaseCommand):
         parser.add_argument('--notification-queue', action='store_true', help='Process the notification send queue.')
         parser.add_argument('--dispatch-scheduled', action='store_true', help='Dispatch scheduled notifications.')
         parser.add_argument('--toc-stale-cleanup', action='store_true', help='Mark stale TOC import jobs timed-out.')
+        parser.add_argument(
+            '--teacher-performance', action='store_true',
+            help="Freeze last month's teacher performance report and notify teachers.",
+        )
+        parser.add_argument('--school', type=int, action='append', help='With --teacher-performance: only this school (repeatable).')
+        parser.add_argument('--month', help='With --teacher-performance: re-freeze this month (YYYY-MM) instead; no notifications.')
         parser.add_argument('--force', action='store_true', help='Skip time-of-day guards inside tasks.')
 
     def handle(self, *args, **options):
@@ -44,7 +51,8 @@ class Command(BaseCommand):
 
         if not any([run_all, options['absence_digest'], options['daily_absence_summary'],
                     options['fee_reminders'], options['notification_queue'],
-                    options['dispatch_scheduled'], options['toc_stale_cleanup']]):
+                    options['dispatch_scheduled'], options['toc_stale_cleanup'],
+                    options['teacher_performance']]):
             self.stderr.write(self.style.ERROR(
                 'Specify at least one job flag or use --all.  Run with --help for options.'
             ))
@@ -70,6 +78,10 @@ class Command(BaseCommand):
         if run_all or options['toc_stale_cleanup']:
             self._run_toc_stale()
 
+        # Not part of --all: --all is the daily fallback, and this is monthly and messages teachers.
+        if options['teacher_performance']:
+            self._run_teacher_performance(options.get('school'), options.get('month'))
+
     # ------------------------------------------------------------------
     # helpers
     # ------------------------------------------------------------------
@@ -85,6 +97,22 @@ class Command(BaseCommand):
             self.stdout.write(self.style.SUCCESS(f'  {task_name} done: {result}'))
         except Exception as exc:
             self.stderr.write(self.style.ERROR(f'  {task_name} FAILED: {exc}'))
+
+    def _run_teacher_performance(self, school_ids, month):
+        from hr.performance.snapshots import freeze_month, freeze_previous_month_for_all
+        from schools.models import School
+
+        self.stdout.write('Running teacher performance freeze…')
+        try:
+            if month:
+                year, mon = (int(x) for x in month.split('-'))
+                ids = school_ids or list(School.objects.filter(is_active=True).values_list('id', flat=True))
+                done = {sid: len(freeze_month(sid, year, mon)['teachers']) for sid in ids}
+            else:
+                done = freeze_previous_month_for_all(school_ids=school_ids)
+            self.stdout.write(self.style.SUCCESS(f'  teacher performance frozen: {done}'))
+        except Exception as exc:
+            self.stderr.write(self.style.ERROR(f'  teacher performance FAILED: {exc}'))
 
     def _run_toc_stale(self):
         from lms.tasks import mark_stale_toc_jobs_timed_out

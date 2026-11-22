@@ -8,6 +8,7 @@ from .views import (
     StaffQualificationViewSet, StaffDocumentViewSet,
     StaffRiskView,
 )
+from .performance_views import TeacherPerformanceViewSet
 
 router = DefaultRouter()
 router.register(r'departments', StaffDepartmentViewSet, basename='staff-department')
@@ -21,6 +22,7 @@ router.register(r'attendance', StaffAttendanceViewSet, basename='staff-attendanc
 router.register(r'appraisals', PerformanceAppraisalViewSet, basename='performance-appraisal')
 router.register(r'qualifications', StaffQualificationViewSet, basename='staff-qualification')
 router.register(r'documents', StaffDocumentViewSet, basename='staff-document')
+router.register(r'teacher-performance', TeacherPerformanceViewSet, basename='teacher-performance')
 
 urlpatterns = [
     path('staff-risk/', StaffRiskView.as_view(), name='staff-risk'),

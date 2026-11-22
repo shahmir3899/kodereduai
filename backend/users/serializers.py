@@ -13,6 +13,7 @@ from django.conf import settings
 from django.contrib.auth import get_user_model
 from schools.models import School
 from core.models import LoginEvent
+from core.activity import record_active_day
 from core.roles import role_config
 
 User = get_user_model()
@@ -36,6 +37,12 @@ class CustomTokenRefreshSerializer(TokenRefreshSerializer):
 
     def validate(self, attrs):
         data = super().validate(attrs)
+        # A refresh is the only sign of use from a session that never signs in again.
+        try:
+            payload = RefreshToken(attrs['refresh'], verify=False).payload
+            record_active_day(payload.get('user_id'), payload.get('school_id'))
+        except Exception:
+            logger.exception('Could not read refresh token for active-day marker')
         if 'refresh' in data:
             token = RefreshToken(data['refresh'])
             if token.payload.get('client') == MOBILE_CLIENT:
@@ -154,6 +161,7 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
             self._record_login_event(user, data['user']['school_id'], data['user']['role'])
         except Exception:
             logger.exception('Failed to record LoginEvent for user_id=%s', user.id)
+        record_active_day(user.id, data['user']['school_id'])
 
         return data
 

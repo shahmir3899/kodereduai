@@ -1,0 +1,54 @@
+{
+  "version": 1,
+  "direction": "ltr",
+  "footer": "Smart creation demo — Class: Two (Math)",
+  "header": {
+    "school_name": "THE FOCUS MONTESSORI & SCHOOL",
+    "exam_title": "2nd Term Examination 2026-27",
+    "subject": "Math",
+    "class_name": "Two",
+    "marks_table": true,
+    "sign_label": "Teacher’s Sign"
+  },
+  "blocks": [
+    {"type": "picture_answer", "title": "Write the time shown on each clock.", "marks": 6,
+     "data": {"per_row": 3, "answer": "line", "items": [
+       {"picture": {"make": "clock", "time": "3:00"}},
+       {"picture": {"make": "clock", "time": "7:30"}},
+       {"picture": {"make": "clock", "time": "10:15"}}
+     ]}},
+    {"type": "picture_answer", "title": "Write the fraction of the shaded part.", "marks": 4,
+     "data": {"per_row": 4, "answer": "box", "items": [
+       {"picture": {"make": "fraction", "shape": "circle", "parts": 2, "shaded": 1}},
+       {"picture": {"make": "fraction", "shape": "circle", "parts": 4, "shaded": 3}},
+       {"picture": {"make": "fraction", "shape": "circle", "parts": 8, "shaded": 5}},
+       {"picture": {"make": "fraction", "shape": "bar", "parts": 5, "shaded": 2}}
+     ]}},
+    {"type": "colour_picture", "title": "Fill in the missing numbers on the number line.", "marks": 4,
+     "data": {"frame": "none", "height": 120,
+              "picture": {"make": "number_line", "start": 0, "end": 50, "step": 5, "hide": [15, 30, 40, 45]}}},
+    {"type": "match_columns", "title": "Match the dice with the tally marks.", "marks": 4,
+     "data": {"dots": true,
+              "left": [{"picture": {"make": "dice", "value": 5}}, {"picture": {"make": "dice", "value": 3}},
+                       {"picture": {"make": "dice", "value": 6}}, {"picture": {"make": "dice", "value": 2}}],
+              "right": [{"picture": {"make": "tally", "count": 3}}, {"picture": {"make": "tally", "count": 6}},
+                        {"picture": {"make": "tally", "count": 2}}, {"picture": {"make": "tally", "count": 5}}]}},
+    {"type": "picture_answer", "title": "Count the dots and write the number.", "marks": 3,
+     "data": {"per_row": 3, "answer": "box", "items": [
+       {"picture": {"make": "ten_frame", "filled": 7}},
+       {"picture": {"make": "ten_frame", "filled": 10}},
+       {"picture": {"make": "ten_frame", "filled": 14}}
+     ]}},
+    {"type": "picture_choice", "title": "Circle the correct name of the shape.", "marks": 4,
+     "data": {"per_row": 4, "items": [
+       {"picture": {"make": "shape", "shape": "hexagon"}, "options": ["Hexagon", "Oval"]},
+       {"picture": {"make": "shape", "shape": "diamond"}, "options": ["Star", "Diamond"]},
+       {"picture": {"make": "shape", "shape": "pentagon"}, "options": ["Pentagon", "Square"]},
+       {"picture": {"make": "shape", "shape": "oval"}, "options": ["Circle", "Oval"]}
+     ]}},
+    {"type": "picture_answer", "title": "How many apples are there in all? Write the multiplication.", "marks": 5,
+     "data": {"per_row": 1, "answer": "line", "items": [
+       {"picture": {"make": "repeat", "picture": "apple", "count": 12, "per_row": 4}}
+     ]}}
+  ]
+}

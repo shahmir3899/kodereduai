@@ -57,33 +57,17 @@ vi.mock('../../../components/ClassSelector', () => ({
 }))
 
 vi.mock('../ImageCapturePaperTab', () => ({ default: () => <div>Image Tab</div> }))
-vi.mock('../ManualEntryPaperTab', () => ({
-  default: function MockManualEntryPaperTab({ draftData, onDraftDataChange }) {
+// The block editor has its own tests (blocks/__tests__); here it only reports a save, as the real one
+// does after each autosave.
+vi.mock('../blocks/BlockPaperEditor', () => ({
+  default: function MockBlockPaperEditor({ onSaved }) {
     return (
-      <div>
-        <button
-          type="button"
-          onClick={() =>
-            onDraftDataChange({
-              ...draftData,
-              questions: [...(draftData.questions || []), {
-                local_id: 'new-q',
-                question_text: 'Newly added',
-                question_type: 'SHORT',
-                difficulty_level: 'MEDIUM',
-                marks: 2,
-                bloom_level: 'apply',
-              }],
-            })
-          }
-        >
-          Add Question
-        </button>
-      </div>
+      <button type="button" onClick={() => onSaved?.({ id: 1, total_marks: 12, overused_questions: [] })}>
+        Save blocks
+      </button>
     )
   },
 }))
-
 vi.mock('../../../services/api', () => ({
   questionPaperApi: {
     getExamPaper: vi.fn().mockResolvedValue({
@@ -168,10 +152,7 @@ describe('SLO Coverage Panel in Paper Builder', () => {
     renderWithProviders(<QuestionPaperBuilderPage />)
 
     await waitFor(() => {
-      expect(screen.getByText('Total SLOs')).toBeInTheDocument()
-      expect(screen.getByText('2')).toBeInTheDocument()
-      expect(screen.getByText('Covered')).toBeInTheDocument()
-      expect(screen.getByText('1')).toBeInTheDocument()
+      expect(screen.getByText('Covered 1 of 2 SLOs')).toBeInTheDocument()
     })
   })
 
@@ -183,16 +164,16 @@ describe('SLO Coverage Panel in Paper Builder', () => {
     })
   })
 
-  it('panel updates when question is added', async () => {
+  it('panel updates when the editor saves the paper', async () => {
     const user = userEvent.setup()
     renderWithProviders(<QuestionPaperBuilderPage />)
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Add Question' })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Save blocks' })).toBeInTheDocument()
     })
     const callsBefore = mockGetCoverageStats.mock.calls.length
 
-    await user.click(screen.getByRole('button', { name: 'Add Question' }))
+    await user.click(screen.getByRole('button', { name: 'Save blocks' }))
 
     await waitFor(() => {
       expect(mockGetCoverageStats.mock.calls.length).toBeGreaterThan(callsBefore)

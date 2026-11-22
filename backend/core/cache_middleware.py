@@ -15,6 +15,12 @@ response even when React Query tries to refetch).
 from django.utils.deprecation import MiddlewareMixin
 
 
+# Files that ship with the app and never change per user or after a save, so they keep the long cache
+# their view sets. The paper picture library is drawn many times per preview and in the picker grid;
+# with no-cache (and no ETag) every one was downloaded again each time.
+LONG_CACHE_PREFIXES = ('/api/examinations/paper-picture-library/',)
+
+
 class APICacheControlMiddleware(MiddlewareMixin):
     """Set Cache-Control headers on API responses."""
 
@@ -23,6 +29,9 @@ class APICacheControlMiddleware(MiddlewareMixin):
 
         # Only affect API endpoints
         if not path.startswith('/api/'):
+            return response
+
+        if path.startswith(LONG_CACHE_PREFIXES) and response.status_code == 200:
             return response
 
         # Always override Cache-Control for API responses to prevent

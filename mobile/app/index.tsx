@@ -3,7 +3,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useAuth } from '../contexts/AuthContext';
 import Spinner from '../components/ui/Spinner';
 import { homeRouteFor } from '../navigation/personas';
-import { ownRouteForPath } from '../navigation/routes';
+import { ownTargetForNext } from '../navigation/routes';
 import { getSchoolCode } from '../services/auth';
 
 export default function Index() {
@@ -24,7 +24,8 @@ export default function Index() {
       return;
     }
 
-    router.replace((next && ownRouteForPath(persona, next)) || (homeRouteFor(persona) as any));
+    const target = next ? ownTargetForNext(persona, next) : undefined;
+    router.replace((target as any) || (homeRouteFor(persona) as any));
   }, [loading, isAuthenticated, persona, router, next]);
 
   return <Spinner fullScreen message="Loading..." />;

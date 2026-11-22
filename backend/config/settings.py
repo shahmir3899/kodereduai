@@ -450,6 +450,12 @@ CELERY_BEAT_SCHEDULE = {
     # 11am" is admin-triggered on demand now (RunNotificationJobView,
     # job='attendance_reminder'); notifications.tasks.send_class_teacher_attendance_reminders
     # remains as a manual `run_scheduled_jobs` backfill.
+    'monthly-teacher-performance-snapshot': {
+        # Freezes last month's teacher performance report (hr/performance/snapshots.py) and tells each
+        # teacher. 03:15 on the 1st: after the 2am nightly snapshots, clear of the 3am weekly cleanups.
+        'task': 'hr.tasks.freeze_teacher_performance',
+        'schedule': crontab(day_of_month=1, hour=3, minute=15),
+    },
     'nightly-attendance-risk-snapshot': {
         'task': 'academic_sessions.tasks.recompute_attendance_risk_snapshots',
         'schedule': crontab(hour=2, minute=0),
@@ -674,6 +680,18 @@ PAPER_LAYOUT_V2 = os.getenv('PAPER_LAYOUT_V2', 'false').lower() in ('1', 'true',
 
 # Groq Vision model (if using groq provider)
 GROQ_VISION_MODEL = os.getenv('GROQ_VISION_MODEL', 'llama-3.2-11b-vision-preview')
+
+# Paper Builder v2 scan (photo -> blocks). Separate from GROQ_VISION_MODEL so the old text-only scan
+# (still used by the phone until Phase 6) is not changed by trying models here. The Groq default was
+# Groq's vision model on 2026-11-16 (Llama 4 Scout was retired); Groq retires models often, so it is overridable.
+# Main scan service, then the fallback used when it is busy, out of quota or not set up (user decision
+# 2026-11-16 after testing both on the Play Group papers). Set PAPER_SCAN_FALLBACK='' for no fallback.
+PAPER_SCAN_PROVIDER = os.getenv('PAPER_SCAN_PROVIDER', 'gemini')  # 'gemini' or 'groq'
+PAPER_SCAN_FALLBACK = os.getenv('PAPER_SCAN_FALLBACK', 'groq')
+PAPER_SCAN_GROQ_MODEL = os.getenv('PAPER_SCAN_GROQ_MODEL', 'qwen/qwen3.8-27b')
+PAPER_SCAN_GROQ_MAX_TOKENS = int(os.getenv('PAPER_SCAN_GROQ_MAX_TOKENS', '1000'))
+GEMINI_API_KEY = os.getenv('GEMINI_API_KEY', '')
+PAPER_SCAN_GEMINI_MODEL = os.getenv('PAPER_SCAN_GEMINI_MODEL', 'gemini-3.8-flash')
 
 # Google Cloud Vision API Configuration
 # Option 1: Use API Key (simpler setup)

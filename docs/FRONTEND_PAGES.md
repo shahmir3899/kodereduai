@@ -44,7 +44,7 @@ The `/dashboard` route uses **DashboardRouter.jsx** to render a role-specific da
 |------|-----------|-------------|
 | SCHOOL_ADMIN | DashboardPage.jsx | Module-aware command center: 4 KPI cards (Students, Attendance, Fees, Staff), AI Insights with module badges, Module Health Grid (10 modules), Attendance bar, Finance snapshot, Session Health, Attendance Risk, Quick Actions, NotificationsFeed. All sections module-gated |
 | PRINCIPAL | DashboardPage.jsx (variant="principal") | Same as admin but quick actions show Lesson Plans, Examinations, Class Management |
-| TEACHER | TeacherDashboard.jsx | 4 KPIs (Classes Today with "Now" indicator, Attendance to Mark, Pending Grading, Upcoming Exams), timetable with current period highlighting, Exams & Marks Entry, Lesson Plans progress bar, Quick Actions, NotificationsFeed |
+| TEACHER | TeacherDashboard.jsx | 4 KPIs (Classes Today with "Now" indicator, Attendance to Mark, Pending Grading, Upcoming Exams), timetable with current period highlighting, Exams & Marks Entry, Lesson Plans progress bar, Quick Actions, NotificationsFeed, "My performance" card (`components/teacher/MyPerformanceCard.jsx`, hidden when not on the report) |
 | MANAGER | ManagerDashboard.jsx | 6 HR KPIs (2 rows) + 4 content KPIs (Lesson Plans, Active Assignments, Question Bank, Exam Papers), department breakdown bars, pending leave with inline approve/reject, top absentees, payroll overview, Quick Actions (HR + content links), NotificationsFeed |
 | finance manager | FinanceManagerDashboard.jsx | 4 KPIs, fee collection by class (color-coded), recent transactions, overdue fees, income vs expense bars, per-account balances, Quick Actions, NotificationsFeed |
 | STAFF | StaffDashboard.jsx | 4 KPIs (Attendance, Leave, Salary, Notifications), mini attendance calendar, leave balance breakdown, recent payslips, assigned inventory, NotificationsFeed |
@@ -126,7 +126,9 @@ Redirects: /attendance/upload, /attendance/review, /attendance/records, /accurac
 | /hr/payroll | PayrollPage.jsx | Payslip generation, PDF download, delete | GET/POST/DELETE payslips/, download-pdf/ |
 | /hr/leave | LeaveManagementPage.jsx | Leave policies & applications. For TEACHER (self-service mode, `isTeacher`): header/subtitle change, Policies tab hidden, Staff Member picker hidden in Apply modal, Approve/Reject actions hidden (mobile + desktop), and `staff_member` omitted from the create payload (backend resolves it from the teacher's own staff profile) | GET/POST leave-policies/, leave-applications/ |
 | /hr/attendance | StaffAttendancePage.jsx | Staff attendance | GET/POST attendance/ |
-| /hr/appraisals | PerformanceAppraisalPage.jsx | Performance reviews | GET/POST appraisals/ |
+| /hr/appraisals | PerformanceAppraisalPage.jsx | Performance reviews. Opens the create form pre-filled when reached from the teacher performance detail ("Start appraisal from this report", router state `appraisalPrefill`) | GET/POST appraisals/ |
+| /hr/teacher-performance | TeacherPerformancePage.jsx (+ `teacherPerformance/` detail, settings, period picker) | Teacher performance report: month or custom range, ranked table/cards, detail with measure bars, missed items and information panel, settings tab, Export PDF/Excel, info popover (`components/teacher/PerformanceInfo.jsx`). Admin, principal | GET teacher-performance/, {id}/, config/, explainer/; PUT config/; POST export/ |
+| /my-performance | teacher/MyPerformancePage.jsx | A teacher's own performance report (month or range), frozen-month note | GET teacher-performance/my/ |
 | /hr/documents | StaffDocumentsPage.jsx | Staff documents | GET/POST documents/ |
 | /hr/letters | LetterComposerPage.jsx | Letter Composer with AI drafting | GET/POST custom-letters/, templates/, prefill/, generate-pdf/, ai-draft/ |
 
