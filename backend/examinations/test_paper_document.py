@@ -753,3 +753,10 @@ class TestWorksheetsListAndStatus:
         response = api.patch(f'{WORKSHEETS}{wid}/', {'status': 'DRAFT'}, token, sid)
         assert response.status_code == 200, response.content
         assert Worksheet.objects.get(id=wid).status == 'DRAFT'
+
+
+def test_preview_puts_the_question_near_the_top_of_the_frame():
+    """Centring it put the question below the window on the web, where the frame starts low (2026-11-23)."""
+    from examinations.paper_blocks.html_renderer import PREVIEW_SCRIPT
+    assert 'window.scrollY+r.top-16' in PREVIEW_SCRIPT
+    assert 'innerHeight-r.height' not in PREVIEW_SCRIPT

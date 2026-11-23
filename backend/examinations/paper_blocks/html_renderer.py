@@ -263,12 +263,14 @@ PREVIEW_CSS = """
 # question was tapped, the editor says which one to show. The phone's WebView uses ReactNativeWebView instead.
 # It scrolls its own window, never scrollIntoView: that also scrolled the editor page around the frame, so choosing a
 # question in the list moved the whole screen to the preview.
+# The question goes near the top of the frame, not its middle: on the web the frame starts low on the page (title,
+# status bar above it), so its middle was often below the window and the question never showed (2026-11-23).
 PREVIEW_SCRIPT = """<script>(function(){
 function send(m){try{if(window.ReactNativeWebView){window.ReactNativeWebView.postMessage(JSON.stringify(m));}else{parent.postMessage(m,'*');}}catch(e){}}
 function show(id,smooth){var old=document.querySelector('.current');if(old){old.classList.remove('current');}
 if(!id){return;}var el=null;document.querySelectorAll('[data-block]').forEach(function(x){if(x.getAttribute('data-block')===id){el=x;}});
 if(el){el.classList.add('current');var r=el.getBoundingClientRect();
-var top=window.scrollY+r.top-Math.max(16,(window.innerHeight-r.height)/2);
+var top=window.scrollY+r.top-16;
 window.scrollTo({top:Math.max(0,top),behavior:smooth?'smooth':'auto'});}}
 document.addEventListener('click',function(e){var el=e.target.closest&&e.target.closest('[data-block]');if(el){send({paperBlock:el.getAttribute('data-block')});}});
 function onMessage(e){var d=e.data;if(typeof d==='string'){try{d=JSON.parse(d);}catch(x){return;}}if(d&&typeof d.paperShow==='string'){show(d.paperShow,true);}}

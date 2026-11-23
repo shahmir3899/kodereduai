@@ -511,6 +511,7 @@ export default function BlockPaperEditor({
             </div>
           </div>
           <A4Preview
+            fitWindow
             show={selectedId || ''}
             onPick={setSelectedId}
             title={isWorksheet ? 'Worksheet preview' : 'Paper preview'}

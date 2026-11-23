@@ -36,3 +36,23 @@ describe('A4Preview', () => {
     expect(onPick).toHaveBeenCalledWith('q7')
   })
 })
+
+describe('A4Preview fitWindow', () => {
+  it('is no taller than the window below its top, and never under 320 px', () => {
+    const spy = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({ top: 500, bottom: 0, left: 0, right: 0, width: 0, height: 0 })
+    window.innerHeight = 1080
+    const { container, unmount } = render(<A4Preview html="<p>x</p>" title="Fitted" fitWindow />)
+    // 1080 - 500 - 16 = 564, under 78vh (842)
+    expect(container.firstChild.style.height).toBe('564px')
+    unmount()
+    spy.mockReturnValue({ top: 950, bottom: 0, left: 0, right: 0, width: 0, height: 0 })
+    const again = render(<A4Preview html="<p>x</p>" title="Fitted" fitWindow />)
+    expect(again.container.firstChild.style.height).toBe('320px')
+    spy.mockRestore()
+  })
+
+  it('keeps the given height without fitWindow (Full size window)', () => {
+    const { container } = render(<A4Preview html="<p>x</p>" title="Plain" height="80vh" />)
+    expect(container.firstChild.style.height).toBe('80vh')
+  })
+})
