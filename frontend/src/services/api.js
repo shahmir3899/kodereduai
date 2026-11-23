@@ -1631,6 +1631,7 @@ export const questionPaperApi = {
   // Exam Papers
   getExamPapers: (params) => api.get('/api/examinations/exam-papers/', { params }),
   getExamPaper: (id) => api.get(`/api/examinations/exam-papers/${id}/`),
+  getExamPaperMakers: () => api.get('/api/examinations/exam-papers/makers/'),
   ensureDraft: (data) => api.post('/api/examinations/exam-papers/ensure-draft/', data),
   autosaveDraft: (id, data) => api.post(`/api/examinations/exam-papers/${id}/autosave/`, data),
   createExamPaper: (data) => api.post('/api/examinations/exam-papers/', data),
@@ -1710,6 +1711,7 @@ export const questionPaperApi = {
 export const worksheetApi = {
   getWorksheets: (params) => api.get('/api/examinations/worksheets/', { params }),
   getWorksheet: (id) => api.get(`/api/examinations/worksheets/${id}/`),
+  getWorksheetMakers: () => api.get('/api/examinations/worksheets/makers/'),
   ensureDraft: (data) => api.post('/api/examinations/worksheets/ensure-draft/', data),
   autosaveDraft: (id, data) => api.post(`/api/examinations/worksheets/${id}/autosave/`, data),
   updateWorksheet: (id, data) => api.patch(`/api/examinations/worksheets/${id}/`, data),

@@ -848,12 +848,20 @@ class PaperQuestionSerializer(serializers.ModelSerializer):
         return self._snapshot_value(obj, 'type_data', {})
 
 
+def paper_maker_name(user):
+    """Who made a paper, as the papers list shows it: the full name, else the username."""
+    if user is None:
+        return None
+    return (user.get_full_name() or '').strip() or user.username
+
+
 class ExamPaperSerializer(serializers.ModelSerializer):
     """Serializer for ExamPaper with nested questions."""
     class_name = serializers.SerializerMethodField()
     subject_name = serializers.CharField(source='subject.name', read_only=True)
     exam_name = serializers.CharField(source='exam.name', read_only=True, allow_null=True)
     generated_by_name = serializers.CharField(source='generated_by.username', read_only=True, allow_null=True)
+    made_by_name = serializers.SerializerMethodField()
     paper_questions = PaperQuestionSerializer(many=True, read_only=True)
     question_count = serializers.IntegerField(read_only=True)
     calculated_total_marks = serializers.DecimalField(max_digits=6, decimal_places=2, read_only=True)
@@ -935,11 +943,14 @@ class ExamPaperSerializer(serializers.ModelSerializer):
             'paper_questions', 'question_count', 'calculated_total_marks',
             'structure_marks_total', 'marks_reconciled',
             'lesson_plans_details', 'covered_topics', 'question_topics_summary', 'overused_questions',
-            'status', 'generated_by', 'generated_by_name',
+            'status', 'generated_by', 'generated_by_name', 'made_by_name',
             'is_active', 'created_at', 'updated_at',
         ]
         read_only_fields = ['id', 'school', 'document', 'generated_by', 'generated_by_name', 'created_at', 'updated_at', 
                            'lesson_plans_details', 'covered_topics', 'question_topics_summary', 'overused_questions']
+
+    def get_made_by_name(self, obj):
+        return paper_maker_name(obj.generated_by)
 
 
 class ExamPaperCreateUpdateSerializer(serializers.ModelSerializer):
@@ -1235,6 +1246,7 @@ class WorksheetSerializer(serializers.ModelSerializer):
     class_name = serializers.SerializerMethodField()
     subject_name = serializers.CharField(source='subject.name', read_only=True, allow_null=True)
     created_by_name = serializers.CharField(source='created_by.username', read_only=True, allow_null=True)
+    made_by_name = serializers.SerializerMethodField()
     items = WorksheetItemSerializer(many=True, read_only=True)
     item_count = serializers.IntegerField(read_only=True)
     tested_topics_details = serializers.SerializerMethodField()
@@ -1266,13 +1278,16 @@ class WorksheetSerializer(serializers.ModelSerializer):
             'id', 'school', 'class_obj', 'class_name', 'subject', 'subject_name',
             'title', 'tested_topics', 'tested_topics_details', 'instructions',
             'structure', 'render_options', 'document', 'uses_blocks', 'items', 'item_count',
-            'status', 'source', 'created_by', 'created_by_name',
+            'status', 'source', 'created_by', 'created_by_name', 'made_by_name',
             'is_active', 'created_at', 'updated_at',
         ]
         read_only_fields = [
             'id', 'school', 'document', 'created_by', 'created_by_name', 'created_at', 'updated_at',
             'tested_topics_details',
         ]
+
+    def get_made_by_name(self, obj):
+        return paper_maker_name(obj.created_by)
 
 
 class WorksheetDraftEnsureSerializer(PaperStructureValidationMixin, serializers.ModelSerializer):

@@ -137,3 +137,21 @@ Batch B, fewer clicks:
    heading selects it so typing replaces it.
 9. Load error: with the server away, opening a paper shows an error with Retry; after the server is back Retry opens
    it (if the block list also failed, a second Retry may be needed).
+
+## Re-record with the Structure step (2026-11-22)
+- Video: docs/media/paper-demo/paper-builder-pg-math-v3.en.mp4, 9:42 (was 9:22). Structure built by hand (user's
+  choice: no template), one "+ Add questions" per row with a spoken line each, so it is longer, not shorter.
+  Scenario docs/media/_authoring/paper-builder-pg-math-v3.json (made by make_v3.py), check check_pg_v3.py, runner run_v3.sh.
+  Saved paper checked after the take: CHECK PASS (headings, marks 50, lists, pictures, dots, dashed frame, nothing to fill).
+- Slow step: in Structure, adding nine rows one at a time takes nine picker openings; marks and parts still need
+  typing for 5 rows (defaults are 5 marks / 5 parts). The template does it in one click.
+- Tooling (not the app): the recorder scrolls at the page centre, which on the Fill step is the preview frame, so the
+  form column never scrolled and fields low in a long form (Count and write "Or type pictures", Match right column)
+  could not be reached. The scenario scrolls inside the form explicitly. Worth a fix in the web-demo-video skill
+  (scroll the element's own scroll container).
+- Tooling: "Full size" scrolling did nothing in the take (the dialog's frame did not scroll under the wheel), so the
+  end shows only the top of the paper. Same in the 9:22 video's warnings.
+- Network: the Microsoft voice failed twice with WinError 64 (IPv6 connections to speech.platform.bing.com reset);
+  forced IPv4 with a sitecustomize.py on PYTHONPATH for the take.
+- App, small: the form column is sticky and taller than the screen (its top sits 143 px above the window when the
+  page is scrolled to the bottom), so the top of a long form is cut off until the page scrolls back up.

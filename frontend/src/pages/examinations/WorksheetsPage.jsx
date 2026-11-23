@@ -13,6 +13,7 @@ import ClassSelector from '../../components/ClassSelector'
 import { useToast } from '../../components/Toast'
 import { useConfirmModal } from '../../components/ConfirmModal'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
+import { useAuth } from '../../contexts/AuthContext'
 import { useSessionClasses } from '../../hooks/useSessionClasses'
 import { useClassSubjects } from '../../hooks/useClassSubjects'
 import useTeacherScopedClasses from '../../hooks/useTeacherScopedClasses'
@@ -49,6 +50,12 @@ export default function WorksheetsPage() {
   const [filterSubjectId, setFilterSubjectId] = useState('')
   const [filterStatus, setFilterStatus] = useState('')
   const [search, setSearch] = useState('')
+  // Same as the papers list: teachers see all their classes' worksheets and may narrow to their own;
+  // school-wide roles pick a maker.
+  const { effectiveRole } = useAuth()
+  const isTeacher = effectiveRole === 'TEACHER'
+  const [mineOnly, setMineOnly] = useState(false)
+  const [madeBy, setMadeBy] = useState('')
   const debouncedSearch = useDebounce(search, 300)
   const [page, setPage] = useState(1)
   const [view, setView] = useViewPreference('worksheets')
@@ -67,7 +74,7 @@ export default function WorksheetsPage() {
       setFilterSubjectId('')
       setPage(1)
     },
-    autoSelectFirst: true,
+    autoSelectFirst: false,
     queryKey: 'teacherWorksheetListClasses',
   })
 
@@ -78,7 +85,16 @@ export default function WorksheetsPage() {
     ...(filterSubjectId && { subject: filterSubjectId }),
     ...(filterStatus && { status: filterStatus }),
     ...(debouncedSearch.trim() && { search: debouncedSearch.trim() }),
-  }), [debouncedSearch, filterStatus, filterSubjectId, page, resolvedClassId])
+    ...(mineOnly && { mine: 1 }),
+    ...(!isTeacher && madeBy && { made_by: madeBy }),
+  }), [debouncedSearch, filterStatus, filterSubjectId, page, resolvedClassId, mineOnly, isTeacher, madeBy])
+
+  const { data: makersRes } = useQuery({
+    queryKey: ['worksheetMakers'],
+    queryFn: () => worksheetApi.getWorksheetMakers(),
+    enabled: !isTeacher,
+  })
+  const makers = makersRes?.data || []
 
   const { data, isLoading, isFetching } = useQuery({
     queryKey: ['worksheetsList', queryParams],
@@ -168,7 +184,7 @@ export default function WorksheetsPage() {
       </div>
 
       <div className="max-w-6xl mx-auto px-6 py-6 space-y-4">
-        <div className="bg-white border border-gray-200 rounded-lg p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+        <div className="bg-white border border-gray-200 rounded-lg p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">Class</label>
             <ClassSelector
@@ -181,7 +197,7 @@ export default function WorksheetsPage() {
               className="input w-full"
               scope={classSelectorScope}
               academicYearId={activeAcademicYear?.id}
-              showAllOption={showAllOption}
+              showAllOption={showAllOption || isTeacher}
               classes={teacherClassOptions || undefined}
             />
           </div>
@@ -230,7 +246,22 @@ export default function WorksheetsPage() {
             </select>
           </div>
 
-          <div className="lg:col-span-2">
+          {isTeacher ? (
+            <label className="flex items-center gap-2 text-sm text-gray-700 sm:pt-5">
+              <input type="checkbox" checked={mineOnly} onChange={(e) => { setMineOnly(e.target.checked); setPage(1) }} className="rounded border-gray-300" />
+              Mine only
+            </label>
+          ) : (
+            <div>
+              <label htmlFor="worksheets-made-by" className="block text-xs font-medium text-gray-600 mb-1">Made by</label>
+              <select id="worksheets-made-by" value={madeBy} onChange={(e) => { setMadeBy(e.target.value); setPage(1) }} className="input w-full">
+                <option value="">Anyone</option>
+                {makers.map((maker) => <option key={maker.id} value={maker.id}>{maker.name}</option>)}
+              </select>
+            </div>
+          )}
+
+          <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">Search</label>
             <input
               type="text"
@@ -272,11 +303,12 @@ export default function WorksheetsPage() {
                   }
                   fields={[
                     { label: 'Items', value: worksheet.item_count || 0 },
+                    { label: 'Made by', value: worksheet.made_by_name || '—' },
                     { label: 'Source', value: worksheet.source },
                     { label: 'Updated', value: worksheet.updated_at ? new Date(worksheet.updated_at).toLocaleString() : '—' },
                   ]}
                   actions={[
-                    { label: worksheet.status === 'DRAFT' ? 'Resume' : 'Open', tone: 'info', onClick: () => navigate(`/academics/worksheets/${worksheet.id}`) },
+                    { label: worksheet.status === 'DRAFT' ? 'Edit' : 'Open', tone: 'info', onClick: () => navigate(`/academics/worksheets/${worksheet.id}`) },
                     { label: 'Duplicate', tone: 'muted', disabled: duplicateMutation.isPending, onClick: () => duplicateMutation.mutate(worksheet.id) },
                     { label: downloadingKey === `${worksheet.id}-pdf` ? 'Generating…' : 'PDF', tone: 'muted', disabled: downloadingKey === `${worksheet.id}-pdf`, onClick: () => handleDownload(worksheet, 'pdf') },
                     { label: downloadingKey === `${worksheet.id}-docx` ? 'Generating…' : 'DOCX', tone: 'muted', disabled: downloadingKey === `${worksheet.id}-docx`, onClick: () => handleDownload(worksheet, 'docx') },
@@ -294,6 +326,7 @@ export default function WorksheetsPage() {
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Title</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Class / Subject</th>
                     <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Items</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Made by</th>
                     <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Source</th>
                     <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Status</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Updated</th>
@@ -308,6 +341,7 @@ export default function WorksheetsPage() {
                         {worksheet.class_name}{worksheet.subject_name ? ` • ${worksheet.subject_name}` : ''}
                       </td>
                       <td className="px-4 py-3 text-sm text-center text-gray-700">{worksheet.item_count || 0}</td>
+                      <td className="px-4 py-3 text-sm text-gray-700">{worksheet.made_by_name || '—'}</td>
                       <td className="px-4 py-3 text-sm text-center text-gray-500">{worksheet.source}</td>
                       <td className="px-4 py-3 text-center">
                         <Badge colors={STATUS_STYLE[worksheet.status] || TONE.neutral}>
@@ -322,7 +356,7 @@ export default function WorksheetsPage() {
                             onClick={() => navigate(`/academics/worksheets/${worksheet.id}`)}
                             className="px-3 py-1.5 rounded border border-blue-200 text-blue-700 text-xs hover:bg-blue-50"
                           >
-                            {worksheet.status === 'DRAFT' ? 'Resume' : 'Open'}
+                            {worksheet.status === 'DRAFT' ? 'Edit' : 'Open'}
                           </button>
                           <button
                             type="button"

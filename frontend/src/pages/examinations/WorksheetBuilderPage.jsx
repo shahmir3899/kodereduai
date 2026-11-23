@@ -11,6 +11,7 @@ import { useSessionClasses } from '../../hooks/useSessionClasses'
 import { useDebounce } from '../../hooks/useDebounce'
 import { getClassSelectorScope, getResolvedMasterClassId } from '../../utils/classScope'
 import BlockPaperEditor from './blocks/BlockPaperEditor'
+import StatusBar from './blocks/StatusBar'
 
 // Worksheets are built with the paper's block editor (Paper Builder v2 Phase 6b, user decision 2026-11-15):
 // details here, blocks in BlockPaperEditor kind="worksheet". Old worksheets open converted to blocks.
@@ -103,7 +104,7 @@ const detailsOf = (worksheet) => ({
 })
 
 function WorksheetBuilderInner({ worksheetId }) {
-  const { showError } = useToast()
+  const { showError, showSuccess } = useToast()
   const queryClient = useQueryClient()
   const [details, setDetails] = useState(null)
   const [detailsState, setDetailsState] = useState('saved') // saved | saving | error
@@ -227,7 +228,17 @@ function WorksheetBuilderInner({ worksheetId }) {
         </div>
       </div>
 
-      <div className="px-4 sm:px-6 py-6">
+      <div className="px-4 sm:px-6 py-6 space-y-4">
+        <StatusBar
+          status={worksheet.status}
+          save={(status) => worksheetApi.updateWorksheet(worksheetId, { status })}
+          onChanged={(status) => {
+            queryClient.invalidateQueries({ queryKey: ['worksheet', worksheetId] })
+            queryClient.invalidateQueries({ queryKey: ['worksheetsList'] })
+            showSuccess(status === 'DRAFT' ? 'The worksheet is a draft again: you can change it.' : `The worksheet is now ${status === 'READY' ? 'ready' : 'published'}.`)
+          }}
+          onError={showError}
+        />
         <BlockPaperEditor
           kind="worksheet"
           paperId={Number(worksheetId)}

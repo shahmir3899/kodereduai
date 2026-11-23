@@ -4543,10 +4543,29 @@ class ExamPaperViewSet(BlockDocumentActionsMixin, ModuleAccessMixin, TenantQuery
         search = self.request.query_params.get('search')
         if search:
             qs = qs.filter(paper_title__icontains=search)
-        
+
+        # Who made it: "Mine only" for anyone, a chosen maker for those who see the whole school. Narrowing only:
+        # the role scope above has already decided what may be seen.
+        if self.request.query_params.get('mine') in ('1', 'true'):
+            qs = qs.filter(generated_by=self.request.user)
+        made_by = self.request.query_params.get('made_by')
+        if made_by and str(made_by).isdigit():
+            qs = qs.filter(generated_by_id=int(made_by))
+
         return qs.select_related(
             'class_obj', 'subject', 'exam', 'exam_subject', 'generated_by'
         ).prefetch_related('paper_questions__question')
+
+    @action(detail=False, methods=['get'], url_path='makers')
+    def makers(self, request):
+        """People who made the papers this user may see, for the list's "Made by" filter."""
+        from django.contrib.auth import get_user_model
+        from .serializers import paper_maker_name
+        ids = (self.get_queryset().exclude(generated_by=None).order_by()
+               .values_list('generated_by_id', flat=True).distinct())
+        users = get_user_model().objects.filter(id__in=list(ids))
+        rows = sorted(({'id': u.id, 'name': paper_maker_name(u)} for u in users), key=lambda r: r['name'].lower())
+        return Response(rows)
 
     def perform_create(self, serializer):
         school_id = _resolve_school_id(self.request)
@@ -5289,6 +5308,17 @@ class PaperUploadViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelV
             )
 
 
+def _start_compact(worksheet):
+    """New worksheets start with the compact header (logo + one box), as schools print one-page sheets (user
+    decision 2026-11-23); older worksheets keep the standard header until changed."""
+    if worksheet.document:
+        return
+    # Only the header choice: no "blocks" key, so the worksheet still counts as not yet started (an old app
+    # adding items to it is converted as before); document_for_editor keeps this header when it starts the list.
+    worksheet.document = {'header': {'header_style': 'compact'}}
+    worksheet.save(update_fields=['document'])
+
+
 class WorksheetViewSet(BlockDocumentActionsMixin, ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet):
     """ViewSet for Worksheet management -- sibling of ExamPaperViewSet, reusing
     the same manage-scope check (_can_manage_exam_scope is generic to
@@ -5343,9 +5373,27 @@ class WorksheetViewSet(BlockDocumentActionsMixin, ModuleAccessMixin, TenantQuery
         if search:
             qs = qs.filter(title__icontains=search)
 
+        # Who made it: same "Mine only" / "Made by" narrowing as the papers list (role scope already applied above).
+        if self.request.query_params.get('mine') in ('1', 'true'):
+            qs = qs.filter(created_by=self.request.user)
+        made_by = self.request.query_params.get('made_by')
+        if made_by and str(made_by).isdigit():
+            qs = qs.filter(created_by_id=int(made_by))
+
         return qs.select_related('class_obj', 'subject', 'created_by').prefetch_related(
             'items__question', 'tested_topics__chapter',
         ).distinct()
+
+    @action(detail=False, methods=['get'], url_path='makers')
+    def makers(self, request):
+        """People who made the worksheets this user may see, for the list's "Made by" filter."""
+        from django.contrib.auth import get_user_model
+        from .serializers import paper_maker_name
+        ids = (self.get_queryset().exclude(created_by=None).order_by()
+               .values_list('created_by_id', flat=True).distinct())
+        users = get_user_model().objects.filter(id__in=list(ids))
+        rows = sorted(({'id': u.id, 'name': paper_maker_name(u)} for u in users), key=lambda r: r['name'].lower())
+        return Response(rows)
 
     def _validate_manage_scope(self, class_obj, subject):
         school_id = _resolve_school_id(self.request)
@@ -5362,7 +5410,7 @@ class WorksheetViewSet(BlockDocumentActionsMixin, ModuleAccessMixin, TenantQuery
         class_obj = serializer.validated_data.get('class_obj')
         subject = serializer.validated_data.get('subject')
         school_id = self._validate_manage_scope(class_obj, subject)
-        serializer.save(school_id=school_id, created_by=self.request.user)
+        _start_compact(serializer.save(school_id=school_id, created_by=self.request.user))
 
     def perform_update(self, serializer):
         class_obj = serializer.validated_data.get('class_obj', serializer.instance.class_obj)
@@ -5409,6 +5457,7 @@ class WorksheetViewSet(BlockDocumentActionsMixin, ModuleAccessMixin, TenantQuery
                     created_by=request.user,
                     status=Worksheet.Status.DRAFT,
                 )
+                _start_compact(worksheet)
                 http_status = status.HTTP_201_CREATED
             else:
                 worksheet = serializer.save(status=Worksheet.Status.DRAFT)

@@ -5,9 +5,10 @@ import { examinationsApi } from '../../services/api';
 import { useWorksheet, useWorksheetActions } from '../../hooks/useWorksheets';
 import { useSubjectsList } from '../../hooks/useManager';
 import { useDebouncedValue } from '../../hooks/useDebouncedValue';
-import { detailsFromWorksheet, detailsPayload, isDraft, type WorksheetDetails } from '../../services/worksheets';
+import { detailsFromWorksheet, detailsPayload, isDraft, WORKSHEET_STATUSES, type WorksheetDetails } from '../../services/worksheets';
 import { inventoryErrorMessage } from '../../services/inventory';
 import Input from '../ui/Input';
+import Button from '../ui/Button';
 import Select from '../ui/Select';
 import Skeleton from '../ui/Skeleton';
 import ErrorState from '../ui/ErrorState';
@@ -80,6 +81,16 @@ export default function WorksheetBuilderScreen() {
   if (query.isError && !query.data) return <ErrorState error={query.error} onRetry={() => query.refetch()} />;
   if (!worksheet || !details || !wid) return <EmptyState title="Worksheet not found" message="Open it from the Worksheets list." />;
 
+  // Same as the web: Ready / Published lock the worksheet, "Edit again" makes it a draft; the server says why Ready is refused.
+  const changeStatus = async (next: string) => {
+    if (next === worksheet.status) return;
+    try {
+      await actions.setStatus.mutateAsync({ id: wid, status: next });
+      toast.success(next === 'DRAFT' ? 'The worksheet is a draft again: you can change it.' : `The worksheet is now ${next === 'READY' ? 'ready' : 'published'}.`);
+    } catch (e) {
+      toast.error(inventoryErrorMessage(e, 'Could not change the status.'));
+    }
+  };
   const set = (patch: Partial<WorksheetDetails>) => setDetails((d) => (d ? { ...d, ...patch } : d));
   const status = !editable ? `${worksheet.status.charAt(0)}${worksheet.status.slice(1).toLowerCase()}, read only`
     : save === 'saving' ? 'Saving details…' : save === 'error' ? 'Details not saved' : 'Details saved';
@@ -88,7 +99,12 @@ export default function WorksheetBuilderScreen() {
     <ScrollView style={styles.container} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
       <Text style={styles.name} numberOfLines={2}>{details.title || worksheet.title}</Text>
       <Text style={styles.sub}>{[worksheet.class_name, worksheet.subject_name].filter(Boolean).join('  ·  ')}  ·  {status}</Text>
-      {!editable ? <Text style={styles.warn}>This worksheet is {worksheet.status.toLowerCase()}. Only a draft can be changed.</Text> : null}
+      {!editable ? (
+        <View style={styles.locked}>
+          <Text style={[styles.warn, styles.flex]}>This worksheet is {worksheet.status.toLowerCase()}, so it is locked.</Text>
+          <Button title="Edit again" size="sm" onPress={() => changeStatus('DRAFT')} disabled={actions.setStatus.isPending} />
+        </View>
+      ) : null}
       <View style={styles.steps}>
         {([[1, 'Details'], [2, 'Build worksheet']] as const).map(([n, label]) => (
           <TouchableOpacity key={n} accessibilityRole="button" accessibilityLabel={`Step ${n}: ${label}`} accessibilityState={{ selected: step === n }}
@@ -100,6 +116,8 @@ export default function WorksheetBuilderScreen() {
 
       {step === 1 ? (
         <View style={styles.body}>
+          <Select label="Status" value={worksheet.status} disabled={actions.setStatus.isPending} onChange={(v) => changeStatus(String(v))}
+            options={WORKSHEET_STATUSES.map((s) => ({ value: s.value as string, label: s.label }))} />
           <Input label="Title" value={details.title} onChangeText={(v) => set({ title: v })} editable={editable} />
           <Input label="Instructions (printed under the header)" value={details.instructions} onChangeText={(v) => set({ instructions: v })}
             multiline editable={editable} placeholder="e.g. Read each question carefully." />
@@ -131,6 +149,8 @@ const styles = StyleSheet.create({
   name: { fontSize: FontSize.lg, fontWeight: '600', color: Colors.text },
   sub: { fontSize: FontSize.sm, color: Colors.textSecondary },
   warn: { color: Colors.warning, fontSize: FontSize.sm },
+  locked: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
+  flex: { flex: 1 },
   body: { gap: Spacing.sm },
   steps: { flexDirection: 'row', gap: Spacing.xs },
   step: { flex: 1, minHeight: 44, alignItems: 'center', justifyContent: 'center', borderRadius: BorderRadius.sm, backgroundColor: Colors.surfaceSecondary },

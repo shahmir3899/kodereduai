@@ -1,10 +1,11 @@
 import React, { useMemo, useState } from 'react';
-import { View, Text, FlatList, ActivityIndicator, TouchableOpacity, StyleSheet, type RefreshControlProps } from 'react-native';
+import { View, Text, FlatList, ActivityIndicator, TouchableOpacity, StyleSheet, Switch, type RefreshControlProps } from 'react-native';
 import { useRouter, type Href } from 'expo-router';
 import { examinationsApi } from '../../services/api';
 import { useMasterClasses } from '../../hooks/useAcademicYear';
 import { useSubjectsList } from '../../hooks/useManager';
-import { useWorksheetActions, useWorksheetsPaged } from '../../hooks/useWorksheets';
+import { useWorksheetActions, useWorksheetMakers, useWorksheetsPaged } from '../../hooks/useWorksheets';
+import { useAuth } from '../../contexts/AuthContext';
 import { usePersonaBase } from '../../hooks/usePersonaBase';
 import { useDebouncedValue } from '../../hooks/useDebouncedValue';
 import { useRefreshControl } from '../../hooks/useRefreshControl';
@@ -42,7 +43,12 @@ export default function WorksheetsScreen() {
   const [classFilter, setClassFilter] = useState<number>(-1);
   const [subjectFilter, setSubjectFilter] = useState<number>(-1);
   const [statusFilter, setStatusFilter] = useState('');
-  const query = useWorksheetsPaged(term, { classId: classFilter === -1 ? null : classFilter, subject: subjectFilter === -1 ? null : subjectFilter, status: statusFilter });
+  // Same as the papers list: teachers see all their classes' worksheets and may narrow to their own; school-wide roles pick a maker.
+  const isTeacher = useAuth().effectiveRole === 'TEACHER';
+  const [mineOnly, setMineOnly] = useState(false);
+  const [madeBy, setMadeBy] = useState<number>(-1);
+  const makers = useWorksheetMakers(!isTeacher);
+  const query = useWorksheetsPaged(term, { classId: classFilter === -1 ? null : classFilter, subject: subjectFilter === -1 ? null : subjectFilter, status: statusFilter, mine: mineOnly, madeBy: !isTeacher && madeBy !== -1 ? madeBy : null });
   const refreshControl = useRefreshControl(query.refetch) as React.ReactElement<RefreshControlProps>;
   const rows = useMemo(() => query.data?.pages.flatMap((p) => p.results) ?? [], [query.data]);
   const [busy, setBusy] = useState<string | null>(null);
@@ -110,6 +116,14 @@ export default function WorksheetsScreen() {
       <Select label="Class" searchable value={classFilter} onChange={setClassFilter} options={[{ value: -1, label: 'All classes' }, ...(classes.data ?? []).map((c) => ({ value: Number(c.id), label: String(c.name) }))]} />
       <Select label="Subject" searchable value={subjectFilter} onChange={setSubjectFilter} options={[{ value: -1, label: 'All subjects' }, ...(subjects.data ?? []).map((s) => ({ value: s.id, label: s.name }))]} />
       <Select label="Status" value={statusFilter} onChange={setStatusFilter} options={[{ value: '', label: 'Any status' }, ...WORKSHEET_STATUSES.map((s) => ({ value: s.value as string, label: s.label }))]} />
+      {isTeacher ? (
+        <View style={styles.switchRow}>
+          <Text style={styles.switchLabel}>Mine only</Text>
+          <Switch value={mineOnly} onValueChange={setMineOnly} accessibilityLabel="Mine only" />
+        </View>
+      ) : (
+        <Select label="Made by" searchable value={madeBy} onChange={setMadeBy} options={[{ value: -1, label: 'Anyone' }, ...(makers.data ?? []).map((m) => ({ value: m.id, label: m.name }))]} />
+      )}
       <Button title="+ New worksheet" size="sm" onPress={() => { setForm(emptyNewWorksheet()); setError(null); setCreating(true); }} />
     </View>
   );
@@ -136,10 +150,12 @@ export default function WorksheetsScreen() {
               <View style={styles.who}>
                 <Text style={styles.name} numberOfLines={2}>{w.title || 'Untitled worksheet'}</Text>
                 <Text style={styles.sub} numberOfLines={1}>{[w.class_name, w.subject_name, `${w.item_count ?? w.items?.length ?? 0} item${(w.item_count ?? w.items?.length ?? 0) === 1 ? '' : 's'}`].filter(Boolean).join('  ·  ')}</Text>
+                {w.made_by_name ? <Text style={styles.sub} numberOfLines={1}>Made by {w.made_by_name}</Text> : null}
               </View>
               <StatusPill label={WORKSHEET_STATUSES.find((s) => s.value === w.status)?.label ?? w.status} tone={worksheetTone(w.status)} />
             </TouchableOpacity>
             <View style={styles.actions}>
+              <Button title={w.status === 'DRAFT' ? 'Edit' : 'Open'} size="sm" onPress={() => open(w.id)} disabled={busy !== null} />
               <Button title="PDF" size="sm" variant="outline" onPress={() => share(w, 'pdf')} loading={busy === `${w.id}-pdf`} disabled={busy !== null} />
               <Button title="Word" size="sm" variant="outline" onPress={() => share(w, 'docx')} loading={busy === `${w.id}-docx`} disabled={busy !== null} />
               <Button title="Duplicate" size="sm" variant="outline" onPress={() => duplicate(w)} loading={busy === `${w.id}-dup`} disabled={busy !== null} />
@@ -169,4 +185,6 @@ const styles = StyleSheet.create({
   name: { fontSize: FontSize.md, fontWeight: '600', color: Colors.text },
   sub: { fontSize: FontSize.sm, color: Colors.textSecondary, marginTop: 2 },
   actions: { flexDirection: 'row', gap: Spacing.sm, flexWrap: 'wrap' },
+  switchRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginVertical: Spacing.sm },
+  switchLabel: { fontSize: FontSize.md, color: Colors.text },
 });

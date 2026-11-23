@@ -3,15 +3,21 @@ import { examinationsApi } from '../services/api';
 import type { Worksheet } from '../services/worksheets';
 import { useScopedPagedQuery, useScopedQuery } from './useScopedQuery';
 
-export function useWorksheetsPaged(search: string, filters: { classId?: number | null; subject?: number | null; status?: string } = {}) {
-  return useScopedPagedQuery<Worksheet>('worksheets', ['paged', search, filters.classId ?? null, filters.subject ?? null, filters.status ?? ''], async (page) => {
+export function useWorksheetsPaged(search: string, filters: { classId?: number | null; subject?: number | null; status?: string; mine?: boolean; madeBy?: number | null } = {}) {
+  return useScopedPagedQuery<Worksheet>('worksheets', ['paged', search, filters.classId ?? null, filters.subject ?? null, filters.status ?? '', !!filters.mine, filters.madeBy ?? null], async (page) => {
     const data = (await examinationsApi.getWorksheets({
       page, page_size: 20, ...(search ? { search } : {}),
       ...(filters.classId ? { class_obj: filters.classId } : {}), ...(filters.subject ? { subject: filters.subject } : {}), ...(filters.status ? { status: filters.status } : {}),
+      ...(filters.mine ? { mine: 1 } : {}), ...(filters.madeBy ? { made_by: filters.madeBy } : {}),
     })).data as { results?: Worksheet[]; next?: string | null; count?: number } | Worksheet[];
     if (Array.isArray(data)) return { results: data, next: null, count: data.length };
     return { results: data.results ?? [], next: data.next ?? null, count: data.count ?? 0 };
   });
+}
+
+/** People who made the worksheets this user may see (the list's "Made by" filter); not asked for teachers. */
+export function useWorksheetMakers(enabled: boolean) {
+  return useScopedQuery('worksheetMakers', [], async () => (await examinationsApi.getWorksheetMakers()).data as { id: number; name: string }[], { enabled });
 }
 
 export function useWorksheet(id: number | null) {
@@ -26,6 +32,8 @@ export function useWorksheetActions() {
     // Autosave does not refetch the worksheet: the screen holds the draft, and a refetch would overwrite what is being typed.
     autosave: useMutation({ mutationFn: ({ id, data }: { id: number; data: object }) => examinationsApi.autosaveWorksheetDraft(id, data) }),
     remove: useMutation({ mutationFn: (id: number) => examinationsApi.deleteWorksheet(id), onSuccess: refresh }),
+    // Status only (Ready / Published / back to Draft); the server refuses Ready while parts are still to fill.
+    setStatus: useMutation({ mutationFn: ({ id, status }: { id: number; status: string }) => examinationsApi.updateWorksheet(id, { status }), onSuccess: refresh }),
     duplicate: useMutation({ mutationFn: (id: number) => examinationsApi.duplicateWorksheet(id), onSuccess: refresh }),
   };
 }

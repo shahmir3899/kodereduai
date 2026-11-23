@@ -28,6 +28,16 @@ body { margin: 0; color: #1f2937; font: 11pt "Trebuchet MS", "Segoe UI", Arial, 
 .head h1 { margin: 0 0 3mm; font-size: 19pt; text-decoration: underline; letter-spacing: .2px; }
 .head p { margin: 0 0 2mm; font-size: 12pt; font-weight: 700; }
 .head .meta span { margin: 0 3mm; }
+.head.has-logo { position: relative; min-height: 20mm; padding: 0 30mm; }
+.head .logo { position: absolute; left: 0; top: 0; height: 20mm; max-width: 28mm; object-fit: contain; }
+.compact { display: flex; align-items: center; gap: 5mm; margin-bottom: 5mm; font-family: Georgia, "Times New Roman", serif; }
+.compact .logo { height: 18mm; max-width: 26mm; object-fit: contain; }
+.compact .cbox { flex: 1; border: 1.5px solid #1f2937; border-radius: 4mm; padding: 3mm 5mm 1mm; font-weight: 700; font-size: 11pt; }
+.compact .row { display: flex; align-items: flex-end; gap: 2mm; margin-bottom: 2.5mm; }
+.compact .fill { flex: 1; border-bottom: 1.5px solid #1f2937; height: 5mm; }
+.compact .fill.short { flex: .6; }
+.compact .gap { width: 6mm; }
+.compact .details { justify-content: space-around; }
 .cand { margin: 4mm 12mm 3mm; font-family: Georgia, "Times New Roman", serif; font-weight: 700; font-size: 11pt; }
 .cand .row { display: flex; align-items: flex-end; gap: 2mm; margin-bottom: 3.5mm; }
 .cand .fill { flex: 1; border-bottom: 1.5px solid #1f2937; height: 5mm; }
@@ -65,6 +75,7 @@ html[dir="rtl"] h2.section, [dir="rtl"] .pt, :lang(ur) {
   font-family: "%(urdu)s", "Trebuchet MS", "Segoe UI", Arial, serif; }
 html[dir="rtl"] body { line-height: 2; }
 html[dir="rtl"] .head h1 { font-size: 21pt; }
+html[dir="rtl"] .head .logo { left: auto; right: 0; }
 html[dir="rtl"] .q-title { font-size: 13pt; }
 /* Numbers, marks and equations keep their own direction inside an Urdu line. */
 .marks, .math, .katex, .blank { unicode-bidi: isolate; }
@@ -85,9 +96,37 @@ def _css_string(value: Any) -> str:
     return str(value or '').replace('\\', '\\\\').replace('"', '\\"').replace('\n', ' ').replace('\r', ' ')
 
 
+def is_compact_header(header: Dict[str, Any]) -> bool:
+    """Worksheets can use the short header schools print on one-page sheets: logo + one box of details."""
+    return header.get('kind') == 'worksheet' and header.get('header_style') == 'compact'
+
+
+def _compact_header_html(header: Dict[str, Any], labels: Dict[str, str]) -> str:
+    logo = str(header.get('logo') or '')
+    image = f'<img class="logo" alt="" src="{escape(logo, quote=True)}">' if logo.startswith('data:image/') else ''
+    details = []
+    if header.get('class_name'):
+        details.append(f'<span>{labels["class"]}: <u>{_text(header["class_name"])}</u></span>')
+    if header.get('subject'):
+        details.append(f'<span>{labels[subject_label_key(header)]}: <u>{_text(header["subject"])}</u></span>')
+    return (
+        f'<header class="compact">{image}<div class="cbox">'
+        f'<div class="row"><span>{labels["name"]}:</span><span class="fill"></span><span class="gap"></span>'
+        f'<span>{labels["date"]}:</span><span class="fill short"></span></div>'
+        + (f'<div class="row details">{"".join(details)}</div>' if details else '')
+        + '</div></header>'
+    )
+
+
 def _header_html(document: Dict[str, Any], labels: Dict[str, str]) -> str:
     header = document.get('header') or {}
-    parts: List[str] = ['<header class="head">']
+    if is_compact_header(header):
+        return _compact_header_html(header, labels) + _header_rest(document, header, labels)
+    logo = str(header.get('logo') or '')
+    if logo.startswith('data:image/'):
+        parts: List[str] = ['<header class="head has-logo">', f'<img class="logo" alt="" src="{escape(logo, quote=True)}">']
+    else:
+        parts = ['<header class="head">']
     parts.append(f'<h1>{_text(header.get("school_name"))}</h1>')
     if header.get('exam_title'):
         parts.append(f'<p>{_with_ordinals(header["exam_title"])}</p>')
@@ -106,6 +145,12 @@ def _header_html(document: Dict[str, Any], labels: Dict[str, str]) -> str:
         f'<span>{labels["date"]}:</span><span class="fill"></span></div>'
         '</div>'
     )
+    return ''.join(parts) + _header_rest(document, header, labels)
+
+
+def _header_rest(document: Dict[str, Any], header: Dict[str, Any], labels: Dict[str, str]) -> str:
+    """Time and marks line, office table and instructions: the same under either header."""
+    parts: List[str] = []
     if header.get('show_time_marks'):
         facts = []
         if header.get('time_label'):

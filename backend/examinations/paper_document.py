@@ -25,7 +25,7 @@ from .paper_blocks.registry import (
 )
 
 # Header settings a teacher can change per paper; everything else in the header comes from the paper.
-HEADER_OPTIONS = {'marks_table', 'show_time_marks', 'sign_label', 'exam_title'}
+HEADER_OPTIONS = {'marks_table', 'show_time_marks', 'sign_label', 'exam_title', 'show_logo', 'header_style'}
 BLOCK_KEYS = {'id', 'type', 'title', 'marks', 'data', 'question_id'}
 
 TYPE_TO_BLOCK = {
@@ -149,6 +149,7 @@ def paper_header(paper: ExamPaper) -> Dict[str, Any]:
         'instructions': paper.instructions or '',
         'marks_table': True,
         'show_time_marks': True,
+        'show_logo': True,
         'sign_label': 'Teacher’s Sign',
     }
 
@@ -251,6 +252,10 @@ def render_document(paper, document: Optional[Dict[str, Any]] = None) -> Dict[st
     if direction == 'rtl':
         header['time_label'] = _time_label(owner.duration(), urdu=True)
     header.update({k: v for k, v in (document.get('header') or {}).items() if k in HEADER_OPTIONS})
+    # Papers saved before the switch existed show the logo too; it is fetched at render time and never saved.
+    logo = school_logo_data_uri(paper.school) if header.get('show_logo', True) is not False else ''
+    if logo:
+        header['logo'] = logo
     class_word = labels_for({'direction': direction})['class']
     where = f"{header['class_name']} ({header['subject']})" if header.get('subject') else header['class_name']
     return {
@@ -260,6 +265,53 @@ def render_document(paper, document: Optional[Dict[str, Any]] = None) -> Dict[st
         'header': header,
         'blocks': document.get('blocks') or [],
     }
+
+
+LOGO_MAX_PX = 400
+
+
+def school_logo_data_uri(school) -> str:
+    """The school's logo as a small inline PNG, '' when it has none or it cannot be read.
+
+    Inline so the preview, print window and Word file never depend on the storage link being reachable from the
+    teacher's device. Cached because the live preview re-renders on every change; failures are cached for a short
+    time so a dead link does not slow every keystroke."""
+    url = (getattr(school, 'logo', None) or '').strip() if school else ''
+    if not url:
+        return ''
+    import base64
+    import hashlib
+    import io
+    from django.core.cache import cache
+    key = f'paper_logo:{school.pk}:{hashlib.sha1(url.encode()).hexdigest()[:16]}'
+    cached = cache.get(key)
+    if cached is not None:
+        return cached
+    raw = None
+    if url.startswith('data:image/') and ';base64,' in url:
+        try:
+            raw = base64.b64decode(url.split(';base64,', 1)[1])
+        except ValueError:
+            raw = None
+    else:
+        from .pdf_generator import _load_logo_stream
+        stream = _load_logo_stream(school)
+        raw = stream.getvalue() if stream else None
+    result = ''
+    if raw:
+        try:
+            from PIL import Image
+            image = Image.open(io.BytesIO(raw))
+            image.load()
+            image = image.convert('RGBA')
+            image.thumbnail((LOGO_MAX_PX, LOGO_MAX_PX))
+            out = io.BytesIO()
+            image.save(out, format='PNG', optimize=True)
+            result = 'data:image/png;base64,' + base64.b64encode(out.getvalue()).decode('ascii')
+        except Exception:  # not an image: print without a logo rather than fail the paper
+            result = ''
+    cache.set(key, result, 3600 if result else 300)
+    return result
 
 
 # ------------------------------------------------------------------ question bank sync
@@ -626,7 +678,7 @@ def convert_old_paper(paper) -> Dict[str, Any]:
         blocks.extend(_blocks_for_run(question_type, run, DEFAULT_TYPE_INSTRUCTIONS.get(question_type, ''), None, None))
 
     if owner.is_worksheet:
-        return {'version': DOCUMENT_VERSION, 'direction': 'ltr', 'header': {}, 'blocks': _ungraded(blocks)}
+        return {'version': DOCUMENT_VERSION, 'direction': 'ltr', 'header': _kept_header(paper), 'blocks': _ungraded(blocks)}
     return {
         'version': DOCUMENT_VERSION,
         'direction': 'ltr',
@@ -635,11 +687,16 @@ def convert_old_paper(paper) -> Dict[str, Any]:
     }
 
 
+def _kept_header(owner) -> Dict[str, Any]:
+    """Header options saved before the first question (a new worksheet's compact header)."""
+    return {k: v for k, v in ((owner.document or {}).get('header') or {}).items() if k in HEADER_OPTIONS}
+
+
 def document_for_editor(paper) -> Tuple[Dict[str, Any], bool]:
     """(document, converted). ``converted`` is True when it was made from an old-style paper."""
     if paper.document and paper.document.get('blocks') is not None:
         return paper.document, False
     if not paper.structure and not _Owner(paper).links().exists():
         # A new, empty paper: nothing to convert.
-        return {'version': DOCUMENT_VERSION, 'direction': 'ltr', 'header': {}, 'blocks': []}, False
+        return {'version': DOCUMENT_VERSION, 'direction': 'ltr', 'header': _kept_header(paper), 'blocks': []}, False
     return convert_old_paper(paper), True

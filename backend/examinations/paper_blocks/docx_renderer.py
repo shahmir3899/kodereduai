@@ -7,7 +7,7 @@ from typing import Any, Dict
 from .layouts import SCENE_WIDTH, build_scene
 from .registry import block_marks, format_marks, is_question, question_blocks, total_marks
 from .text_blocks import DOCX_RENDERERS, attempt_note
-from .html_renderer import sign_label, subject_label_key
+from .html_renderer import is_compact_header, sign_label, subject_label_key
 from .scene import to_png
 from .urdu import document_has_urdu, is_rtl, labels_for
 
@@ -83,6 +83,54 @@ def _title(doc, number, block, labels):
     return paragraph
 
 
+def _logo_bytes(logo) -> bytes:
+    """PNG bytes of the header's inline logo (render_document puts it there), or b''."""
+    import base64
+    text = str(logo or '')
+    if not text.startswith('data:image/') or ';base64,' not in text:
+        return b''
+    try:
+        return base64.b64decode(text.split(';base64,', 1)[1])
+    except ValueError:
+        return b''
+
+
+def _boxed(cell) -> None:
+    """A plain single border round one table cell (Word has no rounded box; the HTML print has one)."""
+    from docx.oxml import OxmlElement
+    from docx.oxml.ns import qn
+    borders = OxmlElement('w:tcBorders')
+    for side in ('top', 'left', 'bottom', 'right'):
+        edge = OxmlElement(f'w:{side}')
+        edge.set(qn('w:val'), 'single')
+        edge.set(qn('w:sz'), '12')
+        edge.set(qn('w:color'), '1F2937')
+        borders.append(edge)
+    cell._tc.get_or_add_tcPr().append(borders)
+
+
+def _compact_header(doc, header, labels):
+    """Worksheet compact header: logo, then one box with Name / Date and Class / Subject (as the HTML print)."""
+    from docx.shared import Mm
+    logo = _logo_bytes(header.get('logo'))
+    table = doc.add_table(rows=1, cols=2 if logo else 1)
+    table.autofit = False
+    cells = table.rows[0].cells
+    box = cells[-1]
+    if logo:
+        cells[0].width, box.width = Mm(30), Mm(CONTENT_WIDTH_MM - 30)
+        cells[0].paragraphs[0].add_run().add_picture(io.BytesIO(logo), height=Mm(18))
+    else:
+        box.width = Mm(CONTENT_WIDTH_MM)
+    _boxed(box)
+    _run(box.paragraphs[0], f'{labels["name"]}: ' + '_' * 30 + f'   {labels["date"]}: ' + '_' * 14, bold=True, size=11, font=SERIF)
+    details = [f'{labels[label]}: {header[key]}' for label, key in (('class', 'class_name'), (subject_label_key(header), 'subject'))
+               if header.get(key)]
+    if details:
+        _run(box.add_paragraph(), '        '.join(details), bold=True, size=11, font=SERIF)
+    doc.add_paragraph()
+
+
 def _header(doc, document, labels):
     from docx.enum.table import WD_TABLE_ALIGNMENT
     from docx.enum.text import WD_ALIGN_PARAGRAPH
@@ -91,24 +139,46 @@ def _header(doc, document, labels):
     header = document.get('header') or {}
     blocks = question_blocks(document)
 
-    paragraph = doc.add_paragraph()
-    paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    _run(paragraph, str(header.get('school_name') or ''), bold=True, size=19, font=SERIF, underline=True)
-    if header.get('exam_title'):
-        paragraph = doc.add_paragraph()
-        paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        _ordinal_runs(paragraph, str(header['exam_title']), bold=True, size=12, font=SERIF)
-    meta = [f'{labels[label]}: {header[key]}' for label, key in ((subject_label_key(header), 'subject'), ('class', 'class_name'))
-            if header.get(key)]
-    if meta:
-        paragraph = doc.add_paragraph()
-        paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        _run(paragraph, '      '.join(meta), bold=True, size=12, font=SERIF)
+    if is_compact_header(header):
+        _compact_header(doc, header, labels)
+    else:
+        # With a logo the title lines sit in the middle cell of a borderless 3-cell row, the logo in the outer cell
+        # (left, or right on an Urdu paper), so the school name stays centred on the page as in the HTML print.
+        logo = _logo_bytes(header.get('logo'))
+        target, fresh = doc, False
+        if logo:
+            from docx.shared import Mm
+            table = doc.add_table(rows=1, cols=3)
+            table.alignment = WD_TABLE_ALIGNMENT.CENTER
+            table.autofit = False
+            for cell, width in zip(table.rows[0].cells, (30, CONTENT_WIDTH_MM - 60, 30)):
+                cell.width = Mm(width)
+            side = table.rows[0].cells[2 if is_rtl(document) else 0]
+            side.paragraphs[0].add_run().add_picture(io.BytesIO(logo), height=Mm(20))
+            target, fresh = table.rows[0].cells[1], True
 
-    for line in (f'{labels["name"]}: ' + '_' * 52, f'{labels["roll"]}: ' + '_' * 22 + f'      {labels["date"]}: ' + '_' * 24):
-        paragraph = doc.add_paragraph()
-        paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        _run(paragraph, line, bold=True, size=11, font=SERIF)
+        def line():
+            nonlocal fresh
+            paragraph = target.paragraphs[0] if fresh else target.add_paragraph()
+            fresh = False
+            paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            return paragraph
+
+        paragraph = line()
+        _run(paragraph, str(header.get('school_name') or ''), bold=True, size=19, font=SERIF, underline=True)
+        if header.get('exam_title'):
+            paragraph = line()
+            _ordinal_runs(paragraph, str(header['exam_title']), bold=True, size=12, font=SERIF)
+        meta = [f'{labels[label]}: {header[key]}' for label, key in ((subject_label_key(header), 'subject'), ('class', 'class_name'))
+                if header.get(key)]
+        if meta:
+            paragraph = line()
+            _run(paragraph, '      '.join(meta), bold=True, size=12, font=SERIF)
+
+        for line in (f'{labels["name"]}: ' + '_' * 52, f'{labels["roll"]}: ' + '_' * 22 + f'      {labels["date"]}: ' + '_' * 24):
+            paragraph = doc.add_paragraph()
+            paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            _run(paragraph, line, bold=True, size=11, font=SERIF)
 
     if header.get('show_time_marks'):
         paragraph = doc.add_paragraph()

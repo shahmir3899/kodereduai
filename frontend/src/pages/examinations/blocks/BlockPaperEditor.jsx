@@ -456,6 +456,17 @@ export default function BlockPaperEditor({
           )}
           <div className="p-3 border-t border-gray-100 space-y-2">
             <p className="text-xs font-semibold text-gray-700">{isWorksheet ? 'Worksheet header' : 'Paper header'}</p>
+            {isWorksheet && (
+              <label className="block text-sm text-gray-700">
+                Header style
+                <select value={header.header_style === 'compact' ? 'compact' : 'standard'} disabled={readOnly}
+                  onChange={(e) => setHeader('header_style', e.target.value)}
+                  className="mt-1 w-full px-2 py-1.5 border border-gray-300 rounded-lg text-sm">
+                  <option value="compact">Compact: logo and one box</option>
+                  <option value="standard">Standard: school name and title</option>
+                </select>
+              </label>
+            )}
             <label className="block text-sm text-gray-700">
               {isWorksheet ? 'Language' : 'Paper language'}
               <select value={doc.direction === 'rtl' ? 'rtl' : 'ltr'} disabled={readOnly}
@@ -471,6 +482,10 @@ export default function BlockPaperEditor({
                 “For office use” marks table
               </label>
             )}
+            <label className="flex items-center gap-2 text-sm text-gray-700">
+              <input type="checkbox" checked={header.show_logo !== false} disabled={readOnly} onChange={(e) => setHeader('show_logo', e.target.checked)} />
+              School logo
+            </label>
             <label className="flex items-center gap-2 text-sm text-gray-700">
               <input type="checkbox" checked={headerSwitchOn(header, 'show_time_marks', kind)} disabled={readOnly} onChange={(e) => setHeader('show_time_marks', e.target.checked)} />
               {isWorksheet ? 'Total marks line' : 'Time and total marks line'}

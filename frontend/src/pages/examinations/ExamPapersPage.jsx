@@ -12,6 +12,7 @@ import ClassSelector from '../../components/ClassSelector'
 import { useToast } from '../../components/Toast'
 import { useConfirmModal } from '../../components/ConfirmModal'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
+import { useAuth } from '../../contexts/AuthContext'
 import { useSessionClasses } from '../../hooks/useSessionClasses'
 import { useClassSubjects } from '../../hooks/useClassSubjects'
 import useTeacherScopedClasses from '../../hooks/useTeacherScopedClasses'
@@ -45,6 +46,12 @@ export default function ExamPapersPage() {
   const [filterSubjectId, setFilterSubjectId] = useState('')
   const [filterStatus, setFilterStatus] = useState('')
   const [search, setSearch] = useState('')
+  // Who made it. Teachers see every paper of the classes and subjects they teach (shared with co-teachers) and can
+  // narrow to their own; school-wide roles pick a maker. The server's role scope decides what is visible at all.
+  const { effectiveRole } = useAuth()
+  const isTeacher = effectiveRole === 'TEACHER'
+  const [mineOnly, setMineOnly] = useState(false)
+  const [madeBy, setMadeBy] = useState('')
   const debouncedSearch = useDebounce(search, 300)
   const [page, setPage] = useState(1)
   const [view, setView] = useViewPreference('exam-papers')
@@ -70,7 +77,8 @@ export default function ExamPapersPage() {
       setFilterSubjectId('')
       setPage(1)
     },
-    autoSelectFirst: true,
+    // All my classes first (user decision 2026-11-23); the class box narrows it.
+    autoSelectFirst: false,
     queryKey: 'teacherExamPaperListClasses',
     // Same combined class-teacher-OR-subject-teacher scope as
     // QuestionPaperBuilderPage — this list page shares the same
@@ -85,7 +93,16 @@ export default function ExamPapersPage() {
     ...(filterSubjectId && { subject: filterSubjectId }),
     ...(filterStatus && { status: filterStatus }),
     ...(debouncedSearch.trim() && { search: debouncedSearch.trim() }),
-  }), [debouncedSearch, filterStatus, filterSubjectId, page, resolvedClassId])
+    ...(mineOnly && { mine: 1 }),
+    ...(!isTeacher && madeBy && { made_by: madeBy }),
+  }), [debouncedSearch, filterStatus, filterSubjectId, page, resolvedClassId, mineOnly, isTeacher, madeBy])
+
+  const { data: makersRes } = useQuery({
+    queryKey: ['examPaperMakers'],
+    queryFn: () => questionPaperApi.getExamPaperMakers(),
+    enabled: !isTeacher,
+  })
+  const makers = makersRes?.data || []
 
   const { data, isLoading, isFetching } = useQuery({
     queryKey: ['examPapersList', queryParams],
@@ -205,7 +222,7 @@ export default function ExamPapersPage() {
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="bg-white border-b border-gray-200 px-6 py-5">
-        <PageHeader className="max-w-6xl mx-auto" title="Question Papers" subtitle="Resume drafts, review ready papers, and export published papers." actions={<>
+        <PageHeader className="max-w-6xl mx-auto" title="Question Papers" subtitle="Every saved paper you may see: edit drafts, open ready and published papers, print or download them." actions={<>
 <Button
  type="button"
  onClick={() => navigate('/academics/paper-builder')}
@@ -217,7 +234,7 @@ export default function ExamPapersPage() {
       </div>
 
       <div className="max-w-6xl mx-auto px-6 py-6 space-y-4">
-        <div className="bg-white border border-gray-200 rounded-lg p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+        <div className="bg-white border border-gray-200 rounded-lg p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">Class</label>
             <ClassSelector
@@ -230,7 +247,7 @@ export default function ExamPapersPage() {
               className="input w-full"
               scope={classSelectorScope}
               academicYearId={activeAcademicYear?.id}
-              showAllOption={showAllOption}
+              showAllOption={showAllOption || isTeacher}
               classes={teacherClassOptions || undefined}
             />
           </div>
@@ -279,7 +296,22 @@ export default function ExamPapersPage() {
             </select>
           </div>
 
-          <div className="lg:col-span-2">
+          {isTeacher ? (
+            <label className="flex items-center gap-2 text-sm text-gray-700 sm:pt-5">
+              <input type="checkbox" checked={mineOnly} onChange={(e) => { setMineOnly(e.target.checked); setPage(1) }} className="rounded border-gray-300" />
+              Mine only
+            </label>
+          ) : (
+            <div>
+              <label htmlFor="papers-made-by" className="block text-xs font-medium text-gray-600 mb-1">Made by</label>
+              <select id="papers-made-by" value={madeBy} onChange={(e) => { setMadeBy(e.target.value); setPage(1) }} className="input w-full">
+                <option value="">Anyone</option>
+                {makers.map((maker) => <option key={maker.id} value={maker.id}>{maker.name}</option>)}
+              </select>
+            </div>
+          )}
+
+          <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">Search</label>
             <input
               type="text"
@@ -332,10 +364,11 @@ export default function ExamPapersPage() {
                   fields={[
                     { label: 'Duration · Marks', value: `${paper.duration_minutes} min · ${paper.total_marks} marks` },
                     { label: 'Questions', value: paper.question_count || 0 },
+                    { label: 'Made by', value: paper.made_by_name || '—' },
                     { label: 'Updated', value: paper.updated_at ? new Date(paper.updated_at).toLocaleString() : '—' },
                   ]}
                   actions={[
-                    { label: paper.status === 'DRAFT' ? 'Resume' : 'Open', tone: 'info', onClick: () => navigate(`/examinations/papers/${paper.id}`) },
+                    { label: paper.status === 'DRAFT' ? 'Edit' : 'Open', tone: 'info', onClick: () => navigate(`/examinations/papers/${paper.id}`) },
                     { label: 'Responses', tone: 'success', onClick: () => navigate(`/academics/papers/${paper.id}/responses`) },
                     { label: downloadingKey === `${paper.id}-pdf` ? 'Generating…' : 'PDF', tone: 'muted', disabled: downloadingKey === `${paper.id}-pdf`, onClick: () => handleDownload(paper, 'pdf') },
                     { label: downloadingKey === `${paper.id}-docx` ? 'Generating…' : 'DOCX', tone: 'muted', disabled: downloadingKey === `${paper.id}-docx`, onClick: () => handleDownload(paper, 'docx') },
@@ -362,6 +395,7 @@ export default function ExamPapersPage() {
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Title</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Class / Subject</th>
                     <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Questions</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Made by</th>
                     <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Status</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Updated</th>
                     <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
@@ -385,6 +419,7 @@ export default function ExamPapersPage() {
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-700">{paper.class_name} • {paper.subject_name}</td>
                       <td className="px-4 py-3 text-sm text-center text-gray-700">{paper.question_count || 0}</td>
+                      <td className="px-4 py-3 text-sm text-gray-700">{paper.made_by_name || '—'}</td>
                       <td className="px-4 py-3 text-center">
                         <Badge colors={STATUS_STYLE[paper.status] || TONE.neutral}>
                           {paper.status}
@@ -398,7 +433,7 @@ export default function ExamPapersPage() {
                             onClick={() => navigate(`/examinations/papers/${paper.id}`)}
                             className="px-3 py-1.5 rounded border border-blue-200 text-blue-700 text-xs hover:bg-blue-50"
                           >
-                            {paper.status === 'DRAFT' ? 'Resume' : 'Open'}
+                            {paper.status === 'DRAFT' ? 'Edit' : 'Open'}
                           </button>
                           <button
                             type="button"

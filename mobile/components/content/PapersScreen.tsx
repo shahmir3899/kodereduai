@@ -1,8 +1,9 @@
 import React, { useMemo, useState } from 'react';
-import { View, Text, FlatList, ActivityIndicator, TouchableOpacity, StyleSheet, type RefreshControlProps } from 'react-native';
+import { View, Text, FlatList, ActivityIndicator, TouchableOpacity, StyleSheet, Switch, type RefreshControlProps } from 'react-native';
 import { useRouter, type Href } from 'expo-router';
 import { examinationsApi } from '../../services/api';
-import { usePaperActions, usePapersPaged } from '../../hooks/usePapers';
+import { usePaperActions, usePaperMakers, usePapersPaged } from '../../hooks/usePapers';
+import { useAuth } from '../../contexts/AuthContext';
 import { usePersonaBase } from '../../hooks/usePersonaBase';
 import { useDebouncedValue } from '../../hooks/useDebouncedValue';
 import { useRefreshControl } from '../../hooks/useRefreshControl';
@@ -38,16 +39,21 @@ export default function PapersScreen() {
   const [classFilter, setClassFilter] = useState<number>(-1);
   const [subjectFilter, setSubjectFilter] = useState<number>(-1);
   const [statusFilter, setStatusFilter] = useState('');
+  // Same as the web: teachers see all their classes' papers and may narrow to their own; school-wide roles pick a maker.
+  const isTeacher = useAuth().effectiveRole === 'TEACHER';
+  const [mineOnly, setMineOnly] = useState(false);
+  const [madeBy, setMadeBy] = useState<number>(-1);
+  const makers = usePaperMakers(!isTeacher);
   const classes = useMasterClasses();
   const subjects = useSubjectsList();
-  const query = usePapersPaged(term, { classId: classFilter === -1 ? null : classFilter, subject: subjectFilter === -1 ? null : subjectFilter, status: statusFilter });
+  const query = usePapersPaged(term, { classId: classFilter === -1 ? null : classFilter, subject: subjectFilter === -1 ? null : subjectFilter, status: statusFilter, mine: mineOnly, madeBy: !isTeacher && madeBy !== -1 ? madeBy : null });
   const refreshControl = useRefreshControl(query.refetch) as React.ReactElement<RefreshControlProps>;
   const rows = useMemo(() => query.data?.pages.flatMap((p) => p.results) ?? [], [query.data]);
   const [busy, setBusy] = useState<number | null>(null);
   // Choosing papers is page-scoped: ids from a list that is no longer on screen must not ride along in a bulk delete.
   const [selecting, setSelecting] = useState(false);
   const [selected, setSelected] = useState<number[]>([]);
-  const filterKey = `${term}|${classFilter}|${subjectFilter}|${statusFilter}`;
+  const filterKey = `${term}|${classFilter}|${subjectFilter}|${statusFilter}|${mineOnly}|${madeBy}`;
   React.useEffect(() => { setSelected([]); }, [filterKey]);
   const rowIds = rows.map((r) => r.id);
 
@@ -106,6 +112,14 @@ export default function PapersScreen() {
       <Select label="Class" searchable value={classFilter} onChange={setClassFilter} options={[{ value: -1, label: 'All classes' }, ...(classes.data ?? []).map((c) => ({ value: Number(c.id), label: String(c.name) }))]} />
       <Select label="Subject" searchable value={subjectFilter} onChange={setSubjectFilter} options={[{ value: -1, label: 'All subjects' }, ...(subjects.data ?? []).map((s) => ({ value: s.id, label: s.name }))]} />
       <Select label="Status" value={statusFilter} onChange={setStatusFilter} options={[{ value: '', label: 'Any status' }, ...PAPER_STATUSES.map((s) => ({ value: s.value as string, label: s.label }))]} />
+      {isTeacher ? (
+        <View style={styles.switchRow}>
+          <Text style={styles.switchLabel}>Mine only</Text>
+          <Switch value={mineOnly} onValueChange={setMineOnly} accessibilityLabel="Mine only" />
+        </View>
+      ) : (
+        <Select label="Made by" searchable value={madeBy} onChange={setMadeBy} options={[{ value: -1, label: 'Anyone' }, ...(makers.data ?? []).map((m) => ({ value: m.id, label: m.name }))]} />
+      )}
       <View style={styles.actions}>
         <Button title="+ New paper" size="sm" onPress={() => open()} />
         <Button title={selecting ? 'Done selecting' : 'Select'} size="sm" variant="outline" onPress={() => { setSelecting((v) => !v); setSelected([]); }} />
@@ -143,10 +157,12 @@ export default function PapersScreen() {
               <View style={styles.who}>
                 <Text style={styles.name} numberOfLines={2}>{p.paper_title}</Text>
                 <Text style={styles.sub} numberOfLines={1}>{[p.class_name, p.subject_name, `${Number(p.total_marks)} marks`].filter(Boolean).join('  ·  ')}</Text>
+                {p.made_by_name ? <Text style={styles.sub} numberOfLines={1}>Made by {p.made_by_name}</Text> : null}
               </View>
               <StatusPill label={PAPER_STATUSES.find((s) => s.value === p.status)?.label ?? p.status} tone={paperTone(p.status)} />
             </TouchableOpacity>
             <View style={styles.actions}>
+              <Button title={p.status === 'DRAFT' ? 'Edit' : 'Open'} size="sm" onPress={() => open(p.id)} disabled={busy !== null || selecting} />
               <Button title="Share PDF" size="sm" variant="outline" onPress={() => share(p)} loading={busy === p.id} disabled={busy !== null} />
               <Button title="Share Word" size="sm" variant="outline" onPress={() => shareDocx(p)} disabled={busy !== null} />
               <Button title="Delete" size="sm" variant="ghost" onPress={() => remove(p)} disabled={busy !== null} />
@@ -168,4 +184,6 @@ const styles = StyleSheet.create({
   sub: { fontSize: FontSize.sm, color: Colors.textSecondary, marginTop: 2 },
   actions: { flexDirection: 'row', gap: Spacing.sm, flexWrap: 'wrap' },
   check: { fontSize: FontSize.xl, color: Colors.primary },
+  switchRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: Spacing.sm },
+  switchLabel: { fontSize: FontSize.md, color: Colors.text },
 });

@@ -568,3 +568,188 @@ class TestMatchingBankShape:
                 'marks': '2', 'subject': saved.subject_id, 'type_data': saved.type_data}
         serializer = QuestionCreateUpdateSerializer(instance=saved, data=data, partial=True)
         assert serializer.is_valid(), serializer.errors
+
+
+def _png_data_uri(size=(60, 40)):
+    import base64
+    from PIL import Image
+    out = io.BytesIO()
+    Image.new('RGB', size, (200, 30, 30)).save(out, format='PNG')
+    return 'data:image/png;base64,' + base64.b64encode(out.getvalue()).decode('ascii')
+
+
+@pytest.mark.django_db
+class TestSchoolLogo:
+    """The school logo on the left of the paper header (demo re-record 2026-11-23: it was never drawn)."""
+
+    def _render(self, paper, logo, header=None):
+        from django.core.cache import cache
+        from docx import Document
+        from examinations.paper_blocks.docx_renderer import render_docx
+        from examinations.paper_blocks.html_renderer import render_html
+        from examinations.paper_blocks.pictures import PictureStore
+        from examinations.paper_document import render_document
+        from schools.models import School
+        cache.clear()
+        School.objects.filter(id=paper.school_id).update(logo=logo)
+        paper = ExamPaper.objects.select_related('school').get(id=paper.id)
+        document = render_document(paper, {'header': header or {}, 'blocks': [
+            {'id': 'a', 'type': 'short_answer', 'title': 'Answer.', 'marks': 2, 'data': {'items': [{'text': 'Why?'}]}}]})
+        word = Document(io.BytesIO(render_docx(document, PictureStore())))
+        return document, render_html(document, PictureStore()), len(word.inline_shapes)
+
+    def test_logo_is_drawn_in_the_page_and_the_word_file(self, paper):
+        document, page, pictures = self._render(paper, _png_data_uri())
+        assert document['header']['logo'].startswith('data:image/png;base64,')
+        assert 'class="head has-logo"' in page and '<img class="logo"' in page
+        assert pictures >= 1
+
+    def test_switch_off_hides_it(self, paper):
+        document, page, pictures = self._render(paper, _png_data_uri(), header={'show_logo': False})
+        assert 'logo' not in document['header'] and 'class="logo"' not in page
+        assert pictures == 0
+
+    def test_a_broken_logo_still_prints_the_paper(self, paper):
+        document, page, pictures = self._render(paper, 'data:image/png;base64,bm90IGFuIGltYWdl')
+        assert 'logo' not in document['header'] and 'class="head"' in page and pictures == 0
+
+    def test_no_logo_keeps_the_plain_header(self, paper):
+        _, page, _ = self._render(paper, '')
+        assert 'class="head"' in page and 'class="logo"' not in page
+
+
+@pytest.mark.django_db
+class TestPapersListMadeBy:
+    """Question Papers page: who made each paper, "Mine only" and the "Made by" filter (2026-11-23)."""
+
+    def _second_paper(self, api, seed_data, who='principal'):
+        response = api.post(f'{PAPERS}ensure-draft/', {
+            'class_obj': seed_data['classes'][0].id, 'subject': seed_data['subjects'][0].id,
+            'paper_title': 'Second paper', 'duration_minutes': 60,
+        }, seed_data['tokens'][who], seed_data['SID_A'])
+        assert response.status_code == 201, response.content
+        return ExamPaper.objects.get(id=response.json()['id'])
+
+    def _ids(self, api, seed_data, query, who='admin'):
+        body = api.get(f'{PAPERS}{query}', seed_data['tokens'][who], seed_data['SID_A']).json()
+        return {row['id'] for row in body['results']}, body['results']
+
+    def test_mine_only_and_made_by(self, api, seed_data, paper):
+        other = self._second_paper(api, seed_data)
+        assert {paper.id, other.id} <= self._ids(api, seed_data, '')[0]
+        assert self._ids(api, seed_data, '?mine=1')[0] == {paper.id}
+        principal = seed_data['users']['principal']
+        assert self._ids(api, seed_data, f'?made_by={principal.id}')[0] == {other.id}
+
+    def test_rows_say_who_made_them_and_makers_lists_them(self, api, seed_data, paper):
+        self._second_paper(api, seed_data)
+        _, rows = self._ids(api, seed_data, '')
+        admin = seed_data['users']['admin']
+        mine = next(r for r in rows if r['id'] == paper.id)
+        assert mine['made_by_name'] == ((admin.get_full_name() or '').strip() or admin.username)
+        makers = api.get(f'{PAPERS}makers/', seed_data['tokens']['admin'], seed_data['SID_A']).json()
+        assert {m['id'] for m in makers} >= {admin.id, seed_data['users']['principal'].id}
+
+    def test_a_ready_paper_can_be_made_a_draft_again(self, api, seed_data, paper):
+        token, sid = seed_data['tokens']['admin'], seed_data['SID_A']
+        ExamPaper.objects.filter(id=paper.id).update(status='READY')
+        response = api.patch(f'{PAPERS}{paper.id}/', {'status': 'DRAFT'}, token, sid)
+        assert response.status_code == 200, response.content
+        assert ExamPaper.objects.get(id=paper.id).status == 'DRAFT'
+
+
+class TestHandwritingLineStyles:
+    """Handwriting lines: four lines or one line, red-and-blue or black (sample worksheet 2026-11-23)."""
+
+    def _svg(self, **data):
+        from examinations.paper_blocks.layouts import handwriting_lines
+        from examinations.paper_blocks.pictures import PictureStore
+        from examinations.paper_blocks.scene import to_svg
+        return to_svg(handwriting_lines({'rows': 2, 'cols': 4, **data}), PictureStore())
+
+    def test_default_is_the_coloured_copybook_ruling(self):
+        svg = self._svg()
+        assert '#dc2626' in svg and '#3b82f6' in svg
+
+    def test_black_has_no_red_or_blue(self):
+        svg = self._svg(colour='black')
+        assert '#dc2626' not in svg and '#3b82f6' not in svg
+
+    def test_one_line_draws_fewer_lines_than_four(self):
+        assert self._svg(style='one').count('<line') < self._svg().count('<line')
+
+    def test_the_settings_are_valid_block_fields(self):
+        from examinations.paper_blocks.registry import validate_document
+        block = {'id': 'h', 'type': 'handwriting_lines', 'title': 'Write.', 'marks': 2,
+                 'data': {'rows': 8, 'cols': 4, 'style': 'four', 'colour': 'black'}}
+        assert validate_document({'header': {}, 'blocks': [block]}) == []
+
+
+WORKSHEETS = '/api/examinations/worksheets/'
+
+
+def _worksheet(api, seed_data, who='admin', title='Practice'):
+    response = api.post(f'{WORKSHEETS}ensure-draft/', {
+        'class_obj': seed_data['classes'][0].id, 'subject': seed_data['subjects'][0].id, 'title': title,
+    }, seed_data['tokens'][who], seed_data['SID_A'])
+    assert response.status_code == 201, response.content
+    return response.json()['id']
+
+
+@pytest.mark.django_db
+class TestCompactWorksheetHeader:
+    def _render(self, worksheet_id):
+        from docx import Document
+        from examinations.models import Worksheet
+        from examinations.paper_blocks.docx_renderer import render_docx
+        from examinations.paper_blocks.html_renderer import render_html
+        from examinations.paper_blocks.pictures import PictureStore
+        from examinations.paper_document import document_for_editor, render_document
+        worksheet = Worksheet.objects.get(id=worksheet_id)
+        document = render_document(worksheet, document_for_editor(worksheet)[0])
+        word = Document(io.BytesIO(render_docx(document, PictureStore())))
+        return document, render_html(document, PictureStore()), word
+
+    def test_a_new_worksheet_starts_compact(self, api, seed_data):
+        document, page, word = self._render(_worksheet(api, seed_data))
+        assert document['header']['header_style'] == 'compact'
+        assert '<header class="compact">' in page and 'class="cand"' not in page and 'Roll No' not in page
+        cell_text = ' '.join(cell.text for table in word.tables for cell in table.rows[0].cells)
+        assert 'Name:' in cell_text and 'Class:' in cell_text
+
+    def test_standard_style_keeps_the_school_header(self, api, seed_data):
+        from examinations.models import Worksheet
+        wid = _worksheet(api, seed_data)
+        worksheet = Worksheet.objects.get(id=wid)
+        worksheet.document['header']['header_style'] = 'standard'
+        worksheet.save(update_fields=['document'])
+        _, page, _ = self._render(wid)
+        assert 'class="head"' in page and '<header class="compact">' not in page
+
+
+@pytest.mark.django_db
+class TestWorksheetsListAndStatus:
+    def _ids(self, api, seed_data, query):
+        body = api.get(f'{WORKSHEETS}{query}', seed_data['tokens']['admin'], seed_data['SID_A']).json()
+        return {row['id'] for row in body['results']}, body['results']
+
+    def test_mine_made_by_and_makers(self, api, seed_data):
+        mine = _worksheet(api, seed_data)
+        other = _worksheet(api, seed_data, who='principal', title='Other')
+        assert {mine, other} <= self._ids(api, seed_data, '')[0]
+        assert self._ids(api, seed_data, '?mine=1')[0] == {mine}
+        principal = seed_data['users']['principal']
+        assert self._ids(api, seed_data, f'?made_by={principal.id}')[0] == {other}
+        _, rows = self._ids(api, seed_data, '')
+        assert all(row.get('made_by_name') for row in rows if row['id'] in (mine, other))
+        makers = api.get(f'{WORKSHEETS}makers/', seed_data['tokens']['admin'], seed_data['SID_A']).json()
+        assert {m['id'] for m in makers} >= {seed_data['users']['admin'].id, principal.id}
+
+    def test_ready_and_back_to_draft(self, api, seed_data):
+        from examinations.models import Worksheet
+        wid = _worksheet(api, seed_data)
+        token, sid = seed_data['tokens']['admin'], seed_data['SID_A']
+        Worksheet.objects.filter(id=wid).update(status='READY')
+        response = api.patch(f'{WORKSHEETS}{wid}/', {'status': 'DRAFT'}, token, sid)
+        assert response.status_code == 200, response.content
+        assert Worksheet.objects.get(id=wid).status == 'DRAFT'

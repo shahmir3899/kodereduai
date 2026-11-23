@@ -328,6 +328,11 @@ export default function BlockPaperEditor({ kind = 'paper', paperId, title, readO
 
           <View style={styles.panel}>
             <Text style={styles.panelTitle}>{isWorksheet ? 'Worksheet header' : 'Paper header'}</Text>
+            {isWorksheet ? (
+              <Select label="Header style" value={header.header_style === 'compact' ? 'compact' : 'standard'} disabled={readOnly}
+                onChange={(v) => setHeader('header_style', v)}
+                options={[{ value: 'compact', label: 'Compact: logo and one box' }, { value: 'standard', label: 'Standard: school name and title' }]} />
+            ) : null}
             <Select label={isWorksheet ? 'Language' : 'Paper language'} value={direction} disabled={readOnly} onChange={(v) => update((prev) => ({ ...prev, direction: v }))}
               options={[{ value: 'ltr', label: 'English (left to right)' }, { value: 'rtl', label: 'اردو Urdu (right to left)' }]} />
             {!isWorksheet ? (
@@ -336,6 +341,10 @@ export default function BlockPaperEditor({ kind = 'paper', paperId, title, readO
                 <Switch value={headerSwitchOn(header, 'marks_table', kind)} disabled={readOnly} onValueChange={(v) => setHeader('marks_table', v)} accessibilityLabel="For office use marks table" />
               </View>
             ) : null}
+            <View style={styles.row}>
+              <Text style={[styles.flex, styles.label]}>School logo</Text>
+              <Switch value={header.show_logo !== false} disabled={readOnly} onValueChange={(v) => setHeader('show_logo', v)} accessibilityLabel="School logo" />
+            </View>
             <View style={styles.row}>
               <Text style={[styles.flex, styles.label]}>{isWorksheet ? 'Total marks line' : 'Time and total marks line'}</Text>
               <Switch value={headerSwitchOn(header, 'show_time_marks', kind)} disabled={readOnly} onValueChange={(v) => setHeader('show_time_marks', v)}

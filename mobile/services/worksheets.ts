@@ -32,6 +32,7 @@ export interface Worksheet {
   items?: WorksheetItemRow[];
   item_count?: number;
   status: 'DRAFT' | 'READY' | 'PUBLISHED' | string;
+  made_by_name?: string | null;
   source?: string;
   /** Saved as blocks (Phase 6b). Every worksheet prints on the phone from print-html either way (Phase 7). */
   uses_blocks?: boolean;

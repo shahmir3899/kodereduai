@@ -5,16 +5,22 @@ import type { CoverageStats, ExamOption, LessonOption } from '../services/questi
 import type { Paper } from '../services/paperBuilder';
 import { useScopedPagedQuery, useScopedQuery } from './useScopedQuery';
 
-export function usePapersPaged(search: string, filters: { classId?: number | null; subject?: number | null; status?: string } = {}) {
-  return useScopedPagedQuery<Paper>('examPapers', ['paged', search, filters.classId ?? null, filters.subject ?? null, filters.status ?? ''], async (page) => {
+export function usePapersPaged(search: string, filters: { classId?: number | null; subject?: number | null; status?: string; mine?: boolean; madeBy?: number | null } = {}) {
+  return useScopedPagedQuery<Paper>('examPapers', ['paged', search, filters.classId ?? null, filters.subject ?? null, filters.status ?? '', !!filters.mine, filters.madeBy ?? null], async (page) => {
     const data = (await examinationsApi.getExamPapers({
       page, page_size: 20, ...(search ? { search } : {}),
       ...(filters.classId ? { class_obj: filters.classId } : {}), ...(filters.subject ? { subject: filters.subject } : {}), ...(filters.status ? { status: filters.status } : {}),
+      ...(filters.mine ? { mine: 1 } : {}), ...(filters.madeBy ? { made_by: filters.madeBy } : {}),
     })).data as
       { results?: Paper[]; next?: string | null; count?: number } | Paper[];
     if (Array.isArray(data)) return { results: data, next: null, count: data.length };
     return { results: data.results ?? [], next: data.next ?? null, count: data.count ?? 0 };
   });
+}
+
+/** People who made the papers this user may see (the list's "Made by" filter); not asked for teachers. */
+export function usePaperMakers(enabled: boolean) {
+  return useScopedQuery('examPaperMakers', [], async () => (await examinationsApi.getExamPaperMakers()).data as { id: number; name: string }[], { enabled });
 }
 
 export function usePaper(id: number | null) {

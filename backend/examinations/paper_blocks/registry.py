@@ -49,6 +49,11 @@ BLOCK_TYPES: Dict[str, Dict[str, Any]] = {
     'handwriting_lines': {'label': 'Handwriting lines', 'kind': 'activity', 'fields': [
         _f('rows', 'Rows', 'int', min=1, max=MAX_GRID, default=4),
         _f('cols', 'Boxes per row', 'int', min=1, max=MAX_GRID, default=4),
+        # Schools print both: coloured copybook ruling, and plain black lines (2026-11-23 sample worksheet).
+        _f('style', 'Lines', 'choice', choices=['four', 'one'], default='four', optional=True,
+           labels={'four': 'Four lines (copybook)', 'one': 'One line'}),
+        _f('colour', 'Colour', 'choice', choices=['colour', 'black'], default='colour', optional=True,
+           labels={'colour': 'Red and blue', 'black': 'Black'}),
     ]},
     'missing_sequence': {'label': 'Missing numbers or letters', 'kind': 'activity', 'fields': [
         # counting: the editors offer "1 to N, every k-th left empty" for this list (demo findings, faster 1).

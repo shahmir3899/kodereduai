@@ -43,19 +43,29 @@ def writing_grid(data: Dict[str, Any]) -> Scene:
 
 
 def handwriting_lines(data: Dict[str, Any]) -> Scene:
-    """Four-line copybook rows: red top and bottom, two dashed blue guides between."""
+    """Writing rows split into boxes. Four lines: copybook ruling (top, two guides, base); one line: a base line
+    to write on. Colour: red top/base with dashed blue guides, or all black (guides lighter)."""
     rows, cols = _int(data.get('rows'), 4), _int(data.get('cols'), 4)
-    band, gap = 44, 14
+    one = data.get('style') == 'one'
+    black = data.get('colour') == 'black'
+    edge = INK if black else RULE_RED
+    guide = RULE_GREY if black else RULE_BLUE
+    divider = INK if black else RULE_GREY
+    band, gap = (36, 10) if one else (44, 14)
     scene = Scene(W, rows * (band + gap) - gap + 4)
     for row in range(rows):
         top = 2 + row * (band + gap)
-        scene.line(0, top, W, top, color=RULE_RED)
-        scene.line(0, top + band, W, top + band, color=RULE_RED)
-        scene.line(0, top + band / 3, W, top + band / 3, stroke=1, dash=True, color=RULE_BLUE)
-        scene.line(0, top + 2 * band / 3, W, top + 2 * band / 3, stroke=1, dash=True, color=RULE_BLUE)
+        if not one:
+            scene.line(0, top, W, top, color=edge)
+            scene.line(0, top + band / 3, W, top + band / 3, stroke=1, dash=not black, color=guide)
+            scene.line(0, top + 2 * band / 3, W, top + 2 * band / 3, stroke=1, dash=not black, color=guide)
+        scene.line(0, top + band, W, top + band, color=edge)
+        # One line with one box needs no end marks; boxes on a single line are short ticks rising from it.
+        if one and cols == 1:
+            continue
         for col in range(cols + 1):
             x = min(W - 0.5, max(0.5, col * W / cols))
-            scene.line(x, top, x, top + band, stroke=1, color=RULE_GREY)
+            scene.line(x, top + (band * 0.55 if one else 0), x, top + band, stroke=1, color=divider)
     return scene
 
 

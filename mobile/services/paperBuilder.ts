@@ -30,6 +30,7 @@ export interface Paper {
   class_name?: string;
   subject: number;
   subject_name?: string;
+  made_by_name?: string | null;
   paper_questions?: PaperQuestionRow[];
   structure?: Array<Record<string, unknown>>;
   exam?: number | null;

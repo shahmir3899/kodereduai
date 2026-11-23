@@ -880,6 +880,7 @@ export const examinationsApi = {
   getExamPapers: (params?: Record<string, unknown>) =>
     api.get('/api/examinations/exam-papers/', { params }),
   getExamPaper: (id: number) => api.get(`/api/examinations/exam-papers/${id}/`),
+  getExamPaperMakers: () => api.get('/api/examinations/exam-papers/makers/'),
   createExamPaper: (data: object) => api.post('/api/examinations/exam-papers/', data),
   updateExamPaper: (id: number, data: object) => api.patch(`/api/examinations/exam-papers/${id}/`, data),
   deleteExamPaper: (id: number) => api.delete(`/api/examinations/exam-papers/${id}/`),
@@ -913,6 +914,8 @@ export const examinationsApi = {
   ensureWorksheetDraft: (data: object) => api.post('/api/examinations/worksheets/ensure-draft/', data),
   autosaveWorksheetDraft: (id: number, data: object) => api.post(`/api/examinations/worksheets/${id}/autosave/`, data),
   deleteWorksheet: (id: number) => api.delete(`/api/examinations/worksheets/${id}/`),
+  updateWorksheet: (id: number, data: object) => api.patch(`/api/examinations/worksheets/${id}/`, data),
+  getWorksheetMakers: () => api.get('/api/examinations/worksheets/makers/'),
   duplicateWorksheet: (id: number) => api.post(`/api/examinations/worksheets/${id}/duplicate/`, {}),
   generateWorksheetDocx: (id: number) => api.get(`/api/examinations/worksheets/${id}/generate-docx/`, { responseType: 'arraybuffer' }),
   // Block worksheets (Paper Builder v2 Phase 6b): the same endpoints as block papers.
