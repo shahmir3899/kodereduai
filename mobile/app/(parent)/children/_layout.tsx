@@ -1,15 +1,9 @@
+import RoleStack from '../../../components/nav/RoleStack';
 import { Stack } from 'expo-router';
-import { Colors, FontSize } from '../../../constants/colors';
 
 export default function Layout() {
   return (
-    <Stack
-      screenOptions={{
-        headerStyle: { backgroundColor: Colors.surface },
-        headerTitleStyle: { fontWeight: '600', fontSize: FontSize.lg },
-        headerTintColor: Colors.text,
-      }}
-    >
+    <RoleStack>
       <Stack.Screen name="index" options={{ title: 'My Children' }} />
       <Stack.Screen name="[id]/index" options={{ title: 'Child' }} />
       <Stack.Screen name="[id]/attendance" options={{ title: 'Attendance' }} />
@@ -20,6 +14,6 @@ export default function Layout() {
       <Stack.Screen name="[id]/library" options={{ title: 'Library' }} />
       <Stack.Screen name="[id]/transport" options={{ title: 'Transport' }} />
       <Stack.Screen name="[id]/track" options={{ title: 'Track Bus' }} />
-    </Stack>
+    </RoleStack>
   );
 }

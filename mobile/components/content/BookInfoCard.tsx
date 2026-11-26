@@ -18,6 +18,7 @@ import { useToast } from '../ui/Toast';
 import { confirm } from '../ui/confirm';
 import FormSheet from '../inventory/FormSheet';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
+import { SectionEmpty, SectionError } from '../../components/ui/SectionState';
 
 // The book at the top of its chapter list: details, how much of the syllabus has been taught (published
 // lesson plans), search across the book's content, and with `editable` edit or delete the book.
@@ -108,8 +109,8 @@ function ContentSearchSheet({ visible, onClose, classId, subjectId }: { visible:
       <TextInput value={text} onChangeText={setText} placeholder="Search by meaning, e.g. photosynthesis" style={styles.input} accessibilityLabel="Search content" autoCorrect={false} />
       {!q ? <Text style={styles.sub}>Finds content blocks about the same idea, even when the words differ.</Text> : null}
       {q && hits.isFetching ? <Spinner /> : null}
-      {q && !hits.isFetching && hits.isError ? <Text style={styles.problem}>Search is not available right now.</Text> : null}
-      {q && !hits.isFetching && !hits.isError && list.length === 0 ? <Text style={styles.sub}>Nothing found for this subject.</Text> : null}
+      {q && !hits.isFetching && hits.isError ? <SectionError message="Search is not available right now." onRetry={() => hits.refetch()} /> : null}
+      {q && !hits.isFetching && !hits.isError && list.length === 0 ? <SectionEmpty message="Nothing found for this subject." icon="search-outline" /> : null}
       {list.map((h) => (
         <View key={h.id} style={styles.hit}>
           <View style={styles.hitHead}><StatusPill label={blockTypeLabel(h.block_type)} tone="info" /></View>
@@ -130,7 +131,6 @@ const styles = StyleSheet.create({
   fill: { height: 8, backgroundColor: Colors.success },
   row: { flexDirection: 'row', gap: Spacing.sm, marginTop: Spacing.sm, flexWrap: 'wrap' },
   input: { borderWidth: 1, borderColor: Colors.border, borderRadius: BorderRadius.sm, padding: Spacing.md, fontSize: FontSize.md, color: Colors.text, backgroundColor: Colors.surface },
-  problem: { fontSize: FontSize.sm, color: Colors.errorText },
   hit: { backgroundColor: Colors.surfaceSecondary, borderRadius: BorderRadius.sm, padding: Spacing.sm, gap: 4 },
   hitHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   path: { fontSize: FontSize.xs, color: Colors.textSecondary },

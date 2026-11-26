@@ -157,6 +157,15 @@ def default_inventory_config():
     }
 
 
+def default_finance_config():
+    """Default finance configuration per school (fee vouchers)."""
+    return {
+        "due_day": 10,
+        "voucher_bank_account_id": None,
+        "voucher_note": "",
+    }
+
+
 def default_ai_config():
     """Default AI pipeline configuration per school."""
     return {
@@ -287,6 +296,15 @@ class School(models.Model):
         default=default_inventory_config,
         blank=True,
         help_text="Per-school inventory config: AI reorder lookahead window, etc."
+    )
+
+    # Finance configuration: fee voucher due day, bank account printed on vouchers, note.
+    # Kept on School (not a finance model) like the other per-school configs; finance owns the
+    # endpoint that edits it (finance.views.FeeVoucherSettingsView).
+    finance_config = models.JSONField(
+        default=default_finance_config,
+        blank=True,
+        help_text="Per-school finance config: voucher due day, bank account, note",
     )
 
     # Status

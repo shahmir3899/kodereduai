@@ -13,6 +13,17 @@ const ToastContext = createContext<ToastApi | null>(null);
 
 const BG: Record<ToastKind, string> = { success: Colors.success, error: Colors.error, info: Colors.primary };
 
+// A short note goes after 3 s; a longer one (a list of rows that were not saved) stays until it
+// can be read, up to 8 s.
+const toastDuration = (message: string) => Math.min(8000, 3000 + message.length * 40);
+
+// "Ali: absent twice, Sara: no roll number, Omar: ... and 4 more": a failed-rows list short
+// enough for a toast.
+export function shortList(lines: string[], max = 3): string {
+  const shown = lines.slice(0, max).join('\n');
+  return lines.length > max ? `${shown}\n...and ${lines.length - max} more` : shown;
+}
+
 // Non-blocking feedback for saves and failures, in place of Alert.alert (which blocks and
 // needs a tap). Use confirm() for questions that need an answer.
 export function ToastProvider({ children }: { children: React.ReactNode }) {
@@ -26,7 +37,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     Animated.timing(opacity, { toValue: 1, duration: 150, useNativeDriver: true }).start();
     timer.current = setTimeout(() => {
       Animated.timing(opacity, { toValue: 0, duration: 200, useNativeDriver: true }).start(() => setToast(null));
-    }, 3000);
+    }, toastDuration(message));
   }, [opacity]);
 
   const api = useRef<ToastApi>({

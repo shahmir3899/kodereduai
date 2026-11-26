@@ -22,7 +22,8 @@ import StatTiles from '../../components/dashboard/StatTiles';
 import RecentNotifications from '../../components/dashboard/RecentNotifications';
 import { formatSlotTime } from '../../services/teacher';
 import LocationDisclosure from '../../components/driver/LocationDisclosure';
-import SchoolSwitcher from '../../components/nav/SchoolSwitcher';
+import HomeHero, { HomeShell } from '../../components/dashboard/HomeHero';
+import { splitTiles } from '../../services/homeHero';
 import Card from '../../components/ui/Card';
 import Button from '../../components/ui/Button';
 import SegmentedTabs from '../../components/ui/SegmentedTabs';
@@ -32,6 +33,8 @@ import ErrorState from '../../components/ui/ErrorState';
 import { useToast } from '../../components/ui/Toast';
 import { confirm } from '../../components/ui/confirm';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
+import TileGrid from '../../components/ui/TileGrid';
+import type { IconName } from '../../components/ui/Icon';
 
 export default function DriverHome() {
   const { user, isModuleEnabled } = useAuth();
@@ -131,8 +134,9 @@ export default function DriverHome() {
     }
   };
 
-  if (vehicle.isLoading) return <Skeleton />;
-  if (vehicle.isError && !vehicle.data) return <ErrorState error={vehicle.error} onRetry={() => vehicle.refetch()} />;
+  const shellName = user?.first_name || user?.username || 'Driver';
+  if (vehicle.isLoading) return <HomeShell name={shellName}><Skeleton /></HomeShell>;
+  if (vehicle.isError && !vehicle.data) return <HomeShell name={shellName}><ErrorState error={vehicle.error} onRetry={() => vehicle.refetch()} /></HomeShell>;
 
   const v = vehicle.data;
   const route = detail.data?.route;
@@ -142,10 +146,8 @@ export default function DriverHome() {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content} refreshControl={refreshControl}>
-      <Text style={styles.greeting}>Hello, {name}</Text>
-      <SchoolSwitcher />
-
-      {hrOn ? <StatTiles tiles={own.tiles} onPress={(r) => router.push(r as Href)} /> : null}
+      <HomeHero name={name} stats={hrOn ? splitTiles(own.tiles).hero : []} onPress={(r) => router.push(r as Href)} />
+      {hrOn ? <StatTiles tiles={splitTiles(own.tiles).rest} onPress={(r) => router.push(r as Href)} /> : null}
 
       {!v ? (
         <Card style={styles.card}>
@@ -228,19 +230,12 @@ export default function DriverHome() {
         </>
       )}
 
-      <View style={styles.actions}>
-        {[
-          { label: 'My Profile', icon: '👤', route: '/(driver)/my-profile', show: true },
-          { label: 'Apply Leave', icon: '🗓️', route: routeFor('driver', '/hr/leave'), show: hrOn },
-          { label: 'Payslips', icon: '🧾', route: routeFor('driver', '/hr/payslips'), show: hrOn },
-          { label: unreadNotes > 0 ? `Notifications (${unreadNotes})` : 'Notifications', icon: '🔔', route: routeFor('driver', '/notifications'), show: isModuleEnabled('notifications') },
-        ].filter((a) => a.show).map((a) => (
-          <TouchableOpacity accessibilityRole="button" key={a.label} style={styles.quick} onPress={() => a.route && router.push(a.route as Href)}>
-            <Text style={styles.quickIcon}>{a.icon}</Text>
-            <Text style={styles.quickLabel}>{a.label}</Text>
-          </TouchableOpacity>
-        ))}
-      </View>
+      <TileGrid items={[
+          { label: 'My Profile', icon: 'person-outline' as IconName, route: '/(driver)/my-profile', show: true },
+          { label: 'Apply Leave', icon: 'calendar-outline' as IconName, route: routeFor('driver', '/hr/leave'), show: hrOn },
+          { label: 'Payslips', icon: 'receipt-outline' as IconName, route: routeFor('driver', '/hr/payslips'), show: hrOn },
+          { label: unreadNotes > 0 ? `Notifications (${unreadNotes})` : 'Notifications', icon: 'notifications-outline' as IconName, route: routeFor('driver', '/notifications'), show: isModuleEnabled('notifications') },
+        ].filter((a) => a.show).map((a) => ({ label: a.label, icon: a.icon, onPress: a.route ? () => router.push(a.route as Href) : undefined }))} />
 
       {hrOn ? <OwnHrPanels balance={own.balance} payslips={own.payslips} /> : null}
       <RecentNotifications enabled={isModuleEnabled('notifications')} onSeeAll={() => router.push('/(driver)/inbox' as Href)} />
@@ -255,11 +250,6 @@ const formatClock = (iso: string) => new Date(iso).toLocaleTimeString([], { hour
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
   content: { padding: Spacing.lg, paddingBottom: Spacing.xxxl },
-  greeting: { fontSize: FontSize.xl, fontWeight: '700', color: Colors.text },
-  actions: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.md, marginTop: Spacing.lg },
-  quick: { width: '30%', minWidth: 84, alignItems: 'center', backgroundColor: Colors.surface, borderRadius: BorderRadius.md, paddingVertical: Spacing.md },
-  quickIcon: { fontSize: 22 },
-  quickLabel: { fontSize: FontSize.xs, color: Colors.text, marginTop: 4, textAlign: 'center' },
   card: { padding: Spacing.md, marginTop: Spacing.md },
   liveCard: { padding: Spacing.md, marginTop: Spacing.md, borderWidth: 1, borderColor: Colors.success },
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: Spacing.sm },

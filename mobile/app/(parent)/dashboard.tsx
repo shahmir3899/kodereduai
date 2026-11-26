@@ -14,8 +14,11 @@ import Card from '../../components/ui/Card';
 import Skeleton from '../../components/ui/Skeleton';
 import ErrorState from '../../components/ui/ErrorState';
 import EmptyState from '../../components/ui/EmptyState';
-import SchoolSwitcher from '../../components/nav/SchoolSwitcher';
-import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
+import HomeHero, { HomeShell } from '../../components/dashboard/HomeHero';
+import type { Tile } from '../../components/dashboard/StatTiles';
+import { parentFigures, pctTone } from '../../services/homeHero';
+import { formatMoney } from '../../services/feeCollect';
+import { Colors, FontSize, Spacing, BorderRadius, GlyphSize } from '../../constants/colors';
 
 export default function ParentDashboard() {
   const { user, isModuleEnabled } = useAuth();
@@ -29,18 +32,24 @@ export default function ParentDashboard() {
   const refreshControl = useRefreshControl(children.refetch, leave.refetch, threads.refetch, notifications.refetch);
   const go = (route: string) => router.push(route as Href);
 
-  if (children.isLoading) return <Skeleton />;
-  if (children.isError && !children.data) return <ErrorState error={children.error} onRetry={() => children.refetch()} />;
+  const shellName = [user?.first_name, user?.last_name].filter(Boolean).join(' ') || user?.username || '';
+  if (children.isLoading) return <HomeShell name={shellName}><Skeleton /></HomeShell>;
+  if (children.isError && !children.data) return <HomeShell name={shellName}><ErrorState error={children.error} onRetry={() => children.refetch()} /></HomeShell>;
 
   const unread = totalUnread(threads.data ?? []);
   const pendingLeave = (leave.data ?? []).filter((l) => l.status === 'PENDING').length;
   const name = [user?.first_name, user?.last_name].filter(Boolean).join(' ') || user?.username;
+  // Across all linked children: what is owed and how attendance is going.
+  const fig = parentFigures(overviews.map((o) => o.data));
+  const heroStats: Tile[] = kids.length === 0 ? [] : [
+    { label: kids.length === 1 ? 'Child' : 'Children', value: kids.length, route: '/(parent)/children' },
+    { label: 'Fees due', value: fig.feesDue == null ? null : formatMoney(fig.feesDue), tone: fig.feesDue == null ? undefined : fig.feesDue > 0 ? 'bad' : 'good', route: '/(parent)/children' },
+    { label: 'Attendance', value: fig.attendance == null ? null : `${fig.attendance}%`, tone: pctTone(fig.attendance), route: '/(parent)/children' },
+  ];
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content} refreshControl={refreshControl}>
-      <Text style={styles.greeting}>Welcome, {name}</Text>
-      {kids.length > 0 ? <Text style={styles.linked}>{childrenLinked(kids.length)}</Text> : null}
-      <SchoolSwitcher />
+      <HomeHero name={name ?? ''} subtitle={childrenLinked(kids.length) || undefined} stats={heroStats} onPress={go} />
       <AttentionStrip items={attentionItems(kids.map((k, i) => ({ studentId: k.student, overview: overviews[i]?.data })), { unreadMessages: unread })} />
 
       {kids.length === 0 ? (
@@ -98,14 +107,12 @@ export default function ParentDashboard() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
   content: { padding: Spacing.lg, paddingBottom: Spacing.xxxl },
-  greeting: { fontSize: FontSize.xl, fontWeight: '700', color: Colors.text },
-  linked: { fontSize: FontSize.sm, color: Colors.textSecondary },
   section: { fontSize: FontSize.lg, fontWeight: '600', color: Colors.text, marginTop: Spacing.xl, marginBottom: Spacing.md },
   sectionRow: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between' },
   link: { fontSize: FontSize.sm, color: Colors.primary, fontWeight: '600', marginBottom: Spacing.md },
   actions: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.md, marginTop: Spacing.sm },
   quick: { flexGrow: 1, flexBasis: '30%', alignItems: 'center', backgroundColor: Colors.surface, borderRadius: BorderRadius.md, paddingVertical: Spacing.md },
-  quickIcon: { fontSize: 22 },
+  quickIcon: { fontSize: GlyphSize.md },
   quickLabel: { fontSize: FontSize.sm, color: Colors.text, marginTop: 4, textAlign: 'center' },
   list: { padding: Spacing.md },
   muted: { fontSize: FontSize.sm, color: Colors.textSecondary },

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, FlatList, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { todayString } from '../../services/attendanceEntry';
 import { monthLabel, stepMonth } from '../../services/register';
 import {
@@ -10,8 +10,10 @@ import { useRefreshControl } from '../../hooks/useRefreshControl';
 import Skeleton from '../ui/Skeleton';
 import ErrorState from '../ui/ErrorState';
 import EmptyState from '../ui/EmptyState';
-import StatusPill from '../ui/StatusPill';
-import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
+import { Colors, FontSize, Spacing, BorderRadius, GlyphSize } from '../../constants/colors';
+import AppList from '../ui/AppList';
+import RecordCard from '../ui/RecordCard';
+import { day } from '../../services/dates';
 
 // The signed-in staff member's own attendance for a month. Read-only: marking is done by an admin.
 export default function MyAttendanceScreen() {
@@ -51,7 +53,7 @@ export default function MyAttendanceScreen() {
   if (records.isError && !records.data) return <ErrorState onRetry={() => { records.refetch(); summary.refetch(); }} />;
 
   return (
-    <FlatList
+    <AppList
       style={styles.container}
       contentContainerStyle={styles.content}
       data={sortAttendance(records.data ?? [])}
@@ -60,14 +62,13 @@ export default function MyAttendanceScreen() {
       ListHeaderComponent={header}
       ListEmptyComponent={<EmptyState title="No records" message="No attendance has been recorded for you in this period." />}
       renderItem={({ item: r }) => (
-        <View style={styles.row}>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.date}>{r.date}</Text>
-            <Text style={styles.sub}>In {shortTime(r.check_in)}  ·  Out {shortTime(r.check_out)}</Text>
-            {r.notes ? <Text style={styles.notes}>{r.notes}</Text> : null}
-          </View>
-          <StatusPill label={r.status_display || ATTENDANCE_LABELS[r.status] || r.status} tone={attendanceTone(r.status)} />
-        </View>
+        <RecordCard
+          icon="calendar-outline"
+          title={day(r.date) || r.date}
+          subtitle={`In ${shortTime(r.check_in)}  ·  Out ${shortTime(r.check_out)}`}
+          meta={r.notes || undefined}
+          status={{ label: r.status_display || ATTENDANCE_LABELS[r.status] || r.status, tone: attendanceTone(r.status) }}
+        />
       )}
     />
   );
@@ -86,15 +87,11 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
   content: { padding: Spacing.lg },
   stepper: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing.xl, marginBottom: Spacing.md },
-  step: { fontSize: 28, color: Colors.primary, paddingHorizontal: Spacing.sm },
+  step: { fontSize: GlyphSize.lg, color: Colors.primary, paddingHorizontal: Spacing.sm },
   stepOff: { color: Colors.border },
   month: { fontSize: FontSize.md, fontWeight: '600', color: Colors.text, minWidth: 140, textAlign: 'center' },
   cards: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm, marginBottom: Spacing.md },
   card: { width: '31%', backgroundColor: Colors.surface, borderRadius: BorderRadius.md, paddingVertical: Spacing.sm, alignItems: 'center' },
   cardValue: { fontSize: FontSize.lg, fontWeight: '700' },
   cardLabel: { fontSize: FontSize.xs, color: Colors.textSecondary },
-  row: { flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.surface, borderRadius: BorderRadius.md, padding: Spacing.md, marginBottom: Spacing.sm, gap: Spacing.sm },
-  date: { fontSize: FontSize.md, fontWeight: '600', color: Colors.text },
-  sub: { fontSize: FontSize.xs, color: Colors.textSecondary, marginTop: 2 },
-  notes: { fontSize: FontSize.xs, color: Colors.textSecondary, fontStyle: 'italic', marginTop: 2 },
 });

@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, ScrollView } from 'react-native';
-import { Colors, FontSize, Spacing, BorderRadius } from '../constants/colors';
+import { Colors, FontSize, Spacing, BorderRadius, Palette } from '../constants/colors';
 
 interface TimetableEntry {
   day: string;
@@ -25,10 +25,7 @@ const DAY_SHORT: Record<string, string> = {
   Saturday: 'Sat',
 };
 
-const SUBJECT_COLORS = [
-  '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6',
-  '#ec4899', '#06b6d4', '#84cc16', '#f97316', '#6366f1',
-];
+const SUBJECT_COLORS = Palette.subjects;
 
 export default function TimetableGrid({ entries }: TimetableGridProps) {
   const grouped = DAYS.reduce<Record<string, TimetableEntry[]>>((acc, day) => {

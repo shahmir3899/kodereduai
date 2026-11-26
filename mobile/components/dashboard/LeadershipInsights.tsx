@@ -12,6 +12,7 @@ import Card from '../ui/Card';
 import Skeleton from '../ui/Skeleton';
 import ErrorState from '../ui/ErrorState';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
+import { SectionEmpty } from '../../components/ui/SectionState';
 
 // Admissions, departures and curriculum counts for school leaders. It is a heavy aggregate on the
 // server, so nothing is requested until the section is opened.
@@ -88,7 +89,7 @@ function Curriculum({ d }: { d: LeadershipData }) {
   return (
     <Card style={styles.card}>
       <Text style={styles.title}>Curriculum &amp; plans</Text>
-      {!hasCurriculumData(d) ? <Text style={styles.muted}>No curriculum or question bank data yet for this school.</Text> : null}
+      {!hasCurriculumData(d) ? <SectionEmpty message="No curriculum or question bank data yet for this school." /> : null}
       {books.length > 0 ? (
         <>
           <Text style={styles.eyebrow}>Books by class</Text>
@@ -117,7 +118,7 @@ function Curriculum({ d }: { d: LeadershipData }) {
             ))}
           </View>
           <Text style={styles.muted}>{labels?.[month]?.label ?? ''}</Text>
-          {classRows.length === 0 ? <Text style={styles.muted}>No lesson plans in this month.</Text> : null}
+          {classRows.length === 0 ? <SectionEmpty message="No lesson plans in this month." /> : null}
           {classRows.map((c) => (
             <View key={c.class_id} style={styles.lpClass}>
               <View style={styles.lpClassHead}>
@@ -189,25 +190,25 @@ const styles = StyleSheet.create({
   cells: { flexDirection: 'row', gap: Spacing.sm },
   cell: { flex: 1, borderRadius: BorderRadius.md, padding: Spacing.sm, alignItems: 'center' },
   cellValue: { fontSize: FontSize.xl, fontWeight: '700' },
-  cellLabel: { fontSize: 10, textAlign: 'center' },
+  cellLabel: { fontSize: FontSize.xxs, textAlign: 'center' },
   depRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, marginTop: Spacing.sm },
   depLabel: { fontSize: FontSize.sm, color: Colors.text },
   depTotal: { fontSize: FontSize.sm, fontWeight: '700', color: Colors.text },
   depDetail: { flex: 1, fontSize: FontSize.xs, color: Colors.textSecondary, textAlign: 'right' },
-  eyebrow: { fontSize: 10, fontWeight: '700', color: Colors.textSecondary, textTransform: 'uppercase', marginTop: Spacing.md, marginBottom: 4 },
+  eyebrow: { fontSize: FontSize.xxs, fontWeight: '700', color: Colors.textSecondary, textTransform: 'uppercase', marginTop: Spacing.md, marginBottom: 4 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.xs },
   chip: { fontSize: FontSize.xs, color: Colors.infoText, backgroundColor: Colors.infoLight, borderRadius: 12, paddingHorizontal: Spacing.sm, paddingVertical: 2, overflow: 'hidden' },
   big: { fontSize: FontSize.lg, fontWeight: '700', color: Colors.text },
   muted: { fontSize: FontSize.xs, color: Colors.textSecondary, marginTop: Spacing.xs },
   lpHead: { flexDirection: 'row', alignItems: 'center', paddingBottom: 2 },
-  lpHeadText: { fontSize: 10, fontWeight: '700', color: Colors.textSecondary },
+  lpHeadText: { fontSize: FontSize.xxs, fontWeight: '700', color: Colors.textSecondary },
   lpRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 4, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: Colors.border },
   lpName: { flex: 1, fontSize: FontSize.xs, color: Colors.text },
   monthTabs: { flexDirection: 'row', gap: Spacing.xs },
   monthTab: { paddingHorizontal: Spacing.md, paddingVertical: 4, borderRadius: 999, borderWidth: 1, borderColor: Colors.border },
   monthTabOn: { backgroundColor: Colors.primary, borderColor: Colors.primary },
   monthTabText: { fontSize: FontSize.xs, color: Colors.text },
-  monthTabTextOn: { color: '#fff' },
+  monthTabTextOn: { color: Colors.textInverse },
   lpClass: { paddingVertical: 4, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: Colors.border },
   lpClassHead: { flexDirection: 'row', alignItems: 'center' },
   lpClassName: { flex: 1, fontSize: FontSize.sm, fontWeight: '600', color: Colors.text },

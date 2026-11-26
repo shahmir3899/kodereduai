@@ -25,6 +25,7 @@ import TocScanSheet from './TocScanSheet';
 import BookInfoCard from './BookInfoCard';
 import type { BookDetail } from '../../services/curriculumContent';
 import { Colors, FontSize, Spacing } from '../../constants/colors';
+import { SectionEmpty } from '../../components/ui/SectionState';
 
 type TopicWithPages = TreeTopic & { page_start?: number | null; page_end?: number | null; content_kind?: string };
 type ChapterWithPages = TreeChapter & { page_start?: number | null; page_end?: number | null };
@@ -144,7 +145,7 @@ export default function BookTreeScreen({ editable = false }: { editable?: boolea
               </TouchableOpacity>
               {isOpen ? (
                 <View style={styles.topics}>
-                  {topics.length === 0 ? <Text style={styles.muted}>No topics.</Text> : topics.map((t) => (
+                  {topics.length === 0 ? <SectionEmpty message="No topics." /> : topics.map((t) => (
                     <View key={t.id} style={styles.topicRow}>
                       <TouchableOpacity accessibilityRole="button" accessibilityLabel={`Open ${t.title}`} style={styles.topicMain}
                         onPress={() => router.push({ pathname: `${base}/curriculum/topic`, params: { bookId, topicId: t.id } } as Href)}>

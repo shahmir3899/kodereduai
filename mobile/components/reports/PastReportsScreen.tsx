@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, FlatList, StyleSheet, type RefreshControlProps } from 'react-native';
+import { View, Text, StyleSheet, type RefreshControlProps } from 'react-native';
 import { reportsApi } from '../../services/api';
 import { listOf } from '../../services/academicYear';
 import { useScopedQuery } from '../../hooks/useScopedQuery';
@@ -12,6 +12,7 @@ import ErrorState from '../ui/ErrorState';
 import EmptyState from '../ui/EmptyState';
 import { useToast } from '../ui/Toast';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
+import AppList from '../ui/AppList';
 
 // Reports the server stored earlier (the 50 newest), each shared through the phone's share sheet. Admin
 // and principal only: a stored student report can hold a whole record. New reports are made on the
@@ -38,7 +39,7 @@ export default function PastReportsScreen() {
   }
 
   return (
-    <FlatList
+    <AppList
       style={styles.container}
       contentContainerStyle={styles.content}
       data={q.data ?? []}

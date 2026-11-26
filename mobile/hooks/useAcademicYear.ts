@@ -4,6 +4,8 @@ import { buildClassOptions, type ClassOption } from '../services/attendanceEntry
 import { sessionsApi, classesApi } from '../services/api';
 import { listOf, pickAcademicYear, type AcademicYear } from '../services/academicYear';
 import { useScopedQuery } from './useScopedQuery';
+import { REFERENCE_STALE_MS } from '../services/queryRules';
+
 import { canChooseYear, isPastYear, resolveYear, saveYearChoice, scopeKey, yearStore } from '../services/yearChoice';
 
 // Both roots are on the persisted reference-data list (services/queryRules.ts), so the class
@@ -19,7 +21,7 @@ export function useAcademicYear(opts: { lockToCurrent?: boolean } = {}) {
   const scope = scopeKey(userId, schoolId);
   const query = useScopedQuery('academicYears', [], async () =>
     listOf<AcademicYear>((await sessionsApi.getAcademicYears()).data),
-  { staleTime: 5 * 60_000 });
+  { staleTime: REFERENCE_STALE_MS });
   const years = query.data ?? [];
   const allowed = canChooseYear(persona);
 
@@ -36,19 +38,24 @@ export function useAcademicYear(opts: { lockToCurrent?: boolean } = {}) {
   return { years, current, actual, isPast: isPastYear(current, actual), canChoose: allowed, choose, isLoading: query.isLoading, isError: query.isError, refetch: query.refetch };
 }
 
+// Fetchers shared with the Home's early load (hooks/usePrefetchNext.ts), so both fill the same cache.
+export const fetchSessionClasses = async (academicYearId: number | null | undefined) =>
+  listOf<Record<string, unknown>>(
+    (await sessionsApi.getSessionClasses({ academic_year: academicYearId, page_size: 9999, is_active: true })).data,
+  );
+export const SESSION_CLASSES_STALE_MS = 5 * 60_000;
+
+export const fetchMasterClasses = async () =>
+  listOf<Record<string, unknown>>((await classesApi.getClasses({ page_size: 9999 })).data);
+
 export function useSessionClasses(academicYearId: number | null | undefined) {
-  return useScopedQuery('session-classes', [academicYearId], async () =>
-    listOf<Record<string, unknown>>(
-      (await sessionsApi.getSessionClasses({ academic_year: academicYearId, page_size: 9999, is_active: true })).data,
-    ),
-  { enabled: !!academicYearId, staleTime: 5 * 60_000 });
+  return useScopedQuery('session-classes', [academicYearId], () => fetchSessionClasses(academicYearId),
+    { enabled: !!academicYearId, staleTime: SESSION_CLASSES_STALE_MS });
 }
 
 // Fallback for a year with no SessionClass rows.
 export function useMasterClasses() {
-  return useScopedQuery('classes', [], async () =>
-    listOf<Record<string, unknown>>((await classesApi.getClasses({ page_size: 9999 })).data),
-  { staleTime: 5 * 60_000 });
+  return useScopedQuery('classes', [], fetchMasterClasses, { staleTime: REFERENCE_STALE_MS });
 }
 
 // Class picker options for one academic year: every session class of that year with the

@@ -1,188 +1,160 @@
-import React from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  FlatList,
-} from 'react-native';
-import { financeApi } from '../../../services/api';
+import React, { useMemo, useState } from 'react';
+import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
+import { ENTRY_PAGE, useEntryHistory } from '../../../hooks/useFinanceManager';
+import { useRefreshControl } from '../../../hooks/useRefreshControl';
+import { monthRange, type RecentEntry } from '../../../services/financeManager';
+import { formatMoney } from '../../../services/feeCollect';
 import Card from '../../../components/ui/Card';
 import Badge from '../../../components/ui/Badge';
+import Icon, { type IconName } from '../../../components/ui/Icon';
+import SegmentedTabs from '../../../components/ui/SegmentedTabs';
 import QueryBoundary from '../../../components/ui/QueryBoundary';
-import { useScopedQuery } from '../../../hooks/useScopedQuery';
-import { useRefreshControl } from '../../../hooks/useRefreshControl';
-import { Colors, FontSize, Spacing, BorderRadius } from '../../../constants/colors';
+import { Colors, FontSize, Spacing } from '../../../constants/colors';
+import AppList from '../../../components/ui/AppList';
+import Button from '../../../components/ui/Button';
+import MonthFilter, { type YearMonth } from '../../../components/finance/MonthFilter';
+import { day, dayTime } from '../../../services/dates';
 
-interface Transaction {
-  id: string;
-  type: 'FEE' | 'EXPENSE' | 'INCOME';
-  description: string;
-  amount: number;
-  date: string;
-  status?: string;
+// Every money movement (fee payments, other income, expenses, transfers), newest first, from the
+// same feed as the finance dashboard: 50 at a time with "Load more", for all months or one month.
+// Each shows what it was, which account it went into or out of, who recorded it and when.
+
+type Kind = 'all' | 'fee_payment' | 'other_income' | 'expense' | 'transfer';
+
+const KIND: Record<string, { label: string; variant: 'success' | 'error' | 'info' | 'purple'; sign: '+' | '-' | ''; color: string; accountLabel: string }> = {
+  fee_payment: { label: 'Fee payment', variant: 'success', sign: '+', color: Colors.success, accountLabel: 'Into' },
+  other_income: { label: 'Income', variant: 'info', sign: '+', color: Colors.success, accountLabel: 'Into' },
+  expense: { label: 'Expense', variant: 'error', sign: '-', color: Colors.error, accountLabel: 'Paid from' },
+  transfer: { label: 'Transfer', variant: 'purple', sign: '', color: Colors.text, accountLabel: 'Between' },
+};
+
+const FILTERS: Array<{ value: Kind; label: string }> = [
+  { value: 'all', label: 'All' },
+  { value: 'fee_payment', label: 'Fees' },
+  { value: 'other_income', label: 'Income' },
+  { value: 'expense', label: 'Expenses' },
+  { value: 'transfer', label: 'Transfers' },
+];
+
+function formatDay(iso?: string | null): string {
+  if (!iso) return 'No date';
+  return day(iso) || iso;
 }
 
-const TYPE_VARIANTS: Record<string, 'success' | 'error' | 'info' | 'default'> = {
-  FEE: 'success',
-  EXPENSE: 'error',
-  INCOME: 'info',
-};
+function formatStamp(iso?: string | null): string | null {
+  if (!iso) return null;
+  return dayTime(iso) || null;
+}
 
-const TYPE_LABELS: Record<string, string> = {
-  FEE: 'Fee Payment',
-  EXPENSE: 'Expense',
-  INCOME: 'Income',
-};
+function Detail({ icon, label, value }: { icon: IconName; label: string; value: string }) {
+  return (
+    <View style={styles.detail}>
+      <Icon name={icon} size={15} color={Colors.textSecondary} />
+      <Text style={styles.detailLabel}>{label}</Text>
+      <Text style={styles.detailValue} numberOfLines={1}>{value}</Text>
+    </View>
+  );
+}
+
+function EntryCard({ e }: { e: RecentEntry }) {
+  const k = KIND[e.type] ?? { label: e.type, variant: 'info' as const, sign: '' as const, color: Colors.text, accountLabel: 'Account' };
+  const amount = Number(e.amount) || 0;
+  // A transfer's description is "From → To — note"; the accounts are its "between" line.
+  const [transferRoute, transferNote] = e.type === 'transfer' ? (e.description ?? '').split(' — ') : [null, null];
+  const ledger = e.type === 'other_income' || e.type === 'expense';
+  // Income and expense descriptions are "Category — note"; newer servers also send the two apart.
+  const [descCategory, descNote] = ledger ? (e.description ?? '').split(' — ') : [null, null];
+  const category = ledger ? (e.category ?? descCategory ?? 'Uncategorized') : e.type === 'fee_payment' ? e.fee_type_label : null;
+  const title = e.type === 'transfer'
+    ? (transferNote || 'Money moved between accounts')
+    : ledger ? ((e.note ?? descNote) || category || k.label) : (e.description || k.label);
+  const account = e.type === 'transfer' ? transferRoute : e.account_name;
+  const stamp = formatStamp(e.timestamp);
+  return (
+    <Card style={styles.card}>
+      <View style={styles.top}>
+        <Badge label={k.label} variant={k.variant} />
+        <Text style={styles.date}>{formatDay(e.date)}</Text>
+      </View>
+      <View style={styles.middle}>
+        <View style={styles.flex}>
+          <Text style={styles.title} numberOfLines={2}>{title}</Text>
+        </View>
+        <Text style={[styles.amount, { color: k.color }]}>{k.sign}{formatMoney(amount)}</Text>
+      </View>
+      <View style={styles.details}>
+        {category ? <Detail icon="pricetag-outline" label={e.type === 'fee_payment' ? 'Fee type' : 'Category'} value={category} /> : null}
+        <Detail icon={e.type === 'transfer' ? 'swap-horizontal-outline' : 'wallet-outline'} label={k.accountLabel} value={account || 'No account'} />
+        <Detail icon="person-outline" label="Recorded by" value={e.recorded_by || 'Not recorded'} />
+        {stamp ? <Detail icon="time-outline" label="Entered" value={stamp} /> : null}
+      </View>
+    </Card>
+  );
+}
 
 export default function TransactionHistory() {
-  // Three money roots, so a payment or expense recorded elsewhere shows up on the next visit.
-  const query = useScopedQuery<Transaction[]>('feePayments', ['history'], async () => {
-    const [feesRes, expensesRes, incomeRes] = await Promise.all([
-      financeApi.getFeePayments(),
-      financeApi.getExpenses(),
-      financeApi.getOtherIncome(),
-    ]);
-      const fees = (feesRes.data.results || feesRes.data || []).map((item: any) => ({
-        id: `fee-${item.id}`,
-        type: 'FEE' as const,
-        description: `${item.student_name || 'Student'} - ${item.month ? `Month ${item.month}` : 'Fee'}${item.kuickpay ? ` · via Kuickpay (${item.kuickpay.reference_text})` : ''}`,
-        amount: parseFloat(item.amount_paid || item.amount || 0),
-        date: item.paid_date || item.due_date || item.created_at || '',
-        status: item.status,
-      }));
-
-      const expenses = (expensesRes.data.results || expensesRes.data || []).map((item: any) => ({
-        id: `exp-${item.id}`,
-        type: 'EXPENSE' as const,
-        description: `${item.category || 'Expense'} - ${item.description || ''}`,
-        amount: parseFloat(item.amount || 0),
-        date: item.date || item.created_at || '',
-      }));
-
-      const income = (incomeRes.data.results || incomeRes.data || []).map((item: any) => ({
-        id: `inc-${item.id}`,
-        type: 'INCOME' as const,
-        description: `${item.source || 'Income'} - ${item.description || ''}`,
-        amount: parseFloat(item.amount || 0),
-        date: item.date || item.created_at || '',
-      }));
-
-      const combined = [...fees, ...expenses, ...income].sort((a, b) => {
-        if (!a.date) return 1;
-        if (!b.date) return -1;
-        return new Date(b.date).getTime() - new Date(a.date).getTime();
-      });
-
-    return combined;
-  });
+  const [ym, setYm] = useState<YearMonth | null>(null);
+  const range = ym ? monthRange(ym.year, ym.month) : null;
+  const query = useEntryHistory(range);
   const refreshControl = useRefreshControl(query.refetch);
-
-  const formatDate = (dateStr: string) => {
-    if (!dateStr) return 'N/A';
-    try {
-      const d = new Date(dateStr);
-      return d.toLocaleDateString('en-PK', {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric',
-      });
-    } catch {
-      return dateStr;
-    }
-  };
-
-  const renderItem = ({ item }: { item: Transaction }) => {
-    const isExpense = item.type === 'EXPENSE';
-
-    return (
-      <Card style={styles.transactionCard}>
-        <View style={styles.transactionHeader}>
-          <Badge
-            label={TYPE_LABELS[item.type] || item.type}
-            variant={TYPE_VARIANTS[item.type] || 'default'}
-          />
-          <Text style={styles.dateText}>{formatDate(item.date)}</Text>
-        </View>
-        <Text style={styles.description} numberOfLines={2}>
-          {item.description}
-        </Text>
-        <Text
-          style={[
-            styles.amount,
-            { color: isExpense ? Colors.error : Colors.success },
-          ]}
-        >
-          {isExpense ? '-' : '+'} PKR {item.amount.toLocaleString()}
-        </Text>
-      </Card>
-    );
-  };
+  const [kind, setKind] = useState<Kind>('all');
+  const all = query.rows;
+  const shown = useMemo(() => (kind === 'all' ? all : all.filter((e) => e.type === kind)), [all, kind]);
+  const loaded = query.data !== undefined;
 
   return (
     <View style={styles.container}>
-      <View style={styles.headerContainer}>
-        <Text style={styles.title}>Transaction History</Text>
-        <Text style={styles.subtitle}>{query.data?.length ?? 0} transactions</Text>
+      <View style={styles.header}>
+        <MonthFilter value={ym} onChange={setYm} />
+        <SegmentedTabs tabs={FILTERS} value={kind} onChange={setKind} scrollable />
+        <Text style={styles.count}>
+          {loaded ? `${shown.length} ${shown.length === 1 ? 'entry' : 'entries'}${query.hasNextPage ? ' so far' : ''}` : ''}
+        </Text>
       </View>
-
-      <QueryBoundary query={query} emptyTitle="No Transactions" emptyMessage="No financial transactions found.">
-        {(transactions) => (
-          <FlatList
-            data={transactions}
-            keyExtractor={(item) => item.id}
-            renderItem={renderItem}
-            contentContainerStyle={styles.listContent}
+      <QueryBoundary
+        query={{ data: loaded ? shown : undefined, isLoading: query.isLoading, isError: query.isError, error: query.error, fetchStatus: query.fetchStatus, refetch: query.refetch as never }}
+        emptyTitle="No transactions"
+        emptyMessage={query.hasNextPage ? 'Nothing of this kind in the latest entries. Load more to look further back.' : ym ? 'Nothing of this kind in this month.' : 'Nothing of this kind yet.'}>
+        {(rows) => (
+          <AppList
+            data={rows}
+            keyExtractor={(e) => `${e.type}-${e.id}`}
+            renderItem={({ item }) => <EntryCard e={item} />}
+            contentContainerStyle={styles.list}
             refreshControl={refreshControl}
+            ListFooterComponent={query.isFetchingNextPage ? <ActivityIndicator color={Colors.primary} style={styles.more} />
+              : query.hasNextPage ? <Button title={`Load ${ENTRY_PAGE} more`} variant="outline" onPress={() => query.fetchNextPage()} style={styles.more} /> : null}
           />
         )}
       </QueryBoundary>
+      {loaded && shown.length === 0 && query.hasNextPage ? (
+        <View style={styles.list}>
+          <Button title={`Load ${ENTRY_PAGE} more`} variant="outline" onPress={() => query.fetchNextPage()} loading={query.isFetchingNextPage} />
+        </View>
+      ) : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.background,
+  container: { flex: 1, backgroundColor: Colors.background },
+  header: { paddingHorizontal: Spacing.lg, paddingTop: Spacing.lg, gap: Spacing.sm },
+  count: { fontSize: FontSize.sm, color: Colors.textSecondary },
+  list: { padding: Spacing.lg, paddingTop: Spacing.sm },
+  more: { marginVertical: Spacing.md },
+  card: { marginBottom: Spacing.md },
+  top: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  date: { fontSize: FontSize.xs, color: Colors.textSecondary },
+  middle: { flexDirection: 'row', alignItems: 'flex-start', gap: Spacing.md, marginTop: Spacing.sm },
+  flex: { flex: 1 },
+  title: { fontSize: FontSize.md, fontWeight: '600', color: Colors.text },
+  sub: { fontSize: FontSize.sm, color: Colors.textSecondary, marginTop: 2 },
+  amount: { fontSize: FontSize.lg, fontWeight: '700' },
+  details: {
+    marginTop: Spacing.md, paddingTop: Spacing.sm, gap: 6,
+    borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: Colors.border,
   },
-  headerContainer: {
-    padding: Spacing.lg,
-    paddingBottom: 0,
-  },
-  title: {
-    fontSize: FontSize.xl,
-    fontWeight: '700',
-    color: Colors.text,
-  },
-  subtitle: {
-    fontSize: FontSize.sm,
-    color: Colors.textSecondary,
-    marginTop: Spacing.xs,
-  },
-  listContent: {
-    padding: Spacing.lg,
-  },
-  transactionCard: {
-    marginBottom: Spacing.md,
-  },
-  transactionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: Spacing.sm,
-  },
-  dateText: {
-    fontSize: FontSize.xs,
-    color: Colors.textTertiary,
-  },
-  description: {
-    fontSize: FontSize.sm,
-    color: Colors.textSecondary,
-    marginBottom: Spacing.sm,
-    lineHeight: 20,
-  },
-  amount: {
-    fontSize: FontSize.lg,
-    fontWeight: '700',
-  },
+  detail: { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs },
+  detailLabel: { fontSize: FontSize.xs, color: Colors.textSecondary, width: 82 },
+  detailValue: { flex: 1, fontSize: FontSize.sm, color: Colors.text },
 });

@@ -1,14 +1,14 @@
 import React, { useMemo, useState } from 'react';
-import { View, FlatList, StyleSheet } from 'react-native';
+import { View, StyleSheet } from 'react-native';
 import { useSubjectsList } from '../../hooks/useManager';
 import { useRefreshControl } from '../../hooks/useRefreshControl';
 import SearchBar from '../ui/SearchBar';
-import ListRow from '../ui/ListRow';
-import StatusPill from '../ui/StatusPill';
 import Skeleton from '../ui/Skeleton';
 import ErrorState from '../ui/ErrorState';
 import EmptyState from '../ui/EmptyState';
 import { Colors, Spacing } from '../../constants/colors';
+import AppList from '../ui/AppList';
+import RecordCard from '../ui/RecordCard';
 
 // Read-only subject list. Adding and editing subjects is for admins, on the web.
 export default function SubjectsScreen() {
@@ -27,7 +27,7 @@ export default function SubjectsScreen() {
 
   return (
     <View style={styles.container}>
-      <FlatList
+      <AppList
         data={shown}
         keyExtractor={(s) => String(s.id)}
         refreshControl={refreshControl}
@@ -35,8 +35,8 @@ export default function SubjectsScreen() {
         ListHeaderComponent={<View style={styles.search}><SearchBar value={search} onChangeText={setSearch} placeholder="Search subjects..." /></View>}
         ListEmptyComponent={<EmptyState title="No subjects" message="Nothing matches." />}
         renderItem={({ item: s }) => (
-          <ListRow title={s.name} subtitle={s.code || undefined}
-            right={s.is_elective ? <StatusPill label="Elective" tone="info" /> : undefined} />
+          <RecordCard icon="book-outline" title={s.name} subtitle={s.code || undefined}
+            status={s.is_elective ? { label: 'Elective', tone: 'info' } : undefined} />
         )}
       />
     </View>

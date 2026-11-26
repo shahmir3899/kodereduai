@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { View, Text, FlatList, ActivityIndicator, TouchableOpacity, StyleSheet, type RefreshControlProps } from 'react-native';
+import { View, Text, ActivityIndicator, TouchableOpacity, StyleSheet, type RefreshControlProps } from 'react-native';
 import { hrApi } from '../../services/api';
 import { useNetPayHistory, usePayrollActions, usePayrollSummary, usePayslipsPaged } from '../../hooks/usePayroll';
 import { useRefreshControl } from '../../hooks/useRefreshControl';
@@ -20,11 +20,12 @@ import Card from '../ui/Card';
 import Skeleton from '../ui/Skeleton';
 import ErrorState from '../ui/ErrorState';
 import EmptyState from '../ui/EmptyState';
-import StatusPill from '../ui/StatusPill';
 import { useToast } from '../ui/Toast';
 import { confirm } from '../ui/confirm';
 import FormSheet from '../inventory/FormSheet';
-import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
+import { Colors, FontSize, Spacing, BorderRadius, GlyphSize } from '../../constants/colors';
+import AppList from '../ui/AppList';
+import RecordCard from '../ui/RecordCard';
 
 // Port of PayrollPage.jsx for admin and principal: a month's totals, the payslips, and
 // generate, approve, mark paid, delete a draft, and the server's own payslip PDF.
@@ -174,7 +175,7 @@ export default function PayrollScreen() {
 
   return (
     <View style={styles.container}>
-      <FlatList
+      <AppList
         contentContainerStyle={styles.content}
         data={rows}
         keyExtractor={(p) => String(p.id)}
@@ -185,17 +186,15 @@ export default function PayrollScreen() {
         ListEmptyComponent={<EmptyState title="No payslips" message="Generate payslips for this month, or pick another month." />}
         ListFooterComponent={query.isFetchingNextPage ? <ActivityIndicator color={Colors.primary} style={{ margin: Spacing.lg }} /> : null}
         renderItem={({ item: p }) => (
-          <TouchableOpacity accessibilityRole="button" style={styles.row} onPress={() => { if (selecting) toggle(p.id); else { setOpen(p); setPaidOn(todayString()); } }}>
-            {selecting ? <Text style={styles.tick} accessibilityLabel={picked.includes(p.id) ? 'Selected' : 'Not selected'}>{picked.includes(p.id) ? '☑' : '☐'}</Text> : null}
-            <View style={styles.who}>
-              <Text style={styles.name} numberOfLines={1}>{p.staff_member_name}</Text>
-              <Text style={styles.sub} numberOfLines={1}>{[p.staff_employee_id, p.department_name].filter(Boolean).join('  ·  ') || ' '}</Text>
-            </View>
-            <View style={styles.right}>
-              <Text style={styles.net}>{formatMoney(Number(p.net_salary) || 0)}</Text>
-              <StatusPill label={p.status_display ?? p.status} tone={payslipTone(p.status)} />
-            </View>
-          </TouchableOpacity>
+          <RecordCard
+            avatarName={p.staff_member_name}
+            title={p.staff_member_name}
+            subtitle={[p.staff_employee_id, p.department_name].filter(Boolean).join('  ·  ') || undefined}
+            status={{ label: p.status_display ?? p.status, tone: payslipTone(p.status) }}
+            trailing={formatMoney(Number(p.net_salary) || 0)}
+            selected={selecting ? picked.includes(p.id) : undefined}
+            onPress={() => { if (selecting) toggle(p.id); else { setOpen(p); setPaidOn(todayString()); } }}
+          />
         )}
       />
 
@@ -250,7 +249,7 @@ const styles = StyleSheet.create({
   bars: { flexDirection: 'row', alignItems: 'flex-end', gap: Spacing.sm, marginTop: Spacing.sm, height: 70 },
   barCol: { flex: 1, alignItems: 'center', justifyContent: 'flex-end' },
   bar: { width: '70%', backgroundColor: Colors.primary, borderRadius: 3 },
-  barLabel: { fontSize: 10, color: Colors.textSecondary, marginTop: 2 },
+  barLabel: { fontSize: FontSize.xxs, color: Colors.textSecondary, marginTop: 2 },
   container: { flex: 1, backgroundColor: Colors.background },
   content: { padding: Spacing.lg, paddingBottom: Spacing.xxxl },
   monthRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: Spacing.md },
@@ -261,13 +260,7 @@ const styles = StyleSheet.create({
   totalValue: { fontSize: FontSize.xxl, fontWeight: '700', color: Colors.primary },
   gap: { height: Spacing.md },
   bulkRow: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm, marginBottom: Spacing.sm },
-  tick: { fontSize: 22, color: Colors.primary },
-  row: { flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.surface, borderRadius: BorderRadius.md, padding: Spacing.md, marginTop: Spacing.sm, gap: Spacing.md },
-  who: { flex: 1 },
-  name: { fontSize: FontSize.md, fontWeight: '600', color: Colors.text },
   sub: { fontSize: FontSize.sm, color: Colors.textSecondary, marginTop: 2 },
-  right: { alignItems: 'flex-end', gap: 4 },
-  net: { fontSize: FontSize.md, fontWeight: '700', color: Colors.text },
   detail: { gap: Spacing.xs },
   line: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 2 },
   lineLabel: { fontSize: FontSize.sm, color: Colors.textSecondary },

@@ -7,7 +7,7 @@ import { useAccounts } from '../../hooks/useFees';
 import { PAYMENT_METHODS } from '../../services/feeCollect';
 import {
   buildBulkPayload, buildSinglePayload, CONFLICTS, confirmText, emptyBulkForm, emptySingleForm, MONTH_NAMES, previewParams,
-  previewText, receivedAmount, resultText, singleResultText, structureText, validateBulk, validateSingle, yearOptions, type BulkForm, type SingleForm,
+  previewText, perFeeLines, receivedAmount, resultText, singleResultText, structureText, validateBulk, validateSingle, yearOptions, type BulkForm, type SingleForm,
 } from '../../services/feeGeneration';
 import { inventoryErrorMessage } from '../../services/inventory';
 import SegmentedTabs from '../ui/SegmentedTabs';
@@ -90,6 +90,9 @@ function Bulk({ academicYearId }: { academicYearId: number }) {
         <Card>
           <Text style={styles.title}>Preview</Text>
           <Text style={styles.body}>{preview.isLoading || preview.isFetching ? 'Checking…' : preview.isError ? 'Could not load the preview.' : preview.data ? previewText(preview.data) : ''}</Text>
+          {preview.data && !preview.isFetching ? perFeeLines(preview.data).map((line) => (
+            <Text key={line} style={styles.hint}>• {line}</Text>
+          )) : null}
         </Card>
       ) : null}
       {error ? <Text style={styles.error} accessibilityRole="alert">{error}</Text> : null}

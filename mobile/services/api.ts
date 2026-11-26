@@ -1,4 +1,5 @@
 import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
+import { acceptsNotModified, etagKey, rememberEtag, storedData, storedEtag } from './etagCache';
 import Constants from 'expo-constants';
 import {
   getAccessToken,
@@ -21,6 +22,8 @@ const API_URL = String(process.env.EXPO_PUBLIC_API_URL ?? extra.apiUrl ?? 'http:
 if (APP_ENV === 'production' && API_URL.startsWith('http://') && !ALLOW_INSECURE_HTTP) {
   throw new Error('Insecure API URL is blocked in production. Configure an HTTPS API URL.');
 }
+
+type EtagConfig = InternalAxiosRequestConfig & { _etagKey?: string | null; _etagSkip?: boolean };
 
 const api = axios.create({
   baseURL: API_URL,
@@ -65,6 +68,14 @@ api.interceptors.request.use(
     if (schoolId && !config.headers['X-School-ID']) {
       config.headers['X-School-ID'] = schoolId;
     }
+    // A rarely-changing list we already hold: ask "changed since this tag?" (services/etagCache.ts).
+    const c = config as EtagConfig;
+    c._etagKey = c._etagSkip ? null : etagKey(config.method, config.url, config.params, config.headers['X-School-ID']);
+    const tag = c._etagKey ? storedEtag(c._etagKey) : null;
+    if (tag) {
+      config.headers['If-None-Match'] = tag;
+      config.validateStatus = acceptsNotModified;
+    }
     return config;
   },
   (error) => Promise.reject(error)
@@ -72,7 +83,24 @@ api.interceptors.request.use(
 
 // Response interceptor — handle 401 with token refresh
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    const config = response.config as EtagConfig;
+    const key = config._etagKey;
+    if (!key) return response;
+    if (response.status === 304) {
+      const kept = storedData(key);
+      // The copy was dropped since the request left (cache cleared): ask again without the tag.
+      if (!kept.found) {
+        config._etagSkip = true;
+        config.headers.delete('If-None-Match');
+        config.validateStatus = undefined;
+        return api(config);
+      }
+      return { ...response, status: 200, data: kept.data };
+    }
+    rememberEtag(key, response.headers?.etag as string | undefined, response.data);
+    return response;
+  },
   async (error: AxiosError) => {
     const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
 
@@ -152,26 +180,12 @@ export const attendanceApi = {
     }),
   createUpload: (data: Record<string, unknown>) =>
     api.post('/api/attendance/uploads/', data),
-  getUploads: (params?: Record<string, unknown>) =>
-    api.get('/api/attendance/uploads/', { params }),
-  getUploadDetails: (id: number) =>
-    api.get(`/api/attendance/uploads/${id}/`),
   confirmAttendance: (id: number, data: Record<string, unknown>) =>
     api.post(`/api/attendance/uploads/${id}/confirm/`, data),
   getPendingReviews: () =>
     api.get('/api/attendance/uploads/pending_review/'),
   getRecords: (params?: Record<string, unknown>) =>
     api.get('/api/attendance/records/', { params }),
-  getDailyReport: (date: string, schoolId: number) =>
-    api.get('/api/attendance/records/daily_report/', { params: { date, school_id: schoolId } }),
-  getChronicAbsentees: (params?: Record<string, unknown>) =>
-    api.get('/api/attendance/records/chronic_absentees/', { params }),
-  reprocessUpload: (id: number) =>
-    api.post(`/api/attendance/uploads/${id}/reprocess/`),
-  deleteUpload: (id: number) =>
-    api.delete(`/api/attendance/uploads/${id}/`),
-  getAIStatus: () =>
-    api.get('/api/attendance/ai-status/'),
   // Classes the signed-in teacher may mark (master classes; admins get every class).
   getMyClasses: () =>
     api.get('/api/attendance/records/my_classes/'),
@@ -306,6 +320,8 @@ export const sessionsApi = {
     api.get('/api/sessions/calendar-entries/day-status/', { params }),
   // Retention, attendance, fee collection and pass rate for a year, with a rule-based summary.
   getSessionHealth: (params?: Record<string, unknown>) => api.get('/api/sessions/health/', { params }),
+  // The AI-written version of that summary; cached on the server, fetched after the numbers so the home never waits on it.
+  getSessionHealthAISummary: (params?: Record<string, unknown>) => api.get('/api/sessions/health/ai-summary/', { params }),
 };
 
 // ─── Bootstrap API (one-request dashboards) ─────────────────────────────────
@@ -313,6 +329,9 @@ export const sessionsApi = {
 // Rule-based notices for the dashboard (the same endpoint the web home uses).
 export const tasksApi = {
   getAIInsights: (params?: Record<string, unknown>) => api.get('/api/tasks/ai-insights/', { params }),
+  // The signed-in person's background jobs from the last 24 hours (payslips, fee generation, report PDFs...).
+  getMyTasks: () => api.get('/api/tasks/tasks/'),
+  cancelTask: (celeryTaskId: string) => api.post(`/api/tasks/tasks/${celeryTaskId}/cancel/`),
 };
 
 export const bootstrapApi = {
@@ -322,6 +341,9 @@ export const bootstrapApi = {
   // Admissions, departures, books, question bank and lesson plan counts. School admin and principal only.
   getLeadershipAcademicInsights: (params?: Record<string, unknown>) =>
     api.get('/api/bootstrap/leadership-academic-insights/', { params }),
+  // The teacher Home in one request; each section is the answer its own endpoint gives, or null.
+  getTeacherDashboard: (params?: Record<string, unknown>) =>
+    api.get('/api/bootstrap/teacher-dashboard/', { params }),
 };
 
 // ─── Students API ────────────────────────────────────────────────────────────
@@ -340,11 +362,16 @@ export const studentsApi = {
     api.delete(`/api/students/${id}/`, { data: { reason } }),
   getDeletedStudents: () => api.get('/api/students/deleted/'),
   restoreStudent: (id: number, data: Record<string, unknown>) => api.post(`/api/students/${id}/restore/`, data),
+  // Soft delete for up to 100 students at once; returns { deleted: ids, skipped: [{ id, name, detail }] }. Admin and principal.
+  bulkDeleteStudents: (data: { student_ids: number[]; reason: string }) => api.post('/api/students/bulk_delete/', data),
   getReclassifyPreview: (id: number, params: Record<string, unknown>) => api.get(`/api/students/${id}/reclassify-preview/`, { params }),
   reclassifyStudent: (id: number, data: Record<string, unknown>) => api.post(`/api/students/${id}/reclassify/`, data),
   getDocuments: (id: number) => api.get(`/api/students/${id}/documents/`),
-  uploadDocument: (id: number, form: FormData) => api.post(`/api/students/${id}/documents/`, form, { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 60000 }),
   deleteDocument: (id: number, docId: number) => api.delete(`/api/students/${id}/documents/${docId}/`),
+  // Image-only upload: the server stores the file, makes the record and reads it ({duplicate, document}).
+  scanDocument: (id: number, form: FormData) => api.post(`/api/students/${id}/documents/scan/`, form, { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 60000 }),
+  rescanDocument: (id: number, docId: number) => api.post(`/api/students/${id}/documents/${docId}/rescan/`),
+  updateDocumentDetails: (id: number, docId: number, data: object) => api.patch(`/api/students/${id}/documents/${docId}/`, data),
   // Status and history (admin and principal): which outcomes are allowed, Graduated or Repeat, enrollment history.
   getRemovalPreview: (id: number) => api.get(`/api/students/${id}/removal-preview/`),
   setOutcome: (id: number, data: Record<string, unknown>) => api.post(`/api/students/${id}/outcome/`, data),
@@ -357,8 +384,6 @@ export const studentsApi = {
     api.post(`/api/students/${id}/upload_photo/`, form, { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 60000 }),
   removePhoto: (id: number) =>
     api.post(`/api/students/${id}/remove_photo/`),
-  getStudentsByClass: (params?: Record<string, unknown>) =>
-    api.get('/api/students/by_class/', { params }),
   getProfileSummary: (id: number) =>
     api.get(`/api/students/${id}/profile_summary/`),
   // The risk profile the server works out for one student (fee detail left out for roles that cannot see fees).
@@ -378,8 +403,6 @@ export const studentsApi = {
 export const classesApi = {
   getClasses: (params?: Record<string, unknown>) =>
     api.get('/api/classes/', { params }),
-  getClass: (id: number) =>
-    api.get(`/api/classes/${id}/`),
   // Class setup (admin and principal).
   createClass: (data: object) => api.post('/api/classes/', data),
   updateClass: (id: number, data: object) => api.patch(`/api/classes/${id}/`, data),
@@ -392,6 +415,14 @@ export const financeApi = {
   // Fee Payments
   getFeePayments: (params?: Record<string, unknown>) =>
     api.get('/api/finance/fee-payments/', { params }),
+  // A4 fee vouchers (School copy | Student copy, 3 students per page) for the month.
+  downloadFeeVouchers: (params: Record<string, unknown>) =>
+    api.get('/api/finance/fee-payments/vouchers/', { params, responseType: 'arraybuffer', timeout: 60000 }),
+  // The same vouchers as data, for the in-app preview, and the school's voucher settings (due day).
+  previewFeeVouchers: (params: Record<string, unknown>) =>
+    api.get('/api/finance/fee-payments/vouchers/', { params: { ...params, format: 'json' } }),
+  getVoucherSettings: () => api.get('/api/finance/voucher-settings/'),
+  createFeeEnrollment: (data: object) => api.post('/api/finance/fee-enrollments/', data),
   // Permanent delete of one fee record. The phone offers it only for a record with nothing paid.
   deleteFeePayment: (id: number) => api.delete(`/api/finance/fee-payments/${id}/`),
   // Many records at once. Both answer with how many they changed and any records they could not.
@@ -399,8 +430,6 @@ export const financeApi = {
   bulkDeletePayments: (data: object) => api.post('/api/finance/fee-payments/bulk_delete/', data),
   recordPayment: (id: number, data: Record<string, unknown>) =>
     api.patch(`/api/finance/fee-payments/${id}/`, data),
-  createPayment: (data: Record<string, unknown>) =>
-    api.post('/api/finance/fee-payments/', data),
   getAccounts: (params?: Record<string, unknown>) =>
     api.get('/api/finance/accounts/', { params }),
   // Account management (admin and principal; the server refuses the rest).
@@ -424,6 +453,10 @@ export const financeApi = {
   updateAnnualCategory: (id: number, data: object) => api.patch(`/api/finance/annual-categories/${id}/`, data),
   deleteAnnualCategory: (id: number) => api.delete(`/api/finance/annual-categories/${id}/`),
   getAnnualCategorySuggestions: () => api.get('/api/finance/annual-categories/suggestions/'),
+  // Optional (enrolled-only) fees: who takes Robotics/Karate/... and from when.
+  getFeeEnrollments: (params?: Record<string, unknown>) => api.get('/api/finance/fee-enrollments/', { params }),
+  bulkEnrollFees: (data: object) => api.post('/api/finance/fee-enrollments/bulk_enroll/', data),
+  endFeeEnrollments: (data: object) => api.post('/api/finance/fee-enrollments/end/', data),
   // The canonical summary the web Fee Overview uses: totals plus by category and by class.
   getFeeSummary: (params?: Record<string, unknown>) => api.get('/api/finance/fee-payments/fee_summary/', { params }),
   getMonthlySummary: (params?: Record<string, unknown>) =>
@@ -431,8 +464,6 @@ export const financeApi = {
   // Admins with several schools: every school plus a combined `grand` total.
   getMonthlySummaryAll: (params?: Record<string, unknown>) =>
     api.get('/api/finance/fee-payments/monthly_summary_all/', { params }),
-  getStudentLedger: (params?: Record<string, unknown>) =>
-    api.get('/api/finance/fee-payments/student_ledger/', { params }),
   // Fee record generation (admin and principal): preview first, then create real fee rows.
   previewGeneration: (params?: Record<string, unknown>) =>
     api.get('/api/finance/fee-payments/preview_generation/', { params }),
@@ -607,11 +638,13 @@ export const hrApi = {
   createQualification: (data: object) => api.post('/api/hr/qualifications/', data),
   updateQualification: (id: number, data: object) => api.patch(`/api/hr/qualifications/${id}/`, data),
   deleteQualification: (id: number) => api.delete(`/api/hr/qualifications/${id}/`),
-  // Documents go as multipart so the photo or file rides along; a JSON edit keeps the old file.
+  // A document is added through scan/ (photo in, record read from it); details are edited as JSON.
   getDocuments: (params?: Record<string, unknown>) => api.get('/api/hr/documents/', { params }),
-  createDocument: (form: FormData) => api.post('/api/hr/documents/', form, { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 60000 }),
   updateDocument: (id: number, data: object) => api.patch(`/api/hr/documents/${id}/`, data),
   deleteDocument: (id: number) => api.delete(`/api/hr/documents/${id}/`),
+  // Image-only upload for a staff member (staff_member + file): {duplicate, document}.
+  scanDocument: (form: FormData) => api.post('/api/hr/documents/scan/', form, { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 60000 }),
+  rescanDocument: (id: number) => api.post(`/api/hr/documents/${id}/rescan/`),
   getLeaveApplications: (params?: Record<string, unknown>) =>
     api.get('/api/hr/leave-applications/', { params }),
   getLeavePolicies: (params?: Record<string, unknown>) =>
@@ -680,6 +713,12 @@ export const inventoryApi = {
   createCategory: (data: object) => api.post('/api/inventory/categories/', data),
   getVendors: (params?: Record<string, unknown>) => api.get('/api/inventory/vendors/', { params }),
   createVendor: (data: object) => api.post('/api/inventory/vendors/', data),
+  // Deletes cascade on the server: a category takes its items with it, an item its movements and assignments.
+  updateCategory: (id: number, data: object) => api.patch(`/api/inventory/categories/${id}/`, data),
+  deleteCategory: (id: number) => api.delete(`/api/inventory/categories/${id}/`),
+  updateVendor: (id: number, data: object) => api.patch(`/api/inventory/vendors/${id}/`, data),
+  deleteVendor: (id: number) => api.delete(`/api/inventory/vendors/${id}/`),
+  deleteItem: (id: number) => api.delete(`/api/inventory/items/${id}/`),
   getItems: (params?: Record<string, unknown>) => api.get('/api/inventory/items/', { params }),
   createItem: (data: object) => api.post('/api/inventory/items/', data),
   updateItem: (id: number, data: object) => api.patch(`/api/inventory/items/${id}/`, data),
@@ -716,10 +755,19 @@ export const schoolDirectoryApi = {
   // Short timeouts: the person is waiting at the front door, and a slow server should say so.
   // The web's own public lookup; it returns the full record, so callers keep only code, name and logo.
   info: (code: string) => api.get('/api/schools/by-subdomain/', { params: { subdomain: code }, timeout: 10000 }),
+  // Every active school's code, name and logo, for the name search. With the ETag of the copy the
+  // phone already has, an unchanged list comes back as an empty 304.
+  list: (etag?: string | null) => api.get('/api/schools/directory/', {
+    timeout: 10000,
+    headers: etag ? { 'If-None-Match': etag } : undefined,
+    validateStatus: (s) => s === 200 || s === 304,
+  }),
 };
 
 export const schoolsApi = {
   getMySchool: () => api.get('/api/schools/current/'),
+  // Setup progress per module (steps done / total, with the web page that finishes each step). School admin only.
+  getCompletion: () => api.get('/api/schools/completion/'),
   uploadAsset: (form: FormData) => api.post('/api/schools/upload_asset/', form, { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 60000 }),
   deleteAsset: (assetType: string) => api.delete('/api/schools/delete_asset/', { params: { asset_type: assetType } }),
   updateTimeZone: (timezone: string) => api.put('/api/schools/time_zone/', { timezone }),
@@ -815,6 +863,8 @@ export const examinationsApi = {
   // Bulk deletes (admin and principal): the server deletes the exams or groups with their subjects and marks.
   bulkDeleteExams: (ids: number[]) => api.post('/api/examinations/exams/bulk_delete/', { ids }),
   bulkDeleteExamGroups: (ids: number[]) => api.post('/api/examinations/exam-groups/bulk_delete/', { ids }),
+  // Shrinks the group's exam period from either edge (the web date sheet's remove-row on the first or last day).
+  updateExamGroup: (id: number, data: { start_date?: string; end_date?: string }) => api.patch(`/api/examinations/exam-groups/${id}/`, data),
   // One exam's subjects: marks and dates (edit), a subject added from the class, or one removed with its marks.
   createExamSubject: (data: object) => api.post('/api/examinations/exam-subjects/', data),
   updateExamSubject: (id: number, data: object) => api.patch(`/api/examinations/exam-subjects/${id}/`, data),
@@ -880,6 +930,13 @@ export const examinationsApi = {
   getExamPapers: (params?: Record<string, unknown>) =>
     api.get('/api/examinations/exam-papers/', { params }),
   getExamPaper: (id: number) => api.get(`/api/examinations/exam-papers/${id}/`),
+  // Per-question answers of a student on a paper (web StudentResponsePage).
+  getStudentResponses: (params: { exam_paper: number; student?: number; page_size?: number }) =>
+    api.get('/api/examinations/student-responses/', { params }),
+  submitStudentResponses: (data: object) => api.post('/api/examinations/student-responses/', data),
+  // "Create tests": one standalone test per subject of a class; preview first, then apply.
+  bulkTestPreview: (data: object) => api.post('/api/examinations/exams/bulk-test-preview/', data),
+  bulkTestApply: (data: object) => api.post('/api/examinations/exams/bulk-test-apply/', data),
   getExamPaperMakers: () => api.get('/api/examinations/exam-papers/makers/'),
   createExamPaper: (data: object) => api.post('/api/examinations/exam-papers/', data),
   updateExamPaper: (id: number, data: object) => api.patch(`/api/examinations/exam-papers/${id}/`, data),
@@ -947,10 +1004,16 @@ export const examinationsApi = {
   // Drafts a teacher or principal remark from the ratings; the reply is {remark, fallback}.
   aiSuggestAssessmentRemark: (data: Record<string, unknown>) =>
     api.post('/api/examinations/student-term-assessment/ai-remark/', data),
-  getClassSummary: (id: number) =>
-    api.get(`/api/examinations/exams/${id}/class_summary/`),
   getReportCard: (params?: Record<string, unknown>) =>
     api.get('/api/examinations/report-card/', { params }),
+  // The hand-set parts of a card (promotion, date of issue, signature captions), stored against the
+  // card's main exam; the server lets admins, managers and the class teacher save them.
+  saveReportCardMeta: (data: Record<string, unknown>) =>
+    api.post('/api/examinations/report-card/meta/', data),
+  getReportCardBulkMeta: (params: { academic_year_id: number; exam_ids: string; student_ids: string }) =>
+    api.get('/api/examinations/report-card/meta/bulk/', { params }),
+  saveReportCardBulkMeta: (data: Record<string, unknown>) =>
+    api.post('/api/examinations/report-card/meta/bulk/', data),
 };
 
 // ─── Auth API ────────────────────────────────────────────────────────────────
@@ -1012,6 +1075,11 @@ export const parentsApi = {
   revokeInvite: (id: number) =>
     api.delete(`/api/parents/admin/invites/${id}/`),
   // Every parent in the school with their children (admin and principal); one parent can have many children.
+  // {student_id: {linked, pending}} for the whole school (admin); a missing student has neither.
+  getParentStatus: () => api.get('/api/parents/admin/parent-status/'),
+  // Change one parent-child link: relation and/or primary contact.
+  updateLink: (linkId: number, data: { relation?: string; is_primary?: boolean }) =>
+    api.patch(`/api/parents/admin/links/${linkId}/`, data),
   getParentsList: (params?: Record<string, unknown>) =>
     api.get('/api/parents/admin/parents/', { params }),
   linkChildren: (data: Record<string, unknown>) =>
@@ -1076,8 +1144,6 @@ export const studentPortalApi = {
     api.get('/api/students/portal/results/', { params }),
   getAssignments: (params?: Record<string, unknown>) =>
     api.get('/api/students/portal/assignments/', { params }),
-  getAssignment: (id: number) =>
-    api.get(`/api/students/portal/assignments/${id}/`),
   // The backend has no /<id>/submit/ route: the id goes in the body of the list URL.
   submitAssignment: (id: number, data: Record<string, unknown>) =>
     api.post('/api/students/portal/assignments/', { ...data, assignment_id: id }),
@@ -1100,8 +1166,6 @@ export const transportApi = {
     api.get('/api/transport/dashboard/'),
   getRoutes: (params?: Record<string, unknown>) =>
     api.get('/api/transport/routes/', { params }),
-  getVehicles: (params?: Record<string, unknown>) =>
-    api.get('/api/transport/vehicles/', { params }),
   getMyVehicle: () =>
     api.get('/api/transport/vehicles/my/'),
   getStops: (params?: Record<string, unknown>) =>
@@ -1115,6 +1179,16 @@ export const transportApi = {
   updateStop: (id: number, data: object) => api.patch(`/api/transport/stops/${id}/`, data),
   deleteStop: (id: number) => api.delete(`/api/transport/stops/${id}/`),
   getAssignments: (params?: Record<string, unknown>) => api.get('/api/transport/assignments/', { params }),
+  // Vehicles, student transport and boarding (admin and principal write; others read).
+  getVehicles: (params?: Record<string, unknown>) => api.get('/api/transport/vehicles/', { params }),
+  createVehicle: (data: object) => api.post('/api/transport/vehicles/', data),
+  updateVehicle: (id: number, data: object) => api.patch(`/api/transport/vehicles/${id}/`, data),
+  deleteVehicle: (id: number) => api.delete(`/api/transport/vehicles/${id}/`),
+  createAssignment: (data: object) => api.post('/api/transport/assignments/', data),
+  deleteAssignment: (id: number) => api.delete(`/api/transport/assignments/${id}/`),
+  bulkAssign: (data: object) => api.post('/api/transport/assignments/bulk_assign/', data),
+  getAttendance: (params?: Record<string, unknown>) => api.get('/api/transport/attendance/', { params }),
+  bulkMarkAttendance: (data: object) => api.post('/api/transport/attendance/bulk_mark/', data),
   // Parents follow the route's bus (the legacy journey/track/ is the student's own sharing).
   trackStudent: (studentId: number) =>
     api.get(`/api/transport/route-journey/track/${studentId}/`),
@@ -1190,12 +1264,8 @@ export const faceAttendanceApi = {
     }),
   createSession: (data: Record<string, unknown>) =>
     api.post('/api/face-attendance/sessions/', data),
-  getSessions: (params?: Record<string, unknown>) =>
-    api.get('/api/face-attendance/sessions/', { params }),
   getSession: (id: string) =>
     api.get(`/api/face-attendance/sessions/${id}/`),
-  getPendingReview: (params?: Record<string, unknown>) =>
-    api.get('/api/face-attendance/sessions/pending_review/', { params }),
   confirmSession: (id: string, data: Record<string, unknown>) =>
     api.post(`/api/face-attendance/sessions/${id}/confirm/`, data),
   reprocessSession: (id: string) =>
@@ -1212,8 +1282,6 @@ export const faceAttendanceApi = {
   // A photo is processed in the background; its outcome (or the server's reason for refusing it) is here.
   getTask: (taskId: string) =>
     api.get(`/api/tasks/tasks/${taskId}/`),
-  getStatus: () =>
-    api.get('/api/face-attendance/status/'),
 };
 
 // ─── Messaging API (staff <-> staff/admin threads; parents use /api/parents/messages) ───
@@ -1235,7 +1303,6 @@ export const messagingApi = {
 
 export const studentExitsApi = {
   getExits: (params?: Record<string, unknown>) => api.get('/api/student-exits/', { params }),
-  getExit: (id: number) => api.get(`/api/student-exits/${id}/`),
   startExit: (data: object) => api.post('/api/student-exits/', data),
   updateExit: (id: number, data: object) => api.patch(`/api/student-exits/${id}/`, data),
   refreshExit: (id: number) => api.post(`/api/student-exits/${id}/refresh/`),

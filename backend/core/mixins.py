@@ -153,3 +153,36 @@ class TenantSerializerMixin:
             raise PermissionDenied("You don't have access to this school.")
 
         return value
+
+
+class ListETagMixin:
+    """
+    ETag + 304 on a ViewSet's list answer, for lists that rarely change (years, classes, subjects,
+    terms, accounts, categories). The phone sends back the ETag it holds; when the list is the same
+    it gets an empty 304 instead of the whole list again.
+
+    The tag is a hash of the answer itself, so it can never call a changed list "unchanged": a new
+    class, another school (X-School-ID) or another role's view all hash differently. The database
+    work still runs; only the bytes on the wire are saved. Done in finalize_response so it also
+    covers ViewSets that override list(). Put it first in the class bases.
+    """
+
+    def finalize_response(self, request, response, *args, **kwargs):
+        if (
+            request.method == 'GET'
+            and getattr(self, 'action', None) == 'list'
+            and getattr(response, 'status_code', None) == 200
+            and getattr(response, 'data', None) is not None
+        ):
+            import hashlib
+            import json
+
+            from rest_framework import status
+            from rest_framework.response import Response
+
+            body = json.dumps(response.data, sort_keys=True, default=str, separators=(',', ':'))
+            etag = '"' + hashlib.md5(body.encode()).hexdigest() + '"'
+            if request.headers.get('If-None-Match') == etag:
+                response = Response(status=status.HTTP_304_NOT_MODIFIED)
+            response['ETag'] = etag
+        return super().finalize_response(request, response, *args, **kwargs)

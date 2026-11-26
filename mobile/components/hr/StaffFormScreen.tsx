@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, ScrollView, Switch, StyleSheet } from 'react-native';
+import { View, Text, Switch, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../../contexts/AuthContext';
 import { useDepartments, useDesignations, useHrActions, useNextEmployeeId, useStaffMember } from '../../hooks/useHrAdmin';
@@ -13,6 +13,7 @@ import Input from '../ui/Input';
 import Select from '../ui/Select';
 import DateField from '../ui/DateField';
 import Button from '../ui/Button';
+import FormScreen from '../ui/FormScreen';
 import Card from '../ui/Card';
 import StaffPhoto from './StaffPhoto';
 import StaffAccountSection from './StaffAccountSection';
@@ -89,7 +90,14 @@ export default function StaffFormScreen({ id }: { id: number | null }) {
   const desigOptions = designationsFor((designations.data ?? []).filter((d) => d.is_active || d.id === form.designation), form.department).map((d) => ({ value: d.id, label: d.name }));
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+    <FormScreen
+      submitLabel={creating ? 'Add staff member' : 'Save changes'}
+      onSubmit={submit}
+      busy={saving}
+      disabled={!seeded}
+      error={error}
+    >
+      <View style={styles.stack}>
       {!creating && member.data ? <StaffPhoto staffId={member.data.id} name={member.data.full_name} photoUrl={(member.data as { photo_url?: string | null }).photo_url} /> : null}
       <Card style={styles.card}>
         <Text style={styles.section}>Personal</Text>
@@ -157,22 +165,20 @@ export default function StaffFormScreen({ id }: { id: number | null }) {
 
       {!creating && member.data ? <StaffAccountSection member={member.data} /> : null}
 
-      {error ? <Text style={styles.error} accessibilityRole="alert">{error}</Text> : null}
-      <Button title={creating ? 'Add staff member' : 'Save changes'} onPress={submit} loading={saving} disabled={saving || !seeded} />
+      {/* Kept in the page, away from Save, so it is never tapped by mistake. */}
       {!creating && member.data ? (
         <Button title={staffHasLeft(member.data) ? 'Reactivate' : 'Deactivate'} variant={staffHasLeft(member.data) ? 'secondary' : 'danger'} onPress={toggleActive} />
       ) : null}
-    </ScrollView>
+      </View>
+    </FormScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.background },
-  content: { padding: Spacing.lg, paddingBottom: Spacing.xxxl, gap: Spacing.md },
+  stack: { gap: Spacing.md },
   card: { gap: Spacing.md },
   section: { fontSize: FontSize.md, fontWeight: '700', color: Colors.text },
   hint: { fontSize: FontSize.sm, color: Colors.textSecondary },
   toggle: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md },
   flex: { flex: 1 },
-  error: { color: Colors.error, fontSize: FontSize.sm },
 });

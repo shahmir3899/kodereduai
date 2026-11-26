@@ -64,6 +64,34 @@
       ],
       "cwd": "mobile",
       "port": 8282
+    },
+    {
+      "name": "backend-real-8000",
+      "runtimeExecutable": "C:/Program Files/Git/bin/bash.exe",
+      "runtimeArgs": [
+        "-c",
+        "export CORS_ALLOWED_ORIGINS=http://localhost:3000,http://localhost:5173,http://localhost:4321,http://localhost:8383 && cd backend && python manage.py runserver 8000"
+      ],
+      "port": 8000
+    },
+    {
+      "name": "mobile-real-8383",
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": [
+        "/c",
+        "set EXPO_PUBLIC_API_URL=http://localhost:8000&& set EXPO_PUBLIC_APP_ENV=development&& set EXPO_PUBLIC_ALLOW_INSECURE_HTTP=true&& npx expo start --web --port 8383"
+      ],
+      "cwd": "mobile",
+      "port": 8383
+    },
+    {
+      "name": "backend-scratch-8000",
+      "runtimeExecutable": "C:/Program Files/Git/bin/bash.exe",
+      "runtimeArgs": [
+        "-c",
+        "source docs/media/_authoring/scratch_env.sh && cd backend && python manage.py runserver 8000 --noreload"
+      ],
+      "port": 8000
     }
   ]
 }

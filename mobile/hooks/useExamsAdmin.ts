@@ -5,6 +5,8 @@ import { listOf } from '../services/academicYear';
 import { examListParams, type ExamRow, type ExamSubjectRow } from '../services/examsAdmin';
 import { useAcademicYear } from './useAcademicYear';
 import { useScopedPagedQuery, useScopedQuery } from './useScopedQuery';
+import { REFERENCE_STALE_MS } from '../services/queryRules';
+
 
 export function useExamsPaged(status: string) {
   const { current } = useAcademicYear();
@@ -24,11 +26,15 @@ export function useExamTypeList() {
       .filter((t) => t.is_active !== false), { staleTime: 5 * 60_000 });
 }
 
+// The marks entry screen's exam type picker (active types only, all of them).
+export const fetchActiveExamTypes = async () =>
+  listOf<{ id: number; name: string }>((await examinationsApi.getExamTypes({ page_size: 9999, is_active: true })).data);
+
 export function useTermList() {
   const { current } = useAcademicYear();
   return useScopedQuery('terms', [current?.id ?? null], async () =>
     listOf<{ id: number; name: string }>((await sessionsApi.getTerms({ ...(current?.id ? { academic_year: current.id } : {}), page_size: 50 })).data),
-  { enabled: !!current?.id, staleTime: 5 * 60_000 });
+  { enabled: !!current?.id, staleTime: REFERENCE_STALE_MS });
 }
 
 export function useExamActions() {

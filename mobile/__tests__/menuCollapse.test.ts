@@ -24,10 +24,11 @@ describe('plainPath and containsPath', () => {
 });
 
 describe('isGroupOpen', () => {
-  it('is closed by default, open when it holds the current screen or is small', () => {
+  it('is closed by default, open only when it holds the current screen, however small', () => {
     expect(isGroupOpen(finance, {}, '/students', false)).toBe(false);
     expect(isGroupOpen(finance, {}, '/finance/income', false)).toBe(true);
-    expect(isGroupOpen(general, {}, '/students', false)).toBe(true);
+    expect(isGroupOpen(general, {}, '/students', false)).toBe(false);
+    expect(isGroupOpen(general, {}, '/dashboard', false)).toBe(true);
   });
   it('follows the person over the default, and searching opens everything', () => {
     expect(isGroupOpen(finance, { Finance: true }, '/students', false)).toBe(true);

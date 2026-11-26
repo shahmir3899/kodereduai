@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { View, Text, FlatList, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { useNavigation } from 'expo-router';
 import { useSaveStaffAttendance, useStaffAttendanceDay, useStaffForAttendance } from '../../hooks/useStaffAdminHr';
 import { useRefreshControl } from '../../hooks/useRefreshControl';
@@ -19,6 +19,7 @@ import EmptyState from '../ui/EmptyState';
 import { useToast } from '../ui/Toast';
 import { confirm } from '../ui/confirm';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
+import AppList from '../ui/AppList';
 
 const TONE_COLOR = { success: Colors.success, error: Colors.error, warning: Colors.warning, info: Colors.leave } as const;
 
@@ -127,7 +128,9 @@ export default function StaffAttendanceAdminScreen() {
 
   return (
     <View style={styles.container}>
-      <FlatList
+      {/* Rows hold typing boxes: clipping off-screen rows on Android can drop the keyboard. */}
+      <AppList
+        removeClippedSubviews={false}
         data={rows}
         keyExtractor={(r) => String(r.staffId)}
         contentContainerStyle={styles.content}
@@ -185,7 +188,7 @@ const styles = StyleSheet.create({
   counts: { flexDirection: 'row', backgroundColor: Colors.surface, borderRadius: BorderRadius.md, paddingVertical: Spacing.md, marginBottom: Spacing.sm },
   count: { flex: 1, alignItems: 'center' },
   countValue: { fontSize: FontSize.lg, fontWeight: '700' },
-  countLabel: { fontSize: 10, color: Colors.textSecondary },
+  countLabel: { fontSize: FontSize.xxs, color: Colors.textSecondary },
   all: { alignSelf: 'flex-start', marginBottom: Spacing.md },
   card: { backgroundColor: Colors.surface, borderRadius: BorderRadius.md, padding: Spacing.md, marginBottom: Spacing.sm },
   rowTop: { flexDirection: 'row', alignItems: 'center' },

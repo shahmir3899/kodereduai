@@ -8,6 +8,7 @@ import {
 } from '../../hooks/useFinanceManager';
 import { useUnreadMessages } from '../../hooks/useMessaging';
 import { useRefreshControl } from '../../hooks/useRefreshControl';
+import { usePrefetchNext } from '../../hooks/usePrefetchNext';
 import { entryAmount, entrySign, PERIOD_LABELS, rangeFor, rateTone, totalBalance, type DateRange, type Period } from '../../services/financeManager';
 import { accountTypeTone, entryBadge } from '../../services/financeDashboard';
 import { balanceOf, formatMoney } from '../../services/feeCollect';
@@ -18,10 +19,13 @@ import { RecentTransfersCard } from './RecentActivityCards';
 import SegmentedTabs from '../ui/SegmentedTabs';
 import DateField from '../ui/DateField';
 import StatusPill from '../ui/StatusPill';
-import SchoolSwitcher from '../nav/SchoolSwitcher';
+import HomeHero from '../dashboard/HomeHero';
+import { splitTiles } from '../../services/homeHero';
 import StatTiles from '../dashboard/StatTiles';
 import RecentNotifications from '../dashboard/RecentNotifications';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
+import TileGrid from '../../components/ui/TileGrid';
+import type { IconName } from '../../components/ui/Icon';
 
 // Port of frontend/src/pages/FinanceManagerDashboard.jsx, minus the quick actions that write
 // (record payment, expense, transfer): the finance API is read-only for this role.
@@ -35,6 +39,7 @@ export default function FinanceHome() {
   const [custom, setCustom] = useState<DateRange>({ from: '', to: '' });
   const range = rangeFor(period, custom);
   const month = useFinanceSummary(range);
+  usePrefetchNext('finance', !month.isLoading);
   const trend = useMonthlyTrend(6);
   const transfers = useRecentTransfers(5);
   const overdue = useOverdueFees(6);
@@ -54,30 +59,21 @@ export default function FinanceHome() {
   ];
 
   const quick = [
-    { label: 'Reports', icon: '📊', route: routeFor('finance', '/finance') },
-    { label: 'Income', icon: '💵', route: routeFor('finance', '/finance/income') },
-    { label: 'Expenses', icon: '🧾', route: routeFor('finance', '/finance/expenses') },
-    { label: unread > 0 ? `Messages (${unread})` : 'Messages', icon: '💬', route: routeFor('finance', '/messages') },
+    { label: 'Reports', icon: 'stats-chart-outline' as IconName, route: routeFor('finance', '/finance') },
+    { label: 'Income', icon: 'trending-up-outline' as IconName, route: routeFor('finance', '/finance/income') },
+    { label: 'Expenses', icon: 'trending-down-outline' as IconName, route: routeFor('finance', '/finance/expenses') },
+    { label: unread > 0 ? `Messages (${unread})` : 'Messages', icon: 'chatbubbles-outline' as IconName, route: routeFor('finance', '/messages') },
   ];
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content} refreshControl={refreshControl}>
-      <Text style={styles.greeting}>Welcome back, {name}</Text>
-      <SchoolSwitcher />
-
-      <StatTiles tiles={tiles} onPress={go} />
+      <HomeHero name={name ?? ""} stats={splitTiles(tiles).hero} onPress={go} />
+      <StatTiles tiles={splitTiles(tiles).rest} onPress={go} />
       {summary?.rate != null ? (
         <View style={styles.rateRow}><StatusPill label={summary.rate >= 80 ? 'On track' : summary.rate >= 50 ? 'Needs attention' : 'Critical'} tone={rateTone(summary.rate)} /></View>
       ) : null}
 
-      <View style={styles.actions}>
-        {quick.map((a) => (
-          <TouchableOpacity accessibilityRole="button" key={a.label} style={styles.quick} onPress={() => go(a.route)}>
-            <Text style={styles.quickIcon}>{a.icon}</Text>
-            <Text style={styles.quickLabel}>{a.label}</Text>
-          </TouchableOpacity>
-        ))}
-      </View>
+      <TileGrid items={quick.map((a) => ({ label: a.label, icon: a.icon, onPress: a.route ? () => go(a.route) : undefined }))} />
 
       {summary && summary.byClass.length > 0 ? (
         <>
@@ -187,12 +183,7 @@ const styles = StyleSheet.create({
   link: { fontSize: FontSize.sm, color: Colors.primary, fontWeight: '600' },
   container: { flex: 1, backgroundColor: Colors.background },
   content: { padding: Spacing.lg, paddingBottom: Spacing.xxxl },
-  greeting: { fontSize: FontSize.xl, fontWeight: '700', color: Colors.text },
   rateRow: { marginTop: Spacing.sm, alignItems: 'flex-start' },
-  actions: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.md, marginTop: Spacing.lg },
-  quick: { width: '22%', minWidth: 72, alignItems: 'center', backgroundColor: Colors.surface, borderRadius: BorderRadius.md, paddingVertical: Spacing.md },
-  quickIcon: { fontSize: 22 },
-  quickLabel: { fontSize: FontSize.xs, color: Colors.text, marginTop: 4, textAlign: 'center' },
   section: { fontSize: FontSize.lg, fontWeight: '600', color: Colors.text, marginTop: Spacing.xl, marginBottom: Spacing.md },
   list: { padding: Spacing.md },
   muted: { fontSize: FontSize.sm, color: Colors.textSecondary },

@@ -6,13 +6,13 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
-  Alert,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { parentsApi } from '../../services/api';
 import { apiErrorMessage, registerBody, registerProblem } from '../../services/parentPortal';
 import Input from '../../components/ui/Input';
 import Button from '../../components/ui/Button';
+import { useToast } from '../../components/ui/Toast';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
 
 export default function RegisterScreen() {
@@ -26,6 +26,7 @@ export default function RegisterScreen() {
   });
   const [loading, setLoading] = useState(false);
   const router = useRouter();
+  const toast = useToast();
 
   const updateField = (field: string, value: string) => {
     setForm((prev) => ({ ...prev, [field]: value }));
@@ -34,18 +35,17 @@ export default function RegisterScreen() {
   const handleRegister = async () => {
     const problem = registerProblem(form);
     if (problem) {
-      Alert.alert('Error', problem);
+      toast.error(problem);
       return;
     }
 
     setLoading(true);
     try {
       await parentsApi.register(registerBody(form));
-      Alert.alert('Success', 'Registration successful! Please sign in.', [
-        { text: 'OK', onPress: () => router.replace('/(auth)/login') },
-      ]);
+      toast.success('Registration done. Please sign in.');
+      router.replace('/(auth)/login');
     } catch (error: any) {
-      Alert.alert('Registration Failed', apiErrorMessage(error.response?.data, 'Registration failed. Please try again.'));
+      toast.error(apiErrorMessage(error.response?.data, 'Registration failed. Please try again.'));
     } finally {
       setLoading(false);
     }

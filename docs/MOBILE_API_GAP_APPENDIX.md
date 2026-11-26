@@ -1,9 +1,9 @@
 # Mobile app and web API coverage
 
-Generated 2026-11-17 by `python scripts/mobile_api_gap.py` (rerun it after each batch).
-The web calls **800** distinct endpoints. The mobile app calls **589** of them (**211 not called**). Mobile-only endpoints (the web never calls them): **2**.
+Generated 2026-11-24 by `python scripts/mobile_api_gap.py` (rerun it after each batch).
+The web calls **802** distinct endpoints. The mobile app calls **593** of them (**209 not called**). Mobile-only endpoints (the web never calls them): **2**.
 
-A call whose URL is a bare variable is not seen (none exist today, checked 2026-11-02); nested template strings are handled. This file is a reference; the plan is `MOBILE_CHANGE_LIST.md`.
+A call whose URL is a bare variable is not seen (none exist today, checked 2026-11-02); nested template strings are handled. This file is a reference; the plan is `MOBILE_WEB_BALANCE_PLAN.md`.
 
 ## 1. Endpoints only the mobile app uses (goal: zero)
 
@@ -49,7 +49,7 @@ Each row groups related endpoints. "Used" is how many of the web's endpoints for
 | Dashboard | Admin dashboard | 1 of 1 | Fully used |  |
 | Dashboard | Leadership insights | 1 of 1 | Fully used |  |
 | Exams | Academic risk | 1 of 1 | Fully used |  |
-| Exams | Exam groups and date sheets | 12 of 14 | Mostly used |  |
+| Exams | Exam groups and date sheets | 13 of 14 | Mostly used |  |
 | Exams | Exam subjects | 4 of 4 | Fully used |  |
 | Exams | Exam types | 4 of 4 | Fully used |  |
 | Exams | Exams | 17 of 20 | Mostly used |  |
@@ -57,11 +57,11 @@ Each row groups related endpoints. "Used" is how many of the web's endpoints for
 | Exams | Marks entry | 2 of 6 | Partly used |  |
 | Exams | Paper photo scan | 3 of 5 | Mostly used | Version 2 |
 | Exams | Question bank | 8 of 11 | Mostly used |  |
-| Exams | Question papers | 14 of 17 | Mostly used | Partly built; AI and Word export on the web |
+| Exams | Question papers | 15 of 18 | Mostly used | Partly built; AI and Word export on the web |
 | Exams | Report cards | 1 of 4 | Partly used |  |
 | Exams | Skills and behaviour assessment | 3 of 5 | Mostly used |  |
 | Exams | Student responses | 0 of 2 | Not used | Version 2 |
-| Exams | Worksheets | 10 of 11 | Mostly used | Version 2 |
+| Exams | Worksheets | 12 of 12 | Fully used |  |
 | Finance | AI assistant | 3 of 3 | Fully used |  |
 | Finance | AI fee predictor | 0 of 1 | Not used | Web only |
 | Finance | Accounts and ledger | 12 of 13 | Mostly used |  |
@@ -285,10 +285,9 @@ Each row groups related endpoints. "Used" is how many of the web's endpoints for
 - `GET /api/lms/lesson-plans/my_classes/`
 - `GET /api/lms/lesson-plans/{}/`
 
-### Exams: Exam groups and date sheets (2)
+### Exams: Exam groups and date sheets (1)
 
 - `DELETE /api/examinations/exam-groups/{}/`
-- `PATCH /api/examinations/exam-groups/{}/`
 
 ### Exams: Exams (3)
 
@@ -335,10 +334,6 @@ Each row groups related endpoints. "Used" is how many of the web's endpoints for
 
 - `GET /api/examinations/student-responses/`
 - `POST /api/examinations/student-responses/`
-
-### Exams: Worksheets (1)
-
-- `PATCH /api/examinations/worksheets/{}/`
 
 ### Finance: AI fee predictor (1)
 

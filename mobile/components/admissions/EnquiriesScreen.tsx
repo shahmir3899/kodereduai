@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { View, Text, FlatList, ActivityIndicator, Linking, TouchableOpacity, StyleSheet, type RefreshControlProps } from 'react-native';
+import { View, Text, ActivityIndicator, Linking, TouchableOpacity, StyleSheet, type RefreshControlProps } from 'react-native';
 import { useRouter } from 'expo-router';
 import {
   useAdmissionsActions, useEnquiriesPaged, useFollowups, useStatusCounts,
@@ -18,12 +18,13 @@ import Button from '../ui/Button';
 import Skeleton from '../ui/Skeleton';
 import ErrorState from '../ui/ErrorState';
 import EmptyState from '../ui/EmptyState';
-import StatusPill from '../ui/StatusPill';
 import { confirm } from '../ui/confirm';
 import { useToast } from '../ui/Toast';
 import EnquiryFormSheet from './EnquiryFormSheet';
 import ConvertSheet from './ConvertSheet';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
+import AppList from '../ui/AppList';
+import RecordCard from '../ui/RecordCard';
 
 const ANY = -1;
 const ANY_TEXT = '';
@@ -205,7 +206,7 @@ export default function EnquiriesScreen() {
 
   return (
     <View style={styles.container}>
-      <FlatList
+      <AppList
         contentContainerStyle={[styles.content, pickedRows.length > 0 && { paddingBottom: 96 }]}
         data={rows}
         keyExtractor={(e) => String(e.id)}
@@ -218,57 +219,43 @@ export default function EnquiriesScreen() {
         ListFooterComponent={followUp === '' && paged.isFetchingNextPage ? <ActivityIndicator color={Colors.primary} style={{ margin: Spacing.lg }} /> : null}
         renderItem={({ item }) => {
           const due = followUpState(item, today);
-          const isPicked = !!picked[item.id];
+          const actions = [
+            telUrl(item.mobile) ? (
+              <TouchableOpacity key="call" accessibilityRole="button" accessibilityLabel={`Call ${item.father_name}`} style={styles.action} onPress={() => call(item)}>
+                <Text style={styles.actionText}>Call</Text>
+              </TouchableOpacity>
+            ) : null,
+            canConfirm(item) ? (
+              <TouchableOpacity key="confirm" accessibilityRole="button" accessibilityLabel={`Confirm enquiry for ${item.name}`} style={styles.action} onPress={() => confirmEnquiry(item)}>
+                <Text style={[styles.actionText, { color: Colors.success }]}>Confirm</Text>
+              </TouchableOpacity>
+            ) : null,
+            canCancel(item) ? (
+              <TouchableOpacity key="cancel" accessibilityRole="button" accessibilityLabel={`Cancel enquiry for ${item.name}`} style={styles.action} onPress={() => cancelEnquiry(item)}>
+                <Text style={[styles.actionText, { color: Colors.error }]}>Cancel</Text>
+              </TouchableOpacity>
+            ) : null,
+            canDeleteCancelled(item) ? (
+              <TouchableOpacity key="delete" accessibilityRole="button" accessibilityLabel={`Delete enquiry for ${item.name}`} style={styles.action} onPress={() => deleteCancelled(item)}>
+                <Text style={[styles.actionText, { color: Colors.error }]}>Delete</Text>
+              </TouchableOpacity>
+            ) : null,
+          ].filter(Boolean);
           return (
-            <View style={[styles.row, isPicked && styles.rowPicked]}>
-              <View style={styles.rowTop}>
-                {canConvert(item) ? (
-                  <TouchableOpacity
-                    accessibilityRole="checkbox" accessibilityState={{ checked: isPicked }} accessibilityLabel={`Select ${item.name} for conversion`}
-                    style={styles.checkHit} onPress={() => togglePick(item)}
-                  >
-                    <View style={[styles.box, isPicked && styles.boxOn]}>{isPicked ? <Text style={styles.tick}>✓</Text> : null}</View>
-                  </TouchableOpacity>
-                ) : null}
-                <TouchableOpacity
-                  accessibilityRole="button" accessibilityLabel={`Open enquiry for ${item.name}`}
-                  style={styles.who} onPress={() => router.push({ pathname: '/(admin)/admissions/[id]', params: { id: String(item.id) } })}
-                >
-                  <Text style={styles.name} numberOfLines={1}>{item.name}</Text>
-                  <Text style={styles.sub} numberOfLines={1}>{item.father_name} · {item.mobile}</Text>
-                  <Text style={styles.sub} numberOfLines={1}>
-                    {gradeLabel(item.applying_for_grade_level)} · {item.source_display ?? sourceLabel(item.source)}
-                    {item.next_followup_date ? ` · follow up ${formatDay(item.next_followup_date)}` : ''}
-                  </Text>
-                </TouchableOpacity>
-                <View style={styles.right}>
-                  <StatusPill label={item.status_display ?? statusLabel(item.status)} tone={statusTone(item.status)} />
-                  {due === 'overdue' ? <Text style={styles.overdue}>Overdue</Text> : due === 'today' ? <Text style={styles.dueToday}>Today</Text> : null}
-                </View>
-              </View>
-              <View style={styles.actions}>
-                {telUrl(item.mobile) ? (
-                  <TouchableOpacity accessibilityRole="button" accessibilityLabel={`Call ${item.father_name}`} style={styles.action} onPress={() => call(item)}>
-                    <Text style={styles.actionText}>Call</Text>
-                  </TouchableOpacity>
-                ) : null}
-                {canConfirm(item) ? (
-                  <TouchableOpacity accessibilityRole="button" accessibilityLabel={`Confirm enquiry for ${item.name}`} style={styles.action} onPress={() => confirmEnquiry(item)}>
-                    <Text style={[styles.actionText, { color: Colors.success }]}>Confirm</Text>
-                  </TouchableOpacity>
-                ) : null}
-                {canCancel(item) ? (
-                  <TouchableOpacity accessibilityRole="button" accessibilityLabel={`Cancel enquiry for ${item.name}`} style={styles.action} onPress={() => cancelEnquiry(item)}>
-                    <Text style={[styles.actionText, { color: Colors.error }]}>Cancel</Text>
-                  </TouchableOpacity>
-                ) : null}
-                {canDeleteCancelled(item) ? (
-                  <TouchableOpacity accessibilityRole="button" accessibilityLabel={`Delete enquiry for ${item.name}`} style={styles.action} onPress={() => deleteCancelled(item)}>
-                    <Text style={[styles.actionText, { color: Colors.error }]}>Delete</Text>
-                  </TouchableOpacity>
-                ) : null}
-              </View>
-            </View>
+            <RecordCard
+              avatarName={item.name}
+              title={item.name}
+              subtitle={`${item.father_name} · ${item.mobile}`}
+              meta={`${gradeLabel(item.applying_for_grade_level)} · ${item.source_display ?? sourceLabel(item.source)}${item.next_followup_date ? ` · follow up ${formatDay(item.next_followup_date)}` : ''}`}
+              status={{ label: item.status_display ?? statusLabel(item.status), tone: statusTone(item.status) }}
+              trailing={due === 'overdue' ? 'Overdue' : due === 'today' ? 'Today' : undefined}
+              trailingColor={due === 'overdue' ? Colors.error : Colors.warning}
+              selected={canConvert(item) ? !!picked[item.id] : undefined}
+              onSelect={canConvert(item) ? () => togglePick(item) : undefined}
+              accessibilityLabel={`Open enquiry for ${item.name}`}
+              onPress={() => router.push({ pathname: '/(admin)/admissions/[id]', params: { id: String(item.id) } })}
+              footer={actions.length > 0 ? <View style={styles.actions}>{actions}</View> : undefined}
+            />
           );
         }}
       />
@@ -323,19 +310,6 @@ const styles = StyleSheet.create({
   metaRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.lg, marginVertical: Spacing.sm },
   count: { fontSize: FontSize.xs, color: Colors.textSecondary, flex: 1 },
   link: { fontSize: FontSize.sm, color: Colors.primary, fontWeight: '600', minHeight: 32, textAlignVertical: 'center' },
-  row: { backgroundColor: Colors.surface, borderRadius: BorderRadius.md, padding: Spacing.md, marginTop: Spacing.sm },
-  rowPicked: { borderWidth: 1.5, borderColor: Colors.primary },
-  rowTop: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
-  checkHit: { minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
-  box: { width: 22, height: 22, borderRadius: 4, borderWidth: 1.5, borderColor: Colors.border, alignItems: 'center', justifyContent: 'center' },
-  boxOn: { backgroundColor: Colors.primary, borderColor: Colors.primary },
-  tick: { color: Colors.textInverse, fontSize: FontSize.sm, fontWeight: '700' },
-  who: { flex: 1, minHeight: 44, justifyContent: 'center' },
-  name: { fontSize: FontSize.md, fontWeight: '600', color: Colors.text },
-  sub: { fontSize: FontSize.sm, color: Colors.textSecondary, marginTop: 2 },
-  right: { alignItems: 'flex-end', gap: 4 },
-  overdue: { fontSize: FontSize.xs, color: Colors.error, fontWeight: '700' },
-  dueToday: { fontSize: FontSize.xs, color: Colors.warning, fontWeight: '700' },
   actions: { flexDirection: 'row', gap: Spacing.lg, marginTop: Spacing.xs, flexWrap: 'wrap' },
   action: { minHeight: 40, minWidth: 44, justifyContent: 'center' },
   actionText: { fontSize: FontSize.sm, fontWeight: '600', color: Colors.primary },

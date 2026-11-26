@@ -3,7 +3,7 @@ import { Animated, Easing, PanResponder, StyleSheet, Text, useWindowDimensions, 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router, usePathname } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Colors } from '../../constants/colors';
+import { Colors, FontSize, Spacing } from '../../constants/colors';
 import { useAuth } from '../../contexts/AuthContext';
 import { useScopedQuery } from '../../hooks/useScopedQuery';
 import { assistantApi } from '../../services/assistantApi';
@@ -31,7 +31,7 @@ export default function AuraLauncher() {
   const visible = on && caps.data?.agents?.length > 0 && !pathname.startsWith('/aura');
 
   const bounds: FabBounds = useMemo(() => ({
-    width, height, boxW: BOX_W, boxH: BOX_H, margin: 16, top: insets.top + 8, bottomReserve: insets.bottom + 84,
+    width, height, boxW: BOX_W, boxH: BOX_H, margin: Spacing.lg, top: insets.top + 8, bottomReserve: insets.bottom + 84,
   }), [width, height, insets.top, insets.bottom]);
   const boundsRef = useRef(bounds);
   boundsRef.current = bounds;
@@ -122,5 +122,5 @@ const styles = StyleSheet.create({
   fabLifted: { elevation: 12, shadowOpacity: 0.4, shadowRadius: 10 },
   bars: { flexDirection: 'row', alignItems: 'center', gap: 3 },
   bar: { width: 3.5, borderRadius: 2, backgroundColor: Colors.textInverse },
-  label: { fontSize: 11, fontWeight: '700', color: Colors.secondary },
+  label: { fontSize: FontSize.xs, fontWeight: '700', color: Colors.secondary },
 });

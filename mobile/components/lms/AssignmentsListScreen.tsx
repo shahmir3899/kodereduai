@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { View, Text, FlatList, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { useRouter, type Href } from 'expo-router';
 import {
   ASSIGNMENT_TYPES, STATUSES, canClose, canPublish, filterAssignments, isOverdue, type Assignment,
@@ -22,6 +22,9 @@ import { confirm } from '../ui/confirm';
 import ScopeBadge from '../teacher/ScopeBadge';
 import { useTeacherScope } from '../../hooks/useTeacher';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
+import AppList from '../ui/AppList';
+import RecordCard from '../ui/RecordCard';
+import { day, dayTime } from '../../services/dates';
 
 const STATUS_TONE: Record<string, Tone> = { DRAFT: 'neutral', PUBLISHED: 'success', CLOSED: 'error' };
 const TYPE_TONE: Record<string, Tone> = { HOMEWORK: 'info', DIARY: 'warning', PROJECT: 'neutral', CLASSWORK: 'success', LAB: 'warning' };
@@ -114,7 +117,7 @@ export default function AssignmentsListScreen({ classOptions, readOnly = false, 
 
   return (
     <View style={styles.container}>
-      <FlatList
+      <AppList
         data={shown}
         keyExtractor={(a) => String(a.id)}
         contentContainerStyle={styles.content}
@@ -125,27 +128,25 @@ export default function AssignmentsListScreen({ classOptions, readOnly = false, 
         renderItem={({ item: a }) => {
           const late = isOverdue(a, today);
           return (
-            <View style={styles.card}>
-              <View style={styles.top}>
-                <Text style={styles.title} numberOfLines={2}>{a.title}</Text>
-                <StatusPill label={a.status} tone={STATUS_TONE[a.status] ?? 'neutral'} />
-              </View>
-              <Text style={styles.meta}>{a.class_name || 'N/A'} · {a.subject_name || 'N/A'}</Text>
-              <ScopeBadge scope={scope.classify(a.class_obj, a.subject)} />
-              <View style={styles.row}>
-                <StatusPill label={a.assignment_type} tone={TYPE_TONE[a.assignment_type] ?? 'neutral'} />
-                <Text style={[styles.due, late && styles.late]}>
-                  {a.assignment_type === 'DIARY' ? 'Date' : 'Due'} {a.due_date || '—'}
-                </Text>
-              </View>
-              {readOnly ? null : <View style={styles.actions}>
-                {draftOnly ? null : <Action label={`Submissions (${a.submission_count ?? 0})`} onPress={() => go('submissions', a.id)} primary />}
-                {draftOnly && a.status !== 'DRAFT' ? null : <Action label="Edit" onPress={() => go('form', a.id)} />}
-                {!draftOnly && canPublish(a) ? <Action label="Publish" onPress={() => run(actions.publish.mutateAsync(a.id), 'Assignment published!', 'Failed to publish assignment')} /> : null}
-                {!draftOnly && canClose(a) ? <Action label="Close" onPress={() => run(actions.close.mutateAsync(a.id), 'Assignment closed!', 'Failed to close assignment')} /> : null}
-                {draftOnly && a.status !== 'DRAFT' ? null : <Action label="Delete" onPress={() => remove(a)} danger />}
-              </View>}
-            </View>
+            <RecordCard
+              icon="document-text-outline"
+              title={a.title}
+              status={{ label: a.status, tone: STATUS_TONE[a.status] ?? 'neutral' }}
+              subtitle={`${a.class_name || 'N/A'} · ${a.subject_name || 'N/A'}`}
+              meta={`${a.assignment_type} · ${a.assignment_type === 'DIARY' ? 'Date' : 'Due'} ${a.due_date ? day(a.due_date) || a.due_date : '—'}`}
+              trailing={late ? 'Overdue' : undefined}
+              trailingColor={Colors.error}
+              footer={<>
+                <ScopeBadge scope={scope.classify(a.class_obj, a.subject)} />
+                {readOnly ? null : <View style={styles.actions}>
+                  {draftOnly ? null : <Action label={`Submissions (${a.submission_count ?? 0})`} onPress={() => go('submissions', a.id)} primary />}
+                  {draftOnly && a.status !== 'DRAFT' ? null : <Action label="Edit" onPress={() => go('form', a.id)} />}
+                  {!draftOnly && canPublish(a) ? <Action label="Publish" onPress={() => run(actions.publish.mutateAsync(a.id), 'Assignment published!', 'Failed to publish assignment')} /> : null}
+                  {!draftOnly && canClose(a) ? <Action label="Close" onPress={() => run(actions.close.mutateAsync(a.id), 'Assignment closed!', 'Failed to close assignment')} /> : null}
+                  {draftOnly && a.status !== 'DRAFT' ? null : <Action label="Delete" onPress={() => remove(a)} danger />}
+                </View>}
+              </>}
+            />
           );
         }}
       />
@@ -173,13 +174,6 @@ const styles = StyleSheet.create({
   filterToggle: { alignSelf: 'flex-start', marginBottom: Spacing.md },
   filterToggleText: { fontSize: FontSize.sm, color: Colors.primary, fontWeight: '600' },
   clear: { fontSize: FontSize.sm, color: Colors.error, marginBottom: Spacing.md },
-  card: { backgroundColor: Colors.surface, borderRadius: BorderRadius.md, padding: Spacing.md, marginBottom: Spacing.sm },
-  top: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: Spacing.sm },
-  title: { flex: 1, fontSize: FontSize.md, fontWeight: '600', color: Colors.text },
-  meta: { fontSize: FontSize.sm, color: Colors.textSecondary, marginTop: 2 },
-  row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: Spacing.sm },
-  due: { fontSize: FontSize.xs, color: Colors.textSecondary },
-  late: { color: Colors.error, fontWeight: '700' },
   actions: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.md, marginTop: Spacing.sm, paddingTop: Spacing.sm, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: Colors.border },
   action: { paddingVertical: 2 },
   actionText: { fontSize: FontSize.sm, fontWeight: '600', color: Colors.textSecondary },

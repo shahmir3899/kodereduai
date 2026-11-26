@@ -3,8 +3,7 @@ import {
   View,
   Text,
   StyleSheet,
-  FlatList,
-} from 'react-native';
+  } from 'react-native';
 import { notificationsApi } from '../../../services/api';
 import { useScopedQuery } from '../../../hooks/useScopedQuery';
 import { useRefreshControl } from '../../../hooks/useRefreshControl';
@@ -12,6 +11,8 @@ import Card from '../../../components/ui/Card';
 import Badge from '../../../components/ui/Badge';
 import QueryBoundary from '../../../components/ui/QueryBoundary';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../../constants/colors';
+import AppList from '../../../components/ui/AppList';
+import { dayTime } from '../../../services/dates';
 
 interface NotificationLog {
   id: number;
@@ -45,21 +46,7 @@ export default function NotificationHistory() {
   });
   const refreshControl = useRefreshControl(query.refetch);
 
-  const formatDate = (dateStr: string) => {
-    if (!dateStr) return 'N/A';
-    try {
-      const d = new Date(dateStr);
-      return d.toLocaleDateString('en-PK', {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-      });
-    } catch {
-      return dateStr;
-    }
-  };
+  const formatDate = (dateStr: string) => (dateStr ? dayTime(dateStr) || dateStr : 'N/A');
 
   const renderItem = ({ item }: { item: NotificationLog }) => (
     <Card style={styles.logCard}>
@@ -107,7 +94,7 @@ export default function NotificationHistory() {
 
       <QueryBoundary query={query} emptyTitle="No Notifications" emptyMessage="No notification history found.">
         {(logs) => (
-          <FlatList
+          <AppList
             data={logs}
             keyExtractor={(item) => String(item.id)}
             renderItem={renderItem}

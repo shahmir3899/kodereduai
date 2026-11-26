@@ -18,7 +18,7 @@ import QueryBoundary from '../ui/QueryBoundary';
 import StatusPill from '../ui/StatusPill';
 import { useToast } from '../ui/Toast';
 import FormSheet from '../inventory/FormSheet';
-import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
+import { Colors, FontSize, Spacing, BorderRadius, GlyphSize } from '../../constants/colors';
 
 // The school's events and OFF days for a month, with add, edit and delete (admin and principal). An
 // OFF day switches attendance off for students and marks staff On leave, so the form says so before
@@ -158,7 +158,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
   content: { padding: Spacing.lg, paddingBottom: Spacing.xxxl },
   nav: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: Spacing.md },
-  arrow: { fontSize: 28, color: Colors.primary, paddingHorizontal: Spacing.md },
+  arrow: { fontSize: GlyphSize.lg, color: Colors.primary, paddingHorizontal: Spacing.md },
   title: { fontSize: FontSize.lg, fontWeight: '700', color: Colors.text },
   add: { alignSelf: 'flex-start', marginBottom: Spacing.md },
   row: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md, marginBottom: Spacing.sm },

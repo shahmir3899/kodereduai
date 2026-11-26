@@ -5,15 +5,18 @@ import { listOf } from '../../services/academicYear';
 import type { EntryForm, EntryKind } from '../../services/financeEntry';
 import { useAccounts } from '../../hooks/useFees';
 import { useScopedQuery } from '../../hooks/useScopedQuery';
+import { REFERENCE_STALE_MS } from '../../services/queryRules';
 import Select from '../ui/Select';
 import DateField from '../ui/DateField';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
 
 // The school's own categories for an expense or an income entry, shared by the entry form, the
 // editor and the list filter.
+export const fetchEntryCategories = async (kind: EntryKind) =>
+  listOf<{ id: number; name: string; is_active?: boolean }>((await (kind === 'expense' ? financeApi.getExpenseCategories : financeApi.getIncomeCategories)({ page_size: 9999 })).data);
+
 export function useEntryCategories(kind: EntryKind) {
-  return useScopedQuery('categories', [kind], async () =>
-    listOf<{ id: number; name: string; is_active?: boolean }>((await (kind === 'expense' ? financeApi.getExpenseCategories : financeApi.getIncomeCategories)({ page_size: 9999 })).data));
+  return useScopedQuery('categories', [kind], () => fetchEntryCategories(kind), { staleTime: REFERENCE_STALE_MS });
 }
 
 // The fields of the expense / income form, used by the record screen and the edit sheet so the two

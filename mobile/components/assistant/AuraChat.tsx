@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, FlatList, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
+import { Colors, FontSize, Spacing, BorderRadius, GlyphSize } from '../../constants/colors';
 import useAssistant from '../../hooks/useAssistant';
 import useAssistantVoice from '../../hooks/useAssistantVoice';
 import useAssistantSpeech from '../../hooks/useAssistantSpeech';
@@ -14,6 +14,7 @@ import ActionCard from './ActionCard';
 import TalkMode from './TalkMode';
 import FeedbackThumbs from './FeedbackThumbs';
 import HistoryList from './HistoryList';
+import PreferencesPanel from './PreferencesPanel';
 import RichText from './RichText';
 import StepTrail from './StepTrail';
 
@@ -56,6 +57,7 @@ export default function AuraChat({ onClose }: { onClose: () => void }) {
   const speech = useAssistantSpeech();
   const [text, setText] = useState('');
   const [showHistory, setShowHistory] = useState(false);
+  const [showPrefs, setShowPrefs] = useState(false);
   const [speakReplies, setSpeakReplies] = useState(true);
   const speakNext = useRef(false);
   const spokenId = useRef<string | number | null>(null);
@@ -126,6 +128,14 @@ export default function AuraChat({ onClose }: { onClose: () => void }) {
   const empty = messages.length === 0 && !live;
   const notice = speech.notice || voice.error;
 
+  if (showPrefs) {
+    return (
+      <View style={[styles.screen, { paddingTop: insets.top }]}>
+        <PreferencesPanel onClose={() => setShowPrefs(false)} />
+      </View>
+    );
+  }
+
   if (showHistory) {
     return (
       <View style={[styles.screen, { paddingTop: insets.top }]}>
@@ -147,6 +157,7 @@ export default function AuraChat({ onClose }: { onClose: () => void }) {
           <Text style={styles.memory} accessibilityLabel={`Memory ${memory.used} of ${memory.limit}`}>Memory {memory.used}/{memory.limit}</Text>
         </View>
         <View style={styles.headRight}>
+          <Pressable accessibilityRole="button" accessibilityLabel="What Aura remembers" onPress={() => setShowPrefs(true)} hitSlop={8} style={styles.iconBtn}><Text style={styles.iconText}>⚙</Text></Pressable>
           <Pressable accessibilityRole="button" accessibilityLabel="Past conversations" onPress={() => setShowHistory(true)} hitSlop={8} style={styles.iconBtn}><Text style={styles.iconText}>🕘</Text></Pressable>
           <Pressable accessibilityRole="button" accessibilityLabel="New chat" onPress={a.newChat} hitSlop={8} style={styles.iconBtn}><Text style={styles.iconText}>＋</Text></Pressable>
         </View>
@@ -269,7 +280,7 @@ const styles = StyleSheet.create({
   headLink: { fontSize: FontSize.sm, color: Colors.primary },
   headRight: { flexDirection: 'row', gap: Spacing.xs },
   iconBtn: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', backgroundColor: Colors.surfaceSecondary },
-  iconText: { fontSize: 16, color: Colors.text },
+  iconText: { fontSize: FontSize.md, color: Colors.text },
   segmentWrap: { backgroundColor: Colors.surface, paddingHorizontal: Spacing.lg, paddingBottom: Spacing.sm, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: Colors.border },
   segment: { flexDirection: 'row', backgroundColor: Colors.surfaceSecondary, borderRadius: BorderRadius.full, padding: 3 },
   segBtn: { flex: 1, minHeight: 36, borderRadius: BorderRadius.full, alignItems: 'center', justifyContent: 'center' },
@@ -293,9 +304,9 @@ const styles = StyleSheet.create({
   notice: { backgroundColor: Colors.warningLight, paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm },
   noticeText: { fontSize: FontSize.xs, color: Colors.warningText },
   composer: { flexDirection: 'row', alignItems: 'flex-end', gap: Spacing.sm, paddingHorizontal: Spacing.sm, paddingTop: Spacing.sm, backgroundColor: Colors.surface, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: Colors.border },
-  input: { flex: 1, maxHeight: 120, minHeight: 44, backgroundColor: Colors.surfaceSecondary, borderRadius: 22, paddingHorizontal: Spacing.lg, paddingTop: 12, paddingBottom: 12, fontSize: FontSize.md, color: Colors.text },
+  input: { flex: 1, maxHeight: 120, minHeight: 44, backgroundColor: Colors.surfaceSecondary, borderRadius: 22, paddingHorizontal: Spacing.lg, paddingTop: Spacing.md, paddingBottom: Spacing.md, fontSize: FontSize.md, color: Colors.text },
   round: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: Colors.surfaceSecondary },
-  roundText: { fontSize: 20 },
+  roundText: { fontSize: GlyphSize.sm },
   send: { height: 44, paddingHorizontal: Spacing.lg, borderRadius: 22, backgroundColor: Colors.primary, alignItems: 'center', justifyContent: 'center' },
   sendText: { color: Colors.textInverse, fontWeight: '700', fontSize: FontSize.sm },
   recording: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: Spacing.md, minHeight: 44 },

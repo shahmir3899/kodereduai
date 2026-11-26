@@ -1,5 +1,6 @@
 import type { ModuleKey } from '../constants/modules';
 import type { TimetableEntry } from './teacher';
+import { dayShort } from './dates';
 
 // Pure helpers for the teacher dashboard; port of frontend/src/pages/teacher/teacherDashboardUtils.js.
 
@@ -162,10 +163,7 @@ export function periodSubtitle(entry: { class_name?: string; room?: string | nul
   return [entry.class_name, entry.room ? `Room ${entry.room}` : ''].filter(Boolean).join('  ·  ');
 }
 
-// A submission's date as 'Mar 5'; '' when it has none or it cannot be read.
+// A submission's date as '5 Mar'; '' when it has none or it cannot be read.
 export function shortDate(iso?: string | null): string {
-  if (!iso) return '';
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return '';
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  return dayShort(iso);
 }

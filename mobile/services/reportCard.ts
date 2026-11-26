@@ -1,3 +1,4 @@
+import { day } from './dates';
 // Pure logic for the view-only report card screen; port of the helpers in
 // frontend/src/pages/examinations/ReportCardPage.jsx, ReportCardMarksTable.jsx and reportCardData.js.
 // Product rules (see the report-card-exam-rules note): the LAST exam by end date is the main exam
@@ -38,8 +39,7 @@ export function shortExamName(name: string | null | undefined): string {
 }
 
 export function formatIssueDate(iso: string): string {
-  const d = new Date(`${iso}T00:00:00`);
-  return Number.isNaN(d.getTime()) ? iso : d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+  return day(iso) || iso;
 }
 
 export interface EnrollmentRef { id: number; student: number; student_name: string; roll_number?: string | null }
@@ -181,4 +181,77 @@ export function reportCardPdfError(error: unknown): string {
     // Not JSON: use the generic text.
   }
   return 'The report card could not be created. Try again in a moment.';
+}
+
+// --- Hand-set card details (the web report card's Edit mode and its "Class bulk edit") ---
+
+export type PromotionStatus = 'NOT_APPLICABLE' | 'PROMOTED' | 'NOT_PROMOTED';
+export const PROMOTION_OPTIONS: Array<{ value: PromotionStatus; label: string }> = [
+  { value: 'NOT_APPLICABLE', label: 'Not Applicable' },
+  { value: 'PROMOTED', label: 'Promoted' },
+  { value: 'NOT_PROMOTED', label: 'Not Promoted' },
+];
+export const SIGNATURE_KEYS = ['class_teacher', 'principal', 'parent'] as const;
+export type SignatureKey = typeof SIGNATURE_KEYS[number];
+export const CAPTION_LABELS: Record<SignatureKey, string> = { class_teacher: 'Class teacher', principal: 'Principal', parent: 'Parent' };
+// The server keeps at most 40 characters of a caption.
+export const CAPTION_MAX = 40;
+
+// Captions as the card prints them: the saved one, else the default.
+export function captionsOf(saved: Record<string, string> | null | undefined): Record<SignatureKey, string> {
+  return Object.fromEntries(SIGNATURE_KEYS.map((k) => [k, (saved?.[k] || '').trim() || DEFAULT_SIGNATURE_LABELS[k]])) as Record<SignatureKey, string>;
+}
+
+// Body for report-card/meta/: always the card's identity, plus only the fields being changed.
+export function singleMetaBody(
+  card: { studentId: number; yearId: number; examIds: number[] },
+  fields: { promotion_status?: PromotionStatus; issue_date?: string; signature_labels?: Record<string, string> },
+): Record<string, unknown> {
+  const body: Record<string, unknown> = { student_id: card.studentId, academic_year_id: card.yearId, exam_ids: card.examIds };
+  if (fields.promotion_status) body.promotion_status = fields.promotion_status;
+  if (fields.issue_date) body.issue_date = fields.issue_date;
+  if (fields.signature_labels) {
+    body.signature_labels = Object.fromEntries(
+      SIGNATURE_KEYS.map((k) => [k, (fields.signature_labels![k] || '').trim().slice(0, CAPTION_MAX)]).filter(([, v]) => v),
+    );
+  }
+  return body;
+}
+
+export interface BulkMetaStudent { promotion_applicable?: boolean; promotion_status?: PromotionStatus }
+
+// Body for report-card/meta/bulk/, as the web modal sends it: promotions only for students the
+// main exam can promote (final exam), the date and captions only when filled in.
+export function bulkMetaBody(input: {
+  yearId: number; examIds: number[]; studentIds: number[]; overwrite: boolean;
+  current: Record<string, BulkMetaStudent>; promotions: Record<string, PromotionStatus>;
+  issueDate: string; captions: Partial<Record<SignatureKey, string>>;
+}): Record<string, unknown> {
+  const body: Record<string, unknown> = {
+    academic_year_id: input.yearId, exam_ids: input.examIds, student_ids: input.studentIds, overwrite: input.overwrite,
+  };
+  const applicable = Object.entries(input.current).filter(([, v]) => v.promotion_applicable).map(([id]) => id);
+  if (applicable.length) body.promotions = Object.fromEntries(applicable.map((id) => [id, input.promotions[id] || 'NOT_APPLICABLE']));
+  if (input.issueDate) body.issue_date = input.issueDate;
+  const filled = Object.fromEntries(
+    SIGNATURE_KEYS.map((k) => [k, (input.captions[k] || '').trim().slice(0, CAPTION_MAX)]).filter(([, v]) => v),
+  );
+  if (Object.keys(filled).length) body.signature_labels = filled;
+  return body;
+}
+
+// The server's own reason (for example "Only admins or the class teacher can edit report card
+// details."), else a plain sentence.
+export function reportMetaError(error: unknown): string {
+  const e = error as { response?: { data?: unknown } } | null;
+  if (!e?.response) return 'No connection. Connect to the internet and try again.';
+  const data = e.response.data as Record<string, unknown> | string | undefined;
+  if (data && typeof data === 'object') {
+    if (typeof data.detail === 'string') return data.detail;
+    for (const v of Object.values(data)) {
+      const first = Array.isArray(v) ? v[0] : v;
+      if (typeof first === 'string') return first;
+    }
+  }
+  return 'Could not save. Try again.';
 }

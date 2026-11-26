@@ -160,12 +160,6 @@ export const attendanceApi = {
   // Create attendance upload record
   createUpload: (data) => api.post('/api/attendance/uploads/', data),
 
-  // Legacy - kept for compatibility
-  uploadImage: (data) => api.post('/api/attendance/uploads/', data),
-
-  // Get uploads list
-  getUploads: (params) => api.get('/api/attendance/uploads/', { params }),
-
   // Get upload details
   getUploadDetails: (id) => api.get(`/api/attendance/uploads/${id}/`),
 
@@ -183,9 +177,6 @@ export const attendanceApi = {
   // Get attendance records
   getRecords: (params) => api.get('/api/attendance/records/', { params }),
 
-  // Lightweight register data (only student_id, date, status — no pagination overhead)
-  getRegisterData: (params) => api.get('/api/attendance/records/register_data/', { params }),
-
   // Bulk monthly records for all classes in one request (used for preloading)
   getMonthlyBulk: (params) => api.get('/api/attendance/records/monthly_bulk/', { params }),
 
@@ -196,17 +187,12 @@ export const attendanceApi = {
     }),
 
   // Get chronic absentees
-  getChronicAbsentees: (params) =>
-    api.get('/api/attendance/records/chronic_absentees/', { params }),
 
   // Reprocess AI for an upload
   reprocessUpload: (id) => api.post(`/api/attendance/uploads/${id}/reprocess/`),
 
   // Delete an upload (only non-confirmed)
   deleteUpload: (id) => api.delete(`/api/attendance/uploads/${id}/`),
-
-  // Test if image URL is accessible
-  testImageUrl: (id) => api.get(`/api/attendance/uploads/${id}/test_image/`),
 
   // Learning metrics
   getAccuracyStats: (params) => api.get('/api/attendance/records/accuracy_stats/', { params }),
@@ -228,7 +214,6 @@ export const attendanceApi = {
 
   // Anomaly detection
   getAnomalies: (params) => api.get('/api/attendance/anomalies/', { params }),
-  getAnomaly: (id) => api.get(`/api/attendance/anomalies/${id}/`),
   resolveAnomaly: (id, data) => api.post(`/api/attendance/anomalies/${id}/resolve/`, data),
 
   // Manual attendance entry
@@ -243,7 +228,6 @@ export const schoolsApi = {
   getAdminSchools: (params) => api.get('/api/admin/schools/', { params }),
   createSchool: (data) => api.post('/api/admin/schools/', data),
   updateSchool: (id, data) => api.patch(`/api/admin/schools/${id}/`, data),
-  getSchoolStats: (id) => api.get(`/api/admin/schools/${id}/stats/`),
   getPlatformStats: () => api.get('/api/admin/schools/platform_stats/'),
   getDemoInsights: () => api.get('/api/admin/schools/demo_insights/'),
   activateSchool: (id) => api.post(`/api/admin/schools/${id}/activate/`),
@@ -271,11 +255,9 @@ export const schoolsApi = {
   updateRegisterConfig: (data) => api.put('/api/schools/register_config/', data),
 
   // Exam configuration
-  getExamConfig: () => api.get('/api/schools/exam_config/'),
   updateExamConfig: (data) => api.put('/api/schools/exam_config/', data),
 
   // Attendance configuration (AI risk threshold, etc.)
-  getAttendanceConfig: () => api.get('/api/schools/attendance_config/'),
   updateAttendanceConfig: (data) => api.put('/api/schools/attendance_config/', data),
   updateTimeZone: (timezone) => api.put('/api/schools/time_zone/', { timezone }),
 
@@ -333,7 +315,6 @@ export const studentsApi = {
   // Erase a removed student for good; only allowed when they own no records at all.
   purgeStudent: (id, confirmName) => api.post(`/api/students/${id}/purge/`, { confirm_name: confirmName }),
   bulkCreateStudents: (data) => api.post('/api/students/bulk_create/', data),
-  getStudentsByClass: (params) => api.get('/api/students/by_class/', { params }),
 
   // Profile endpoints
   getProfileSummary: (id) => api.get(`/api/students/${id}/profile_summary/`),
@@ -383,7 +364,6 @@ export const studentsApi = {
 // Classes API
 export const classesApi = {
   getClasses: (params) => api.get('/api/classes/', { params }),
-  getClass: (id) => api.get(`/api/classes/${id}/`),
   createClass: (data) => api.post('/api/classes/', data),
   updateClass: (id, data) => api.patch(`/api/classes/${id}/`, data),
   deleteClass: (id) => api.delete(`/api/classes/${id}/`),
@@ -394,23 +374,23 @@ export const financeApi = {
   // Fee Structures
   getFeeStructures: (params) => api.get('/api/finance/fee-structures/', { params }),
   createFeeStructure: (data) => api.post('/api/finance/fee-structures/', data),
-  updateFeeStructure: (id, data) => api.patch(`/api/finance/fee-structures/${id}/`, data),
-  deleteFeeStructure: (id) => api.delete(`/api/finance/fee-structures/${id}/`),
   bulkSetFeeStructures: (data) => api.post('/api/finance/fee-structures/bulk_set/', data),
   bulkSetStudentFeeStructures: (data) => api.post('/api/finance/fee-structures/bulk_set_students/', data),
 
   // Fee Payments
   getFeePayments: (params) => api.get('/api/finance/fee-payments/', { params }),
   recordPayment: (id, data) => api.patch(`/api/finance/fee-payments/${id}/`, data),
-  createPayment: (data) => api.post('/api/finance/fee-payments/', data),
   generateSingleFee: (data) => api.post('/api/finance/fee-payments/generate_single/', data),
   generateMonthly: (data) => api.post('/api/finance/fee-payments/generate_monthly/', data),
-  generateOnetimeFees: (data) => api.post('/api/finance/fee-payments/generate_onetime_fees/', data),
   generateAnnualFees: (data) => api.post('/api/finance/fee-payments/generate_annual_fees/', data),
   getMonthlySummary: (params) => api.get('/api/finance/fee-payments/monthly_summary/', { params }),
+  // Fee vouchers PDF (School copy | Student copy, 3 students per A4) and the school's voucher settings.
+  downloadFeeVouchers: (params) => api.get('/api/finance/fee-payments/vouchers/', { params, responseType: 'blob' }),
+  previewFeeVouchers: (params) => api.get('/api/finance/fee-payments/vouchers/', { params: { ...params, format: 'json' } }),
+  getVoucherSettings: () => api.get('/api/finance/voucher-settings/'),
+  updateVoucherSettings: (data) => api.put('/api/finance/voucher-settings/', data),
   getMonthlySummaryAll: (params) => api.get('/api/finance/fee-payments/monthly_summary_all/', { params }),
   getFeeSummary: (params) => api.get('/api/finance/fee-payments/fee_summary/', { params }),
-  getStudentLedger: (params) => api.get('/api/finance/fee-payments/student_ledger/', { params }),
   deleteFeePayment: (id) => api.delete(`/api/finance/fee-payments/${id}/`),
   bulkUpdatePayments: (data) => api.post('/api/finance/fee-payments/bulk_update/', data),
   bulkDeletePayments: (data) => api.post('/api/finance/fee-payments/bulk_delete/', data),
@@ -426,8 +406,6 @@ export const financeApi = {
   // Income Categories
   getIncomeCategories: (params) => api.get('/api/finance/income-categories/', { params }),
   createIncomeCategory: (data) => api.post('/api/finance/income-categories/', data),
-  updateIncomeCategory: (id, data) => api.patch(`/api/finance/income-categories/${id}/`, data),
-  deleteIncomeCategory: (id) => api.delete(`/api/finance/income-categories/${id}/`),
 
   // Annual Fee Categories
   getAnnualCategories: (params) => api.get('/api/finance/annual-categories/', { params }),
@@ -442,11 +420,17 @@ export const financeApi = {
   updateMonthlyCategory: (id, data) => api.patch(`/api/finance/monthly-categories/${id}/`, data),
   deleteMonthlyCategory: (id) => api.delete(`/api/finance/monthly-categories/${id}/`),
   getMonthlyCategorySuggestions: () => api.get('/api/finance/monthly-categories/suggestions/'),
+  // Optional (enrolled-only) fees: who takes Robotics/Karate/... and from when.
+  getFeeEnrollments: (params) => api.get('/api/finance/fee-enrollments/', { params }),
+  bulkEnrollFees: (data) => api.post('/api/finance/fee-enrollments/bulk_enroll/', data),
+  createFeeEnrollment: (data) => api.post('/api/finance/fee-enrollments/', data),
+  endFeeEnrollments: (data) => api.post('/api/finance/fee-enrollments/end/', data),
+  updateFeeEnrollment: (id, data) => api.patch(`/api/finance/fee-enrollments/${id}/`, data),
+  deleteFeeEnrollment: (id) => api.delete(`/api/finance/fee-enrollments/${id}/`),
 
   // Other Income
   getOtherIncome: (params) => api.get('/api/finance/other-income/', { params }),
   createOtherIncome: (data) => api.post('/api/finance/other-income/', data),
-  updateOtherIncome: (id, data) => api.patch(`/api/finance/other-income/${id}/`, data),
   deleteOtherIncome: (id) => api.delete(`/api/finance/other-income/${id}/`),
 
   // Accounts
@@ -464,7 +448,6 @@ export const financeApi = {
   // Monthly Closings
   closeMonth: (data) => api.post('/api/finance/accounts/close_month/', data),
   getClosings: () => api.get('/api/finance/accounts/closings/'),
-  reopenMonth: (id) => api.delete(`/api/finance/accounts/${id}/reopen/`),
 
   // Transfers
   getTransfers: (params) => api.get('/api/finance/transfers/', { params }),
@@ -488,8 +471,6 @@ export const financeApi = {
   getChatHistory: () => api.get('/api/finance/ai-chat/'),
   clearChatHistory: () => api.delete('/api/finance/ai-chat/'),
 
-  // AI Fee Predictor
-  getFeePredictor: (params) => api.get('/api/finance/fee-predictor/', { params }),
 }
 
 // Builds multipart form data for a staff-document create/update — skips
@@ -546,15 +527,12 @@ export const hrApi = {
 
   // Salary Structures
   getSalaryStructures: (params) => api.get('/api/hr/salary-structures/', { params }),
-  getSalaryStructure: (id) => api.get(`/api/hr/salary-structures/${id}/`),
   createSalaryStructure: (data) => api.post('/api/hr/salary-structures/', data),
   updateSalaryStructure: (id, data) => api.patch(`/api/hr/salary-structures/${id}/`, data),
   deleteSalaryStructure: (id) => api.delete(`/api/hr/salary-structures/${id}/`),
-  getCurrentSalary: (staffMemberId) => api.get('/api/hr/salary-structures/current/', { params: { staff_member: staffMemberId } }),
 
   // Payslips / Payroll
   getPayslips: (params) => api.get('/api/hr/payslips/', { params }),
-  getPayslip: (id) => api.get(`/api/hr/payslips/${id}/`),
   generatePayslips: (data) => api.post('/api/hr/payslips/generate_payslips/', data),
   // One grouped query for the payroll card trend strip, instead of a getPayslips call per staff member per month.
   getPayslipNetPayHistory: (params) => api.get('/api/hr/payslips/net_pay_history/', { params }),
@@ -583,21 +561,17 @@ export const hrApi = {
 
   // Staff Attendance
   getStaffAttendance: (params) => api.get('/api/hr/attendance/', { params }),
-  createStaffAttendance: (data) => api.post('/api/hr/attendance/', data),
-  updateStaffAttendance: (id, data) => api.patch(`/api/hr/attendance/${id}/`, data),
   bulkMarkAttendance: (data) => api.post('/api/hr/attendance/bulk_mark/', data),
   getAttendanceSummary: (params) => api.get('/api/hr/attendance/summary/', { params }),
 
   // Performance Appraisals
   getAppraisals: (params) => api.get('/api/hr/appraisals/', { params }),
-  getAppraisal: (id) => api.get(`/api/hr/appraisals/${id}/`),
   createAppraisal: (data) => api.post('/api/hr/appraisals/', data),
   updateAppraisal: (id, data) => api.patch(`/api/hr/appraisals/${id}/`, data),
   deleteAppraisal: (id) => api.delete(`/api/hr/appraisals/${id}/`),
 
   // Staff Qualifications
   getQualifications: (params) => api.get('/api/hr/qualifications/', { params }),
-  createQualification: (data) => api.post('/api/hr/qualifications/', data),
   updateQualification: (id, data) => api.patch(`/api/hr/qualifications/${id}/`, data),
   deleteQualification: (id) => api.delete(`/api/hr/qualifications/${id}/`),
 
@@ -605,12 +579,6 @@ export const hrApi = {
   // object) can ride along; `file` is optional on update (omit to keep the
   // existing file_url untouched, see StaffDocumentViewSet.update()).
   getDocuments: (params) => api.get('/api/hr/documents/', { params }),
-  createDocument: (data) => api.post('/api/hr/documents/', buildDocumentFormData(data), {
-    headers: { 'Content-Type': 'multipart/form-data' },
-  }),
-  updateDocument: (id, data) => api.patch(`/api/hr/documents/${id}/`, buildDocumentFormData(data), {
-    headers: { 'Content-Type': 'multipart/form-data' },
-  }),
   deleteDocument: (id) => api.delete(`/api/hr/documents/${id}/`),
   // Image-only upload: the server stores the file and reads the record from it.
   // Resolves to { duplicate, document }. `qualificationId` attaches the file to a
@@ -644,7 +612,6 @@ export const teacherPerformanceApi = {
 export const academicsApi = {
   // Subjects
   getSubjects: (params) => api.get('/api/academics/subjects/', { params }),
-  getSubject: (id) => api.get(`/api/academics/subjects/${id}/`),
   createSubject: (data) => api.post('/api/academics/subjects/', data),
   updateSubject: (id, data) => api.patch(`/api/academics/subjects/${id}/`, data),
   deleteSubject: (id) => api.delete(`/api/academics/subjects/${id}/`),
@@ -652,7 +619,6 @@ export const academicsApi = {
 
   // Class-Subject Assignments
   getClassSubjects: (params) => api.get('/api/academics/class-subjects/', { params }),
-  createClassSubject: (data) => api.post('/api/academics/class-subjects/', data),
   bulkAssignSubjects: (data) => api.post('/api/academics/class-subjects/bulk-assign/', data),
   updateClassSubject: (id, data) => api.patch(`/api/academics/class-subjects/${id}/`, data),
   deleteClassSubject: (id) => api.delete(`/api/academics/class-subjects/${id}/`),
@@ -680,7 +646,6 @@ export const academicsApi = {
   bulkCreateSlots: (data) => api.post('/api/academics/timetable-slots/bulk_create_slots/', data),
 
   // Timetable Entries
-  getTimetableEntries: (params) => api.get('/api/academics/timetable-entries/', { params }),
   getMyTimetable: (params) => api.get('/api/academics/timetable-entries/my_timetable/', { params }),
   getTimetableByClass: (classId, sessionClassId) =>
     api.get('/api/academics/timetable-entries/by_class/', {
@@ -712,8 +677,6 @@ export const academicsApi = {
     api.get('/api/academics/subjects/gap_analysis/'),
   getAnalytics: (params) =>
     api.get('/api/academics/analytics/', { params }),
-  getAnalyticsAlerts: () =>
-    api.get('/api/academics/analytics/', { params: { type: 'alerts' } }),
   updateAnalyticsAlert: (data) =>
     api.patch('/api/academics/analytics/', data),
 
@@ -729,17 +692,14 @@ export const sessionsApi = {
   renumberSection: (sessionClassId, data) => api.post(`/api/sessions/session-classes/${sessionClassId}/renumber/`, data),
   // Academic Years
   getAcademicYears: (params) => api.get('/api/sessions/academic-years/', { params }),
-  getAcademicYear: (id) => api.get(`/api/sessions/academic-years/${id}/`),
   createAcademicYear: (data) => api.post('/api/sessions/academic-years/', data),
   updateAcademicYear: (id, data) => api.patch(`/api/sessions/academic-years/${id}/`, data),
   deleteAcademicYear: (id) => api.delete(`/api/sessions/academic-years/${id}/`),
   setCurrentYear: (id, data) => api.post(`/api/sessions/academic-years/${id}/set_current/`, data),
   getYearSummary: (id) => api.get(`/api/sessions/academic-years/${id}/summary/`),
-  getCurrentYear: () => api.get('/api/sessions/academic-years/current/'),
 
   // Terms
   getTerms: (params) => api.get('/api/sessions/terms/', { params }),
-  getTerm: (id) => api.get(`/api/sessions/terms/${id}/`),
   createTerm: (data) => api.post('/api/sessions/terms/', data),
   updateTerm: (id, data) => api.patch(`/api/sessions/terms/${id}/`, data),
   deleteTerm: (id) => api.delete(`/api/sessions/terms/${id}/`),
@@ -756,9 +716,6 @@ export const sessionsApi = {
 
   // Enrollments
   getEnrollments: (params) => api.get('/api/sessions/enrollments/', { params }),
-  createEnrollment: (data) => api.post('/api/sessions/enrollments/', data),
-  updateEnrollment: (id, data) => api.patch(`/api/sessions/enrollments/${id}/`, data),
-  deleteEnrollment: (id) => api.delete(`/api/sessions/enrollments/${id}/`),
   getEnrollmentsByClass: (params) => api.get('/api/sessions/enrollments/by_class/', { params }),
   bulkPromote: (data) => api.post('/api/sessions/enrollments/bulk_promote/', data),
   bulkReversePromote: (data) => api.post('/api/sessions/enrollments/bulk_reverse_promote/', data),
@@ -813,7 +770,6 @@ export const examinationsApi = {
 
   // Exams
   getExams: (params) => api.get('/api/examinations/exams/', { params }),
-  getExam: (id) => api.get(`/api/examinations/exams/${id}/`),
   createExam: (data) => api.post('/api/examinations/exams/', data),
   updateExam: (id, data) => api.patch(`/api/examinations/exams/${id}/`, data),
   deleteExam: (id) => api.delete(`/api/examinations/exams/${id}/`),
@@ -826,7 +782,6 @@ export const examinationsApi = {
   unpublishExamResults: (id) => api.post(`/api/examinations/exams/${id}/unpublish-results/`),
   populateExamSubjects: (id) => api.post(`/api/examinations/exams/${id}/populate-subjects/`),
   getExamResults: (id, params) => api.get(`/api/examinations/exams/${id}/results/`, { params }),
-  getClassSummary: (id, params) => api.get(`/api/examinations/exams/${id}/class_summary/`, { params }),
 
   // Exam Groups
   getExamGroups: (params) => api.get('/api/examinations/exam-groups/', { params }),
@@ -835,7 +790,6 @@ export const examinationsApi = {
   deleteExamGroup: (id) => api.delete(`/api/examinations/exam-groups/${id}/`),
   bulkDeleteExamGroups: (ids) => api.post('/api/examinations/exam-groups/bulk_delete/', { ids }),
   getDateSheet: (groupId) => api.get(`/api/examinations/exam-groups/${groupId}/date-sheet/`),
-  updateDateBySubject: (groupId, data) => api.post(`/api/examinations/exam-groups/${groupId}/update-date-by-subject/`, data),
   updateDateSheet: (groupId, entries) => api.patch(`/api/examinations/exam-groups/${groupId}/date-sheet/`, { date_sheet: entries }),
   downloadDateSheet: (groupId) => api.get(`/api/examinations/exam-groups/${groupId}/download-date-sheet/`, { responseType: 'blob' }),
   downloadDateSheetPdf: (groupId) => api.get(`/api/examinations/exam-groups/${groupId}/download-date-sheet-pdf/`, { responseType: 'blob' }),
@@ -852,10 +806,8 @@ export const examinationsApi = {
 
   // Marks
   getMarks: (params) => api.get('/api/examinations/marks/', { params }),
-  createMark: (data) => api.post('/api/examinations/marks/', data),
   updateMark: (id, data) => api.patch(`/api/examinations/marks/${id}/`, data),
   bulkEntryMarks: (data) => api.post('/api/examinations/marks/bulk_entry/', data),
-  getMarksByStudent: (params) => api.get('/api/examinations/marks/by_student/', { params }),
   downloadMarksTemplate: (examSubjectId) =>
     api.get('/api/examinations/marks/download_template/', {
       params: { exam_subject_id: examSubjectId },
@@ -937,10 +889,8 @@ export const activityLogApi = {
 // Users API
 export const usersApi = {
   getUsers: (params) => api.get('/api/users/', { params }),
-  getUser: (id) => api.get(`/api/users/${id}/`),
   createUser: (data) => api.post('/api/users/', data),
   updateUser: (id, data) => api.patch(`/api/users/${id}/`, data),
-  deleteUser: (id) => api.delete(`/api/users/${id}/`),
   uploadPhoto: (id, file) => {
     const formData = new FormData()
     formData.append('file', file)
@@ -956,18 +906,12 @@ export const usersApi = {
 export const notificationsApi = {
   // Templates
   getTemplates: (params) => api.get('/api/notifications/templates/', { params }),
-  getTemplate: (id) => api.get(`/api/notifications/templates/${id}/`),
   createTemplate: (data) => api.post('/api/notifications/templates/', data),
   updateTemplate: (id, data) => api.patch(`/api/notifications/templates/${id}/`, data),
   deleteTemplate: (id) => api.delete(`/api/notifications/templates/${id}/`),
 
-  // Logs
-  getLogs: (params) => api.get('/api/notifications/logs/', { params }),
-
   // Preferences
   getPreferences: (params) => api.get('/api/notifications/preferences/', { params }),
-  updatePreference: (id, data) => api.patch(`/api/notifications/preferences/${id}/`, data),
-  createPreference: (data) => api.post('/api/notifications/preferences/', data),
 
   // Config
   getConfig: () => api.get('/api/notifications/config/'),
@@ -1003,7 +947,6 @@ export const notificationsApi = {
 export const reportsApi = {
   generate: (data) => api.post('/api/reports/generate/', data),
   generateInstant: (data) => api.post('/api/reports/generate-instant/', data, { responseType: 'blob' }),
-  getList: (params) => api.get('/api/reports/list/', { params }),
   download: (reportId) => api.get(`/api/reports/${reportId}/download/`, { responseType: 'blob' }),
 }
 
@@ -1032,8 +975,6 @@ export const parentsApi = {
   getChildFees: (studentId, params) => api.get(`/api/parents/children/${studentId}/fees/`, { params }),
   getChildKuickpayBill: (studentId) => api.get(`/api/parents/children/${studentId}/kuickpay-bill/`),
   // DEPRECATED 2026-05-13: Payment gateway removed
-  // getPaymentGateways: (studentId) => api.get(`/api/parents/children/${studentId}/pay-fee/`),
-  initiatePayment: (studentId, data) => api.post(`/api/parents/children/${studentId}/pay-fee/`, data),
   getChildTimetable: (studentId) => api.get(`/api/parents/children/${studentId}/timetable/`),
   getChildLibrary: (studentId) => api.get(`/api/parents/children/${studentId}/library/`),
   getChildTransport: (studentId) => api.get(`/api/parents/children/${studentId}/transport/`),
@@ -1047,14 +988,10 @@ export const parentsApi = {
   cancelLeaveRequest: (id) => api.delete(`/api/parents/leave-requests/${id}/`),
 
   // Messages
-  getMessageThreads: () => api.get('/api/parents/messages/threads/'),
-  getThreadMessages: (threadId) => api.get(`/api/parents/messages/threads/${threadId}/`),
   sendMessage: (data) => api.post('/api/parents/messages/', data),
-  markMessageRead: (id) => api.patch(`/api/parents/messages/${id}/read/`),
 
   // Admin endpoints
   getParentsList: (params) => api.get('/api/parents/admin/parents/', { params }),
-  linkChild: (data) => api.post('/api/parents/admin/link-child/', data),
   unlinkChild: (id) => api.delete(`/api/parents/admin/unlink-child/${id}/`),
   generateInvite: (data) => api.post('/api/parents/admin/generate-invite/', data),
   getStudentInvites: (studentId) => api.get('/api/parents/admin/generate-invite/', { params: { student_id: studentId } }),
@@ -1063,8 +1000,6 @@ export const parentsApi = {
   updateLink: (id, data) => api.patch(`/api/parents/admin/links/${id}/`, data),
   getSiblingSuggestions: (params) => api.get('/api/parents/admin/sibling-suggestions/', { params }),
   getParentStatus: () => api.get('/api/parents/admin/parent-status/'),
-  getAdminLeaveRequests: (params) => api.get('/api/parents/admin/leave-requests/', { params }),
-  reviewLeaveRequest: (id, data) => api.patch(`/api/parents/admin/leave-requests/${id}/review/`, data),
 }
 
 // Admissions API
@@ -1082,12 +1017,8 @@ export const admissionsApi = {
   batchConvert: (data) => api.post('/api/admissions/enquiries/batch-convert/', data),
 
   // Notes
-  getNotes: (enquiryId) => api.get(`/api/admissions/enquiries/${enquiryId}/notes/`),
-  addNote: (enquiryId, data) => api.post(`/api/admissions/enquiries/${enquiryId}/notes/`, data),
 
   // Followups
-  getTodayFollowups: () => api.get('/api/admissions/followups/today/'),
-  getOverdueFollowups: () => api.get('/api/admissions/followups/overdue/'),
 
   // Conversion Likelihood Predictor
   getConversionLikelihood: (params) => api.get('/api/admissions/conversion-likelihood/', { params }),
@@ -1125,7 +1056,6 @@ export const studentPortalApi = {
 
   // Assignments
   getAssignments: (params) => api.get('/api/students/portal/assignments/', { params }),
-  getAssignment: (id) => api.get(`/api/students/portal/assignments/${id}/`),
   // The backend takes the assignment id in the body of the list URL; there is no /<id>/submit/ route.
   submitAssignment: (id, data) => api.post('/api/students/portal/assignments/', { ...data, assignment_id: id }),
 
@@ -1152,8 +1082,6 @@ export const discountApi = {
   bulkAssign: (data) => api.post('/api/finance/student-discounts/bulk_assign/', data),
   removeStudentDiscount: (id) => api.delete(`/api/finance/student-discounts/${id}/`),
 
-  getFeeBreakdown: (studentId) => api.get(`/api/finance/fee-breakdown/${studentId}/`),
-  getSiblings: (studentId) => api.get(`/api/finance/siblings/${studentId}/`),
 }
 
 // DEPRECATED 2026-05-13: Payment Gateway API removed.
@@ -1182,7 +1110,6 @@ export const transportApi = {
 
   // Vehicles
   getVehicles: (params) => api.get('/api/transport/vehicles/', { params }),
-  getVehicle: (id) => api.get(`/api/transport/vehicles/${id}/`),
   createVehicle: (data) => api.post('/api/transport/vehicles/', data),
   updateVehicle: (id, data) => api.patch(`/api/transport/vehicles/${id}/`, data),
   deleteVehicle: (id) => api.delete(`/api/transport/vehicles/${id}/`),
@@ -1190,13 +1117,11 @@ export const transportApi = {
   // Assignments
   getAssignments: (params) => api.get('/api/transport/assignments/', { params }),
   createAssignment: (data) => api.post('/api/transport/assignments/', data),
-  updateAssignment: (id, data) => api.patch(`/api/transport/assignments/${id}/`, data),
   deleteAssignment: (id) => api.delete(`/api/transport/assignments/${id}/`),
   bulkAssign: (data) => api.post('/api/transport/assignments/bulk_assign/', data),
 
   // Transport Attendance
   getAttendance: (params) => api.get('/api/transport/attendance/', { params }),
-  markAttendance: (data) => api.post('/api/transport/attendance/', data),
   bulkMarkAttendance: (data) => api.post('/api/transport/attendance/bulk_mark/', data),
 
   // Route duplication
@@ -1206,24 +1131,16 @@ export const transportApi = {
   getMyVehicle: () => api.get('/api/transport/vehicles/my/'),
 
   // Route Journey (driver/vehicle-centric tracking)
-  startRouteJourney: (data) => api.post('/api/transport/route-journey/start/', data),
-  endRouteJourney: (data) => api.post('/api/transport/route-journey/end/', data),
-  updateRouteJourney: (data) => api.post('/api/transport/route-journey/update/', data),
-  trackStudentBus: (studentId) => api.get(`/api/transport/route-journey/track/${studentId}/`),
-  getActiveRouteJourneys: () => api.get('/api/transport/route-journey/active/'),
-  getRouteJourneyHistory: (params) => api.get('/api/transport/route-journey/history/', { params }),
 }
 
 // LMS (Learning Management System) API
 export const lmsApi = {
   // Curriculum Books
   getBooks: (params) => api.get('/api/lms/books/', { params }),
-  getBook: (id) => api.get(`/api/lms/books/${id}/`),
   createBook: (data) => api.post('/api/lms/books/', data),
   updateBook: (id, data) => api.patch(`/api/lms/books/${id}/`, data),
   deleteBook: (id) => api.delete(`/api/lms/books/${id}/`),
   getBookTree: (id) => api.get(`/api/lms/books/${id}/tree/`),
-  bulkTOC: (id, data) => api.post(`/api/lms/books/${id}/bulk_toc/`, data),
   parseTOC: (id, data) => api.post(`/api/lms/books/${id}/parse_toc/`, data),
   parseTOCStream: (id, data) => api.post(`/api/lms/books/${id}/parse_toc_stream/`, data),
   suggestTOC: (id, data) => api.post(`/api/lms/books/${id}/suggest_toc/`, data),
@@ -1259,7 +1176,6 @@ export const lmsApi = {
   getSyllabusProgress: (params) => api.get('/api/lms/books/syllabus_progress/', { params }),
 
   // Chapters
-  getChapters: (params) => api.get('/api/lms/chapters/', { params }),
   createChapter: (data) => api.post('/api/lms/chapters/', data),
   updateChapter: (id, data) => api.patch(`/api/lms/chapters/${id}/`, data),
   deleteChapter: (id) => api.delete(`/api/lms/chapters/${id}/`),
@@ -1275,10 +1191,7 @@ export const lmsApi = {
     api.post(`/api/lms/topics/${topicId}/set-planned-date/`, { academic_year: academicYear, planned_date: plannedDate }),
 
   // Sub-topics (under topics)
-  getSubtopics: (params) => api.get('/api/lms/subtopics/', { params }),
-  createSubtopic: (data) => api.post('/api/lms/subtopics/', data),
   updateSubtopic: (id, data) => api.patch(`/api/lms/subtopics/${id}/`, data),
-  deleteSubtopic: (id) => api.delete(`/api/lms/subtopics/${id}/`),
 
   // Content blocks
   getContentBlocks: (params) => api.get('/api/lms/content-blocks/', { params }),
@@ -1313,7 +1226,6 @@ export const lmsApi = {
   publishLessonPlan: (id) => api.post(`/api/lms/lesson-plans/${id}/publish/`),
   linkLessonPlanObjectives: (id, objectiveIds) =>
     api.post(`/api/lms/lesson-plans/${id}/link_objectives/`, { objective_ids: objectiveIds }),
-  bulkCreateLessonPlans: (data) => api.post('/api/lms/lesson-plans/bulk_create/', data),
   bulkDeleteLessonPlans: (ids) => api.post('/api/lms/lesson-plans/bulk_delete/', { ids }),
   bulkPublishLessonPlans: (ids) => api.post('/api/lms/lesson-plans/bulk_publish/', { ids }),
 
@@ -1328,7 +1240,6 @@ export const lmsApi = {
 
   // Submissions
   getSubmissions: (params) => api.get('/api/lms/submissions/', { params }),
-  getSubmission: (id) => api.get(`/api/lms/submissions/${id}/`),
   gradeSubmission: (id, data) => api.patch(`/api/lms/submissions/${id}/grade/`, data),
   returnSubmission: (id) => api.post(`/api/lms/submissions/${id}/return/`),
 }
@@ -1346,7 +1257,6 @@ export const libraryApi = {
 
   // Books
   getBooks: (params) => api.get('/api/library/books/', { params }),
-  getBook: (id) => api.get(`/api/library/books/${id}/`),
   createBook: (data) => api.post('/api/library/books/', data),
   updateBook: (id, data) => api.patch(`/api/library/books/${id}/`, data),
   deleteBook: (id) => api.delete(`/api/library/books/${id}/`),
@@ -1375,14 +1285,12 @@ export const hostelApi = {
 
   // Hostels
   getHostels: (params) => api.get('/api/hostel/hostels/', { params }),
-  getHostel: (id) => api.get(`/api/hostel/hostels/${id}/`),
   createHostel: (data) => api.post('/api/hostel/hostels/', data),
   updateHostel: (id, data) => api.patch(`/api/hostel/hostels/${id}/`, data),
   deleteHostel: (id) => api.delete(`/api/hostel/hostels/${id}/`),
 
   // Rooms
   getRooms: (params) => api.get('/api/hostel/rooms/', { params }),
-  getRoom: (id) => api.get(`/api/hostel/rooms/${id}/`),
   createRoom: (data) => api.post('/api/hostel/rooms/', data),
   updateRoom: (id, data) => api.patch(`/api/hostel/rooms/${id}/`, data),
   deleteRoom: (id) => api.delete(`/api/hostel/rooms/${id}/`),
@@ -1414,7 +1322,6 @@ export const inventoryApi = {
 
   // Vendors
   getVendors: (params) => api.get('/api/inventory/vendors/', { params }),
-  getVendor: (id) => api.get(`/api/inventory/vendors/${id}/`),
   createVendor: (data) => api.post('/api/inventory/vendors/', data),
   updateVendor: (id, data) => api.patch(`/api/inventory/vendors/${id}/`, data),
   deleteVendor: (id) => api.delete(`/api/inventory/vendors/${id}/`),
@@ -1425,11 +1332,9 @@ export const inventoryApi = {
   createItem: (data) => api.post('/api/inventory/items/', data),
   updateItem: (id, data) => api.patch(`/api/inventory/items/${id}/`, data),
   deleteItem: (id) => api.delete(`/api/inventory/items/${id}/`),
-  getLowStockItems: () => api.get('/api/inventory/items/low_stock/'),
 
   // Assignments
   getAssignments: (params) => api.get('/api/inventory/assignments/', { params }),
-  getAssignment: (id) => api.get(`/api/inventory/assignments/${id}/`),
   createAssignment: (data) => api.post('/api/inventory/assignments/', data),
   returnItem: (id, data) => api.post(`/api/inventory/assignments/${id}/return/`, data),
   
@@ -1455,7 +1360,6 @@ export const messagingApi = {
   reply: (threadId, data) => api.post(`/api/messaging/threads/${threadId}/reply/`, data),
   markRead: (threadId) => api.patch(`/api/messaging/threads/${threadId}/read/`),
   getRecipients: () => api.get('/api/messaging/recipients/'),
-  getUnreadCount: () => api.get('/api/messaging/unread-count/'),
 }
 
 // Background Tasks API
@@ -1596,15 +1500,8 @@ export const questionPaperApi = {
     const query = searchParams.toString()
     return api.get(`/api/examinations/questions/${query ? `?${query}` : ''}`)
   },
-  getQuestionsByLessonPlan: (lessonPlanId) =>
-    api.get('/api/examinations/questions/by_lesson_plan/', {
-      params: { lesson_plan_id: lessonPlanId },
-    }),
   semanticSearchQuestions: (params) =>
     api.get('/api/examinations/questions/semantic_search/', { params }),
-  generateFromLesson: (data) =>
-    api.post('/api/examinations/questions/generate_from_lesson/', data),
-  getQuestion: (id) => api.get(`/api/examinations/questions/${id}/`),
   createQuestion: (data) => api.post('/api/examinations/questions/', data),
   updateQuestion: (id, data) => api.patch(`/api/examinations/questions/${id}/`, data),
   deleteQuestion: (id) => api.delete(`/api/examinations/questions/${id}/`),
@@ -1625,8 +1522,6 @@ export const questionPaperApi = {
       headers: { 'Content-Type': 'multipart/form-data' },
     })
   },
-  removeQuestionDiagram: (questionId, slot) =>
-    api.post(`/api/examinations/questions/${questionId}/remove_diagram/`, { slot }),
 
   // Exam Papers
   getExamPapers: (params) => api.get('/api/examinations/exam-papers/', { params }),
@@ -1638,7 +1533,6 @@ export const questionPaperApi = {
   updateExamPaper: (id, data) => api.patch(`/api/examinations/exam-papers/${id}/`, data),
   deleteExamPaper: (id) => api.delete(`/api/examinations/exam-papers/${id}/`),
   bulkDeleteExamPapers: (ids) => api.post('/api/examinations/exam-papers/bulk_delete/', { ids }),
-  createFromLessons: (data) => api.post('/api/examinations/exam-papers/create_from_lessons/', data),
   linkLessonPlans: (paperId, data) =>
     api.post(`/api/examinations/exam-papers/${paperId}/link_lesson_plans/`, data),
   getCoverageStats: (paperId) =>
@@ -1672,13 +1566,10 @@ export const questionPaperApi = {
   },
   deletePaperPicture: (id) => api.delete(`/api/examinations/paper-pictures/${id}/`),
 
-  reviewQuestions: (questions) => api.post('/api/examinations/exam-papers/review-questions/', { questions }),
   getStudentResponses: (params) => api.get('/api/examinations/student-responses/', { params }),
   submitStudentResponses: (data) => api.post('/api/examinations/student-responses/', data),
 
   // Paper Uploads (image capture for OCR)
-  getPaperUploads: (params) => api.get('/api/examinations/paper-uploads/', { params }),
-  getPaperUpload: (id) => api.get(`/api/examinations/paper-uploads/${id}/`),
   // groupId/pageNumber tie the pages of one capture together. The client makes the group
   // id (a uuid) and sends every page with its own page number, so pages can go up at the
   // same time; omit both for a single standalone upload.
@@ -1700,8 +1591,6 @@ export const questionPaperApi = {
   // is extracted it also carries the pages' blocks joined into one result.
   getPaperGroupStatus: (groupId, totalPages) => api.get('/api/examinations/paper-uploads/group-status/', { params: { group_id: groupId, total_pages: totalPages } }),
 
-  // Paper Feedback (for learning loop)
-  getPaperFeedback: (params) => api.get('/api/examinations/paper-feedback/', { params }),
 }
 
 // Worksheets -- sibling of questionPaperApi's exam-paper group, same shapes
@@ -1731,15 +1620,12 @@ export const worksheetApi = {
 
 export const aiJobsApi = {
   getAIJobs: (params) => api.get('/api/tasks/ai-jobs/', { params }),
-  updateAIJob: (id, data) => api.patch(`/api/tasks/ai-jobs/${id}/`, data),
 }
 
 // Brochure CMS API (Super-admins only)
 export const brochureApi = {
   getSections: () => api.get('/api/admin/brochure/sections/'),
-  getSection: (id) => api.get(`/api/admin/brochure/sections/${id}/`),
   updateSection: (id, data) => api.patch(`/api/admin/brochure/sections/${id}/`, data),
-  reorderSections: (items) => api.post('/api/admin/brochure/sections/reorder/', { items }),
   getPreviewHtml: () => api.get('/api/admin/brochure/preview/'),
   downloadPdf: () => api.get('/api/admin/brochure/download-pdf/', { responseType: 'blob' }),
 }

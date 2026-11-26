@@ -2144,48 +2144,7 @@ class ExamViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet)
                 many=True
             ).data,
             'results': results,
-        })  
-        @action(detail=True, methods=['get'])
-        def class_summary(self, request, pk=None):
-            exam = self.get_object()
-            school_id = _resolve_school_id(request)
-            exam_subjects = exam.exam_subjects.filter(is_active=True).select_related('subject')
-
-            students, _roll_by_student = _exam_roster(
-                school_id, exam, session_class_id=_exam_section_param(request, school_id, exam),
-            )
-
-            # Prefetch all marks for this exam in one query
-            all_marks = StudentMark.objects.filter(
-                exam_subject__in=exam_subjects, school_id=school_id,
-                is_absent=False, marks_obtained__isnull=False,
-            )
-            # Group marks by exam_subject_id
-            marks_by_subject = {}
-            for m in all_marks:
-                marks_by_subject.setdefault(m.exam_subject_id, []).append(m)
-
-            subject_stats = []
-            for es in exam_subjects:
-                subject_marks = marks_by_subject.get(es.id, [])
-                marks_values = [float(m.marks_obtained) for m in subject_marks]
-                passed = sum(1 for m in subject_marks if m.marks_obtained >= es.passing_marks)
-                subject_stats.append({
-                    'subject_name': es.subject.name,
-                    'total_marks': float(es.total_marks),
-                    'students_appeared': len(marks_values),
-                    'average': round(sum(marks_values) / len(marks_values), 2) if marks_values else 0,
-                    'highest': max(marks_values) if marks_values else 0,
-                    'lowest': min(marks_values) if marks_values else 0,
-                    'passed': passed,
-                    'failed': len(marks_values) - passed,
-                })
-
-            return Response({
-                'exam': ExamSerializer(exam).data,
-                'total_students': len(students),
-                'subject_stats': subject_stats,
-            })
+        })
 
 
 class ExamSubjectViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet):

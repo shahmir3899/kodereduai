@@ -337,9 +337,8 @@ Notes: the `test_*.py` scripts in the backend root (`test_phase1.py`, `test_audi
 ### `tests/test_phase6_examinations/TestDateSheetGrid.py` (1)
 - `test_h5_pdf_download_teacher_forbidden`: AssertionError: status=200
 
-### `tests/test_phase6_examinations/TestResultsAndReportCard.py` (2)
-- `test_f3_class_summary`: AssertionError: status=404
-- `test_f4_class_summary_stats_fields`: assert 404 == 200
+### `tests/test_phase6_examinations/TestResultsAndReportCard.py` (0)
+- Both failures (`test_f3_class_summary`, `test_f4_class_summary_stats_fields`, 404) are gone: the never-registered `class_summary` action and these two tests were removed on 2026-11-24.
 
 ### `tests/test_report_historical_scope.py` (1)
 - `test_student_comprehensive_uses_historical_summary_class_and_roll`: KeyError: 'summary'
@@ -395,6 +394,7 @@ Notes: the `test_*.py` scripts in the backend root (`test_phase1.py`, `test_audi
 
 ## Found while building mobile teacher Batch 12 (2026-11-01, not fixed)
 - **Web Create Daily Diary is refused by the server.** `AssignmentsPage.jsx` `bulkDiaryMutation` posts one DIARY assignment per subject with no `teacher`, and `AssignmentCreateSerializer` requires it (the model field is not null): the response is `{"teacher": ["This field is required."]}`. Seen from the phone build with the same payload on 2026-11-01. Fix on the web: send the signed-in teacher's staff id (admins need a teacher choice), or default it on the server for a diary. The mobile Daily Diary sends the teacher.
+  **Fixed 2026-11-24:** the server fills a missing `teacher` on create (a teacher: their own staff record; others: the subject's assigned teacher). `lms/tests/test_assignment_default_teacher.py`. Needs deploy.
 
 ## Found while building mobile student Batch 13 (2026-11-01, not fixed)
 - **Web student Dashboard tiles read the wrong keys.** `StudentDashboard.jsx` takes `dashboard.stats` (`attendance_rate`, `fee_outstanding`, `upcoming_assignments_count`), but `StudentDashboardView` returns `attendance`, `fees` and `upcoming_assignments` and no `stats`. The attendance and fee tiles therefore show N/A and the assignments tile falls back to the list length. Mobile reads the real keys.
@@ -411,6 +411,7 @@ Notes: the `test_*.py` scripts in the backend root (`test_phase1.py`, `test_audi
 
 ## Found while building mobile staff Batch 20 (2026-11-02, not fixed on the web)
 - **Web own-attendance cards read the wrong keys.** `StaffAttendancePage.jsx` `MyAttendanceView` takes `summary.PRESENT`, `ABSENT`, `LATE`, `HALF_DAY`, `ON_LEAVE`, but `GET /api/hr/attendance/summary/` answers lowercase `present`, `absent`, `late`, `half_day`, `on_leave`, so those cards show 0 for a teacher, manager, staff, finance manager and driver (the Rate card reads `attendance_rate`, which is right). The mobile screen had the same mistake and is fixed. The web staff Dashboard reads the lowercase keys correctly.
+  **Fixed 2026-11-24:** `MyAttendanceView` reads the lowercase keys (test in `StaffAttendanceFinanceManager.test.jsx`).
 - **Test account:** `SEED_TEST_staff_e2e` (school 37) no longer accepts the dev password `Abcd1234`.
 
 ## Found while building Paper Builder v2 Phase 3a (2026-11-15; gone 2026-11-17)

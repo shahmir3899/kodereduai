@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { View, Text, FlatList, TouchableOpacity, StyleSheet, type RefreshControlProps } from 'react-native';
+import { View, Text, StyleSheet, type RefreshControlProps } from 'react-native';
 import { useAppraisalActions, useAppraisals } from '../../hooks/usePayroll';
 import { useStaffOptions } from '../../hooks/usePayroll';
 import { useRefreshControl } from '../../hooks/useRefreshControl';
@@ -16,11 +16,13 @@ import Button from '../ui/Button';
 import Skeleton from '../ui/Skeleton';
 import ErrorState from '../ui/ErrorState';
 import EmptyState from '../ui/EmptyState';
-import StatusPill from '../ui/StatusPill';
 import { useToast } from '../ui/Toast';
 import { confirm } from '../ui/confirm';
 import FormSheet from '../inventory/FormSheet';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
+import AppList from '../ui/AppList';
+import RecordCard from '../ui/RecordCard';
+import { day } from '../../services/dates';
 
 // Port of PerformanceAppraisalPage.jsx for admin and principal: reviews with a 1 to 5 rating.
 export default function AppraisalsScreen() {
@@ -79,7 +81,7 @@ export default function AppraisalsScreen() {
 
   return (
     <View style={styles.container}>
-      <FlatList
+      <AppList
         contentContainerStyle={styles.content}
         data={shown}
         keyExtractor={(a) => String(a.id)}
@@ -88,13 +90,13 @@ export default function AppraisalsScreen() {
         ListHeaderComponent={header}
         ListEmptyComponent={<EmptyState title="No appraisals" message={search ? 'No staff match your search.' : 'Write the first review.'} />}
         renderItem={({ item: a }) => (
-          <TouchableOpacity accessibilityRole="button" style={styles.row} onPress={() => { setForm(appraisalToForm(a)); setError(null); setEditing(a); }}>
-            <View style={styles.who}>
-              <Text style={styles.name} numberOfLines={1}>{a.staff_member_name}</Text>
-              <Text style={styles.sub} numberOfLines={1}>{a.review_period_start} to {a.review_period_end}</Text>
-            </View>
-            <StatusPill label={`${a.rating} · ${RATING_LABELS[a.rating] ?? ''}`} tone={ratingTone(a.rating)} />
-          </TouchableOpacity>
+          <RecordCard
+            avatarName={a.staff_member_name}
+            title={a.staff_member_name}
+            subtitle={`${day(a.review_period_start) || a.review_period_start} to ${day(a.review_period_end) || a.review_period_end}`}
+            status={{ label: `${a.rating} · ${RATING_LABELS[a.rating] ?? ''}`, tone: ratingTone(a.rating) }}
+            onPress={() => { setForm(appraisalToForm(a)); setError(null); setEditing(a); }}
+          />
         )}
       />
 
@@ -121,8 +123,5 @@ export default function AppraisalsScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
   content: { padding: Spacing.lg, paddingBottom: Spacing.xxxl },
-  row: { flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.surface, borderRadius: BorderRadius.md, padding: Spacing.md, marginTop: Spacing.sm, gap: Spacing.md },
-  who: { flex: 1 },
   name: { fontSize: FontSize.md, fontWeight: '600', color: Colors.text },
-  sub: { fontSize: FontSize.sm, color: Colors.textSecondary, marginTop: 2 },
 });

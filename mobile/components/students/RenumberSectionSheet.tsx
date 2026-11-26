@@ -101,5 +101,5 @@ const styles = StyleSheet.create({
   newRoll: { minWidth: 28, textAlign: 'right', fontSize: FontSize.md, fontWeight: '700', color: Colors.primary },
   move: { minWidth: 40, minHeight: 40, alignItems: 'center', justifyContent: 'center', borderRadius: BorderRadius.sm, borderWidth: 1, borderColor: Colors.border, backgroundColor: Colors.surface },
   off: { opacity: 0.35 },
-  moveText: { fontSize: 18, color: Colors.text },
+  moveText: { fontSize: FontSize.lg, color: Colors.text },
 });

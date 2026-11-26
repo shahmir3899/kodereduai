@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { View, Text, FlatList, ActivityIndicator, Switch, TouchableOpacity, StyleSheet, type RefreshControlProps } from 'react-native';
+import { View, Text, ActivityIndicator, Switch, TouchableOpacity, StyleSheet, type RefreshControlProps } from 'react-native';
 import { useAuth } from '../../contexts/AuthContext';
 import { useBooksPaged, useCategories, useLibraryActions } from '../../hooks/useLibrary';
 import { useDebouncedValue } from '../../hooks/useDebouncedValue';
@@ -16,11 +16,13 @@ import Button from '../ui/Button';
 import Skeleton from '../ui/Skeleton';
 import ErrorState from '../ui/ErrorState';
 import EmptyState from '../ui/EmptyState';
-import StatusPill from '../ui/StatusPill';
 import { useToast } from '../ui/Toast';
 import { confirm } from '../ui/confirm';
 import FormSheet from '../inventory/FormSheet';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
+import { SectionEmpty } from '../../components/ui/SectionState';
+import AppList from '../ui/AppList';
+import RecordCard from '../ui/RecordCard';
 
 const ALL = -1;
 
@@ -108,7 +110,7 @@ export default function CatalogScreen() {
 
   return (
     <View style={styles.container}>
-      <FlatList
+      <AppList
         contentContainerStyle={styles.content}
         data={books}
         keyExtractor={(b) => String(b.id)}
@@ -120,14 +122,14 @@ export default function CatalogScreen() {
         ListEmptyComponent={<EmptyState title="No books" message={term ? 'No book matches your search.' : 'Add the first book to the catalog.'} />}
         ListFooterComponent={query.isFetchingNextPage ? <ActivityIndicator color={Colors.primary} style={{ margin: Spacing.lg }} /> : null}
         renderItem={({ item: b }) => (
-          <TouchableOpacity accessibilityRole="button" style={[styles.row, !b.is_active && styles.inactive]} onPress={() => { if (canManage) openBook(b); }} disabled={!canManage}>
-            <View style={styles.who}>
-              <Text style={styles.name} numberOfLines={2}>{b.title}</Text>
-              <Text style={styles.sub} numberOfLines={1}>{bookLine(b)}</Text>
-              <Text style={styles.sub}>{copiesLine(b)}</Text>
-            </View>
-            {!b.is_active ? <StatusPill label="Inactive" tone="neutral" /> : b.available_copies === 0 ? <StatusPill label="All out" tone="warning" /> : null}
-          </TouchableOpacity>
+          <RecordCard
+            icon="book-outline"
+            title={b.title}
+            subtitle={bookLine(b)}
+            meta={copiesLine(b)}
+            status={!b.is_active ? { label: 'Inactive', tone: 'neutral' } : b.available_copies === 0 ? { label: 'All out', tone: 'warning' } : undefined}
+            onPress={canManage ? () => openBook(b) : undefined}
+          />
         )}
       />
 
@@ -158,7 +160,7 @@ export default function CatalogScreen() {
             <Button title="Delete" size="sm" variant="ghost" onPress={() => removeCategory(c)} />
           </View>
         ))}
-        {(categories.data ?? []).length === 0 ? <Text style={styles.sub}>No categories yet.</Text> : null}
+        {(categories.data ?? []).length === 0 ? <SectionEmpty message="No categories yet." /> : null}
         <Input label={catEditing && catEditing !== 'new' ? 'Rename category' : 'New category'} value={catName} onChangeText={setCatName} placeholder="e.g. Science" />
         {catEditing && catEditing !== 'new' ? <Button title="Cancel rename" size="sm" variant="ghost" onPress={() => { setCatEditing(null); setCatName(''); setCatError(null); }} /> : null}
       </FormSheet>
@@ -171,8 +173,6 @@ const styles = StyleSheet.create({
   content: { padding: Spacing.lg, paddingBottom: Spacing.xxxl, gap: Spacing.sm },
   header: { gap: Spacing.md, marginBottom: Spacing.sm },
   sub: { fontSize: FontSize.sm, color: Colors.textSecondary },
-  row: { flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.surface, borderRadius: BorderRadius.md, padding: Spacing.md, gap: Spacing.md },
-  inactive: { opacity: 0.6 },
   who: { flex: 1 },
   name: { fontSize: FontSize.md, fontWeight: '600', color: Colors.text },
   toggle: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },

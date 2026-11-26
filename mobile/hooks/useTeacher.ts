@@ -1,5 +1,8 @@
 import { useMemo } from 'react';
-import { academicsApi, attendanceApi, examinationsApi, lmsApi, sessionsApi } from '../services/api';
+import { useQueryClient } from '@tanstack/react-query';
+import { academicsApi, attendanceApi, bootstrapApi, examinationsApi, lmsApi, sessionsApi } from '../services/api';
+import { scopedKey } from '../services/queryRules';
+import { notificationsOf } from '../services/manager';
 import { listOf } from '../services/academicYear';
 import { teacherClassOptions, type TimetableEntry } from '../services/teacher';
 import { countOf, sectionParams, weekRange, type WeekPlan, type Assignment, type ExamLite, type SectionProgress } from '../services/teacherDashboard';
@@ -9,16 +12,18 @@ import { useAuth } from '../contexts/AuthContext';
 import { useScopedQuery } from './useScopedQuery';
 import { useAcademicYear, useSessionClasses } from './useAcademicYear';
 
+export const fetchMyAttendanceClasses = async () =>
+  listOf<{ id: number; name: string; section?: string; grade_level?: number | string }>(
+    (await attendanceApi.getMyClasses()).data,
+  );
+
 // Sections this teacher may mark attendance for, in the active academic year or another one
 // (report cards can look back at a past year).
 export function useTeacherClassOptions(yearIdOverride?: number | null) {
   const year = useAcademicYear();
   const yearId = yearIdOverride ?? year.current?.id ?? null;
   const sessionClasses = useSessionClasses(yearId);
-  const mine = useScopedQuery('myAttendanceClasses', [yearId], async () =>
-    listOf<{ id: number; name: string; section?: string; grade_level?: number | string }>(
-      (await attendanceApi.getMyClasses()).data,
-    ), { enabled: !year.isLoading });
+  const mine = useScopedQuery('myAttendanceClasses', [yearId], fetchMyAttendanceClasses, { enabled: !year.isLoading });
 
   const options = useMemo(
     () => teacherClassOptions(mine.data ?? [], (sessionClasses.data ?? []) as never[]),
@@ -33,20 +38,20 @@ export function useTeacherClassOptions(yearIdOverride?: number | null) {
 }
 
 // 'timetable' is on the persisted reference list, so the week still shows offline.
-export function useMyTimetable() {
+export function useMyTimetable(enabled = true) {
   const year = useAcademicYear();
   return useScopedQuery('timetable', ['mine', year.current?.id ?? null], async () =>
     listOf<TimetableEntry>(
       (await academicsApi.getMyTimetable(year.current?.id ? { academic_year: year.current.id } : undefined)).data,
-    ), { enabled: !year.isLoading, staleTime: 5 * 60_000 });
+    ), { enabled: enabled && !year.isLoading, staleTime: 5 * 60_000 });
 }
 
-export function useMyClassAssignments() {
+export function useMyClassAssignments(enabled = true) {
   const year = useAcademicYear();
   return useScopedQuery('myClassAssignments', [year.current?.id ?? null], async () =>
     listOf<Assignment>(
       (await academicsApi.getMyClassTeacherAssignments(year.current?.id ? { academic_year: year.current.id } : undefined)).data,
-    ), { enabled: !year.isLoading });
+    ), { enabled: enabled && !year.isLoading });
 }
 
 // Class teacher / subject teacher: why a row is visible to this teacher. Only teachers load it;
@@ -142,4 +147,65 @@ export function useTeacherExams(enabled: boolean) {
   return useScopedQuery('teacherExams', [year.current?.id ?? null], async () =>
     listOf<ExamLite>((await examinationsApi.getExams({ ...(year.current?.id && { academic_year: year.current.id }), page_size: 10 })).data),
   { enabled: enabled && !year.isLoading, staleTime: 60_000 });
+}
+
+// ─── Teacher Home in one request ─────────────────────────────────────────────────────────────
+
+export type TeacherHomeSection =
+  | 'timetable' | 'class_assignments' | 'section_progress' | 'off_day' | 'pending_submissions'
+  | 'students_at_risk' | 'exams' | 'week_plans' | 'notifications';
+
+type Bundle = Partial<Record<TeacherHomeSection, unknown>>;
+const NOTIFICATIONS_LIMIT = 5;
+
+// The Home used to open ~10 requests (two more per section for attendance progress). The server's
+// bundle answers them all at once; this writes each answer into the cache key its own hook uses,
+// with the same parsing, so the Home and the screens behind it read it without fetching again.
+//
+// `own(section)` tells a hook whether to fetch for itself: while the bundle loads, no; after it,
+// only when its section came back null (failed there) or the whole bundle failed (an older
+// server without the endpoint, or no connection).
+export function useTeacherHomeBundle(sections: TeacherHomeSection[]) {
+  const { activeSchool } = useAuth();
+  const queryClient = useQueryClient();
+  const year = useAcademicYear();
+  const schoolId = activeSchool?.id ?? 0;
+  const yearId = year.current?.id ?? null;
+  const today = todayString();
+  const { from, to } = weekRange(new Date());
+  const wanted = sections.join(',');
+
+  const q = useScopedQuery<Bundle>('teacherHome', [yearId, today, from, to, wanted], async () => {
+    const data = (await bootstrapApi.getTeacherDashboard({
+      sections: wanted, date: today, week_from: from, week_to: to, notifications_limit: NOTIFICATIONS_LIMIT,
+      ...(yearId ? { academic_year: yearId } : {}),
+    })).data as Bundle;
+    const seed = (root: string, params: unknown[], value: unknown) => queryClient.setQueryData(scopedKey(root, schoolId, params), value);
+    const has = (k: TeacherHomeSection) => data[k] !== undefined && data[k] !== null;
+
+    if (has('timetable')) seed('timetable', ['mine', yearId], listOf<TimetableEntry>(data.timetable));
+    const assignments = has('class_assignments') ? listOf<Assignment>(data.class_assignments) : null;
+    if (assignments) seed('myClassAssignments', [yearId], assignments);
+    if (assignments && has('section_progress')) {
+      const rows = data.section_progress as Array<{ assignment_id: number; total: number | null; marked: number | null; failed: boolean }>;
+      const byId = new Map(rows.map((r) => [r.assignment_id, r]));
+      seed('teacherSectionProgress', [today, yearId, assignments.map((a) => a.id).join(',')],
+        assignments.map((a): SectionProgress => {
+          const r = byId.get(a.id);
+          return r ? { assignment: a, total: r.total, marked: r.marked, failed: r.failed } : { assignment: a, total: null, marked: null, failed: true };
+        }));
+    }
+    if (has('off_day')) seed('offDay', [today], ((data.off_day as { days?: Record<string, unknown> }).days?.[today] ?? null));
+    if (has('pending_submissions')) seed('pendingSubmissions', [], { count: countOf(data.pending_submissions), items: listOf(data.pending_submissions) });
+    if (has('students_at_risk')) seed('myStudentsAtRisk', [yearId], data.students_at_risk);
+    if (has('exams')) seed('teacherExams', [yearId], listOf<ExamLite>(data.exams));
+    if (has('week_plans')) seed('lessonPlans', ['week', from, to], listOf<WeekPlan>(data.week_plans));
+    if (has('notifications')) seed('myNotifications', ['recent', NOTIFICATIONS_LIMIT], notificationsOf(data.notifications).slice(0, NOTIFICATIONS_LIMIT));
+    return data;
+  // No retry: a failed bundle falls straight back to the separate requests, which retry themselves.
+  }, { enabled: !year.isLoading, staleTime: 0, retry: false });
+
+  const own = (section: TeacherHomeSection) =>
+    q.isError || (q.isSuccess && (q.data?.[section] === undefined || q.data?.[section] === null));
+  return { loading: year.isLoading || q.isLoading, ok: q.isSuccess, own, refetch: q.refetch };
 }

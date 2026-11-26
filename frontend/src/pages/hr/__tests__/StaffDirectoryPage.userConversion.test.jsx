@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { screen, waitFor } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
 import { server } from '../../../test/mocks/server'
@@ -33,6 +33,8 @@ vi.mock('../../../hooks/useDebounce', () => ({
 }))
 
 // Helper: page renders both mobile cards + desktop table, so names appear twice.
+// Form fields are found the way the modals label them now: Username by its Field label,
+// passwords by their placeholders ("Min 8 chars" / "Confirm", bulk "...same for all accounts").
 function expectTextPresent(text) {
   const matches = screen.getAllByText(text)
   expect(matches.length).toBeGreaterThanOrEqual(1)
@@ -96,7 +98,7 @@ describe('StaffDirectoryPage — User Conversion Features', () => {
     })
 
     // Should have username field
-    expect(screen.getByPlaceholderText(/username/i)).toBeInTheDocument()
+    expect(screen.getByLabelText(/^Username/)).toBeInTheDocument()
 
     // Should have role dropdown/select — look for the label "Role"
     const roleText = screen.queryByText(/role/i)
@@ -133,18 +135,18 @@ describe('StaffDirectoryPage — User Conversion Features', () => {
     })
 
     // Fill in form
-    const usernameInput = screen.getByPlaceholderText(/username/i)
+    const usernameInput = screen.getByLabelText(/^Username/)
     await user.clear(usernameInput)
     await user.type(usernameInput, 'sara_ahmed')
 
-    const passwordInputs = screen.getAllByPlaceholderText(/password/i)
+    const passwordInputs = screen.getAllByPlaceholderText(/^(Min 8 chars|Confirm)$/)
     await user.type(passwordInputs[0], 'Teacher@123')
     if (passwordInputs.length > 1) {
       await user.type(passwordInputs[1], 'Teacher@123')
     }
 
     // Submit
-    const submitBtn = screen.getByRole('button', { name: /create.*account|save|submit/i })
+    const submitBtn = within(screen.getByRole('dialog')).getByRole('button', { name: 'Create Account' })
     await user.click(submitBtn)
 
     await waitFor(() => {
@@ -207,7 +209,7 @@ describe('StaffDirectoryPage — User Conversion Features', () => {
     })
 
     // Password field should be present
-    expect(screen.getByPlaceholderText(/default password|password/i)).toBeInTheDocument()
+    expect(screen.getByPlaceholderText(/same for all accounts/i)).toBeInTheDocument()
   })
 
   it('submits bulk staff convert and calls API', async () => {
@@ -256,11 +258,11 @@ describe('StaffDirectoryPage — User Conversion Features', () => {
     })
 
     // Enter password
-    const passwordField = screen.getByPlaceholderText(/default password|password/i)
+    const passwordField = screen.getByPlaceholderText(/same for all accounts/i)
     await user.type(passwordField, 'BulkStaff@123')
 
     // Submit
-    const submitBtn = screen.getByRole('button', { name: /create.*accounts|confirm|submit/i })
+    const submitBtn = within(screen.getByRole('dialog')).getByRole('button', { name: /^Create \d+ Account/ })
     await user.click(submitBtn)
 
     await waitFor(() => {
@@ -296,17 +298,17 @@ describe('StaffDirectoryPage — User Conversion Features', () => {
       expect(screen.getByText(/Create User Account/i)).toBeInTheDocument()
     })
 
-    const usernameInput = screen.getByPlaceholderText(/username/i)
+    const usernameInput = screen.getByLabelText(/^Username/)
     await user.clear(usernameInput)
     await user.type(usernameInput, 'duplicate_user')
 
-    const passwordInputs = screen.getAllByPlaceholderText(/password/i)
+    const passwordInputs = screen.getAllByPlaceholderText(/^(Min 8 chars|Confirm)$/)
     await user.type(passwordInputs[0], 'Teacher@123')
     if (passwordInputs.length > 1) {
       await user.type(passwordInputs[1], 'Teacher@123')
     }
 
-    const submitBtn = screen.getByRole('button', { name: /create.*account|save|submit/i })
+    const submitBtn = within(screen.getByRole('dialog')).getByRole('button', { name: 'Create Account' })
     await user.click(submitBtn)
 
     await waitFor(() => {
@@ -375,16 +377,15 @@ describe('StaffDirectoryPage — User Conversion Features', () => {
       expect(screen.getByText(/Bulk Create/i)).toBeInTheDocument()
     })
 
-    const passwordField = screen.getByPlaceholderText(/default password|password/i)
+    const passwordField = screen.getByPlaceholderText(/same for all accounts/i)
     await user.type(passwordField, 'BulkStaff@123')
 
-    const submitBtn = screen.getByRole('button', { name: /create.*accounts|confirm|submit/i })
+    const submitBtn = within(screen.getByRole('dialog')).getByRole('button', { name: /^Create \d+ Account/ })
     await user.click(submitBtn)
 
-    // Results should show created count
+    // Results show the created count (the page's toast also says "created", so match the modal line)
     await waitFor(() => {
-      const created = screen.queryByText(/created/i)
-      expect(created).toBeInTheDocument()
+      expect(within(screen.getByRole('dialog')).getByText(/^Created: \d+ account/)).toBeInTheDocument()
     })
   })
 })

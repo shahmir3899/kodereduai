@@ -124,3 +124,28 @@ describe('reorder text and errors', () => {
     expect(inventoryErrorMessage({ response: { status: 400, data: {} } }, 'Oops')).toBe('Oops');
   });
 });
+
+describe('categories and vendors', () => {
+  const inv = require('../services/inventory');
+
+  it('needs a name and accepts a blank or valid email', () => {
+    expect(inv.validateNamed({ name: ' ' }, 'category')).toBe('Enter the category name.');
+    expect(inv.validateNamed({ name: 'Acme', email: 'nope' }, 'vendor')).toMatch(/valid email/);
+    expect(inv.validateNamed({ name: 'Acme', email: '' }, 'vendor')).toBeNull();
+    expect(inv.validateNamed({ name: 'Acme', email: 'a@b.pk' }, 'vendor')).toBeNull();
+  });
+
+  it('sends trimmed fields under the server names', () => {
+    expect(inv.vendorPayload({ name: ' Acme ', contactPerson: ' Ali ', phone: '0300', email: ' a@b.pk ', address: '' }))
+      .toEqual({ name: 'Acme', contact_person: 'Ali', phone: '0300', email: 'a@b.pk', address: '' });
+    expect(inv.categoryPayload({ name: ' Stationery ', description: ' Pens ' })).toEqual({ name: 'Stationery', description: 'Pens' });
+    expect(inv.vendorToForm({ id: 1, name: 'Acme', contact_person: 'Ali' }).contactPerson).toBe('Ali');
+  });
+
+  it('warns that a category delete takes its items with it', () => {
+    expect(inv.categoryDeleteMessage({ id: 1, name: 'Sports', items_count: 3 })).toMatch(/Its 3 items .* deleted too/);
+    expect(inv.categoryDeleteMessage({ id: 1, name: 'Sports', items_count: 1 })).toMatch(/Its 1 item and/);
+    expect(inv.categoryDeleteMessage({ id: 1, name: 'Empty', items_count: 0 })).toBe('Delete "Empty"? This cannot be undone.');
+    expect(inv.itemDeleteMessage('Chalk')).toMatch(/stock movements and assignments are deleted too/);
+  });
+});

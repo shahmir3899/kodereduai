@@ -12,7 +12,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from core.mixins import TenantQuerySetMixin, ensure_tenant_school_id
+from core.mixins import TenantQuerySetMixin, ensure_tenant_school_id, ListETagMixin
 from core.permissions import IsSchoolAdmin, IsSchoolAdminOrReadOnly, IsSchoolAdminOrManagerOrReadOnly, HasSchoolAccess
 from core.class_scope import resolve_class_scope
 
@@ -67,7 +67,7 @@ def _resolve_school_id(request):
     return None
 
 
-class AcademicYearViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
+class AcademicYearViewSet(ListETagMixin, TenantQuerySetMixin, viewsets.ModelViewSet):
     queryset = AcademicYear.objects.all()
     permission_classes = [IsAuthenticated, IsSchoolAdminOrReadOnly, HasSchoolAccess]
     allow_portal_roles = True  # the app shell loads the year list for every signed-in role (read-only: writes need an admin)
@@ -159,7 +159,7 @@ class AcademicYearViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
         })
 
 
-class TermViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
+class TermViewSet(ListETagMixin, TenantQuerySetMixin, viewsets.ModelViewSet):
     queryset = Term.objects.all()
     permission_classes = [IsAuthenticated, IsSchoolAdminOrReadOnly, HasSchoolAccess]
     allow_portal_roles = True  # loaded with the year list by the app shell (read-only for non-admins)

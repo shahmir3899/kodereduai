@@ -24,6 +24,7 @@ import { StudentMoveSheet, StudentRemoveSheet } from './StudentMoveSheets';
 import { StudentExitSheet, StudentReadmitSheet } from './StudentExitSheets';
 import ParentLinksSheet from './ParentLinksSheet';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
+import { SectionError, SectionLoading } from '../../components/ui/SectionState';
 
 interface Props {
   student: { id: number; name: string; roll?: string | number | null; className?: string | null; status?: string | null; has_user_account?: boolean; sectionId?: number | null; awaySince?: string | null };
@@ -140,8 +141,8 @@ export default function StudentAdminActions({ student }: Props) {
 
       <FormSheet visible={open === 'status'} title="Change status" onClose={close} onSubmit={saveStatus} submitLabel="Save status"
         busy={setOutcomeMutation.isPending} error={error}>
-        {preview.isLoading ? <Text style={styles.hint}>Checking what is allowed...</Text> : null}
-        {preview.isError ? <Text style={styles.hint}>Could not check what is allowed for this student.</Text> : null}
+        {preview.isLoading ? <SectionLoading /> : null}
+        {preview.isError ? <SectionError message="Could not check what is allowed for this student." onRetry={() => preview.refetch()} /> : null}
         {offered.map((o) => (
           <TouchableOpacity key={o.value} accessibilityRole="radio" accessibilityState={{ selected: outcome === o.value }} onPress={() => setOutcome(o.value)}
             style={[styles.option, outcome === o.value && styles.optionOn]}>

@@ -2,13 +2,17 @@ import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { Colors, FontSize, Spacing } from '../../constants/colors';
 import Button from './Button';
+import Icon, { type IconName } from './Icon';
+import { emptyIconFor } from '../../services/emptyIcon';
 
 interface EmptyStateProps {
   title: string;
   message?: string;
   actionLabel?: string;
   onAction?: () => void;
-  icon?: React.ReactNode;
+  // An icon name, your own element, or nothing: then one is picked from the title, so no empty
+  // state is text alone. Pass `false` for none.
+  icon?: React.ReactNode | IconName | false;
 }
 
 export default function EmptyState({
@@ -20,7 +24,15 @@ export default function EmptyState({
 }: EmptyStateProps) {
   return (
     <View style={styles.container}>
-      {icon && <View style={styles.iconContainer}>{icon}</View>}
+      {icon === false ? null : (
+        <View style={styles.iconContainer}>
+          {icon === undefined || typeof icon === 'string' ? (
+            <View style={styles.iconCircle}>
+              <Icon name={(icon as IconName | undefined) ?? emptyIconFor(title)} size={30} color={Colors.primary} />
+            </View>
+          ) : icon}
+        </View>
+      )}
       <Text style={styles.title}>{title}</Text>
       {message && <Text style={styles.message}>{message}</Text>}
       {actionLabel && onAction && (
@@ -44,6 +56,14 @@ const styles = StyleSheet.create({
   },
   iconContainer: {
     marginBottom: Spacing.lg,
+  },
+  iconCircle: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.infoLight,
   },
   title: {
     fontSize: FontSize.lg,

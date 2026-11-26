@@ -65,6 +65,9 @@ const ADMIN_ROUTES: Record<string, string> = {
   '/attendance/register': '/(admin)/attendance/register',
   '/transport': '/(admin)/transport',
   '/transport/routes': '/(admin)/transport/routes',
+  '/transport/vehicles': '/(admin)/transport/vehicles',
+  '/transport/assignments': '/(admin)/transport/assignments',
+  '/transport/attendance': '/(admin)/transport/attendance',
   '/library': '/(admin)/library',
   '/library/catalog': '/(admin)/library/catalog',
   '/library/issues': '/(admin)/library/issue',
@@ -109,6 +112,9 @@ const TEACHER_ROUTES: Record<string, string> = {
   '/library/overdue': '/(teacher)/library/overdue',
   '/transport': '/(teacher)/transport',
   '/transport/routes': '/(teacher)/transport/routes',
+  '/transport/vehicles': '/(teacher)/transport/vehicles',
+  '/transport/assignments': '/(teacher)/transport/assignments',
+  '/transport/attendance': '/(teacher)/transport/attendance',
 };
 
 const MANAGER_ROUTES: Record<string, string> = {
@@ -225,9 +231,9 @@ export function ownRouteForPath(persona: Persona, pathname: string): string | un
 // own group has (__tests__/ownRoute.test.ts checks the files exist).
 export const LINKED_SCREENS: Partial<Record<Persona, string[]>> = {
   admin: ['/worksheet-builder', '/curriculum/book', '/curriculum/topic', '/messages/thread', '/transport/route', '/date-sheet',
-    '/finance/account-ledger', '/session-terms'],
-  teacher: ['/worksheet-builder', '/curriculum/book', '/curriculum/topic', '/messages/thread', '/transport/route'],
-  manager: ['/worksheet-builder', '/curriculum/book', '/curriculum/topic', '/messages/thread'],
+    '/finance/account-ledger', '/session-terms', '/bulk-tests', '/paper-responses'],
+  teacher: ['/worksheet-builder', '/curriculum/book', '/curriculum/topic', '/messages/thread', '/transport/route', '/paper-responses'],
+  manager: ['/worksheet-builder', '/curriculum/book', '/curriculum/topic', '/messages/thread', '/paper-responses'],
   student: ['/assignments/detail'],
   parent: ['/messages/thread'],
   driver: ['/messages/thread'],

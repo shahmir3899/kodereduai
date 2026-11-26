@@ -1,14 +1,15 @@
 import React, { useMemo, useState } from 'react';
-import { View, Text, FlatList, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { useCalendarMonth } from '../../hooks/useManager';
 import { useRefreshControl } from '../../hooks/useRefreshControl';
 import { calendarItems, monthTitle, shiftMonth } from '../../services/manager';
 import Skeleton from '../ui/Skeleton';
 import ErrorState from '../ui/ErrorState';
 import EmptyState from '../ui/EmptyState';
-import StatusPill from '../ui/StatusPill';
-import Card from '../ui/Card';
-import { Colors, FontSize, Spacing } from '../../constants/colors';
+import { Colors, FontSize, Spacing, GlyphSize } from '../../constants/colors';
+import AppList from '../ui/AppList';
+import RecordCard from '../ui/RecordCard';
+import { dayShort } from '../../services/dates';
 
 // Read-only month list of school events and off days (Sundays are left out). Editing the
 // calendar is for admins, on the web.
@@ -29,18 +30,19 @@ export default function CalendarScreen() {
       {query.isLoading ? <Skeleton /> : query.isError && !query.data ? (
         <ErrorState error={query.error} onRetry={() => query.refetch()} />
       ) : (
-        <FlatList
+        <AppList
           data={items}
           keyExtractor={(i) => i.date}
           contentContainerStyle={styles.content}
           refreshControl={refreshControl}
           ListEmptyComponent={<EmptyState title="Nothing this month" message="No events or holidays are scheduled." />}
           renderItem={({ item }) => (
-            <Card style={styles.row}>
-              <Text style={styles.date}>{item.date.slice(8)}</Text>
-              <Text style={styles.names} numberOfLines={2}>{item.names.join(', ')}</Text>
-              {item.off ? <StatusPill label="Off day" tone="warning" /> : null}
-            </Card>
+            <RecordCard
+              icon="calendar-outline"
+              title={dayShort(item.date) || item.date}
+              meta={item.names.join(', ')}
+              status={item.off ? { label: 'Off day', tone: 'warning' } : undefined}
+            />
           )}
         />
       )}
@@ -51,10 +53,7 @@ export default function CalendarScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
   nav: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: Spacing.lg },
-  arrow: { fontSize: 28, color: Colors.primary, paddingHorizontal: Spacing.md },
+  arrow: { fontSize: GlyphSize.lg, color: Colors.primary, paddingHorizontal: Spacing.md },
   title: { fontSize: FontSize.lg, fontWeight: '700', color: Colors.text },
   content: { paddingHorizontal: Spacing.lg, paddingBottom: Spacing.xxxl },
-  row: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md, padding: Spacing.md, marginBottom: Spacing.sm },
-  date: { width: 32, fontSize: FontSize.lg, fontWeight: '700', color: Colors.primary },
-  names: { flex: 1, fontSize: FontSize.sm, color: Colors.text },
 });

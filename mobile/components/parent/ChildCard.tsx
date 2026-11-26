@@ -4,11 +4,20 @@ import { useRouter, type Href } from 'expo-router';
 import { useChildOverview } from '../../hooks/useParent';
 import { rateTone } from '../../services/studentPortal';
 import { formatMoney } from '../../services/feeCollect';
+import TileGrid from '../ui/TileGrid';
+import type { IconName } from '../ui/Icon';
 import { CHILD_LINKS, examDelta, feeNote, nextExamWhen, type ChildLink } from '../../services/parentPortal';
 import Avatar from '../ui/Avatar';
 import Card from '../ui/Card';
 import StatusPill from '../ui/StatusPill';
 import { Colors, FontSize, Spacing } from '../../constants/colors';
+import { SectionError, SectionLoading } from '../../components/ui/SectionState';
+
+// Icons for the child's shortcut tiles, by the screen they open.
+const CHILD_LINK_ICON: Record<string, IconName> = {
+  attendance: 'checkbox-outline', fees: 'wallet-outline', results: 'bar-chart-outline', timetable: 'time-outline',
+  'exam-schedule': 'calendar-number-outline', library: 'library-outline', transport: 'bus-outline',
+};
 
 // One child at a glance (attendance, fees, today, next exam). Tap to open their pages.
 export default function ChildCard({ child }: { child: ChildLink }) {
@@ -20,8 +29,10 @@ export default function ChildCard({ child }: { child: ChildLink }) {
   const delta = examDelta(o?.latest_exam, o?.previous_exam);
 
   return (
-    <TouchableOpacity accessibilityRole="button" onPress={() => router.push(`/(parent)/children/${child.student}` as Href)}>
-      <Card style={styles.card}>
+    // The top of the card opens the child's overview; the shortcuts sit outside that button (a button
+    // inside a button is invalid on the web build).
+    <Card style={styles.card}>
+      <TouchableOpacity accessibilityRole="button" accessibilityLabel={`${child.student_name}: Overview`} onPress={() => router.push(`/(parent)/children/${child.student}` as Href)}>
         <View style={styles.top}>
           <Avatar name={child.student_name || '?'} uri={child.student_photo_url || o?.photo_url} size={44} />
           <View style={{ flex: 1 }}>
@@ -35,7 +46,7 @@ export default function ChildCard({ child }: { child: ChildLink }) {
           ) : null}
         </View>
 
-        {q.isLoading ? <Text style={styles.sub}>Loading…</Text> : q.isError ? <Text style={styles.sub}>Could not load. Pull to refresh.</Text> : o ? (
+        {q.isLoading ? <SectionLoading /> : q.isError ? <SectionError message="Could not load this child's summary." onRetry={() => q.refetch()} /> : o ? (
           <View style={styles.stats}>
             <View style={styles.stat}>
               <Text style={[styles.value, rate != null && { color: rateColor(rate) }]}>{rate != null ? `${rate}%` : '–'}</Text>
@@ -64,19 +75,18 @@ export default function ChildCard({ child }: { child: ChildLink }) {
 
         {o?.next_exam ? <Text style={styles.next}>Next exam: {o.next_exam.subject_name} · {nextExamWhen(o.next_exam.exam_date)}</Text> : null}
         {o && o.pending_leave_count > 0 ? <Text style={styles.next}>{o.pending_leave_count} leave request{o.pending_leave_count === 1 ? '' : 's'} awaiting review</Text> : null}
-        <View style={styles.chips}>
-          {CHILD_LINKS.map((l) => (
-            <TouchableOpacity key={l.label} accessibilityRole="button" accessibilityLabel={`${child.student_name}: ${l.label}`} style={styles.chip}
-              onPress={() => router.push(`/(parent)/children/${child.student}${l.path ? `/${l.path}` : ''}` as Href)}>
-              <Text style={styles.chipText}>{l.label}</Text>
-            </TouchableOpacity>
-          ))}
-          <TouchableOpacity accessibilityRole="button" accessibilityLabel={`Apply leave for ${child.student_name}`} style={styles.chip} onPress={() => router.push('/(parent)/leave' as Href)}>
-            <Text style={styles.chipText}>Apply leave</Text>
-          </TouchableOpacity>
-        </View>
-      </Card>
-    </TouchableOpacity>
+      </TouchableOpacity>
+      <View style={styles.tiles}>
+        <TileGrid collapseAfter={4} items={[
+          ...CHILD_LINKS.filter((l) => l.path).map((l) => ({
+            label: l.label, icon: CHILD_LINK_ICON[l.path] ?? 'ellipse-outline',
+            accessibilityLabel: `${child.student_name}: ${l.label}`,
+            onPress: () => router.push(`/(parent)/children/${child.student}/${l.path}` as Href),
+          })),
+          { label: 'Apply leave', icon: 'calendar-outline' as IconName, accessibilityLabel: `Apply leave for ${child.student_name}`, onPress: () => router.push('/(parent)/leave' as Href) },
+        ]} />
+      </View>
+    </Card>
   );
 }
 
@@ -87,8 +97,6 @@ const rateColor = (rate: number) => ({ success: Colors.success, warning: Colors.
 const styles = StyleSheet.create({
   card: { padding: Spacing.md, marginBottom: Spacing.md },
   top: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md },
-  avatar: { width: 44, height: 44, borderRadius: 22, backgroundColor: Colors.primary, alignItems: 'center', justifyContent: 'center' },
-  avatarText: { color: Colors.textInverse, fontWeight: '700', fontSize: FontSize.lg },
   name: { fontSize: FontSize.lg, fontWeight: '700', color: Colors.text },
   sub: { fontSize: FontSize.sm, color: Colors.textSecondary },
   stats: { flexDirection: 'row', marginTop: Spacing.md, gap: Spacing.md },
@@ -97,8 +105,6 @@ const styles = StyleSheet.create({
   label: { fontSize: FontSize.xs, color: Colors.textSecondary },
   dots: { flexDirection: 'row', gap: 3, marginTop: 4 },
   dot: { width: 8, height: 8, borderRadius: 4 },
-  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.xs, marginTop: Spacing.md },
-  chip: { minHeight: 36, justifyContent: 'center', backgroundColor: Colors.surfaceSecondary, borderRadius: 6, paddingHorizontal: Spacing.sm },
-  chipText: { fontSize: FontSize.xs, fontWeight: '600', color: Colors.textSecondary },
+  tiles: { marginTop: Spacing.md, paddingTop: Spacing.md, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: Colors.border },
   next: { fontSize: FontSize.sm, color: Colors.textSecondary, marginTop: Spacing.sm },
 });

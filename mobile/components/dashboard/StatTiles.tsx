@@ -2,7 +2,8 @@ import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
 
-export interface Tile { label: string; value: string | number | null | undefined; route?: string }
+// `tone` colours the figure in the Home banner card (good green, warn amber, bad red).
+export interface Tile { label: string; value: string | number | null | undefined; route?: string; tone?: 'good' | 'warn' | 'bad' }
 
 // Two-across number tiles for the manager, finance manager and staff homes, so they read as one family.
 // A tile with no route is not tappable; a missing value shows a dash, never a made-up 0.

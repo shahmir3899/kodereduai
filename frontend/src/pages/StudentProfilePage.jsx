@@ -28,6 +28,7 @@ import {
   HistoryTab,
   DocumentsTab,
 } from './students/profile/ProfileTabs'
+import StudentOptionalFees from './students/profile/StudentOptionalFees'
 
 const TABS = ['Overview', 'Attendance', 'Fees', 'Academics', 'Assessment', 'History', 'Documents']
 
@@ -44,7 +45,9 @@ export default function StudentProfilePage() {
   const { showError, showSuccess } = useToast()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
-  const { user } = useAuth()
+  const { user, isSchoolAdmin, isPrincipal, isSuperAdmin } = useAuth()
+  // Same roles that may write finance data (a finance manager reads only).
+  const canManageOptionalFees = !!(isSchoolAdmin || isPrincipal || isSuperAdmin)
   const canManageLifecycle = canManageStudentLifecycle(user?.role)
   const removeMutation = useMutation({
     mutationFn: ({ reason }) => studentsApi.deleteStudent(id, reason),
@@ -289,6 +292,7 @@ export default function StudentProfilePage() {
       {/* Tab Content */}
       {tab === 'Overview' && <OverviewTab summary={summary} ai={ai} isLoading={summaryLoading} error={summaryIsError ? summaryError : null} />}
       {tab === 'Attendance' && <AttendanceTab awayPeriods={student.away_periods} data={attendanceData?.data} isLoading={attendanceLoading} error={attendanceIsError ? attendanceError : null} />}
+      {tab === 'Fees' && <StudentOptionalFees studentId={Number(id)} canEdit={canManageOptionalFees} />}
       {tab === 'Fees' && <FeesTab data={feeData?.data} isLoading={feeLoading} error={feeIsError ? feeError : null} />}
       {tab === 'Academics' && <AcademicsTab data={examData?.data} isLoading={examLoading} error={examIsError ? examError : null} />}
       {tab === 'Assessment' && (

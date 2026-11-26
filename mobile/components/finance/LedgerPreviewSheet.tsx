@@ -6,6 +6,7 @@ import type { AccountBalance } from '../../services/financeManager';
 import { useLedgerPreview } from '../../hooks/useFinanceManager';
 import { formatMoney } from '../../services/feeCollect';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
+import { SectionEmpty, SectionLoading } from '../../components/ui/SectionState';
 
 // The ten newest ledger lines of the tapped account (credit, debit, running balance), as the web
 // preview does, with a button to the full ledger. Read-only.
@@ -19,8 +20,8 @@ export default function LedgerPreviewSheet({ account, schoolId, canOpenFull = tr
   return (
     <BottomSheet visible={account !== null} onClose={onClose} title={account ? `${account.name}${account.account_type ? ` · ${account.account_type}` : ''}` : ''}>
       <ScrollView contentContainerStyle={styles.body}>
-        {q.isLoading ? <Text style={styles.muted}>Loading…</Text> : q.isError ? <Text style={styles.muted}>Could not load the ledger.</Text> : entries.length === 0 ? (
-          <Text style={styles.muted}>No transactions yet for this account.</Text>
+        {q.isLoading ? <SectionLoading /> : q.isError ? <Text style={styles.muted}>Could not load the ledger.</Text> : entries.length === 0 ? (
+          <SectionEmpty message="No transactions yet for this account." />
         ) : (
           <>
             <View style={styles.balance}>

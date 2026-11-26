@@ -1,3 +1,4 @@
+import { day } from './dates';
 // Pure logic for the rest of the question bank and paper builder: search by meaning, AI questions and
 // verifying them, subject tags, selecting and deleting several papers, Word files, the paper's exam and
 // automatic title, and the coverage panel. Port of frontend/src/pages/examinations (QuestionsPage,
@@ -106,8 +107,8 @@ export function examOptionLabel(e: ExamOption): string {
   const parts = [e.name || e.exam_type_name || `Exam #${e.id}`];
   if (e.exam_type_name && e.exam_type_name !== e.name) parts.push(`(${e.exam_type_name})`);
   if (e.start_date) {
-    const d = new Date(`${e.start_date}T00:00:00Z`);
-    if (!Number.isNaN(d.getTime())) parts.push(`- ${d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' })}`);
+    const when = day(e.start_date.slice(0, 10));
+    if (when) parts.push(`- ${when}`);
   }
   return parts.join(' ');
 }

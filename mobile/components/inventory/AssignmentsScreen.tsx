@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { View, Text, FlatList, ActivityIndicator, TouchableOpacity, StyleSheet, type RefreshControlProps } from 'react-native';
+import { View, ActivityIndicator, StyleSheet, type RefreshControlProps } from 'react-native';
 import { useAuth } from '../../contexts/AuthContext';
 import { useAllItems, useAssignableUsers, useAssignmentsPaged, useInventoryActions } from '../../hooks/useInventory';
 import { useDebouncedValue } from '../../hooks/useDebouncedValue';
@@ -18,11 +18,13 @@ import Button from '../ui/Button';
 import Skeleton from '../ui/Skeleton';
 import ErrorState from '../ui/ErrorState';
 import EmptyState from '../ui/EmptyState';
-import StatusPill from '../ui/StatusPill';
 import { useToast } from '../ui/Toast';
 import { confirm } from '../ui/confirm';
 import FormSheet from './FormSheet';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
+import AppList from '../ui/AppList';
+import RecordCard from '../ui/RecordCard';
+import { day } from '../../services/dates';
 
 type Tab = 'true' | 'false' | '';
 const TABS: Array<{ value: Tab; label: string }> = [
@@ -98,7 +100,7 @@ export default function AssignmentsScreen() {
 
   return (
     <View style={styles.container}>
-      <FlatList
+      <AppList
         contentContainerStyle={styles.content}
         data={rows}
         keyExtractor={(a) => String(a.id)}
@@ -110,18 +112,13 @@ export default function AssignmentsScreen() {
         ListEmptyComponent={<EmptyState title="No assignments" message={term ? 'No assignments match your search.' : 'Nothing here yet.'} />}
         ListFooterComponent={query.isFetchingNextPage ? <ActivityIndicator color={Colors.primary} style={{ margin: Spacing.lg }} /> : null}
         renderItem={({ item: a }) => (
-          <TouchableOpacity
-            accessibilityRole="button" disabled={!(canManage && a.is_active)} style={styles.row}
-            onPress={() => { setReturning(a); setCondition('GOOD'); setNotes(''); }}
-          >
-            <View style={styles.who}>
-              <Text style={styles.name} numberOfLines={1}>{a.quantity} × {a.item_name}</Text>
-              <Text style={styles.sub} numberOfLines={2}>
-                {[a.assigned_to_full_name?.trim() || a.assigned_to_name, a.is_active ? `since ${a.assigned_date}` : `returned ${a.returned_date ?? ''}`, a.is_active ? a.condition_on_assign_display : a.condition_on_return_display].filter(Boolean).join('  ·  ')}
-              </Text>
-            </View>
-            <StatusPill label={a.is_active ? 'With them' : 'Returned'} tone={a.is_active ? 'info' : 'neutral'} />
-          </TouchableOpacity>
+          <RecordCard
+            icon="cube-outline"
+            title={`${a.quantity} × ${a.item_name}`}
+            meta={[a.assigned_to_full_name?.trim() || a.assigned_to_name, a.is_active ? `since ${day(a.assigned_date) || a.assigned_date}` : `returned ${day(a.returned_date) || a.returned_date || ''}`, a.is_active ? a.condition_on_assign_display : a.condition_on_return_display].filter(Boolean).join('  ·  ')}
+            status={{ label: a.is_active ? 'With them' : 'Returned', tone: a.is_active ? 'info' : 'neutral' }}
+            onPress={canManage && a.is_active ? () => { setReturning(a); setCondition('GOOD'); setNotes(''); } : undefined}
+          />
         )}
       />
 
@@ -154,8 +151,4 @@ export default function AssignmentsScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
   content: { padding: Spacing.lg, paddingBottom: Spacing.xxxl },
-  row: { flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.surface, borderRadius: BorderRadius.md, padding: Spacing.md, marginTop: Spacing.sm, gap: Spacing.md },
-  who: { flex: 1 },
-  name: { fontSize: FontSize.md, fontWeight: '600', color: Colors.text },
-  sub: { fontSize: FontSize.sm, color: Colors.textSecondary, marginTop: 2 },
 });

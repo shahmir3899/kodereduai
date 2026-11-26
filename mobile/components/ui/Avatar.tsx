@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { Image, Text, View, StyleSheet } from 'react-native';
+import { Text, View, StyleSheet } from 'react-native';
+import { Image } from 'expo-image';
 import { Colors } from '../../constants/colors';
 
 interface AvatarProps {
@@ -8,13 +9,14 @@ interface AvatarProps {
   size?: number;
 }
 
-// Photo when there is one, otherwise the person's initials. A photo that fails to load (a deleted
+// Photo when there is one, otherwise the person's initials. expo-image keeps a downloaded photo on
+// the phone's disk, so a list scrolled again or opened tomorrow does not fetch every face again. A photo that fails to load (a deleted
 // file, a dead link) falls back to the initials instead of leaving an empty circle.
 export default function Avatar({ name, uri, size = 40 }: AvatarProps) {
   const box = { width: size, height: size, borderRadius: size / 2 };
   const [failed, setFailed] = useState(false);
   useEffect(() => setFailed(false), [uri]);
-  if (uri && !failed) return <Image source={{ uri }} style={box} resizeMethod="resize" onError={() => setFailed(true)} accessibilityIgnoresInvertColors />;
+  if (uri && !failed) return <Image source={{ uri }} style={box} transition={150} onError={() => setFailed(true)} accessibilityIgnoresInvertColors />;
   const initials = name.trim().split(/\s+/).slice(0, 2).map((p) => p[0]?.toUpperCase() ?? '').join('');
   return (
     <View style={[styles.fallback, box]}>

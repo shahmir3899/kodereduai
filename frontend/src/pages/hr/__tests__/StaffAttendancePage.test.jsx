@@ -33,7 +33,7 @@ describe('StaffAttendancePage - Bug #4: date_from/date_to params', () => {
         if (!dateFrom || !dateTo) {
           return HttpResponse.json({ detail: 'date_from and date_to are required.' }, { status: 400 })
         }
-        return HttpResponse.json({ total_records: 20, present: 15, absent: 3, late: 2 })
+        return HttpResponse.json([{ staff_member: 1, present: 15, absent: 3, late: 2, half_day: 0, on_leave: 0, attendance_rate: 85.0 }])
       })
     )
 

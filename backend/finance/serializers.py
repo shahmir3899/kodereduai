@@ -4,6 +4,8 @@ Finance serializers for fee structures, payments, expenses, other income, and AI
 
 from decimal import Decimal
 
+from django.db.models import Q
+from django.utils import timezone
 from rest_framework import serializers
 from core.mixins import ensure_tenant_school_id
 from core.permissions import ADMIN_ROLES, _is_data_restricted_user, get_effective_role, has_finance_access
@@ -14,6 +16,7 @@ from .models import (
     ExpenseCategory, IncomeCategory, AnnualFeeCategory, MonthlyFeeCategory,
     FinanceAIChatMessage, MonthlyClosing, AccountSnapshot,
     Discount, Scholarship, StudentDiscount, PaymentGatewayConfig, OnlinePayment,
+    StudentFeeEnrollment,
 )
 
 
@@ -349,6 +352,7 @@ class FeePaymentSerializer(serializers.ModelSerializer):
             'annual_category', 'annual_category_name',
             'monthly_category', 'monthly_category_name',
             'month', 'year', 'previous_balance', 'amount_due', 'amount_paid',
+            'discount_amount', 'discount_detail',
             'status', 'payment_date', 'payment_method',
             'receipt_number', 'notes',
             'collected_by', 'collected_by_name',
@@ -624,18 +628,97 @@ class IncomeCategorySerializer(serializers.ModelSerializer):
         fields = ['id', 'name', 'code', 'is_active']
 
 
-class AnnualFeeCategorySerializer(serializers.ModelSerializer):
+class _BillingModeFields(serializers.ModelSerializer):
+    """billing_mode / default_amount / enrolled_count, shared by both fee category serializers."""
+    enrolled_count = serializers.SerializerMethodField()
+
+    def get_enrolled_count(self, obj):
+        if obj.billing_mode != 'ENROLLED':
+            return None
+        today = timezone.localdate()
+        return obj.enrollments.filter(start_date__lte=today).filter(
+            Q(end_date__isnull=True) | Q(end_date__gte=today)
+        ).values('student_id').distinct().count()
+
+    def validate_default_amount(self, value):
+        if value is not None and value < 0:
+            raise serializers.ValidationError('Price cannot be negative.')
+        return value
+
+
+class AnnualFeeCategorySerializer(_BillingModeFields):
     class Meta:
         model = AnnualFeeCategory
-        fields = ['id', 'name', 'description', 'is_active', 'created_at', 'updated_at']
+        fields = ['id', 'name', 'description', 'is_active', 'billing_mode', 'default_amount', 'enrolled_count',
+                  'created_at', 'updated_at']
         read_only_fields = ['id', 'created_at', 'updated_at']
 
 
-class MonthlyFeeCategorySerializer(serializers.ModelSerializer):
+class MonthlyFeeCategorySerializer(_BillingModeFields):
     class Meta:
         model = MonthlyFeeCategory
-        fields = ['id', 'name', 'description', 'is_active', 'created_at', 'updated_at']
+        fields = ['id', 'name', 'description', 'is_active', 'billing_mode', 'default_amount', 'enrolled_count',
+                  'created_at', 'updated_at']
         read_only_fields = ['id', 'created_at', 'updated_at']
+
+
+class StudentFeeEnrollmentSerializer(serializers.ModelSerializer):
+    student_name = serializers.CharField(source='student.name', read_only=True)
+    student_roll = serializers.SerializerMethodField()
+    class_label = serializers.SerializerMethodField()
+    category_name = serializers.SerializerMethodField()
+    fee_type = serializers.SerializerMethodField()
+    is_active = serializers.SerializerMethodField()
+
+    class Meta:
+        model = StudentFeeEnrollment
+        fields = [
+            'id', 'student', 'student_name', 'student_roll', 'class_label',
+            'monthly_category', 'annual_category', 'category_name', 'fee_type',
+            'academic_year', 'start_date', 'end_date', 'amount', 'notes', 'is_active',
+            'created_at', 'updated_at',
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at']
+
+    def _placement(self, obj):
+        placements = self.context.get('placements') or {}
+        return placements.get(obj.student_id)
+
+    def get_class_label(self, obj):
+        from academic_sessions.roster import placement_label
+        return placement_label(self._placement(obj), obj.student) or ''
+
+    def get_student_roll(self, obj):
+        from academic_sessions.roster import placement_roll
+        return placement_roll(self._placement(obj), obj.student) or ''
+
+    def get_category_name(self, obj):
+        return getattr(obj.category, 'name', '')
+
+    def get_fee_type(self, obj):
+        return 'MONTHLY' if obj.monthly_category_id else 'ANNUAL'
+
+    def get_is_active(self, obj):
+        today = timezone.localdate()
+        return obj.start_date <= today and (obj.end_date is None or obj.end_date >= today)
+
+    def validate(self, attrs):
+        start = attrs.get('start_date', getattr(self.instance, 'start_date', None))
+        end = attrs.get('end_date', getattr(self.instance, 'end_date', None))
+        if start and end and end < start:
+            raise serializers.ValidationError({'end_date': 'End date cannot be before the start date.'})
+        amount = attrs.get('amount')
+        if amount is not None and amount < 0:
+            raise serializers.ValidationError({'amount': 'Price cannot be negative.'})
+        if self.instance is None:
+            if bool(attrs.get('monthly_category')) == bool(attrs.get('annual_category')):
+                raise serializers.ValidationError('Pick exactly one fee category.')
+        else:
+            # The category and student are what the enrollment is; change them by ending it and enrolling again.
+            for field in ('student', 'monthly_category', 'annual_category'):
+                if field in attrs and attrs[field] != getattr(self.instance, field):
+                    raise serializers.ValidationError({field: 'Cannot be changed. End this enrollment and add a new one.'})
+        return attrs
 
 
 class ExpenseSerializer(serializers.ModelSerializer):
@@ -780,7 +863,35 @@ class MonthlyClosingSerializer(serializers.ModelSerializer):
 # Phase 3: Discount & Scholarship Serializers
 # =============================================================================
 
-class DiscountSerializer(serializers.ModelSerializer):
+class _FeeTypeTargets(serializers.ModelSerializer):
+    """monthly_categories / annual_categories (which fees a discount or scholarship cuts), shared.
+
+    Written as id lists, read back as ids plus fee_types [{id, name, kind}] for display.
+    """
+    monthly_categories = serializers.PrimaryKeyRelatedField(
+        many=True, required=False, queryset=MonthlyFeeCategory.objects.all(),
+    )
+    annual_categories = serializers.PrimaryKeyRelatedField(
+        many=True, required=False, queryset=AnnualFeeCategory.objects.all(),
+    )
+    fee_types = serializers.SerializerMethodField()
+
+    def get_fee_types(self, obj):
+        return (
+            [{'id': c.id, 'name': c.name, 'kind': 'MONTHLY'} for c in obj.monthly_categories.all()]
+            + [{'id': c.id, 'name': c.name, 'kind': 'ANNUAL'} for c in obj.annual_categories.all()]
+        )
+
+    def _validate_categories(self, attrs):
+        school_id = _serializer_school_id(self)
+        for field in ('monthly_categories', 'annual_categories'):
+            for category in attrs.get(field) or []:
+                if school_id and category.school_id != school_id:
+                    raise serializers.ValidationError({field: 'Fee category does not belong to your school.'})
+        return attrs
+
+
+class DiscountSerializer(_FeeTypeTargets):
     """Full CRUD serializer for Discount model."""
     discount_type_display = serializers.CharField(
         source='get_discount_type_display', read_only=True
@@ -806,6 +917,7 @@ class DiscountSerializer(serializers.ModelSerializer):
             'target_class', 'target_class_name',
             'start_date', 'end_date', 'is_active',
             'max_uses', 'stackable', 'usage_count',
+            'monthly_categories', 'annual_categories', 'fee_types',
             'created_at', 'updated_at',
         ]
         read_only_fields = ['id', 'school', 'created_at', 'updated_at']
@@ -838,10 +950,10 @@ class DiscountSerializer(serializers.ModelSerializer):
             if academic_year and academic_year.school_id != school_id:
                 raise serializers.ValidationError({'academic_year': 'Academic year does not belong to your school.'})
 
-        return attrs
+        return self._validate_categories(attrs)
 
 
-class ScholarshipSerializer(serializers.ModelSerializer):
+class ScholarshipSerializer(_FeeTypeTargets):
     """Full CRUD serializer for Scholarship model."""
     scholarship_type_display = serializers.CharField(
         source='get_scholarship_type_display', read_only=True
@@ -863,6 +975,7 @@ class ScholarshipSerializer(serializers.ModelSerializer):
             'coverage', 'coverage_display',
             'value', 'max_recipients', 'is_active',
             'recipient_count',
+            'monthly_categories', 'annual_categories', 'fee_types',
             'created_at', 'updated_at',
         ]
         read_only_fields = ['id', 'school', 'created_at', 'updated_at']
@@ -875,7 +988,7 @@ class ScholarshipSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError(
                     {'value': 'Percentage value must be between 0 and 100.'}
                 )
-        return attrs
+        return self._validate_categories(attrs)
 
 
 class StudentDiscountSerializer(serializers.ModelSerializer):

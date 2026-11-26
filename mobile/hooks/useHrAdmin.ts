@@ -4,6 +4,7 @@ import { listOf } from '../services/academicYear';
 import type { Department, Designation, HrStats, LeavePolicy, Qualification, StaffDocument, StaffRow } from '../services/hrAdmin';
 import { canSearchUsers, type LinkCandidate } from '../services/staffAccounts';
 import { useScopedPagedQuery, useScopedQuery } from './useScopedQuery';
+import { REFERENCE_STALE_MS } from '../services/queryRules';
 
 // Names, phone numbers and documents stay in memory only (not a persisted root). Every write
 // refreshes the lists and the dashboard counts that depend on it.
@@ -37,11 +38,13 @@ export function useStaffPicker() {
 }
 
 export function useDepartments() {
-  return useScopedQuery('hrDepartments', ['list'], async () => listOf<Department>((await hrApi.getDepartments({ page_size: 9999 })).data));
+  return useScopedQuery('hrDepartments', ['list'], async () => listOf<Department>((await hrApi.getDepartments({ page_size: 9999 })).data),
+    { staleTime: REFERENCE_STALE_MS });
 }
 
 export function useDesignations() {
-  return useScopedQuery('hrDesignations', ['list'], async () => listOf<Designation>((await hrApi.getDesignations({ page_size: 9999 })).data));
+  return useScopedQuery('hrDesignations', ['list'], async () => listOf<Designation>((await hrApi.getDesignations({ page_size: 9999 })).data),
+    { staleTime: REFERENCE_STALE_MS });
 }
 
 export function useLeavePolicyList() {
@@ -81,7 +84,6 @@ export function useHrActions() {
     createQualification: useWrite((d: object) => hrApi.createQualification(d)),
     updateQualification: useWrite(({ id, data }: { id: number; data: object }) => hrApi.updateQualification(id, data)),
     deleteQualification: useWrite((id: number) => hrApi.deleteQualification(id)),
-    createDocument: useWrite((f: FormData) => hrApi.createDocument(f)),
     updateDocument: useWrite(({ id, data }: { id: number; data: object }) => hrApi.updateDocument(id, data)),
     deleteDocument: useWrite((id: number) => hrApi.deleteDocument(id)),
   };

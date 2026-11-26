@@ -2,23 +2,29 @@ import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { sessionsApi } from '../../services/api';
 import { useScopedQuery } from '../../hooks/useScopedQuery';
-import { healthTiles, type SessionHealthReport } from '../../services/sessionHealth';
+import { healthTiles, pickSummary, type SessionHealthReport, type SessionSummary } from '../../services/sessionHealth';
 import Card from '../ui/Card';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
 
 // Retention, attendance, fee collection and pass rate for the year, plus the server's rule-based
 // notes. Shows nothing without a year, while loading, or when the report fails: it is a summary,
-// not a reason to block the dashboard. The AI-written summary stays on the web.
+// not a reason to block the dashboard. When the server can write an AI summary it is fetched after the
+// numbers (and cached there), so the card never waits on it; until then the rule-based notes show.
 export default function SessionHealthCard({ yearId, yearName }: { yearId: number | null | undefined; yearName?: string }) {
   const q = useScopedQuery<SessionHealthReport | null>('sessionHealth', [yearId], async () => {
     const r = (await sessionsApi.getSessionHealth({ academic_year: yearId })).data as SessionHealthReport;
     return r?.success ? r : null;
   }, { enabled: !!yearId, staleTime: 5 * 60_000, retry: false });
+  const aiAvailable = !!q.data?.ai_summary_available;
+  const ai = useScopedQuery<SessionSummary | null>('sessionHealthAI', [yearId], async () =>
+    ((await sessionsApi.getSessionHealthAISummary({ academic_year: yearId })).data as { ai_summary?: SessionSummary })?.ai_summary ?? null,
+  { enabled: !!yearId && aiAvailable, staleTime: 30 * 60_000, retry: false });
   const report = q.data;
   if (!report) return null;
 
   const tiles = healthTiles(report);
-  const s = report.ai_summary;
+  const s = pickSummary(ai.data, report.ai_summary);
+  const writing = aiAvailable && ai.isLoading;
   const groups: Array<{ title: string; items?: string[]; color: string }> = [
     { title: 'Highlights', items: s?.highlights, color: Colors.success },
     { title: 'Concerns', items: s?.concerns, color: Colors.warning },
@@ -27,7 +33,10 @@ export default function SessionHealthCard({ yearId, yearName }: { yearId: number
 
   return (
     <View>
-      <Text style={styles.section}>Session health{yearName ? `: ${yearName}` : ''}</Text>
+      <View style={styles.head}>
+        <Text style={styles.section}>Session health{yearName ? `: ${yearName}` : ''}</Text>
+        {s?.source === 'ai' ? <Text style={styles.badge}>AI summary</Text> : writing ? <Text style={styles.writing}>Writing AI summary...</Text> : null}
+      </View>
       <View style={styles.grid}>
         {tiles.map((t) => (
           <View key={t.label} style={styles.tile}>
@@ -52,6 +61,9 @@ export default function SessionHealthCard({ yearId, yearName }: { yearId: number
 }
 
 const styles = StyleSheet.create({
+  head: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: Spacing.sm },
+  badge: { fontSize: FontSize.xs, fontWeight: '700', color: Colors.primary, backgroundColor: Colors.infoLight, paddingHorizontal: Spacing.sm, paddingVertical: 2, borderRadius: BorderRadius.full, marginTop: Spacing.xl, marginBottom: Spacing.md },
+  writing: { fontSize: FontSize.xs, color: Colors.textTertiary, marginTop: Spacing.xl, marginBottom: Spacing.md },
   section: { fontSize: FontSize.lg, fontWeight: '600', color: Colors.text, marginTop: Spacing.xl, marginBottom: Spacing.md },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.md },
   tile: { width: '47%', backgroundColor: Colors.surface, borderRadius: BorderRadius.md, padding: Spacing.md },

@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import type { Q } from './types';
-import { View, Text, FlatList, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import { useStudentFees } from '../../hooks/useStudentPortal';
 import { useRefreshControl } from '../../hooks/useRefreshControl';
 import { defaultFeeYear, feeTotals, feeYears, filterFeesByYear, sortFees, type FeeYear, type PortalFee } from '../../services/studentPortal';
@@ -13,6 +13,7 @@ import SegmentedTabs from '../ui/SegmentedTabs';
 import StatusPill from '../ui/StatusPill';
 import KuickpayReceivedLabel from '../finance/KuickpayReceivedLabel';
 import { Colors, FontSize, Spacing } from '../../constants/colors';
+import AppList from '../ui/AppList';
 
 // The student's own fee ledger. Paying happens at school: no payment gateway is live.
 export function FeesView({ query, header }: { query: Q<PortalFee[]>; header?: React.ReactNode }) {
@@ -28,7 +29,7 @@ export function FeesView({ query, header }: { query: Q<PortalFee[]>; header?: Re
   if (query.isError && !query.data) return <ErrorState error={query.error} onRetry={() => query.refetch()} />;
 
   return (
-    <FlatList
+    <AppList
       style={styles.container}
       contentContainerStyle={styles.content}
       data={rows}

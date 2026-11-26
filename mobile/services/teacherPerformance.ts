@@ -2,6 +2,7 @@
 // frontend/src/pages/hr/teacherPerformance/shared.js). No React or native imports, so Jest covers them.
 
 import type { Tone } from '../components/ui/StatusPill';
+import { monthLong } from './dates';
 
 export interface Band { key: string; label: string }
 export interface MissedItem {
@@ -50,7 +51,7 @@ export function monthRange(offset = 0, today: Date = new Date()): { start: strin
   const first = new Date(today.getFullYear(), today.getMonth() + offset, 1);
   const last = new Date(first.getFullYear(), first.getMonth() + 1, 0);
   const iso = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-  const label = first.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
+  const label = monthLong(first);
   return { start: iso(first), end: iso(last), label };
 }
 

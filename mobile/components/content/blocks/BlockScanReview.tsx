@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
-import { Image, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
+import { Image } from 'expo-image';
 import Button from '../../ui/Button';
 import PaperPhotoViewer from '../PaperPhotoViewer';
 import { usePictureLookups } from '../../../hooks/useBlockPaper';
@@ -56,7 +57,7 @@ export default function BlockScanReview({ result, photos, registry, busy, onAcce
                 {pictures.map((p, i) => {
                   const uri = thumbUrl(p?.image);
                   // eslint-disable-next-line react/no-array-index-key -- a block may use one picture twice
-                  return uri ? <Image key={i} source={{ uri }} style={styles.thumb} resizeMode="contain" accessibilityLabel={p?.label} />
+                  return uri ? <Image key={i} source={{ uri }} style={styles.thumb} contentFit="contain" accessibilityLabel={p?.label} />
                     : <Text key={i} style={styles.missing}>{p?.label || 'picture'}</Text>;
                 })}
               </View>
@@ -88,8 +89,8 @@ const styles = StyleSheet.create({
   card: { backgroundColor: Colors.surfaceSecondary, borderRadius: BorderRadius.sm, padding: Spacing.sm, gap: Spacing.xs },
   off: { opacity: 0.5 },
   thumbs: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
-  thumb: { width: 40, height: 40, backgroundColor: '#fff', borderRadius: 4, borderWidth: 1, borderColor: Colors.border },
-  missing: { minWidth: 40, height: 40, paddingHorizontal: 4, fontSize: 10, color: Colors.textSecondary, borderWidth: 1, borderStyle: 'dashed', borderColor: Colors.textTertiary, borderRadius: 4, textAlignVertical: 'center' },
+  thumb: { width: 40, height: 40, backgroundColor: Colors.surface, borderRadius: 4, borderWidth: 1, borderColor: Colors.border },
+  missing: { minWidth: 40, height: 40, paddingHorizontal: 4, fontSize: FontSize.xxs, color: Colors.textSecondary, borderWidth: 1, borderStyle: 'dashed', borderColor: Colors.textTertiary, borderRadius: 4, textAlignVertical: 'center' },
   link: { fontSize: FontSize.sm, color: Colors.primary },
   notes: { backgroundColor: Colors.warningLight, borderRadius: BorderRadius.sm, padding: Spacing.sm, gap: 2 },
   noteTitle: { fontSize: FontSize.sm, fontWeight: '600', color: Colors.warningText },

@@ -22,6 +22,16 @@ export const COVERAGES = [
   { value: 'FULL', label: 'Full fee waiver' }, { value: 'PERCENTAGE', label: 'Percentage off' }, { value: 'FIXED', label: 'Fixed amount off' },
 ] as const;
 
+export interface FeeTypeRef { id: number; name: string; kind: 'MONTHLY' | 'ANNUAL' }
+
+// "On: Tuition, Transport", or the warning a discount with no fees picked deserves.
+export function feeTypesText(feeTypes?: FeeTypeRef[] | null): string {
+  return feeTypes && feeTypes.length ? `On: ${feeTypes.map((f) => f.name).join(', ')}` : 'No fees picked: not applied';
+}
+
+const NO_FEES = 'Pick at least one fee it applies to.';
+const hasFees = (f: { monthlyFees: number[]; annualFees: number[] }) => f.monthlyFees.length + f.annualFees.length > 0;
+
 export interface Discount {
   id: number;
   name: string;
@@ -39,6 +49,10 @@ export interface Discount {
   max_uses?: number | null;
   stackable?: boolean;
   usage_count?: number;
+  // Which fees it cuts (per fee type, 2026-11-26). None = it reduces no bill.
+  monthly_categories?: number[];
+  annual_categories?: number[];
+  fee_types?: FeeTypeRef[];
 }
 
 export interface Scholarship {
@@ -53,6 +67,10 @@ export interface Scholarship {
   is_active: boolean;
   recipient_count?: number;
   academic_year?: number | null;
+  // Which fees it cuts (per fee type, 2026-11-26). None = it reduces no bill.
+  monthly_categories?: number[];
+  annual_categories?: number[];
+  fee_types?: FeeTypeRef[];
 }
 
 export interface StudentDiscount {
@@ -112,11 +130,13 @@ export interface DiscountForm {
   maxUses: string;
   stackable: boolean;
   isActive: boolean;
+  monthlyFees: number[];
+  annualFees: number[];
 }
 
 export const emptyDiscountForm = (): DiscountForm => ({
   name: '', type: 'PERCENTAGE', value: '', appliesTo: 'ALL', gradeLevel: '', targetClass: null,
-  startDate: '', endDate: '', maxUses: '', stackable: false, isActive: true,
+  startDate: '', endDate: '', maxUses: '', stackable: false, isActive: true, monthlyFees: [], annualFees: [],
 });
 
 export const discountToForm = (d: Discount): DiscountForm => ({
@@ -124,6 +144,7 @@ export const discountToForm = (d: Discount): DiscountForm => ({
   gradeLevel: d.target_grade_level != null ? String(d.target_grade_level) : '', targetClass: d.target_class ?? null,
   startDate: d.start_date ?? '', endDate: d.end_date ?? '', maxUses: d.max_uses != null ? String(d.max_uses) : '',
   stackable: !!d.stackable, isActive: d.is_active,
+  monthlyFees: d.monthly_categories ?? [], annualFees: d.annual_categories ?? [],
 });
 
 export function validateDiscount(f: DiscountForm): string | null {
@@ -134,6 +155,7 @@ export function validateDiscount(f: DiscountForm): string | null {
   if (f.appliesTo === 'CLASS' && !f.targetClass) return 'Choose the class.';
   if (f.startDate && f.endDate && f.endDate < f.startDate) return 'The end date is before the start date.';
   if (f.maxUses.trim() && !/^\d+$/.test(f.maxUses.trim())) return 'Maximum uses must be a whole number.';
+  if (!hasFees(f)) return NO_FEES;
   return null;
 }
 
@@ -150,6 +172,8 @@ export function buildDiscountPayload(f: DiscountForm, academicYearId?: number | 
     max_uses: f.maxUses.trim() ? Number(f.maxUses) : null,
     stackable: f.stackable,
     is_active: f.isActive,
+    monthly_categories: f.monthlyFees,
+    annual_categories: f.annualFees,
     ...(academicYearId ? { academic_year: academicYearId } : {}),
   };
 }
@@ -164,15 +188,19 @@ export interface ScholarshipForm {
   value: string;
   maxRecipients: string;
   isActive: boolean;
+  monthlyFees: number[];
+  annualFees: number[];
 }
 
 export const emptyScholarshipForm = (): ScholarshipForm => ({
   name: '', description: '', type: 'MERIT', coverage: 'FULL', value: '', maxRecipients: '', isActive: true,
+  monthlyFees: [], annualFees: [],
 });
 
 export const scholarshipToForm = (s: Scholarship): ScholarshipForm => ({
   name: s.name, description: s.description ?? '', type: s.scholarship_type, coverage: s.coverage,
   value: s.coverage === 'FULL' ? '' : String(num(s.value)), maxRecipients: s.max_recipients != null ? String(s.max_recipients) : '', isActive: s.is_active,
+  monthlyFees: s.monthly_categories ?? [], annualFees: s.annual_categories ?? [],
 });
 
 export function validateScholarship(f: ScholarshipForm): string | null {
@@ -182,6 +210,7 @@ export function validateScholarship(f: ScholarshipForm): string | null {
     if (f.coverage === 'PERCENTAGE' && Number(f.value) > 100) return 'A percentage must be between 0 and 100.';
   }
   if (f.maxRecipients.trim() && !/^\d+$/.test(f.maxRecipients.trim())) return 'Maximum recipients must be a whole number.';
+  if (!hasFees(f)) return NO_FEES;
   return null;
 }
 
@@ -195,6 +224,8 @@ export function buildScholarshipPayload(f: ScholarshipForm, academicYearId?: num
     value: f.coverage === 'FULL' ? 0 : Number(f.value),
     max_recipients: f.maxRecipients.trim() ? Number(f.maxRecipients) : null,
     is_active: f.isActive,
+    monthly_categories: f.monthlyFees,
+    annual_categories: f.annualFees,
     ...(academicYearId ? { academic_year: academicYearId } : {}),
   };
 }

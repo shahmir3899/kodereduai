@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, FlatList, TouchableOpacity, StyleSheet, type RefreshControlProps } from 'react-native';
+import { View, Text, StyleSheet, type RefreshControlProps } from 'react-native';
 import { useInsight } from '../../hooks/useInsights';
 import { useRefreshControl } from '../../hooks/useRefreshControl';
 import { cachedText, INSIGHT_TABS, SEVERITY_TONE, summaryText, type InsightKind, type InsightRow } from '../../services/insights';
@@ -9,9 +9,10 @@ import Card from '../ui/Card';
 import Skeleton from '../ui/Skeleton';
 import ErrorState from '../ui/ErrorState';
 import EmptyState from '../ui/EmptyState';
-import StatusPill from '../ui/StatusPill';
 import FormSheet from '../inventory/FormSheet';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
+import AppList from '../ui/AppList';
+import RecordCard from '../ui/RecordCard';
 
 // Read-only risk cards for admin and principal. Each tab shows the last scan (kept ten minutes);
 // "Run a new scan" asks the server again. Students and staff are named, so this stays on the phone
@@ -43,7 +44,7 @@ export default function InsightsScreen() {
 
   return (
     <View style={styles.container}>
-      <FlatList
+      <AppList
         contentContainerStyle={styles.content}
         data={s?.rows ?? []}
         keyExtractor={(r) => String(r.id)}
@@ -51,13 +52,13 @@ export default function InsightsScreen() {
         ListHeaderComponent={header}
         ListEmptyComponent={<EmptyState title="Nobody at risk" message="No one is flagged in this scan." />}
         renderItem={({ item: r }) => (
-          <TouchableOpacity accessibilityRole="button" style={styles.row} onPress={() => setOpen(r)}>
-            <View style={styles.who}>
-              <Text style={styles.name} numberOfLines={1}>{r.name}</Text>
-              <Text style={styles.sub} numberOfLines={1}>{[r.subtitle, r.headline].filter(Boolean).join('  ·  ')}</Text>
-            </View>
-            {r.severity ? <StatusPill label={r.severity} tone={SEVERITY_TONE[r.severity]} /> : null}
-          </TouchableOpacity>
+          <RecordCard
+            avatarName={r.name}
+            title={r.name}
+            subtitle={[r.subtitle, r.headline].filter(Boolean).join('  ·  ') || undefined}
+            status={r.severity ? { label: r.severity, tone: SEVERITY_TONE[r.severity] } : undefined}
+            onPress={() => setOpen(r)}
+          />
         )}
       />
 
@@ -80,8 +81,6 @@ const styles = StyleSheet.create({
   content: { padding: Spacing.lg, paddingBottom: Spacing.xxxl },
   summary: { fontSize: FontSize.md, fontWeight: '600', color: Colors.text },
   gap: { height: Spacing.md },
-  row: { flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.surface, borderRadius: BorderRadius.md, padding: Spacing.md, marginTop: Spacing.sm, gap: Spacing.md },
-  who: { flex: 1 },
   name: { fontSize: FontSize.md, fontWeight: '600', color: Colors.text },
   sub: { fontSize: FontSize.sm, color: Colors.textSecondary, marginTop: 2 },
   detail: { gap: Spacing.xs },

@@ -1966,9 +1966,47 @@ class AssignmentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
         data['teacher'] = teacher
         return data
 
+    def _data_with_default_teacher(self):
+        """The request body with `teacher` filled when the caller left it out.
+
+        The web's Daily Diary never sent a teacher, so every diary was refused with "teacher:
+        required". A teacher writes as themselves (the phone already sends their own staff id);
+        anyone else gets the subject's assigned teacher, refused when that is not exactly one
+        person, the same rule a manager's drafts use.
+        """
+        data = self.request.data
+        if data.get('teacher') not in (None, ''):
+            return data
+        data = data.copy()
+        if get_effective_role(self.request) == 'TEACHER':
+            staff = getattr(self.request.user, 'staff_profile', None)
+            if staff is None:
+                raise ValidationError({'teacher': 'Your account is not linked to a staff record.'})
+            data['teacher'] = staff.id
+            return data
+        class_obj, subject = data.get('class_obj'), data.get('subject')
+        if not class_obj or not subject:
+            return data  # the serializer reports the missing fields
+        from academic_sessions.models import AcademicYear
+        from lms.assignment_rules import resolve_subject_teacher
+        school_id = ensure_tenant_school_id(self.request) or self.request.user.school_id
+        year = data.get('academic_year')
+        if not year:
+            current = AcademicYear.objects.filter(school_id=school_id, is_current=True, is_active=True).first()
+            year = current.id if current else None
+        section = data.get('session_class') or None
+        teacher, problem = resolve_subject_teacher(school_id, year, int(class_obj), int(subject), int(section) if section else None)
+        if problem:
+            raise ValidationError({'teacher': problem})
+        data['teacher'] = teacher
+        return data
+
     def create(self, request, *args, **kwargs):
         if not self._is_manager():
-            return super().create(request, *args, **kwargs)
+            serializer = self.get_serializer(data=self._data_with_default_teacher())
+            serializer.is_valid(raise_exception=True)
+            self.perform_create(serializer)
+            return Response(serializer.data, status=status.HTTP_201_CREATED, headers=self.get_success_headers(serializer.data))
         serializer = self.get_serializer(data=self._manager_data())
         serializer.is_valid(raise_exception=True)
         self.perform_create(serializer)

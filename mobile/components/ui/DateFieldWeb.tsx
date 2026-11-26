@@ -28,7 +28,7 @@ export default function DateField({ label, value, onChange, error, minimumDate, 
         max: maximumDate ? format(maximumDate, 'yyyy-MM-dd') : undefined,
         onChange: (e: { target: { value: string } }) => { if (e.target.value) onChange(e.target.value); },
         style: {
-          padding: 12, fontSize: 15, borderRadius: BorderRadius.md, backgroundColor: Colors.surface,
+          padding: Spacing.md, fontSize: FontSize.md, borderRadius: BorderRadius.md, backgroundColor: Colors.surface,
           border: `1px solid ${error ? Colors.error : Colors.border}`, color: Colors.text,
         },
       })}

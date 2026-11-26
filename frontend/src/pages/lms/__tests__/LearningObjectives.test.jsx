@@ -4,22 +4,24 @@ import userEvent from '@testing-library/user-event'
 import LessonPlanWizard from '../LessonPlanWizard'
 import { render } from '@testing-library/react'
 
+const QUERY_RESULTS = vi.hoisted(() => ({
+  classSubjects: { data: { data: { results: [{ id: 1, subject: 1, subject_name: 'Science' }] } }, isLoading: false },
+  hrStaffTeachers: { data: { data: { results: [{ id: 1, full_name: 'Teacher One' }] } }, isLoading: false },
+  booksForClassSubject: { data: { data: [] }, isLoading: false },
+  emptyList: { data: { data: [] }, isLoading: false, isError: false },
+  none: { data: undefined, isLoading: false },
+  sessionClasses: { sessionClasses: [{ id: 101, class_obj: 1 }] },
+}))
+
 vi.mock('@tanstack/react-query', () => ({
   useQueryClient: () => ({ invalidateQueries: vi.fn() }),
   useQuery: ({ queryKey }) => {
     const key = Array.isArray(queryKey) ? queryKey[0] : queryKey
-    if (key === 'classSubjects') {
-      return { data: { data: { results: [{ id: 1, subject: 1, subject_name: 'Science' }] } }, isLoading: false }
-    }
-    if (key === 'hrStaffTeachers') {
-      return { data: { data: { results: [{ id: 1, full_name: 'Teacher One' }] } }, isLoading: false }
-    }
-    if (key === 'booksForClassSubject') {
-      return { data: { data: [] }, isLoading: false }
-    }
-    return { data: undefined, isLoading: false }
+    // Same object every call, as React Query does: a fresh object per render re-ran the wizard's
+    // effects forever and the test worker ran out of memory.
+    return QUERY_RESULTS[key] || QUERY_RESULTS.none
   },
-  useQueries: ({ queries }) => (queries || []).map(() => ({ data: { data: [] }, isLoading: false, isError: false })),
+  useQueries: ({ queries }) => (queries || []).map(() => QUERY_RESULTS.emptyList),
   useMutation: () => ({
     mutate: vi.fn(),
     mutateAsync: vi.fn().mockResolvedValue({ data: { id: 999 } }),
@@ -40,7 +42,7 @@ vi.mock('../../../components/Toast', () => ({
 }))
 
 vi.mock('../../../hooks/useSessionClasses', () => ({
-  useSessionClasses: () => ({ sessionClasses: [{ id: 101, class_obj: 1 }] }),
+  useSessionClasses: () => QUERY_RESULTS.sessionClasses, // stable, like the real (memoised) hook
 }))
 
 vi.mock('../../../utils/classScope', () => ({
@@ -60,12 +62,13 @@ vi.mock('../../../components/ClassSelector', () => ({
 }))
 
 vi.mock('../LessonPlanAIModal', () => ({
-  default: function MockLessonPlanAIModal({ isOpen, onAccept }) {
-    if (!isOpen) return null
+  // Same props as the real modal (`open`, `onApply`; renamed from isOpen / onAccept).
+  default: function MockLessonPlanAIModal({ open, onApply }) {
+    if (!open) return null
     return (
       <button
         type="button"
-        onClick={() => onAccept({ objectives: '- Obj 1\n- Obj 2\n- Obj 3', title: 'AI Plan' })}
+        onClick={() => onApply({ objectives: '- Obj 1\n- Obj 2\n- Obj 3', title: 'AI Plan' })}
       >
         Apply AI Draft
       </button>

@@ -23,6 +23,7 @@ import {
   resolveClassIdToMasterClassId,
 } from '../../utils/classScope'
 import Button from '../../components/ui/Button'
+import VoucherModal from './VoucherModal'
 import useResetStaleClassFilter from '../../hooks/useResetStaleClassFilter'
 import { useDebounce } from '../../hooks/useDebounce'
 
@@ -62,6 +63,7 @@ export default function FeeCollectPage() {
   // Modal state
   const [showPaymentModal, setShowPaymentModal] = useState(null)
   const [showGenerateModal, setShowGenerateModal] = useState(false)
+  const [showVoucherModal, setShowVoucherModal] = useState(false)
   const [showCreateFeeModal, setShowCreateFeeModal] = useState(false)
 
   // Form state
@@ -233,6 +235,25 @@ export default function FeeCollectPage() {
     if (ok) data.deleteFeePaymentMutation.mutate(id)
   }
 
+  // Vouchers follow what is on screen: selected rows first, else the rows a search/status filter
+  // left, else the whole class (sent as a class scope so a big class does not mean a huge URL).
+  const voucherStudentIds = useMemo(() => {
+    const idOf = (p) => p.student || p.student_id
+    if (selectedIds.size > 0) {
+      return [...new Set(data.paymentList.filter((p) => selectedIds.has(p.id)).map(idOf).filter(Boolean))]
+    }
+    if (searchQuery || statusFilter) {
+      return [...new Set(data.paymentList.map(idOf).filter(Boolean))]
+    }
+    return null
+  }, [selectedIds, data.paymentList, searchQuery, statusFilter])
+
+  const voucherScopeParams = useMemo(() => ({
+    ...(resolvedClassFilter && { class_id: resolvedClassFilter }),
+    ...(selectedSessionClassId && { session_class_id: selectedSessionClassId }),
+    ...(activeAcademicYear?.id && { academic_year: activeAcademicYear.id }),
+  }), [resolvedClassFilter, selectedSessionClassId, activeAcademicYear?.id])
+
   const handleExportPDF = async () => {
     const { exportFeePDF } = await import('./feeExport')
     await exportFeePDF({
@@ -270,6 +291,13 @@ export default function FeeCollectPage() {
           )}
           {/* Always rendered (disabled while empty): mounting it only after the records load shifted the
               right-aligned buttons to the left, so an early click on "Generate Single Fee Record" hit its neighbour. */}
+          <Button
+            variant="secondary"
+            onClick={() => setShowVoucherModal(true)}
+            disabled={data.paymentList.length === 0}
+          >
+            Print Vouchers
+          </Button>
           <button
             onClick={handleExportPDF}
             disabled={data.paymentList.length === 0}
@@ -308,6 +336,19 @@ export default function FeeCollectPage() {
         onFilterUnpaid={() => setStatusFilter(statusFilter === 'UNPAID' ? '' : 'UNPAID')}
         onFilterPaid={() => setStatusFilter(statusFilter === 'PAID' ? '' : 'PAID')}
       />
+
+      {showVoucherModal && (
+        <VoucherModal
+          open
+          onClose={() => setShowVoucherModal(false)}
+          month={month}
+          year={year}
+          studentIds={voucherStudentIds}
+          scopeParams={voucherScopeParams}
+          scopeLabel={selectedClassLabel}
+          canEditSettings={canManageFeeRecords}
+        />
+      )}
 
       {/* Fee Table */}
       <FeeTable

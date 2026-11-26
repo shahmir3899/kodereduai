@@ -347,7 +347,13 @@ class AdmissionEnquiryViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.M
                                         monthly_category_id=monthly_category_id,
                                         academic_year_id=academic_year.id,
                                     )
-                                    if amount is None and ft in ('MONTHLY', 'ANNUAL'):
+                                    # No discounts here: a student converted this moment has no discount
+                                    # or scholarship assigned yet (they are assigned afterwards).
+                                    from finance import optional_fees
+                                    generation_category = optional_fees.category_for(ft, annual_category_id, monthly_category_id)
+                                    # An enrolled-only category (e.g. Robotics) must never take the
+                                    # uncategorised tuition amount below; a new student is not enrolled yet.
+                                    if amount is None and ft in ('MONTHLY', 'ANNUAL') and not optional_fees.is_enrolled_only(generation_category):
                                         # Backward compatibility: allow legacy uncategorized structures
                                         # as source amount, but always create categorized fee records.
                                         amount = resolve_fee_amount(student, ft, academic_year_id=academic_year.id)

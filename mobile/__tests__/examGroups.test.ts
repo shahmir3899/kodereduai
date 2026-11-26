@@ -1,5 +1,5 @@
 import {
-  buildDateSheetEntry, canAnnounce, groupProgress, progressText, progressTone, resultsReplyText, scheduleReplyText, shortTime, sortRows,
+  buildDateSheetEntry, canAnnounce, periodEdgeTrims, groupProgress, progressText, progressTone, resultsReplyText, scheduleReplyText, shortTime, sortRows,
   subjectsInSheet, toRows, unscheduledCount, validateDateSheetEdit, type DateSheetSubjectDto, type GroupExam,
 } from '../services/examGroups';
 
@@ -93,5 +93,29 @@ describe('date sheet edit', () => {
   it('sends null for anything cleared', () => {
     expect(buildDateSheetEntry(11, { date: '', start: '', end: '' })).toEqual({ exam_subject_id: 11, exam_date: null, start_time: null, end_time: null });
     expect(buildDateSheetEntry(11, { date: '2026-11-03', start: '09:00', end: '' })).toEqual({ exam_subject_id: 11, exam_date: '2026-11-03', start_time: '09:00', end_time: null });
+  });
+});
+
+describe('trimming the exam period', () => {
+  const row = (date: string) => ({ examSubjectId: 1, subject: 'Maths', className: 'Grade 1', date, start: '', end: '' });
+
+  it('offers both edges when nothing is scheduled on them', () => {
+    expect(periodEdgeTrims('2026-12-01', '2026-12-05', [row('2026-12-03')]))
+      .toEqual({ first: { start_date: '2026-12-02' }, last: { end_date: '2026-12-04' } });
+  });
+
+  it('keeps an edge that has a subject on it', () => {
+    const t = periodEdgeTrims('2026-12-01', '2026-12-05', [row('2026-12-01'), row('')]);
+    expect(t.first).toBeNull();
+    expect(t.last).toEqual({ end_date: '2026-12-04' });
+  });
+
+  it('never trims a one-day or missing period', () => {
+    expect(periodEdgeTrims('2026-12-01', '2026-12-01', [])).toEqual({ first: null, last: null });
+    expect(periodEdgeTrims(null, '2026-12-01', [])).toEqual({ first: null, last: null });
+  });
+
+  it('crosses a month end', () => {
+    expect(periodEdgeTrims('2026-11-30', '2026-12-01', []).first).toEqual({ start_date: '2026-12-01' });
   });
 });

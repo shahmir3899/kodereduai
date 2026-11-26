@@ -4,9 +4,9 @@ import {
   Text,
   StyleSheet,
   ScrollView,
-  Image,
   TouchableOpacity,
 } from 'react-native';
+import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import {
   COVERAGE_FILTERS, COVERAGE_LABEL, COVERAGE_TONE, POLL_LIMIT, POLL_MS, PORTRAIT_TIPS, buildEnrollPayload, coverageLine, coverageSummaryLine, duplicateOf,
@@ -29,7 +29,7 @@ import ErrorState from '../../../components/ui/ErrorState';
 import { useToast } from '../../../components/ui/Toast';
 import { confirm } from '../../../components/ui/confirm';
 import EmptyState from '../../../components/ui/EmptyState';
-import { Colors, FontSize, Spacing, BorderRadius } from '../../../constants/colors';
+import { Colors, FontSize, Spacing, BorderRadius, GlyphSize } from '../../../constants/colors';
 
 interface Student {
   id: number;
@@ -354,7 +354,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  removePhotoText: { color: Colors.textInverse, fontSize: 14, fontWeight: '700' },
+  removePhotoText: { color: Colors.textInverse, fontSize: FontSize.sm, fontWeight: '700' },
   photoButtons: { alignItems: 'stretch', gap: Spacing.sm, alignSelf: 'stretch' },
   tip: { fontSize: FontSize.sm, color: Colors.textSecondary, marginTop: Spacing.xs },
   coverRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, paddingVertical: Spacing.sm, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: Colors.border, minHeight: 52 },
@@ -371,7 +371,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  thumbPlaceholderText: { fontSize: 20 },
+  thumbPlaceholderText: { fontSize: GlyphSize.sm },
   enrollmentInfo: { flex: 1 },
   enrollmentName: { fontSize: FontSize.sm, fontWeight: '500', color: Colors.text },
   enrollmentRoll: { fontSize: FontSize.xs, color: Colors.textSecondary, marginTop: 2 },
@@ -384,5 +384,5 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  deleteBtnText: { color: Colors.error, fontSize: 14, fontWeight: '600' },
+  deleteBtnText: { color: Colors.error, fontSize: FontSize.sm, fontWeight: '600' },
 });

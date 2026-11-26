@@ -9,7 +9,7 @@ import Skeleton from '../ui/Skeleton';
 import ErrorState from '../ui/ErrorState';
 import Card from '../ui/Card';
 import StatusPill from '../ui/StatusPill';
-import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
+import { Colors, FontSize, Spacing, BorderRadius, GlyphSize } from '../../constants/colors';
 
 const COLORS: Record<AttendanceCode, string> = {
   PRESENT: Colors.success, ABSENT: Colors.error, LATE: Colors.warning, LEAVE: Colors.info,
@@ -96,7 +96,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
   content: { padding: Spacing.lg },
   nav: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: Spacing.md },
-  arrow: { fontSize: 28, color: Colors.primary, paddingHorizontal: Spacing.md },
+  arrow: { fontSize: GlyphSize.lg, color: Colors.primary, paddingHorizontal: Spacing.md },
   off: { color: Colors.textTertiary },
   title: { fontSize: FontSize.lg, fontWeight: '700', color: Colors.text },
   summary: { padding: Spacing.md, marginBottom: Spacing.lg },

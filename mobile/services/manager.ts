@@ -3,6 +3,7 @@ import type { NavGroup } from '../navigation/navConfig';
 import type { TimetableEntry } from './teacher';
 import { listOf } from './academicYear';
 import { normalizeNotification, type NotificationRecord } from './notificationMeta';
+import { monthLong } from './dates';
 
 // Pure helpers for the Manager screens (read-only academics + content). No React imports so
 // Jest can load it.
@@ -115,7 +116,7 @@ export function calendarItems(days: CalendarDay[]): CalendarItem[] {
 }
 
 export function monthTitle(year: number, month: number): string {
-  return new Date(year, month - 1, 1).toLocaleString('en-US', { month: 'long', year: 'numeric' });
+  return monthLong(new Date(year, month - 1, 1));
 }
 
 export function shiftMonth(year: number, month: number, delta: number): { year: number; month: number } {

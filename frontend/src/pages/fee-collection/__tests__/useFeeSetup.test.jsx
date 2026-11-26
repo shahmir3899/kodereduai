@@ -16,7 +16,6 @@ vi.mock('../../../services/api', () => ({
     bulkSetFeeStructures: vi.fn(),
     bulkSetStudentFeeStructures: vi.fn(),
     generateMonthly: vi.fn(),
-    generateOnetimeFees: vi.fn(),
     generateAnnualFees: vi.fn(),
   },
   classesApi: {

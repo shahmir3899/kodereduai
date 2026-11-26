@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, FlatList, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
 import { useChildren, useLeaveActions, useLeaveRequests } from '../../hooks/useParent';
 import { useRefreshControl } from '../../hooks/useRefreshControl';
 import { apiErrorMessage, canCancelLeave, leaveBody, leaveDays, LEAVE_TONE, validateLeave, type LeaveForm } from '../../services/parentPortal';
@@ -17,6 +17,7 @@ import { useToast } from '../ui/Toast';
 import { confirm } from '../ui/confirm';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
 import { saveFailureMessage } from '../../services/errorKind';
+import AppList from '../ui/AppList';
 
 const blank = (student: number | null): LeaveForm => ({ student, start: todayString(), end: todayString(), reason: '', link: '' });
 
@@ -53,7 +54,7 @@ export default function LeaveScreen() {
 
   return (
     <View style={styles.container}>
-      <FlatList
+      <AppList
         data={rows}
         keyExtractor={(l) => String(l.id)}
         contentContainerStyle={styles.content}

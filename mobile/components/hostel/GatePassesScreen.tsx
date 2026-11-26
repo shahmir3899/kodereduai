@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { View, Text, FlatList, ActivityIndicator, StyleSheet, type RefreshControlProps } from 'react-native';
+import { View, Text, ActivityIndicator, StyleSheet, type RefreshControlProps } from 'react-native';
 import { useActiveAllocations, useGatePasses, useHostelActions } from '../../hooks/useHostel';
 import { useRefreshControl } from '../../hooks/useRefreshControl';
 import { todayString } from '../../services/attendanceEntry';
@@ -13,15 +13,15 @@ import Select from '../ui/Select';
 import Input from '../ui/Input';
 import DateField from '../ui/DateField';
 import Button from '../ui/Button';
-import Card from '../ui/Card';
 import Skeleton from '../ui/Skeleton';
 import ErrorState from '../ui/ErrorState';
 import EmptyState from '../ui/EmptyState';
-import StatusPill from '../ui/StatusPill';
 import { useToast } from '../ui/Toast';
 import { confirm } from '../ui/confirm';
 import FormSheet from '../inventory/FormSheet';
 import { Colors, FontSize, Spacing } from '../../constants/colors';
+import AppList from '../ui/AppList';
+import RecordCard from '../ui/RecordCard';
 
 // Gate passes: make one for a student who has a room, approve or reject it (with a remark), check the
 // student out and mark them back. Admin and principal only. The server calls a checked-out pass USED.
@@ -87,7 +87,7 @@ export default function GatePassesScreen() {
 
   return (
     <View style={styles.container}>
-      <FlatList
+      <AppList
         contentContainerStyle={styles.content}
         data={rows}
         keyExtractor={(p) => String(p.id)}
@@ -98,24 +98,25 @@ export default function GatePassesScreen() {
         ListEmptyComponent={<EmptyState title="No gate passes" message="No gate pass matches this view." />}
         ListFooterComponent={query.isFetchingNextPage ? <ActivityIndicator color={Colors.primary} style={{ margin: Spacing.lg }} /> : null}
         renderItem={({ item: p }) => (
-          <Card style={styles.card}>
-            <View style={styles.head}>
-              <Text style={styles.name}>{p.student_name}</Text>
-              <StatusPill label={PASS_STATUS_LABEL[p.status] ?? p.status_display ?? p.status} tone={PASS_STATUS_TONE[p.status] ?? 'neutral'} />
-            </View>
-            <Text style={styles.when}>{`${p.pass_type_display ?? p.pass_type}  ·  ${passLine(p)}`}</Text>
-            <Text style={styles.sub}>{`To ${p.going_to}${p.contact_at_destination ? `  ·  ${p.contact_at_destination}` : ''}`}</Text>
-            <Text style={styles.sub}>{p.reason}</Text>
-            {p.remarks ? <Text style={styles.sub}>{`Remark: ${p.remarks}`}</Text> : null}
-            {passActions(p.status).length > 0 ? (
-              <View style={styles.actions}>
-                {passActions(p.status).map((a) => (
-                  <Button key={a} title={PASS_ACTION_LABEL[a]} size="sm" variant={a === 'reject' ? 'danger' : a === 'approve' ? 'primary' : 'secondary'}
-                    style={styles.flex} loading={busy === p.id} disabled={busy !== null} onPress={() => act(p, a)} />
-                ))}
-              </View>
-            ) : null}
-          </Card>
+          <RecordCard
+            avatarName={p.student_name}
+            title={p.student_name}
+            status={{ label: PASS_STATUS_LABEL[p.status] ?? p.status_display ?? p.status, tone: PASS_STATUS_TONE[p.status] ?? 'neutral' }}
+            subtitle={`${p.pass_type_display ?? p.pass_type}  ·  ${passLine(p)}`}
+            meta={`To ${p.going_to}${p.contact_at_destination ? `  ·  ${p.contact_at_destination}` : ''}`}
+            footer={<>
+              <Text style={styles.sub}>{p.reason}</Text>
+              {p.remarks ? <Text style={styles.sub}>{`Remark: ${p.remarks}`}</Text> : null}
+              {passActions(p.status).length > 0 ? (
+                <View style={styles.actions}>
+                  {passActions(p.status).map((a) => (
+                    <Button key={a} title={PASS_ACTION_LABEL[a]} size="sm" variant={a === 'reject' ? 'danger' : a === 'approve' ? 'primary' : 'secondary'}
+                      style={styles.flex} loading={busy === p.id} disabled={busy !== null} onPress={() => act(p, a)} />
+                  ))}
+                </View>
+              ) : null}
+            </>}
+          />
         )}
       />
 
@@ -146,10 +147,6 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
   content: { padding: Spacing.lg, paddingBottom: Spacing.xxxl, gap: Spacing.sm },
   header: { gap: Spacing.md, marginBottom: Spacing.sm },
-  card: { gap: Spacing.xs },
-  head: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: Spacing.sm },
-  name: { flex: 1, fontSize: FontSize.md, fontWeight: '600', color: Colors.text },
-  when: { fontSize: FontSize.sm, color: Colors.primary, fontWeight: '500' },
   sub: { fontSize: FontSize.sm, color: Colors.textSecondary },
   actions: { flexDirection: 'row', gap: Spacing.sm, marginTop: Spacing.sm },
   flex: { flex: 1 },

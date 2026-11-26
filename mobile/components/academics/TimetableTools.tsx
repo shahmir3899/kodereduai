@@ -13,6 +13,7 @@ import Select from '../ui/Select';
 import StatusPill from '../ui/StatusPill';
 import FormSheet from '../inventory/FormSheet';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
+import { SectionEmpty } from '../../components/ui/SectionState';
 
 // The quality score as a small badge; tapping it opens the breakdown.
 export function ScoreBadge({ score, onPress }: { score: QualityData; onPress: () => void }) {
@@ -138,7 +139,7 @@ export function SubstituteSheet({ visible, onClose, teachers }: { visible: boole
       {data && !view.error ? (
         <View style={styles.gap}>
           <Text style={styles.sub}>{view.heading}</Text>
-          {view.entries.length === 0 ? <Text style={styles.sub}>No classes need cover.</Text> : view.entries.map((e, i) => (
+          {view.entries.length === 0 ? <SectionEmpty message="No classes need cover." /> : view.entries.map((e, i) => (
             <View key={i} style={styles.card}>
               <Text style={styles.name}>{e.slot_name} ({e.slot_start}-{e.slot_end})</Text>
               <Text style={styles.sub}>{[e.class_name, e.subject_name].filter(Boolean).join(' — ')}</Text>
@@ -147,7 +148,7 @@ export function SubstituteSheet({ visible, onClose, teachers }: { visible: boole
                   <Text style={styles.name}>{s.teacher_name}</Text>
                   <StatusPill label={s.reason || 'Available'} tone={strongSubstitute(s.score) ? 'success' : 'neutral'} />
                 </View>
-              )) : <Text style={styles.sub}>No substitutes available for this period.</Text>}
+              )) : <SectionEmpty message="No substitutes available for this period." />}
             </View>
           ))}
         </View>
@@ -158,7 +159,7 @@ export function SubstituteSheet({ visible, onClose, teachers }: { visible: boole
 
 const styles = StyleSheet.create({
   center: { alignItems: 'center' },
-  big: { fontSize: 40, fontWeight: '700' },
+  big: { fontSize: FontSize.display, fontWeight: '700' },
   sub: { fontSize: FontSize.sm, color: Colors.textSecondary },
   name: { fontSize: FontSize.md, fontWeight: '600', color: Colors.text },
   part: { gap: 4 },

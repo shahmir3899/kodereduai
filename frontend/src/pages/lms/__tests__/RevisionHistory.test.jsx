@@ -208,7 +208,8 @@ describe('Content Block Revision History', () => {
 
   it('clicking history opens revision drawer', async () => {
     await openRevisionDrawer()
-    expect(screen.getByText('Current block text')).toBeInTheDocument()
+    // Once on the block card and once as the newest revision's preview in the drawer.
+    expect(screen.getAllByText('Current block text').length).toBeGreaterThanOrEqual(2)
   })
 
   it('revision list shows date, author, and content preview', async () => {

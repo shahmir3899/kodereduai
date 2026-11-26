@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { parseShortcut } from '../../services/examsAdmin';
 import {
-  View, Text, FlatList, TextInput, Switch, TouchableOpacity, KeyboardAvoidingView, Platform, StyleSheet, Alert,
+  View, Text, FlatList, TextInput, Switch, TouchableOpacity, KeyboardAvoidingView, Platform, StyleSheet,
 } from 'react-native';
 import { useLocalSearchParams, useNavigation } from 'expo-router';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
@@ -15,12 +15,13 @@ import {
 import type { ClassOption } from '../../services/attendanceEntry';
 import { useAttendanceClassOptions } from '../../hooks/useAcademicYear';
 import { useScopedQuery } from '../../hooks/useScopedQuery';
+import { fetchActiveExamTypes } from '../../hooks/useExamsAdmin';
 import Select from '../ui/Select';
 import Button from '../ui/Button';
 import Skeleton from '../ui/Skeleton';
 import ErrorState from '../ui/ErrorState';
 import EmptyState from '../ui/EmptyState';
-import { useToast } from '../ui/Toast';
+import { shortList, useToast } from '../ui/Toast';
 import { confirm } from '../ui/confirm';
 import ScopeBadge from '../teacher/ScopeBadge';
 import { useTeacherScope } from '../../hooks/useTeacher';
@@ -74,9 +75,7 @@ export default function MarksEntryScreen({ classOptions }: Props) {
   const option = options.find((o) => o.id === classId) ?? null;
   const masterClassId = option ? (option.classObj ?? option.id) : null;
 
-  const types = useScopedQuery('examTypes', [], async () =>
-    listOf<{ id: number; name: string }>((await examinationsApi.getExamTypes({ page_size: 9999, is_active: true })).data),
-  { staleTime: 5 * 60_000 });
+  const types = useScopedQuery('examTypes', [], fetchActiveExamTypes, { staleTime: 5 * 60_000 });
 
   const examsQ = useScopedQuery('marksExams', [yearId, masterClassId, typeId], async () =>
     listOf<ExamLite>((await examinationsApi.getExams({
@@ -174,8 +173,7 @@ export default function MarksEntryScreen({ classOptions }: Props) {
       setBaseline(rowsRef.current.map((r) => (rejectedIds.has(r.studentId) ? oldBase.get(r.studentId) ?? r : r)));
       queryClient.invalidateQueries({ queryKey: ['examMarks'] });
       if (rejected.length > 0) {
-        toast.error(`${rejected.length} row(s) not saved.`);
-        Alert.alert('Some marks were not saved', describeRejected(rejected, rowsRef.current).join('\n'));
+        toast.error(`${rejected.length} row(s) not saved:\n${shortList(describeRejected(rejected, rowsRef.current))}`);
         return;
       }
       toast.success(`Saved: ${res.created ?? 0} added, ${res.updated ?? 0} updated.`);
@@ -319,7 +317,7 @@ const styles = StyleSheet.create({
   pass: { color: Colors.success },
   fail: { color: Colors.error },
   absent: { alignItems: 'center' },
-  absentLabel: { fontSize: 10, color: Colors.textSecondary },
+  absentLabel: { fontSize: FontSize.xxs, color: Colors.textSecondary },
   error: { fontSize: FontSize.xs, color: Colors.error, marginTop: Spacing.xs },
   addRemarks: { fontSize: FontSize.xs, color: Colors.primary, marginTop: Spacing.xs },
   remarks: {

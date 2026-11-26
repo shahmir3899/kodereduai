@@ -19,7 +19,7 @@ IGNORED_RELATIONS = frozenset({
 # Buckets shown to the admin; anything else is reported under 'other'.
 _GROUPS = {
     'attendance': ('attendance.AttendanceRecord',),
-    'fees': ('finance.FeePayment', 'finance.OnlinePayment', 'finance.StudentDiscount', 'finance.FeeStructure'),
+    'fees': ('finance.FeePayment', 'finance.OnlinePayment', 'finance.StudentDiscount', 'finance.FeeStructure', 'finance.StudentFeeEnrollment'),
     'marks': ('examinations.StudentMark', 'examinations.StudentTermAssessment', 'examinations.StudentResponse'),
     'enrollments': ('academic_sessions.StudentEnrollment',),
 }

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, FlatList, ActivityIndicator, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, ActivityIndicator, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
 import { useLocalSearchParams, useRouter, type Href } from 'expo-router';
 import type { ClassOption } from '../../services/attendanceEntry';
 import { STATUS_SCOPES, statusLabel, statusTone, summaryTiles, type StatusScope } from '../../services/students';
@@ -20,7 +20,12 @@ import { accountableIds } from '../../services/studentBulk';
 import type { BulkStudent } from '../../services/bulkReportCards';
 import { BulkAccountsSheet, BulkReportsSheet } from './BulkStudentSheets';
 import RenumberSectionSheet from './RenumberSectionSheet';
-import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
+import BulkRemoveSheet from './BulkRemoveSheet';
+import { parentsApi } from '../../services/api';
+import { useScopedQuery } from '../../hooks/useScopedQuery';
+import { PORTAL_FILTERS, filterByPortal, portalStatus, type PortalKey, type PortalStatus } from '../../services/parentLinks';
+import { Colors, FontSize, Spacing, BorderRadius, GlyphSize } from '../../constants/colors';
+import AppList from '../ui/AppList';
 
 const ALL = 0;
 
@@ -51,7 +56,16 @@ export default function StudentsListScreen({ classOptions, canAdd }: Props) {
   const option = classId === ALL ? null : options.find((o) => o.id === classId) ?? null;
   const query = useStudentsPaged(term, option, scope);
   const refreshControl = useRefreshControl(query.refetch);
-  const students = useMemo(() => query.data?.pages.flatMap((p) => p.results) ?? [], [query.data]);
+  const loaded = useMemo(() => query.data?.pages.flatMap((p) => p.results) ?? [], [query.data]);
+  // Parent portal status for every student (admin and principal: the endpoint is admin only).
+  const [portal, setPortal] = useState<'all' | PortalKey>('all');
+  const portalQ = useScopedQuery('parentStatus', [], async () => ((await parentsApi.getParentStatus()).data ?? {}) as Record<string, PortalStatus>,
+    { enabled: !!canAdd, staleTime: 60_000 });
+  const students = useMemo(() => filterByPortal(loaded, portalQ.data, portal), [loaded, portalQ.data, portal]);
+  // The list arrives a page at a time; a portal filter must see every student, so keep loading.
+  useEffect(() => {
+    if (portal !== 'all' && query.hasNextPage && !query.isFetchingNextPage) query.fetchNextPage();
+  }, [portal, query.hasNextPage, query.isFetchingNextPage]); // eslint-disable-line react-hooks/exhaustive-deps
   const total = query.data?.pages[0]?.count ?? 0;
   const counts = useStudentCounts(!!canAdd);
   const tiles = summaryTiles(counts, options.length);
@@ -59,10 +73,10 @@ export default function StudentsListScreen({ classOptions, canAdd }: Props) {
   // Choosing students is page-scoped (admin and principal): ids from a list no longer on screen must not ride along.
   const [selecting, setSelecting] = useState(false);
   const [selected, setSelected] = useState<number[]>([]);
-  const [sheet, setSheet] = useState<'accounts' | 'reports' | 'renumber' | null>(null);
+  const [sheet, setSheet] = useState<'accounts' | 'reports' | 'renumber' | 'remove' | null>(null);
   // Only one section at a time, and only a section (a class with no sections has no roll to re-number).
   const renumberSection = canAdd && option?.isSession ? { id: option.id, label: option.label } : null;
-  const listKey = `${term}|${classId}|${scope}`;
+  const listKey = `${term}|${classId}|${scope}|${portal}`;
   useEffect(() => { setSelected([]); }, [listKey]);
   const shownIds = students.map((s) => s.id);
   const loginIds = accountableIds(students, selected);
@@ -94,7 +108,22 @@ export default function StudentsListScreen({ classOptions, canAdd }: Props) {
           ))}
         </ScrollView>
       ) : null}
-      {query.data ? <Text style={styles.count}>{total} student{total === 1 ? '' : 's'}</Text> : null}
+      {canAdd ? (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chips} contentContainerStyle={styles.chipsRow}>
+          {PORTAL_FILTERS.map((o) => (
+            <TouchableOpacity key={o.value} accessibilityRole="radio" accessibilityState={{ selected: portal === o.value }} onPress={() => setPortal(o.value)}
+              style={[styles.chip, portal === o.value && styles.chipOn]}>
+              <Text style={[styles.chipText, portal === o.value && styles.chipTextOn]}>{o.label}</Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      ) : null}
+      {query.data ? (
+        <Text style={styles.count}>
+          {portal === 'all' ? `${total} student${total === 1 ? '' : 's'}`
+            : `${students.length} of ${total} student${total === 1 ? '' : 's'}${query.hasNextPage ? ' (loading the rest...)' : ''}`}
+        </Text>
+      ) : null}
       {renumberSection ? (
         <View style={styles.bulkRow}>
           <Button title="Re-number section" size="sm" variant="outline" onPress={() => setSheet('renumber')} />
@@ -110,6 +139,7 @@ export default function StudentsListScreen({ classOptions, canAdd }: Props) {
         <View style={styles.bulkRow}>
           <Button title={`Create logins (${loginIds.length})`} size="sm" variant="outline" disabled={loginIds.length === 0} onPress={() => setSheet('accounts')} />
           <Button title={`Reports (${selected.length})`} size="sm" variant="outline" disabled={selected.length === 0} onPress={() => setSheet('reports')} />
+          <Button title={`Remove (${selected.length})`} size="sm" variant="danger" disabled={selected.length === 0} onPress={() => setSheet('remove')} />
         </View>
       ) : null}
     </View>
@@ -120,7 +150,7 @@ export default function StudentsListScreen({ classOptions, canAdd }: Props) {
 
   return (
     <View style={styles.container}>
-    <FlatList
+    <AppList
       style={styles.container}
       contentContainerStyle={styles.content}
       data={students}
@@ -143,6 +173,7 @@ export default function StudentsListScreen({ classOptions, canAdd }: Props) {
           avatarName={s.name}
           avatarUri={s.photo_url}
           status={s.status && s.status !== 'ACTIVE' ? { label: statusLabel(s.status), tone: statusTone(s.status) } : undefined}
+          trailing={canAdd && portalQ.data ? portalStatus(portalQ.data[String(s.id)]).label : undefined}
           onPress={() => (selecting ? setSelected((x) => toggleId(x, s.id)) : router.push(`${base}/students/${s.id}` as Href))}
         />
           </View>
@@ -153,6 +184,8 @@ export default function StudentsListScreen({ classOptions, canAdd }: Props) {
         onDone={() => { setSelected([]); setSelecting(false); }} />
       {renumberSection ? <RenumberSectionSheet visible={sheet === 'renumber'} onClose={() => setSheet(null)} section={renumberSection} /> : null}
       <BulkReportsSheet visible={sheet === 'reports'} onClose={() => setSheet(null)} students={picked} />
+      <BulkRemoveSheet visible={sheet === 'remove'} onClose={() => setSheet(null)} students={picked.map((p) => ({ id: p.studentId, name: p.name }))}
+        onDone={(gone) => setSelected((x) => x.filter((id) => !gone.includes(id)))} />
     </View>
   );
 }
@@ -168,7 +201,7 @@ const styles = StyleSheet.create({
   bulkRow: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm, marginBottom: Spacing.sm },
   pickRow: { flexDirection: 'row', alignItems: 'center' },
   pickCard: { flex: 1 },
-  check: { fontSize: 24, color: Colors.primary, paddingRight: Spacing.sm, minWidth: 36, textAlign: 'center' },
+  check: { fontSize: GlyphSize.md, color: Colors.primary, paddingRight: Spacing.sm, minWidth: 36, textAlign: 'center' },
   count: { fontSize: FontSize.xs, color: Colors.textSecondary, marginBottom: Spacing.md },
   chips: { marginBottom: Spacing.md },
   chipsRow: { gap: Spacing.sm },

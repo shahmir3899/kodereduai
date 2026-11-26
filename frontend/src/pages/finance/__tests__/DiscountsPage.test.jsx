@@ -14,6 +14,11 @@ vi.mock('../../../contexts/AuthContext', () => ({
   }),
 }))
 
+// The page reads the active year (discounts are per year); the test has no AcademicYearProvider.
+vi.mock('../../../contexts/AcademicYearContext', () => ({
+  useAcademicYear: () => ({ activeAcademicYear: { id: 1, name: '2026-27' } }),
+}))
+
 // Mock Toast
 vi.mock('../../../components/Toast', () => ({
   useToast: () => ({
@@ -28,13 +33,15 @@ vi.mock('../../../constants/gradePresets', () => ({
   GRADE_LEVEL_LABELS: {},
 }))
 
+// The page renders each discount twice (phone cards and the desktop table, one hidden by CSS),
+// so texts are matched with getAllBy*.
 describe('DiscountsPage - Bug #9: discount_type field name', () => {
   it('renders discounts with discount_type field', async () => {
     renderWithProviders(<DiscountsPage />)
     await waitFor(() => {
-      expect(screen.getByText('PERCENTAGE')).toBeInTheDocument()
+      expect(screen.getAllByText('PERCENTAGE').length).toBeGreaterThan(0)
     })
-    expect(screen.getByText('FIXED')).toBeInTheDocument()
+    expect(screen.getAllByText('FIXED').length).toBeGreaterThan(0)
   })
 
   it('sends discount_type (not type) when creating a discount', async () => {
@@ -43,7 +50,10 @@ describe('DiscountsPage - Bug #9: discount_type field name', () => {
       http.post('/api/finance/discounts/', async ({ request }) => {
         capturedBody = await request.json()
         return HttpResponse.json({ id: 3, ...capturedBody }, { status: 201 })
-      })
+      }),
+      // Per-fee discounts (2026-11-26): a discount must name the fees it cuts.
+      http.get('/api/finance/monthly-categories/', () => HttpResponse.json([{ id: 7, name: 'Tuition', is_active: true }])),
+      http.get('/api/finance/annual-categories/', () => HttpResponse.json([])),
     )
 
     const user = userEvent.setup()
@@ -51,7 +61,7 @@ describe('DiscountsPage - Bug #9: discount_type field name', () => {
 
     // Wait for page to load
     await waitFor(() => {
-      expect(screen.getByText('Early Bird')).toBeInTheDocument()
+      expect(screen.getAllByText('Early Bird').length).toBeGreaterThan(0)
     })
 
     // Click Add Discount button
@@ -59,11 +69,13 @@ describe('DiscountsPage - Bug #9: discount_type field name', () => {
     await user.click(addBtn)
 
     // Fill the form
-    const nameInput = screen.getByPlaceholderText(/discount name/i)
+    const nameInput = screen.getByPlaceholderText(/early bird discount/i)
     await user.type(nameInput, 'Test Discount')
 
     const valueInput = screen.getByPlaceholderText(/e\.g\., 10/i)
     await user.type(valueInput, '15')
+
+    await user.click(await screen.findByRole('checkbox', { name: 'Tuition' }))
 
     // Submit
     const saveBtn = screen.getByRole('button', { name: /save|create/i })
@@ -75,6 +87,7 @@ describe('DiscountsPage - Bug #9: discount_type field name', () => {
     expect(capturedBody).toHaveProperty('discount_type')
     expect(capturedBody).not.toHaveProperty('type')
     expect(capturedBody.discount_type).toBe('PERCENTAGE')
+    expect(capturedBody.monthly_categories).toEqual([7])
   })
 
   it('populates discount_type when editing', async () => {
@@ -82,7 +95,7 @@ describe('DiscountsPage - Bug #9: discount_type field name', () => {
     renderWithProviders(<DiscountsPage />)
 
     await waitFor(() => {
-      expect(screen.getByText('Early Bird')).toBeInTheDocument()
+      expect(screen.getAllByText('Early Bird').length).toBeGreaterThan(0)
     })
 
     // Find and click edit button on first discount

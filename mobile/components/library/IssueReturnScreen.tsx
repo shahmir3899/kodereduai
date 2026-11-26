@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { View, Text, FlatList, ActivityIndicator, ScrollView, TouchableOpacity, StyleSheet, type RefreshControlProps } from 'react-native';
+import { View, Text, ActivityIndicator, ScrollView, TouchableOpacity, StyleSheet, type RefreshControlProps } from 'react-native';
 import { useAuth } from '../../contexts/AuthContext';
 import { useBookSearch, useBorrowerSearch, useConfig, useLibraryActions, useOpenIssues } from '../../hooks/useLibrary';
 import { useDebouncedValue } from '../../hooks/useDebouncedValue';
@@ -19,10 +19,11 @@ import Card from '../ui/Card';
 import Skeleton from '../ui/Skeleton';
 import ErrorState from '../ui/ErrorState';
 import EmptyState from '../ui/EmptyState';
-import StatusPill from '../ui/StatusPill';
 import { useToast } from '../ui/Toast';
 import { confirm } from '../ui/confirm';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
+import AppList from '../ui/AppList';
+import RecordCard from '../ui/RecordCard';
 
 type Tab = 'issue' | 'return';
 
@@ -147,7 +148,7 @@ function ReturnTab({ readOnly = false }: { readOnly?: boolean }) {
   if (query.isError && !query.data) return <ErrorState error={query.error} onRetry={() => query.refetch()} />;
 
   return (
-    <FlatList
+    <AppList
       contentContainerStyle={styles.content}
       data={rows}
       keyExtractor={(i) => String(i.id)}
@@ -159,14 +160,13 @@ function ReturnTab({ readOnly = false }: { readOnly?: boolean }) {
       ListEmptyComponent={<EmptyState title="No books out" message={term ? 'Nothing matches your search.' : 'Every book is back on the shelf.'} />}
       ListFooterComponent={query.isFetchingNextPage ? <ActivityIndicator color={Colors.primary} style={{ margin: Spacing.lg }} /> : null}
       renderItem={({ item: i }) => (
-        <View style={styles.row}>
-          <View style={styles.flex}>
-            <Text style={styles.name} numberOfLines={2}>{i.book_title}</Text>
-            <Text style={styles.sub}>{issueLine(i)}</Text>
-            {isLate(i) ? <StatusPill label="Overdue" tone="warning" /> : null}
-          </View>
-          {readOnly ? null : <Button title="Return" size="sm" variant="outline" loading={busy === i.id} disabled={busy !== null} onPress={() => giveBack(i)} />}
-        </View>
+        <RecordCard
+          icon="book-outline"
+          title={i.book_title}
+          subtitle={issueLine(i)}
+          status={isLate(i) ? { label: 'Overdue', tone: 'warning' } : undefined}
+          footer={readOnly ? undefined : <Button title="Return" size="sm" variant="outline" loading={busy === i.id} disabled={busy !== null} onPress={() => giveBack(i)} />}
+        />
       )}
     />
   );
@@ -184,6 +184,4 @@ const styles = StyleSheet.create({
   pickedText: { flex: 1, fontSize: FontSize.md, fontWeight: '600', color: Colors.primary },
   option: { borderWidth: 1, borderColor: Colors.border, borderRadius: BorderRadius.md, padding: Spacing.md },
   error: { color: Colors.error, fontSize: FontSize.sm },
-  row: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md, backgroundColor: Colors.surface, borderRadius: BorderRadius.md, padding: Spacing.md, marginTop: Spacing.sm },
-  flex: { flex: 1, gap: 2 },
 });

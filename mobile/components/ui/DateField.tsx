@@ -4,6 +4,7 @@ import DateTimePicker, { type DateTimePickerEvent } from '@react-native-communit
 import { format } from 'date-fns';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
 import DateFieldWeb from './DateFieldWeb';
+import { day } from '../../services/dates';
 
 interface DateFieldProps {
   label?: string;
@@ -43,10 +44,10 @@ function NativeDateField({ label, value, onChange, placeholder = 'Select date', 
       {label ? <Text style={styles.label}>{label}</Text> : null}
       <TouchableOpacity style={[styles.field, error ? styles.fieldError : null]} onPress={() => setOpen((o) => !o)}
         accessibilityRole="button"
-        accessibilityLabel={`${label ?? 'Date'}: ${value ? format(parse(value), 'dd MMMM yyyy') : placeholder}`}
+        accessibilityLabel={`${label ?? 'Date'}: ${value ? format(parse(value), 'd MMMM yyyy') : placeholder}`}
         accessibilityHint="Opens a date picker">
         <Text style={value ? styles.value : styles.placeholder}>
-          {value ? format(parse(value), 'dd MMM yyyy') : placeholder}
+          {value ? day(value) || value : placeholder}
         </Text>
         <Text style={styles.icon} accessible={false}>📅</Text>
       </TouchableOpacity>

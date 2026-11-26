@@ -7,14 +7,15 @@ import {
   Platform,
   ScrollView,
   TouchableOpacity,
-  Alert,
-  Image,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { useRouter, type Href } from 'expo-router';
 import { useSavedSchool } from '../../hooks/useSchoolFinder';
 import { useAuth } from '../../contexts/AuthContext';
 import Input from '../../components/ui/Input';
+import Icon from '../../components/ui/Icon';
 import Button from '../../components/ui/Button';
+import { useToast } from '../../components/ui/Toast';
 import { loginErrorMessage } from '../../services/sessionRules';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
 
@@ -25,13 +26,14 @@ export default function LoginScreen() {
   const [loading, setLoading] = useState(false);
   const { login, sessionExpired } = useAuth();
   const router = useRouter();
+  const toast = useToast();
   // The school picked on the front screen: its logo and name head the page. Without one (or when it
   // cannot be loaded) the page shows the app's own brand and signing in still works.
   const saved = useSavedSchool();
 
   const handleLogin = async () => {
     if (!username.trim() || !password.trim()) {
-      Alert.alert('Error', 'Please enter both username and password.');
+      toast.error('Please enter both username and password.');
       return;
     }
 
@@ -41,7 +43,7 @@ export default function LoginScreen() {
       // The index route picks the home screen from the active school's role.
       router.replace('/');
     } catch (error: any) {
-      Alert.alert('Login Failed', loginErrorMessage(error));
+      toast.error(loginErrorMessage(error));
     } finally {
       setLoading(false);
     }
@@ -59,7 +61,7 @@ export default function LoginScreen() {
         {/* Header */}
         <View style={styles.header}>
           {saved.school?.logo ? (
-            <Image source={{ uri: saved.school.logo }} style={styles.schoolLogo} resizeMode="contain" accessibilityLabel={`${saved.school.name} logo`} />
+            <Image source={{ uri: saved.school.logo }} style={styles.schoolLogo} contentFit="contain" accessibilityLabel={`${saved.school.name} logo`} />
           ) : (
             <Image source={require('../../assets/icon.png')} style={styles.schoolLogo} accessibilityLabel="Education AI" />
           )}
@@ -99,11 +101,8 @@ export default function LoginScreen() {
             autoCapitalize="none"
             returnKeyType="done"
             onSubmitEditing={handleLogin}
-            rightIcon={
-              <Text style={styles.showHide}>
-                {showPassword ? 'Hide' : 'Show'}
-              </Text>
-            }
+            rightIcon={<Icon name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={22} color={Colors.textSecondary} />}
+            rightIconLabel={showPassword ? 'Hide password' : 'Show password'}
             onRightIconPress={() => setShowPassword(!showPassword)}
           />
 
@@ -166,19 +165,22 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.md,
   },
   logoText: {
-    fontSize: 32,
+    fontSize: FontSize.xxxl,
     fontWeight: '800',
     color: Colors.textInverse,
   },
+  // Centred text too: a long school name wraps, and the wrapped lines lined up on the left.
   appName: {
     fontSize: FontSize.xxl,
     fontWeight: '700',
     color: Colors.text,
+    textAlign: 'center',
   },
   tagline: {
     fontSize: FontSize.sm,
     color: Colors.textSecondary,
     marginTop: Spacing.xs,
+    textAlign: 'center',
   },
   form: {
     backgroundColor: Colors.surface,

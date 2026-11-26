@@ -202,6 +202,18 @@ class TestFees:
         _approve(_card(_run(seed_data, 'clear_student_monthly_fee', student_id=stu['a'].id)), seed_data)
         assert not FeeStructure.objects.filter(student=stu['a'], is_active=True).exists()
 
+    def test_monthly_override_names_its_fee_when_school_has_several(self, seed_data, stu):
+        from finance.models import FeeStructure, MonthlyFeeCategory
+        tuition = MonthlyFeeCategory.objects.create(school=stu['school'], name='Tuition Fee')
+        kids = MonthlyFeeCategory.objects.create(school=stu['school'], name='Koder Kids')
+        assert 'error' in _run(seed_data, 'set_student_monthly_fee', student_id=stu['a'].id, amount=3000)
+        _approve(_card(_run(seed_data, 'set_student_monthly_fee', student_id=stu['a'].id, amount=800, fee_name='koder')), seed_data)
+        _approve(_card(_run(seed_data, 'set_student_monthly_fee', student_id=stu['a'].id, amount=3000, fee_name='Tuition Fee')), seed_data)
+        active = {f.monthly_category_id: float(f.monthly_amount) for f in FeeStructure.objects.filter(student=stu['a'], is_active=True)}
+        assert active == {tuition.id: 3000.0, kids.id: 800.0}
+        _approve(_card(_run(seed_data, 'clear_student_monthly_fee', student_id=stu['a'].id, fee_name='Koder Kids')), seed_data)
+        assert list(FeeStructure.objects.filter(student=stu['a'], is_active=True).values_list('monthly_category_id', flat=True)) == [tuition.id]
+
     def test_same_amount_refused_and_clear_without_override_refused(self, seed_data, stu):
         assert 'error' in _run(seed_data, 'clear_student_monthly_fee', student_id=stu['a'].id)
 

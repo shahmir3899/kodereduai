@@ -15,6 +15,12 @@ from django.utils import timezone
 from django.core.cache import cache
 from django.db.models import Count, Q
 from datetime import timedelta
+import hashlib
+import json
+
+# The public school directory (SchoolViewSet.directory): one cached copy for everyone.
+SCHOOL_DIRECTORY_CACHE_KEY = 'public_school_directory_v1'
+SCHOOL_DIRECTORY_CACHE_SECONDS = 600
 
 from core.permissions import IsSuperAdmin, HasSchoolAccess
 from core.mixins import TenantQuerySetMixin
@@ -505,6 +511,40 @@ class SchoolViewSet(TenantQuerySetMixin, viewsets.ReadOnlyModelViewSet):
                 {'detail': f'School with subdomain "{subdomain}" not found.'},
                 status=status.HTTP_404_NOT_FOUND
             )
+
+    @action(detail=False, methods=['get'], permission_classes=[], authentication_classes=[], url_path='directory')
+    def directory(self, request):
+        """
+        Public list of active schools for the phone app's "Find your school" search.
+        GET /api/schools/directory/  ->  [{"code", "name", "logo"}, ...]
+
+        Only what the search needs: no address, phone or email. The app loads it quietly in the
+        background and matches names on the phone. School codes are already public as web
+        addresses (<code>.educationai.pk), so the list exposes nothing new. Throttling is off
+        app-wide (see REST_FRAMEWORK in settings), so the list is cached server-side for 10 minutes
+        (the database is read at most once per 10 minutes) and a request carrying the current ETag
+        gets an empty 304.
+        No authentication classes, so a stale token on the phone cannot turn this into a 401.
+        """
+        payload = cache.get(SCHOOL_DIRECTORY_CACHE_KEY)
+        if payload is None:
+            rows = list(
+                School.objects.filter(is_active=True)
+                .exclude(subdomain__isnull=True).exclude(subdomain='')
+                .order_by('name')
+                .values('subdomain', 'name', 'logo')
+            )
+            items = [{'code': r['subdomain'], 'name': r['name'], 'logo': r['logo'] or None} for r in rows]
+            etag = '"' + hashlib.md5(json.dumps(items, sort_keys=True).encode()).hexdigest() + '"'
+            payload = {'items': items, 'etag': etag}
+            cache.set(SCHOOL_DIRECTORY_CACHE_KEY, payload, SCHOOL_DIRECTORY_CACHE_SECONDS)
+
+        # Cache-Control is set to no-cache for every API answer (core/cache_middleware.py); with the
+        # ETag that means "check each time", and the check is a cheap 304.
+        headers = {'ETag': payload['etag']}
+        if request.headers.get('If-None-Match') == payload['etag']:
+            return Response(status=status.HTTP_304_NOT_MODIFIED, headers=headers)
+        return Response(payload['items'], headers=headers)
 
     @action(detail=False, methods=['get', 'put'])
     def exam_config(self, request):

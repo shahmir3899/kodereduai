@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { View, Text, FlatList, TextInput, TouchableOpacity, Linking, StyleSheet } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, Linking, StyleSheet } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import {
   canReturn, firstFieldError, gradeLabel, submissionStats, truncate, validateGrade, type Submission,
@@ -14,6 +14,9 @@ import EmptyState from '../ui/EmptyState';
 import StatusPill, { type Tone } from '../ui/StatusPill';
 import { useToast } from '../ui/Toast';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
+import AppList from '../ui/AppList';
+import RecordCard from '../ui/RecordCard';
+import { day, dayTime } from '../../services/dates';
 
 const TONE: Record<Submission['status'], Tone> = {
   PENDING: 'neutral', SUBMITTED: 'info', LATE: 'warning', GRADED: 'success', RETURNED: 'neutral',
@@ -85,7 +88,7 @@ export default function SubmissionsScreen() {
       <View style={styles.card}>
         <Text style={styles.title}>{a.title}</Text>
         <Text style={styles.meta}>{a.class_name || '--'} · {a.subject_name || '--'}</Text>
-        <Text style={styles.meta}>Due {a.due_date || '--'}  ·  Total marks {a.total_marks ?? '--'}</Text>
+        <Text style={styles.meta}>Due {a.due_date ? day(a.due_date) || a.due_date : '--'}  ·  Total marks {a.total_marks ?? '--'}</Text>
       </View>
       <View style={styles.stats}>
         <Stat label="Total" value={stats.total} />
@@ -99,7 +102,7 @@ export default function SubmissionsScreen() {
 
   return (
     <View style={styles.container}>
-      <FlatList
+      <AppList
         data={list}
         keyExtractor={(s) => String(s.id)}
         contentContainerStyle={styles.content}
@@ -110,32 +113,33 @@ export default function SubmissionsScreen() {
           const open = expanded.has(s.id);
           const text = s.submission_text || '';
           return (
-            <View style={styles.card}>
-              <View style={styles.top}>
-                <Text style={styles.name} numberOfLines={1}>{s.student_name}</Text>
-                <StatusPill label={s.status} tone={TONE[s.status] ?? 'neutral'} />
-              </View>
-              {s.submitted_at ? <Text style={styles.meta}>Submitted {s.submitted_at.replace('T', ' ').slice(0, 16)}</Text> : null}
-              {text ? (
-                <TouchableOpacity accessibilityRole="button" onPress={() => setExpanded((cur) => { const n = new Set(cur); n.has(s.id) ? n.delete(s.id) : n.add(s.id); return n; })}>
-                  <Text style={styles.text}>{open ? text : truncate(text)}</Text>
-                  {text.length > 140 ? <Text style={styles.more}>{open ? 'Show less' : 'Read more'}</Text> : null}
-                </TouchableOpacity>
-              ) : null}
-              {s.file_url ? (
-                <TouchableOpacity accessibilityRole="button" onPress={() => Linking.openURL(s.file_url as string)}>
-                  <Text style={styles.link}>Open attachment</Text>
-                </TouchableOpacity>
-              ) : null}
-              {s.marks_obtained != null ? <Text style={styles.marks}>Marks: {s.marks_obtained}{total ? ` / ${total}` : ''}</Text> : null}
-              {s.feedback ? <Text style={styles.feedback}>“{s.feedback}”</Text> : null}
-              <View style={styles.actions}>
-                <TouchableOpacity accessibilityRole="button" onPress={() => startGrading(s)}><Text style={styles.action}>{gradeLabel(s)}</Text></TouchableOpacity>
-                {canReturn(s) ? (
-                  <TouchableOpacity accessibilityRole="button" disabled={returnToStudent.isPending} onPress={() => sendBack(s)}><Text style={styles.action}>Return</Text></TouchableOpacity>
+            <RecordCard
+              avatarName={s.student_name}
+              title={s.student_name}
+              status={{ label: s.status, tone: TONE[s.status] ?? 'neutral' }}
+              subtitle={s.submitted_at ? `Submitted ${dayTime(s.submitted_at) || s.submitted_at}` : undefined}
+              trailing={s.marks_obtained != null ? `${s.marks_obtained}${total ? ` / ${total}` : ''}` : undefined}
+              footer={<>
+                {text ? (
+                  <TouchableOpacity accessibilityRole="button" onPress={() => setExpanded((cur) => { const n = new Set(cur); n.has(s.id) ? n.delete(s.id) : n.add(s.id); return n; })}>
+                    <Text style={styles.text}>{open ? text : truncate(text)}</Text>
+                    {text.length > 140 ? <Text style={styles.more}>{open ? 'Show less' : 'Read more'}</Text> : null}
+                  </TouchableOpacity>
                 ) : null}
-              </View>
-            </View>
+                {s.file_url ? (
+                  <TouchableOpacity accessibilityRole="button" onPress={() => Linking.openURL(s.file_url as string)}>
+                    <Text style={styles.link}>Open attachment</Text>
+                  </TouchableOpacity>
+                ) : null}
+                {s.feedback ? <Text style={styles.feedback}>“{s.feedback}”</Text> : null}
+                <View style={styles.actions}>
+                  <TouchableOpacity accessibilityRole="button" onPress={() => startGrading(s)}><Text style={styles.action}>{gradeLabel(s)}</Text></TouchableOpacity>
+                  {canReturn(s) ? (
+                    <TouchableOpacity accessibilityRole="button" disabled={returnToStudent.isPending} onPress={() => sendBack(s)}><Text style={styles.action}>Return</Text></TouchableOpacity>
+                  ) : null}
+                </View>
+              </>}
+            />
           );
         }}
       />
@@ -174,14 +178,11 @@ const styles = StyleSheet.create({
   stats: { flexDirection: 'row', gap: Spacing.sm, marginBottom: Spacing.sm },
   stat: { flex: 1, backgroundColor: Colors.surface, borderRadius: BorderRadius.md, padding: Spacing.sm, alignItems: 'center' },
   statValue: { fontSize: FontSize.lg, fontWeight: '700' },
-  statLabel: { fontSize: 10, color: Colors.textSecondary },
+  statLabel: { fontSize: FontSize.xxs, color: Colors.textSecondary },
   lateNote: { fontSize: FontSize.xs, color: Colors.warning, marginBottom: Spacing.sm },
-  top: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: Spacing.sm },
-  name: { flex: 1, fontSize: FontSize.md, fontWeight: '600', color: Colors.text },
   text: { fontSize: FontSize.sm, color: Colors.text, marginTop: Spacing.sm },
   more: { fontSize: FontSize.xs, color: Colors.primary, marginTop: 2 },
   link: { fontSize: FontSize.sm, color: Colors.primary, fontWeight: '600', marginTop: Spacing.sm },
-  marks: { fontSize: FontSize.sm, fontWeight: '700', color: Colors.success, marginTop: Spacing.sm },
   feedback: { fontSize: FontSize.sm, color: Colors.textSecondary, fontStyle: 'italic', marginTop: 2 },
   actions: { flexDirection: 'row', gap: Spacing.xl, marginTop: Spacing.sm, paddingTop: Spacing.sm, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: Colors.border },
   action: { fontSize: FontSize.sm, fontWeight: '600', color: Colors.primary },

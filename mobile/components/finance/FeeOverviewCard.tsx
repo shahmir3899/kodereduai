@@ -9,7 +9,7 @@ import { useAcademicYear } from '../../hooks/useAcademicYear';
 import { useScopedQuery } from '../../hooks/useScopedQuery';
 import Card from '../ui/Card';
 import SegmentedTabs from '../ui/SegmentedTabs';
-import { Colors, FontSize, Spacing } from '../../constants/colors';
+import { Colors, FontSize, Spacing, GlyphSize } from '../../constants/colors';
 
 type By = 'category' | 'class';
 
@@ -64,8 +64,8 @@ export default function FeeOverviewCard() {
         />
       </View>
       <View style={styles.legend}>
-        <View style={styles.key}><View style={[styles.dot, { backgroundColor: '#16a34a' }]} /><Text style={styles.axis}>Collected</Text></View>
-        <View style={styles.key}><View style={[styles.dot, { backgroundColor: '#fca5a5' }]} /><Text style={styles.axis}>Pending</Text></View>
+        <View style={styles.key}><View style={[styles.dot, { backgroundColor: Colors.success }]} /><Text style={styles.axis}>Collected</Text></View>
+        <View style={styles.key}><View style={[styles.dot, { backgroundColor: Colors.errorSoft }]} /><Text style={styles.axis}>Pending</Text></View>
       </View>
       {rows.map((r) => (
         <TouchableOpacity key={r.label} accessibilityRole="text" activeOpacity={1} style={styles.row}>
@@ -81,10 +81,10 @@ export default function FeeOverviewCard() {
 const styles = StyleSheet.create({
   card: { marginBottom: Spacing.lg },
   nav: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: Spacing.sm },
-  arrow: { fontSize: 26, color: Colors.primary, paddingHorizontal: Spacing.sm },
+  arrow: { fontSize: GlyphSize.lg, color: Colors.primary, paddingHorizontal: Spacing.sm },
   off: { color: Colors.border },
   title: { fontSize: FontSize.md, fontWeight: '700', color: Colors.text },
-  axis: { fontSize: 10, color: Colors.textSecondary },
+  axis: { fontSize: FontSize.xxs, color: Colors.textSecondary },
   legend: { flexDirection: 'row', gap: Spacing.lg, marginTop: Spacing.sm, marginBottom: Spacing.sm },
   key: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   dot: { width: 10, height: 10, borderRadius: 5 },

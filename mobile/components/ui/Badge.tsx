@@ -16,7 +16,7 @@ const variantColors: Record<BadgeVariant, { bg: string; text: string }> = {
   warning: { bg: Colors.warningLight, text: Colors.warningText },
   info: { bg: Colors.infoLight, text: Colors.infoText },
   default: { bg: Colors.surfaceSecondary, text: Colors.neutralText },
-  purple: { bg: '#f3e8ff', text: '#7c3aed' },
+  purple: { bg: Colors.purpleLight, text: Colors.secondary },
 };
 
 export default function Badge({ label, variant = 'default', size = 'sm' }: BadgeProps) {

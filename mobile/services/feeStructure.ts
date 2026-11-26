@@ -18,7 +18,7 @@ export interface FeeStructure {
   is_active: boolean;
 }
 
-export interface FeeCategory { id: number; name: string; description?: string; is_active?: boolean }
+export interface FeeCategory { id: number; name: string; description?: string; is_active?: boolean; billing_mode?: string | null; default_amount?: number | string | null }
 
 export interface ChargeRow {
   // The saved structure this row shows (to stop it); absent on a row the person added.

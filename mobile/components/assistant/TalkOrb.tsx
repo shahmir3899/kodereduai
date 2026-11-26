@@ -2,10 +2,11 @@ import React, { useEffect, useRef } from 'react';
 import { Animated, Easing, Pressable, View } from 'react-native';
 import { themeFor } from '../../services/assistantTheme';
 import { ORB_LABEL, type TalkPhase } from '../../services/assistantTalk';
+import { Palette } from '../../constants/colors';
 
-const BLUE = { ring: '#378ADD', fill: '#E6F1FB', ink: '#185FA5' };
-const RED = { ring: '#E24B4A', fill: '#FCEBEB', ink: '#A32D2D' };
-const SLATE = { ring: '#94A3B8', fill: '#F1F5F9', ink: '#334155' };
+const BLUE = Palette.talkOrb.blue;
+const RED = Palette.talkOrb.red;
+const SLATE = Palette.talkOrb.slate;
 const SHAPE = [0.38, 0.62, 0.9, 0.62, 0.38]; // bar heights as a share of the core, as on the web
 
 function loop(value: Animated.Value, ms: number, delay = 0) {

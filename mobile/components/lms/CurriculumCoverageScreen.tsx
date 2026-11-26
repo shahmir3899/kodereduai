@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { View, Text, FlatList, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { COVERAGE_FILTERS, SCHEDULE_FILTERS, coverageStats, scheduleStatus, topicName, topicStatus, type CoverageFilter, type CoverageTopic, type ScheduleFilter } from '../../services/curriculumCoverage';
 import { uniqueSubjects } from '../../services/dailyDiary';
 import { inventoryErrorMessage } from '../../services/inventory';
@@ -17,6 +17,9 @@ import EmptyState from '../ui/EmptyState';
 import StatusPill from '../ui/StatusPill';
 import { useToast } from '../ui/Toast';
 import { Colors, FontSize, Spacing } from '../../constants/colors';
+import AppList from '../ui/AppList';
+import RecordCard from '../ui/RecordCard';
+import { day } from '../../services/dates';
 
 // Which topics of a class and subject are taught and tested, and when each is planned. The planned
 // date can be set or cleared here (the web page does the same); taught and tested come from the
@@ -75,7 +78,7 @@ export default function CurriculumCoverageScreen({ classOptions }: { classOption
   if (options.length === 0) return <EmptyState title="No classes" message="There is no class you can see coverage for." />;
 
   return (
-    <FlatList
+    <AppList
       style={styles.container}
       contentContainerStyle={styles.content}
       data={subjectId && !topicsQ.isLoading && !topicsQ.isError ? topics : []}
@@ -93,22 +96,21 @@ export default function CurriculumCoverageScreen({ classOptions }: { classOption
         const status = topicStatus(t);
         const sched = scheduleStatus(t);
         return (
-          <Card style={styles.card}>
-            <View style={styles.top}>
-              <Text style={styles.title} numberOfLines={2}>{topicName(t)}</Text>
-              <StatusPill label={status.label} tone={status.tone} />
-            </View>
-            {sched ? <View style={styles.sched}><StatusPill label={sched.label} tone={sched.tone} /></View> : null}
-            <Text style={styles.meta}>
-              {t.lesson_plan_count ?? 0} lesson plan{(t.lesson_plan_count ?? 0) === 1 ? '' : 's'}  ·  {t.test_question_count ?? 0} question{(t.test_question_count ?? 0) === 1 ? '' : 's'}  ·  Taught {t.taught_date || 'not yet'}
-            </Text>
-            <DateField label="Planned date" value={t.planned_date} onChange={(d) => save(t, d)} placeholder="Not set" />
-            {t.planned_date ? (
-              <TouchableOpacity accessibilityRole="button" style={styles.clearBox} onPress={() => save(t, null)} disabled={setDate.isPending}>
-                <Text style={styles.clear}>Clear planned date</Text>
-              </TouchableOpacity>
-            ) : null}
-          </Card>
+          <RecordCard
+            icon="list-outline"
+            title={topicName(t)}
+            status={{ label: status.label, tone: status.tone }}
+            meta={`${t.lesson_plan_count ?? 0} lesson plan${(t.lesson_plan_count ?? 0) === 1 ? '' : 's'}  ·  ${t.test_question_count ?? 0} question${(t.test_question_count ?? 0) === 1 ? '' : 's'}  ·  Taught ${t.taught_date ? day(t.taught_date) || t.taught_date : 'not yet'}`}
+            footer={<>
+              {sched ? <View style={styles.sched}><StatusPill label={sched.label} tone={sched.tone} /></View> : null}
+              <DateField label="Planned date" value={t.planned_date} onChange={(d) => save(t, d)} placeholder="Not set" />
+              {t.planned_date ? (
+                <TouchableOpacity accessibilityRole="button" style={styles.clearBox} onPress={() => save(t, null)} disabled={setDate.isPending}>
+                  <Text style={styles.clear}>Clear planned date</Text>
+                </TouchableOpacity>
+              ) : null}
+            </>}
+          />
         );
       }}
     />
@@ -131,11 +133,7 @@ const styles = StyleSheet.create({
   tile: { flex: 1, padding: Spacing.md },
   tileLabel: { fontSize: FontSize.xs, color: Colors.textSecondary },
   tileValue: { fontSize: FontSize.xl, fontWeight: '700' },
-  card: { padding: Spacing.md, marginBottom: Spacing.sm },
-  top: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: Spacing.sm },
-  title: { flex: 1, fontSize: FontSize.md, fontWeight: '600', color: Colors.text },
   sched: { flexDirection: 'row', marginTop: Spacing.xs },
-  meta: { fontSize: FontSize.xs, color: Colors.textSecondary, marginTop: Spacing.xs, marginBottom: Spacing.sm },
   clearBox: { minHeight: 44, justifyContent: 'center' },
   clear: { fontSize: FontSize.sm, color: Colors.primary, fontWeight: '600' },
 });

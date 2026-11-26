@@ -1,10 +1,10 @@
+import { day } from './dates';
 // Pure logic for academic years and terms; port of frontend/src/pages/sessions (AcademicYearsPage,
 // TermsManager, termDefaults) and components/timeline/timelineMath. Admin and principal only: the
 // server refuses the rest and re-checks every rule here. Dates are ISO "YYYY-MM-DD" strings handled
 // in UTC so a timezone can never shift a boundary by a day.
 
 const DAY_MS = 86400000;
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 // Same limits as the server (AcademicYearCreateSerializer): outside them a year is almost always a typo.
 export const YEAR_MIN_DAYS = 60;
@@ -50,9 +50,7 @@ export function addDays(iso: string, days: number): string {
 // "2026-09-14" -> "14 Sep 2026", the style the server's messages use.
 export function formatDay(iso: string | null | undefined): string {
   if (!iso) return '';
-  const [y, m, d] = String(iso).split('-').map(Number);
-  if (!y || !m || !d) return String(iso);
-  return `${d} ${MONTHS[m - 1]} ${y}`;
+  return day(String(iso).slice(0, 10)) || String(iso);
 }
 
 // Same rule as the server: two spans clash when one starts before the other ends; touching is fine.

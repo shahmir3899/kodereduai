@@ -5,7 +5,7 @@ import { useDiscountActions, useDiscounts, useScholarships, useStudentDiscountsP
 import { useRefreshControl } from '../../hooks/useRefreshControl';
 import {
   APPLIES_TO, bulkResultText, buildAssignPayload, buildBulkPayload, buildDiscountPayload, buildScholarshipPayload,
-  COVERAGES, DISCOUNT_TYPES, discountScopeText, discountToForm, discountValueText, emptyAssignForm, emptyDiscountForm,
+  COVERAGES, DISCOUNT_TYPES, discountScopeText, feeTypesText, discountToForm, discountValueText, emptyAssignForm, emptyDiscountForm,
   emptyScholarshipForm, scholarshipToForm, scholarshipValueText, SCHOLARSHIP_TYPES, validateAssign, validateDiscount,
   validateScholarship, type AssignForm, type AssignKind, type Discount, type DiscountForm, type Scholarship, type ScholarshipForm,
 } from '../../services/discounts';
@@ -24,6 +24,8 @@ import { useToast } from '../ui/Toast';
 import { confirm } from '../ui/confirm';
 import FormSheet from '../inventory/FormSheet';
 import StudentPicker from './StudentPicker';
+import MultiSelect from '../ui/MultiSelect';
+import { useFeeCategories } from '../../hooks/useFeeStructure';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
 
 type Tab = 'discounts' | 'scholarships' | 'assignments';
@@ -94,6 +96,7 @@ function DiscountsTab() {
             <View style={styles.who}>
               <Text style={styles.name} numberOfLines={1}>{d.name}</Text>
               <Text style={styles.sub} numberOfLines={1}>{[discountValueText(d), discountScopeText(d), `${d.usage_count ?? 0} students`].join('  ·  ')}</Text>
+              <Text style={d.fee_types?.length ? styles.sub : styles.warn} numberOfLines={1}>{feeTypesText(d.fee_types)}</Text>
             </View>
             <StatusPill label={d.is_active ? 'Active' : 'Off'} tone={d.is_active ? 'success' : 'neutral'} />
           </TouchableOpacity>
@@ -114,6 +117,7 @@ function DiscountsTab() {
         <DateField label="Start date (optional)" value={form.startDate} onChange={(v) => set('startDate', v)} />
         <DateField label="End date (optional)" value={form.endDate} onChange={(v) => set('endDate', v)} />
         <Input label="Maximum uses (optional)" value={form.maxUses} onChangeText={(v) => set('maxUses', v)} keyboardType="number-pad" />
+        <FeePicker monthly={form.monthlyFees} annual={form.annualFees} onChange={(m, a) => setForm((f) => ({ ...f, monthlyFees: m, annualFees: a }))} />
         <ToggleRow label="Can combine with other discounts" value={form.stackable} onChange={(v) => set('stackable', v)} />
         <ToggleRow label="Active" value={form.isActive} onChange={(v) => set('isActive', v)} />
         {editing && editing !== 'new' ? <Button title="Delete discount" variant="danger" size="sm" onPress={() => remove(editing)} /> : null}
@@ -173,6 +177,7 @@ function ScholarshipsTab() {
             <View style={styles.who}>
               <Text style={styles.name} numberOfLines={1}>{s.name}</Text>
               <Text style={styles.sub} numberOfLines={1}>{[scholarshipValueText(s), s.scholarship_type_display, `${s.recipient_count ?? 0} students`].filter(Boolean).join('  ·  ')}</Text>
+              <Text style={s.fee_types?.length ? styles.sub : styles.warn} numberOfLines={1}>{feeTypesText(s.fee_types)}</Text>
             </View>
             <StatusPill label={s.is_active ? 'Active' : 'Off'} tone={s.is_active ? 'success' : 'neutral'} />
           </TouchableOpacity>
@@ -188,6 +193,7 @@ function ScholarshipsTab() {
         {form.coverage !== 'FULL' ? (
           <Input label={form.coverage === 'PERCENTAGE' ? 'Percentage (0 to 100)' : 'Amount off (PKR)'} value={form.value} onChangeText={(v) => set('value', v)} keyboardType="decimal-pad" />
         ) : null}
+        <FeePicker monthly={form.monthlyFees} annual={form.annualFees} onChange={(m, a) => setForm((f) => ({ ...f, monthlyFees: m, annualFees: a }))} />
         <Input label="Maximum recipients (optional)" value={form.maxRecipients} onChangeText={(v) => set('maxRecipients', v)} keyboardType="number-pad" />
         <ToggleRow label="Active" value={form.isActive} onChange={(v) => set('isActive', v)} />
         {editing && editing !== 'new' ? <Button title="Delete scholarship" variant="danger" size="sm" onPress={() => remove(editing)} /> : null}
@@ -297,6 +303,24 @@ function AssignmentsTab() {
   );
 }
 
+// Which fees a discount or scholarship cuts (any monthly or annual fee, optional fees included).
+function FeePicker({ monthly, annual, onChange }: { monthly: number[]; annual: number[]; onChange: (m: number[], a: number[]) => void }) {
+  const monthlyCats = useFeeCategories('MONTHLY');
+  const annualCats = useFeeCategories('ANNUAL');
+  const opts = (rows?: { id: number; name: string; is_active?: boolean }[]) =>
+    (rows ?? []).filter((c) => c.is_active !== false).map((c) => ({ value: c.id, label: c.name }));
+  const flip = (list: number[], id: number) => (list.includes(id) ? list.filter((x) => x !== id) : [...list, id]);
+  return (
+    <>
+      <MultiSelect label="Applies to monthly fees" values={monthly} options={opts(monthlyCats.data)} placeholder="None"
+        onToggle={(id) => onChange(flip(monthly, id), annual)} />
+      <MultiSelect label="Applies to annual fees" values={annual} options={opts(annualCats.data)} placeholder="None"
+        hint={monthly.length + annual.length ? undefined : 'Pick at least one fee. With none it reduces no bill.'}
+        onToggle={(id) => onChange(monthly, flip(annual, id))} />
+    </>
+  );
+}
+
 function ToggleRow({ label, value, onChange }: { label: string; value: boolean; onChange: (v: boolean) => void }) {
   return (
     <View style={styles.toggle}>
@@ -316,6 +340,7 @@ const styles = StyleSheet.create({
   who: { flex: 1 },
   name: { fontSize: FontSize.md, fontWeight: '600', color: Colors.text },
   sub: { fontSize: FontSize.sm, color: Colors.textSecondary, marginTop: 2 },
+  warn: { fontSize: FontSize.sm, color: Colors.warning, marginTop: 2 },
   remove: { minHeight: 44, justifyContent: 'center', paddingHorizontal: Spacing.sm },
   removeText: { color: Colors.error, fontWeight: '600', fontSize: FontSize.sm },
   hint: { fontSize: FontSize.xs, color: Colors.textSecondary },

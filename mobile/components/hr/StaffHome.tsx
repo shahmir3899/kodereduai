@@ -8,11 +8,14 @@ import { useUnreadMessages } from '../../hooks/useMessaging';
 import { useRefreshControl } from '../../hooks/useRefreshControl';
 import { sortAssignments } from '../../services/financeManager';
 import Card from '../ui/Card';
-import SchoolSwitcher from '../nav/SchoolSwitcher';
+import HomeHero from '../dashboard/HomeHero';
+import { splitTiles } from '../../services/homeHero';
 import StatTiles from '../dashboard/StatTiles';
 import RecentNotifications from '../dashboard/RecentNotifications';
 import { OwnHrPanels, useOwnHr } from './OwnHrHome';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
+import TileGrid from '../../components/ui/TileGrid';
+import type { IconName } from '../../components/ui/Icon';
 
 // Port of frontend/src/pages/staff/StaffDashboard.jsx: own attendance, leave, payslips, assigned
 // items and the unread counts. Staff have no student, finance or academic data.
@@ -50,28 +53,19 @@ export default function StaffHome() {
   ];
 
   const quick = [
-    { label: 'My Profile', icon: '👤', route: '/(staff)/my-profile', show: true },
-    { label: 'Apply Leave', icon: '🗓️', route: routeFor('staff', '/hr/self-service'), show: hrOn },
-    { label: 'Payslips', icon: '🧾', route: routeFor('staff', '/hr/payslips'), show: hrOn },
-    { label: unreadNotes > 0 ? `Notifications (${unreadNotes})` : 'Notifications', icon: '🔔', route: routeFor('staff', '/notifications'), show: isModuleEnabled('notifications') },
-    { label: unreadMsgs > 0 ? `Messages (${unreadMsgs})` : 'Messages', icon: '💬', route: routeFor('staff', '/messages'), show: true },
+    { label: 'My Profile', icon: 'person-outline' as IconName, route: '/(staff)/my-profile', show: true },
+    { label: 'Apply Leave', icon: 'calendar-outline' as IconName, route: routeFor('staff', '/hr/self-service'), show: hrOn },
+    { label: 'Payslips', icon: 'receipt-outline' as IconName, route: routeFor('staff', '/hr/payslips'), show: hrOn },
+    { label: unreadNotes > 0 ? `Notifications (${unreadNotes})` : 'Notifications', icon: 'notifications-outline' as IconName, route: routeFor('staff', '/notifications'), show: isModuleEnabled('notifications') },
+    { label: unreadMsgs > 0 ? `Messages (${unreadMsgs})` : 'Messages', icon: 'chatbubbles-outline' as IconName, route: routeFor('staff', '/messages'), show: true },
   ].filter((a) => a.show);
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content} refreshControl={refreshControl}>
-      <Text style={styles.greeting}>Welcome back, {name}</Text>
-      <SchoolSwitcher />
+      <HomeHero name={name ?? ""} stats={splitTiles(tiles).hero} onPress={go} />
+      <StatTiles tiles={splitTiles(tiles).rest} onPress={go} />
 
-      <StatTiles tiles={tiles} onPress={go} />
-
-      <View style={styles.actions}>
-        {quick.map((a) => (
-          <TouchableOpacity accessibilityRole="button" key={a.label} style={styles.quick} onPress={() => go(a.route)}>
-            <Text style={styles.quickIcon}>{a.icon}</Text>
-            <Text style={styles.quickLabel}>{a.label}</Text>
-          </TouchableOpacity>
-        ))}
-      </View>
+      <TileGrid items={quick.map((a) => ({ label: a.label, icon: a.icon, onPress: a.route ? () => go(a.route) : undefined }))} />
 
       {hrOn ? <OwnHrPanels balance={own.balance} payslips={own.payslips} /> : null}
       {items.length > 0 ? (
@@ -95,11 +89,6 @@ export default function StaffHome() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
   content: { padding: Spacing.lg, paddingBottom: Spacing.xxxl },
-  greeting: { fontSize: FontSize.xl, fontWeight: '700', color: Colors.text },
-  actions: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.md, marginTop: Spacing.lg },
-  quick: { width: '30%', minWidth: 84, alignItems: 'center', backgroundColor: Colors.surface, borderRadius: BorderRadius.md, paddingVertical: Spacing.md },
-  quickIcon: { fontSize: 22 },
-  quickLabel: { fontSize: FontSize.xs, color: Colors.text, marginTop: 4, textAlign: 'center' },
   section: { fontSize: FontSize.lg, fontWeight: '600', color: Colors.text, marginTop: Spacing.xl, marginBottom: Spacing.md },
   list: { padding: Spacing.md },
   line: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, paddingVertical: 6 },

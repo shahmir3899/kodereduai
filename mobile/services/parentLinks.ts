@@ -37,3 +37,28 @@ export function toggleId(ids: number[], id: number): number[] {
 export function linkSummary(linked: number): string {
   return linked === 1 ? '1 parent linked' : linked > 1 ? `${linked} parents linked` : 'No parent linked';
 }
+
+// --- Parent portal status on the student list (web parentLinkUtils) ---
+
+export interface PortalStatus { linked?: number; pending?: number }
+export type PortalKey = 'none' | 'pending' | 'linked';
+export const PORTAL_FILTERS: Array<{ value: 'all' | PortalKey; label: string }> = [
+  { value: 'all', label: 'Parent portal: all' },
+  { value: 'none', label: 'Not linked' },
+  { value: 'pending', label: 'Invite pending' },
+  { value: 'linked', label: 'Linked' },
+];
+
+// {linked, pending} for one student (missing = neither) -> what the row shows.
+export function portalStatus(s: PortalStatus | undefined): { key: PortalKey; label: string } {
+  const linked = s?.linked || 0;
+  if (linked > 0) return { key: 'linked', label: linked === 1 ? '1 parent linked' : `${linked} parents linked` };
+  if ((s?.pending || 0) > 0) return { key: 'pending', label: 'Invite pending' };
+  return { key: 'none', label: 'Not linked' };
+}
+
+export function filterByPortal<T extends { id: number }>(rows: T[], status: Record<string, PortalStatus> | undefined, filter: 'all' | PortalKey): T[] {
+  if (filter === 'all') return rows;
+  return rows.filter((r) => portalStatus(status?.[String(r.id)]).key === filter);
+}
+

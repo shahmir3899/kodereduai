@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { FlatList, Image, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
+import { FlatList, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
+import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import BottomSheet from '../../ui/BottomSheet';
 import SegmentedTabs from '../../ui/SegmentedTabs';
@@ -47,7 +48,7 @@ export default function PicturePickerSheet({ visible, onClose, onPick, allowCrea
 function Tile({ uri, label, sub, onPress, onLongPress, a11y }: { uri: string | null; label: string; sub?: string; onPress: () => void; onLongPress?: () => void; a11y: string }) {
   return (
     <TouchableOpacity accessibilityRole="button" accessibilityLabel={a11y} style={styles.tile} onPress={onPress} onLongPress={onLongPress}>
-      {uri ? <Image source={{ uri }} style={styles.thumb} resizeMode="contain" /> : <View style={styles.thumb} />}
+      {uri ? <Image source={{ uri }} style={styles.thumb} contentFit="contain" /> : <View style={styles.thumb} />}
       <Text style={styles.tileText} numberOfLines={1}>{label}</Text>
       {sub ? <Text style={styles.tileSub} numberOfLines={1}>{sub}</Text> : null}
     </TouchableOpacity>
@@ -138,7 +139,7 @@ function UploadsTab({ onPick }: { onPick: (ref: PictureRef) => void }) {
   if (source) {
     return (
       <View style={styles.gap}>
-        <Image source={{ uri: source.uri }} style={styles.preview} resizeMode="contain" accessibilityLabel="The chosen picture" />
+        <Image source={{ uri: source.uri }} style={styles.preview} contentFit="contain" accessibilityLabel="The chosen picture" />
         <Input label="What it shows" value={label} onChangeText={setLabel} />
         <View style={styles.row}>
           <Text style={[styles.hint, styles.flex]}>Clean up a photo of a drawing (white paper, black lines). Turn off for a coloured picture.</Text>
@@ -229,7 +230,7 @@ const styles = StyleSheet.create({
   gap: { gap: Spacing.sm },
   grid: { maxHeight: 420 },
   tile: { flex: 1 / 3, margin: 3, padding: Spacing.xs, alignItems: 'center', borderWidth: 1, borderColor: Colors.border, borderRadius: BorderRadius.sm, backgroundColor: Colors.surface, minHeight: 44 },
-  thumb: { width: '100%', height: 64, backgroundColor: '#fff' },
+  thumb: { width: '100%', height: 64, backgroundColor: Colors.surface },
   tileText: { fontSize: FontSize.xs, color: Colors.text },
   tileSub: { fontSize: FontSize.xs, color: Colors.textSecondary, writingDirection: 'rtl' },
   preview: { width: '100%', height: 220, backgroundColor: Colors.surfaceSecondary, borderRadius: BorderRadius.sm },

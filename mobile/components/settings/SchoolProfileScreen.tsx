@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, Image, Switch, Share, StyleSheet } from 'react-native';
+import { View, Text, ScrollView, Switch, Share, StyleSheet } from 'react-native';
+import { Image } from 'expo-image';
 import QRCode from 'react-native-qrcode-svg';
 import * as ImagePicker from 'expo-image-picker';
 import { useAuth } from '../../contexts/AuthContext';
@@ -110,7 +111,7 @@ function Body({ school }: { school: SchoolProfile }) {
     <Card style={styles.card}>
       <Text style={styles.section}>{title}</Text>
       <Text style={styles.hint}>{hint}</Text>
-      {url ? <Image source={{ uri: url }} style={type === 'logo' ? styles.logo : styles.letterhead} resizeMode="contain" accessibilityLabel={`School ${ASSET_LABEL[type]}`} /> : <Text style={styles.empty}>{`No ${ASSET_LABEL[type]} uploaded`}</Text>}
+      {url ? <Image source={{ uri: url }} style={type === 'logo' ? styles.logo : styles.letterhead} contentFit="contain" accessibilityLabel={`School ${ASSET_LABEL[type]}`} /> : <Text style={styles.empty}>{`No ${ASSET_LABEL[type]} uploaded`}</Text>}
       <View style={styles.pair}>
         <Button title={url ? 'Replace' : 'Upload'} size="sm" style={styles.half} onPress={() => upload(type)} loading={uploading === type} disabled={uploading !== null} />
         {url ? <Button title="Remove" size="sm" variant="danger" style={styles.half} onPress={() => removeAsset(type)} disabled={uploading !== null || actions.remove.isPending} /> : null}
@@ -188,7 +189,7 @@ const styles = StyleSheet.create({
   value: { fontSize: FontSize.sm, fontWeight: '600', color: Colors.text, flexShrink: 1, textAlign: 'right' },
   logo: { width: 128, height: 128, alignSelf: 'flex-start', borderRadius: BorderRadius.md, backgroundColor: Colors.surfaceSecondary },
   letterhead: { width: '100%', height: 90, borderRadius: BorderRadius.md, backgroundColor: Colors.surfaceSecondary },
-  qr: { alignItems: 'center', padding: Spacing.md, backgroundColor: '#ffffff', borderRadius: BorderRadius.md, alignSelf: 'center' },
+  qr: { alignItems: 'center', padding: Spacing.md, backgroundColor: Colors.surface, borderRadius: BorderRadius.md, alignSelf: 'center' },
   pair: { flexDirection: 'row', gap: Spacing.sm },
   half: { flex: 1 },
   toggle: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md },

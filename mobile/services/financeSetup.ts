@@ -111,19 +111,30 @@ export interface ManagedCategory {
   is_active?: boolean;
   // Only the expense list carries it, and only for admins; absent means the role cannot set it.
   is_sensitive?: boolean;
+  // Fee categories only: ENROLLED bills just the students enrolled in it (Robotics, Karate...).
+  billing_mode?: 'ALL' | 'ENROLLED';
+  default_amount?: string | number | null;
+  enrolled_count?: number | null;
 }
 
 export interface CategoryForm {
   name: string;
   description: string;
   isSensitive: boolean;
+  enrolledOnly: boolean;
+  price: string;
 }
 
-export const emptyCategoryForm = (): CategoryForm => ({ name: '', description: '', isSensitive: false });
+export const emptyCategoryForm = (): CategoryForm => ({ name: '', description: '', isSensitive: false, enrolledOnly: false, price: '' });
 
 export const categoryToForm = (c: ManagedCategory): CategoryForm => ({
   name: c.name, description: c.description ?? '', isSensitive: !!c.is_sensitive,
+  enrolledOnly: c.billing_mode === 'ENROLLED',
+  price: c.default_amount == null ? '' : String(Number(c.default_amount)),
 });
+
+// Monthly and annual fee categories can bill everyone or only enrolled students.
+export const hasBilling = (kind: CategoryKind) => kind === 'monthly' || kind === 'annual';
 
 // Fee categories carry a description, expense ones the sensitive flag, income ones only a name.
 export const hasDescription = (kind: CategoryKind) => kind === 'monthly' || kind === 'annual';
@@ -134,13 +145,19 @@ export function canSetSensitive(kind: CategoryKind, rows: ManagedCategory[]): bo
 }
 
 export function validateCategory(f: CategoryForm): string | null {
-  return f.name.trim() ? null : 'Enter a name.';
+  if (!f.name.trim()) return 'Enter a name.';
+  if (f.enrolledOnly && f.price.trim() && !(Number(f.price) >= 0)) return 'Enter a price of 0 or more.';
+  return null;
 }
 
 export function buildCategoryPayload(kind: CategoryKind, f: CategoryForm, rows: ManagedCategory[]): Record<string, unknown> {
   const data: Record<string, unknown> = { name: f.name.trim() };
   if (hasDescription(kind)) data.description = f.description.trim();
   if (canSetSensitive(kind, rows)) data.is_sensitive = f.isSensitive;
+  if (hasBilling(kind)) {
+    data.billing_mode = f.enrolledOnly ? 'ENROLLED' : 'ALL';
+    if (f.enrolledOnly) data.default_amount = f.price.trim() ? f.price.trim() : null;
+  }
   return data;
 }
 

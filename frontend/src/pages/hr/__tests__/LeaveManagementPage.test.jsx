@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { screen, waitFor } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
 import { server } from '../../../test/mocks/server'
@@ -22,11 +22,21 @@ vi.mock('../../../components/Toast', () => ({
   }),
 }))
 
+// Each application renders twice (phone cards and the desktop table, one hidden by CSS), so rows
+// are matched with getAllBy*. Approve and Reject open a confirm modal with its own button.
+async function openAndConfirm(user, action) {
+  await waitFor(() => expect(screen.getAllByText('Ali Khan').length).toBeGreaterThan(0))
+  await user.click(screen.getAllByRole('button', { name: action })[0])
+  const heading = await screen.findByRole('heading', { name: `${action} Leave` })
+  const modal = heading.parentElement
+  await user.click(within(modal).getByRole('button', { name: action }))
+}
+
 describe('LeaveManagementPage - Bug #3: invalidateQueries syntax', () => {
   it('renders leave applications', async () => {
     renderWithProviders(<LeaveManagementPage />)
     await waitFor(() => {
-      expect(screen.getByText(/leave/i)).toBeInTheDocument()
+      expect(screen.getAllByText('Ali Khan').length).toBeGreaterThan(0)
     })
   })
 
@@ -45,19 +55,7 @@ describe('LeaveManagementPage - Bug #3: invalidateQueries syntax', () => {
     const user = userEvent.setup()
     renderWithProviders(<LeaveManagementPage />, { queryClient })
 
-    await waitFor(() => {
-      expect(screen.getByText('Ali Khan')).toBeInTheDocument()
-    })
-
-    // Find approve button
-    const approveBtn = screen.getByRole('button', { name: /approve/i })
-    await user.click(approveBtn)
-
-    // If there's a confirmation modal, confirm it
-    const confirmBtn = screen.queryByRole('button', { name: /confirm|yes|approve/i })
-    if (confirmBtn) {
-      await user.click(confirmBtn)
-    }
+    await openAndConfirm(user, 'Approve')
 
     await waitFor(() => {
       expect(approveCalled).toBe(true)
@@ -65,13 +63,10 @@ describe('LeaveManagementPage - Bug #3: invalidateQueries syntax', () => {
 
     // Verify invalidateQueries was called with v5 object syntax
     await waitFor(() => {
-      const calls = invalidateSpy.mock.calls
-      if (calls.length > 0) {
-        // v5 syntax: first arg should be an object with queryKey
-        const firstCall = calls[0][0]
-        expect(firstCall).toHaveProperty('queryKey')
-        expect(Array.isArray(firstCall.queryKey)).toBe(true)
-      }
+      expect(invalidateSpy).toHaveBeenCalled()
+      const firstCall = invalidateSpy.mock.calls[0][0]
+      expect(firstCall).toHaveProperty('queryKey')
+      expect(Array.isArray(firstCall.queryKey)).toBe(true)
     })
   })
 
@@ -87,29 +82,19 @@ describe('LeaveManagementPage - Bug #3: invalidateQueries syntax', () => {
     const user = userEvent.setup()
     renderWithProviders(<LeaveManagementPage />)
 
-    await waitFor(() => {
-      expect(screen.getByText('Ali Khan')).toBeInTheDocument()
-    })
-
-    // Find reject button
-    const rejectBtn = screen.getByRole('button', { name: /reject/i })
-    await user.click(rejectBtn)
-
-    // If there's a confirmation modal, confirm it
-    const confirmBtn = screen.queryByRole('button', { name: /confirm|yes|reject/i })
-    if (confirmBtn) {
-      await user.click(confirmBtn)
-    }
+    await openAndConfirm(user, 'Reject')
 
     await waitFor(() => {
       expect(rejectCalled).toBe(true)
     })
   })
 
-  it('renders PENDING status badge', async () => {
+  it('renders the pending status badge from status_display', async () => {
     renderWithProviders(<LeaveManagementPage />)
     await waitFor(() => {
-      expect(screen.getByText('PENDING')).toBeInTheDocument()
+      // Not the "Pending" option of the status filter: the badge on the row.
+      const badges = screen.getAllByText('Pending').filter((el) => el.tagName !== 'OPTION')
+      expect(badges.length).toBeGreaterThan(0)
     })
   })
 })

@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { View, Text, FlatList, ActivityIndicator, StyleSheet, type RefreshControlProps } from 'react-native';
+import { View, ActivityIndicator, StyleSheet, type RefreshControlProps } from 'react-native';
 import { useAuth } from '../../contexts/AuthContext';
 import { useAllItems, useInventoryActions, useMovementsPaged, useVendors } from '../../hooks/useInventory';
 import { useRefreshControl } from '../../hooks/useRefreshControl';
@@ -16,11 +16,13 @@ import Button from '../ui/Button';
 import Skeleton from '../ui/Skeleton';
 import ErrorState from '../ui/ErrorState';
 import EmptyState from '../ui/EmptyState';
-import StatusPill from '../ui/StatusPill';
 import { useToast } from '../ui/Toast';
 import FormSheet from './FormSheet';
 import QuickAdd from './QuickAdd';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
+import AppList from '../ui/AppList';
+import RecordCard from '../ui/RecordCard';
+import { day } from '../../services/dates';
 
 // The stock ledger. Rows are never edited or deleted (the server refuses it); admin and principal
 // can record a purchase, adjustment or disposal. Issues and returns come from assignments.
@@ -71,7 +73,7 @@ export default function MovementsScreen() {
 
   return (
     <View style={styles.container}>
-      <FlatList
+      <AppList
         contentContainerStyle={styles.content}
         data={rows}
         keyExtractor={(m) => String(m.id)}
@@ -82,19 +84,14 @@ export default function MovementsScreen() {
         ListEmptyComponent={<EmptyState title="No movements" message="Stock movements will appear here." />}
         ListFooterComponent={query.isFetchingNextPage ? <ActivityIndicator color={Colors.primary} style={{ margin: Spacing.lg }} /> : null}
         renderItem={({ item: m }) => (
-          <View style={styles.row}>
-            <View style={styles.who}>
-              <Text style={styles.name} numberOfLines={1}>{m.item_name}</Text>
-              <Text style={styles.sub} numberOfLines={2}>
-                {[m.date, m.vendor_name, m.reference_number, m.remarks].filter(Boolean).join('  ·  ')}
-              </Text>
-            </View>
-            <View style={styles.right}>
-              <Text style={[styles.qty, { color: m.quantity < 0 ? Colors.error : Colors.success }]}>{m.quantity > 0 ? '+' : ''}{m.quantity}</Text>
-              <StatusPill label={m.transaction_type_display ?? m.transaction_type} tone={movementTone(m.transaction_type)} />
-              {Number(m.total_amount) ? <Text style={styles.amount}>{formatMoney(Math.abs(Number(m.total_amount)))}</Text> : null}
-            </View>
-          </View>
+          <RecordCard
+            icon="swap-vertical-outline"
+            title={m.item_name}
+            meta={[day(m.date) || m.date, m.vendor_name, m.reference_number, Number(m.total_amount) ? formatMoney(Math.abs(Number(m.total_amount))) : null, m.remarks].filter(Boolean).join('  ·  ')}
+            status={{ label: m.transaction_type_display ?? m.transaction_type, tone: movementTone(m.transaction_type) }}
+            trailing={`${m.quantity > 0 ? '+' : ''}${m.quantity}`}
+            trailingColor={m.quantity < 0 ? Colors.error : Colors.success}
+          />
         )}
       />
 
@@ -134,11 +131,4 @@ export default function MovementsScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
   content: { padding: Spacing.lg, paddingBottom: Spacing.xxxl },
-  row: { flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.surface, borderRadius: BorderRadius.md, padding: Spacing.md, marginTop: Spacing.sm, gap: Spacing.md },
-  who: { flex: 1 },
-  name: { fontSize: FontSize.md, fontWeight: '600', color: Colors.text },
-  sub: { fontSize: FontSize.sm, color: Colors.textSecondary, marginTop: 2 },
-  right: { alignItems: 'flex-end', gap: 4 },
-  qty: { fontSize: FontSize.lg, fontWeight: '700' },
-  amount: { fontSize: FontSize.xs, color: Colors.textSecondary },
 });

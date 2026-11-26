@@ -5,12 +5,12 @@ import Icon from '../ui/Icon';
 import { Colors } from '../../constants/colors';
 
 // Header button that opens the side menu. Not shown when the menu is a permanent rail.
-export default function MenuButton() {
+export default function MenuButton({ color = Colors.text }: { color?: string }) {
   const { docked, open } = useSideMenu();
   if (docked) return null;
   return (
     <TouchableOpacity accessibilityRole="button" accessibilityLabel="Open menu" onPress={open} style={styles.btn}>
-      <Icon name="menu-outline" size={26} color={Colors.text} />
+      <Icon name="menu-outline" size={26} color={color} />
     </TouchableOpacity>
   );
 }

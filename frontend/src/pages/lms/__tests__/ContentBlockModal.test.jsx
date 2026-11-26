@@ -264,7 +264,8 @@ describe('ContentBlock Modal', () => {
 
     await user.click(screen.getAllByRole('button', { name: 'Add Content Block' })[0])
 
-    const blockTypeSelect = screen.getByText('Block Type *').parentElement.querySelector('select')
+    // The shared Field links its label to the select (the "*" is a separate, hidden span now).
+    const blockTypeSelect = screen.getByLabelText(/^Block Type/)
     fireEvent.change(blockTypeSelect, { target: { value: '' } })
     await user.type(screen.getByPlaceholderText('Write the content block text...'), 'Only text')
     const modal = screen.getByRole('heading', { name: 'Add Content Block' }).closest('.bg-white')

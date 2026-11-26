@@ -9,9 +9,9 @@ import {
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
-  Alert,
 } from 'react-native';
 import { confirm } from './ui/confirm';
+import { useToast } from './ui/Toast';
 import { Colors, FontSize, Spacing, BorderRadius } from '../constants/colors';
 
 interface ChatMessage {
@@ -39,6 +39,7 @@ export default function ChatInterface({
   welcomeMessage = 'Hello! How can I help you today?',
   suggestions,
 }: ChatInterfaceProps) {
+  const toast = useToast();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -104,7 +105,7 @@ export default function ChatInterface({
       await clearHistory();
       setMessages([{ role: 'assistant', content: welcomeMessage }]);
     } catch {
-      Alert.alert('Error', 'Failed to clear chat history.');
+      toast.error('Could not clear the chat. Please try again.');
     }
   };
 

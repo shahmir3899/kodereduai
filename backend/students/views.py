@@ -26,7 +26,7 @@ from core.permissions import (
     get_teacher_combined_scope, get_teacher_master_only_class_scope, get_teacher_session_class_scope,
     _get_session_class_student_ids,
 )
-from core.mixins import TenantQuerySetMixin, ensure_tenant_schools, ensure_tenant_school_id
+from core.mixins import TenantQuerySetMixin, ensure_tenant_schools, ensure_tenant_school_id, ListETagMixin
 from core.audit import AuditedDeleteMixin
 from .models import Class, Student, StudentDocument, StudentProfile, StudentInvite
 from .serializers import (
@@ -60,7 +60,7 @@ def _resolve_school_id(request):
     return None
 
 
-class ClassViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet):
+class ClassViewSet(ListETagMixin, ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet):
     required_module = 'students'
     queryset = Class.objects.all()
     permission_classes = [IsAuthenticated, CanViewStudentRecords, HasSchoolAccess]

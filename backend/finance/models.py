@@ -19,6 +19,13 @@ class FeeType(models.TextChoices):
     FINE = 'FINE', 'Fine (Deprecated)'
 
 
+class FeeBillingMode(models.TextChoices):
+    """Who a fee category bills: every student (class/student price), or only students enrolled
+    in it (electives such as Robotics or Karate, transport for bus users)."""
+    ALL = 'ALL', 'All students'
+    ENROLLED = 'ENROLLED', 'Enrolled students only'
+
+
 SUGGESTED_ANNUAL_CATEGORIES = [
     {'name': 'School Fee', 'description': 'Primary annual education fee'},
     {'name': 'Sports & Games', 'description': 'Extra-curricular sports activities'},
@@ -298,6 +305,14 @@ class AnnualFeeCategory(models.Model):
     )
     name = models.CharField(max_length=100, help_text="Display name for this annual charge (e.g. School Fee)")
     description = models.CharField(max_length=255, blank=True, help_text="Optional description")
+    billing_mode = models.CharField(
+        max_length=10, choices=FeeBillingMode.choices, default=FeeBillingMode.ALL,
+        help_text="ALL bills every student; ENROLLED bills only students with a StudentFeeEnrollment",
+    )
+    # One price for every enrolled student, used when no class or student price is set.
+    # Only read for ENROLLED categories: an ALL category keeps needing a class price, so turning
+    # this on cannot suddenly bill a whole school.
+    default_amount = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -319,6 +334,14 @@ class MonthlyFeeCategory(models.Model):
     )
     name = models.CharField(max_length=100, help_text="Display name for this monthly charge (e.g. Tuition Fee)")
     description = models.CharField(max_length=255, blank=True, help_text="Optional description")
+    billing_mode = models.CharField(
+        max_length=10, choices=FeeBillingMode.choices, default=FeeBillingMode.ALL,
+        help_text="ALL bills every student; ENROLLED bills only students with a StudentFeeEnrollment",
+    )
+    # One price for every enrolled student, used when no class or student price is set.
+    # Only read for ENROLLED categories: an ALL category keeps needing a class price, so turning
+    # this on cannot suddenly bill a whole school.
+    default_amount = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -427,12 +450,75 @@ class FeeStructure(models.Model):
         return f"{target} - {self.monthly_amount} ({type_label})"
 
 
+class StudentFeeEnrollment(models.Model):
+    """A student taking an optional (ENROLLED-billed) fee: Robotics, Karate, transport...
+
+    Billing reads these by date: a month is billed when the enrollment overlaps any day of it, so
+    joining mid-month is charged the full month (school decision, 2026-11-26). Ending one never
+    touches bills already generated.
+    """
+    school = models.ForeignKey('schools.School', on_delete=models.CASCADE, related_name='fee_enrollments')
+    student = models.ForeignKey('students.Student', on_delete=models.CASCADE, related_name='fee_enrollments')
+    monthly_category = models.ForeignKey(
+        MonthlyFeeCategory, on_delete=models.CASCADE, null=True, blank=True, related_name='enrollments',
+    )
+    annual_category = models.ForeignKey(
+        AnnualFeeCategory, on_delete=models.CASCADE, null=True, blank=True, related_name='enrollments',
+    )
+    academic_year = models.ForeignKey(
+        'academic_sessions.AcademicYear', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='fee_enrollments',
+    )
+    start_date = models.DateField()
+    end_date = models.DateField(null=True, blank=True, help_text="Last day enrolled; blank = still enrolled")
+    amount = models.DecimalField(
+        max_digits=10, decimal_places=2, null=True, blank=True,
+        help_text="Price for this student only; blank = student/class price, then the category price",
+    )
+    notes = models.CharField(max_length=200, blank=True, default='')
+    created_by = models.ForeignKey('users.User', on_delete=models.SET_NULL, null=True, blank=True, related_name='+')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-start_date', '-id']
+        indexes = [
+            models.Index(fields=['school', 'monthly_category'], name='feeenr_school_monthly_idx'),
+            models.Index(fields=['school', 'annual_category'], name='feeenr_school_annual_idx'),
+            models.Index(fields=['school', 'student'], name='feeenr_school_student_idx'),
+        ]
+        constraints = [
+            models.CheckConstraint(
+                condition=(
+                    Q(monthly_category__isnull=False, annual_category__isnull=True)
+                    | Q(monthly_category__isnull=True, annual_category__isnull=False)
+                ),
+                name='feeenr_exactly_one_category',
+            ),
+            models.CheckConstraint(
+                condition=Q(end_date__isnull=True) | Q(end_date__gte=models.F('start_date')),
+                name='feeenr_end_after_start',
+            ),
+        ]
+
+    @property
+    def category(self):
+        return self.monthly_category or self.annual_category
+
+    def __str__(self):
+        return f"{self.student_id} - {self.category} from {self.start_date}"
+
+
 def resolve_fee_amount(student, fee_type='MONTHLY', annual_category_id=None, monthly_category_id=None,
-                       academic_year_id=None):
+                       academic_year_id=None, year=None, month=None):
     """
     Resolve the fee for a student by fee_type (and optionally annual_category or monthly_category).
     Priority: student-level FeeStructure > class-level FeeStructure.
     Returns Decimal amount or None if no fee structure found.
+
+    Enrolled-only categories (finance.optional_fees): None unless the student is enrolled during
+    the billing period (year/month, default this month); then enrollment price > student >
+    class > category default price.
 
     The class is the student's class in `academic_year_id` (default: current
     year) from their enrollment. Pricing by the Student.class_obj snapshot
@@ -444,6 +530,23 @@ def resolve_fee_amount(student, fee_type='MONTHLY', annual_category_id=None, mon
 
     school_id = student.school_id
     class_obj_id = class_id_for_year(student, academic_year_id)
+
+    from . import optional_fees
+    category = optional_fees.category_for(fee_type, annual_category_id, monthly_category_id)
+    enrolled_only = optional_fees.is_enrolled_only(category)
+    if enrolled_only:
+        if fee_type == 'MONTHLY' and not month:
+            year, month = today.year, today.month
+        first_day, last_day = optional_fees.billing_period(
+            fee_type, year or today.year, month if fee_type == 'MONTHLY' else None, academic_year_id,
+        )
+        enrollment = optional_fees.enrollments_in_period(
+            school_id, category, first_day, last_day, student_ids=[student.pk],
+        ).get(student.pk)
+        if enrollment is None:
+            return None
+        if enrollment.amount is not None:
+            return enrollment.amount
 
     extra_filters = {}
     if fee_type == 'ANNUAL' and annual_category_id:
@@ -482,6 +585,8 @@ def resolve_fee_amount(student, fee_type='MONTHLY', annual_category_id=None, mon
     if class_fee:
         return class_fee.monthly_amount
 
+    if enrolled_only:
+        return category.default_amount
     return None
 
 
@@ -556,6 +661,11 @@ class FeePayment(models.Model):
         default=0,
         help_text="Carried-forward balance from previous month"
     )
+    # Discount taken off this row's own charge, already subtracted: base_monthly_fee (monthly) or
+    # amount_due (annual) is what is charged after it. Kept as a separate figure only so bills and
+    # vouchers can show "fee, less discount"; the carry-forward ledger never reads it.
+    discount_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    discount_detail = models.JSONField(default=list, blank=True, help_text="[{name, kind, amount}] applied")
     base_monthly_fee = models.DecimalField(
         max_digits=10,
         decimal_places=2,
@@ -1107,6 +1217,15 @@ class Discount(models.Model):
     is_active = models.BooleanField(default=True)
     max_uses = models.IntegerField(null=True, blank=True)
     stackable = models.BooleanField(default=False)
+    # Which fees this cuts (decision 2026-11-26: discounts are per fee type, any monthly or annual
+    # category, optional fees included). None picked = it cuts nothing: discounts made before this
+    # change never reduced a bill, so they stay inert until a school picks their fees.
+    monthly_categories = models.ManyToManyField(
+        'finance.MonthlyFeeCategory', blank=True, related_name='%(class)s_set',
+    )
+    annual_categories = models.ManyToManyField(
+        'finance.AnnualFeeCategory', blank=True, related_name='%(class)s_set',
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -1154,6 +1273,15 @@ class Scholarship(models.Model):
     value = models.DecimalField(max_digits=10, decimal_places=2)
     max_recipients = models.IntegerField(null=True, blank=True)
     is_active = models.BooleanField(default=True)
+    # Which fees this cuts (decision 2026-11-26: discounts are per fee type, any monthly or annual
+    # category, optional fees included). None picked = it cuts nothing: discounts made before this
+    # change never reduced a bill, so they stay inert until a school picks their fees.
+    monthly_categories = models.ManyToManyField(
+        'finance.MonthlyFeeCategory', blank=True, related_name='%(class)s_set',
+    )
+    annual_categories = models.ManyToManyField(
+        'finance.AnnualFeeCategory', blank=True, related_name='%(class)s_set',
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

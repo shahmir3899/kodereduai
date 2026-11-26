@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, ScrollView, KeyboardAvoidingView, Platform, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRouter, type Href } from 'expo-router';
 import { studentsApi } from '../../services/api';
@@ -15,7 +15,7 @@ import { usePersonaBase } from '../../hooks/usePersonaBase';
 import Input from '../ui/Input';
 import DateField from '../ui/DateField';
 import Select from '../ui/Select';
-import Button from '../ui/Button';
+import FormScreen from '../ui/FormScreen';
 import Skeleton from '../ui/Skeleton';
 import ErrorState from '../ui/ErrorState';
 import { useToast } from '../ui/Toast';
@@ -123,8 +123,12 @@ export default function StudentFormScreen({ studentId }: Props) {
   };
 
   return (
-    <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+    <FormScreen
+      submitLabel={isEdit ? 'Save changes' : 'Add student'}
+      onSubmit={submit}
+      busy={save.isPending}
+      secondary={{ label: 'Cancel', onPress: () => router.back() }}
+    >
         {general ? <View style={styles.banner}><Text style={styles.bannerText}>{general}</Text></View> : null}
 
         {!isEdit ? (
@@ -149,18 +153,11 @@ export default function StudentFormScreen({ studentId }: Props) {
           </TouchableOpacity>
         ) : null}
 
-        <View style={styles.actions}>
-          <Button title="Cancel" variant="outline" onPress={() => router.back()} style={{ flex: 1 }} />
-          <Button title={isEdit ? 'Save changes' : 'Add student'} onPress={submit} loading={save.isPending} style={{ flex: 1 }} />
-        </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+    </FormScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.background },
-  content: { padding: Spacing.lg, paddingBottom: Spacing.xxl },
   section: { marginTop: Spacing.lg },
   sectionTitle: { fontSize: FontSize.sm, fontWeight: '700', color: Colors.textSecondary, textTransform: 'uppercase', marginBottom: Spacing.sm },
   textArea: { minHeight: 72, textAlignVertical: 'top' },
@@ -169,5 +166,4 @@ const styles = StyleSheet.create({
   moreText: { color: Colors.primary, fontWeight: '600', fontSize: FontSize.sm },
   banner: { backgroundColor: Colors.errorLight, borderRadius: BorderRadius.md, padding: Spacing.md, marginBottom: Spacing.md },
   bannerText: { color: Colors.error, fontSize: FontSize.sm },
-  actions: { flexDirection: 'row', gap: Spacing.md, marginTop: Spacing.xl },
 });

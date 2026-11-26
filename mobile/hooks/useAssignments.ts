@@ -4,6 +4,8 @@ import { listOf } from '../services/academicYear';
 import type { Assignment, Submission } from '../services/assignments';
 import { useAcademicYear } from './useAcademicYear';
 import { useScopedQuery } from './useScopedQuery';
+import { REFERENCE_STALE_MS } from '../services/queryRules';
+
 
 // The whole academic year in one request; class, subject, status and type filter on the phone.
 // Teacher section scoping is enforced server-side.
@@ -40,7 +42,7 @@ export function useClassSubjectRows(masterClassId: number | null) {
 export function useSubjectList() {
   return useScopedQuery('subjects', [], async () =>
     listOf<{ id: number; name: string }>((await academicsApi.getSubjects({ page_size: 9999 })).data),
-  { staleTime: 5 * 60_000 });
+  { staleTime: REFERENCE_STALE_MS });
 }
 
 // Teacher picker for the form. Some schools add teachers as staff rows with no linked user

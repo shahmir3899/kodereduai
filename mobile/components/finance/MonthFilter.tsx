@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { MONTH_NAMES, stepFeeMonth } from '../../services/feeCollect';
 import SegmentedTabs from '../ui/SegmentedTabs';
-import { Colors, FontSize, Spacing } from '../../constants/colors';
+import { Colors, FontSize, Spacing, GlyphSize } from '../../constants/colors';
 
 export type YearMonth = { year: number; month: number };
 
@@ -34,7 +34,7 @@ export default function MonthFilter({ value, onChange }: { value: YearMonth | nu
 const styles = StyleSheet.create({
   wrap: { marginBottom: Spacing.sm },
   nav: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: Spacing.sm },
-  arrow: { fontSize: 28, color: Colors.primary, paddingHorizontal: Spacing.md },
+  arrow: { fontSize: GlyphSize.lg, color: Colors.primary, paddingHorizontal: Spacing.md },
   off: { color: Colors.textTertiary },
   title: { fontSize: FontSize.md, fontWeight: '700', color: Colors.text },
 });

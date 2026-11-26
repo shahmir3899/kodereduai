@@ -69,7 +69,12 @@ export function useBackgroundTask({ mutationFn, taskType, title, onSuccess, onSu
     isError: mutation.isError,
     error: mutation.error,
     data: mutation.data,
-    reset: mutation.reset,
+    // Forget the submitted task too: the fee generation dialog closes itself when it sees a
+    // submittedTaskId, so keeping the old one made it close again on every reopen (2026-11-26).
+    reset: () => {
+      mutation.reset()
+      setSubmittedTaskId(null)
+    },
     submittedTaskId,
     taskStatus: currentStatus,
     isComplete: currentStatus?.status === 'SUCCESS',

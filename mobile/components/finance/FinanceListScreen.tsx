@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { View, Text, FlatList, ActivityIndicator, StyleSheet, TouchableOpacity, type RefreshControlProps } from 'react-native';
+import { View, Text, ActivityIndicator, StyleSheet, TouchableOpacity, type RefreshControlProps } from 'react-native';
 import { financeApi } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
 import { incomeDescription } from '../../services/financeManager';
@@ -28,6 +28,7 @@ import ErrorState from '../ui/ErrorState';
 import EmptyState from '../ui/EmptyState';
 import StatusPill from '../ui/StatusPill';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
+import AppList from '../ui/AppList';
 
 interface LedgerRow {
   id: number;
@@ -124,6 +125,11 @@ function FeesList() {
 // read only for the finance manager, so their lists have no controls.
 export function OtherIncomeHistory() {
   return <LedgerList kind="income" />;
+}
+
+// The same for expenses, under the admin's Record Expense screen.
+export function ExpenseHistory() {
+  return <LedgerList kind="expenses" />;
 }
 
 function LedgerList({ kind }: { kind: 'expenses' | 'income' }) {
@@ -236,7 +242,7 @@ function List<T>({ query, header, rows, refreshControl, emptyTitle, keyOf, rende
   if (query.isLoading) return <View style={styles.container}><View style={styles.content}>{header}</View><Skeleton variant="list" /></View>;
   if (query.isError && !query.data) return <ErrorState onRetry={() => query.refetch()} />;
   return (
-    <FlatList
+    <AppList
       style={styles.container}
       contentContainerStyle={styles.content}
       data={rows}

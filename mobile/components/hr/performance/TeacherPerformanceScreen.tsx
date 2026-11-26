@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { FlatList, ScrollView, Text, View, StyleSheet, type RefreshControlProps } from 'react-native';
+import { ScrollView, Text, View, StyleSheet, type RefreshControlProps } from 'react-native';
 import { useTeacherPerformanceDetail, useTeacherPerformanceReport } from '../../../hooks/useTeacherPerformance';
 import { useRefreshControl } from '../../../hooks/useRefreshControl';
 import { teacherPerformanceApi } from '../../../services/api';
@@ -15,6 +15,8 @@ import MonthSwitcher from './MonthSwitcher';
 import PerformanceDetail from './PerformanceDetail';
 import PerformanceInfoButton from './PerformanceInfoButton';
 import { Colors, FontSize, Spacing } from '../../../constants/colors';
+import AppList from '../../ui/AppList';
+import { day } from '../../../services/dates';
 
 // Admin and principal: ranked list for a month, a teacher's breakdown, and the PDF / Excel export
 // shared through the phone's share sheet. Settings stay on the web.
@@ -61,7 +63,7 @@ export default function TeacherPerformanceScreen() {
         <View style={styles.row}>
           <Text style={styles.muted}>
             {list.data.out_of ?? 0} ranked · {list.data.snapshot && list.data.frozen_at
-              ? `frozen on ${new Date(list.data.frozen_at).toLocaleDateString()}`
+              ? `frozen on ${day(list.data.frozen_at)}`
               : `counted until ${list.data.period.counted_until}`}
           </Text>
           <PerformanceInfoButton />
@@ -78,7 +80,7 @@ export default function TeacherPerformanceScreen() {
   if (list.isError) return <View style={[styles.page, styles.content]}>{header}<ErrorState error={list.error} onRetry={list.refetch} /></View>;
 
   return (
-    <FlatList
+    <AppList
       style={styles.page}
       contentContainerStyle={styles.content}
       data={list.data?.teachers ?? []}

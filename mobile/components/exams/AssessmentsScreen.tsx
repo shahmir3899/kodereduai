@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  View, Text, FlatList, TextInput, TouchableOpacity, Modal, ScrollView, KeyboardAvoidingView, Platform, StyleSheet,
+  View, Text, TextInput, TouchableOpacity, Modal, ScrollView, KeyboardAvoidingView, Platform, StyleSheet,
 } from 'react-native';
 import { useNavigation } from 'expo-router';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
@@ -27,6 +27,7 @@ import { useToast } from '../ui/Toast';
 import { saveFailureMessage } from '../../services/errorKind';
 import { confirm } from '../ui/confirm';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
+import AppList from '../ui/AppList';
 
 interface Props {
   // Teachers pass their own sections; admins leave it out and get every class.
@@ -141,7 +142,7 @@ export default function AssessmentsScreen({ classOptions }: Props) {
 
   return (
     <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <FlatList
+      <AppList
         data={option && !loading && !failed ? visible : []}
         keyExtractor={(r) => String(r.student)}
         contentContainerStyle={styles.content}

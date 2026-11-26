@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { useRecentNotifications } from '../../hooks/useManager';
 import Card from '../ui/Card';
 import { Colors, FontSize, Spacing } from '../../constants/colors';
+import { SectionEmpty, SectionError, SectionLoading } from '../../components/ui/SectionState';
 
 // The latest few notifications on a home screen, with a link to the full inbox.
 export default function RecentNotifications({ enabled, onSeeAll }: { enabled: boolean; onSeeAll?: () => void }) {
@@ -21,7 +22,7 @@ export default function RecentNotifications({ enabled, onSeeAll }: { enabled: bo
       </View>
       <Card style={styles.list}>
         {items.length === 0 ? (
-          <Text style={styles.muted}>{q.isLoading ? 'Loading…' : q.isError ? 'Could not load notifications.' : 'No notifications.'}</Text>
+          q.isLoading ? <SectionLoading /> : q.isError ? <SectionError message="Could not load notifications." onRetry={() => q.refetch()} /> : <SectionEmpty message="No notifications." icon="notifications-outline" />
         ) : items.map((n) => (
           <View key={n.id} style={styles.note}>
             <Text style={[styles.title, !n.is_read && styles.bold]} numberOfLines={1}>{n.title}</Text>
@@ -39,7 +40,6 @@ const styles = StyleSheet.create({
   linkBox: { minHeight: 44, minWidth: 44, justifyContent: 'center', alignItems: 'flex-end' },
   link: { fontSize: FontSize.sm, color: Colors.primary, fontWeight: '600' },
   list: { padding: Spacing.md },
-  muted: { fontSize: FontSize.sm, color: Colors.textSecondary },
   note: { paddingVertical: 6 },
   title: { fontSize: FontSize.sm, color: Colors.text },
   bold: { fontWeight: '700' },

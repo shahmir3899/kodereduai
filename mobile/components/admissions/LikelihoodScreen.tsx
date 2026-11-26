@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { View, Text, FlatList, TouchableOpacity, StyleSheet, type RefreshControlProps } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, type RefreshControlProps } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useConversionLikelihood } from '../../hooks/useAdmissions';
 import { useRefreshControl } from '../../hooks/useRefreshControl';
@@ -11,6 +11,7 @@ import ErrorState from '../ui/ErrorState';
 import EmptyState from '../ui/EmptyState';
 import StatusPill from '../ui/StatusPill';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
+import AppList from '../ui/AppList';
 
 // Open enquiries scored by a rule-based predictor (source history, response time, follow-up
 // activity). The last result is kept for five minutes; refresh runs the scoring again.
@@ -34,7 +35,7 @@ export default function LikelihoodScreen() {
   );
 
   return (
-    <FlatList
+    <AppList
       style={styles.container}
       contentContainerStyle={styles.content}
       data={rows}

@@ -13,30 +13,39 @@ import { insightList } from '../../services/aiInsights';
 import { routeFor } from '../../navigation/routes';
 import { useAcademicYear } from '../../hooks/useAcademicYear';
 import { useScopedQuery } from '../../hooks/useScopedQuery';
+import { usePrefetchNext } from '../../hooks/usePrefetchNext';
+import { REFERENCE_STALE_MS } from '../../services/queryRules';
 import { useRefreshControl } from '../../hooks/useRefreshControl';
 import StatCard from '../../components/StatCard';
 import HeroCard from '../../components/dashboard/HeroCard';
+import HomeHero, { HomeShell } from '../../components/dashboard/HomeHero';
+import type { Tile } from '../../components/dashboard/StatTiles';
+import { pctTone } from '../../services/homeHero';
+import { shortYearLabel } from '../../services/headerView';
 import AttendanceBreakdown from '../../components/dashboard/AttendanceBreakdown';
 import MonthlyFeeCard from '../../components/dashboard/MonthlyFeeCard';
 import LeadershipInsights from '../../components/dashboard/LeadershipInsights';
 import AIInsightsCard from '../../components/dashboard/AIInsightsCard';
 import ModuleOverview from '../../components/dashboard/ModuleOverview';
 import SessionHealthCard from '../../components/dashboard/SessionHealthCard';
+import SetupProgressCard from '../../components/dashboard/SetupProgressCard';
 import PredictorsCard from '../../components/dashboard/PredictorsCard';
 import Icon, { type IconName } from '../../components/ui/Icon';
 import RecentNotifications from '../../components/dashboard/RecentNotifications';
 import { dayHero } from '../../services/dashboardView';
 import Card from '../../components/ui/Card';
+import AttentionCard from '../../components/ui/AttentionCard';
+import { SectionEmpty } from '../../components/ui/SectionState';
 import Skeleton from '../../components/ui/Skeleton';
 import ErrorState from '../../components/ui/ErrorState';
-import SchoolSwitcher from '../../components/nav/SchoolSwitcher';
-import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
+import { Colors, FontSize, Spacing, BorderRadius, GlyphSize } from '../../constants/colors';
+import TileGrid from '../../components/ui/TileGrid';
 
 const rateColor = (r: number | null) => (r == null ? Colors.textTertiary : r >= 90 ? Colors.success : r >= 75 ? Colors.warning : Colors.error);
 const TONE_COLOR = { red: Colors.error, amber: Colors.warning, blue: Colors.info } as const;
 
 export default function AdminDashboard() {
-  const { user, isModuleEnabled } = useAuth();
+  const { user, isModuleEnabled, isSchoolAdmin } = useAuth();
   const router = useRouter();
   const today = todayString();
   const [date, setDate] = useState(today);
@@ -59,7 +68,7 @@ export default function AdminDashboard() {
   { enabled: !year.isLoading && isModuleEnabled('examinations'), staleTime: 60_000, retry: false });
   const terms = useScopedQuery('academicTerms', [year.current?.id ?? null], async () =>
     listOf<{ name?: string; start_date?: string; end_date?: string }>((await sessionsApi.getTerms({ academic_year: year.current?.id, page_size: 100 })).data),
-  { enabled: !!year.current?.id, staleTime: 5 * 60_000, retry: false });
+  { enabled: !!year.current?.id, staleTime: REFERENCE_STALE_MS, retry: false });
   // Same key as the AI insights card, so the two share one request.
   const ai = useScopedQuery('aiInsights', [], async () => insightList((await tasksApi.getAIInsights()).data),
     { staleTime: 5 * 60_000, retry: false });
@@ -67,8 +76,11 @@ export default function AdminDashboard() {
   const refreshControl = useRefreshControl(query.refetch);
 
   const data = query.data;
-  if (query.isLoading || year.isLoading) return <Skeleton variant="stats" />;
-  if (query.isError && !data) return <ErrorState error={query.error} onRetry={() => query.refetch()} />;
+  usePrefetchNext('admin', !query.isLoading && !year.isLoading);
+  const displayName = user?.first_name || user?.username || 'Admin';
+  // Home has no white header, so loading and errors sit under the banner too.
+  if (query.isLoading || year.isLoading) return <HomeShell name={displayName}><Skeleton variant="stats" /></HomeShell>;
+  if (query.isError && !data) return <HomeShell name={displayName}><ErrorState error={query.error} onRetry={() => query.refetch()} /></HomeShell>;
 
   const att = data?.attendance;
   const hr = data?.hr;
@@ -79,6 +91,15 @@ export default function AdminDashboard() {
   const feeRate = collectionRate(fee);
 
   const go = (route?: string) => route && router.push(route as Href);
+  // The day's three figures for the Home banner, from the same dashboard bundle.
+  const heroStats: Tile[] = [
+    ...(isModuleEnabled('attendance') && att ? [
+      // Today's presence and what is not marked are in the cards below, so the banner gives the school's size.
+      { label: 'Students', value: att.total_students ?? null, route: routeFor('admin', '/students') },
+    ] : []),
+    ...(isModuleEnabled('hr') && hr ? [{ label: 'Staff present', value: offDay ? 'Off day' : staffPct != null ? `${staffPct}%` : null, tone: offDay ? undefined : pctTone(staffPct), route: routeFor('admin', '/hr/attendance') }] : []),
+    ...(isModuleEnabled('finance') && fee ? [{ label: 'Fees collected', value: feeRate != null ? `${feeRate}%` : null, tone: pctTone(feeRate), route: routeFor('admin', '/finance') }] : []),
+  ];
   const attention = buildAttentionItems({
     isModuleEnabled,
     data: data ?? {},
@@ -128,9 +149,8 @@ export default function AdminDashboard() {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content} refreshControl={refreshControl}>
-      <Text style={styles.greeting}>Welcome, {user?.first_name || user?.username || 'Admin'}</Text>
-      <SchoolSwitcher />
-      {year.current ? <Text style={styles.year}>{year.current.name}{term ? `  |  ${term}` : ''}</Text> : null}
+      <HomeHero name={displayName} subtitle={year.current ? `${shortYearLabel(year.current.name)}${term ? `  ·  ${term}` : ''}` : undefined}
+        stats={heroStats} onPress={go} />
 
       {!year.current ? (
         <View style={styles.warn}>
@@ -165,16 +185,10 @@ export default function AdminDashboard() {
       {/* Needs attention */}
       <Text style={styles.section}>Needs attention</Text>
       {attention.length === 0 ? (
-        <Card style={styles.clear}><Text style={styles.clearText}>All clear. Nothing needs attention.</Text></Card>
+        <Card style={styles.clear}><SectionEmpty message="All clear. Nothing needs attention." /></Card>
       ) : (
         attention.map((it) => (
-          <TouchableOpacity accessibilityRole="button" accessibilityLabel="Next day" key={it.key} disabled={!it.href} onPress={() => go(it.href)}>
-            <Card style={styles.attention}>
-              <Text style={[styles.attCount, { color: TONE_COLOR[it.tone] }]}>{it.count}</Text>
-              <Text style={styles.attLabel}>{it.label}</Text>
-              {it.href ? <Text style={styles.arrow}>›</Text> : null}
-            </Card>
-          </TouchableOpacity>
+          <AttentionCard key={it.key} itemKey={it.key} count={it.count} label={it.label} tone={it.tone} onPress={it.href ? () => go(it.href) : undefined} />
         ))
       )}
 
@@ -224,16 +238,11 @@ export default function AdminDashboard() {
       ) : null}
 
       <Text style={styles.section}>Quick actions</Text>
-      <View style={styles.actions}>
-        {quick.map((a) => (
-          <TouchableOpacity accessibilityRole="button" key={a.label} style={[styles.action, !a.route && styles.actionOff]} disabled={!a.route} onPress={() => go(a.route)}>
-            <Icon name={a.icon} size={24} color={Colors.primary} />
-            <Text style={styles.actionLabel}>{a.label}</Text>
-          </TouchableOpacity>
-        ))}
-      </View>
+      <TileGrid items={quick.map((a) => ({ label: a.label, icon: a.icon, onPress: a.route ? () => go(a.route) : undefined }))} />
 
       <SessionHealthCard yearId={year.current?.id} yearName={year.current?.name} />
+
+      <SetupProgressCard enabled={isSchoolAdmin} />
 
       <PredictorsCard />
 
@@ -249,33 +258,21 @@ export default function AdminDashboard() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
   content: { padding: Spacing.lg, paddingBottom: Spacing.xxxl },
-  greeting: { fontSize: FontSize.xl, fontWeight: '700', color: Colors.text },
-  year: { fontSize: FontSize.sm, color: Colors.textSecondary, marginTop: 2 },
   warn: { backgroundColor: Colors.warningLight, borderRadius: BorderRadius.md, padding: Spacing.md, marginTop: Spacing.md },
   warnTitle: { fontSize: FontSize.sm, fontWeight: '700', color: Colors.warning },
   warnText: { fontSize: FontSize.xs, color: Colors.warning, marginTop: 2 },
   warnBtn: { alignSelf: 'flex-start', marginTop: Spacing.sm, paddingVertical: 4 },
   warnBtnText: { fontSize: FontSize.sm, fontWeight: '700', color: Colors.warning, textDecorationLine: 'underline' },
   stepper: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing.xl, marginTop: Spacing.lg },
-  stepBtn: { fontSize: 28, color: Colors.primary, paddingHorizontal: Spacing.sm },
+  stepBtn: { fontSize: GlyphSize.lg, color: Colors.primary, paddingHorizontal: Spacing.sm },
   stepDisabled: { color: Colors.border },
   stepDate: { fontSize: FontSize.md, fontWeight: '600', color: Colors.text, minWidth: 110, textAlign: 'center' },
   hero: { marginTop: Spacing.lg },
   gap: { marginTop: Spacing.md },
   section: { fontSize: FontSize.lg, fontWeight: '600', color: Colors.text, marginTop: Spacing.xl, marginBottom: Spacing.md },
   clear: { padding: Spacing.md },
-  clearText: { color: Colors.success, fontSize: FontSize.sm, fontWeight: '600' },
-  attention: { flexDirection: 'row', alignItems: 'center', padding: Spacing.md, marginBottom: Spacing.sm },
-  attCount: { fontSize: FontSize.xl, fontWeight: '700', minWidth: 44 },
-  attLabel: { flex: 1, fontSize: FontSize.sm, color: Colors.text },
-  arrow: { fontSize: FontSize.xl, color: Colors.textTertiary },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.md, marginTop: Spacing.xl },
   absentCard: { padding: Spacing.md },
   absentRow: { fontSize: FontSize.sm, color: Colors.text, paddingVertical: 3 },
   more: { fontSize: FontSize.xs, color: Colors.textSecondary, marginTop: Spacing.xs },
-  actions: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.md },
-  action: { width: '22%', minWidth: 72, alignItems: 'center', backgroundColor: Colors.surface, borderRadius: BorderRadius.md, paddingVertical: Spacing.md },
-  actionOff: { opacity: 0.4 },
-  actionIcon: { fontSize: 22 },
-  actionLabel: { fontSize: FontSize.xs, color: Colors.text, marginTop: 4, textAlign: 'center' },
 });

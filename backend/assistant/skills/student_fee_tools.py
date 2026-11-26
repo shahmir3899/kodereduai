@@ -55,9 +55,29 @@ def get_student_fees(ctx, student_id=None, student_name=None, student_class=None
 
 # ── monthly fee override ─────────────────────────────────────────────────────
 
-def _active_overrides(ctx, st):
+def _active_overrides(ctx, st, category_id=None):
     from finance.models import FeeStructure
-    return list(FeeStructure.objects.filter(school_id=ctx.school_id, student=st, fee_type='MONTHLY', is_active=True))
+    qs = FeeStructure.objects.filter(school_id=ctx.school_id, student=st, fee_type='MONTHLY', is_active=True)
+    return list(qs.filter(monthly_category_id=category_id) if category_id else qs)
+
+
+def _monthly_category(ctx, name, required):
+    """The monthly fee (category) an override is for. A school with several monthly fees must say
+    which one: an uncategorised override is charged on every monthly fee."""
+    from finance.models import MonthlyFeeCategory
+
+    cats = list(MonthlyFeeCategory.objects.filter(school_id=ctx.school_id, is_active=True))
+    if name:
+        wanted = str(name).strip().lower()
+        hits = [c for c in cats if c.name.lower() == wanted] or [c for c in cats if wanted in c.name.lower()]
+        if len(hits) == 1:
+            return hits[0]
+        raise ProposalError(f'No single monthly fee matches "{name}". Monthly fees: ' + ', '.join(c.name for c in cats) + '.')
+    if len(cats) == 1:
+        return cats[0]
+    if cats and required:
+        raise ProposalError('Which monthly fee? Ask the user: ' + ', '.join(c.name for c in cats) + '.')
+    return None
 
 
 def _build_override(ctx, payload):
@@ -66,19 +86,20 @@ def _build_override(ctx, payload):
     st = Student.objects.filter(school_id=ctx.school_id, id=payload['student_id']).first()
     if st is None:
         raise ProposalError('That student no longer exists.')
-    old = _active_overrides(ctx, st)
+    old = _active_overrides(ctx, st, payload.get('category_id'))
     was = f"Rs {_m(old[0].monthly_amount)}" if old else 'class fee'
+    fee = payload.get('category_name') or 'Monthly fee'
     if payload['mode'] == 'clear':
         if not old:
             raise ProposalError(f'{st.name} has no monthly fee override; the class fee already applies.')
-        rows = [{'field': 'Monthly fee', 'from': was, 'to': 'class fee'}]
+        rows = [{'field': fee, 'from': was, 'to': 'class fee'}]
         title, summary = 'Remove monthly fee override', f'{st.name}: back to the class fee'
         warnings = ['Fee records already generated keep their amounts.']
     else:
         amount = _amount(payload['amount'], 'monthly fee')
         if old and old[0].monthly_amount == amount:
             raise ProposalError(f'{st.name} already has a monthly fee of Rs {_m(amount)}.')
-        rows = [{'field': 'Monthly fee', 'from': was, 'to': f'Rs {_m(amount)}'}, {'field': 'From', 'from': '', 'to': payload['effective_from']}]
+        rows = [{'field': fee, 'from': was, 'to': f'Rs {_m(amount)}'}, {'field': 'From', 'from': '', 'to': payload['effective_from']}]
         title, summary = 'Set monthly fee override', f'{st.name}: monthly fee Rs {_m(amount)}'
         warnings = ['Fee records already generated keep their amounts; change a pending month separately if needed.']
         if len(old) > 1:
@@ -88,17 +109,25 @@ def _build_override(ctx, payload):
         'totals': {'count': 1}, 'warnings': warnings, 'editable': {}}}
 
 
-def set_student_monthly_fee(ctx, amount=None, student_id=None, student_name=None, student_class=None, effective_from=None):
+def _category_fields(cat):
+    return {'category_id': cat.id, 'category_name': cat.name} if cat else {}
+
+
+def set_student_monthly_fee(ctx, amount=None, student_id=None, student_name=None, student_class=None, effective_from=None, fee_name=None):
     st = resolve_student(ctx, student_id, student_name, student_class)
     if amount is None:
         raise ProposalError('What monthly fee amount? Ask the user.')
+    cat = _monthly_category(ctx, fee_name, required=True)
     return _build_override(ctx, {'kind': 'edit_entry', 'mode': 'set', 'student_id': st.id, 'amount': str(_amount(amount, 'monthly fee')),
-                                 'effective_from': (lc.parse_date(effective_from, 'effective_from') if effective_from else timezone.localdate()).isoformat()})
+                                 'effective_from': (lc.parse_date(effective_from, 'effective_from') if effective_from else timezone.localdate()).isoformat(),
+                                 **_category_fields(cat)})
 
 
-def clear_student_monthly_fee(ctx, student_id=None, student_name=None, student_class=None):
+def clear_student_monthly_fee(ctx, student_id=None, student_name=None, student_class=None, fee_name=None):
     st = resolve_student(ctx, student_id, student_name, student_class)
-    return _build_override(ctx, {'kind': 'edit_entry', 'mode': 'clear', 'student_id': st.id})
+    # No fee named: clear all of the student's monthly overrides (back to the class fee everywhere).
+    cat = _monthly_category(ctx, fee_name, required=False) if fee_name else None
+    return _build_override(ctx, {'kind': 'edit_entry', 'mode': 'clear', 'student_id': st.id, **_category_fields(cat)})
 
 
 def revise_override(ctx, payload, edits):
@@ -111,13 +140,13 @@ def apply_override(ctx, payload):
 
     st = Student.objects.get(pk=payload['student_id'])
     if payload['mode'] == 'clear':
-        for fs in _active_overrides(ctx, st):
+        for fs in _active_overrides(ctx, st, payload.get('category_id')):
             s, body = call(ctx.user, ctx.school_id, FeeStructureViewSet, {'delete': 'destroy'}, 'delete', f'/api/finance/fee-structures/{fs.id}/', pk=fs.id)
             if s not in (200, 204):
                 return {'ok': False, 'error': _fail(body, 'The override could not be removed.')}
         return {'ok': True}
     data = {'class_id': st.class_obj_id, 'fee_type': 'MONTHLY', 'effective_from': payload['effective_from'],
-            'students': [{'student_id': st.id, 'monthly_amount': payload['amount']}]}
+            'students': [{'student_id': st.id, 'monthly_amount': payload['amount'], 'monthly_category': payload.get('category_id')}]}
     s, body = call(ctx.user, ctx.school_id, FeeStructureViewSet, {'post': 'bulk_set_students'}, 'post', '/api/finance/fee-structures/bulk_set_students/', data)
     if s not in (200, 201):
         return {'ok': False, 'error': _fail(body, 'The fee could not be saved.')}
@@ -300,10 +329,11 @@ _read('get_student_fees', "One student's fee records (monthly, annual, ...) with
 
 _write('set_student_monthly_fee', "PREPARE a student's own monthly fee (an override of the class fee), e.g. 'Ali ki monthly fee 3000 kar do'. "
        "Existing fee records keep their amounts. Nothing is saved until the user approves.",
-       {**_WHO, 'amount': {'type': 'number'}, 'effective_from': {'type': 'string', 'description': 'YYYY-MM-DD, defaults to today'}},
+       {**_WHO, 'amount': {'type': 'number'}, 'effective_from': {'type': 'string', 'description': 'YYYY-MM-DD, defaults to today'},
+        'fee_name': {'type': 'string', 'description': 'Which monthly fee, e.g. Tuition Fee; required when the school has several'}},
        set_student_monthly_fee, revise_override, apply_override)
 _write('clear_student_monthly_fee', "PREPARE removing a student's own monthly fee so the class fee applies again. Nothing changes until the user approves.",
-       dict(_WHO), clear_student_monthly_fee, revise_override, apply_override)
+       {**_WHO, 'fee_name': {'type': 'string', 'description': 'Which monthly fee; leave out to clear all'}}, clear_student_monthly_fee, revise_override, apply_override)
 _write('assign_student_discount', 'PREPARE giving a student a discount or scholarship by name (see list_discounts). Nothing is saved until the user approves.',
        {**_WHO, 'discount_name': {'type': 'string'}, 'notes': {'type': 'string'}}, assign_student_discount, revise_discount, apply_discount)
 _write('remove_student_discount', 'PREPARE removing a discount or scholarship from a student. Nothing changes until the user approves.',

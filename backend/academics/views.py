@@ -24,7 +24,7 @@ from core.permissions import (
     get_effective_role,
     get_teacher_combined_scope,
 )
-from core.mixins import TenantQuerySetMixin, ensure_tenant_schools, ensure_tenant_school_id
+from core.mixins import TenantQuerySetMixin, ensure_tenant_schools, ensure_tenant_school_id, ListETagMixin
 from core.class_scope import resolve_class_scope
 from .models import Subject, ClassSubject, ClassTeacherAssignment, TimetableSlot, TimetableEntry
 from .timetable_scope import section_timetable
@@ -99,7 +99,7 @@ def _is_school_header_rejected(request):
 
 # ── Subject ViewSet ──────────────────────────────────────────────────────────
 
-class SubjectViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet):
+class SubjectViewSet(ListETagMixin, ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet):
     """CRUD for subjects."""
     required_module = 'academics'
     queryset = Subject.objects.all()

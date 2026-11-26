@@ -4,6 +4,7 @@ import { trendBars, type TrendMonth } from '../../services/financeManager';
 import { formatMoney } from '../../services/feeCollect';
 import Card from '../ui/Card';
 import { Colors, FontSize, Spacing } from '../../constants/colors';
+import { SectionEmpty, SectionLoading } from '../../components/ui/SectionState';
 
 // Income and expenses per month as paired bars with the net on the right. Shared by the finance
 // reports and the finance dashboard so the two read the same.
@@ -11,7 +12,7 @@ export default function TrendCard({ trend, loading }: { trend: TrendMonth[] | un
   const bars = trendBars(trend ?? []);
   return (
     <Card>
-      {loading ? <Text style={styles.muted}>Loading…</Text> : bars.length === 0 ? <Text style={styles.muted}>No data yet.</Text> : (
+      {loading ? <SectionLoading /> : bars.length === 0 ? <SectionEmpty message="No data yet." /> : (
         <>
           {bars.map((b) => (
             <View key={b.label} style={styles.row} accessible accessibilityLabel={`${b.label}: income ${formatMoney(b.income)}, expenses ${formatMoney(b.expenses)}`}>

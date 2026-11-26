@@ -87,16 +87,6 @@ export function useFeeSetup({ academicYearId, feeType, studentClassId, structure
     },
   })
 
-  const generateOnetimeMutation = useBackgroundTask({
-    mutationFn: (data) => financeApi.generateOnetimeFees(data),
-    taskType: 'FEE_GENERATION',
-    title: `Generating one-time fees for ${year}`,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['feePayments'] })
-      queryClient.invalidateQueries({ queryKey: ['feeSummary'] })
-      queryClient.invalidateQueries({ queryKey: ['generate-preview'] })
-    },
-  })
 
   const generateAnnualMutation = useBackgroundTask({
     mutationFn: (data) => financeApi.generateAnnualFees(data),
@@ -137,7 +127,6 @@ export function useFeeSetup({ academicYearId, feeType, studentClassId, structure
     bulkFeeMutation,
     bulkStudentFeeMutation,
     generateMutation,
-    generateOnetimeMutation,
     generateAnnualMutation,
     createFeePaymentMutation,
   }

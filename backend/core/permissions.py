@@ -633,7 +633,7 @@ class FinanceRoleAccessPermission(permissions.BasePermission):
 
     # ViewSet class name -> allowed actions for TEACHER role.
     TEACHER_ALLOWED_ACTIONS = {
-        'FeePaymentViewSet': {'list', 'retrieve', 'update', 'partial_update', 'fee_summary'},
+        'FeePaymentViewSet': {'list', 'retrieve', 'update', 'partial_update', 'fee_summary', 'vouchers'},
         'AccountViewSet': {'list', 'retrieve'},
         'AnnualFeeCategoryViewSet': {'list', 'retrieve', 'suggestions'},
         'MonthlyFeeCategoryViewSet': {'list', 'retrieve', 'suggestions'},

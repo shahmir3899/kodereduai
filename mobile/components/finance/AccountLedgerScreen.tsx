@@ -11,6 +11,7 @@ import Card from '../ui/Card';
 import StatusPill from '../ui/StatusPill';
 import QueryBoundary from '../ui/QueryBoundary';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
+import { SectionEmpty } from '../../components/ui/SectionState';
 
 const money = (v: number | string | null | undefined) => formatMoney(Number(v ?? 0) || 0);
 
@@ -42,7 +43,7 @@ export default function AccountLedgerScreen() {
               <Card style={styles.tile}><Text style={styles.label}>Credits</Text><Text style={[styles.value, { color: Colors.success }]}>{money(d.total_credits)}</Text></Card>
               <Card style={styles.tile}><Text style={styles.label}>Debits</Text><Text style={[styles.value, { color: Colors.error }]}>{money(d.total_debits)}</Text></Card>
             </View>
-            {d.entries.length === 0 ? <Text style={styles.muted}>No entries in this period.</Text> : d.entries.map((e) => {
+            {d.entries.length === 0 ? <SectionEmpty message="No entries in this period." /> : d.entries.map((e) => {
               const credit = Number(e.credit) || 0;
               const debit = Number(e.debit) || 0;
               return (

@@ -3,7 +3,7 @@ import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-nati
 import { useDateSheet, useDateSheetActions } from '../../hooks/useExamGroups';
 import { useRefreshControl } from '../../hooks/useRefreshControl';
 import {
-  buildDateSheetEntry, sortRows, subjectsInSheet, toRows, unscheduledCount, validateDateSheetEdit, type DateSheetEdit, type DateSheetRow,
+  buildDateSheetEntry, periodEdgeTrims, sortRows, subjectsInSheet, toRows, unscheduledCount, validateDateSheetEdit, type DateSheetEdit, type DateSheetRow,
 } from '../../services/examGroups';
 import { inventoryErrorMessage } from '../../services/inventory';
 import Input from '../ui/Input';
@@ -60,6 +60,14 @@ export default function DateSheetScreen({ groupId }: { groupId: number }) {
   const missing = unscheduledCount(rows);
   const subjects = subjectsInSheet(rows, q.data?.subjects ?? []);
   const window = q.data?.start_date && q.data?.end_date ? `${q.data.start_date} to ${q.data.end_date}` : null;
+  const trims = periodEdgeTrims(q.data?.start_date, q.data?.end_date, rows);
+
+  const trim = async (patch: { start_date?: string; end_date?: string }, which: string) => {
+    try {
+      await actions.trimPeriod.mutateAsync(patch);
+      toast.success(`Removed the ${which} day of the exam period.`);
+    } catch (e) { toast.error(inventoryErrorMessage(e, 'Could not change the exam period.')); }
+  };
 
   return (
     <View style={styles.container}>
@@ -69,6 +77,12 @@ export default function DateSheetScreen({ groupId }: { groupId: number }) {
             <>
               <Text style={styles.title}>{q.data?.group_name}</Text>
               {window ? <Text style={styles.sub}>{`Exam period ${window}`}</Text> : null}
+              {trims.first || trims.last ? (
+                <View style={styles.trimRow}>
+                  {trims.first ? <Button title={`Remove first day (${q.data?.start_date})`} size="sm" variant="ghost" disabled={actions.trimPeriod.isPending} onPress={() => trim(trims.first!, 'first')} /> : null}
+                  {trims.last ? <Button title={`Remove last day (${q.data?.end_date})`} size="sm" variant="ghost" disabled={actions.trimPeriod.isPending} onPress={() => trim(trims.last!, 'last')} /> : null}
+                </View>
+              ) : null}
               {missing > 0 ? <StatusPill label={`${missing} not scheduled yet`} tone="warning" /> : <StatusPill label="Every subject has a date" tone="success" />}
               <Button title="Same date for one subject, all classes" size="sm" variant="outline" onPress={() => { setBulkSubject(null); setBulkDate(''); setError(null); setBulk(true); }} />
               {rows.map((r) => (
@@ -110,4 +124,5 @@ const styles = StyleSheet.create({
   name: { fontSize: FontSize.md, fontWeight: '600', color: Colors.text },
   sub: { fontSize: FontSize.sm, color: Colors.textSecondary, marginTop: 2 },
   hint: { fontSize: FontSize.xs, color: Colors.textSecondary },
+  trimRow: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.xs },
 });

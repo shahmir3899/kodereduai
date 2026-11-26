@@ -9,8 +9,11 @@ import { useUnreadMessages } from '../../hooks/useMessaging';
 import { useRefreshControl } from '../../hooks/useRefreshControl';
 import StatTiles from '../../components/dashboard/StatTiles';
 import RecentNotifications from '../../components/dashboard/RecentNotifications';
-import SchoolSwitcher from '../../components/nav/SchoolSwitcher';
+import HomeHero from '../../components/dashboard/HomeHero';
+import { splitTiles } from '../../services/homeHero';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
+import TileGrid from '../../components/ui/TileGrid';
+import type { IconName } from '../../components/ui/Icon';
 
 // Content-side counts only, like the web ManagerDashboard: the Manager has no attendance,
 // finance or student data.
@@ -44,31 +47,22 @@ export default function ManagerDashboard() {
   ].filter((t) => t.show);
 
   const quick = [
-    { label: 'Question Bank', icon: '❓', route: routeFor('manager', '/academics/questions'), show: examsOn },
-    { label: 'Paper Builder', icon: '📝', route: routeFor('manager', '/academics/paper-builder'), show: examsOn },
-    { label: 'Assignments', icon: '📚', route: routeFor('manager', '/academics/assignments'), show: lmsOn },
-    { label: 'Timetable', icon: '📅', route: routeFor('manager', '/academics/timetable'), show: isModuleEnabled('academics') },
-    { label: 'Classes', icon: '🏫', route: routeFor('manager', '/classes'), show: isModuleEnabled('students') },
-    { label: 'My Leave', icon: '🗓️', route: routeFor('manager', '/hr/leave'), show: isModuleEnabled('hr') },
-    { label: unread > 0 ? `Messages (${unread})` : 'Messages', icon: '💬', route: routeFor('manager', '/messages'), show: true },
+    { label: 'Question Bank', icon: 'help-circle-outline' as IconName, route: routeFor('manager', '/academics/questions'), show: examsOn },
+    { label: 'Paper Builder', icon: 'construct-outline' as IconName, route: routeFor('manager', '/academics/paper-builder'), show: examsOn },
+    { label: 'Assignments', icon: 'document-text-outline' as IconName, route: routeFor('manager', '/academics/assignments'), show: lmsOn },
+    { label: 'Timetable', icon: 'time-outline' as IconName, route: routeFor('manager', '/academics/timetable'), show: isModuleEnabled('academics') },
+    { label: 'Classes', icon: 'school-outline' as IconName, route: routeFor('manager', '/classes'), show: isModuleEnabled('students') },
+    { label: 'My Leave', icon: 'calendar-outline' as IconName, route: routeFor('manager', '/hr/leave'), show: isModuleEnabled('hr') },
+    { label: unread > 0 ? `Messages (${unread})` : 'Messages', icon: 'chatbubbles-outline' as IconName, route: routeFor('manager', '/messages'), show: true },
   ].filter((a) => a.show);
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content} refreshControl={refreshControl}>
-      <Text style={styles.greeting}>Welcome back, {name}</Text>
-      <SchoolSwitcher />
-
-      <StatTiles tiles={tiles} onPress={go} />
+      <HomeHero name={name ?? ""} stats={splitTiles(tiles).hero} onPress={go} />
+      <StatTiles tiles={splitTiles(tiles).rest} onPress={go} />
 
       <Text style={styles.section}>Quick actions</Text>
-      <View style={styles.actions}>
-        {quick.map((a) => (
-          <TouchableOpacity accessibilityRole="button" key={a.label} style={[styles.quick, !a.route && styles.quickOff]} disabled={!a.route} onPress={() => go(a.route)}>
-            <Text style={styles.quickIcon}>{a.icon}</Text>
-            <Text style={styles.quickLabel}>{a.label}</Text>
-          </TouchableOpacity>
-        ))}
-      </View>
+      <TileGrid items={quick.map((a) => ({ label: a.label, icon: a.icon, onPress: a.route ? () => go(a.route) : undefined }))} />
 
       <RecentNotifications enabled={notifOn} onSeeAll={() => go(routeFor('manager', '/notifications'))} />
     </ScrollView>
@@ -78,11 +72,5 @@ export default function ManagerDashboard() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
   content: { padding: Spacing.lg, paddingBottom: Spacing.xxxl },
-  greeting: { fontSize: FontSize.xl, fontWeight: '700', color: Colors.text },
   section: { fontSize: FontSize.lg, fontWeight: '600', color: Colors.text, marginTop: Spacing.xl, marginBottom: Spacing.md },
-  actions: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.md },
-  quick: { width: '22%', minWidth: 72, alignItems: 'center', backgroundColor: Colors.surface, borderRadius: BorderRadius.md, paddingVertical: Spacing.md },
-  quickOff: { opacity: 0.4 },
-  quickIcon: { fontSize: 22 },
-  quickLabel: { fontSize: FontSize.xs, color: Colors.text, marginTop: 4, textAlign: 'center' },
 });

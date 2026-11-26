@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { View, Text, FlatList, ActivityIndicator, TouchableOpacity, StyleSheet, type RefreshControlProps } from 'react-native';
+import { View, Text, ActivityIndicator, StyleSheet, type RefreshControlProps } from 'react-native';
 import { useRouter, type Href } from 'expo-router';
 import { useAcademicYear, useAttendanceClassOptions, useMasterClasses } from '../../hooks/useAcademicYear';
 import { useScopedQuery } from '../../hooks/useScopedQuery';
@@ -21,13 +21,15 @@ import Button from '../ui/Button';
 import Skeleton from '../ui/Skeleton';
 import ErrorState from '../ui/ErrorState';
 import EmptyState from '../ui/EmptyState';
-import StatusPill from '../ui/StatusPill';
 import { useToast } from '../ui/Toast';
 import { confirm } from '../ui/confirm';
 import FormSheet from '../inventory/FormSheet';
 import ExamSubjectsEditor from './ExamSubjectsEditor';
 import BulkDeleteSheet from './BulkDeleteSheet';
-import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
+import { Colors, FontSize, Spacing, BorderRadius, GlyphSize } from '../../constants/colors';
+import AppList from '../ui/AppList';
+import RecordCard from '../ui/RecordCard';
+import { day, dayTime } from '../../services/dates';
 
 
 interface SubjectLine { id: number; subject_name: string; exam_date?: string | null; total_marks?: number | string | null; passing_marks?: number | string | null }
@@ -167,6 +169,7 @@ export default function ExamsAdminScreen({ readOnly = false }: { readOnly?: bool
       {readOnly ? null : <>
         <Button title="Date sheets and publishing" size="sm" variant="secondary" onPress={() => router.push('/(admin)/exam-groups' as Href)} />
         <Button title="+ New exams for several classes" size="sm" onPress={() => router.push('/(admin)/exam-wizard' as Href)} />
+        <Button title="+ Create tests (one class, several subjects)" size="sm" variant="outline" onPress={() => router.push('/(admin)/bulk-tests' as Href)} />
         <View style={{ height: Spacing.sm }} />
         <Button title="+ One exam for one class" size="sm" variant="outline" onPress={() => { setForm(emptyExamForm()); setError(null); setEditing('new'); }} />
         <View style={{ height: Spacing.sm }} />
@@ -188,7 +191,7 @@ export default function ExamsAdminScreen({ readOnly = false }: { readOnly?: bool
 
   return (
     <View style={styles.container}>
-      <FlatList
+      <AppList
         contentContainerStyle={styles.content}
         data={rows}
         keyExtractor={(e) => String(e.id)}
@@ -199,16 +202,16 @@ export default function ExamsAdminScreen({ readOnly = false }: { readOnly?: bool
         ListEmptyComponent={status === 'REMOVED' ? <EmptyState title="No removed exams" message="Exams you delete appear here, and can be brought back." /> : <EmptyState title="No exams" message="Create the first exam for this academic year." />}
         ListFooterComponent={query.isFetchingNextPage ? <ActivityIndicator color={Colors.primary} style={{ margin: Spacing.lg }} /> : null}
         renderItem={({ item: e }) => (
-          <TouchableOpacity accessibilityRole="button" style={styles.row} onPress={() => { if (readOnly) setOpen(open === e.id ? null : e.id); else if (selecting) setPicked((p) => toggleId(p, e.id)); else { setForm(examToForm(e)); setError(null); setEditing(e); } }}>
-            {selecting ? <Text style={styles.tick} accessibilityLabel={picked.includes(e.id) ? 'Selected' : 'Not selected'}>{picked.includes(e.id) ? '☑' : '☐'}</Text> : null}
-            <View style={styles.who}>
-              <Text style={styles.name} numberOfLines={1}>{e.name}</Text>
-              <Text style={styles.sub} numberOfLines={1}>{[e.class_name, e.exam_type_name, e.start_date ? `${e.start_date}${e.end_date ? ` to ${e.end_date}` : ''}` : ''].filter(Boolean).join('  ·  ')}</Text>
-              <Text style={styles.sub} numberOfLines={1}>{marksProgress(e)}</Text>
-              {readOnly && open === e.id ? <SubjectLines examId={e.id} /> : null}
-            </View>
-            <StatusPill label={isRemoved(e) ? 'Removed' : (EXAM_STATUSES.find((s) => s.value === e.status)?.label ?? e.status)} tone={isRemoved(e) ? 'neutral' : statusTone(e.status)} />
-          </TouchableOpacity>
+          <RecordCard
+            icon="school-outline"
+            title={e.name}
+            subtitle={[e.class_name, e.exam_type_name, e.start_date ? `${day(e.start_date) || e.start_date}${e.end_date ? ` to ${day(e.end_date) || e.end_date}` : ''}` : ''].filter(Boolean).join('  ·  ') || undefined}
+            meta={marksProgress(e) || undefined}
+            status={{ label: isRemoved(e) ? 'Removed' : (EXAM_STATUSES.find((s) => s.value === e.status)?.label ?? e.status), tone: isRemoved(e) ? 'neutral' : statusTone(e.status) }}
+            selected={selecting ? picked.includes(e.id) : undefined}
+            onPress={() => { if (readOnly) setOpen(open === e.id ? null : e.id); else if (selecting) setPicked((p) => toggleId(p, e.id)); else { setForm(examToForm(e)); setError(null); setEditing(e); } }}
+            footer={readOnly && open === e.id ? <SubjectLines examId={e.id} /> : undefined}
+          />
         )}
       />
 
@@ -243,13 +246,9 @@ export default function ExamsAdminScreen({ readOnly = false }: { readOnly?: bool
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
   content: { padding: Spacing.lg, paddingBottom: Spacing.xxxl },
-  row: { flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.surface, borderRadius: BorderRadius.md, padding: Spacing.md, marginTop: Spacing.sm, gap: Spacing.md },
-  who: { flex: 1 },
   selectBar: { flexDirection: 'row', gap: Spacing.sm, justifyContent: 'space-between' },
-  tick: { fontSize: 22, color: Colors.primary },
   lines: { marginTop: Spacing.sm, gap: 6 },
   line: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: Colors.border, paddingTop: 6 },
   lineName: { fontSize: FontSize.sm, fontWeight: '600', color: Colors.text },
-  name: { fontSize: FontSize.md, fontWeight: '600', color: Colors.text },
   sub: { fontSize: FontSize.sm, color: Colors.textSecondary, marginTop: 2 },
 });

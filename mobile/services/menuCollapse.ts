@@ -5,9 +5,6 @@ import type { NavGroup } from '../navigation/navConfig';
 // phone); a group they never touched follows the defaults below.
 export type Overrides = Record<string, boolean>;
 
-// Groups this small are not worth a tap to open, so they stay open.
-export const ALWAYS_OPEN_MAX = 2;
-
 // '/(admin)/finance/accounts' -> '/finance/accounts', to compare with the current path.
 export const plainPath = (href: string) => href.replace(/\/\([^)]*\)/g, '') || '/';
 
@@ -21,12 +18,13 @@ export function containsPath(group: NavGroup, path: string): boolean {
 }
 
 // Searching shows every matching group open; otherwise the person's choice wins, then the default:
-// open when small or when it holds the screen they are on.
+// open only when it holds the screen they are on. Small groups fold too: left always open they read
+// as loose pages rather than groups (owner feedback 2026-11-25).
 export function isGroupOpen(group: NavGroup, overrides: Overrides, currentPath: string, searching: boolean): boolean {
   if (searching) return true;
   const own = overrides[group.name];
   if (own !== undefined) return own;
-  return group.items.length <= ALWAYS_OPEN_MAX || containsPath(group, currentPath);
+  return containsPath(group, currentPath);
 }
 
 export function toggleGroup(overrides: Overrides, group: NavGroup, currentPath: string): Overrides {

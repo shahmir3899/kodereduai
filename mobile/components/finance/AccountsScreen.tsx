@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { FlatList, View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { useRouter, type Href } from 'expo-router';
 import Button from '../ui/Button';
 import SegmentedTabs from '../ui/SegmentedTabs';
@@ -19,8 +19,9 @@ import { useRefreshControl } from '../../hooks/useRefreshControl';
 import Skeleton from '../ui/Skeleton';
 import ErrorState from '../ui/ErrorState';
 import EmptyState from '../ui/EmptyState';
-import StatusPill from '../ui/StatusPill';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
+import AppList from '../ui/AppList';
+import RecordCard from '../ui/RecordCard';
 
 // Account balances, read-only. The server already hides the accounts the school keeps private
 // from restricted roles.
@@ -68,7 +69,7 @@ function AccountBalances({ canManage }: { canManage: boolean }) {
   if (q.isError && !q.data) return <ErrorState onRetry={() => q.refetch()} />;
   const accounts = q.data ?? [];
   return (
-    <FlatList
+    <AppList
       style={styles.container}
       contentContainerStyle={styles.content}
       data={accounts}
@@ -94,13 +95,12 @@ function AccountBalances({ canManage }: { canManage: boolean }) {
       }
       ListEmptyComponent={<EmptyState title="No accounts" message="No accounts are visible to your role." />}
       renderItem={({ item: a }) => (
-        <View style={styles.row}>
-          <View style={styles.who}>
-            <Text style={styles.name} numberOfLines={1}>{a.name}</Text>
-            {a.account_type ? <StatusPill label={a.account_type} tone="info" /> : null}
-          </View>
-          <View style={styles.right}>
-            <Text style={styles.amount}>{formatMoney(Number(a.net_balance ?? a.balance) || 0)}</Text>
+        <RecordCard
+          icon="wallet-outline"
+          title={a.name}
+          status={a.account_type ? { label: a.account_type, tone: 'info' } : undefined}
+          trailing={formatMoney(Number(a.net_balance ?? a.balance) || 0)}
+          footer={
             <View style={styles.exports}>
               <TouchableOpacity
                 accessibilityRole="button" accessibilityLabel={`Open ${a.name} ledger`} style={styles.export}
@@ -118,8 +118,8 @@ function AccountBalances({ canManage }: { canManage: boolean }) {
                 </TouchableOpacity>
               ))}
             </View>
-          </View>
-        </View>
+          }
+        />
       )}
     />
   );
@@ -137,11 +137,6 @@ const styles = StyleSheet.create({
   totalValue: { fontSize: FontSize.xxl, fontWeight: '700', color: Colors.primary, marginTop: 2 },
   manage: { flexDirection: 'row', gap: Spacing.sm, marginBottom: Spacing.md },
   manageBtn: { flex: 1 },
-  row: { flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.surface, borderRadius: BorderRadius.md, padding: Spacing.md, marginBottom: Spacing.sm, gap: Spacing.md },
-  who: { flex: 1, alignItems: 'flex-start', gap: 4 },
-  name: { fontSize: FontSize.md, fontWeight: '600', color: Colors.text },
-  amount: { fontSize: FontSize.md, fontWeight: '700', color: Colors.text },
-  right: { alignItems: 'flex-end', gap: 6 },
   exports: { flexDirection: 'row', gap: Spacing.sm },
   export: { minHeight: 32, minWidth: 52, alignItems: 'center', justifyContent: 'center', borderRadius: BorderRadius.sm, borderWidth: 1, borderColor: Colors.primary, paddingHorizontal: Spacing.sm },
   exportText: { fontSize: FontSize.xs, fontWeight: '600', color: Colors.primary },

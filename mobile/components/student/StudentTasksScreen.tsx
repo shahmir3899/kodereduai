@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { View, Text, FlatList, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { useRouter, type Href } from 'expo-router';
 import { useStudentAssignments } from '../../hooks/useStudentPortal';
 import { useRefreshControl } from '../../hooks/useRefreshControl';
@@ -10,6 +10,7 @@ import ErrorState from '../ui/ErrorState';
 import EmptyState from '../ui/EmptyState';
 import StatusPill, { type Tone } from '../ui/StatusPill';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
+import AppList from '../ui/AppList';
 
 export const TASK_PILL: Record<TaskState, { label: string; tone: Tone }> = {
   open: { label: 'To do', tone: 'info' },
@@ -31,7 +32,7 @@ export default function StudentTasksScreen() {
   if (query.isError && !query.data) return <ErrorState error={query.error} onRetry={() => query.refetch()} />;
 
   return (
-    <FlatList
+    <AppList
       style={styles.container}
       contentContainerStyle={styles.content}
       data={shown}

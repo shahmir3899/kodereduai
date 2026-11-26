@@ -11,6 +11,7 @@ import Input from '../ui/Input';
 import { useToast } from '../ui/Toast';
 import { confirm } from '../ui/confirm';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
+import { SectionEmpty, SectionError, SectionLoading } from '../../components/ui/SectionState';
 
 interface Props { examId: number; classObj: number; sessionClass?: number | null }
 
@@ -77,9 +78,9 @@ export default function ExamSubjectsEditor({ examId, classObj, sessionClass }: P
   return (
     <View style={styles.wrap}>
       <Text style={styles.title}>Subjects of this exam</Text>
-      {subjects.isLoading ? <Text style={styles.sub}>Loading subjects...</Text> : null}
-      {subjects.isError ? <Text style={styles.sub}>Could not load the subjects.</Text> : null}
-      {!subjects.isLoading && rows.length === 0 && !subjects.isError ? <Text style={styles.sub}>No subjects on this exam yet.</Text> : null}
+      {subjects.isLoading ? <SectionLoading /> : null}
+      {subjects.isError ? <SectionError message="Could not load the subjects." onRetry={() => subjects.refetch()} /> : null}
+      {!subjects.isLoading && rows.length === 0 && !subjects.isError ? <SectionEmpty message="No subjects on this exam yet." icon="school-outline" /> : null}
       {rows.map((s) => (
         <View key={s.id} style={styles.row}>
           <TouchableOpacity accessibilityRole="button" accessibilityLabel={`Edit ${s.subject_name}`} onPress={() => (editing === s.id ? setEditing(null) : open(s.id, s))}>

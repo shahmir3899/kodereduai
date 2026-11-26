@@ -4,7 +4,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 vi.mock('../../../services/api', () => ({
-  parentsApi: { getChildFees: vi.fn(), getPaymentGateways: vi.fn(), initiatePayment: vi.fn() },
+  parentsApi: { getChildFees: vi.fn(), getChildKuickpayBill: vi.fn() },
 }))
 import { parentsApi } from '../../../services/api'
 import ChildFees from '../ChildFees'
@@ -42,7 +42,7 @@ function renderPage() {
 describe('Parent fee screen: received via Kuickpay', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    parentsApi.getPaymentGateways.mockResolvedValue({ data: { gateways: [] } })
+    parentsApi.getChildKuickpayBill.mockResolvedValue({ data: { enabled: false } })
     parentsApi.getChildFees.mockResolvedValue({ data: ROWS })
   })
 
@@ -61,5 +61,32 @@ describe('Parent fee screen: received via Kuickpay', () => {
     const labelled = document.querySelectorAll('[data-testid="kuickpay-received"]')
     expect(labelled.length).toBeGreaterThan(0)
     for (const el of labelled) expect(el.textContent).not.toContain('6,500')
+  })
+})
+
+// The old online-gateway Pay flow is gone (the server's pay-fee answers 410); the banner points
+// to the Kuickpay bill when the school has it, otherwise to the school office.
+const OWING = [
+  { id: 9, fee_type: 'MONTHLY', academic_year: 7, branch: null, month: 4, year, month_name: 'April', fee_type_name: 'Monthly',
+    amount_due: '3000.00', amount_paid: '0.00', status: 'UNPAID', payment_date: null, payment_method: null, kuickpay: null },
+]
+
+describe('Parent fee screen: outstanding balance banner', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    parentsApi.getChildFees.mockResolvedValue({ data: OWING })
+  })
+
+  it('points to the school office when Kuickpay is off', async () => {
+    parentsApi.getChildKuickpayBill.mockResolvedValue({ data: { enabled: false } })
+    renderPage()
+    expect(await screen.findByText('Please pay at the school office.')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /pay now/i })).not.toBeInTheDocument()
+  })
+
+  it('points to the Kuickpay bill when the school has Kuickpay', async () => {
+    parentsApi.getChildKuickpayBill.mockResolvedValue({ data: { enabled: true, active_bill: null } })
+    renderPage()
+    expect(await screen.findByText('Pay with the Kuickpay bill above, or at the school office.')).toBeInTheDocument()
   })
 })

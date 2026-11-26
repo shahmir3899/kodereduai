@@ -20,6 +20,9 @@ export const assistantApi = {
   rejectAction: (id: number) => api.post(`${BASE}/actions/${id}/reject/`, {}),
   editAction: (id: number, edits: object) => api.post(`${BASE}/actions/${id}/edit/`, { edits }),
   spokenVersion: (text: string) => api.post(`${BASE}/voice/spoken/`, { text }),
+  // What Aura remembers for this person: reply language, usual class, usual fee account.
+  getPreferences: () => api.get(`${BASE}/preferences/`),
+  updatePreferences: (data: object) => api.patch(`${BASE}/preferences/`, data),
   // The recording is a file on the phone; React Native reads { uri, name, type } itself.
   transcribe: async (file: { uri: string; name: string; type: string }, language = 'auto') => {
     const form = new FormData();

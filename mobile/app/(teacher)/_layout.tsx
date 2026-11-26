@@ -10,7 +10,7 @@ const TABS: TabSpec[] = [
 ];
 
 // Reached from More or from other screens; no tab of their own.
-const HIDDEN = ['my-profile', 'inbox', 'register', 'results', 'assessments', 'exam-schedule', 'report-cards', 'fees', 'leave', 'my-attendance', 'classes', 'lesson-plans', 'questions', 'papers', 'paper-builder', 'worksheets', 'worksheet-builder', 'inventory', 'coverage', 'my-performance'];
+const HIDDEN = ['my-profile', 'inbox', 'register', 'results', 'assessments', 'exam-schedule', 'report-cards', 'fees', 'leave', 'my-attendance', 'classes', 'lesson-plans', 'questions', 'papers', 'paper-builder', 'worksheets', 'worksheet-builder', 'inventory', 'coverage', 'my-performance', 'paper-responses'];
 
 const STACKS = ['assignments', 'students', 'curriculum', 'messages', 'library', 'transport'];
 
@@ -19,7 +19,7 @@ const TITLES: Record<string, string> = {
   inbox: 'Notifications',
   register: 'Attendance Record', results: 'Results', assessments: 'Assessments', 'exam-schedule': 'Exam Schedule',
   'report-cards': 'Report Cards', fees: 'Collect Payments', leave: 'My Leave', 'my-attendance': 'My Attendance',
-  classes: 'My Classes', 'lesson-plans': 'Lesson Plans', questions: 'Question Bank', papers: 'Question Papers', 'paper-builder': 'Paper Builder', worksheets: 'Worksheets', 'worksheet-builder': 'Worksheet', inventory: 'My Inventory', coverage: 'Curriculum Coverage', 'my-performance': 'My Performance',
+  classes: 'My Classes', 'lesson-plans': 'Lesson Plans', questions: 'Question Bank', papers: 'Question Papers', 'paper-builder': 'Paper Builder', worksheets: 'Worksheets', 'worksheet-builder': 'Worksheet', inventory: 'My Inventory', coverage: 'Curriculum Coverage', 'my-performance': 'My Performance', 'paper-responses': 'Student Responses',
 };
 
 export default function TeacherLayout() {

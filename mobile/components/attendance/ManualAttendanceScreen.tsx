@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, FlatList, TouchableOpacity, StyleSheet, Alert } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { useNavigation } from 'expo-router';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { attendanceApi, sessionsApi } from '../../services/api';
@@ -17,14 +17,15 @@ import Button from '../ui/Button';
 import Skeleton from '../ui/Skeleton';
 import ErrorState from '../ui/ErrorState';
 import EmptyState from '../ui/EmptyState';
-import { useToast } from '../ui/Toast';
+import { shortList, useToast } from '../ui/Toast';
 import { confirm } from '../ui/confirm';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
+import AppList from '../ui/AppList';
 
 const STATUS_STYLE: Record<'PRESENT' | 'ABSENT' | 'LEAVE', { letter: string; label: string; bg: string; fg: string }> = {
   PRESENT: { letter: 'P', label: 'Present', bg: Colors.successLight, fg: Colors.success },
   ABSENT: { letter: 'A', label: 'Absent', bg: Colors.errorLight, fg: Colors.error },
-  LEAVE: { letter: 'L', label: 'Leave', bg: '#ede9fe', fg: Colors.leave },
+  LEAVE: { letter: 'L', label: 'Leave', bg: Colors.leaveLight, fg: Colors.leave },
 };
 const STATUS_KEYS = ['PRESENT', 'ABSENT', 'LEAVE'] as const;
 
@@ -147,9 +148,11 @@ export default function ManualAttendanceScreen({ classOptions, initialClassId }:
     },
     onSuccess: (res) => {
       setBaseline(rowsRef.current);
-      toast.success(`Saved: ${res.created ?? 0} added, ${res.updated ?? 0} updated.`);
-      if (res.errors && res.errors.length > 0) {
-        Alert.alert('Some students were not saved', res.errors.map((e) => (typeof e === 'string' ? e : JSON.stringify(e))).join('\n'));
+      const failed = (res.errors ?? []).map((e) => (typeof e === 'string' ? e : JSON.stringify(e)));
+      if (failed.length > 0) {
+        toast.error(`Saved ${(res.created ?? 0) + (res.updated ?? 0)}, but ${failed.length} not saved:\n${shortList(failed)}`);
+      } else {
+        toast.success(`Saved: ${res.created ?? 0} added, ${res.updated ?? 0} updated.`);
       }
       queryClient.invalidateQueries({ queryKey: ['attendanceRecords'] });
       queryClient.invalidateQueries({ queryKey: ['attendanceRegister'] });
@@ -225,7 +228,7 @@ export default function ManualAttendanceScreen({ classOptions, initialClassId }:
 
   return (
     <View style={styles.container}>
-      <FlatList
+      <AppList
         data={option && !loadingRows ? rows : []}
         keyExtractor={(r) => String(r.studentId)}
         contentContainerStyle={styles.content}

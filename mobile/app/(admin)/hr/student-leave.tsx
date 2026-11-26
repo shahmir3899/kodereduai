@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, ScrollView } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { parentsApi } from '../../../services/api';
 import { useScopedQuery } from '../../../hooks/useScopedQuery';
@@ -8,7 +8,7 @@ import { saveFailureMessage } from '../../../services/errorKind';
 import Card from '../../../components/ui/Card';
 import Badge from '../../../components/ui/Badge';
 import Button from '../../../components/ui/Button';
-import QueryBoundary from '../../../components/ui/QueryBoundary';
+import QueryList from '../../../components/ui/QueryList';
 import { useToast } from '../../../components/ui/Toast';
 import { Colors, FontSize, Spacing } from '../../../constants/colors';
 
@@ -44,12 +44,21 @@ export default function LeaveApprovals() {
   const busy = (id: number) => review.isPending && review.variables?.id === id;
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content} refreshControl={refreshControl}>
-      <Text style={styles.title}>Student leave requests</Text>
-      <Text style={styles.note}>Leave that parents asked for on behalf of their children. Staff leave is on the Leave screen.</Text>
-      <QueryBoundary query={query} emptyTitle="No Pending Requests" emptyMessage="All leave requests have been processed.">
-        {(requests) => requests.map((req) => (
-          <Card key={req.id} style={styles.card}>
+    <QueryList
+      query={query}
+      style={styles.container}
+      contentContainerStyle={styles.content}
+      refreshControl={refreshControl}
+      emptyTitle="No Pending Requests"
+      emptyMessage="All leave requests have been processed."
+      keyExtractor={(req) => String(req.id)}
+      extraData={review.isPending ? review.variables?.id : null}
+      header={<>
+        <Text style={styles.title}>Student leave requests</Text>
+        <Text style={styles.note}>Leave that parents asked for on behalf of their children. Staff leave is on the Leave screen.</Text>
+      </>}
+      renderItem={(req) => (
+          <Card style={styles.card}>
             <View style={styles.cardHeader}>
               <View>
                 <Text style={styles.studentName}>{req.student_name}</Text>
@@ -66,9 +75,8 @@ export default function LeaveApprovals() {
                 loading={busy(req.id)} style={{ flex: 1 }} />
             </View>
           </Card>
-        ))}
-      </QueryBoundary>
-    </ScrollView>
+      )}
+    />
   );
 }
 

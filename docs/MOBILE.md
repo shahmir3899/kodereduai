@@ -1,6 +1,6 @@
 # Education AI mobile app
 
-One Expo app (`mobile/`, React Native 0.81, Expo 54, expo-router) for every role. The role decides which route group the user lands in; the web sidebar rules in `frontend/src/navigation/navigationConfig.js` are the source of truth for who sees what. Plan and decisions: `docs/MOBILE_PLAN.md`. Device test script: `docs/MOBILE_QA.md`. Driver tracking and the Play location declaration: `docs/ANDROID_BACKGROUND_LOCATION.md`.
+One Expo app (`mobile/`, React Native 0.81, Expo 54, expo-router) for every role. The role decides which route group the user lands in; the web sidebar rules in `frontend/src/navigation/navigationConfig.js` are the source of truth for who sees what. Open work: `docs/MOBILE_WEB_BALANCE_PLAN.md` (old plans are in git history at 7e2a0cc2). Device test script: `docs/MOBILE_QA.md`. Driver tracking and the Play location declaration: `docs/ANDROID_BACKGROUND_LOCATION.md`.
 
 ## Layout
 
@@ -12,6 +12,26 @@ One Expo app (`mobile/`, React Native 0.81, Expo 54, expo-router) for every role
 | `services/` | API clients and pure, unit-tested logic |
 | `hooks/` | React Query hooks; `useScopedQuery` puts the school id in the key |
 | `__tests__/` | Jest: nav rules per role, pure logic, accessibility roles |
+
+## Screen building blocks (UI refresh, 2026-11-26)
+
+Use these instead of drawing a new row, tile or empty line by hand (plan: `MOBILE_UI_REFRESH_PLAN.md`):
+
+| Need | Component |
+|---|---|
+| A list row for a person or record | `components/ui/RecordCard` (avatar or `icon`, status pill, `trailing`, unread `badge`, `footer` for extra lines and buttons) |
+| Quick actions / a record's shortcuts | `components/ui/TileGrid` (round icon tiles, 4 a row, `collapseAfter` adds "More") |
+| A "Needs attention" item | `components/ui/AttentionCard` (icon and action word from the item key, `services/attentionLook.ts`) |
+| Top of a role's Home | `components/dashboard/HomeHero` (+ `HomeShell` for its loading/error); figures must not repeat what is below |
+| Whole-screen empty / error / loading | `EmptyState` (icon picked from the title), `ErrorState`, `Skeleton`, or `QueryBoundary` |
+| A section inside a card | `components/ui/SectionState`: `SectionLoading`, `SectionError` (Try again), `SectionEmpty` |
+| A long list | `components/ui/AppList` (lighter FlatList defaults; pass `removeClippedSubviews={false}` when rows hold typing boxes) or `components/ui/QueryList` (AppList + QueryBoundary loading / error / empty) |
+| Picking several rows | `RecordCard` `selected` (+ `onSelect` for a separate tick box) |
+| A full-page form | `components/ui/FormScreen` (fields scroll, Save pinned above the keyboard, one error line); bottom-sheet forms use `FormSheet` |
+| A date on screen | `services/dates.ts` (`day`, `dayShort`, `dayTime`, `monthYear`, `monthLong`) |
+| Header left button | automatic: ☰ on tabs, ← elsewhere (`PersonaTabs`, `RoleStack`); a folder layout uses `RoleStack` |
+
+`node scripts/ui_audit.js` (from `mobile/`) lists screens that break the loading / refresh / error rules.
 
 ## Commands
 
@@ -30,8 +50,9 @@ npx expo export --platform android --output-dir <scratch>   # bundle check
 - **Session:** an access token that expires is refreshed once; only an explicit rejection of the refresh token signs the user out, and the login screen then says the session expired. Logout unregisters the push token first (while still authenticated), then clears tokens and the query cache.
 - **Push taps:** the backend sends only `log_id`, so a tap opens the persona's notifications inbox (home if it has none). A `screen` in the payload is honoured only inside the user's own route group (`services/notificationRoute.ts`).
 - **Crashes:** a root error boundary shows a plain "Something went wrong" screen. Sentry reporting is on only when `EXPO_PUBLIC_SENTRY_DSN` is set in the EAS build env and the app env is not `development`; it sends no PII, request data or screenshots (`services/crashReporting.ts`). Never commit the DSN.
+- **Pictures** from the server (avatars, logos, paper and document pictures) use `expo-image`, which keeps them on the phone's disk; camera previews and bundled assets may use the built-in `Image`. `expo-image` is native: an app build without it needs a new APK.
 - **Report files** (finance report, fee collection, defaulters, ledger PDF/Excel) are made by the server and shared through the phone's share sheet (`services/reportShare.ts`), so they are identical to the web downloads. Needs `expo-file-system` and `expo-sharing` (native: rebuild the APK).
-- **Finance manager** is read-only on all finance APIs; **Staff** is HR self-service, messages, notifications and own inventory. See `MOBILE_PLAN.md` Phase 7.
+- **Finance manager** is read-only on all finance APIs; **Staff** is HR self-service, messages, notifications and own inventory.
 
 ## Release
 
@@ -48,16 +69,19 @@ eas build --platform android --profile production    # Play bundle
 
 ## Play Store checklist
 
-- **Permissions in the manifest:** camera, fine/coarse/background location, foreground service (location). Microphone and boot-complete are not requested.
+(Re-checked against `app.json` and the code on 2026-11-24.)
+- **Permissions in the manifest:** camera, fine/coarse/background location, foreground service (location), and **microphone** (the `expo-audio` plugin, for talking to the Aura assistant). Biometric unlock (`expo-local-authentication`). Boot-complete is not requested.
 - **Background location declaration and video:** text in `ANDROID_BACKGROUND_LOCATION.md`.
 - **Data safety form (draft, confirm before submitting):**
-  - Collected: name, email, phone (account), user ID, precise location (driver role only, during a journey, shared with parents of that route), photos (student and attendance photos the school uploads), app diagnostics (crash reports, if Sentry is on), push token.
-  - Shared with third parties: none for advertising. Crash reports go to Sentry if enabled.
+  - Collected: name, email, phone (account), user ID, precise location (driver role only, during a journey, shared with parents of that route), photos (student, staff and document photos, attendance photos, photos of question papers and book contents pages), **audio (voice messages to the assistant, recorded only while the mic button is on, sent for transcription and not kept by the app)**, messages and assistant chats, app diagnostics (crash reports, only if Sentry is on), push token.
+  - Processed by service providers on our behalf (not "shared" in Play's sense, but name them in the privacy policy): Groq (speech to text, assistant), Cerebras (assistant), Google Gemini (reading paper photos), Google Cloud Vision (reading document and contents-page photos), Supabase (file storage), Sentry (crash reports, if on).
+  - Shared with third parties for advertising: none. No data sold.
   - Encrypted in transit: yes (HTTPS). Users can request deletion through their school (the school owns the data).
-  - No ads, no data sold.
 - **Privacy policy URL:** the landing site page `privacy` on the Astro site; check the live URL before submitting.
 - **Listing assets still to produce:** feature graphic (1024x500), 4 to 8 phone screenshots (use the demo school 42), short and full description, content rating questionnaire, target audience (school staff, parents; not directed at children under 13).
-- **Icon and splash:** `assets/icon.png`, `adaptive-icon.png`, `splash-icon.png` exist; check them against Play specs (512x512 icon, adaptive icon safe zone).
+- **Icon and splash:** `assets/icon.png`, `adaptive-icon.png`, `splash-icon.png` are 1024x1024 (checked 2026-11-24). Play wants a separate 512x512 store icon (scale `icon.png` down); check the adaptive icon keeps the logo inside the central safe zone.
+- **Removed 2026-11-24:** `react-native-maps` (installed but never imported; the bus tracker opens the Maps app). No Google Maps key is needed.
+- **Sentry:** off unless `EXPO_PUBLIC_SENTRY_DSN` is set in the EAS build environment (`services/crashReporting.ts`).
 
 ## Known gaps (see `PHASE5_KNOWN_FAILURES.md`)
 
@@ -83,7 +107,7 @@ Admin and principal: exam types and the grade scale; date sheet editing and publ
 - **App lock:** More, "Fingerprint or face lock". Needs the phone's fingerprint, face or screen lock; asks on a cold start and when the app returns after 30 seconds away; turning it on or off needs the prompt. "Sign out and use password" is on the lock screen. Needs `expo-local-authentication`, so a new APK.
 - **New native modules since the last APK:** `expo-document-picker`, `react-native-svg` (QR code), `expo-local-authentication`.
 
-## What is left (2026-10-30)
+## What is left (2026-10-30; superseded by `MOBILE_WEB_BALANCE_PLAN.md`)
 
 **Moved to version 2 (decided 2026-10-30)**
 - Transport management, Library and Hostel screens for admin and principal. The driver app, student/parent transport and library views, and the existing gate-pass and issue/return screens stay as they are.
@@ -159,7 +183,7 @@ Compared by reading the web pages and components against the mobile screens (no 
 - **A. AI remark on Assessments:** "Suggest with AI" beside the teacher and principal remarks; fills the box, saves nothing by itself.
 - **B. User photo and Profile:** the header and the top of More show the signed-in user's photo (initials if none) and open `my-profile` (all roles): take or choose a photo (square crop), upload, remove, edit name, phone and email. The school logo and name stay in More under the user row. No new native module.
 - **C. AI comments:** Results has Generate comments / Regenerate all with live progress and Stop, and per student edit and regenerate; the Report card can edit and regenerate its comments. Code: `components/exams/CommentTools.tsx`, `services/examComments.ts`.
-- Plan and what is next: `docs/MOBILE_UI_POLISH_PLAN.md` (phases D to F).
+- What is still open: `docs/MOBILE_WEB_BALANCE_PLAN.md`.
 - **D and E (dashboards, header):** admin home has the day hero, four-state attendance bar, monthly fee card and latest notifications; the header has the academic year chip (staff shells), a notification bell with unread count, and the user's photo; `RecordCard` is the shared list row; pickers with more than 8 options get a search box; teachers now have a notifications inbox. Code: `components/dashboard/*`, `components/nav/HeaderActions.tsx`, `components/ui/RecordCard.tsx`, `services/{dashboardView,headerView}.ts`.
 - **D finished, F done (2026-10-30, uncommitted, never run on a device):**
   - **D:** admin home has a "School insights" section (admissions and departures, books, question bank, lesson plans by teacher) that loads only when opened; manager, finance manager and staff homes share `StatTiles`; finance manager and staff homes show the latest notifications. Trend strips are not built (the dashboard API sends no history).

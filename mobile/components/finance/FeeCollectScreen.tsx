@@ -1,21 +1,22 @@
 import React, { useMemo, useState } from 'react';
-import { View, Text, FlatList, TextInput, TouchableOpacity, ScrollView, StyleSheet } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet } from 'react-native';
 import { todayString, type ClassOption } from '../../services/attendanceEntry';
 import {
   MONTH_NAMES, PAYMENT_METHODS, STATUS_TABS, balanceOf, bulkDeleteFeesResultText, bulkDeleteFeesText, bulkPayPayload, bulkPayResultText, bulkPayText, bulkPayTotal, deletableIds, payableIds, skippedNote, validateBulkPay, buildPaymentPatch, canDeleteFee, canRecordPayment, categoryOptions, emptyPaymentForm,
   feeDescription, feeLabel, filterPayments, formatMoney, sortPayments, statusTone, stepFeeMonth, summarize, validatePayment,
-  type FeePayment, type FeeTypeTab, type PaymentForm, type StatusTab,
-} from '../../services/feeCollect';
+  type FeePayment, type FeeTypeTab, type PaymentForm, type StatusTab, groupByStudent, groupStatus, shouldGroupByStudent } from '../../services/feeCollect';
 import { useAttendanceClassOptions } from '../../hooks/useAcademicYear';
 import { useAccounts, useBulkDeleteFees, useBulkPayFull, useDeleteFeePayment, useFeePayments, useRecordPayment } from '../../hooks/useFees';
 import { selectedAll, toggleAll, toggleId } from '../../services/questionExtras';
 import { confirm } from '../ui/confirm';
 import { useAcademicYear } from '../../hooks/useAcademicYear';
 import { reportsApi } from '../../services/api';
+import { voucherParams } from '../../services/feeVouchers';
 import { shareReportFile } from '../../services/reportShare';
 import { feeReportFileName, feeReportRequest } from '../../services/reports';
 import { staffLeaveErrorMessage } from '../../services/staffLeave';
 import FormSheet from '../inventory/FormSheet';
+import VoucherSheet from './VoucherSheet';
 import { useRefreshControl } from '../../hooks/useRefreshControl';
 import SearchBar from '../ui/SearchBar';
 import SegmentedTabs from '../ui/SegmentedTabs';
@@ -26,11 +27,12 @@ import Button from '../ui/Button';
 import Skeleton from '../ui/Skeleton';
 import ErrorState from '../ui/ErrorState';
 import EmptyState from '../ui/EmptyState';
-import StatusPill from '../ui/StatusPill';
 import KuickpayReceivedLabel from './KuickpayReceivedLabel';
 import CopyableNumber from '../ui/CopyableNumber';
 import { useToast } from '../ui/Toast';
-import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
+import { Colors, FontSize, Spacing, BorderRadius, GlyphSize } from '../../constants/colors';
+import AppList from '../ui/AppList';
+import RecordCard from '../ui/RecordCard';
 
 interface Props {
   // Teachers pass their own sections (and must pick one); admins leave it out and may see all.
@@ -88,6 +90,9 @@ export default function FeeCollectScreen({ classOptions, canRecord = true, canMa
   })), [query.data, option, status, category, search]);
   const categories = useMemo(() => categoryOptions(query.data ?? []), [query.data]);
   const totals = useMemo(() => summarize(shown), [shown]);
+  // Several fee types this period (e.g. Tuition + Koder Kids): one card per student, each fee inside
+  // it. Selecting for bulk actions works per record, so it shows the plain list meanwhile.
+  const groups = useMemo(() => groupByStudent(shown), [shown]);
   const activeAccounts = (accounts.data ?? []).filter((a) => a.is_active !== false);
 
   // Bulk actions (admin and principal). Choosing is page-scoped: ids from a list no longer on screen must not ride along.
@@ -162,6 +167,15 @@ export default function FeeCollectScreen({ classOptions, canRecord = true, canMa
     finally { setReporting(false); }
   };
 
+  // Vouchers for the month: the chosen rows, else what is on screen. The sheet picks the due date,
+  // previews and shares the PDF.
+  const [voucherParamsOpen, setVoucherParamsOpen] = useState<Record<string, string | number> | null>(null);
+  const openVouchers = () => setVoucherParamsOpen(voucherParams({
+    month: ym.month, year: ym.year, shown, selectedIds: selecting ? selected : [],
+    filtered: !!search || status !== 'ALL' || category !== ALL_CATEGORIES,
+    option: option ?? null, academicYearId: academicYear.current?.id,
+  }));
+
   const open = (p: FeePayment) => {
     setPaying(p);
     setForm(emptyPaymentForm(balanceOf(p), today, activeAccounts.length === 1 ? activeAccounts[0].id : (p.account ?? null)));
@@ -224,6 +238,10 @@ export default function FeeCollectScreen({ classOptions, canRecord = true, canMa
           <Button title={`Delete (${delIds.length})`} size="sm" variant="danger" disabled={delIds.length === 0 || bulkPay.isPending || bulkDelete.isPending} onPress={removeSelected} />
         </View>
       ) : null}
+      {feeType !== 'ANNUAL' && shown.length > 0 ? (
+        <Button title={selecting && selected.length ? `Vouchers for ${selected.length} selected (PDF)` : `${MONTH_NAMES[ym.month - 1]} vouchers (PDF)`}
+          size="sm" variant="outline" onPress={openVouchers} style={styles.reportBtn} />
+      ) : null}
       {canManage && feeType !== 'ANNUAL' ? (
         <Button title={`${MONTH_NAMES[ym.month - 1]} report (PDF, whole school)`} size="sm" variant="outline" onPress={shareMonthReport} loading={reporting} disabled={reporting} style={styles.reportBtn} />
       ) : null}
@@ -237,12 +255,75 @@ export default function FeeCollectScreen({ classOptions, canRecord = true, canMa
     </View>
   );
 
+  const grouped = !selecting && shouldGroupByStudent(shown);
+
   if (query.isLoading) return <View style={styles.container}><View style={styles.content}>{header}</View><Skeleton /></View>;
   if (query.isError && !query.data) return <ErrorState message={(query.error as any)?.response?.data?.detail} onRetry={() => query.refetch()} />;
 
   return (
     <View style={styles.container}>
-      <FlatList
+      {grouped ? (
+        <AppList
+          data={groups}
+          keyExtractor={(g) => g.key}
+          contentContainerStyle={styles.content}
+          keyboardShouldPersistTaps="handled"
+          refreshControl={refreshControl}
+          ListHeaderComponent={header}
+          renderItem={({ item: g }) => {
+            const status = groupStatus(g);
+            return (
+              <RecordCard
+                avatarName={g.student_name}
+                title={g.student_name}
+                subtitle={`${g.student_roll ? `Roll ${g.student_roll}  ·  ` : ''}${g.class_label}` || undefined}
+                meta={`${g.rows.length} fee${g.rows.length === 1 ? '' : 's'}`}
+                status={status === 'MIXED' ? { label: 'MIXED', tone: 'warning' } : { label: status, tone: statusTone(status) }}
+                footer={<>
+                  {g.rows.map((p) => {
+                    const balance = balanceOf(p);
+                    return (
+                      <View key={p.id} style={styles.feeBlock}>
+                        <Text style={styles.feeName}>{feeLabel(p)}</Text>
+                        <View style={styles.amounts}>
+                          <Amount label="Due" value={formatMoney(Number(p.amount_due))} />
+                          <Amount label="Received" value={formatMoney(Number(p.amount_paid))} color={Colors.success} />
+                          <Amount label="Balance" value={formatMoney(balance)} color={balance > 0 ? Colors.error : Colors.textSecondary} />
+                        </View>
+                        <KuickpayReceivedLabel kuickpay={p.kuickpay} />
+                        {Number(p.previous_balance) > 0 ? <Text style={styles.carry}>Includes {formatMoney(Number(p.previous_balance))} carried forward</Text> : null}
+                        <View style={styles.feeActions}>
+                          {canManage && canDeleteFee(p) ? (
+                            <TouchableOpacity accessibilityRole="button" accessibilityLabel={`Delete fee: ${feeDescription(p)}`} style={[styles.delete, styles.feeAction]} onPress={() => { setDeleteError(null); setDeleting(p); }}>
+                              <Text style={styles.deleteText}>Delete</Text>
+                            </TouchableOpacity>
+                          ) : null}
+                          {canRecord && canRecordPayment(p) ? (
+                            <TouchableOpacity accessibilityRole="button" accessibilityLabel={`Record payment: ${feeLabel(p)}`} style={[styles.record, styles.feeAction]} onPress={() => open(p)}>
+                              <Text style={styles.recordText}>Record payment</Text>
+                            </TouchableOpacity>
+                          ) : null}
+                        </View>
+                      </View>
+                    );
+                  })}
+                  {g.rows.length > 1 ? (
+                    <View style={styles.subTotal}>
+                      <Text style={styles.subTotalLabel}>Sub total</Text>
+                      <View style={styles.amounts}>
+                        <Amount label="Due" value={formatMoney(g.due)} />
+                        <Amount label="Received" value={formatMoney(g.paid)} color={Colors.success} />
+                        <Amount label="Balance" value={formatMoney(g.balance)} color={g.balance > 0 ? Colors.error : Colors.textSecondary} />
+                      </View>
+                    </View>
+                  ) : null}
+                </>}
+              />
+            );
+          }}
+        />
+      ) : (
+      <AppList
         data={shown}
         keyExtractor={(p) => String(p.id)}
         contentContainerStyle={styles.content}
@@ -252,49 +333,50 @@ export default function FeeCollectScreen({ classOptions, canRecord = true, canMa
         ListEmptyComponent={<EmptyState title="No fees" message="No fee records match. Fees can be generated from Generate Fee Records." />}
         renderItem={({ item: p }) => {
           const balance = balanceOf(p);
+          const toggle = () => setSelected((s) => toggleId(s, p.id));
           return (
-            <View style={styles.card}>
-              <TouchableOpacity accessibilityRole={selecting ? 'checkbox' : 'text'} accessibilityState={selecting ? { checked: selected.includes(p.id) } : undefined} activeOpacity={selecting ? 0.6 : 1}
-                disabled={!selecting} onPress={() => setSelected((s) => toggleId(s, p.id))}>
-              <View style={styles.top}>
-                {selecting ? <Text style={styles.check}>{selected.includes(p.id) ? '☑' : '☐'}</Text> : null}
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.name} numberOfLines={1}>{p.student_name}</Text>
-                  <Text style={styles.sub} numberOfLines={1}>
-                    {p.student_roll ? `Roll ${p.student_roll}  ·  ` : ''}{p.session_class_label || p.class_name || ''}
-                  </Text>
+            <RecordCard
+              avatarName={p.student_name}
+              title={p.student_name}
+              subtitle={`${p.student_roll ? `Roll ${p.student_roll}  ·  ` : ''}${p.session_class_label || p.class_name || ''}` || undefined}
+              meta={feeLabel(p)}
+              status={{ label: p.status, tone: statusTone(p.status) }}
+              selected={selecting ? selected.includes(p.id) : undefined}
+              onPress={selecting ? toggle : undefined}
+              onSelect={selecting ? toggle : undefined}
+              footer={<>
+                <View style={styles.amounts}>
+                  <Amount label="Due" value={formatMoney(Number(p.amount_due))} />
+                  <Amount label="Received" value={formatMoney(Number(p.amount_paid))} color={Colors.success} />
+                  <Amount label="Balance" value={formatMoney(balance)} color={balance > 0 ? Colors.error : Colors.textSecondary} />
                 </View>
-                <StatusPill label={p.status} tone={statusTone(p.status)} />
-              </View>
-              </TouchableOpacity>
-              <Text style={styles.fee}>{feeLabel(p)}</Text>
-              <View style={styles.amounts}>
-                <Amount label="Due" value={formatMoney(Number(p.amount_due))} />
-                <Amount label="Received" value={formatMoney(Number(p.amount_paid))} color={Colors.success} />
-                <Amount label="Balance" value={formatMoney(balance)} color={balance > 0 ? Colors.error : Colors.textSecondary} />
-              </View>
-              <KuickpayReceivedLabel kuickpay={p.kuickpay} />
-              {p.kuickpay_consumer_number ? (
-                <View style={styles.consumerRow}>
-                  <Text style={styles.consumerLabel}>Kuickpay No.</Text>
-                  <CopyableNumber value={p.kuickpay_consumer_number} textStyle={styles.consumerNumber} />
-                </View>
-              ) : null}
-              {Number(p.previous_balance) > 0 ? <Text style={styles.carry}>Includes {formatMoney(Number(p.previous_balance))} carried forward</Text> : null}
-              {!selecting && canManage && canDeleteFee(p) ? (
-                <TouchableOpacity accessibilityRole="button" accessibilityLabel={`Delete fee: ${feeDescription(p)}`} style={styles.delete} onPress={() => { setDeleteError(null); setDeleting(p); }}>
-                  <Text style={styles.deleteText}>Delete this record</Text>
-                </TouchableOpacity>
-              ) : null}
-              {!selecting && canRecord && canRecordPayment(p) ? (
-                <TouchableOpacity accessibilityRole="button" style={styles.record} onPress={() => open(p)}>
-                  <Text style={styles.recordText}>Record payment</Text>
-                </TouchableOpacity>
-              ) : null}
-            </View>
+                <KuickpayReceivedLabel kuickpay={p.kuickpay} />
+                {p.kuickpay_consumer_number ? (
+                  <View style={styles.consumerRow}>
+                    <Text style={styles.consumerLabel}>Kuickpay No.</Text>
+                    <CopyableNumber value={p.kuickpay_consumer_number} textStyle={styles.consumerNumber} />
+                  </View>
+                ) : null}
+                {Number(p.previous_balance) > 0 ? <Text style={styles.carry}>Includes {formatMoney(Number(p.previous_balance))} carried forward</Text> : null}
+                {!selecting && canManage && canDeleteFee(p) ? (
+                  <TouchableOpacity accessibilityRole="button" accessibilityLabel={`Delete fee: ${feeDescription(p)}`} style={styles.delete} onPress={() => { setDeleteError(null); setDeleting(p); }}>
+                    <Text style={styles.deleteText}>Delete this record</Text>
+                  </TouchableOpacity>
+                ) : null}
+                {!selecting && canRecord && canRecordPayment(p) ? (
+                  <TouchableOpacity accessibilityRole="button" style={styles.record} onPress={() => open(p)}>
+                    <Text style={styles.recordText}>Record payment</Text>
+                  </TouchableOpacity>
+                ) : null}
+              </>}
+            />
           );
         }}
       />
+      )}
+
+      <VoucherSheet visible={voucherParamsOpen !== null} onClose={() => setVoucherParamsOpen(null)}
+        month={ym.month} year={ym.year} params={voucherParamsOpen ?? {}} />
 
       <FormSheet visible={deleting !== null} title="Delete this fee record?" onClose={() => setDeleting(null)} onSubmit={confirmDelete} submitLabel="Delete" busy={remove.isPending} error={deleteError}>
         {deleting ? <Text style={styles.sheetWho}>{feeDescription(deleting)}</Text> : null}
@@ -359,28 +441,28 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
   content: { padding: Spacing.lg },
   stepper: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing.xl, marginBottom: Spacing.md },
-  step: { fontSize: 28, color: Colors.primary, paddingHorizontal: Spacing.sm },
+  step: { fontSize: GlyphSize.lg, color: Colors.primary, paddingHorizontal: Spacing.sm },
   stepOff: { color: Colors.border },
   month: { fontSize: FontSize.md, fontWeight: '600', color: Colors.text, minWidth: 150, textAlign: 'center' },
   totals: { flexDirection: 'row', gap: Spacing.sm, backgroundColor: Colors.surface, borderRadius: BorderRadius.md, padding: Spacing.md, marginBottom: Spacing.md },
   total: { flex: 1, alignItems: 'center' },
   totalValue: { fontSize: FontSize.md, fontWeight: '700' },
   totalLabel: { fontSize: FontSize.xs, color: Colors.textSecondary },
-  card: { backgroundColor: Colors.surface, borderRadius: BorderRadius.md, padding: Spacing.md, marginBottom: Spacing.sm },
-  top: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
-  name: { fontSize: FontSize.md, fontWeight: '600', color: Colors.text },
-  sub: { fontSize: FontSize.xs, color: Colors.textSecondary, marginTop: 2 },
-  fee: { fontSize: FontSize.sm, color: Colors.textSecondary, marginTop: Spacing.sm },
   amounts: { flexDirection: 'row', gap: Spacing.sm, marginTop: Spacing.xs },
   amount: { flex: 1 },
-  amountLabel: { fontSize: 10, color: Colors.textSecondary },
+  amountLabel: { fontSize: FontSize.xxs, color: Colors.textSecondary },
   amountValue: { fontSize: FontSize.sm, fontWeight: '700' },
   reportBtn: { alignSelf: 'flex-start', marginBottom: Spacing.md },
   bulkRow: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm, marginVertical: Spacing.xs },
-  check: { fontSize: 22, color: Colors.primary, marginRight: Spacing.sm },
   delete: { marginTop: Spacing.sm, borderWidth: 1, borderColor: Colors.error, borderRadius: BorderRadius.md, paddingVertical: Spacing.sm, alignItems: 'center' },
   deleteText: { color: Colors.error, fontWeight: '700', fontSize: FontSize.sm },
   carry: { fontSize: FontSize.xs, color: Colors.warning, marginTop: Spacing.xs },
+  feeBlock: { borderTopWidth: 1, borderTopColor: Colors.border, paddingTop: Spacing.sm, marginTop: Spacing.sm },
+  feeName: { fontSize: FontSize.sm, fontWeight: '700', color: Colors.text },
+  feeActions: { flexDirection: 'row', gap: Spacing.sm },
+  feeAction: { flex: 1 },
+  subTotal: { borderTopWidth: 1, borderTopColor: Colors.border, paddingTop: Spacing.sm, marginTop: Spacing.sm },
+  subTotalLabel: { fontSize: FontSize.sm, fontWeight: '700', color: Colors.primary },
   consumerRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: Spacing.sm, marginTop: Spacing.xs },
   consumerLabel: { fontSize: FontSize.xs, color: Colors.textSecondary },
   consumerNumber: { fontSize: FontSize.sm },

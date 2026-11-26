@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { View, Text, FlatList, ActivityIndicator, TouchableOpacity, StyleSheet, Switch, type RefreshControlProps } from 'react-native';
+import { View, Text, ActivityIndicator, StyleSheet, Switch, type RefreshControlProps } from 'react-native';
 import { useRouter, type Href } from 'expo-router';
 import { examinationsApi } from '../../services/api';
 import { usePaperActions, usePaperMakers, usePapersPaged } from '../../hooks/usePapers';
@@ -21,10 +21,11 @@ import Button from '../ui/Button';
 import Skeleton from '../ui/Skeleton';
 import ErrorState from '../ui/ErrorState';
 import EmptyState from '../ui/EmptyState';
-import StatusPill from '../ui/StatusPill';
 import { useToast } from '../ui/Toast';
 import { confirm } from '../ui/confirm';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
+import AppList from '../ui/AppList';
+import RecordCard from '../ui/RecordCard';
 
 // Question papers: open one in the builder, share its PDF, delete, or start a new one. A block paper (Paper
 // Builder v2) is printed on the phone from the server's page, as the web prints it in the browser; an old paper
@@ -138,7 +139,7 @@ export default function PapersScreen() {
 
   return (
     <View style={styles.container}>
-      <FlatList
+      <AppList
         contentContainerStyle={styles.content}
         data={rows}
         keyExtractor={(p) => String(p.id)}
@@ -149,26 +150,31 @@ export default function PapersScreen() {
         onEndReachedThreshold={0.5}
         ListEmptyComponent={<EmptyState title="No papers" message={term ? 'Nothing matches your search.' : 'Build the first question paper.'} />}
         ListFooterComponent={query.isFetchingNextPage ? <ActivityIndicator color={Colors.primary} style={{ margin: Spacing.lg }} /> : null}
-        renderItem={({ item: p }) => (
-          <View style={styles.card}>
-            <TouchableOpacity accessibilityRole={selecting ? 'checkbox' : 'button'} accessibilityState={selecting ? { checked: selected.includes(p.id) } : undefined} style={styles.top}
-              onPress={() => (selecting ? setSelected((s) => toggleId(s, p.id)) : open(p.id))}>
-              {selecting ? <Text style={styles.check}>{selected.includes(p.id) ? '☑' : '☐'}</Text> : null}
-              <View style={styles.who}>
-                <Text style={styles.name} numberOfLines={2}>{p.paper_title}</Text>
-                <Text style={styles.sub} numberOfLines={1}>{[p.class_name, p.subject_name, `${Number(p.total_marks)} marks`].filter(Boolean).join('  ·  ')}</Text>
-                {p.made_by_name ? <Text style={styles.sub} numberOfLines={1}>Made by {p.made_by_name}</Text> : null}
-              </View>
-              <StatusPill label={PAPER_STATUSES.find((s) => s.value === p.status)?.label ?? p.status} tone={paperTone(p.status)} />
-            </TouchableOpacity>
-            <View style={styles.actions}>
-              <Button title={p.status === 'DRAFT' ? 'Edit' : 'Open'} size="sm" onPress={() => open(p.id)} disabled={busy !== null || selecting} />
-              <Button title="Share PDF" size="sm" variant="outline" onPress={() => share(p)} loading={busy === p.id} disabled={busy !== null} />
-              <Button title="Share Word" size="sm" variant="outline" onPress={() => shareDocx(p)} disabled={busy !== null} />
-              <Button title="Delete" size="sm" variant="ghost" onPress={() => remove(p)} disabled={busy !== null} />
-            </View>
-          </View>
-        )}
+        renderItem={({ item: p }) => {
+          const toggle = () => setSelected((s) => toggleId(s, p.id));
+          return (
+            <RecordCard
+              icon="document-outline"
+              title={p.paper_title}
+              subtitle={[p.class_name, p.subject_name, `${Number(p.total_marks)} marks`].filter(Boolean).join('  ·  ')}
+              meta={p.made_by_name ? `Made by ${p.made_by_name}` : undefined}
+              status={{ label: PAPER_STATUSES.find((s) => s.value === p.status)?.label ?? p.status, tone: paperTone(p.status) }}
+              selected={selecting ? selected.includes(p.id) : undefined}
+              onSelect={selecting ? toggle : undefined}
+              onPress={() => (selecting ? toggle() : open(p.id))}
+              footer={
+                <View style={styles.actions}>
+                  <Button title={p.status === 'DRAFT' ? 'Edit' : 'Open'} size="sm" onPress={() => open(p.id)} disabled={busy !== null || selecting} />
+                  <Button title="Share PDF" size="sm" variant="outline" onPress={() => share(p)} loading={busy === p.id} disabled={busy !== null} />
+                  <Button title="Share Word" size="sm" variant="outline" onPress={() => shareDocx(p)} disabled={busy !== null} />
+                  <Button title="Responses" size="sm" variant="outline" disabled={busy !== null || selecting}
+                    onPress={() => router.push({ pathname: `${base}/paper-responses`, params: { id: p.id } } as Href)} />
+                  <Button title="Delete" size="sm" variant="ghost" onPress={() => remove(p)} disabled={busy !== null} />
+                </View>
+              }
+            />
+          );
+        }}
       />
     </View>
   );
@@ -177,13 +183,7 @@ export default function PapersScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
   content: { padding: Spacing.lg, paddingBottom: Spacing.xxxl },
-  card: { backgroundColor: Colors.surface, borderRadius: BorderRadius.md, padding: Spacing.md, marginTop: Spacing.sm, gap: Spacing.sm },
-  top: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md },
-  who: { flex: 1 },
-  name: { fontSize: FontSize.md, fontWeight: '600', color: Colors.text },
-  sub: { fontSize: FontSize.sm, color: Colors.textSecondary, marginTop: 2 },
   actions: { flexDirection: 'row', gap: Spacing.sm, flexWrap: 'wrap' },
-  check: { fontSize: FontSize.xl, color: Colors.primary },
   switchRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: Spacing.sm },
   switchLabel: { fontSize: FontSize.md, color: Colors.text },
 });

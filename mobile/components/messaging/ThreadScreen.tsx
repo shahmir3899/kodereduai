@@ -72,7 +72,7 @@ const styles = StyleSheet.create({
   theirs: { alignSelf: 'flex-start', backgroundColor: Colors.surface },
   sender: { fontSize: FontSize.xs, fontWeight: '700', color: Colors.textSecondary, marginBottom: 2 },
   body: { fontSize: FontSize.md, color: Colors.text },
-  time: { fontSize: 10, color: Colors.textSecondary, marginTop: 4, alignSelf: 'flex-end' },
+  time: { fontSize: FontSize.xxs, color: Colors.textSecondary, marginTop: 4, alignSelf: 'flex-end' },
   composer: { flexDirection: 'row', alignItems: 'flex-end', gap: Spacing.sm, padding: Spacing.md, backgroundColor: Colors.surface, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: Colors.border },
   input: { flex: 1, maxHeight: 120, backgroundColor: Colors.surfaceSecondary, borderRadius: BorderRadius.md, paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm, fontSize: FontSize.md, color: Colors.text },
 });

@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { View, Text, FlatList, ActivityIndicator, TouchableOpacity, StyleSheet, Switch, type RefreshControlProps } from 'react-native';
+import { View, Text, ActivityIndicator, StyleSheet, Switch, type RefreshControlProps } from 'react-native';
 import { useRouter, type Href } from 'expo-router';
 import { examinationsApi } from '../../services/api';
 import { useMasterClasses } from '../../hooks/useAcademicYear';
@@ -23,11 +23,12 @@ import Button from '../ui/Button';
 import Skeleton from '../ui/Skeleton';
 import ErrorState from '../ui/ErrorState';
 import EmptyState from '../ui/EmptyState';
-import StatusPill from '../ui/StatusPill';
 import { useToast } from '../ui/Toast';
 import { confirm } from '../ui/confirm';
 import FormSheet from '../inventory/FormSheet';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
+import AppList from '../ui/AppList';
+import RecordCard from '../ui/RecordCard';
 
 // Worksheets: practice and homework sheets. Open one in the builder, share its PDF or Word file (the server's own
 // files, the same the web downloads), duplicate or delete it, or start a new one. Port of the web Worksheets page.
@@ -133,7 +134,7 @@ export default function WorksheetsScreen() {
 
   return (
     <View style={styles.container}>
-      <FlatList
+      <AppList
         contentContainerStyle={styles.content}
         data={rows}
         keyExtractor={(w) => String(w.id)}
@@ -145,23 +146,23 @@ export default function WorksheetsScreen() {
         ListEmptyComponent={<EmptyState title="No worksheets" message={term ? 'Nothing matches your search.' : 'Make the first practice sheet.'} />}
         ListFooterComponent={query.isFetchingNextPage ? <ActivityIndicator color={Colors.primary} style={{ margin: Spacing.lg }} /> : null}
         renderItem={({ item: w }) => (
-          <View style={styles.card}>
-            <TouchableOpacity accessibilityRole="button" style={styles.top} onPress={() => open(w.id)}>
-              <View style={styles.who}>
-                <Text style={styles.name} numberOfLines={2}>{w.title || 'Untitled worksheet'}</Text>
-                <Text style={styles.sub} numberOfLines={1}>{[w.class_name, w.subject_name, `${w.item_count ?? w.items?.length ?? 0} item${(w.item_count ?? w.items?.length ?? 0) === 1 ? '' : 's'}`].filter(Boolean).join('  ·  ')}</Text>
-                {w.made_by_name ? <Text style={styles.sub} numberOfLines={1}>Made by {w.made_by_name}</Text> : null}
+          <RecordCard
+            icon="reader-outline"
+            title={w.title || 'Untitled worksheet'}
+            subtitle={[w.class_name, w.subject_name, `${w.item_count ?? w.items?.length ?? 0} item${(w.item_count ?? w.items?.length ?? 0) === 1 ? '' : 's'}`].filter(Boolean).join('  ·  ')}
+            meta={w.made_by_name ? `Made by ${w.made_by_name}` : undefined}
+            status={{ label: WORKSHEET_STATUSES.find((s) => s.value === w.status)?.label ?? w.status, tone: worksheetTone(w.status) }}
+            onPress={() => open(w.id)}
+            footer={
+              <View style={styles.actions}>
+                <Button title={w.status === 'DRAFT' ? 'Edit' : 'Open'} size="sm" onPress={() => open(w.id)} disabled={busy !== null} />
+                <Button title="PDF" size="sm" variant="outline" onPress={() => share(w, 'pdf')} loading={busy === `${w.id}-pdf`} disabled={busy !== null} />
+                <Button title="Word" size="sm" variant="outline" onPress={() => share(w, 'docx')} loading={busy === `${w.id}-docx`} disabled={busy !== null} />
+                <Button title="Duplicate" size="sm" variant="outline" onPress={() => duplicate(w)} loading={busy === `${w.id}-dup`} disabled={busy !== null} />
+                <Button title="Delete" size="sm" variant="ghost" onPress={() => remove(w)} disabled={busy !== null} />
               </View>
-              <StatusPill label={WORKSHEET_STATUSES.find((s) => s.value === w.status)?.label ?? w.status} tone={worksheetTone(w.status)} />
-            </TouchableOpacity>
-            <View style={styles.actions}>
-              <Button title={w.status === 'DRAFT' ? 'Edit' : 'Open'} size="sm" onPress={() => open(w.id)} disabled={busy !== null} />
-              <Button title="PDF" size="sm" variant="outline" onPress={() => share(w, 'pdf')} loading={busy === `${w.id}-pdf`} disabled={busy !== null} />
-              <Button title="Word" size="sm" variant="outline" onPress={() => share(w, 'docx')} loading={busy === `${w.id}-docx`} disabled={busy !== null} />
-              <Button title="Duplicate" size="sm" variant="outline" onPress={() => duplicate(w)} loading={busy === `${w.id}-dup`} disabled={busy !== null} />
-              <Button title="Delete" size="sm" variant="ghost" onPress={() => remove(w)} disabled={busy !== null} />
-            </View>
-          </View>
+            }
+          />
         )}
       />
 
@@ -179,11 +180,6 @@ export default function WorksheetsScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
   content: { padding: Spacing.lg, paddingBottom: Spacing.xxxl },
-  card: { backgroundColor: Colors.surface, borderRadius: BorderRadius.md, padding: Spacing.md, marginTop: Spacing.sm, gap: Spacing.sm },
-  top: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md },
-  who: { flex: 1 },
-  name: { fontSize: FontSize.md, fontWeight: '600', color: Colors.text },
-  sub: { fontSize: FontSize.sm, color: Colors.textSecondary, marginTop: 2 },
   actions: { flexDirection: 'row', gap: Spacing.sm, flexWrap: 'wrap' },
   switchRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginVertical: Spacing.sm },
   switchLabel: { fontSize: FontSize.md, color: Colors.text },

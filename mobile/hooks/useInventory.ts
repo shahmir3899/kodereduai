@@ -87,12 +87,19 @@ export function useInventoryActions() {
   };
   const refreshLists = () => ['inventoryCategories', 'inventoryVendors']
     .forEach((root) => qc.invalidateQueries({ predicate: (q) => q.queryKey[0] === root }));
+  // Deletes cascade on the server (a category's items, an item's history) and counts change.
+  const refreshAll = () => { refresh(); refreshLists(); };
 
   return {
     createItem: useMutation({ mutationFn: (d: object) => inventoryApi.createItem(d), onSuccess: refresh }),
     updateItem: useMutation({ mutationFn: ({ id, data }: { id: number; data: object }) => inventoryApi.updateItem(id, data), onSuccess: refresh }),
     createCategory: useMutation({ mutationFn: (d: object) => inventoryApi.createCategory(d), onSuccess: refreshLists }),
     createVendor: useMutation({ mutationFn: (d: object) => inventoryApi.createVendor(d), onSuccess: refreshLists }),
+    updateCategory: useMutation({ mutationFn: ({ id, data }: { id: number; data: object }) => inventoryApi.updateCategory(id, data), onSuccess: refreshAll }),
+    deleteCategory: useMutation({ mutationFn: (id: number) => inventoryApi.deleteCategory(id), onSuccess: refreshAll }),
+    updateVendor: useMutation({ mutationFn: ({ id, data }: { id: number; data: object }) => inventoryApi.updateVendor(id, data), onSuccess: refreshLists }),
+    deleteVendor: useMutation({ mutationFn: (id: number) => inventoryApi.deleteVendor(id), onSuccess: refreshAll }),
+    deleteItem: useMutation({ mutationFn: (id: number) => inventoryApi.deleteItem(id), onSuccess: refreshAll }),
     createMovement: useMutation({ mutationFn: (d: object) => inventoryApi.createTransaction(d), onSuccess: refresh }),
     createAssignment: useMutation({ mutationFn: (d: object) => inventoryApi.createAssignment(d), onSuccess: refresh }),
     returnItem: useMutation({ mutationFn: ({ id, data }: { id: number; data: object }) => inventoryApi.returnItem(id, data), onSuccess: refresh }),

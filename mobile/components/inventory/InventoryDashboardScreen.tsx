@@ -12,6 +12,7 @@ import Skeleton from '../ui/Skeleton';
 import ErrorState from '../ui/ErrorState';
 import StatusPill from '../ui/StatusPill';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
+import { SectionEmpty } from '../../components/ui/SectionState';
 
 // Port of InventoryDashboard.jsx: totals, stock value, low stock and the latest movements.
 export default function InventoryDashboardScreen() {
@@ -78,7 +79,7 @@ export default function InventoryDashboardScreen() {
 
       <Text style={styles.section}>Recent movements</Text>
       <Card style={styles.list}>
-        {d.recent_transactions.length === 0 ? <Text style={styles.muted}>No movements yet.</Text> : d.recent_transactions.map((m) => (
+        {d.recent_transactions.length === 0 ? <SectionEmpty message="No movements yet." /> : d.recent_transactions.map((m) => (
           <View key={m.id} style={styles.line}>
             <View style={styles.lineBody}>
               <Text style={styles.lineTitle} numberOfLines={1}>{m.item_name}</Text>

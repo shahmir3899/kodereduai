@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { Colors, FontSize, Spacing } from '../../constants/colors';
 
-// For features that stay on the web (docs/MOBILE_PLAN.md section 8): say so instead of a dead end.
+// For features that stay on the web (decided 2026-10-27, see git history of docs/MOBILE_PLAN.md): say so instead of a dead end.
 export default function OpenOnWeb({ title, note }: { title: string; note?: string }) {
   return (
     <View style={styles.container}>

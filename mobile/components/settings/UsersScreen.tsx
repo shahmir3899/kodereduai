@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { View, Text, FlatList, TouchableOpacity, StyleSheet, Switch } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Switch } from 'react-native';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSchoolUserActions, useSchoolUsers } from '../../hooks/useSchoolUsers';
 import { useRefreshControl } from '../../hooks/useRefreshControl';
@@ -19,6 +19,8 @@ import { useToast } from '../ui/Toast';
 import { confirm } from '../ui/confirm';
 import FormSheet from '../inventory/FormSheet';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
+import { SectionEmpty } from '../../components/ui/SectionState';
+import AppList from '../ui/AppList';
 
 // Who can sign in to this school and in what role: add a user, change their name, email, phone or
 // role, deactivate them, reset their password. Admin and principal only, and only for roles below
@@ -115,14 +117,14 @@ export default function UsersScreen() {
     <View style={styles.container}>
       <QueryBoundary query={q} isEmpty={() => false}>
         {() => (
-          <FlatList
+          <AppList
             data={users}
             keyExtractor={(u) => String(u.id)}
             refreshControl={refreshControl}
             keyboardShouldPersistTaps="handled"
             contentContainerStyle={styles.content}
             ListHeaderComponent={header}
-            ListEmptyComponent={<Text style={styles.note}>No users match.</Text>}
+            ListEmptyComponent={<SectionEmpty message="No users match." />}
             renderItem={({ item: u }) => {
               const manageable = canManageUser(u, allowed);
               return (

@@ -10,7 +10,7 @@ const TABS: TabSpec[] = [
 ];
 
 // Opened from Reports, More or the dashboard; no tab of their own.
-const HIDDEN = ['my-profile', 'accounts', 'account-ledger', 'transfers', 'income', 'expenses', 'inventory', 'inventory-items', 'inventory-movements', 'inventory-assignments', 'inventory-reorder', 'leave', 'my-attendance', 'payslips', 'inbox', 'change-password'];
+const HIDDEN = ['my-profile', 'accounts', 'account-ledger', 'transfers', 'income', 'expenses', 'inventory', 'inventory-items', 'inventory-movements', 'inventory-assignments', 'inventory-reorder', 'leave', 'my-attendance', 'payslips', 'inbox', 'change-password', 'jobs'];
 
 const TITLES: Record<string, string> = {
   'my-profile': 'My Profile',
@@ -32,6 +32,7 @@ const TITLES: Record<string, string> = {
   payslips: 'My Payslips',
   inbox: 'Notifications',
   'change-password': 'Change Password',
+  jobs: 'Running Jobs',
 };
 
 export default function FinanceLayout() {

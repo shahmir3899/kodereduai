@@ -1,3 +1,4 @@
+import { dayShort } from './dates';
 // Pure helpers for the staff Messages screens (/api/messaging/). No React imports.
 
 export interface Thread {
@@ -81,7 +82,7 @@ export function timeAgo(iso: string | null | undefined, now: number = Date.now()
   if (mins < 60) return `${mins}m`;
   if (mins < 60 * 24) return `${Math.floor(mins / 60)}h`;
   if (mins < 60 * 24 * 7) return `${Math.floor(mins / (60 * 24))}d`;
-  return new Date(t).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+  return dayShort(t);
 }
 
 export function canSend(body: string, recipientId: number | null | undefined, isNew: boolean): boolean {

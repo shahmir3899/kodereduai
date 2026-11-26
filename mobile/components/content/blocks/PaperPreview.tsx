@@ -48,7 +48,7 @@ export default function PaperPreview({ html, height, show, onPick }: Props) {
       {Platform.OS === 'web'
         ? React.createElement('iframe', {
           ref: frameRef, title: 'Paper preview', sandbox: 'allow-scripts', srcDoc: page,
-          style: { border: 0, width: '100%', height: '100%', background: '#f1f5f9' },
+          style: { border: 0, width: '100%', height: '100%', background: Colors.surfaceSecondary },
         })
         : (
           <WebView
@@ -65,5 +65,5 @@ export default function PaperPreview({ html, height, show, onPick }: Props) {
 
 const styles = StyleSheet.create({
   wrap: { borderWidth: 1, borderColor: Colors.border, borderRadius: 8, overflow: 'hidden', backgroundColor: Colors.surface },
-  web: { flex: 1, backgroundColor: '#f1f5f9' },
+  web: { flex: 1, backgroundColor: Colors.surfaceSecondary },
 });

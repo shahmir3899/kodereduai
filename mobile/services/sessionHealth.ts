@@ -7,7 +7,17 @@ export interface SessionHealthReport {
   attendance?: { average_attendance_rate?: number | null };
   fee_collection?: { collection_rate?: number | null };
   exam_performance?: { average_pass_rate?: number | null };
-  ai_summary?: { highlights?: string[]; concerns?: string[]; action_items?: string[] } | null;
+  ai_summary?: SessionSummary | null;
+  // True when the server can write an AI version of the summary (fetched separately).
+  ai_summary_available?: boolean;
+}
+
+export interface SessionSummary { source?: string; highlights?: string[]; concerns?: string[]; action_items?: string[] }
+
+// The AI-written summary once it has arrived and says something; otherwise the rule-based one.
+export function pickSummary(ai: SessionSummary | null | undefined, rules: SessionSummary | null | undefined): SessionSummary | null {
+  const has = (x?: SessionSummary | null) => !!x && [x.highlights, x.concerns, x.action_items].some((l) => (l?.length ?? 0) > 0);
+  return has(ai) ? ai! : rules ?? null;
 }
 
 const pct = (v: number | null | undefined) => (v == null || !Number.isFinite(Number(v)) ? '—' : `${Math.round(Number(v))}%`);

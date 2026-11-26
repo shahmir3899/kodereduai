@@ -18,6 +18,7 @@ import { useToast } from '../ui/Toast';
 import { confirm } from '../ui/confirm';
 import FormSheet from '../inventory/FormSheet';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
+import { SectionEmpty } from '../../components/ui/SectionState';
 
 // Hostels and their rooms: add, edit and delete each. Admin and principal only. The server refuses a
 // room smaller than its occupants, a duplicate room number and deleting a hostel or room in use.
@@ -140,7 +141,7 @@ function Rooms({ hostel, onOpen }: { hostel: number; onOpen: (hostel: number, r:
           {r.is_full ? <StatusPill label="Full" tone="warning" /> : !r.is_available ? <StatusPill label="Not available" tone="neutral" /> : null}
         </TouchableOpacity>
       ))}
-      {q.data && q.data.length === 0 ? <Text style={styles.sub}>No rooms yet.</Text> : null}
+      {q.data && q.data.length === 0 ? <SectionEmpty message="No rooms yet." /> : null}
       <Button title="+ Add a room" size="sm" variant="ghost" onPress={() => onOpen(hostel, null)} />
     </View>
   );

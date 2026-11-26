@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Image, Platform, StyleSheet, Text, View } from 'react-native';
+import { Platform, StyleSheet, Text, View } from 'react-native';
+import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { useQuestionActions } from '../../hooks/useQuestionBank';
 import { hasPicture, pictureProblem, PICTURE_SLOTS, slotsFor, type PictureSlot, type Question } from '../../services/questionBank';
@@ -93,7 +94,7 @@ export default function QuestionPictures({ question, type, ensure, onChange }: P
           <View key={sl.slot} style={styles.slot}>
             <View style={styles.head}>
               <Text style={styles.label}>{sl.label}{hasPicture(question, sl.slot) ? ' ✓' : ''}</Text>
-              {url ? <Image source={{ uri: url }} style={styles.thumb} resizeMode="cover" accessibilityLabel={`${sl.label} preview`} /> : null}
+              {url ? <Image source={{ uri: url }} style={styles.thumb} contentFit="cover" accessibilityLabel={`${sl.label} preview`} /> : null}
             </View>
             <View style={styles.actions}>
               <Button title="Gallery" size="sm" variant="outline" onPress={() => take(sl.slot, false)} loading={busy === sl.slot} disabled={busy !== null} />

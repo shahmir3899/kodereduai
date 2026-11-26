@@ -1,4 +1,6 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useAuth } from '../contexts/AuthContext';
+import { scopedKey } from '../services/queryRules';
 import { financeApi } from '../services/api';
 import { listOf } from '../services/academicYear';
 import {
@@ -31,6 +33,42 @@ export function useAccountLedger(accountId: number, from: string, to: string) {
 export function useRecentEntries(limit = 8) {
   return useScopedQuery('finance', ['recent', limit], async () =>
     listOf<RecentEntry>((await financeApi.getRecentEntries({ limit })).data));
+}
+
+// Transaction History: every money movement, newest first, 50 at a time, optionally one month.
+// 'finance' is a money root, so it is always refetched and any save refreshes it.
+// An older server ignores offset and the dates: it sends the same latest 50 again. So a page that
+// brings nothing new ends the list, rows are de-duplicated, and the month is also checked here
+// on each row's own date.
+export const ENTRY_PAGE = 50;
+const entryKey = (e: RecentEntry) => `${e.type}-${e.id}`;
+
+export function useEntryHistory(range: { from: string; to: string } | null) {
+  const { activeSchool } = useAuth();
+  const schoolId = activeSchool?.id ?? 0;
+  const q = useInfiniteQuery({
+    queryKey: scopedKey('finance', schoolId, ['history', range?.from ?? '', range?.to ?? '']),
+    initialPageParam: 0,
+    queryFn: async ({ pageParam }) => listOf<RecentEntry>((await financeApi.getRecentEntries({
+      limit: ENTRY_PAGE, offset: pageParam, ...(range ? { date_from: range.from, date_to: range.to } : {}),
+    })).data),
+    getNextPageParam: (last, pages, lastParam) => {
+      if (last.length < ENTRY_PAGE) return undefined;
+      const seen = new Set(pages.slice(0, -1).flat().map(entryKey));
+      return last.some((e) => !seen.has(entryKey(e))) ? lastParam + ENTRY_PAGE : undefined;
+    },
+    enabled: schoolId > 0,
+  });
+  const rows = (() => {
+    const seen = new Set<string>();
+    return (q.data?.pages ?? []).flat().filter((e) => {
+      const k = entryKey(e);
+      if (seen.has(k)) return false;
+      seen.add(k);
+      return !range || !e.date || (e.date >= range.from && e.date <= range.to);
+    });
+  })();
+  return { ...q, rows };
 }
 
 // This month's MONTHLY fees, the same definition every web dashboard uses.

@@ -133,3 +133,22 @@ export function subjectsInSheet(rows: DateSheetRow[], subjects: DateSheetSubject
   const have = new Set(rows.map((r) => r.subject));
   return subjects.filter((s) => have.has(s.subject_name)).map((s) => ({ id: s.subject_id, name: s.subject_name }));
 }
+
+const addDays = (iso: string, n: number): string => {
+  const d = new Date(`${iso}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+};
+
+// The exam period can lose its first or last day only when nothing is scheduled on that day and the
+// period is longer than one day, as on the web date sheet (a day in the middle cannot be removed: the
+// group stores only a start and an end date). Returns the PATCH body for each edge, or null.
+export function periodEdgeTrims(start: string | null | undefined, end: string | null | undefined, rows: DateSheetRow[]):
+  { first: { start_date: string } | null; last: { end_date: string } | null } {
+  if (!start || !end || start >= end) return { first: null, last: null };
+  const used = new Set(rows.map((r) => r.date).filter(Boolean));
+  return {
+    first: used.has(start) ? null : { start_date: addDays(start, 1) },
+    last: used.has(end) ? null : { end_date: addDays(end, -1) },
+  };
+}

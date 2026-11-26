@@ -6,6 +6,7 @@ import { formatMoney } from '../../services/feeCollect';
 import Card from '../ui/Card';
 import StatusPill from '../ui/StatusPill';
 import { Colors, FontSize, Spacing } from '../../constants/colors';
+import { SectionEmpty, SectionLoading } from '../../components/ui/SectionState';
 
 const balanceOf = (a: AccountBalance) => Number(a.net_balance ?? a.balance ?? 0) || 0;
 
@@ -31,7 +32,7 @@ export default function AccountBalancesCard({ accounts, groups, total, loading, 
         <Text style={styles.title}>Account balances</Text>
         {onManage ? <TouchableOpacity accessibilityRole="button" onPress={onManage} hitSlop={8}><Text style={styles.link}>Manage</Text></TouchableOpacity> : null}
       </View>
-      {loading ? <Text style={styles.muted}>Loading…</Text> : empty ? <Text style={styles.muted}>No accounts created yet.</Text> : (
+      {loading ? <SectionLoading /> : empty ? <SectionEmpty message="No accounts created yet." /> : (
         <>
           {groups
             ? groups.map((g) => (

@@ -1,3 +1,4 @@
+import { monthLong } from './dates';
 // Pure logic for the monthly attendance register; port of the helpers in
 // frontend/src/pages/AttendanceRecordsPage.jsx and utils/awayPeriods.js.
 
@@ -159,7 +160,7 @@ export function buildRegister(input: {
 }
 
 export function monthLabel(year: number, month0: number): string {
-  return new Date(year, month0).toLocaleString('en-GB', { month: 'long', year: 'numeric' });
+  return monthLong(new Date(year, month0, 1));
 }
 
 // Month stepping with the year rolling over; the register never goes past the current month.

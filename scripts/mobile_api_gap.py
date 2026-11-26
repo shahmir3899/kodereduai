@@ -215,7 +215,7 @@ def main():
            f'Generated {datetime.date.today()} by `python scripts/mobile_api_gap.py` (rerun it after each batch).',
            f'The web calls **{len(web)}** distinct endpoints. The mobile app calls **{len(covered)}** of them (**{len(missing)} not called**). '
            f'Mobile-only endpoints (the web never calls them): **{len(mobile_only)}**.', '',
-           'A call whose URL is a bare variable is not seen (none exist today, checked 2026-11-02); nested template strings are handled. This file is a reference; the plan is `MOBILE_CHANGE_LIST.md`.', '',
+           'A call whose URL is a bare variable is not seen (none exist today, checked 2026-11-02); nested template strings are handled. This file is a reference; the plan is `MOBILE_WEB_BALANCE_PLAN.md`.', '',
            '## 1. Endpoints only the mobile app uses (goal: zero)', '']
     if mobile_only:
         out += ['These are calls the web never makes. For each, the aim is to replace it with an endpoint the web already uses, unless the phone truly needs something new (push token, driver tracking).', '',

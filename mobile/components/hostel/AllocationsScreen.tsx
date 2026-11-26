@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { View, Text, FlatList, ActivityIndicator, TouchableOpacity, StyleSheet, type RefreshControlProps } from 'react-native';
+import { View, Text, ActivityIndicator, TouchableOpacity, StyleSheet, type RefreshControlProps } from 'react-native';
 import { useActiveAllocations, useAllocations, useHostelActions, useRooms, useStudentSearch } from '../../hooks/useHostel';
 import { useAcademicYear } from '../../hooks/useAcademicYear';
 import { useDebouncedValue } from '../../hooks/useDebouncedValue';
@@ -15,11 +15,13 @@ import Button from '../ui/Button';
 import Skeleton from '../ui/Skeleton';
 import ErrorState from '../ui/ErrorState';
 import EmptyState from '../ui/EmptyState';
-import StatusPill from '../ui/StatusPill';
 import { useToast } from '../ui/Toast';
 import { confirm } from '../ui/confirm';
 import FormSheet from '../inventory/FormSheet';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
+import AppList from '../ui/AppList';
+import RecordCard from '../ui/RecordCard';
+import { day } from '../../services/dates';
 
 // Who sleeps where: place a student in a room for the academic year, and vacate a bed. Admin and
 // principal only. The server refuses a full room and a second allocation in the same year.
@@ -74,7 +76,7 @@ export default function AllocationsScreen() {
 
   return (
     <View style={styles.container}>
-      <FlatList
+      <AppList
         contentContainerStyle={styles.content}
         data={rows}
         keyExtractor={(a) => String(a.id)}
@@ -85,14 +87,14 @@ export default function AllocationsScreen() {
         ListEmptyComponent={<EmptyState title="No allocations" message="Allocate a student to a room." />}
         ListFooterComponent={query.isFetchingNextPage ? <ActivityIndicator color={Colors.primary} style={{ margin: Spacing.lg }} /> : null}
         renderItem={({ item: a }) => (
-          <View style={styles.row}>
-            <View style={styles.flex}>
-              <Text style={styles.name}>{a.student_name}</Text>
-              <Text style={styles.sub}>{allocationLine(a)}</Text>
-              <Text style={styles.sub}>{`${a.academic_year_name ?? ''}${a.allocated_date ? `  ·  from ${a.allocated_date}` : ''}${a.vacated_date ? `  ·  left ${a.vacated_date}` : ''}`.replace(/^  ·  /, '')}</Text>
-            </View>
-            {a.is_active ? <Button title="Vacate" size="sm" variant="outline" loading={busy === a.id} disabled={busy !== null} onPress={() => vacate(a)} /> : <StatusPill label="Vacated" tone="neutral" />}
-          </View>
+          <RecordCard
+            avatarName={a.student_name}
+            title={a.student_name}
+            subtitle={allocationLine(a)}
+            meta={`${a.academic_year_name ?? ''}${a.allocated_date ? `  ·  from ${day(a.allocated_date) || a.allocated_date}` : ''}${a.vacated_date ? `  ·  left ${day(a.vacated_date) || a.vacated_date}` : ''}`.replace(/^  ·  /, '') || undefined}
+            status={a.is_active ? undefined : { label: 'Vacated', tone: 'neutral' }}
+            footer={a.is_active ? <Button title="Vacate" size="sm" variant="outline" loading={busy === a.id} disabled={busy !== null} onPress={() => vacate(a)} /> : undefined}
+          />
         )}
       />
 
@@ -122,8 +124,6 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
   content: { padding: Spacing.lg, paddingBottom: Spacing.xxxl, gap: Spacing.sm },
   header: { gap: Spacing.md, marginBottom: Spacing.sm },
-  row: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md, backgroundColor: Colors.surface, borderRadius: BorderRadius.md, padding: Spacing.md },
-  flex: { flex: 1, gap: 2 },
   name: { fontSize: FontSize.md, fontWeight: '600', color: Colors.text },
   sub: { fontSize: FontSize.sm, color: Colors.textSecondary },
   picked: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, justifyContent: 'space-between' },

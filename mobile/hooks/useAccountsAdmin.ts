@@ -3,6 +3,8 @@ import { financeApi } from '../services/api';
 import { listOf } from '../services/academicYear';
 import type { AccountOption, ClosingRow, TransferRow } from '../services/accountsAdmin';
 import { useScopedQuery } from './useScopedQuery';
+import { REFERENCE_STALE_MS } from '../services/queryRules';
+
 
 // Money roots (services/queryRules.ts): never persisted, always stale. 'accounts' is refreshed after
 // every write because balances move with a transfer and freeze with a closing.
@@ -10,7 +12,8 @@ const refresh = (qc: ReturnType<typeof useQueryClient>) =>
   ['accounts', 'finance', 'feePayments', 'expenses', 'otherIncome'].forEach((root) => qc.invalidateQueries({ predicate: (q) => q.queryKey[0] === root }));
 
 export function useAccountOptions() {
-  return useScopedQuery('accounts', ['options'], async () => listOf<AccountOption>((await financeApi.getAccounts({ page_size: 9999 })).data));
+  return useScopedQuery('accounts', ['options'], async () => listOf<AccountOption>((await financeApi.getAccounts({ page_size: 9999 })).data),
+    { staleTime: REFERENCE_STALE_MS });
 }
 
 export function useTransfers(from: string, to: string) {

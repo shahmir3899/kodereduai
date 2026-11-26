@@ -23,6 +23,30 @@ export interface Preview {
   total_amount: string;
   has_more?: boolean;
   students?: Array<Record<string, unknown>>;
+  not_enrolled?: number;
+  // One entry per fee type picked (server, 2026-11-26).
+  categories?: PreviewFee[];
+}
+
+export interface PreviewFee {
+  id: number;
+  name: string;
+  billing_mode: 'ALL' | 'ENROLLED';
+  in_scope: number;
+  enrolled: number | null;
+  will_create: number;
+  total_amount: string;
+}
+
+// "Koder Kids: 3 new, PKR 4,200 (3 of 4 students enrolled)" per fee, shown when several fees run
+// together or one is optional, so the school sees what each adds and who an optional fee skips.
+export function perFeeLines(p: Preview): string[] {
+  const fees = p.categories ?? [];
+  if (fees.length < 2 && !fees.some((c) => c.billing_mode === 'ENROLLED')) return [];
+  return fees.map((c) => {
+    const who = c.billing_mode === 'ENROLLED' ? ` (${c.enrolled ?? 0} of ${c.in_scope} students enrolled)` : ' (all students)';
+    return `${c.name}: ${c.will_create} new, PKR ${Math.round(Number(c.total_amount)).toLocaleString()}${who}`;
+  });
 }
 
 export interface BulkForm {

@@ -304,7 +304,12 @@ CORS_ALLOW_HEADERS = [
     # live-match call with a device key instead of a user login; without this the cross-origin
     # preflight in production rejects it.
     'x-device-key',
+    # The phone app's school name search sends the ETag of the school list it already has
+    # (GET /api/schools/directory/), so an unchanged list is an empty 304.
+    'if-none-match',
 ]
+# ...and reads the ETag back to keep with its copy (browsers hide other headers from scripts).
+CORS_EXPOSE_HEADERS = ['etag']
 
 # =============================================================================
 # Celery Configuration

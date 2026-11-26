@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Image, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View, useWindowDimensions } from 'react-native';
+import { Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View, useWindowDimensions } from 'react-native';
+import { Image } from 'expo-image';
 import Button from '../ui/Button';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
 import type { PagePhoto, PhotoBox } from '../../services/paperPages';
@@ -45,9 +46,9 @@ export default function PaperPhotoViewer({ visible, photos, page, box, onPageCha
           <ScrollView horizontal>
             <View style={{ width: imageWidth, height: imageHeight }}>
               <Image
-                source={{ uri: current.image_url }} style={{ width: imageWidth, height: imageHeight }} resizeMode="contain"
+                source={{ uri: current.image_url }} style={{ width: imageWidth, height: imageHeight }} contentFit="contain"
                 accessibilityLabel={`Page ${current.page_number} of the paper`}
-                onLoad={(e) => { const s = e.nativeEvent?.source; if (s?.width && s?.height) setAspect(s.height / s.width); }}
+                onLoad={(e) => { const s = e.source; if (s?.width && s?.height) setAspect(s.height / s.width); }}
               />
               {box ? (
                 <View pointerEvents="none" style={[styles.box, {
@@ -77,8 +78,8 @@ const styles = StyleSheet.create({
   tab: { paddingHorizontal: Spacing.sm, paddingVertical: Spacing.xs, borderRadius: BorderRadius.sm, borderWidth: 1, borderColor: Colors.border },
   tabOn: { backgroundColor: Colors.primary, borderColor: Colors.primary },
   tabText: { fontSize: FontSize.sm, color: Colors.text },
-  tabTextOn: { color: '#fff' },
+  tabTextOn: { color: Colors.textInverse },
   actions: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, padding: Spacing.sm, borderTopWidth: 1, borderTopColor: Colors.border },
   zoom: { fontSize: FontSize.sm, color: Colors.textSecondary, minWidth: 44, textAlign: 'center' },
-  box: { position: 'absolute', borderWidth: 2, borderColor: Colors.warningText ?? '#d97706', backgroundColor: 'rgba(251,191,36,0.25)' },
+  box: { position: 'absolute', borderWidth: 2, borderColor: Colors.warningText, backgroundColor: 'rgba(251,191,36,0.25)' },
 });

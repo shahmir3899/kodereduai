@@ -2,8 +2,8 @@
 // Conversion Likelihood), components/BatchConvertModal and the rules in backend/admissions
 // (serializers.py, views.py). The server re-checks everything; these checks only save a round trip
 // and say what is wrong in plain words.
-import { format } from 'date-fns';
 import { inventoryErrorMessage } from './inventory';
+import { day, dayTime } from './dates';
 
 export const admissionsErrorMessage = inventoryErrorMessage;
 
@@ -328,13 +328,10 @@ export function filterScored(rows: ScoredEnquiry[], level: '' | Likelihood): Sco
 // previous day west of UTC.
 export function formatDay(iso: string | null | undefined): string {
   if (!iso) return '–';
-  const [y, m, d] = iso.slice(0, 10).split('-').map(Number);
-  if (!y || !m || !d) return iso;
-  return format(new Date(y, m - 1, d), 'd MMM yyyy');
+  return day(iso.slice(0, 10)) || iso;
 }
 
 export function formatStamp(iso: string | null | undefined): string {
   if (!iso) return '';
-  const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? '' : format(d, 'd MMM yyyy, h:mm a');
+  return dayTime(iso);
 }

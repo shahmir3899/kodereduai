@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { Colors, FontSize, Spacing, BorderRadius } from '../constants/colors';
+import { monthLong } from '../services/dates';
 
 interface AttendanceDay {
   date: string;
@@ -25,7 +26,7 @@ const DAY_LABELS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
 export default function AttendanceCalendar({ days, month, year }: AttendanceCalendarProps) {
   const firstDay = new Date(year, month - 1, 1).getDay();
   const daysInMonth = new Date(year, month, 0).getDate();
-  const monthName = new Date(year, month - 1).toLocaleString('default', { month: 'long' });
+  const monthName = monthLong(new Date(year, month - 1, 1));
 
   const dayMap = new Map(days.map((d) => [new Date(d.date).getDate(), d.status]));
 

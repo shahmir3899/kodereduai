@@ -124,6 +124,54 @@ export function summarize(list: FeePayment[]) {
   return { due, paid, pending: Math.max(0, due - paid), count };
 }
 
+// A student's fees for the period, one card (web Collect Payments groups the same way).
+export interface StudentFeeGroup {
+  key: string;
+  student: number;
+  student_name: string;
+  student_roll?: string | number | null;
+  class_label: string;
+  rows: FeePayment[];
+  due: number;
+  paid: number;
+  balance: number;
+}
+
+// Group only when the list holds more than one fee type (e.g. Tuition + Koder Kids); a school with
+// a single fee keeps one plain card per record.
+export function shouldGroupByStudent(list: FeePayment[]): boolean {
+  return new Set(list.map((p) => feeLabel(p))).size > 1;
+}
+
+// Keeps the list order (sortPayments already puts a student's rows together).
+export function groupByStudent(list: FeePayment[]): StudentFeeGroup[] {
+  const groups: StudentFeeGroup[] = [];
+  const byKey = new Map<string, StudentFeeGroup>();
+  for (const p of list) {
+    const key = String(p.student);
+    let g = byKey.get(key);
+    if (!g) {
+      g = {
+        key, student: p.student, student_name: p.student_name, student_roll: p.student_roll,
+        class_label: p.session_class_label || p.class_name || '', rows: [], due: 0, paid: 0, balance: 0,
+      };
+      byKey.set(key, g);
+      groups.push(g);
+    }
+    g.rows.push(p);
+    g.due += num(p.amount_due);
+    g.paid += num(p.amount_paid);
+    g.balance += balanceOf(p);
+  }
+  return groups;
+}
+
+// One status for a student's card: the shared one, else MIXED.
+export function groupStatus(g: StudentFeeGroup): FeeStatus | 'MIXED' {
+  const statuses = new Set(g.rows.map((r) => r.status));
+  return statuses.size === 1 ? g.rows[0].status : 'MIXED';
+}
+
 // What a fee is called on a card: its category, else its type.
 export function feeLabel(p: FeePayment): string {
   return p.monthly_category_name || p.annual_category_name || p.fee_type_display || p.fee_type;

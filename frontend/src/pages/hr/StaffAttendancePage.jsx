@@ -69,11 +69,12 @@ function MyAttendanceView() {
       {summaryLoading ? null : summary && (
         <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 mb-4">
           {[
-            { label: 'Present', count: summary.PRESENT ?? 0, cls: 'text-green-700 bg-green-50' },
-            { label: 'Absent', count: summary.ABSENT ?? 0, cls: 'text-red-700 bg-red-50' },
-            { label: 'Late', count: summary.LATE ?? 0, cls: 'text-yellow-700 bg-yellow-50' },
-            { label: 'Half Day', count: summary.HALF_DAY ?? 0, cls: 'text-orange-700 bg-orange-50' },
-            { label: 'On Leave', count: summary.ON_LEAVE ?? 0, cls: 'text-blue-700 bg-blue-50' },
+            // hr/attendance/summary/ answers lowercase keys; reading PRESENT etc. showed 0 on every card.
+            { label: 'Present', count: summary.present ?? 0, cls: 'text-green-700 bg-green-50' },
+            { label: 'Absent', count: summary.absent ?? 0, cls: 'text-red-700 bg-red-50' },
+            { label: 'Late', count: summary.late ?? 0, cls: 'text-yellow-700 bg-yellow-50' },
+            { label: 'Half Day', count: summary.half_day ?? 0, cls: 'text-orange-700 bg-orange-50' },
+            { label: 'On Leave', count: summary.on_leave ?? 0, cls: 'text-blue-700 bg-blue-50' },
             { label: 'Rate', count: summary.attendance_rate != null ? `${summary.attendance_rate}%` : '-', cls: 'text-gray-900 bg-gray-50' },
           ].map(s => (
             <div key={s.label} className={`rounded-lg p-2 text-center ${s.cls}`}>
@@ -173,8 +174,10 @@ function StaffAttendanceAdminView() {
     enabled: viewMode === 'mark' && !!selectedDate,
   })
 
-  const staffList = staffRes?.data?.results || staffRes?.data || []
-  const existingAttendance = attendanceRes?.data?.results || attendanceRes?.data || []
+  // Memoised: a fresh `[]` on every render while loading re-ran the init effect below, which set
+  // state, which rendered again, forever (the page spun until the data came; the test ran out of memory).
+  const staffList = useMemo(() => staffRes?.data?.results || staffRes?.data || [], [staffRes])
+  const existingAttendance = useMemo(() => attendanceRes?.data?.results || attendanceRes?.data || [], [attendanceRes])
   const summaryData = summaryRes?.data || []
   const selectedDayStatus = selectedDayStatusRes?.data?.days?.[selectedDate] || null
   const selectedDayIsOff = !!selectedDayStatus?.is_off_day

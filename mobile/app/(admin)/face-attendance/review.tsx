@@ -4,9 +4,9 @@ import {
   Text,
   StyleSheet,
   ScrollView,
-  Image,
   TouchableOpacity,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { faceAttendanceApi } from '../../../services/api';
 import Button from '../../../components/ui/Button';
@@ -428,7 +428,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.success,
     borderColor: Colors.success,
   },
-  checkmark: { color: Colors.textInverse, fontSize: 14, fontWeight: '700' },
+  checkmark: { color: Colors.textInverse, fontSize: FontSize.sm, fontWeight: '700' },
   actions: { gap: Spacing.md, marginTop: Spacing.md },
   confirmedText: {
     fontSize: FontSize.sm,

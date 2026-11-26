@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { View, Text, FlatList, TextInput, TouchableOpacity, ScrollView, StyleSheet } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet } from 'react-native';
 import {
   LEAVE_STATUSES, buildLeavePayload, canCancelLeave, emptyLeaveForm, filterLeave, leaveDays, leaveErrorMessage,
   leaveTone, sortLeave, usedPercent, validateLeave, type LeaveForm,
@@ -18,6 +18,8 @@ import StatusPill from '../ui/StatusPill';
 import { useToast } from '../ui/Toast';
 import { confirm } from '../ui/confirm';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
+import RecordCard from '../ui/RecordCard';
+import AppList from '../ui/AppList';
 
 type Tab = 'ALL' | 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED';
 const label = (s: string) => s[0] + s.slice(1).toLowerCase();
@@ -95,7 +97,7 @@ export default function MyLeaveScreen() {
 
   return (
     <View style={styles.container}>
-      <FlatList
+      <AppList
         data={shown}
         keyExtractor={(a) => String(a.id)}
         contentContainerStyle={styles.content}
@@ -103,20 +105,23 @@ export default function MyLeaveScreen() {
         ListHeaderComponent={header}
         ListEmptyComponent={<EmptyState title="No leave applications" message="Tap Apply for leave to send one." />}
         renderItem={({ item: a }) => (
-          <View style={styles.card}>
-            <View style={styles.top}>
-              <Text style={styles.type}>{a.leave_type_display || a.leave_policy_name || 'Leave'}</Text>
-              <StatusPill label={a.status} tone={leaveTone(a.status)} />
-            </View>
-            <Text style={styles.dates}>{a.start_date} to {a.end_date}{a.total_days ? `  ·  ${a.total_days} day${a.total_days === 1 ? '' : 's'}` : ''}</Text>
-            {a.reason ? <Text style={styles.reason}>{a.reason}</Text> : null}
-            {a.admin_remarks ? <Text style={styles.remarks}>Admin: {a.admin_remarks}</Text> : null}
-            {canCancelLeave(a) ? (
-              <TouchableOpacity accessibilityRole="button" onPress={() => cancel(a.id)} disabled={actions.cancel.isPending}>
-                <Text style={styles.cancel}>Cancel</Text>
-              </TouchableOpacity>
-            ) : null}
-          </View>
+          <RecordCard
+            icon="calendar-outline"
+            title={a.leave_type_display || a.leave_policy_name || 'Leave'}
+            status={{ label: a.status, tone: leaveTone(a.status) }}
+            subtitle={`${a.start_date} to ${a.end_date}${a.total_days ? `  ·  ${a.total_days} day${a.total_days === 1 ? '' : 's'}` : ''}`}
+            meta={a.reason || undefined}
+            footer={a.admin_remarks || canCancelLeave(a) ? (
+              <>
+                {a.admin_remarks ? <Text style={styles.remarks}>Admin: {a.admin_remarks}</Text> : null}
+                {canCancelLeave(a) ? (
+                  <TouchableOpacity accessibilityRole="button" onPress={() => cancel(a.id)} disabled={actions.cancel.isPending}>
+                    <Text style={styles.cancel}>Cancel</Text>
+                  </TouchableOpacity>
+                ) : null}
+              </>
+            ) : undefined}
+          />
         )}
       />
       <View style={styles.footer}>
@@ -154,11 +159,6 @@ const styles = StyleSheet.create({
   bar: { height: 6, borderRadius: 3, backgroundColor: Colors.border, marginVertical: Spacing.xs, overflow: 'hidden' },
   barFill: { height: 6, backgroundColor: Colors.primary },
   balanceSub: { fontSize: FontSize.xs, color: Colors.textSecondary },
-  card: { backgroundColor: Colors.surface, borderRadius: BorderRadius.md, padding: Spacing.md, marginBottom: Spacing.sm },
-  top: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  type: { fontSize: FontSize.md, fontWeight: '600', color: Colors.text },
-  dates: { fontSize: FontSize.sm, color: Colors.textSecondary, marginTop: 2 },
-  reason: { fontSize: FontSize.sm, color: Colors.text, marginTop: Spacing.xs },
   remarks: { fontSize: FontSize.xs, color: Colors.textSecondary, fontStyle: 'italic', marginTop: Spacing.xs },
   cancel: { fontSize: FontSize.sm, fontWeight: '600', color: Colors.error, marginTop: Spacing.sm },
   footer: { position: 'absolute', left: 0, right: 0, bottom: 0, padding: Spacing.lg, backgroundColor: Colors.surface, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: Colors.border },

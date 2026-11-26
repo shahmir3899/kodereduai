@@ -24,10 +24,27 @@ def _period(year, month):
 
 
 def _fee_for(category_id, student, class_obj_id, school_id, today):
-    student_fees, class_fees = _build_fee_maps(school_id, 'MONTHLY', today, monthly_category_id=category_id)
+    from . import optional_fees
+    category = MonthlyFeeCategory.objects.filter(id=category_id).first()
+    enrolled_only = optional_fees.is_enrolled_only(category)
+    student_fees, class_fees = _build_fee_maps(
+        school_id, 'MONTHLY', today, monthly_category_id=category_id, legacy_fallback=not enrolled_only,
+    )
+    if enrolled_only:
+        # A price on the enrollment is the student's own and does not move with the class;
+        # with no class price the category price applies in both classes.
+        first_day, last_day = optional_fees.billing_period('MONTHLY', today.year, today.month)
+        enrollment = optional_fees.enrollments_in_period(
+            school_id, category, first_day, last_day, student_ids=[student.id],
+        ).get(student.id)
+        if enrollment and enrollment.amount is not None:
+            return enrollment.amount, True
     if student.id in student_fees:
         return student_fees[student.id], True
-    return class_fees.get(class_obj_id), False
+    fee = class_fees.get(class_obj_id)
+    if fee is None and enrolled_only:
+        fee = category.default_amount
+    return fee, False
 
 
 def fee_impact(student, *, academic_year, old_class_obj_id, new_class_obj_id, effective_date, today=None):
@@ -103,6 +120,8 @@ def reprice_months(student, *, academic_year, new_class_obj_id, effective_date, 
     closed = set(MonthlyClosing.objects.filter(school_id=school_id).values_list('year', 'month'))
     changes = []
 
+    from . import fee_discounts, optional_fees
+
     for category in MonthlyFeeCategory.objects.filter(school_id=school_id, is_active=True).order_by('id'):
         new_fee, overridden = _fee_for(category.id, student, new_class_obj_id, school_id, today)
         if new_fee is None or overridden:
@@ -126,9 +145,16 @@ def reprice_months(student, *, academic_year, new_class_obj_id, effective_date, 
                 if previous is not None else (row.previous_balance or Decimal('0'))
             )
             old_due = row.amount_due
+            # The new class's fee, less the discounts that cover this fee that month.
+            first_day, last_day = optional_fees.billing_period('MONTHLY', row.year, row.month)
+            discount, detail = fee_discounts.apply(new_fee, fee_discounts.rules_for(
+                school_id, [student.id], category, first_day, last_day, academic_year.id,
+            ).get(student.id))
             row.previous_balance = carried
-            row.base_monthly_fee = new_fee
-            row.amount_due = carried + new_fee
+            row.base_monthly_fee = new_fee - discount
+            row.discount_amount = discount
+            row.discount_detail = detail
+            row.amount_due = carried + row.base_monthly_fee
             row.compute_status()
             row.save()
             changes.append({

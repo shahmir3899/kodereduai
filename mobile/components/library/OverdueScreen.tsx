@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, FlatList, StyleSheet, type RefreshControlProps } from 'react-native';
+import { View, Text, StyleSheet, type RefreshControlProps } from 'react-native';
 import { useAuth } from '../../contexts/AuthContext';
 import { useLibraryActions, useOverdue } from '../../hooks/useLibrary';
 import { useRefreshControl } from '../../hooks/useRefreshControl';
@@ -12,6 +12,8 @@ import EmptyState from '../ui/EmptyState';
 import { useToast } from '../ui/Toast';
 import { confirm } from '../ui/confirm';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
+import RecordCard from '../ui/RecordCard';
+import AppList from '../ui/AppList';
 
 // Books past their due date, most overdue first, with the fine each has built up. A book can be taken
 // back from here. Admin and principal only.
@@ -38,7 +40,7 @@ export default function OverdueScreen() {
   const rows = [...(query.data ?? [])].sort((a, b) => (b.days_overdue ?? 0) - (a.days_overdue ?? 0));
 
   return (
-    <FlatList
+    <AppList
       style={styles.container}
       contentContainerStyle={styles.content}
       data={rows}
@@ -46,14 +48,13 @@ export default function OverdueScreen() {
       refreshControl={refreshControl}
       ListEmptyComponent={<EmptyState title="Nothing overdue" message="Every book out is within its loan period." />}
       renderItem={({ item: i }) => (
-        <View style={styles.row}>
-          <View style={styles.flex}>
-            <Text style={styles.name} numberOfLines={2}>{i.book_title}</Text>
-            <Text style={styles.sub}>{issueLine(i)}</Text>
-            {Number(i.estimated_fine) > 0 ? <Text style={styles.fine}>{`Fine so far ${rupees(i.estimated_fine)}`}</Text> : null}
-          </View>
-          {canManage ? <Button title="Return" size="sm" variant="outline" loading={busy === i.id} disabled={busy !== null} onPress={() => giveBack(i)} /> : null}
-        </View>
+        <RecordCard
+          icon="book-outline"
+          title={i.book_title}
+          subtitle={issueLine(i)}
+          status={Number(i.estimated_fine) > 0 ? { label: `Fine ${rupees(i.estimated_fine)}`, tone: 'error' } : undefined}
+          footer={canManage ? <Button title="Return" size="sm" variant="outline" loading={busy === i.id} disabled={busy !== null} onPress={() => giveBack(i)} /> : undefined}
+        />
       )}
     />
   );
@@ -61,10 +62,5 @@ export default function OverdueScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
-  content: { padding: Spacing.lg, paddingBottom: Spacing.xxxl, gap: Spacing.sm },
-  row: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md, backgroundColor: Colors.surface, borderRadius: BorderRadius.md, padding: Spacing.md },
-  flex: { flex: 1, gap: 2 },
-  name: { fontSize: FontSize.md, fontWeight: '600', color: Colors.text },
-  sub: { fontSize: FontSize.sm, color: Colors.textSecondary },
-  fine: { fontSize: FontSize.sm, fontWeight: '600', color: Colors.error },
+  content: { padding: Spacing.lg, paddingBottom: Spacing.xxxl },
 });

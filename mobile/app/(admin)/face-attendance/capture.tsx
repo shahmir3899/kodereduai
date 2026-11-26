@@ -5,7 +5,6 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  Alert,
   Image,
   ScrollView,
 } from 'react-native';
@@ -17,6 +16,7 @@ import Button from '../../../components/ui/Button';
 import Spinner from '../../../components/ui/Spinner';
 import Select from '../../../components/ui/Select';
 import { useToast } from '../../../components/ui/Toast';
+import { confirm } from '../../../components/ui/confirm';
 import { saveFailureMessage } from '../../../services/errorKind';
 import { GROUP_TIPS, photoMime, photoName } from '../../../services/faceEnroll';
 import { useMasterClasses } from '../../../hooks/useAcademicYear';
@@ -88,14 +88,8 @@ export default function FaceAttendanceCapture() {
 
       const sessionId = sessionRes.data.id;
 
-      Alert.alert('Processing', 'Faces are being detected and matched.', [
-        {
-          text: 'View Results',
-          onPress: () =>
-            router.push(`/(admin)/face-attendance/review?id=${sessionId}`),
-        },
-        { text: 'Capture Another', onPress: () => setPhoto(null) },
-      ]);
+      // Not awaited: the upload button must stop spinning while the question is open.
+      confirm({ title: 'Photo sent', message: 'Faces are being detected and matched. See the results now, or capture another photo?', confirmLabel: 'View results', cancelLabel: 'Capture another' }).then((yes) => { if (yes) router.push(`/(admin)/face-attendance/review?id=${sessionId}`); else setPhoto(null); });
     } catch (error: any) {
       toast.error(error.response?.data?.error || error.response?.data?.detail || saveFailureMessage(error, 'Upload failed.'));
     } finally {

@@ -5,22 +5,29 @@ import { useAuth } from '../../contexts/AuthContext';
 import { routeFor } from '../../navigation/routes';
 import {
   useMyClassAssignments, useMyStudentsAtRisk, useMyTimetable, useOffDayToday, usePendingSubmissions,
-  useSectionProgress, useTeacherExams, useWeekLessonPlans,
+  useSectionProgress, useTeacherExams, useTeacherHomeBundle, useWeekLessonPlans, type TeacherHomeSection,
 } from '../../hooks/useTeacher';
 import { useRefreshControl } from '../../hooks/useRefreshControl';
+import { usePrefetchNext } from '../../hooks/usePrefetchNext';
+import { day } from '../../services/dates';
 import { dayCodeFor, entriesForDay, formatSlotTime } from '../../services/teacher';
 import {
   assignmentLabel, attendanceClassId, buildTeacherAttention, examsAwaitingMarks, findPeriod, isPending,
   badgeLabel, matchAssignment, minutesLabel, periodSubtitle, planIsDone, shortDate, studentsAtRiskCount, upcomingExams, weekPlanStats, type WeekPlan,
 } from '../../services/teacherDashboard';
 import Card from '../../components/ui/Card';
+import AttentionCard from '../../components/ui/AttentionCard';
 import Skeleton from '../../components/ui/Skeleton';
 import StatusPill from '../../components/ui/StatusPill';
 import Hero from '../../components/dashboard/HeroCard';
-import SchoolSwitcher from '../../components/nav/SchoolSwitcher';
+import HomeHero, { HomeShell } from '../../components/dashboard/HomeHero';
+import type { Tile } from '../../components/dashboard/StatTiles';
 import RecentNotifications from '../../components/dashboard/RecentNotifications';
 import MyPerformanceCard from '../../components/hr/performance/MyPerformanceCard';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
+import { SectionEmpty, SectionError, SectionLoading } from '../../components/ui/SectionState';
+import TileGrid from '../../components/ui/TileGrid';
+import type { IconName } from '../../components/ui/Icon';
 
 const TONE_COLOR = { red: Colors.error, amber: Colors.warning } as const;
 
@@ -32,18 +39,36 @@ export default function TeacherDashboard() {
   const academicsOn = isModuleEnabled('academics');
   const examsOn = isModuleEnabled('examinations');
 
-  const off = useOffDayToday(attendanceOn);
-  const timetable = useMyTimetable();
-  const assignmentsQ = useMyClassAssignments();
-  const assignments = assignmentsQ.data ?? [];
-  const progress = useSectionProgress(assignments, attendanceOn);
-  const submissions = usePendingSubmissions(academicsOn);
-  const risk = useMyStudentsAtRisk(academicsOn && assignments.length > 0);
-  const exams = useTeacherExams(examsOn);
-  const weekPlans = useWeekLessonPlans(academicsOn);
+  // One request fills every section below (and the notifications card); a section the bundle
+  // could not give fetches on its own, so an older server still gets a working Home.
+  const sections: TeacherHomeSection[] = [
+    'timetable', 'class_assignments',
+    ...(attendanceOn ? ['section_progress', 'off_day'] as const : []),
+    ...(academicsOn ? ['pending_submissions', 'students_at_risk', 'week_plans'] as const : []),
+    ...(examsOn ? ['exams'] as const : []),
+    ...(isModuleEnabled('notifications') ? ['notifications'] as const : []),
+  ];
+  const bundle = useTeacherHomeBundle(sections);
+  const own = bundle.own;
+  usePrefetchNext('teacher', !bundle.loading);
 
+  const off = useOffDayToday(attendanceOn && own('off_day'));
+  const timetable = useMyTimetable(own('timetable'));
+  const assignmentsQ = useMyClassAssignments(own('class_assignments'));
+  const assignments = assignmentsQ.data ?? [];
+  const progress = useSectionProgress(assignments, attendanceOn && own('section_progress'));
+  const submissions = usePendingSubmissions(academicsOn && own('pending_submissions'));
+  const risk = useMyStudentsAtRisk(academicsOn && assignments.length > 0 && own('students_at_risk'));
+  const exams = useTeacherExams(examsOn && own('exams'));
+  const weekPlans = useWeekLessonPlans(academicsOn && own('week_plans'));
+
+  // A pull refreshes the bundle once, plus only the sections that are fetching on their own.
   const refreshControl = useRefreshControl(
-    timetable.refetch, assignmentsQ.refetch, progress.refetch, submissions.refetch, risk.refetch, exams.refetch, weekPlans.refetch,
+    ...(bundle.ok ? [bundle.refetch] : []),
+    ...([
+      ['timetable', timetable.refetch], ['class_assignments', assignmentsQ.refetch], ['section_progress', progress.refetch],
+      ['pending_submissions', submissions.refetch], ['students_at_risk', risk.refetch], ['exams', exams.refetch], ['week_plans', weekPlans.refetch],
+    ] as const).filter(([key]) => own(key)).map(([, refetch]) => refetch),
   );
 
   const today = useMemo(() => entriesForDay(timetable.data ?? [], dayCodeFor(now)), [timetable.data]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -74,9 +99,18 @@ export default function TeacherDashboard() {
     },
   });
 
-  if (timetable.isLoading && assignmentsQ.isLoading) return <Skeleton />;
+  const name = [user?.first_name, user?.last_name].filter(Boolean).join(' ') || user?.username || '';
+  if (bundle.loading || (timetable.isLoading && assignmentsQ.isLoading)) return <HomeShell name={name}><Skeleton /></HomeShell>;
 
-  const name = [user?.first_name, user?.last_name].filter(Boolean).join(' ') || user?.username;
+  // The teacher's day at a glance for the Home banner. The to-dos (attendance, marks, grading,
+  // students at risk) are in "Needs attention" below, so they are not repeated here.
+  const plans = weekPlanStats(weekPlans.data ?? []);
+  const heroStats: Tile[] = [
+    { label: 'Classes today', value: off.isOffDay ? 'Off day' : timetable.isLoading ? null : today.length, route: routeFor('teacher', '/academics/timetable') },
+    ...(academicsOn ? [{ label: 'Plans done this week', value: weekPlans.isLoading ? null : plans.total === 0 ? 0 : `${plans.done}/${plans.total}`, tone: plans.total > 0 && plans.done < plans.total ? 'warn' as const : undefined, route: routeFor('teacher', '/academics/lesson-plans') }] : []),
+    { label: assignments.length === 1 ? 'My class' : 'My classes', value: assignmentsQ.isLoading ? null : assignments.length, route: routeFor('teacher', '/classes') },
+  ];
+
   const attendanceRoute = routeFor('teacher', '/attendance/manual-entry');
 
   // What the teacher should be doing right now.
@@ -105,36 +139,29 @@ export default function TeacherDashboard() {
   }
 
   const quick = [
-    { label: 'Attendance', icon: '✅', route: attendanceRoute, show: attendanceOn, badge: off.isOffDay ? 0 : rows.filter(isPending).length },
-    { label: 'Timetable', icon: '📅', route: routeFor('teacher', '/academics/timetable'), show: true, badge: 0 },
-    { label: 'Lesson Plans', icon: '📖', route: routeFor('teacher', '/academics/lesson-plans'), show: academicsOn, badge: 0 },
-    { label: 'Marks', icon: '📝', route: routeFor('teacher', '/academics/marks-entry'), show: examsOn, badge: examsAwaitingMarks(allExams) },
-    { label: 'Assignments', icon: '📚', route: routeFor('teacher', '/academics/assignments'), show: academicsOn, badge: submissions.data?.count ?? 0 },
-    { label: 'Collect Fees', icon: '💰', route: routeFor('teacher', '/finance/fees/collect'), show: isModuleEnabled('finance'), badge: 0 },
-    { label: 'My Leave', icon: '🗓️', route: routeFor('teacher', '/hr/leave'), show: isModuleEnabled('hr'), badge: 0 },
-    { label: 'Notifications', icon: '🔔', route: routeFor('teacher', '/notifications'), show: isModuleEnabled('notifications'), badge: 0 },
+    { label: 'Attendance', icon: 'checkbox-outline' as IconName, route: attendanceRoute, show: attendanceOn, badge: off.isOffDay ? 0 : rows.filter(isPending).length },
+    { label: 'Timetable', icon: 'time-outline' as IconName, route: routeFor('teacher', '/academics/timetable'), show: true, badge: 0 },
+    { label: 'Lesson Plans', icon: 'book-outline' as IconName, route: routeFor('teacher', '/academics/lesson-plans'), show: academicsOn, badge: 0 },
+    { label: 'Marks', icon: 'create-outline' as IconName, route: routeFor('teacher', '/academics/marks-entry'), show: examsOn, badge: examsAwaitingMarks(allExams) },
+    { label: 'Assignments', icon: 'document-text-outline' as IconName, route: routeFor('teacher', '/academics/assignments'), show: academicsOn, badge: submissions.data?.count ?? 0 },
+    { label: 'Collect Fees', icon: 'cash-outline' as IconName, route: routeFor('teacher', '/finance/fees/collect'), show: isModuleEnabled('finance'), badge: 0 },
+    { label: 'My Leave', icon: 'calendar-outline' as IconName, route: routeFor('teacher', '/hr/leave'), show: isModuleEnabled('hr'), badge: 0 },
+    { label: 'Notifications', icon: 'notifications-outline' as IconName, route: routeFor('teacher', '/notifications'), show: isModuleEnabled('notifications'), badge: 0 },
   ].filter((a) => a.show);
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content} refreshControl={refreshControl}>
-      <Text style={styles.greeting}>Welcome back, {name}</Text>
-      <SchoolSwitcher />
+      <HomeHero name={name} stats={heroStats} onPress={(r) => go(r)} />
       {off.label ? <Text style={styles.off}>{off.label}</Text> : null}
 
       {isModuleEnabled('hr') ? <MyPerformanceCard /> : null}
 
       <Text style={styles.section}>Needs attention</Text>
       {attention.length === 0 ? (
-        <Card style={styles.clear}><Text style={styles.clearText}>All clear. Nothing needs attention.</Text></Card>
+        <Card style={styles.clear}><SectionEmpty message="All clear. Nothing needs attention." /></Card>
       ) : (
         attention.map((it) => (
-          <TouchableOpacity accessibilityRole="button" key={it.key} disabled={!it.href} onPress={() => go(it.href)}>
-            <Card style={styles.attention}>
-              <Text style={[styles.attCount, { color: TONE_COLOR[it.tone] }]}>{it.count}</Text>
-              <Text style={styles.attLabel}>{it.label}</Text>
-              {it.href ? <Text style={styles.arrow}>›</Text> : null}
-            </Card>
-          </TouchableOpacity>
+          <AttentionCard key={it.key} itemKey={it.key} count={it.count} label={it.label} tone={it.tone} onPress={it.href ? () => go(it.href) : undefined} />
         ))
       )}
 
@@ -143,7 +170,7 @@ export default function TeacherDashboard() {
 
       <Text style={styles.section}>Today&apos;s timetable</Text>
       {today.length === 0 ? (
-        <Text style={styles.muted}>No classes scheduled today.</Text>
+        <SectionEmpty message="No classes scheduled today." />
       ) : (
         today.map((e, idx) => {
           const current = !off.isOffDay && period.state === 'now' && idx === period.index;
@@ -209,7 +236,7 @@ export default function TeacherDashboard() {
             <Card key={e.id} style={styles.section2}>
               <View style={{ flex: 1 }}>
                 <Text style={styles.subject} numberOfLines={1}>{e.name}</Text>
-                <Text style={styles.cls} numberOfLines={1}>{e.class_name}{e.start_date ? `  ·  ${e.start_date}` : ''}</Text>
+                <Text style={styles.cls} numberOfLines={1}>{e.class_name}{e.start_date ? `  ·  ${day(e.start_date) || e.start_date}` : ''}</Text>
               </View>
               <StatusPill label={e.status} tone={e.status === 'PUBLISHED' ? 'success' : 'info'} />
               {e.status === 'PUBLISHED' && examsOn && routeFor('teacher', '/academics/marks-entry') ? (
@@ -247,31 +274,23 @@ export default function TeacherDashboard() {
               <Text style={styles.link}>View all</Text>
             </TouchableOpacity>
           </View>
-          <WeekPlans plans={weekPlans.data ?? []} loading={weekPlans.isLoading} failed={weekPlans.isError && !weekPlans.data} />
+          <WeekPlans plans={weekPlans.data ?? []} loading={weekPlans.isLoading} failed={weekPlans.isError && !weekPlans.data} onRetry={() => weekPlans.refetch()} />
         </>
       ) : null}
 
       <Text style={styles.section}>Quick actions</Text>
-      <View style={styles.actions}>
-        {quick.map((a) => (
-          <TouchableOpacity accessibilityRole="button" key={a.label} style={[styles.quick, !a.route && styles.quickOff]} disabled={!a.route} onPress={() => go(a.route)}>
-            <Text style={styles.quickIcon}>{a.icon}</Text>
-            <Text style={styles.quickLabel}>{a.label}</Text>
-            {badgeLabel(a.badge) ? <View style={styles.badge}><Text style={styles.badgeText}>{badgeLabel(a.badge)}</Text></View> : null}
-          </TouchableOpacity>
-        ))}
-      </View>
+      <TileGrid items={quick.map((a) => ({ label: a.label, icon: a.icon, badge: a.badge, onPress: a.route ? () => go(a.route) : undefined }))} />
 
       <RecentNotifications enabled={isModuleEnabled('notifications')} onSeeAll={() => go(routeFor('teacher', '/notifications'))} />
     </ScrollView>
   );
 }
 
-function WeekPlans({ plans, loading, failed }: { plans: WeekPlan[]; loading: boolean; failed: boolean }) {
+function WeekPlans({ plans, loading, failed, onRetry }: { plans: WeekPlan[]; loading: boolean; failed: boolean; onRetry: () => void }) {
   const stats = weekPlanStats(plans);
-  if (loading) return <Card style={styles.list}><Text style={styles.muted}>Loading…</Text></Card>;
-  if (failed) return <Card style={styles.list}><Text style={styles.muted}>Could not load lesson plans.</Text></Card>;
-  if (stats.total === 0) return <Card style={styles.list}><Text style={styles.muted}>No lesson plans this week.</Text></Card>;
+  if (loading) return <Card style={styles.list}><SectionLoading /></Card>;
+  if (failed) return <Card style={styles.list}><SectionError message="Could not load lesson plans." onRetry={onRetry} /></Card>;
+  if (stats.total === 0) return <Card style={styles.list}><SectionEmpty message="No lesson plans this week." /></Card>;
   return (
     <Card style={styles.list}>
       <View style={styles.barRow}>
@@ -297,21 +316,15 @@ function WeekPlans({ plans, loading, failed }: { plans: WeekPlan[]; loading: boo
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
   content: { padding: Spacing.lg, paddingBottom: Spacing.xxxl },
-  greeting: { fontSize: FontSize.xl, fontWeight: '700', color: Colors.text },
   off: { fontSize: FontSize.sm, color: Colors.textSecondary, marginTop: Spacing.xs },
   section: { fontSize: FontSize.lg, fontWeight: '600', color: Colors.text, marginTop: Spacing.xl, marginBottom: Spacing.md },
   muted: { fontSize: FontSize.sm, color: Colors.textSecondary },
   clear: { padding: Spacing.md },
-  clearText: { color: Colors.success, fontSize: FontSize.sm, fontWeight: '600' },
-  attention: { flexDirection: 'row', alignItems: 'center', padding: Spacing.md, marginBottom: Spacing.sm },
-  attCount: { fontSize: FontSize.xl, fontWeight: '700', minWidth: 44 },
-  attLabel: { flex: 1, fontSize: FontSize.sm, color: Colors.text },
-  arrow: { fontSize: FontSize.xl, color: Colors.textTertiary },
   period: { flexDirection: 'row', alignItems: 'center', padding: Spacing.md, marginBottom: Spacing.sm },
   periodNow: { borderWidth: 1, borderColor: Colors.info, backgroundColor: Colors.infoLight },
   time: { width: 76, marginRight: Spacing.md },
   timeText: { fontSize: FontSize.sm, fontWeight: '700', color: Colors.primary },
-  nowTag: { fontSize: 10, fontWeight: '700', color: Colors.info },
+  nowTag: { fontSize: FontSize.xxs, fontWeight: '700', color: Colors.info },
   subject: { fontSize: FontSize.md, fontWeight: '600', color: Colors.text, flexShrink: 1 },
   cls: { fontSize: FontSize.sm, color: Colors.textSecondary, marginTop: 2 },
   section2: { flexDirection: 'row', alignItems: 'center', padding: Spacing.md, marginBottom: Spacing.sm },
@@ -329,13 +342,6 @@ const styles = StyleSheet.create({
   risk: { padding: Spacing.md, marginBottom: Spacing.sm },
   riskTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: Spacing.sm },
   action: { fontSize: FontSize.xs, color: Colors.text, marginTop: Spacing.xs },
-  actions: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.md },
-  quick: { width: '22%', minWidth: 72, alignItems: 'center', backgroundColor: Colors.surface, borderRadius: BorderRadius.md, paddingVertical: Spacing.md },
-  quickOff: { opacity: 0.4 },
   slot: { fontSize: FontSize.xs, color: Colors.textTertiary, marginLeft: Spacing.sm },
   enter: { marginLeft: Spacing.sm, minHeight: 44, justifyContent: 'center' },
-  badge: { position: 'absolute', top: 4, right: 6, minWidth: 18, height: 18, borderRadius: 9, backgroundColor: Colors.error, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4 },
-  badgeText: { fontSize: 10, fontWeight: '700', color: Colors.surface },
-  quickIcon: { fontSize: 22 },
-  quickLabel: { fontSize: FontSize.xs, color: Colors.text, marginTop: 4, textAlign: 'center' },
 });

@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Linking, StyleSheet, useWindowDimensions } from 'react-native';
+import { View, Text, TouchableOpacity, Linking, StyleSheet, useWindowDimensions } from 'react-native';
+import AppList from '../ui/AppList';
 import { useRouter, useLocalSearchParams, type Href } from 'expo-router';
 import { BarChart, PieChart } from 'react-native-gifted-charts';
 import { financeApi, studentsApi } from '../../services/api';
@@ -19,7 +20,8 @@ import Select from '../ui/Select';
 import SegmentedTabs from '../ui/SegmentedTabs';
 import StatusPill from '../ui/StatusPill';
 import Button from '../ui/Button';
-import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
+import { Colors, FontSize, Spacing, BorderRadius, GlyphSize } from '../../constants/colors';
+import { SectionEmpty, SectionError, SectionLoading } from '../../components/ui/SectionState';
 
 type Summary = FeeSummaryData & { total_pending?: number | string; paid_count?: number; partial_count?: number; unpaid_count?: number; advance_count?: number };
 const TONE = { UNPAID: 'error', PARTIAL: 'warning', PAID: 'success', ADVANCE: 'info' } as const;
@@ -79,7 +81,18 @@ export default function FeeOverviewScreen({ canCollect = false }: { canCollect?:
   };
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content} refreshControl={refreshControl} keyboardShouldPersistTaps="handled">
+    // The figures, charts and class list are the header; the pending students (one card per class,
+    // open by default, often hundreds of rows) are the list, drawn as they scroll into view.
+    <AppList
+      style={styles.container}
+      contentContainerStyle={styles.content}
+      refreshControl={refreshControl}
+      keyboardShouldPersistTaps="handled"
+      data={pending.count > 0 ? pending.groups : []}
+      keyExtractor={(g) => g.name}
+      extraData={open}
+      initialNumToRender={4}
+      ListHeaderComponent={<>
       <Text style={styles.title}>Fee Overview</Text>
       <SegmentedTabs<OverviewFeeType> value={feeType} onChange={changeType} tabs={[{ value: 'MONTHLY', label: 'Monthly' }, { value: 'ANNUAL', label: 'Annual' }]} />
 
@@ -93,10 +106,10 @@ export default function FeeOverviewScreen({ canCollect = false }: { canCollect?:
       <Select label="Category" value={categoryId} onChange={setCategoryId}
         options={[{ value: 0, label: 'All categories' }, ...(cats.data ?? []).map((c) => ({ value: c.id, label: c.name }))]} />
 
-      {summary.isLoading ? <Text style={styles.muted}>Loading fee data…</Text> : summary.isError ? (
-        <Text style={styles.muted}>Could not load the fee data. Pull down to retry.</Text>
+      {summary.isLoading ? <SectionLoading lines={3} /> : summary.isError ? (
+        <SectionError message="Could not load the fee data." onRetry={() => summary.refetch()} />
       ) : !data || (kpi.due === 0 && kpi.students === 0) ? (
-        <Card style={styles.card}><Text style={styles.muted}>No fee records for this {monthly ? 'month' : 'year'}.</Text></Card>
+        <Card style={styles.card}><SectionEmpty message={`No fee records for this ${monthly ? 'month' : 'year'}.`} /></Card>
       ) : (
         <>
           <View style={styles.kpis}>
@@ -180,13 +193,14 @@ export default function FeeOverviewScreen({ canCollect = false }: { canCollect?:
       ) : null}
 
       {pending.count > 0 ? (
-        <>
           <View style={styles.rowBetween}>
             <Text style={styles.section}>Pending students</Text>
             <Text style={styles.muted}>{pending.count} · {formatMoney(pending.total)} due</Text>
           </View>
-          {pending.groups.map((g) => (
-            <Card key={g.name} style={styles.pendingCard}>
+      ) : null}
+      </>}
+      renderItem={({ item: g }) => (
+            <Card style={styles.pendingCard}>
               <TouchableOpacity accessibilityRole="button" accessibilityState={{ expanded: open[`p:${g.name}`] !== false }} onPress={() => setOpen((o) => ({ ...o, [`p:${g.name}`]: o[`p:${g.name}`] === false }))} style={styles.rowBetween}>
                 <Text style={styles.name} numberOfLines={1}>{open[`p:${g.name}`] === false ? '▸' : '▾'} {g.name} ({g.rows.length})</Text>
                 <Text style={styles.owed}>{formatMoney(g.balance)}</Text>
@@ -203,14 +217,11 @@ export default function FeeOverviewScreen({ canCollect = false }: { canCollect?:
                 </View>
               )) : null}
             </Card>
-          ))}
-        </>
-      ) : null}
-
-      {canCollect ? (
+      )}
+      ListFooterComponent={canCollect ? (
         <Button title="Collect fees" onPress={() => router.push('/(admin)/finance/fee-collection' as Href)} fullWidth style={styles.collect} />
       ) : null}
-    </ScrollView>
+    />
   );
 }
 
@@ -228,7 +239,7 @@ const styles = StyleSheet.create({
   content: { padding: Spacing.lg, paddingBottom: Spacing.xxxl },
   title: { fontSize: FontSize.xl, fontWeight: '700', color: Colors.text, marginBottom: Spacing.md },
   nav: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginVertical: Spacing.md },
-  arrow: { fontSize: 28, color: Colors.primary, paddingHorizontal: Spacing.md },
+  arrow: { fontSize: GlyphSize.lg, color: Colors.primary, paddingHorizontal: Spacing.md },
   off: { color: Colors.border },
   navTitle: { fontSize: FontSize.lg, fontWeight: '700', color: Colors.text },
   muted: { fontSize: FontSize.sm, color: Colors.textSecondary },
@@ -248,7 +259,7 @@ const styles = StyleSheet.create({
   legend: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.lg, justifyContent: 'center' },
   key: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   dot: { width: 10, height: 10, borderRadius: 5 },
-  axis: { fontSize: 10, color: Colors.textSecondary },
+  axis: { fontSize: FontSize.xxs, color: Colors.textSecondary },
   section: { fontSize: FontSize.lg, fontWeight: '600', color: Colors.text, marginTop: Spacing.lg, marginBottom: Spacing.md },
   student: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: Spacing.md, paddingTop: Spacing.md },
   grow: { flex: 1 },

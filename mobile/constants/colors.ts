@@ -61,6 +61,31 @@ export const Colors = {
   shadow: '#000000',
   disabled: '#cbd5e1',
   placeholder: '#6b7280',
+
+  // One-off shades that used to be written inline in screens.
+  leaveLight: '#ede9fe',     // background behind the purple "Leave" mark
+  purpleLight: '#f3e8ff',    // purple badge background (text uses `secondary`)
+  infoBorder: '#bfdbfe',     // outline of a new notification
+  errorSoft: '#fca5a5',      // "pending" share in the fee chart
+  star: '#f59e0b',           // report card stars
+  gold: '#eab308',           // 1st place
+  silver: '#9ca3af',         // 2nd place
+  bronze: '#d97706',         // 3rd place
+  black: '#000000',          // camera background
+} as const;
+
+// Fixed colour sets, kept here so screens never hold raw colours.
+export const Palette = {
+  // Timetable subject colours, given out in turn so neighbouring subjects differ.
+  subjects: ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16', '#f97316', '#6366f1'],
+  // Timetable rows that are not lessons.
+  slots: { BREAK: '#FEF9C3', LUNCH: '#FFEDD5', ASSEMBLY: '#DBEAFE' },
+  // The voice assistant orb's moods (ring, fill, ink), matching the web.
+  talkOrb: {
+    blue: { ring: '#378ADD', fill: '#E6F1FB', ink: '#185FA5' },
+    red: { ring: '#E24B4A', fill: '#FCEBEB', ink: '#A32D2D' },
+    slate: { ring: '#94A3B8', fill: '#F1F5F9', ink: '#334155' },
+  },
 } as const;
 
 export const Spacing = {
@@ -73,7 +98,10 @@ export const Spacing = {
   xxxl: 32,
 } as const;
 
+// Text sizes. Screens use these names, never raw numbers (scripts/ui_audit.js checks).
+// xxs is for badges and chart axis labels only; display is for one big figure on a screen.
 export const FontSize = {
+  xxs: 10,
   xs: 11,
   sm: 13,
   md: 15,
@@ -81,6 +109,15 @@ export const FontSize = {
   xl: 20,
   xxl: 24,
   xxxl: 30,
+  display: 36,
+} as const;
+
+// Symbols drawn with text (‹ › arrows, ✓ ticks, the odd emoji). They are icons, not words, so they
+// have their own sizes instead of borrowing text ones.
+export const GlyphSize = {
+  sm: 20,
+  md: 24,
+  lg: 28,
 } as const;
 
 export const BorderRadius = {

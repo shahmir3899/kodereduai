@@ -15,6 +15,7 @@ import { GRADE_PRESETS, GRADE_LEVEL_LABELS } from '../../constants/gradePresets'
 import { getClassSelectorScope, getResolvedMasterClassId, resolveSessionClassId } from '../../utils/classScope'
 import Badge from '../../components/ui/Badge'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
+import FeeTypePicker, { FeeTypesLabel } from './FeeTypePicker'
 
 // ── Badge color maps ──────────────────────────────────────────────────────────
 
@@ -50,6 +51,7 @@ const EMPTY_DISCOUNT = {
   end_date: '',
   stackable: false,
   is_active: true,
+  fees: { monthly: [], annual: [] },
 }
 
 const EMPTY_SCHOLARSHIP = {
@@ -60,6 +62,7 @@ const EMPTY_SCHOLARSHIP = {
   description: '',
   max_recipients: '',
   is_active: true,
+  fees: { monthly: [], annual: [] },
 }
 
 const EMPTY_ASSIGNMENT = {
@@ -417,6 +420,7 @@ export default function DiscountsPage() {
       end_date: discount.end_date || '',
       stackable: discount.stackable || false,
       is_active: discount.is_active !== undefined ? discount.is_active : true,
+      fees: { monthly: discount.monthly_categories || [], annual: discount.annual_categories || [] },
     })
     setShowDiscountModal(true)
   }
@@ -441,6 +445,10 @@ export default function DiscountsPage() {
       showError('Percentage discount cannot exceed 100%')
       return
     }
+    if (!discountForm.fees.monthly.length && !discountForm.fees.annual.length) {
+      showError('Pick at least one fee this discount applies to')
+      return
+    }
 
     const payload = {
       name: discountForm.name.trim(),
@@ -449,6 +457,8 @@ export default function DiscountsPage() {
       applies_to: discountForm.applies_to,
       stackable: discountForm.stackable,
       is_active: discountForm.is_active,
+      monthly_categories: discountForm.fees.monthly,
+      annual_categories: discountForm.fees.annual,
     }
 
     if (discountForm.applies_to === 'GRADE_LEVEL' && discountForm.target_grade_level) {
@@ -487,6 +497,7 @@ export default function DiscountsPage() {
       description: scholarship.description || '',
       max_recipients: scholarship.max_recipients || '',
       is_active: scholarship.is_active !== undefined ? scholarship.is_active : true,
+      fees: { monthly: scholarship.monthly_categories || [], annual: scholarship.annual_categories || [] },
     })
     setShowScholarshipModal(true)
   }
@@ -511,6 +522,10 @@ export default function DiscountsPage() {
       showError('Percentage coverage cannot exceed 100%')
       return
     }
+    if (!scholarshipForm.fees.monthly.length && !scholarshipForm.fees.annual.length) {
+      showError('Pick at least one fee this scholarship applies to')
+      return
+    }
 
     const payload = {
       name: scholarshipForm.name.trim(),
@@ -518,6 +533,8 @@ export default function DiscountsPage() {
       coverage: scholarshipForm.coverage,
       description: scholarshipForm.description,
       is_active: scholarshipForm.is_active,
+      monthly_categories: scholarshipForm.fees.monthly,
+      annual_categories: scholarshipForm.fees.annual,
     }
 
     if (scholarshipForm.coverage === 'FULL') {
@@ -770,6 +787,7 @@ export default function DiscountsPage() {
                       <div className="flex items-start justify-between">
                         <div className="min-w-0 flex-1">
                           <p className="font-medium text-sm text-gray-900 truncate">{discount.name}</p>
+                          <FeeTypesLabel feeTypes={discount.fee_types} />
                           <div className="flex items-center gap-2 mt-1 flex-wrap">
                             <Badge colors={discountTypeBadge[discount.discount_type] || TONE.neutral}>
                               {discount.discount_type}
@@ -825,6 +843,7 @@ export default function DiscountsPage() {
                                 </span>
                               )}
                             </div>
+                            <FeeTypesLabel feeTypes={discount.fee_types} />
                           </td>
                           <td className="px-4 py-3">
                             <Badge colors={discountTypeBadge[discount.discount_type] || TONE.neutral}>
@@ -916,6 +935,7 @@ export default function DiscountsPage() {
                       <div className="flex items-start justify-between">
                         <div className="min-w-0 flex-1">
                           <p className="font-medium text-sm text-gray-900 truncate">{sc.name}</p>
+                          <FeeTypesLabel feeTypes={sc.fee_types} />
                           <div className="flex items-center gap-2 mt-1 flex-wrap">
                             <Badge colors={scholarshipTypeBadge[sc.type] || TONE.neutral}>
                               {sc.type}
@@ -968,6 +988,7 @@ export default function DiscountsPage() {
                               {sc.description && (
                                 <p className="text-xs text-gray-500 truncate max-w-xs">{sc.description}</p>
                               )}
+                              <FeeTypesLabel feeTypes={sc.fee_types} />
                             </div>
                           </td>
                           <td className="px-4 py-3">
@@ -1271,6 +1292,11 @@ export default function DiscountsPage() {
 </Field>
               </div>
 
+              <FeeTypePicker
+                value={discountForm.fees}
+                onChange={(fees) => setDiscountForm({ ...discountForm, fees })}
+              />
+
               <div className="flex items-center gap-4">
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input
@@ -1376,6 +1402,11 @@ export default function DiscountsPage() {
                   />
 </Field>
               )}
+
+              <FeeTypePicker
+                value={scholarshipForm.fees}
+                onChange={(fees) => setScholarshipForm({ ...scholarshipForm, fees })}
+              />
 
               <div>
                 <label className="label">Description</label>

@@ -1,12 +1,16 @@
 import React from 'react';
 import { View } from 'react-native';
 import { Tabs } from 'expo-router';
-import Icon from '../../components/ui/Icon';
 import RoleGuard from '../../components/nav/RoleGuard';
-import { useTabScreenOptions } from '../../components/nav/tabBarStyle';
+import { renderTabBar, tabIcon, useTabScreenOptions } from '../../components/nav/tabBarStyle';
 import { SideMenuProvider, useSideMenu } from '../../components/nav/SideMenuContext';
 import SideMenu from '../../components/nav/SideMenu';
 import MenuButton from '../../components/nav/MenuButton';
+import BackButton from '../../components/nav/BackButton';
+import { TabNamesContext } from '../../components/nav/RoleStack';
+
+// The admin's bottom tabs; every other screen in the group opens from the menu or a card.
+const TAB_NAMES: ReadonlySet<string> = new Set(['dashboard', 'attendance', 'finance', 'students', 'more']);
 
 // The side menu is the admin's main way to reach every screen: the More tab opens it on a phone
 // and it is a permanent rail on wide screens. The More page stays as the fallback route.
@@ -26,15 +30,23 @@ function AdminTabs() {
     <View style={{ flex: 1, flexDirection: 'row' }}>
     {menu.docked ? <SideMenu /> : null}
     <View style={{ flex: 1 }}>
+    <TabNamesContext.Provider value={TAB_NAMES}>
     <Tabs
-      screenOptions={screenOptions}
+      // Tabs show the menu button, everything else a back arrow; the Android back key follows history.
+      screenOptions={({ route }) => ({
+        ...screenOptions,
+        headerLeft: () => (TAB_NAMES.has(route.name) ? <MenuButton /> : <BackButton />),
+      })}
+      tabBar={renderTabBar}
+      backBehavior="history"
     >
       <Tabs.Screen
         name="dashboard"
         options={{
           title: 'Dashboard',
-          headerLeft: () => <MenuButton />,
-          tabBarIcon: ({ color }) => <Icon name="grid-outline" size={22} color={color} />,
+          // The blue Home banner carries the menu, year, bell and photo instead.
+          headerShown: false,
+          tabBarIcon: tabIcon('grid-outline'),
         }}
       />
       <Tabs.Screen
@@ -42,7 +54,7 @@ function AdminTabs() {
         options={{
           title: 'Attendance',
           headerShown: false,
-          tabBarIcon: ({ color }) => <Icon name="camera-outline" size={22} color={color} />,
+          tabBarIcon: tabIcon('camera-outline'),
         }}
       />
       <Tabs.Screen
@@ -50,7 +62,7 @@ function AdminTabs() {
         options={{
           title: 'Finance',
           headerShown: false,
-          tabBarIcon: ({ color }) => <Icon name="cash-outline" size={22} color={color} />,
+          tabBarIcon: tabIcon('cash-outline'),
         }}
       />
       <Tabs.Screen
@@ -58,7 +70,7 @@ function AdminTabs() {
         options={{
           title: 'Students',
           headerShown: false,
-          tabBarIcon: ({ color }) => <Icon name="school-outline" size={22} color={color} />,
+          tabBarIcon: tabIcon('school-outline'),
         }}
       />
       <Tabs.Screen
@@ -66,7 +78,7 @@ function AdminTabs() {
         listeners={{ tabPress: (e) => { if (!menu.docked) { e.preventDefault(); menu.open(); } } }}
         options={{
           title: 'More',
-          tabBarIcon: ({ color }) => <Icon name="menu-outline" size={22} color={color} />,
+          tabBarIcon: tabIcon('menu-outline'),
         }}
       />
       {/* Hidden screens — accessed via "More" or deep navigation */}
@@ -100,6 +112,9 @@ function AdminTabs() {
       <Tabs.Screen name="exam-groups" options={{ href: null, title: 'Date Sheets and Publishing' }} />
       <Tabs.Screen name="date-sheet" options={{ href: null, title: 'Date Sheet' }} />
       <Tabs.Screen name="exam-wizard" options={{ href: null, title: 'New Exams (several classes)' }} />
+      <Tabs.Screen name="bulk-tests" options={{ href: null, title: 'Create Tests' }} />
+      <Tabs.Screen name="paper-responses" options={{ href: null, title: 'Student Responses' }} />
+      <Tabs.Screen name="jobs" options={{ href: null, title: 'Running Jobs' }} />
       <Tabs.Screen name="library" options={{ href: null, headerShown: false }} />
       <Tabs.Screen name="admissions" options={{ href: null, headerShown: false }} />
       <Tabs.Screen name="inventory" options={{ href: null, headerShown: false }} />
@@ -117,6 +132,7 @@ function AdminTabs() {
       <Tabs.Screen name="ai-assistant" options={{ href: null }} />
       <Tabs.Screen name="face-attendance" options={{ href: null, headerShown: false }} />
     </Tabs>
+    </TabNamesContext.Provider>
     </View>
     {menu.docked ? null : <SideMenu />}
     </View>

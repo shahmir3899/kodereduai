@@ -5,7 +5,6 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  Alert,
   Image,
 } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -14,10 +13,13 @@ import * as ImagePicker from 'expo-image-picker';
 import { attendanceApi } from '../../../services/api';
 import Button from '../../../components/ui/Button';
 import Spinner from '../../../components/ui/Spinner';
+import { useToast } from '../../../components/ui/Toast';
+import { confirm } from '../../../components/ui/confirm';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../../constants/colors';
 
 export default function CaptureAttendance() {
   const router = useRouter();
+  const toast = useToast();
   const [permission, requestPermission] = useCameraPermissions();
   const [photo, setPhoto] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -32,7 +34,7 @@ export default function CaptureAttendance() {
         }
       } catch (error) {
         console.error('Failed to take photo:', error);
-        Alert.alert('Error', 'Failed to capture photo.');
+        toast.error('Could not capture the photo. Please try again.');
       }
     }
   };
@@ -69,13 +71,11 @@ export default function CaptureAttendance() {
         date: todayString(),
       });
 
-      Alert.alert('Success', 'Attendance photo uploaded. AI is processing it.', [
-        { text: 'Review', onPress: () => router.push('/(admin)/attendance/review') },
-        { text: 'Take Another', onPress: () => setPhoto(null) },
-      ]);
+      // Not awaited: the upload button must stop spinning while the question is open.
+      confirm({ title: 'Photo uploaded', message: 'AI is processing it. Review it now, or take another photo?', confirmLabel: 'Review', cancelLabel: 'Take another' }).then((yes) => { if (yes) router.push('/(admin)/attendance/review'); else setPhoto(null); });
     } catch (error) {
       console.error('Failed to upload:', error);
-      Alert.alert('Error', 'Failed to upload attendance photo. Please try again.');
+      toast.error('Could not upload the attendance photo. Please try again.');
     } finally {
       setUploading(false);
     }

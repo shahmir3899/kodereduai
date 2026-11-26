@@ -1,3 +1,4 @@
+import StudentOptionalFees from '../finance/StudentOptionalFees';
 import React, { useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, Linking, StyleSheet } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
@@ -225,6 +226,7 @@ export default function StudentProfileScreen({ canEdit }: Props) {
           ))
       ) : null}
 
+      {tab === 'fees' && !denied(fees) ? <StudentOptionalFees studentId={s.id} canEdit={!!canEdit} /> : null}
       {tab === 'fees' ? (
         fees.isLoading ? <Skeleton rows={3} />
           : denied(fees) ? <EmptyState title="Not available" message="Fee details aren't available for your role." />
@@ -266,13 +268,13 @@ const styles = StyleSheet.create({
   cards: { flexDirection: 'row', gap: Spacing.sm, marginBottom: Spacing.lg },
   card: { flex: 1, backgroundColor: Colors.surface, borderRadius: BorderRadius.md, padding: Spacing.md, alignItems: 'center' },
   cardValue: { fontSize: FontSize.lg, fontWeight: '700' },
-  cardLabel: { fontSize: 10, color: Colors.textSecondary, textAlign: 'center' },
+  cardLabel: { fontSize: FontSize.xxs, color: Colors.textSecondary, textAlign: 'center' },
   reason: { fontSize: FontSize.sm, color: Colors.textSecondary, marginBottom: Spacing.md },
   banner: { backgroundColor: Colors.warningLight, borderRadius: BorderRadius.md, padding: Spacing.md, marginBottom: Spacing.md, gap: 2 },
   bannerTitle: { fontSize: FontSize.md, fontWeight: '700', color: Colors.text },
   bannerText: { fontSize: FontSize.sm, color: Colors.text },
   camBadge: { position: 'absolute', right: -2, bottom: -2, width: 22, height: 22, borderRadius: 11, backgroundColor: Colors.primary, alignItems: 'center', justifyContent: 'center' },
-  camText: { color: Colors.textInverse, fontSize: 12, fontWeight: '700' },
+  camText: { color: Colors.textInverse, fontSize: FontSize.xs, fontWeight: '700' },
   groupTitle: { fontSize: FontSize.xs, fontWeight: '700', color: Colors.textSecondary, textTransform: 'uppercase', marginTop: Spacing.md, marginBottom: Spacing.sm },
   link: { color: Colors.primary },
   sheetBtn: { marginBottom: Spacing.sm },

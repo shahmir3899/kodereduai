@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Modal, View, Text, TouchableOpacity, Pressable, StyleSheet, ActivityIndicator, Alert } from 'react-native';
+import { Modal, View, Text, TouchableOpacity, Pressable, StyleSheet, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useToast } from '../ui/Toast';
 import { useAuth } from '../../contexts/AuthContext';
@@ -63,18 +63,19 @@ export function SchoolSwitchSheet({ visible, onClose }: { visible: boolean; onCl
 }
 
 // Shows the active school's name; a user with more than one school can tap it to switch.
-export default function SchoolSwitcher() {
+// `light` is white text for the blue Home banner.
+export default function SchoolSwitcher({ light = false }: { light?: boolean }) {
   const { user, activeSchool } = useAuth();
   const [open, setOpen] = useState(false);
   const schools = user?.schools ?? [];
   const name = activeSchool?.name || user?.school_name || '';
   if (!name) return null;
-  if (schools.length <= 1) return <Text style={styles.plain}>{name}</Text>;
+  if (schools.length <= 1) return <Text style={[styles.plain, light && styles.light]} numberOfLines={1}>{name}</Text>;
   return (
     <>
       <TouchableOpacity accessibilityRole="button" style={styles.button} onPress={() => setOpen(true)}>
-        <Text style={styles.buttonText} numberOfLines={1}>{name}</Text>
-        <Text style={styles.chevron}>▾</Text>
+        <Text style={[styles.buttonText, light && styles.light]} numberOfLines={1}>{name}</Text>
+        <Text style={[styles.chevron, light && styles.light]}>▾</Text>
       </TouchableOpacity>
       <SchoolSwitchSheet visible={open} onClose={() => setOpen(false)} />
     </>
@@ -83,6 +84,7 @@ export default function SchoolSwitcher() {
 
 const styles = StyleSheet.create({
   plain: { fontSize: FontSize.sm, color: Colors.textSecondary },
+  light: { color: 'rgba(255, 255, 255, 0.85)' },
   button: { flexDirection: 'row', alignItems: 'center', maxWidth: 220 },
   buttonText: { fontSize: FontSize.sm, color: Colors.primary, fontWeight: '600', flexShrink: 1 },
   chevron: { fontSize: FontSize.sm, color: Colors.primary, marginLeft: Spacing.xs },

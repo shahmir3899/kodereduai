@@ -38,3 +38,24 @@ describe('parent links', () => {
     expect([0, 1, 3].map(linkSummary)).toEqual(['No parent linked', '1 parent linked', '3 parents linked']);
   });
 });
+
+describe('parent portal status on the student list', () => {
+  const { filterByPortal, portalStatus } = require('../services/parentLinks');
+
+  it('reads linked first, then pending, and treats a missing student as not linked', () => {
+    expect(portalStatus({ linked: 2, pending: 1 })).toEqual({ key: 'linked', label: '2 parents linked' });
+    expect(portalStatus({ linked: 1 })).toEqual({ key: 'linked', label: '1 parent linked' });
+    expect(portalStatus({ linked: 0, pending: 1 })).toEqual({ key: 'pending', label: 'Invite pending' });
+    expect(portalStatus(undefined)).toEqual({ key: 'none', label: 'Not linked' });
+  });
+
+  it('filters rows by that status', () => {
+    const rows = [{ id: 1 }, { id: 2 }, { id: 3 }];
+    const status = { 1: { linked: 1 }, 2: { pending: 1 } };
+    expect(filterByPortal(rows, status, 'all')).toHaveLength(3);
+    expect(filterByPortal(rows, status, 'linked').map((r: { id: number }) => r.id)).toEqual([1]);
+    expect(filterByPortal(rows, status, 'pending').map((r: { id: number }) => r.id)).toEqual([2]);
+    expect(filterByPortal(rows, status, 'none').map((r: { id: number }) => r.id)).toEqual([3]);
+    expect(filterByPortal(rows, undefined, 'none')).toHaveLength(3);
+  });
+});

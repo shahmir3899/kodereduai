@@ -1,11 +1,12 @@
 import React, { useMemo, useState } from 'react';
-import { View, Text, FlatList, ActivityIndicator, Switch, TouchableOpacity, StyleSheet, type RefreshControlProps } from 'react-native';
+import { View, Text, ActivityIndicator, Switch, StyleSheet, type RefreshControlProps } from 'react-native';
+import { useRouter } from 'expo-router';
 import { useAuth } from '../../contexts/AuthContext';
 import { useCategories, useInventoryActions, useItemsPaged } from '../../hooks/useInventory';
 import { useDebouncedValue } from '../../hooks/useDebouncedValue';
 import { useRefreshControl } from '../../hooks/useRefreshControl';
 import {
-  buildItemPayload, emptyItemForm, inventoryErrorMessage, itemToForm, STOCK_LABEL, STOCK_TONE, stockStatus, UNITS,
+  buildItemPayload, emptyItemForm, inventoryErrorMessage, itemDeleteMessage, itemToForm, STOCK_LABEL, STOCK_TONE, stockStatus, UNITS,
   validateItem, type Item, type ItemForm,
 } from '../../services/inventory';
 import { formatMoney } from '../../services/feeCollect';
@@ -17,11 +18,13 @@ import Button from '../ui/Button';
 import Skeleton from '../ui/Skeleton';
 import ErrorState from '../ui/ErrorState';
 import EmptyState from '../ui/EmptyState';
-import StatusPill from '../ui/StatusPill';
 import { useToast } from '../ui/Toast';
+import { confirm } from '../ui/confirm';
 import FormSheet from './FormSheet';
 import QuickAdd from './QuickAdd';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
+import AppList from '../ui/AppList';
+import RecordCard from '../ui/RecordCard';
 
 type StockTab = '' | 'ok' | 'low' | 'out';
 const TABS: Array<{ value: StockTab; label: string }> = [
@@ -33,6 +36,7 @@ const ALL = -1;
 // only through movements and assignments, so editing an item never touches its stock count.
 export default function ItemsScreen() {
   const toast = useToast();
+  const router = useRouter();
   const { isSchoolAdminNav: canManage } = useAuth();
   const actions = useInventoryActions();
   const categories = useCategories();
@@ -83,7 +87,18 @@ export default function ItemsScreen() {
     }
   };
 
-  const busy = actions.createItem.isPending || actions.updateItem.isPending;
+  const removeItem = async (item: Item) => {
+    if (!(await confirm({ title: 'Delete item', message: itemDeleteMessage(item.name), confirmLabel: 'Delete', destructive: true }))) return;
+    try {
+      await actions.deleteItem.mutateAsync(item.id);
+      toast.success('Item deleted.');
+      setEditing(null);
+    } catch (e) {
+      setError(inventoryErrorMessage(e, 'Could not delete the item.'));
+    }
+  };
+
+  const busy = actions.createItem.isPending || actions.updateItem.isPending || actions.deleteItem.isPending;
 
   const header = (
     <View>
@@ -94,7 +109,12 @@ export default function ItemsScreen() {
       />
       <SearchBar value={search} onChangeText={setSearch} placeholder="Search name or code..." />
       {query.data ? <Text style={styles.count}>{total} item{total === 1 ? '' : 's'}</Text> : null}
-      {canManage ? <Button title="+ Add item" size="sm" onPress={() => open('new')} /> : null}
+      {canManage ? (
+        <View style={styles.actions}>
+          <Button title="+ Add item" size="sm" onPress={() => open('new')} />
+          <Button title="Categories & vendors" size="sm" variant="outline" onPress={() => router.push('/(admin)/inventory/lists')} />
+        </View>
+      ) : null}
     </View>
   );
 
@@ -103,7 +123,7 @@ export default function ItemsScreen() {
 
   return (
     <View style={styles.container}>
-      <FlatList
+      <AppList
         contentContainerStyle={styles.content}
         data={items}
         keyExtractor={(i) => String(i.id)}
@@ -117,18 +137,14 @@ export default function ItemsScreen() {
         renderItem={({ item }) => {
           const status = stockStatus(item);
           return (
-            <TouchableOpacity accessibilityRole="button" style={[styles.row, !item.is_active && styles.inactive]} onPress={() => open(item)}>
-              <View style={styles.who}>
-                <Text style={styles.name} numberOfLines={1}>{item.name}{item.is_active ? '' : ' (inactive)'}</Text>
-                <Text style={styles.sub} numberOfLines={1}>
-                  {[item.category_name, item.sku, item.location].filter(Boolean).join('  ·  ') || 'Uncategorized'}
-                </Text>
-              </View>
-              <View style={styles.right}>
-                <Text style={styles.qty}>{item.current_stock} {item.unit_display ?? item.unit}</Text>
-                <StatusPill label={STOCK_LABEL[status]} tone={STOCK_TONE[status]} />
-              </View>
-            </TouchableOpacity>
+            <RecordCard
+              icon="cube-outline"
+              title={`${item.name}${item.is_active ? '' : ' (inactive)'}`}
+              subtitle={[item.category_name, item.sku, item.location].filter(Boolean).join('  ·  ') || 'Uncategorized'}
+              trailing={`${item.current_stock} ${item.unit_display ?? item.unit}`}
+              status={{ label: STOCK_LABEL[status], tone: STOCK_TONE[status] }}
+              onPress={() => open(item)}
+            />
           );
         }}
       />
@@ -136,6 +152,8 @@ export default function ItemsScreen() {
       <FormSheet
         visible={editing !== null} title={editing === 'new' ? 'Add item' : 'Edit item'} onClose={() => setEditing(null)}
         onSubmit={save} submitLabel={editing === 'new' ? 'Add item' : 'Save changes'} busy={busy} error={error}
+        secondaryLabel={editing && editing !== 'new' ? 'Delete item' : undefined}
+        onSecondary={editing && editing !== 'new' ? () => removeItem(editing) : undefined}
       >
         <Input label="Name" value={form.name} onChangeText={(v) => set('name', v)} />
         <Select
@@ -189,16 +207,10 @@ export default function ItemsScreen() {
 }
 
 const styles = StyleSheet.create({
+  actions: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm },
   container: { flex: 1, backgroundColor: Colors.background },
   content: { padding: Spacing.lg, paddingBottom: Spacing.xxxl },
   count: { fontSize: FontSize.xs, color: Colors.textSecondary, marginBottom: Spacing.sm },
-  row: { flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.surface, borderRadius: BorderRadius.md, padding: Spacing.md, marginTop: Spacing.sm, gap: Spacing.md },
-  inactive: { opacity: 0.6 },
-  who: { flex: 1 },
-  name: { fontSize: FontSize.md, fontWeight: '600', color: Colors.text },
-  sub: { fontSize: FontSize.sm, color: Colors.textSecondary, marginTop: 2 },
-  right: { alignItems: 'flex-end', gap: 4 },
-  qty: { fontSize: FontSize.md, fontWeight: '700', color: Colors.text },
   note: { fontSize: FontSize.sm, color: Colors.textSecondary },
   switchRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 44 },
   switchLabel: { fontSize: FontSize.md, color: Colors.text },

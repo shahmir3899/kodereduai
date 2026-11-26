@@ -1,14 +1,18 @@
-import React, { useMemo, useState } from 'react';
-import { View, Text, ScrollView, Linking, TouchableOpacity, StyleSheet } from 'react-native';
-import * as ImagePicker from 'expo-image-picker';
-import * as DocumentPicker from 'expo-document-picker';
+import React, { useEffect, useMemo, useState } from 'react';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
+import { hrApi } from '../../services/api';
+import { appendFile } from '../../services/formFile';
+import {
+  SCAN_STATUS, STAFF_DOC_TYPES, anyReading, scanError, scanReplyMessage, typeLabel, type ScannedDoc,
+} from '../../services/documentScan';
+import { pickDocumentFile } from '../documents/pickDocumentFile';
+import DocumentDetailsSheet from '../documents/DocumentDetailsSheet';
 import { useDocuments, useHrActions, useQualifications, useStaffPicker } from '../../hooks/useHrAdmin';
 import { useRefreshControl } from '../../hooks/useRefreshControl';
 import { todayString } from '../../services/attendanceEntry';
 import {
-  buildQualificationPayload, documentFields, documentFileProblem, documentToForm, DOCUMENT_TYPES, emptyDocumentForm, emptyQualificationForm, expiryLabel, labelOf,
-  qualificationToForm, QUALIFICATION_TYPES, validateDocument, validateQualification, type DocumentForm, type QualificationForm,
-  type Qualification, type StaffDocument,
+  buildQualificationPayload, emptyQualificationForm, expiryLabel, labelOf,
+  qualificationToForm, QUALIFICATION_TYPES, validateQualification, type QualificationForm, type Qualification,
 } from '../../services/hrAdmin';
 import { inventoryErrorMessage } from '../../services/inventory';
 import Input from '../ui/Input';
@@ -25,9 +29,8 @@ import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors'
 
 type Tab = 'documents' | 'qualifications';
 
-// Staff documents (ID, contract, certificates, medical) and qualifications, for admin and principal.
-// A document is a photo, a PDF or a Word file (10 MB at most). Documents that are about to expire or
-// already have are flagged.
+// Staff documents (read from a photo) and qualifications, for admin and principal. Documents that are
+// about to expire or already have are flagged.
 export default function StaffDocumentsScreen() {
   const [tab, setTab] = useState<Tab>('documents');
   return (
@@ -40,6 +43,12 @@ export default function StaffDocumentsScreen() {
   );
 }
 
+const POLL_MS = 3000;
+
+// Staff documents (web StaffDocumentsPage). Adding one is image-only: choose the person (never guessed
+// from the picture), then take a photo or choose a file; the server reads the record from it in the
+// background ("Reading…" until it is done). Open a record to check and correct what was read; a
+// degree, diploma, certification, training or licence also fills the person's qualifications.
 function DocumentsTab() {
   const toast = useToast();
   const today = todayString();
@@ -47,107 +56,91 @@ function DocumentsTab() {
   const staff = useStaffPicker();
   const actions = useHrActions();
   const refreshControl = useRefreshControl(q.refetch);
-  const [editing, setEditing] = useState<StaffDocument | 'new' | null>(null);
-  const [form, setForm] = useState<DocumentForm>(emptyDocumentForm());
-  const [error, setError] = useState<string | null>(null);
-  const set = <K extends keyof DocumentForm>(k: K, v: DocumentForm[K]) => setForm((f) => ({ ...f, [k]: v }));
+  const rows = (q.data ?? []) as unknown as ScannedDoc[];
+  const [adding, setAdding] = useState(false);
+  const [person, setPerson] = useState<number | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [addError, setAddError] = useState<string | null>(null);
+  const [open, setOpen] = useState<ScannedDoc | null>(null);
   const staffOptions = useMemo(() => (staff.data ?? []).map((s) => ({ value: s.id, label: s.full_name })), [staff.data]);
 
-  const open = (d: StaffDocument | 'new') => { setForm(d === 'new' ? emptyDocumentForm() : documentToForm(d)); setError(null); setEditing(d); };
+  // While the server is still reading a picture, keep checking until it is done.
+  const reading = anyReading(rows);
+  useEffect(() => {
+    if (!reading) return undefined;
+    const t = setInterval(() => { q.refetch(); }, POLL_MS);
+    return () => clearInterval(t);
+  }, [reading]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const pick = async (camera: boolean) => {
-    setError(null);
-    const perm = camera ? await ImagePicker.requestCameraPermissionsAsync() : await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!perm.granted) return setError(camera ? 'Allow the camera in your phone settings.' : 'Allow photo access in your phone settings.');
-    const result = camera ? await ImagePicker.launchCameraAsync({ quality: 0.7 }) : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.7 });
-    if (result.canceled || !result.assets?.[0]) return;
-    const a = result.assets[0];
-    const bad = documentFileProblem(a.mimeType ?? 'image/jpeg', a.fileSize);
-    if (bad) return setError(bad);
-    setForm((f) => ({ ...f, fileUri: a.uri, fileName: a.fileName ?? 'document.jpg', mime: a.mimeType ?? 'image/jpeg' }));
-  };
-
-  // PDFs and Word files, from the phone's file picker.
-  const pickFile = async () => {
-    setError(null);
-    const result = await DocumentPicker.getDocumentAsync({ type: ['application/pdf', 'image/*', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'], copyToCacheDirectory: true });
-    if (result.canceled || !result.assets?.[0]) return;
-    const a = result.assets[0];
-    const bad = documentFileProblem(a.mimeType, a.size);
-    if (bad) return setError(bad);
-    setForm((f) => ({ ...f, fileUri: a.uri, fileName: a.name, mime: a.mimeType ?? null }));
-  };
-
-  const save = async () => {
-    const creating = editing === 'new';
-    const problem = validateDocument(form, creating);
-    if (problem) return setError(problem);
-    setError(null);
+  const upload = async (source: 'camera' | 'gallery' | 'file') => {
+    setAddError(null);
+    if (!person) return setAddError('Choose the staff member first.');
+    const picked = await pickDocumentFile(source);
+    if (!picked) return;
+    if ('error' in picked) return setAddError(picked.error);
+    setUploading(true);
     try {
-      const fields = documentFields(form);
-      if (creating || form.fileUri) {
-        // New file: multipart, like the web form. An edit with a replacement file sends it the same way.
-        const body = new FormData();
-        Object.entries(fields).forEach(([k, v]) => body.append(k, v));
-        body.append('file', { uri: form.fileUri, name: form.fileName ?? 'document', type: form.mime ?? 'application/octet-stream' } as unknown as Blob);
-        if (creating) await actions.createDocument.mutateAsync(body);
-        else await actions.updateDocument.mutateAsync({ id: (editing as StaffDocument).id, data: body });
-      } else {
-        // Details only: JSON keeps the stored file untouched.
-        await actions.updateDocument.mutateAsync({ id: (editing as StaffDocument).id, data: { ...fields, expiry_date: form.expiry || null } });
-      }
-      toast.success('Document saved.');
-      setEditing(null);
-    } catch (e) { setError(inventoryErrorMessage(e)); }
+      const body = new FormData();
+      body.append('staff_member', String(person));
+      await appendFile(body, 'file', picked.file);
+      const res = await hrApi.scanDocument(body);
+      toast.success(scanReplyMessage(res.data as { duplicate?: boolean }));
+      await q.refetch();
+      setAdding(false);
+    } catch (e) { setAddError(scanError(e)); }
+    finally { setUploading(false); }
   };
 
-  const remove = async (d: StaffDocument) => {
-    if (!(await confirm({ title: 'Delete document?', message: `${d.title} for ${d.staff_member_name ?? 'this person'}.`, confirmLabel: 'Delete', destructive: true }))) return;
-    try {
-      await actions.deleteDocument.mutateAsync(d.id);
-      toast.success('Document deleted.');
-      setEditing(null);
-    } catch (e) { toast.error(inventoryErrorMessage(e, 'Could not delete the document.')); }
+  const remove = async (d: ScannedDoc): Promise<boolean> => {
+    const message = `${d.title} for ${d.staff_member_name ?? 'this person'}. Its file and any qualification read from it are deleted too. This cannot be undone.`;
+    if (!(await confirm({ title: 'Delete document?', message, confirmLabel: 'Delete', destructive: true }))) return false;
+    await actions.deleteDocument.mutateAsync(d.id);
+    toast.success('Document deleted.');
+    return true;
   };
-
-  const busy = actions.createDocument.isPending || actions.updateDocument.isPending;
-  const existing = editing && editing !== 'new' ? editing : null;
 
   return (
     <>
       <ScrollView contentContainerStyle={styles.content} refreshControl={refreshControl}>
-        <Button title="+ Add document" size="sm" onPress={() => open('new')} />
+        <Button title="+ Add document" size="sm" onPress={() => { setAddError(null); setAdding(true); }} />
         <QueryBoundary query={q} emptyTitle="No documents" emptyMessage="Add IDs, contracts and certificates for your staff.">
-          {(list) => list.map((d) => {
+          {() => rows.map((d) => {
             const exp = expiryLabel(d.expiry_date, today);
+            const scan = d.scan_status ? SCAN_STATUS[d.scan_status] : undefined;
             return (
-              <TouchableOpacity key={d.id} accessibilityRole="button" accessibilityLabel={`${d.title}, ${d.staff_member_name ?? ''}. Open`} style={styles.row} onPress={() => open(d)}>
+              <TouchableOpacity key={d.id} accessibilityRole="button" accessibilityLabel={`${d.title}, ${d.staff_member_name ?? ''}. Open`} style={styles.row}
+                disabled={d.scan_status === 'PENDING'} onPress={() => setOpen(d)}>
                 <View style={styles.who}>
                   <Text style={styles.name} numberOfLines={1}>{d.title}</Text>
-                  <Text style={styles.sub} numberOfLines={1}>{[d.staff_member_name, labelOf(DOCUMENT_TYPES, d.document_type)].filter(Boolean).join('  ·  ')}</Text>
+                  <Text style={styles.sub} numberOfLines={1}>{[d.staff_member_name, typeLabel(STAFF_DOC_TYPES, d.document_type), d.document_number].filter(Boolean).join('  ·  ')}</Text>
                 </View>
-                {exp && exp.tone !== 'neutral' ? <StatusPill label={exp.text} tone={exp.tone} /> : null}
+                {scan ? <StatusPill label={scan.label} tone={scan.tone} /> : exp && exp.tone !== 'neutral' ? <StatusPill label={exp.text} tone={exp.tone} /> : null}
               </TouchableOpacity>
             );
           })}
         </QueryBoundary>
       </ScrollView>
 
-      <FormSheet visible={editing !== null} title={editing === 'new' ? 'New document' : 'Document'} onClose={() => setEditing(null)} onSubmit={save} submitLabel="Save" busy={busy} error={error}>
-        <Select label="Staff member" searchable value={form.staff} onChange={(v) => set('staff', Number(v))} placeholder="Choose a person" options={staffOptions} disabled={!!existing} />
-        <Select label="Type" value={form.type} onChange={(v) => set('type', String(v))} options={DOCUMENT_TYPES} />
-        <Input label="Title" value={form.title} onChangeText={(v) => set('title', v)} placeholder="e.g. CNIC front" />
-        <DateField label="Expiry date (optional)" value={form.expiry} onChange={(v) => set('expiry', v)} />
-        <Input label="Notes (optional)" value={form.notes} onChangeText={(v) => set('notes', v)} />
-        <Text style={styles.sub}>{form.fileUri ? `File chosen: ${form.fileName}` : existing ? 'The saved file stays unless you choose a new one.' : 'No file chosen yet.'}</Text>
+      <FormSheet visible={adding} title="Add document" onClose={() => setAdding(false)} onSubmit={() => setAdding(false)} submitLabel="Close" busy={uploading} error={addError}>
+        <Select label="Staff member" searchable value={person} onChange={(v) => setPerson(Number(v))} placeholder="Choose a person" options={staffOptions} />
+        <Text style={styles.sub}>Then take a photo of the page or choose a file. The details are read from it; check them afterwards.</Text>
         <View style={styles.pair}>
-          <Button title="Take photo" size="sm" variant="outline" style={styles.half} onPress={() => pick(true)} />
-          <Button title="Choose photo" size="sm" variant="outline" style={styles.half} onPress={() => pick(false)} />
+          <Button title="Take photo" size="sm" variant="outline" style={styles.half} onPress={() => upload('camera')} disabled={uploading} />
+          <Button title="Choose photo" size="sm" variant="outline" style={styles.half} onPress={() => upload('gallery')} disabled={uploading} />
         </View>
-        <Button title="Choose PDF or Word file" size="sm" variant="outline" onPress={pickFile} />
-        {existing?.file_url ? <Button title="Open saved file" size="sm" variant="ghost" onPress={() => Linking.openURL(existing.file_url as string)} /> : null}
-        {existing ? <Button title="Delete document" variant="danger" size="sm" onPress={() => remove(existing)} /> : null}
+        <Button title="Choose PDF or Word file" size="sm" variant="outline" onPress={() => upload('file')} disabled={uploading} />
+        {uploading ? <Text style={styles.sub}>Uploading...</Text> : null}
       </FormSheet>
+
+      <DocumentDetailsSheet doc={open} types={STAFF_DOC_TYPES} canEdit onClose={() => setOpen(null)}
+        onSave={async (payload) => { await actions.updateDocument.mutateAsync({ id: open!.id, data: payload }); toast.success('Saved.'); }}
+        onRescan={async () => {
+          const res = await hrApi.rescanDocument(open!.id);
+          const dup = (res.data as { duplicate?: boolean })?.duplicate;
+          toast.success(dup ? 'This was a copy of a document already on file, so it was not kept.' : 'Reading the picture again.');
+          await q.refetch();
+        }}
+        onDelete={() => remove(open!)} />
     </>
   );
 }

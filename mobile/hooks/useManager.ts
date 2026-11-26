@@ -3,6 +3,8 @@ import { listOf } from '../services/academicYear';
 import { notificationsOf, timetableEntriesOf, type CalendarDay } from '../services/manager';
 import type { TimetableEntry } from '../services/teacher';
 import { useScopedPagedQuery, useScopedQuery } from './useScopedQuery';
+import { REFERENCE_STALE_MS } from '../services/queryRules';
+
 
 // Read-only data for the Manager screens.
 
@@ -18,7 +20,7 @@ export function useSubjectsList() {
   return useScopedQuery('subjects', ['list'], async () =>
     listOf<{ id: number; name: string; code?: string; is_elective?: boolean; is_active?: boolean }>(
       (await academicsApi.getSubjects({ page_size: 9999 })).data),
-  { staleTime: 5 * 60_000 });
+  { staleTime: REFERENCE_STALE_MS });
 }
 
 export function useCalendarMonth(year: number, month: number) {

@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { FlatList, View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import { useMyInventory } from '../../hooks/useStaff';
 import { useRefreshControl } from '../../hooks/useRefreshControl';
 import { sortAssignments } from '../../services/financeManager';
@@ -8,6 +8,7 @@ import ErrorState from '../ui/ErrorState';
 import EmptyState from '../ui/EmptyState';
 import StatusPill from '../ui/StatusPill';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
+import AppList from '../ui/AppList';
 
 // Items assigned to the signed-in person, read-only (the API allows staff only this list).
 export default function InventoryAssignmentsScreen() {
@@ -17,7 +18,7 @@ export default function InventoryAssignmentsScreen() {
   if (q.isLoading) return <Skeleton />;
   if (q.isError && !q.data) return <ErrorState onRetry={() => q.refetch()} />;
   return (
-    <FlatList
+    <AppList
       style={styles.container}
       contentContainerStyle={styles.content}
       data={rows}

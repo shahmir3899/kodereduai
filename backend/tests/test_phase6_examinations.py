@@ -2053,38 +2053,8 @@ class TestResultsAndReportCard:
         ranks = [r['rank'] for r in results]
         assert len(ranks) > 0 and ranks[0] == 1, f"ranks={ranks[:5]}"
 
-    def test_f3_class_summary(self, exam_prereqs, api):
-        """F3: Class summary has subject_stats and total_students."""
-        d = exam_prereqs
-        env = self._setup_full_env(d, api)
-        resp = api.get(
-            f'/api/examinations/exams/{env["exam_mid_id"]}/class_summary/',
-            d['tokens']['admin'], d['SID_A'],
-        )
-        assert resp.status_code == 200, f"status={resp.status_code}"
-        data = resp.json()
-        assert 'subject_stats' in data, f"keys={list(data.keys())}"
-        assert 'total_students' in data, f"keys={list(data.keys())}"
-
-    def test_f4_class_summary_stats_fields(self, exam_prereqs, api):
-        """F4: Subject stats have the correct fields."""
-        d = exam_prereqs
-        env = self._setup_full_env(d, api)
-        resp = api.get(
-            f'/api/examinations/exams/{env["exam_mid_id"]}/class_summary/',
-            d['tokens']['admin'], d['SID_A'],
-        )
-        assert resp.status_code == 200
-        data = resp.json()
-        stats = data.get('subject_stats', [])
-        assert len(stats) > 0, "no stats"
-        first = stats[0]
-        required_keys = [
-            'subject_name', 'total_marks', 'students_appeared',
-            'average', 'highest', 'lowest', 'passed', 'failed',
-        ]
-        for key in required_keys:
-            assert key in first, f"missing key: {key}, keys={list(first.keys())}"
+    # F3/F4 tested exams/<id>/class_summary/, which was never registered (the action sat inside
+    # the previous method) and was removed on 2026-11-24 with its unused client calls.
 
     def test_f5_report_card(self, exam_prereqs, api):
         """F5: Report card has student, exams, summary."""

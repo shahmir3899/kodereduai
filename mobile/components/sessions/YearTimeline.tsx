@@ -134,7 +134,7 @@ const styles = StyleSheet.create({
   term: { position: 'absolute', top: 2, bottom: 2, borderRadius: 4, justifyContent: 'center', paddingHorizontal: 6, opacity: 0.85 },
   termSelected: { opacity: 1, borderWidth: 2, borderColor: Colors.text },
   termRinged: { borderWidth: 2, borderColor: Colors.error },
-  termText: { color: '#fff', fontSize: FontSize.xs, fontWeight: '700' },
+  termText: { color: Colors.textInverse, fontSize: FontSize.xs, fontWeight: '700' },
   today: { position: 'absolute', top: 0, bottom: 0, width: 2, backgroundColor: Colors.error },
   handle: { position: 'absolute', top: 0, width: HANDLE, height: HANDLE + 6, alignItems: 'center', justifyContent: 'center' },
   grip: { width: 14, height: HANDLE - 6, borderRadius: 7, backgroundColor: Colors.text, borderWidth: 2, borderColor: Colors.surface },

@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { View, Text, FlatList, Switch, TouchableOpacity, StyleSheet, type RefreshControlProps } from 'react-native';
+import { View, Text, Switch, TouchableOpacity, StyleSheet, type RefreshControlProps } from 'react-native';
 import { usePayrollActions, useSalaryStructures, useStaffOptions } from '../../hooks/usePayroll';
 import { useRefreshControl } from '../../hooks/useRefreshControl';
 import { todayString } from '../../services/attendanceEntry';
@@ -20,6 +20,8 @@ import { useToast } from '../ui/Toast';
 import { confirm } from '../ui/confirm';
 import FormSheet from '../inventory/FormSheet';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
+import AppList from '../ui/AppList';
+import RecordCard from '../ui/RecordCard';
 
 // Port of SalaryManagementPage.jsx for admin and principal: each staff member's basic salary,
 // allowances and deductions. Changing one affects the payslips generated afterwards, not old ones.
@@ -82,7 +84,7 @@ export default function SalaryScreen() {
 
   return (
     <View style={styles.container}>
-      <FlatList
+      <AppList
         contentContainerStyle={styles.content}
         data={shown}
         keyExtractor={(s) => String(s.id)}
@@ -91,16 +93,13 @@ export default function SalaryScreen() {
         ListHeaderComponent={header}
         ListEmptyComponent={<EmptyState title="No salaries" message={search ? 'No staff match your search.' : 'Add a salary for each staff member.'} />}
         renderItem={({ item: s }) => (
-          <TouchableOpacity accessibilityRole="button" style={styles.row} onPress={() => { setForm(salaryToForm(s)); setError(null); setEditing(s); }}>
-            <View style={styles.who}>
-              <Text style={styles.name} numberOfLines={1}>{s.staff_member_name}</Text>
-              <Text style={styles.sub} numberOfLines={1}>{[s.staff_employee_id, s.department_name].filter(Boolean).join('  ·  ') || ' '}</Text>
-            </View>
-            <View style={styles.right}>
-              <Text style={styles.net}>{formatMoney(Number(s.net_salary) || 0)}</Text>
-              <Text style={styles.sub}>net per month</Text>
-            </View>
-          </TouchableOpacity>
+          <RecordCard
+            avatarName={s.staff_member_name}
+            title={s.staff_member_name}
+            subtitle={[s.staff_employee_id, s.department_name].filter(Boolean).join('  ·  ') || undefined}
+            trailing={`${formatMoney(Number(s.net_salary) || 0)} a month`}
+            onPress={() => { setForm(salaryToForm(s)); setError(null); setEditing(s); }}
+          />
         )}
       />
 
@@ -154,11 +153,8 @@ function PairEditor({ title, rows, onChange }: { title: string; rows: PairRow[];
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
   content: { padding: Spacing.lg, paddingBottom: Spacing.xxxl },
-  row: { flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.surface, borderRadius: BorderRadius.md, padding: Spacing.md, marginTop: Spacing.sm, gap: Spacing.md },
-  who: { flex: 1 },
   name: { fontSize: FontSize.md, fontWeight: '600', color: Colors.text },
   sub: { fontSize: FontSize.sm, color: Colors.textSecondary, marginTop: 2 },
-  right: { alignItems: 'flex-end' },
   net: { fontSize: FontSize.md, fontWeight: '700', color: Colors.text },
   preview: { backgroundColor: Colors.surfaceSecondary, borderRadius: BorderRadius.sm, padding: Spacing.sm },
   toggle: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 44 },

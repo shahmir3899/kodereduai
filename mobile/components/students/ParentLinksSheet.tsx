@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, Share, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, ScrollView, Share, Switch, TouchableOpacity, StyleSheet } from 'react-native';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { parentsApi } from '../../services/api';
 import { useScopedQuery } from '../../hooks/useScopedQuery';
@@ -16,7 +16,7 @@ import Select from '../ui/Select';
 import { useToast } from '../ui/Toast';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
 
-const ROOTS = ['parentLinks', 'parentInvites', 'siblingSuggestions', 'students', 'student'];
+const ROOTS = ['parentLinks', 'parentInvites', 'siblingSuggestions', 'students', 'student', 'parentStatus'];
 
 // Admin and principal: who is linked to this student, link an existing parent (the same parent can be
 // linked to every sibling), tick likely siblings, or make an invite code for a parent with no login yet.
@@ -50,6 +50,7 @@ export default function ParentLinksSheet({ visible, onClose, student }: { visibl
 
   const link = useMutation({ mutationFn: (v: { parent: number; students: number[]; relation: string }) => parentsApi.linkChildren(buildLinkPayload(v.parent, v.students, v.relation)) });
   const unlink = useMutation({ mutationFn: (linkId: number) => parentsApi.unlinkChild(linkId) });
+  const update = useMutation({ mutationFn: (v: { linkId: number; data: { relation?: string; is_primary?: boolean } }) => parentsApi.updateLink(v.linkId, v.data) });
   const makeInvite = useMutation({ mutationFn: () => parentsApi.generateInvite(buildInvitePayload(student.id, invRelation, invPhone)) });
   const revoke = useMutation({ mutationFn: (id: number) => parentsApi.revokeInvite(id) });
 
@@ -80,6 +81,17 @@ export default function ParentLinksSheet({ visible, onClose, student }: { visibl
             </View>
             <Button title="Unlink" size="sm" variant="outline" disabled={unlink.isPending}
               onPress={() => run(() => unlink.mutateAsync(x.link.link_id), 'Parent unlinked.', 'Could not unlink.')} />
+          </View>
+        ))}
+        {linked.map((x) => (
+          <View key={`edit-${x.link.link_id}`} style={styles.editLink}>
+            <Select label={`${parentName(x.parent)}: relation`} value={x.link.relation} options={RELATIONS} disabled={update.isPending}
+              onChange={(v) => { if (v !== x.link.relation) run(() => update.mutateAsync({ linkId: x.link.link_id, data: { relation: String(v) } }), 'Relation saved.', 'Could not save the relation.'); }} />
+            <View style={styles.row}>
+              <Text style={[styles.hint, styles.grow]}>Primary contact (gets the school's messages first)</Text>
+              <Switch value={x.link.is_primary} disabled={update.isPending} accessibilityLabel={`${parentName(x.parent)} is the primary contact`}
+                onValueChange={(on) => { void run(() => update.mutateAsync({ linkId: x.link.link_id, data: { is_primary: on } }), on ? 'Primary contact set.' : 'Primary contact removed.', 'Could not save.'); }} />
+            </View>
           </View>
         ))}
 
@@ -130,6 +142,7 @@ const styles = StyleSheet.create({
   hint: { fontSize: FontSize.sm, color: Colors.textSecondary },
   name: { fontSize: FontSize.md, fontWeight: '700', color: Colors.text },
   row: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
+  editLink: { borderTopWidth: 1, borderTopColor: Colors.border, paddingTop: Spacing.sm, gap: Spacing.xs },
   grow: { flex: 1 },
   suggest: { borderWidth: 1, borderColor: Colors.border, borderRadius: BorderRadius.md, padding: Spacing.md, gap: Spacing.xs, backgroundColor: Colors.infoLight },
   tick: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, paddingVertical: Spacing.xs },

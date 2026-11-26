@@ -6,6 +6,7 @@ import { useToast } from '../../components/Toast'
 import { getErrorMessage } from '../../utils/errorUtils'
 import Button from '../../components/ui/Button'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
+import OptionalFeeModal from './OptionalFeeModal'
 
 /**
  * Modal for managing monthly fee categories (add / rename / delete).
@@ -17,12 +18,16 @@ export default function MonthlyCategoryManagerModal({ onClose }) {
 
   const [newName, setNewName] = useState('')
   const [newDesc, setNewDesc] = useState('')
+  // Who pays is chosen when the fee is created, not afterwards behind a Billing button.
+  const [newMode, setNewMode] = useState('ALL')
+  const [newPrice, setNewPrice] = useState('')
   const [editingId, setEditingId] = useState(null)
   const [editName, setEditName] = useState('')
   const [editDesc, setEditDesc] = useState('')
   const [deleteConfirmId, setDeleteConfirmId] = useState(null)
+  const [billingCategory, setBillingCategory] = useState(null)
 
-  useEscapeKey(onClose)
+  useEscapeKey(onClose, !billingCategory)
 
   const { data: catData, isLoading } = useQuery({
     queryKey: ['monthly-categories'],
@@ -39,12 +44,16 @@ export default function MonthlyCategoryManagerModal({ onClose }) {
 
   const createMutation = useMutation({
     mutationFn: (data) => financeApi.createMonthlyCategory(data),
-    onSuccess: () => {
+    onSuccess: (res) => {
       queryClient.invalidateQueries(['monthly-categories'])
       queryClient.invalidateQueries(['monthly-category-suggestions'])
       setNewName('')
       setNewDesc('')
+      setNewPrice('')
       addToast('Category created', 'success')
+      // An optional fee is useless until students are enrolled: open that next.
+      if (res?.data?.billing_mode === 'ENROLLED') setBillingCategory(res.data)
+      setNewMode('ALL')
     },
     onError: (err) => addToast(getErrorMessage(err, 'Failed to create category'), 'error'),
   })
@@ -73,7 +82,12 @@ export default function MonthlyCategoryManagerModal({ onClose }) {
   function handleCreate(e) {
     e.preventDefault()
     if (!newName.trim()) return
-    createMutation.mutate({ name: newName.trim(), description: newDesc.trim() })
+    createMutation.mutate({
+      name: newName.trim(),
+      description: newDesc.trim(),
+      billing_mode: newMode,
+      default_amount: newMode === 'ENROLLED' && newPrice !== '' ? newPrice : null,
+    })
   }
 
   function handleAddSuggestion(suggestion) {
@@ -154,7 +168,16 @@ export default function MonthlyCategoryManagerModal({ onClose }) {
                         <div className="flex-1 min-w-0">
                           <span className="text-sm font-medium text-gray-800">{cat.name}</span>
                           {cat.description && <span className="text-xs text-gray-500 ml-2">{cat.description}</span>}
+                          {cat.billing_mode === 'ENROLLED' && (
+                            <span className="ml-2 rounded-full bg-purple-50 px-2 py-0.5 text-xs text-purple-700">
+                              Enrolled only · {cat.enrolled_count ?? 0}
+                            </span>
+                          )}
                         </div>
+                        <button onClick={() => setBillingCategory(cat)}
+                          className="text-xs text-purple-600 hover:underline">
+                          {cat.billing_mode === 'ENROLLED' ? 'Students' : 'Billing'}
+                        </button>
                         <button onClick={() => startEdit(cat)}
                           className="text-xs text-blue-600 hover:underline">Edit</button>
                         <button onClick={() => setDeleteConfirmId(cat.id)}
@@ -188,6 +211,21 @@ export default function MonthlyCategoryManagerModal({ onClose }) {
                 {createMutation.isPending ? 'Adding…' : '+ Add'}
               </Button>
             </form>
+            <div className="mt-2 flex flex-wrap items-center gap-3 text-sm">
+              <label className="flex items-center gap-2">
+                <span className="text-gray-600">Who pays?</span>
+                <select className="input-field py-1 text-sm" value={newMode} onChange={(e) => setNewMode(e.target.value)} aria-label="Who pays">
+                  <option value="ALL">All students</option>
+                  <option value="ENROLLED">Only enrolled students</option>
+                </select>
+              </label>
+              {newMode === 'ENROLLED' && (
+                <input
+                  type="number" min="0" value={newPrice} onChange={(e) => setNewPrice(e.target.value)}
+                  className="input-field w-36 py-1 text-sm" placeholder="Price (Rs)" aria-label="Price for enrolled students"
+                />
+              )}
+            </div>
           </div>
 
           {/* Suggestions */}
@@ -211,6 +249,14 @@ export default function MonthlyCategoryManagerModal({ onClose }) {
             </div>
           )}
         </div>
+
+        {billingCategory && (
+          <OptionalFeeModal
+            category={categories.find((c) => c.id === billingCategory.id) || billingCategory}
+            kind="MONTHLY"
+            onClose={() => setBillingCategory(null)}
+          />
+        )}
 
         <div className="px-6 py-4 border-t flex justify-end">
           <button onClick={onClose} className="px-5 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 text-sm font-medium">

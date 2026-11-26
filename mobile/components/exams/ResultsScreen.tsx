@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocalSearchParams } from 'expo-router';
 import { parseShortcut } from '../../services/examsAdmin';
-import { View, Text, FlatList, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { examinationsApi } from '../../services/api';
 import { listOf } from '../../services/academicYear';
 import type { ClassOption } from '../../services/attendanceEntry';
@@ -17,13 +17,14 @@ import StatusPill from '../ui/StatusPill';
 import { CommentJobCard, StudentComments } from './CommentTools';
 import { commentRows } from '../../services/examComments';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
+import AppList from '../ui/AppList';
 
 interface Props {
   // Teachers pass their own sections; admins leave it out and get every class.
   classOptions?: ClassOption[];
 }
 
-const RANK_COLOR: Record<number, string> = { 1: '#eab308', 2: '#9ca3af', 3: '#d97706' };
+const RANK_COLOR: Record<number, string> = { 1: Colors.gold, 2: Colors.silver, 3: Colors.bronze };
 
 // Ranked results for one exam, with a pass/fail summary, and the AI report-card comment tools
 // (generate for the exam, then edit or regenerate per student). The server decides who may do
@@ -111,7 +112,7 @@ export default function ResultsScreen({ classOptions }: Props) {
   const failed = !!examId && !resultsQ.data && resultsQ.isError;
 
   return (
-    <FlatList
+    <AppList
       style={styles.container}
       contentContainerStyle={styles.content}
       data={examId && !loading && !failed ? rows : []}
@@ -181,7 +182,7 @@ const styles = StyleSheet.create({
   cards: { flexDirection: 'row', gap: Spacing.sm, marginBottom: Spacing.md },
   stat: { flex: 1, backgroundColor: Colors.surface, borderRadius: BorderRadius.md, padding: Spacing.sm, alignItems: 'center' },
   statValue: { fontSize: FontSize.lg, fontWeight: '700' },
-  statLabel: { fontSize: 10, color: Colors.textSecondary, textAlign: 'center' },
+  statLabel: { fontSize: FontSize.xxs, color: Colors.textSecondary, textAlign: 'center' },
   topper: { backgroundColor: Colors.warningLight, borderRadius: BorderRadius.md, padding: Spacing.md, marginBottom: Spacing.md },
   topperTitle: { fontSize: FontSize.sm, fontWeight: '700', color: Colors.text },
   topperSub: { fontSize: FontSize.xs, color: Colors.textSecondary, marginTop: 2 },

@@ -7,6 +7,7 @@ import { formatMoney } from '../../services/feeCollect';
 import Card from '../ui/Card';
 import StatusPill from '../ui/StatusPill';
 import { Colors, FontSize, Spacing } from '../../constants/colors';
+import { SectionEmpty, SectionLoading } from '../../components/ui/SectionState';
 
 // The newest transfers between accounts, with a link to all of them.
 export function RecentTransfersCard({ transfers, loading, onAll }: { transfers: TransferRow[] | undefined; loading?: boolean; onAll: () => void }) {
@@ -16,7 +17,7 @@ export function RecentTransfersCard({ transfers, loading, onAll }: { transfers: 
         <Text style={styles.title}>Recent transfers</Text>
         <TouchableOpacity accessibilityRole="button" onPress={onAll} hitSlop={8}><Text style={styles.link}>View all</Text></TouchableOpacity>
       </View>
-      {loading ? <Text style={styles.muted}>Loading…</Text> : (transfers ?? []).length === 0 ? <Text style={styles.muted}>No transfers recorded.</Text> : (
+      {loading ? <SectionLoading /> : (transfers ?? []).length === 0 ? <SectionEmpty message="No transfers recorded." /> : (
         (transfers ?? []).map((t) => (
           <View key={t.id} style={styles.line}>
             <View style={styles.body}>

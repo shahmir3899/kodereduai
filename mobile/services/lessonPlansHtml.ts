@@ -1,5 +1,6 @@
 import { plainText } from './lessonPlanObjectives';
 import { esc } from './reportCardHtml';
+import { day } from './dates';
 
 // The lesson plans PDF as an HTML page, drawn on the phone from the same list the screen loads;
 // expo-print turns it into the PDF. Same content and order as the web export
@@ -41,8 +42,7 @@ const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
 
 export function formatLessonDate(iso: string | null | undefined): string {
   if (!iso) return '—';
-  const d = new Date(`${iso}T00:00:00`);
-  return Number.isNaN(d.getTime()) ? String(iso) : d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+  return day(iso) || String(iso);
 }
 
 // Both ends are needed for a document that says which dates it covers, as on the web.

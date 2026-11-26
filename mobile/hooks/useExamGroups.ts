@@ -34,6 +34,10 @@ export function useDateSheetActions(groupId: number) {
       mutationFn: (v: { subjectId: number; date: string | null }) => examinationsApi.updateDateBySubject(groupId, { subject_id: v.subjectId, exam_date: v.date }),
       onSuccess: done,
     }),
+    trimPeriod: useMutation({
+      mutationFn: (patch: { start_date?: string; end_date?: string }) => examinationsApi.updateExamGroup(groupId, patch),
+      onSuccess: done,
+    }),
   };
 }
 

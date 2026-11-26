@@ -5,6 +5,7 @@ import { formatMoney, MONTH_NAMES } from '../../services/feeCollect';
 import Card from '../ui/Card';
 import FeeCollectionBreakdown, { Tile } from './FeeCollectionBreakdown';
 import { Colors, FontSize, Spacing } from '../../constants/colors';
+import { SectionEmpty, SectionLoading } from '../../components/ui/SectionState';
 
 // Port of the web MonthlyFeeCollectionCard: this month's MONTHLY fees as collected, pending and the
 // paid / partial / unpaid student counts, then categories and (several schools) each school.
@@ -17,8 +18,8 @@ export default function MonthlyFeeCollectionCard({ summary, loading, onDetails }
         <Text style={styles.title}>Monthly fees — {month}{summary?.isMulti ? ' · all schools' : ''}</Text>
         {onDetails ? <TouchableOpacity accessibilityRole="button" onPress={onDetails} hitSlop={8}><Text style={styles.link}>Details</Text></TouchableOpacity> : null}
       </View>
-      {loading ? <Text style={styles.muted}>Loading…</Text> : !summary || !hasAnnualFees(summary) ? (
-        <Text style={styles.muted}>No monthly fee records for this month.</Text>
+      {loading ? <SectionLoading /> : !summary || !hasAnnualFees(summary) ? (
+        <SectionEmpty message="No monthly fee records for this month." />
       ) : (
         <>
           <View style={styles.tiles}>

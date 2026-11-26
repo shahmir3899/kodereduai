@@ -41,11 +41,18 @@ export const MONEY_QUERY_ROOTS = [
   'studentDiscounts',
   'feeStructures',
   'feeCategories',
+  // Who takes an optional fee (Robotics, Karate...): decides who gets billed.
+  'feeEnrollments',
   'categories',
   // Admin dashboard bundles the monthly fee numbers with attendance and HR.
   'adminDashboard',
 ];
 const MONEY_ROOT_SET = new Set<unknown>(MONEY_QUERY_ROOTS);
+
+// Picker lists that change a few times a year (years, classes, subjects, terms, account and category
+// names, departments). Set per query, not per root: 'accounts' and 'categories' also hold money
+// numbers. A save still refreshes them at once (money mutations invalidate those roots).
+export const REFERENCE_STALE_MS = 20 * 60 * 1000;
 
 // Retry only failures that may be transient (no response, or a 5xx). A 4xx is the server
 // answering "no" and asking again won't change it.

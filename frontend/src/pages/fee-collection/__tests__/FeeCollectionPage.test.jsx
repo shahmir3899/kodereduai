@@ -63,7 +63,9 @@ describe('FeeFilters — Fee Type Dropdown', () => {
     classList: [],
   }
 
-  it('renders fee type dropdown with all 5 types + All', () => {
+  // Admission, Books and Fine were retired as fee types (the server marks them deprecated), so the
+  // filter offers All, Monthly and Annual; old records of those types still show their labels below.
+  it('renders fee type dropdown with All, Monthly and Annual', () => {
     renderWithProviders(<FeeFilters {...defaultProps} />)
 
     const feeTypeSelect = screen.getByDisplayValue('Monthly')
@@ -75,9 +77,9 @@ describe('FeeFilters — Fee Type Dropdown', () => {
     expect(labels).toContain('All Types')
     expect(labels).toContain('Monthly')
     expect(labels).toContain('Annual')
-    expect(labels).toContain('Admission')
-    expect(labels).toContain('Books')
-    expect(labels).toContain('Fine')
+    expect(labels).not.toContain('Admission')
+    expect(labels).not.toContain('Books')
+    expect(labels).not.toContain('Fine')
   })
 
   it('shows month selector when fee type is MONTHLY', () => {
@@ -125,6 +127,10 @@ describe('FeeFilters — Fee Type Dropdown', () => {
 // FeeTable — Fee Type Display
 // ====================================================================
 
+// The table renders each row twice (phone cards and the desktop table, one hidden by CSS), so
+// labels are matched with getAllBy*.
+const present = (text) => expect(screen.getAllByText(text).length).toBeGreaterThan(0)
+
 describe('FeeTable — Fee Type Display', () => {
   const basePayment = {
     id: 1, student: 1, student_name: 'Ali Hassan', student_roll: '1',
@@ -153,37 +159,37 @@ describe('FeeTable — Fee Type Display', () => {
   it('shows "Monthly Fee" column header for MONTHLY filter', () => {
     renderWithProviders(<FeeTable {...defaultProps} feeTypeFilter="MONTHLY" />)
 
-    expect(screen.getByText('Monthly Fee')).toBeInTheDocument()
+    present('Monthly Fee')
   })
 
   it('shows "Annual Fee" column header for ANNUAL filter', () => {
     renderWithProviders(<FeeTable {...defaultProps} feeTypeFilter="ANNUAL" />)
 
-    expect(screen.getByText('Annual Fee')).toBeInTheDocument()
+    present('Annual Fee')
   })
 
   it('shows "Admission Fee" column header for ADMISSION filter', () => {
     renderWithProviders(<FeeTable {...defaultProps} feeTypeFilter="ADMISSION" />)
 
-    expect(screen.getByText('Admission Fee')).toBeInTheDocument()
+    present('Admission Fee')
   })
 
   it('shows "Books Fee" column header for BOOKS filter', () => {
     renderWithProviders(<FeeTable {...defaultProps} feeTypeFilter="BOOKS" />)
 
-    expect(screen.getByText('Books Fee')).toBeInTheDocument()
+    present('Books Fee')
   })
 
   it('shows "Fine" column header for FINE filter', () => {
     renderWithProviders(<FeeTable {...defaultProps} feeTypeFilter="FINE" />)
 
-    expect(screen.getByText('Fine')).toBeInTheDocument()
+    present('Fine')
   })
 
   it('shows Prev Bal column for MONTHLY type', () => {
     renderWithProviders(<FeeTable {...defaultProps} feeTypeFilter="MONTHLY" />)
 
-    expect(screen.getByText('Prev Bal')).toBeInTheDocument()
+    present('Prev Bal')
   })
 
   it('hides Prev Bal column for ANNUAL type', () => {
@@ -230,7 +236,7 @@ describe('FeeTable — Fee Type Display', () => {
     )
 
     // Badge shows fee_type_display ('Annual') from the desktop table view
-    expect(screen.getByText('Annual')).toBeInTheDocument()
+    present('Annual')
   })
 
   it('shows loading state', () => {

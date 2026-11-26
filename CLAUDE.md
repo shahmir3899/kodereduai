@@ -193,7 +193,7 @@ Read on demand from `docs/` (not preloaded — these are large):
 - `docs/FRONTEND_COMPONENTS.md` — components, contexts, hooks, state management
 - `docs/ATTENDANCE_PIPELINE.md` — complete AI OCR flow with code references
 - `docs/ENV_AND_DEPLOYMENT.md` — env/deploy detail beyond this file
-- `docs/MOBILE.md` — mobile app architecture, commands, release and Play checklist (plan: `MOBILE_PLAN.md`, device script: `MOBILE_QA.md`)
+- `docs/MOBILE.md` — mobile app architecture, commands, release and Play checklist (open work: `MOBILE_WEB_BALANCE_PLAN.md`, device script: `MOBILE_QA.md`)
 - `docs/GUIDE_VIDEO_HOSTING.md` — where guide videos live (media host, file naming, variants, adding videos)
 - `docs/DEMO_SHOWCASE_DATA.md` — demo/showcase seed commands and cleanup rules
 

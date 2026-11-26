@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { View, Text, FlatList, ScrollView, ActivityIndicator, Switch, TouchableOpacity, StyleSheet, type RefreshControlProps } from 'react-native';
+import { View, Text, ScrollView, ActivityIndicator, Switch, TouchableOpacity, StyleSheet, type RefreshControlProps } from 'react-native';
 import { useAuth } from '../../contexts/AuthContext';
 import { useAcademicYear, useAttendanceClassOptions } from '../../hooks/useAcademicYear';
 import { useBooksForClassSubject, useLessonPlanActions, useLessonPlansPaged, useMyStaffRecordId, useTopicObjectives, useClassSubjectTeachers } from '../../hooks/useLessonPlans';
@@ -46,7 +46,11 @@ import { confirm } from '../ui/confirm';
 import FormSheet from '../inventory/FormSheet';
 import ScopeBadge from '../teacher/ScopeBadge';
 import { useTeacherScope } from '../../hooks/useTeacher';
-import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
+import { Colors, FontSize, Spacing, BorderRadius, GlyphSize } from '../../constants/colors';
+import AppList from '../ui/AppList';
+import RecordCard from '../ui/RecordCard';
+import { day } from '../../services/dates';
+import { dayTime } from '../../services/dates';
 
 type Tab = '' | 'DRAFT' | 'PUBLISHED';
 const TABS: Array<{ value: Tab; label: string }> = [{ value: '', label: 'All' }, { value: 'DRAFT', label: 'Drafts' }, { value: 'PUBLISHED', label: 'Published' }];
@@ -254,7 +258,7 @@ export default function LessonPlansScreen({ classOptions }: { classOptions?: Cla
       if (tooMany) return toast.error(tooMany);
       const plans = sortByDate(list);
       const html = renderLessonPlansHtml({
-        plans, from: filters.from, to: filters.to, yearLabel: year?.name ?? null, school: school.data ?? null, generatedAt: new Date().toLocaleString(),
+        plans, from: filters.from, to: filters.to, yearLabel: year?.name ?? null, school: school.data ?? null, generatedAt: dayTime(new Date()),
       });
       await shareReportFile(() => htmlToPdf(html), lessonPlansFileName(plans, filters.from, filters.to), 'pdf');
     } catch (e) {
@@ -339,7 +343,7 @@ export default function LessonPlansScreen({ classOptions }: { classOptions?: Cla
 
   return (
     <View style={styles.container}>
-      <FlatList
+      <AppList
         contentContainerStyle={styles.content}
         data={items}
         keyExtractor={(it) => (it.kind === 'head' ? `h${it.key}` : String(it.plan.id))}
@@ -360,37 +364,36 @@ export default function LessonPlansScreen({ classOptions }: { classOptions?: Cla
             );
           }
           const p = item.plan;
+          const goals = objectiveSummary(p.linked_objectives);
           return (
-          <View style={styles.card}>
-            <TouchableOpacity accessibilityRole={selecting ? 'checkbox' : 'button'} accessibilityState={selecting ? { checked: selected.includes(p.id) } : undefined} style={styles.row}
-              onPress={() => (selecting ? setSelected((s) => toggleId(s, p.id)) : (setForm(planToForm(p, options)), setError(null), setEditing(p)))}>
-              {selecting ? <Text style={styles.check}>{selected.includes(p.id) ? '☑' : '☐'}</Text> : null}
-              <View style={styles.who}>
-                <Text style={styles.name} numberOfLines={1}>{p.title}</Text>
-                <Text style={styles.sub} numberOfLines={1}>{[p.lesson_date, p.class_name, p.subject_name, isSchoolAdminNav ? p.teacher_name : ''].filter(Boolean).join('  ·  ')}</Text>
+            <RecordCard
+              icon="book-outline"
+              title={p.title}
+              subtitle={[p.lesson_date ? day(p.lesson_date) || p.lesson_date : '', p.class_name, p.subject_name, isSchoolAdminNav ? p.teacher_name : ''].filter(Boolean).join('  ·  ') || undefined}
+              status={{ label: p.status === 'PUBLISHED' ? 'Published' : 'Draft', tone: statusTone(p.status) }}
+              trailing={p.ai_generated ? 'AI' : undefined}
+              trailingColor={Colors.info}
+              selected={selecting ? selected.includes(p.id) : undefined}
+              onPress={() => (selecting ? setSelected((s) => toggleId(s, p.id)) : (setForm(planToForm(p, options)), setError(null), setEditing(p)))}
+              footer={<>
                 <ScopeBadge scope={scope.classify(p.class_obj, p.subject)} />
-                {objectiveSummary(p.linked_objectives).shown.map((o) => (
+                {goals.shown.map((o) => (
                   <View key={o.id} style={styles.objective}>
                     <Text style={styles.sub} numberOfLines={1}>{o.statement}</Text>
                     {o.bloom_level ? <StatusPill label={bloomLabel(o.bloom_level)} tone={bloomTone(o.bloom_level)} /> : null}
                   </View>
                 ))}
-                {objectiveSummary(p.linked_objectives).more > 0 ? <Text style={styles.sub}>+{objectiveSummary(p.linked_objectives).more} objectives</Text> : null}
-              </View>
-              <View style={styles.pills}>
-                <StatusPill label={p.status === 'PUBLISHED' ? 'Published' : 'Draft'} tone={statusTone(p.status)} />
-                {p.ai_generated ? <StatusPill label="AI" tone="info" /> : null}
-              </View>
-            </TouchableOpacity>
-            {!selecting ? (
-              <View style={styles.actions}>
-                <Button title="View" size="sm" variant="outline" onPress={() => setViewing(p)} />
-                {canPublish(p) ? (
-                  <Button title="Publish" size="sm" variant="outline" onPress={() => publishOne(p)} loading={actions.publish.isPending && actions.publish.variables === p.id} disabled={actions.publish.isPending} />
+                {goals.more > 0 ? <Text style={styles.sub}>+{goals.more} objectives</Text> : null}
+                {!selecting ? (
+                  <View style={styles.actions}>
+                    <Button title="View" size="sm" variant="outline" onPress={() => setViewing(p)} />
+                    {canPublish(p) ? (
+                      <Button title="Publish" size="sm" variant="outline" onPress={() => publishOne(p)} loading={actions.publish.isPending && actions.publish.variables === p.id} disabled={actions.publish.isPending} />
+                    ) : null}
+                  </View>
                 ) : null}
-              </View>
-            ) : null}
-          </View>
+              </>}
+            />
           );
         }}
       />
@@ -476,23 +479,18 @@ const styles = StyleSheet.create({
   chip: { paddingHorizontal: Spacing.md, paddingVertical: 6, borderRadius: 999, borderWidth: 1, borderColor: Colors.border, backgroundColor: Colors.surface },
   chipOn: { backgroundColor: Colors.primary, borderColor: Colors.primary },
   chipText: { fontSize: FontSize.sm, color: Colors.text },
-  chipTextOn: { color: '#fff' },
+  chipTextOn: { color: Colors.textInverse },
   stats: { fontSize: FontSize.sm, color: Colors.textSecondary, marginVertical: Spacing.xs },
   sectionHead: { marginTop: Spacing.lg },
   viewBlock: { marginTop: Spacing.sm },
   viewHead: { fontSize: FontSize.xs, fontWeight: '700', color: Colors.textSecondary, textTransform: 'uppercase' },
   viewText: { fontSize: FontSize.md, color: Colors.text },
   content: { padding: Spacing.lg, paddingBottom: Spacing.xxxl },
-  card: { backgroundColor: Colors.surface, borderRadius: BorderRadius.md, padding: Spacing.md, marginTop: Spacing.sm, gap: Spacing.sm },
-  row: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md },
   objective: { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs, marginTop: 2 },
-  check: { fontSize: 22, color: Colors.primary },
-  pills: { alignItems: 'flex-end', gap: 4 },
   actions: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm, marginVertical: Spacing.xs },
   filters: { marginVertical: Spacing.sm },
   hint: { color: Colors.textSecondary, fontSize: FontSize.xs, marginVertical: Spacing.xs },
   problem: { color: Colors.error, fontSize: FontSize.sm, marginVertical: Spacing.xs },
-  who: { flex: 1 },
   name: { fontSize: FontSize.md, fontWeight: '600', color: Colors.text, flexShrink: 1 },
   sub: { fontSize: FontSize.sm, color: Colors.textSecondary, marginTop: 2 },
   toggle: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 44, gap: Spacing.md },

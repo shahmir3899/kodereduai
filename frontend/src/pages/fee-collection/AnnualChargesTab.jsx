@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import AnnualChargesCardView from './AnnualChargesCardView'
-import AnnualChargesStudentTab from './AnnualChargesStudentTab'
+import StudentChargesGrid from './StudentChargesGrid'
 
 /**
  * AnnualChargesTab — Wrapper component that displays the card-based view for all classes.
@@ -31,7 +31,7 @@ export default function AnnualChargesTab() {
         </button>
       </div>
 
-      {mode === 'class' ? <AnnualChargesCardView /> : <AnnualChargesStudentTab />}
+      {mode === 'class' ? <AnnualChargesCardView /> : <StudentChargesGrid feeType="ANNUAL" />}
     </div>
   )
 }

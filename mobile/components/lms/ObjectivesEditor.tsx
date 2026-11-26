@@ -7,7 +7,7 @@ import Input from '../ui/Input';
 import Select from '../ui/Select';
 import Button from '../ui/Button';
 import StatusPill from '../ui/StatusPill';
-import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
+import { Colors, FontSize, Spacing, BorderRadius, GlyphSize } from '../../constants/colors';
 
 interface Props {
   rows: ObjectiveRow[];
@@ -66,7 +66,7 @@ const styles = StyleSheet.create({
   line: { flexDirection: 'row', alignItems: 'flex-end', gap: Spacing.sm },
   bloom: { flex: 1 },
   remove: { minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center', borderRadius: BorderRadius.md, borderWidth: 1, borderColor: Colors.border },
-  removeText: { fontSize: 22, color: Colors.textSecondary },
+  removeText: { fontSize: GlyphSize.md, color: Colors.textSecondary },
   hint: { fontSize: FontSize.xs, color: Colors.textSecondary, marginTop: 2 },
   suggest: { marginTop: Spacing.md, gap: Spacing.xs },
   chip: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: Spacing.sm, minHeight: 44, backgroundColor: Colors.infoLight, borderRadius: BorderRadius.md, padding: Spacing.sm },

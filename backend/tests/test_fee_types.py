@@ -863,6 +863,54 @@ class TestBulkFeeStructure:
         assert other_payment.amount_due == Decimal('15000.00')
 
 
+class TestMonthlyStudentOverrideCategory:
+    """bulk_set_students MONTHLY overrides are scoped to one monthly fee (category)."""
+
+    def _cats(self, seed_data, *names):
+        from finance.models import MonthlyFeeCategory
+        return [MonthlyFeeCategory.objects.create(school=seed_data['school_a'], name=f"{seed_data['prefix']}{n}") for n in names]
+
+    def _post(self, seed_data, api, rows):
+        return api.post('/api/finance/fee-structures/bulk_set_students/', {
+            'class_id': seed_data['classes'][0].id, 'fee_type': 'MONTHLY',
+            'effective_from': str(date.today()), 'students': rows,
+        }, seed_data['tokens']['admin'], seed_data['SID_A'])
+
+    def test_several_categories_require_one(self, seed_data, api):
+        self._cats(seed_data, 'Tuition', 'Koder Kids')
+        resp = self._post(seed_data, api, [{'student_id': seed_data['students'][0].id, 'monthly_amount': '3000.00'}])
+        assert resp.status_code == 400
+
+    def test_single_category_is_filled_in(self, seed_data, api):
+        from finance.models import FeeStructure
+        (tuition,) = self._cats(seed_data, 'Tuition')
+        student = seed_data['students'][0]
+        resp = self._post(seed_data, api, [{'student_id': student.id, 'monthly_amount': '3000.00'}])
+        assert resp.status_code in (200, 201), resp.content[:300]
+        fs = FeeStructure.objects.get(student=student, fee_type='MONTHLY', is_active=True)
+        assert fs.monthly_category_id == tuition.id
+
+    def test_saving_one_category_keeps_the_others(self, seed_data, api):
+        from finance.models import FeeStructure
+        tuition, kids = self._cats(seed_data, 'Tuition', 'Koder Kids')
+        sid = seed_data['students'][0].id
+        assert self._post(seed_data, api, [
+            {'student_id': sid, 'monthly_amount': '3000.00', 'monthly_category': tuition.id},
+            {'student_id': sid, 'monthly_amount': '800.00', 'monthly_category': kids.id},
+        ]).status_code in (200, 201)
+        assert self._post(seed_data, api, [
+            {'student_id': sid, 'monthly_amount': '3500.00', 'monthly_category': tuition.id},
+        ]).status_code in (200, 201)
+        active = {fs.monthly_category_id: fs.monthly_amount for fs in FeeStructure.objects.filter(student_id=sid, fee_type='MONTHLY', is_active=True)}
+        assert active == {tuition.id: Decimal('3500.00'), kids.id: Decimal('800.00')}
+
+    def test_other_school_category_refused(self, seed_data, api):
+        from finance.models import MonthlyFeeCategory
+        foreign = MonthlyFeeCategory.objects.create(school=seed_data['school_b'], name=f"{seed_data['prefix']}Foreign")
+        resp = self._post(seed_data, api, [{'student_id': seed_data['students'][0].id, 'monthly_amount': '3000.00', 'monthly_category': foreign.id}])
+        assert resp.status_code == 400
+
+
 class TestFeeGenerationConflicts:
     """Conflict-aware regeneration for monthly and annual fee records."""
 

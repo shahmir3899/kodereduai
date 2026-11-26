@@ -19,7 +19,7 @@ import StatusPill from '../ui/StatusPill';
 import { useToast } from '../ui/Toast';
 import { confirm } from '../ui/confirm';
 import BulkDeleteSheet from './BulkDeleteSheet';
-import { Colors, FontSize, Spacing } from '../../constants/colors';
+import { Colors, FontSize, Spacing, GlyphSize } from '../../constants/colors';
 
 // Exam groups of the active year: edit the date sheet and publish the schedule or the results, for the
 // whole group or one class. Port of the Exams page on the web. Admin and principal only.
@@ -173,7 +173,7 @@ const styles = StyleSheet.create({
   content: { padding: Spacing.lg, paddingBottom: Spacing.xxxl, gap: Spacing.md },
   card: { gap: Spacing.sm },
   pickRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, minHeight: 44 },
-  tick: { fontSize: 22, color: Colors.primary },
+  tick: { fontSize: GlyphSize.md, color: Colors.primary },
   pickText: { fontSize: FontSize.sm, color: Colors.text },
   name: { fontSize: FontSize.lg, fontWeight: '700', color: Colors.text },
   sub: { fontSize: FontSize.sm, color: Colors.textSecondary },

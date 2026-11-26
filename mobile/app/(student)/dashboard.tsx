@@ -12,10 +12,14 @@ import { formatSlotTime } from '../../services/teacher';
 import Card from '../../components/ui/Card';
 import Skeleton from '../../components/ui/Skeleton';
 import ErrorState from '../../components/ui/ErrorState';
-import SchoolSwitcher from '../../components/nav/SchoolSwitcher';
+import HomeHero, { HomeShell } from '../../components/dashboard/HomeHero';
+import type { Tile } from '../../components/dashboard/StatTiles';
 import RecentNotifications from '../../components/dashboard/RecentNotifications';
 import StatusPill from '../../components/ui/StatusPill';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
+import { SectionEmpty } from '../../components/ui/SectionState';
+import TileGrid from '../../components/ui/TileGrid';
+import type { IconName } from '../../components/ui/Icon';
 
 const TONE = { success: Colors.success, warning: Colors.warning, error: Colors.error } as const;
 const PCT_COLOR = { success: Colors.success, info: Colors.info, warning: Colors.warning, error: Colors.error, neutral: Colors.textSecondary } as const;
@@ -34,54 +38,44 @@ export default function StudentDashboard() {
   const go = (route?: string, params?: Record<string, string | number>) =>
     route && router.push((params ? { pathname: route, params } : route) as Href);
 
-  if (query.isLoading) return <Skeleton />;
-  if (query.isError && !query.data) return <ErrorState error={query.error} onRetry={() => query.refetch()} />;
+  const shellName = [user?.first_name, user?.last_name].filter(Boolean).join(' ') || user?.username || '';
+  if (query.isLoading) return <HomeShell name={shellName}><Skeleton /></HomeShell>;
+  if (query.isError && !query.data) return <HomeShell name={shellName}><ErrorState error={query.error} onRetry={() => query.refetch()} /></HomeShell>;
   const d = query.data!;
   const pending = Number(d.fees.outstanding) || 0;
   const name = d.student?.name || [user?.first_name, user?.last_name].filter(Boolean).join(' ') || user?.username;
+  // The four figures that used to be tiles, now in the Home banner card.
+  const attTone = { success: 'good', warning: 'warn', error: 'bad' } as const;
+  const examTone = { success: 'good', info: 'good', warning: 'warn', error: 'bad', neutral: undefined } as const;
+  const heroStats: Tile[] = [
+    { label: isOffDay ? offDayNote(dayStatus.data?.[today]) : 'Attendance', value: attendanceTile(d.attendance, isOffDay),
+      tone: d.attendance.total_days > 0 && !isOffDay ? attTone[rateTone(d.attendance.rate)] : undefined, route: routeFor('student', '/student/attendance') },
+    { label: 'Fees pending', value: formatMoney(pending), tone: pending > 0 ? 'bad' : 'good', route: routeFor('student', '/student/fees') },
+    { label: 'Tasks due soon', value: d.upcoming_assignments.length, route: routeFor('student', '/student/assignments') },
+    { label: 'Last exam', value: lastExam != null ? `${Math.round(lastExam)}%` : 'N/A', tone: examTone[pctTone(lastExam)], route: routeFor('student', '/student/results') },
+  ];
 
   const quick = [
-    { label: 'Attendance', icon: '✅', route: routeFor('student', '/student/attendance') },
-    { label: 'Results', icon: '📊', route: routeFor('student', '/student/results') },
-    { label: 'Tasks', icon: '📝', route: routeFor('student', '/student/assignments') },
-    { label: 'Timetable', icon: '⏰', route: routeFor('student', '/student/timetable') },
-    { label: 'Exams', icon: '🗓️', route: routeFor('student', '/student/exam-schedule') },
-    { label: 'Fees', icon: '💰', route: routeFor('student', '/student/fees') },
-    { label: 'Library', icon: '📚', route: routeFor('student', '/student/library') },
-    { label: 'Transport', icon: '🚌', route: routeFor('student', '/student/transport') },
-    { label: 'Study helper', icon: '🤖', route: routeFor('student', '/student/study-helper') },
+    { label: 'Attendance', icon: 'checkbox-outline' as IconName, route: routeFor('student', '/student/attendance') },
+    { label: 'Results', icon: 'bar-chart-outline' as IconName, route: routeFor('student', '/student/results') },
+    { label: 'Tasks', icon: 'checkmark-done-outline' as IconName, route: routeFor('student', '/student/assignments') },
+    { label: 'Timetable', icon: 'time-outline' as IconName, route: routeFor('student', '/student/timetable') },
+    { label: 'Exams', icon: 'calendar-number-outline' as IconName, route: routeFor('student', '/student/exam-schedule') },
+    { label: 'Fees', icon: 'wallet-outline' as IconName, route: routeFor('student', '/student/fees') },
+    { label: 'Library', icon: 'library-outline' as IconName, route: routeFor('student', '/student/library') },
+    { label: 'Transport', icon: 'bus-outline' as IconName, route: routeFor('student', '/student/transport') },
+    { label: 'Study helper', icon: 'sparkles-outline' as IconName, route: routeFor('student', '/student/study-helper') },
   ];
   const recent = (results.data ?? []).slice(0, 4);
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content} refreshControl={refreshControl}>
-      <Text style={styles.greeting}>Hello, {name}</Text>
-      <Text style={styles.sub}>{[d.student?.class_name, d.student?.roll_number ? `Roll #${d.student.roll_number}` : ''].filter(Boolean).join('  ·  ')}</Text>
-      <SchoolSwitcher />
-
-      <View style={styles.tiles}>
-        <TouchableOpacity accessibilityRole="button" style={styles.tile} onPress={() => go(routeFor('student', '/student/attendance'))}>
-          <Text style={[styles.tileValue, { color: d.attendance.total_days > 0 && !isOffDay ? TONE[rateTone(d.attendance.rate)] : Colors.textSecondary }]}>
-            {attendanceTile(d.attendance, isOffDay)}
-          </Text>
-          <Text style={styles.tileLabel}>{isOffDay ? offDayNote(dayStatus.data?.[today]) : 'Attendance'}</Text>
-        </TouchableOpacity>
-        <TouchableOpacity accessibilityRole="button" style={styles.tile} onPress={() => go(routeFor('student', '/student/fees'))}>
-          <Text style={[styles.tileValue, { color: pending > 0 ? Colors.error : Colors.success }]}>{formatMoney(pending)}</Text>
-          <Text style={styles.tileLabel}>Fees pending</Text>
-        </TouchableOpacity>
-        <TouchableOpacity accessibilityRole="button" style={styles.tile} onPress={() => go(routeFor('student', '/student/assignments'))}>
-          <Text style={styles.tileValue}>{d.upcoming_assignments.length}</Text>
-          <Text style={styles.tileLabel}>Tasks due soon</Text>
-        </TouchableOpacity>
-        <TouchableOpacity accessibilityRole="button" style={styles.tile} onPress={() => go(routeFor('student', '/student/results'))}>
-          <Text style={[styles.tileValue, { color: PCT_COLOR[pctTone(lastExam)] }]}>{lastExam != null ? `${Math.round(lastExam)}%` : 'N/A'}</Text>
-          <Text style={styles.tileLabel}>Last exam</Text>
-        </TouchableOpacity>
-      </View>
+      <HomeHero name={name ?? ''} onPress={(r) => go(r)}
+        subtitle={[d.student?.class_name, d.student?.roll_number ? `Roll #${d.student.roll_number}` : ''].filter(Boolean).join('  ·  ') || undefined}
+        stats={heroStats} />
 
       <Text style={styles.section}>Today&apos;s classes</Text>
-      {d.today_timetable.length === 0 ? <Text style={styles.muted}>No classes today.</Text> : d.today_timetable.map((p, i) => {
+      {d.today_timetable.length === 0 ? <SectionEmpty message="No classes today." /> : d.today_timetable.map((p, i) => {
         const current = !isOffDay && isCurrentPeriod(p.start_time, p.end_time, nowHm);
         return (
         <Card key={`${p.slot}-${i}`} style={current ? { ...styles.period, ...styles.periodNow } : styles.period}>
@@ -137,14 +131,7 @@ export default function StudentDashboard() {
       ) : null}
 
       <Text style={styles.section}>Quick links</Text>
-      <View style={styles.actions}>
-        {quick.map((a) => (
-          <TouchableOpacity accessibilityRole="button" key={a.label} style={[styles.quick, !a.route && styles.quickOff]} disabled={!a.route} onPress={() => go(a.route)}>
-            <Text style={styles.quickIcon}>{a.icon}</Text>
-            <Text style={styles.quickLabel}>{a.label}</Text>
-          </TouchableOpacity>
-        ))}
-      </View>
+      <TileGrid items={quick.map((a) => ({ label: a.label, icon: a.icon, onPress: a.route ? () => go(a.route) : undefined }))} />
 
       <RecentNotifications enabled={isModuleEnabled('notifications')} onSeeAll={() => go(routeFor('student', '/notifications'))} />
     </ScrollView>
@@ -154,12 +141,7 @@ export default function StudentDashboard() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
   content: { padding: Spacing.lg, paddingBottom: Spacing.xxxl },
-  greeting: { fontSize: FontSize.xl, fontWeight: '700', color: Colors.text },
   sub: { fontSize: FontSize.sm, color: Colors.textSecondary },
-  tiles: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.md, marginTop: Spacing.lg },
-  tile: { width: '47%', backgroundColor: Colors.surface, borderRadius: BorderRadius.md, padding: Spacing.md },
-  tileValue: { fontSize: FontSize.xl, fontWeight: '700' },
-  tileLabel: { fontSize: FontSize.sm, color: Colors.textSecondary, marginTop: 2 },
   section: { fontSize: FontSize.lg, fontWeight: '600', color: Colors.text, marginTop: Spacing.xl, marginBottom: Spacing.md },
   muted: { fontSize: FontSize.sm, color: Colors.textSecondary },
   period: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md, padding: Spacing.md, marginBottom: Spacing.sm },
@@ -173,9 +155,4 @@ const styles = StyleSheet.create({
   link: { fontSize: FontSize.sm, color: Colors.primary, fontWeight: '600' },
   pct: { fontSize: FontSize.lg, fontWeight: '700' },
   arrow: { fontSize: FontSize.xl, color: Colors.textTertiary },
-  actions: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.md },
-  quick: { width: '22%', minWidth: 72, alignItems: 'center', backgroundColor: Colors.surface, borderRadius: BorderRadius.md, paddingVertical: Spacing.md },
-  quickOff: { opacity: 0.4 },
-  quickIcon: { fontSize: 22 },
-  quickLabel: { fontSize: FontSize.xs, color: Colors.text, marginTop: 4, textAlign: 'center' },
 });

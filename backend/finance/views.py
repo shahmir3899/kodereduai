@@ -23,18 +23,20 @@ from rest_framework.permissions import IsAuthenticated
 from django.http import FileResponse
 
 from core.permissions import IsSchoolAdmin, IsSchoolAdminOrFinanceManager, FinanceRoleAccessPermission, HasSchoolAccess, get_effective_role, ModuleAccessMixin, ADMIN_ROLES, _is_data_restricted_user, get_teacher_class_scope, get_teacher_master_only_class_scope, get_teacher_session_class_scope, _get_session_class_student_ids
-from core.mixins import TenantQuerySetMixin, ensure_tenant_schools, ensure_tenant_school_id
+from core.mixins import TenantQuerySetMixin, ensure_tenant_schools, ensure_tenant_school_id, ListETagMixin
 from core.class_scope import resolve_class_scope
 from students.models import Student, Class
 from students.status_groups import ENROLLED_STATUSES
 from django.utils import timezone
+from django.utils.dateparse import parse_date
 from .models import (
-    KuickpayBill, KuickpayPaymentAllocation,
+    KuickpayBill, KuickpayPaymentAllocation, KuickpaySchoolMapping,
     Account, Transfer, FeeStructure, FeePayment, Expense, OtherIncome,
     ExpenseCategory, IncomeCategory, AnnualFeeCategory, MonthlyFeeCategory,
     DEFAULT_EXPENSE_CATEGORIES, DEFAULT_INCOME_CATEGORIES, SUGGESTED_ANNUAL_CATEGORIES, SUGGESTED_MONTHLY_CATEGORIES,
     FinanceAIChatMessage, MonthlyClosing, AccountSnapshot,
     Discount, Scholarship, StudentDiscount, PaymentGatewayConfig, OnlinePayment,
+    StudentFeeEnrollment,
     resolve_fee_amount,
 )
 from .serializers import (
@@ -49,7 +51,7 @@ from .serializers import (
     FinanceAIChatMessageSerializer, FinanceAIChatInputSerializer,
     CloseMonthSerializer, MonthlyClosingSerializer,
     DiscountSerializer, ScholarshipSerializer,
-    StudentDiscountSerializer, StudentDiscountCreateSerializer,
+    StudentDiscountSerializer, StudentDiscountCreateSerializer, StudentFeeEnrollmentSerializer,
     PaymentGatewayConfigSerializer,
     OnlinePaymentSerializer, OnlinePaymentInitiateSerializer,
     FeeBreakdownSerializer,
@@ -158,6 +160,30 @@ def _get_previous_month_balance(school_id, student_id, month, year, monthly_cate
     missing intervening month does not lose it. One implementation, shared with bulk generation."""
     from . import ledger
     return ledger.carry_in_balance(school_id, student_id, monthly_category_id, year, month, lock=lock)
+
+
+def _scope_student_override_categories(school_id, fee_type, students_data):
+    """Every student monthly override must name its category once the school has categories. An
+    uncategorised one used to switch off all of the student's per-category overrides and was then
+    charged as the fallback for every monthly fee (Fee Setup 'By Student', 2026-11-26). With exactly
+    one category the choice is unambiguous, so older app builds keep working; with several we refuse.
+    Fills item['monthly_category'] in place; returns an error message or None."""
+    model = AnnualFeeCategory if fee_type == 'ANNUAL' else MonthlyFeeCategory
+    key = 'annual_category' if fee_type == 'ANNUAL' else 'monthly_category'
+    given = {item.get(key) for item in students_data if item.get(key)}
+    if given:
+        known = set(model.objects.filter(school_id=school_id, id__in=given).values_list('id', flat=True))
+        if given - known:
+            return 'One or more fee categories do not belong to this school.'
+    if fee_type != 'MONTHLY' or all(item.get(key) for item in students_data):
+        return None
+    active = list(model.objects.filter(school_id=school_id, is_active=True).values_list('id', flat=True)[:2])
+    if len(active) > 1:
+        return 'Choose which monthly fee (category) these student amounts are for.'
+    if active:
+        for item in students_data:
+            item[key] = item.get(key) or active[0]
+    return None
 
 
 class FeeStructureViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet):
@@ -337,6 +363,10 @@ class FeeStructureViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Model
             len(students_data),
             effective_from,
         )
+
+        category_error = _scope_student_override_categories(school_id, fee_type, students_data)
+        if category_error:
+            return Response({'detail': category_error}, status=400)
 
         created_count = 0
 
@@ -666,9 +696,27 @@ class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
             annual_category_id=annual_category_id,
             monthly_category_id=monthly_category_id,
             academic_year_id=academic_year_id,
+            year=year,
+            month=month,
         )
         if base_amount is None:
+            from . import optional_fees
+            category = optional_fees.category_for(fee_type, annual_category_id, monthly_category_id)
+            if optional_fees.is_enrolled_only(category):
+                return Response({'detail': f'{student.name} is not enrolled in {category.name} for this period, or it has no price.'}, status=400)
             return Response({'detail': 'No fee structure found for the selected student/type/category.'}, status=400)
+
+        # Discounts covering this fee come off the charge, as in bulk generation.
+        from . import fee_discounts, optional_fees
+        discount_category = optional_fees.category_for(fee_type, annual_category_id, monthly_category_id)
+        first_day, last_day = optional_fees.billing_period(fee_type, year, month or None, academic_year_id)
+        discount_amount, discount_detail = fee_discounts.apply(
+            base_amount,
+            fee_discounts.rules_for(
+                school_id, [student.id], discount_category, first_day, last_day, academic_year_id,
+            ).get(student.id),
+        )
+        base_amount = base_amount - discount_amount
 
         previous_balance = Decimal('0')
         base_monthly_fee = None
@@ -739,6 +787,8 @@ class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
                     }, status=409)
 
                 existing_payment.amount_due = amount_due
+                existing_payment.discount_amount = discount_amount
+                existing_payment.discount_detail = discount_detail
                 if fee_type == 'MONTHLY':
                     existing_payment.previous_balance = previous_balance
                     existing_payment.base_monthly_fee = base_monthly_fee
@@ -777,6 +827,8 @@ class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
             'monthly_category_id': monthly_category_id,
             'academic_year_id': academic_year_id,
             'amount_due': amount_due,
+            'discount_amount': discount_amount,
+            'discount_detail': discount_detail,
             'amount_paid': amount_paid,
             'notes': data.get('notes', ''),
             'collected_by': request.user,
@@ -1668,6 +1720,149 @@ class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
             'grand': grand,
         })
 
+    @action(detail=False, methods=['get'], url_path='vouchers')
+    def vouchers(self, request):
+        """A4 PDF of fee vouchers (School copy | Student copy, 3 students per page).
+
+        Students are those with a MONTHLY row in ?month&year inside this viewset's scope (school,
+        class/section filters, teacher sections), optionally narrowed by ?student_ids=1,2. Totals
+        come from finance.vouchers, the same rules as the student's pending balance.
+        """
+        from . import vouchers as voucher_mod
+
+        try:
+            month = int(request.query_params.get('month'))
+            year = int(request.query_params.get('year'))
+        except (TypeError, ValueError):
+            return Response({'detail': 'month and year are required.'}, status=400)
+        if not 1 <= month <= 12:
+            return Response({'detail': 'month must be 1-12.'}, status=400)
+
+        school_id = _resolve_school_id(request)
+        if not school_id:
+            return Response({'detail': 'No school selected.'}, status=400)
+        from schools.models import School
+        school = School.objects.get(id=school_id)
+
+        scope = self.get_queryset().filter(fee_type='MONTHLY', month=month, year=year)
+        raw_ids = request.query_params.get('student_ids')
+        if raw_ids:
+            try:
+                wanted = [int(x) for x in raw_ids.split(',') if x.strip()]
+            except ValueError:
+                return Response({'detail': 'student_ids must be comma-separated numbers.'}, status=400)
+            scope = scope.filter(student_id__in=wanted)
+        student_ids = list(scope.values_list('student_id', flat=True).distinct())
+
+        only_unpaid = request.query_params.get('only_unpaid', '1').lower() not in ('0', 'false')
+        due_date = None
+        if request.query_params.get('due_date'):
+            due_date = parse_date(request.query_params['due_date'])
+            if not due_date:
+                return Response({'detail': 'due_date must be YYYY-MM-DD.'}, status=400)
+        vouchers = voucher_mod.build_vouchers(
+            school, student_ids, year, month, only_unpaid=only_unpaid, due_date=due_date,
+        )
+        if request.query_params.get('format') == 'json':
+            # In-app preview: the first few vouchers as data, drawn by the web page.
+            from .models import Account
+            bank = voucher_mod.voucher_bank_account(school)
+            return Response({
+                'count': len(vouchers),
+                'school_name': school.name,
+                'note': ((school.finance_config or {}).get('voucher_note') or ''),
+                'bank': {f: getattr(bank, f) for f in Account.BANK_DETAIL_FIELDS} if bank else None,
+                'vouchers': [voucher_mod.voucher_json(v) for v in vouchers[:3]],
+            })
+        pdf = voucher_mod.render_vouchers_pdf(school, vouchers)
+        filename = f"fee-vouchers-{year}-{month:02d}.pdf"
+        response = FileResponse(BytesIO(pdf), content_type='application/pdf')
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        response['X-Voucher-Count'] = str(len(vouchers))
+        return response
+
+
+class FeeVoucherSettingsView(ModuleAccessMixin, APIView):
+    """GET/PUT the school's voucher settings (School.finance_config).
+
+    Anyone with finance read access can read; only admins change it, matching
+    FinanceRoleAccessPermission (a finance MANAGER is read-only). The due day is also copied to
+    the Kuickpay mapping so the bank and the paper voucher never show different due dates.
+    """
+    required_module = 'finance'
+    permission_classes = [IsAuthenticated, FinanceRoleAccessPermission, HasSchoolAccess]
+
+    def _payload(self, school):
+        from .vouchers import due_day_for
+        from schools.models import default_finance_config
+        config = {**default_finance_config(), **(school.finance_config or {})}
+        config['due_day'] = due_day_for(school)
+        banks = Account.objects.filter(
+            school_id=school.id, is_active=True, account_type=Account.AccountType.BANK,
+        ).order_by('name')
+        return {
+            **config,
+            'bank_accounts': [
+                {'id': a.id, 'name': a.name, 'bank_name': a.bank_name, 'account_title': a.account_title,
+                 'account_number': a.account_number, 'iban': a.iban}
+                for a in banks
+            ],
+            'kuickpay_enabled': KuickpaySchoolMapping.objects.filter(school_id=school.id, is_enabled=True).exists(),
+        }
+
+    def _school(self, request):
+        from schools.models import School
+        school_id = _resolve_school_id(request)
+        return School.objects.filter(id=school_id).first() if school_id else None
+
+    def get(self, request):
+        school = self._school(request)
+        if not school:
+            return Response({'detail': 'No school selected.'}, status=400)
+        return Response(self._payload(school))
+
+    def put(self, request):
+        school = self._school(request)
+        if not school:
+            return Response({'detail': 'No school selected.'}, status=400)
+        config = dict(school.finance_config or {})
+        data = request.data
+
+        if 'due_day' in data:
+            try:
+                due_day = int(data['due_day'])
+            except (TypeError, ValueError):
+                return Response({'detail': 'Due day must be a number.'}, status=400)
+            if not 1 <= due_day <= 28:
+                return Response({'detail': 'Due day must be between 1 and 28.'}, status=400)
+            config['due_day'] = due_day
+
+        if 'voucher_bank_account_id' in data:
+            account_id = data['voucher_bank_account_id'] or None
+            if account_id is not None:
+                ok = Account.objects.filter(
+                    id=account_id, school_id=school.id, is_active=True, account_type=Account.AccountType.BANK,
+                ).exists()
+                if not ok:
+                    return Response({'detail': 'Pick an active bank account of this school.'}, status=400)
+                account_id = int(account_id)
+            config['voucher_bank_account_id'] = account_id
+
+        if 'voucher_note' in data:
+            voucher_note = str(data['voucher_note'] or '').strip()
+            if len(voucher_note) > 150:
+                return Response({'detail': 'Note must be 150 characters or fewer.'}, status=400)
+            config['voucher_note'] = voucher_note
+
+        with transaction.atomic():
+            school.finance_config = config
+            school.save(update_fields=['finance_config', 'updated_at'])
+            if 'due_day' in data:
+                KuickpaySchoolMapping.objects.filter(school_id=school.id).update(
+                    due_day=config['due_day'], updated_at=timezone.now(),
+                )
+        return Response(self._payload(school))
+
 
 def _seed_expense_categories(school_id):
     """Create default expense categories for a school if none exist."""
@@ -1685,7 +1880,7 @@ def _seed_income_categories(school_id):
         )
 
 
-class ExpenseCategoryViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet):
+class ExpenseCategoryViewSet(ListETagMixin, ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet):
     """CRUD for school expense categories. Auto-seeds defaults on first access."""
     required_module = 'finance'
     queryset = ExpenseCategory.objects.all()
@@ -1722,7 +1917,7 @@ class ExpenseCategoryViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Mo
         serializer.save()
 
 
-class IncomeCategoryViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet):
+class IncomeCategoryViewSet(ListETagMixin, ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet):
     """CRUD for school income categories. Auto-seeds defaults on first access."""
     required_module = 'finance'
     queryset = IncomeCategory.objects.all()
@@ -1847,6 +2042,154 @@ class MonthlyFeeCategoryViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets
         )
         available = [s for s in SUGGESTED_MONTHLY_CATEGORIES if s['name'] not in existing_names]
         return Response({'suggestions': available})
+
+
+class StudentFeeEnrollmentViewSet(ModuleAccessMixin, viewsets.ModelViewSet):
+    """Who takes an optional (enrolled-only) fee such as Robotics or Karate, and from when.
+
+    Filters: ?monthly_category / ?annual_category / ?student, ?status=active (default) | ended | all.
+    Admins write; a finance manager reads (FinanceRoleAccessPermission). Ending or deleting an
+    enrollment never changes bills already generated.
+    """
+    required_module = 'finance'
+    serializer_class = StudentFeeEnrollmentSerializer
+    permission_classes = [IsAuthenticated, FinanceRoleAccessPermission, HasSchoolAccess]
+    pagination_class = None
+
+    def get_queryset(self):
+        school_id = _resolve_school_id(self.request)
+        if not school_id:
+            return StudentFeeEnrollment.objects.none()
+        qs = StudentFeeEnrollment.objects.filter(school_id=school_id).select_related(
+            'student', 'monthly_category', 'annual_category',
+        )
+        params = self.request.query_params
+        for field in ('monthly_category', 'annual_category', 'student'):
+            if params.get(field):
+                qs = qs.filter(**{f'{field}_id': params[field]})
+        if self.action == 'list':
+            status_filter = params.get('status', 'active')
+            today = timezone.localdate()
+            current = Q(end_date__isnull=True) | Q(end_date__gte=today)
+            if status_filter == 'active':
+                qs = qs.filter(current)
+            elif status_filter == 'ended':
+                qs = qs.exclude(current)
+        return qs.order_by('student__name', '-start_date')
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        if self.action == 'list':
+            from academic_sessions.roster import current_placements_for
+            school_id = _resolve_school_id(self.request)
+            ids = list(self.get_queryset().values_list('student_id', flat=True))
+            context['placements'] = current_placements_for(school_id, ids) if school_id else {}
+        return context
+
+    def _category(self, school_id, monthly_id=None, annual_id=None):
+        """The enrolled-only category named in a request, or raise ValidationError."""
+        from rest_framework.exceptions import ValidationError
+        if bool(monthly_id) == bool(annual_id):
+            raise ValidationError({'detail': 'Pick exactly one fee category.'})
+        model = MonthlyFeeCategory if monthly_id else AnnualFeeCategory
+        category = model.objects.filter(id=monthly_id or annual_id, school_id=school_id).first()
+        if not category:
+            raise ValidationError({'detail': 'Fee category not found in this school.'})
+        if category.billing_mode != 'ENROLLED':
+            raise ValidationError({'detail': f'{category.name} bills every student. Switch it to "Enrolled students only" first.'})
+        return category
+
+    def perform_create(self, serializer):
+        from rest_framework.exceptions import ValidationError
+        from . import optional_fees
+        school_id = _resolve_school_id(self.request)
+        data = serializer.validated_data
+        category = self._category(
+            school_id,
+            getattr(data.get('monthly_category'), 'id', None),
+            getattr(data.get('annual_category'), 'id', None),
+        )
+        student = data['student']
+        if student.school_id != school_id:
+            raise ValidationError({'student': 'Student not found in this school.'})
+        if optional_fees.overlapping_enrollment(school_id, student.id, category, data['start_date'], data.get('end_date')):
+            raise ValidationError({'detail': f'{student.name} is already enrolled in {category.name} for these dates.'})
+        serializer.save(school_id=school_id, created_by=self.request.user)
+
+    def perform_update(self, serializer):
+        from rest_framework.exceptions import ValidationError
+        from . import optional_fees
+        instance = serializer.instance
+        start = serializer.validated_data.get('start_date', instance.start_date)
+        end = serializer.validated_data.get('end_date', instance.end_date)
+        if optional_fees.overlapping_enrollment(
+            instance.school_id, instance.student_id, instance.category, start, end, exclude_id=instance.id,
+        ):
+            raise ValidationError({'detail': 'These dates overlap another enrollment of this student in this fee.'})
+        serializer.save()
+
+    @action(detail=False, methods=['post'])
+    def bulk_enroll(self, request):
+        """Enroll many students at once: {monthly_category|annual_category, student_ids, start_date,
+        amount?, academic_year?}. Students already enrolled for those dates are skipped."""
+        from . import optional_fees
+        school_id = _resolve_school_id(request)
+        category = self._category(school_id, request.data.get('monthly_category'), request.data.get('annual_category'))
+        start_date = parse_date(str(request.data.get('start_date') or ''))
+        if not start_date:
+            return Response({'detail': 'start_date (YYYY-MM-DD) is required.'}, status=400)
+        amount = request.data.get('amount')
+        if amount in ('', None):
+            amount = None
+        else:
+            try:
+                amount = Decimal(str(amount))
+            except Exception:
+                return Response({'detail': 'Price must be a number.'}, status=400)
+            if amount < 0:
+                return Response({'detail': 'Price cannot be negative.'}, status=400)
+        try:
+            wanted = {int(x) for x in request.data.get('student_ids') or []}
+        except (TypeError, ValueError):
+            return Response({'detail': 'student_ids must be a list of numbers.'}, status=400)
+        if not wanted:
+            return Response({'detail': 'Pick at least one student.'}, status=400)
+
+        students = list(Student.objects.filter(school_id=school_id, id__in=wanted))
+        is_monthly = isinstance(category, MonthlyFeeCategory)
+        created, skipped = [], []
+        with transaction.atomic():
+            for student in students:
+                if optional_fees.overlapping_enrollment(school_id, student.id, category, start_date, None):
+                    skipped.append(student.name)
+                    continue
+                created.append(StudentFeeEnrollment(
+                    school_id=school_id, student=student,
+                    monthly_category=category if is_monthly else None,
+                    annual_category=None if is_monthly else category,
+                    academic_year_id=request.data.get('academic_year') or None,
+                    start_date=start_date, amount=amount, created_by=request.user,
+                ))
+            StudentFeeEnrollment.objects.bulk_create(created)
+        return Response({
+            'created': len(created),
+            'skipped': len(skipped),
+            'skipped_names': skipped[:20],
+            'not_found': len(wanted) - len(students),
+        }, status=201 if created else 200)
+
+    @action(detail=False, methods=['post'])
+    def end(self, request):
+        """End enrollments: {ids, end_date}. Months after end_date are no longer billed."""
+        school_id = _resolve_school_id(request)
+        end_date = parse_date(str(request.data.get('end_date') or ''))
+        if not end_date:
+            return Response({'detail': 'end_date (YYYY-MM-DD) is required.'}, status=400)
+        ids = request.data.get('ids') or []
+        rows = StudentFeeEnrollment.objects.filter(school_id=school_id, id__in=ids)
+        too_early = rows.filter(start_date__gt=end_date).count()
+        ended = rows.filter(start_date__lte=end_date).update(end_date=end_date, updated_at=timezone.now())
+        return Response({'ended': ended, 'skipped_starts_after_end': too_early})
 
 
 class ExpenseViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet):
@@ -2067,7 +2410,15 @@ class OtherIncomeViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelV
             )
         instance.delete()
 
-class AccountViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet):
+
+def _person_name(user):
+    # Full name when the account has one, else the username: many staff accounts have no first or
+    # last name, and get_full_name() alone made those entries look unrecorded.
+    if not user:
+        return None
+    return user.get_full_name() or user.username
+
+class AccountViewSet(ListETagMixin, ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet):
     """CRUD for accounts + balance computation."""
     required_module = 'finance'
     queryset = Account.objects.all()
@@ -3230,20 +3581,39 @@ class AccountViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
     @action(detail=False, methods=['get'], url_path='recent_entries',
             permission_classes=[IsAuthenticated, IsSchoolAdminOrFinanceManager, HasSchoolAccess])
     def recent_entries(self, request):
-        """Return recent finance entries across all transaction types. Admin+ and Finance manager (dashboard feed)."""
+        """Return recent finance entries across all transaction types. Admin+ and Finance manager (dashboard feed).
+
+        Optional, for the phone's Transaction History ("Load more" and a month filter):
+          offset             entries to skip (newest first), capped at 2000
+          date_from, date_to YYYY-MM-DD, on each entry's own date (payment date, entry date)
+        Same answer shape as before: a list. A page shorter than `limit` means there is no more.
+        """
         school_id = _resolve_school_id(request)
         if not school_id:
             return Response({'detail': 'No school associated.'}, status=400)
 
         limit = min(int(request.query_params.get('limit', 20)), 50)
+        offset = max(0, min(int(request.query_params.get('offset', 0) or 0), 2000))
+        # Each of the four sources is read up to offset + limit rows: the merged page can only come
+        # from those, since every source is already newest first.
+        take = offset + limit
+        date_from = parse_date(request.query_params.get('date_from') or '')
+        date_to = parse_date(request.query_params.get('date_to') or '')
+
+        def dated(qs, field):
+            if date_from:
+                qs = qs.filter(**{f'{field}__gte': date_from})
+            if date_to:
+                qs = qs.filter(**{f'{field}__lte': date_to})
+            return qs
+
         entries = []
 
         # Recent fee payments (where money was actually received)
         fee_payments = list(
-            FeePayment.objects
-            .filter(school_id=school_id, amount_paid__gt=0)
+            dated(FeePayment.objects.filter(school_id=school_id, amount_paid__gt=0), 'payment_date')
             .select_related('student', 'student__class_obj', 'account', 'collected_by')
-            .order_by('-updated_at')[:limit]
+            .order_by('-updated_at')[:take]
         )
         # Label each payment with the class the student was in for its own year.
         from academic_sessions.roster import placement_group, placements_for
@@ -3271,16 +3641,15 @@ class AccountViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
                 'amount': float(fp.amount_paid),
                 'date': str(fp.payment_date) if fp.payment_date else None,
                 'account_name': fp.account.name if fp.account else None,
-                'recorded_by': fp.collected_by.get_full_name() if fp.collected_by else None,
+                'recorded_by': _person_name(fp.collected_by),
                 'timestamp': fp.updated_at.isoformat(),
             })
 
         # Recent other income
         other_income = (
-            OtherIncome.objects
-            .filter(school_id=school_id)
+            dated(OtherIncome.objects.filter(school_id=school_id), 'date')
             .select_related('account', 'recorded_by', 'category')
-            .order_by('-created_at')[:limit]
+            .order_by('-created_at')[:take]
         )
         for oi in other_income:
             entries.append({
@@ -3290,16 +3659,17 @@ class AccountViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
                 'amount': float(oi.amount),
                 'date': str(oi.date),
                 'account_name': oi.account.name if oi.account else None,
-                'recorded_by': oi.recorded_by.get_full_name() if oi.recorded_by else None,
+                'category': oi.category.name if oi.category else None,
+                'note': oi.description or None,
+                'recorded_by': _person_name(oi.recorded_by),
                 'timestamp': oi.created_at.isoformat(),
             })
 
         # Recent expenses
         expenses = (
-            Expense.objects
-            .filter(school_id=school_id)
+            dated(Expense.objects.filter(school_id=school_id), 'date')
             .select_related('account', 'recorded_by', 'category')
-            .order_by('-created_at')[:limit]
+            .order_by('-created_at')[:take]
         )
         for exp in expenses:
             entries.append({
@@ -3309,16 +3679,17 @@ class AccountViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
                 'amount': float(exp.amount),
                 'date': str(exp.date),
                 'account_name': exp.account.name if exp.account else None,
-                'recorded_by': exp.recorded_by.get_full_name() if exp.recorded_by else None,
+                'category': exp.category.name if exp.category else None,
+                'note': exp.description or None,
+                'recorded_by': _person_name(exp.recorded_by),
                 'timestamp': exp.created_at.isoformat(),
             })
 
         # Recent transfers
         transfers = (
-            Transfer.objects
-            .filter(school_id=school_id)
+            dated(Transfer.objects.filter(school_id=school_id), 'date')
             .select_related('from_account', 'to_account', 'recorded_by')
-            .order_by('-created_at')[:limit]
+            .order_by('-created_at')[:take]
         )
         for tfr in transfers:
             entries.append({
@@ -3328,13 +3699,13 @@ class AccountViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
                 'amount': float(tfr.amount),
                 'date': str(tfr.date),
                 'account_name': None,
-                'recorded_by': tfr.recorded_by.get_full_name() if tfr.recorded_by else None,
+                'recorded_by': _person_name(tfr.recorded_by),
                 'timestamp': tfr.created_at.isoformat(),
             })
 
-        # Sort all by timestamp descending, take top N
+        # Sort all by timestamp descending, take the requested page
         entries.sort(key=lambda e: e['timestamp'], reverse=True)
-        return Response(entries[:limit])
+        return Response(entries[offset:offset + limit])
 
 
 class TransferViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet):
@@ -3714,7 +4085,7 @@ class DiscountViewSet(ModuleAccessMixin, viewsets.ModelViewSet):
     def get_queryset(self):
         queryset = Discount.objects.select_related(
             'school', 'academic_year', 'target_class',
-        ).annotate(
+        ).prefetch_related('monthly_categories', 'annual_categories').annotate(
             usage_count=Count('student_assignments', filter=Q(student_assignments__is_active=True)),
         )
         school_id = _resolve_school_id(self.request)
@@ -3762,7 +4133,9 @@ class ScholarshipViewSet(ModuleAccessMixin, viewsets.ModelViewSet):
 
 
     def get_queryset(self):
-        queryset = Scholarship.objects.select_related('school', 'academic_year').annotate(
+        queryset = Scholarship.objects.select_related('school', 'academic_year').prefetch_related(
+            'monthly_categories', 'annual_categories',
+        ).annotate(
             recipient_count=Count('student_assignments', filter=Q(student_assignments__is_active=True)),
         )
         school_id = _resolve_school_id(self.request)
@@ -4129,104 +4502,76 @@ class OnlinePaymentViewSet(ModuleAccessMixin, viewsets.ReadOnlyModelViewSet):
 
 class FeeBreakdownView(ModuleAccessMixin, APIView):
     """
-    GET: Compute fee breakdown for a student with discount/scholarship deductions.
-    Takes student_id from URL path.
+    GET: a student's fees for this month, per fee type, with the discounts and scholarships that
+    cut each one (finance.fee_discounts, the same rules fee generation uses). Takes student_id from
+    the URL path; ?year=&month= pick another month.
+
+    The top-level base_amount / discount_total / final_amount are the monthly totals, so older
+    callers still read one figure per month.
     """
     required_module = 'finance'
     permission_classes = [IsAuthenticated, IsSchoolAdmin, HasSchoolAccess]
 
     def get(self, request, student_id):
+        from . import fee_discounts, optional_fees
+        from academic_sessions.roster import current_placement, placement_label
+
         school_id = _resolve_school_id(request)
         if not school_id:
             return Response({'detail': 'No school associated with your account.'}, status=400)
 
         try:
-            student = Student.objects.select_related('class_obj').get(
-                id=student_id, school_id=school_id,
-            )
+            student = Student.objects.select_related('class_obj').get(id=student_id, school_id=school_id)
         except Student.DoesNotExist:
             return Response({'detail': 'Student not found.'}, status=404)
 
-        # 1. Get base fee amount
-        base_amount = resolve_fee_amount(student)
-        from academic_sessions.roster import current_placement, placement_label
-        class_name = placement_label(current_placement(student), student)
+        today = timezone.localdate()
+        try:
+            year = int(request.query_params.get('year') or today.year)
+            month = int(request.query_params.get('month') or today.month)
+        except ValueError:
+            return Response({'detail': 'year and month must be numbers.'}, status=400)
 
-        if base_amount is None:
-            return Response(FeeBreakdownSerializer({
-                'student_id': student.id,
-                'student_name': student.name,
-                'class_name': class_name,
-                'base_amount': None,
-                'discounts_applied': [],
-                'scholarship_applied': None,
-                'discount_total': Decimal('0'),
-                'final_amount': None,
-            }).data)
+        from academic_sessions.models import AcademicYear
+        ay = AcademicYear.objects.filter(school_id=school_id, is_current=True).first()
+        ay_id = ay.id if ay else None
 
-        # 2. Find active StudentDiscounts for this student
-        student_discounts = StudentDiscount.objects.filter(
-            school_id=school_id,
-            student=student,
-            is_active=True,
-        ).select_related('discount', 'scholarship')
+        fees = []
+        categories = [('MONTHLY', c) for c in MonthlyFeeCategory.objects.filter(school_id=school_id, is_active=True)]
+        categories += [('ANNUAL', c) for c in AnnualFeeCategory.objects.filter(school_id=school_id, is_active=True)]
+        for fee_type, category in categories:
+            gross = resolve_fee_amount(
+                student, fee_type,
+                monthly_category_id=category.id if fee_type == 'MONTHLY' else None,
+                annual_category_id=category.id if fee_type == 'ANNUAL' else None,
+                academic_year_id=ay_id, year=year, month=month,
+            )
+            if gross is None:
+                continue
+            first_day, last_day = optional_fees.billing_period(fee_type, year, month if fee_type == 'MONTHLY' else None, ay_id)
+            discount, detail = fee_discounts.apply(gross, fee_discounts.rules_for(
+                school_id, [student.id], category, first_day, last_day, ay_id,
+            ).get(student.id))
+            fees.append({
+                'fee_type': fee_type, 'category_id': category.id, 'category_name': category.name,
+                'gross': str(gross), 'discount': str(discount), 'net': str(gross - discount),
+                'discounts': detail,
+            })
 
-        discounts_applied = []
-        scholarship_applied = None
-        discount_total = Decimal('0')
-
-        for sd in student_discounts:
-            if sd.discount and sd.discount.is_active:
-                disc = sd.discount
-                if disc.discount_type == 'PERCENTAGE':
-                    amount_off = (base_amount * disc.value / Decimal('100')).quantize(Decimal('0.01'))
-                else:  # FIXED
-                    amount_off = min(disc.value, base_amount)
-
-                discounts_applied.append({
-                    'id': disc.id,
-                    'name': disc.name,
-                    'type': 'discount',
-                    'discount_type': disc.discount_type,
-                    'value': disc.value,
-                    'amount_off': amount_off,
-                })
-                discount_total += amount_off
-
-            elif sd.scholarship and sd.scholarship.is_active:
-                sch = sd.scholarship
-                if sch.coverage == 'FULL':
-                    amount_off = base_amount
-                elif sch.coverage == 'PERCENTAGE':
-                    amount_off = (base_amount * sch.value / Decimal('100')).quantize(Decimal('0.01'))
-                else:  # FIXED
-                    amount_off = min(sch.value, base_amount)
-
-                scholarship_applied = {
-                    'id': sch.id,
-                    'name': sch.name,
-                    'type': 'scholarship',
-                    'discount_type': sch.coverage,
-                    'value': sch.value,
-                    'amount_off': amount_off,
-                }
-                discount_total += amount_off
-
-        final_amount = max(Decimal('0'), base_amount - discount_total)
-
-        return Response(FeeBreakdownSerializer({
+        monthly = [f for f in fees if f['fee_type'] == 'MONTHLY']
+        base = sum((Decimal(f['gross']) for f in monthly), Decimal('0'))
+        off = sum((Decimal(f['discount']) for f in monthly), Decimal('0'))
+        return Response({
             'student_id': student.id,
             'student_name': student.name,
-            'class_name': class_name,
-            'base_amount': base_amount,
-            'discounts_applied': discounts_applied,
-            'scholarship_applied': scholarship_applied,
-            'discount_total': discount_total,
-            'final_amount': final_amount,
-        }).data)
-
-
-
+            'class_name': placement_label(current_placement(student), student),
+            'year': year,
+            'month': month,
+            'fees': fees,
+            'base_amount': str(base) if monthly else None,
+            'discount_total': str(off),
+            'final_amount': str(base - off) if monthly else None,
+        })
 
 
 # =============================================================================

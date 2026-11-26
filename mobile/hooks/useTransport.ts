@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { transportApi } from '../services/api';
 import { listOf } from '../services/academicYear';
 import type { AssignmentRow, RouteRow, StopRow } from '../services/routeMap';
+import type { BoardingRecord, TransportAssignmentRow, VehicleRow } from '../services/transportAdmin';
 import { useScopedQuery } from './useScopedQuery';
 
 export interface TransportStats { total_routes?: number; total_vehicles?: number; total_students?: number }
@@ -35,7 +36,26 @@ export function useActiveJourneys(enabled: boolean) {
     { enabled, staleTime: 0, refetchInterval: 15_000 });
 }
 
-const ROOTS = ['transportStats', 'transportRoutes', 'transportStops', 'transportAssignments', 'transport-stats', 'transport-routes'];
+export function useVehicles() {
+  return useScopedQuery<VehicleRow[]>('transportVehicles', [], async () => listOf<VehicleRow>((await transportApi.getVehicles({ page_size: 500 })).data), { staleTime: 0 });
+}
+
+// The year's assignments, optionally for one route. (The server has no class filter: the web sends
+// class_id and it is ignored, so the phone does not offer one.)
+export function useYearAssignments(yearId: number | null, routeId: number | null) {
+  return useScopedQuery<TransportAssignmentRow[]>('transportAssignments', ['year', yearId, routeId], async () =>
+    listOf<TransportAssignmentRow>((await transportApi.getAssignments({
+      academic_year: yearId, page_size: 1000, ...(routeId ? { route_id: routeId } : {}),
+    })).data), { enabled: yearId != null, staleTime: 0 });
+}
+
+export function useBoarding(routeId: number | null, date: string) {
+  return useScopedQuery<BoardingRecord[]>('transportBoarding', [routeId, date], async () =>
+    listOf<BoardingRecord>((await transportApi.getAttendance({ route_id: routeId, date, page_size: 1000 })).data),
+  { enabled: routeId != null && !!date, staleTime: 0 });
+}
+
+const ROOTS = ['transportStats', 'transportRoutes', 'transportStops', 'transportAssignments', 'transport-stats', 'transport-routes', 'transportVehicles', 'transportBoarding'];
 
 export function useTransportActions() {
   const qc = useQueryClient();
@@ -48,5 +68,12 @@ export function useTransportActions() {
     createStop: useMutation({ mutationFn: (d: object) => transportApi.createStop(d), onSuccess: done }),
     updateStop: useMutation({ mutationFn: ({ id, data }: { id: number; data: object }) => transportApi.updateStop(id, data), onSuccess: done }),
     deleteStop: useMutation({ mutationFn: (id: number) => transportApi.deleteStop(id), onSuccess: done }),
+    createVehicle: useMutation({ mutationFn: (d: object) => transportApi.createVehicle(d), onSuccess: done }),
+    updateVehicle: useMutation({ mutationFn: ({ id, data }: { id: number; data: object }) => transportApi.updateVehicle(id, data), onSuccess: done }),
+    deleteVehicle: useMutation({ mutationFn: (id: number) => transportApi.deleteVehicle(id), onSuccess: done }),
+    createAssignment: useMutation({ mutationFn: (d: object) => transportApi.createAssignment(d), onSuccess: done }),
+    bulkAssign: useMutation({ mutationFn: (d: object) => transportApi.bulkAssign(d), onSuccess: done }),
+    deleteAssignment: useMutation({ mutationFn: (id: number) => transportApi.deleteAssignment(id), onSuccess: done }),
+    markBoarding: useMutation({ mutationFn: (d: object) => transportApi.bulkMarkAttendance(d), onSuccess: done }),
   };
 }

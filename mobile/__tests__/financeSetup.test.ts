@@ -60,8 +60,9 @@ describe('category form', () => {
   });
   it('sends the right fields per kind', () => {
     expect(buildCategoryPayload('income', f, [])).toEqual({ name: 'Rent' });
-    expect(buildCategoryPayload('monthly', f, [])).toEqual({ name: 'Rent', description: 'monthly' });
-    expect(buildCategoryPayload('annual', f, [])).toEqual({ name: 'Rent', description: 'monthly' });
+    // Fee categories also say who they bill (everyone unless switched to enrolled-only).
+    expect(buildCategoryPayload('monthly', f, [])).toEqual({ name: 'Rent', description: 'monthly', billing_mode: 'ALL' });
+    expect(buildCategoryPayload('annual', f, [])).toEqual({ name: 'Rent', description: 'monthly', billing_mode: 'ALL' });
   });
   it('sends the sensitive flag only when the server shows it (admin)', () => {
     expect(buildCategoryPayload('expense', f, [])).toEqual({ name: 'Rent', is_sensitive: true });
@@ -71,7 +72,7 @@ describe('category form', () => {
     expect(canSetSensitive('income', [])).toBe(false);
   });
   it('loads a category and reads suggestions', () => {
-    expect(categoryToForm({ id: 2, name: 'Lab', description: 'x', is_sensitive: true })).toEqual({ name: 'Lab', description: 'x', isSensitive: true });
+    expect(categoryToForm({ id: 2, name: 'Lab', description: 'x', is_sensitive: true })).toEqual({ name: 'Lab', description: 'x', isSensitive: true, enrolledOnly: false, price: '' });
     expect(suggestionsOf({ suggestions: [{ name: 'Tuition', description: 'd' }, { nope: 1 }] })).toEqual([{ name: 'Tuition', description: 'd' }]);
     expect(suggestionsOf(null)).toEqual([]);
   });

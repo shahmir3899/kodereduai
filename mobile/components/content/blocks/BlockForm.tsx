@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Image, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Image } from 'expo-image';
 import Input from '../../ui/Input';
 import Select from '../../ui/Select';
 import Button from '../../ui/Button';
@@ -28,7 +29,7 @@ function PictureField({ value, onChange, optional, readOnly }: { value: PictureR
   return (
     <View style={styles.row}>
       <View style={styles.pictureBox}>
-        {uri ? <Image source={{ uri }} style={styles.pictureImg} resizeMode="contain" /> : <Text style={styles.tiny}>{value ? 'drawn' : 'none'}</Text>}
+        {uri ? <Image source={{ uri }} style={styles.pictureImg} contentFit="contain" /> : <Text style={styles.tiny}>{value ? 'drawn' : 'none'}</Text>}
       </View>
       <View style={styles.flex}>
         <Text style={styles.text} numberOfLines={2}>{shown?.label || 'No picture'}</Text>
@@ -289,7 +290,7 @@ const styles = StyleSheet.create({
   help: { fontSize: FontSize.xs, color: Colors.textSecondary },
   text: { fontSize: FontSize.md, color: Colors.text },
   placeholder: { color: Colors.textTertiary },
-  tiny: { fontSize: 10, color: Colors.textTertiary },
+  tiny: { fontSize: FontSize.xxs, color: Colors.textTertiary },
   box: { borderWidth: 1, borderColor: Colors.border, borderRadius: BorderRadius.sm, paddingHorizontal: Spacing.sm, paddingVertical: 8, fontSize: FontSize.md, color: Colors.text, backgroundColor: Colors.surface, minHeight: 44 },
   narrow: { maxWidth: 140 },
   multi: { minHeight: 96, textAlignVertical: 'top' },
@@ -306,8 +307,8 @@ const styles = StyleSheet.create({
   icon: { fontSize: FontSize.lg, color: Colors.primary },
   off: { opacity: 0.3 },
   danger: { color: Colors.error, fontSize: FontSize.sm },
-  pictureBox: { width: 64, height: 56, borderWidth: 1, borderColor: Colors.border, borderRadius: BorderRadius.sm, alignItems: 'center', justifyContent: 'center', backgroundColor: '#fff', overflow: 'hidden' },
+  pictureBox: { width: 64, height: 56, borderWidth: 1, borderColor: Colors.border, borderRadius: BorderRadius.sm, alignItems: 'center', justifyContent: 'center', backgroundColor: Colors.surface, overflow: 'hidden' },
   pictureImg: { width: '100%', height: '100%' },
-  problems: { backgroundColor: Colors.errorLight ?? '#fef2f2', borderRadius: BorderRadius.sm, padding: Spacing.sm, gap: 2 },
+  problems: { backgroundColor: Colors.errorLight, borderRadius: BorderRadius.sm, padding: Spacing.sm, gap: 2 },
   problemText: { color: Colors.errorText ?? Colors.error, fontSize: FontSize.sm },
 });

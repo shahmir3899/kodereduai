@@ -186,7 +186,7 @@ const styles = StyleSheet.create({
   chip: { borderWidth: 1, borderColor: Colors.border, backgroundColor: Colors.surface, borderRadius: BorderRadius.full, paddingHorizontal: Spacing.md, minHeight: 36, justifyContent: 'center' },
   chipText: { fontSize: FontSize.sm, color: Colors.text },
   last: { alignSelf: 'stretch', borderWidth: 1, borderColor: Colors.border, borderRadius: BorderRadius.md, padding: Spacing.md },
-  lastLabel: { fontSize: 11, letterSpacing: 0.6, color: Colors.textSecondary, marginBottom: Spacing.xs },
+  lastLabel: { fontSize: FontSize.xs, letterSpacing: 0.6, color: Colors.textSecondary, marginBottom: Spacing.xs },
   lastText: { fontSize: FontSize.sm, color: Colors.text },
   choices: { alignSelf: 'stretch', flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.xs },
   choice: { borderWidth: 1, borderColor: Colors.border, borderRadius: BorderRadius.full, paddingHorizontal: Spacing.md, minHeight: 36, justifyContent: 'center' },

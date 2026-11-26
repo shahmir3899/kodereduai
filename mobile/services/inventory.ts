@@ -31,8 +31,34 @@ export interface Item {
   active_assignments_count?: number;
 }
 
-export interface Category { id: number; name: string; description?: string; is_active?: boolean }
-export interface Vendor { id: number; name: string; contact_person?: string; phone?: string; is_active?: boolean }
+export interface Category { id: number; name: string; description?: string; is_active?: boolean; items_count?: number }
+export interface Vendor { id: number; name: string; contact_person?: string; phone?: string; email?: string; address?: string; is_active?: boolean }
+
+// The web's category and vendor forms (Items page > Categories / Vendors).
+export interface CategoryForm { name: string; description: string }
+export interface VendorForm { name: string; contactPerson: string; phone: string; email: string; address: string }
+export const categoryToForm = (c?: Category): CategoryForm => ({ name: c?.name ?? '', description: c?.description ?? '' });
+export const vendorToForm = (v?: Vendor): VendorForm => ({
+  name: v?.name ?? '', contactPerson: v?.contact_person ?? '', phone: v?.phone ?? '', email: v?.email ?? '', address: v?.address ?? '',
+});
+export function validateNamed(form: { name: string; email?: string }, noun: string): string | null {
+  if (!form.name.trim()) return `Enter the ${noun} name.`;
+  if (form.email && form.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) return 'Enter a valid email or leave it blank.';
+  return null;
+}
+export const categoryPayload = (f: CategoryForm) => ({ name: f.name.trim(), description: f.description.trim() });
+export const vendorPayload = (f: VendorForm) => ({
+  name: f.name.trim(), contact_person: f.contactPerson.trim(), phone: f.phone.trim(), email: f.email.trim(), address: f.address.trim(),
+});
+// What a delete takes with it, said before it happens (the server cascades).
+export function categoryDeleteMessage(c: Category): string {
+  const n = c.items_count ?? 0;
+  return n > 0
+    ? `Delete "${c.name}"? Its ${n} item${n === 1 ? '' : 's'} and all their stock movements and assignments are deleted too. This cannot be undone.`
+    : `Delete "${c.name}"? This cannot be undone.`;
+}
+export const itemDeleteMessage = (name: string) =>
+  `Delete "${name}"? Its stock movements and assignments are deleted too. This cannot be undone.`;
 
 export interface Movement {
   id: number;

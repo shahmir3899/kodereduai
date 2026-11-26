@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, FlatList, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { attendanceApi, sessionsApi, studentsApi } from '../../services/api';
 import { listOf } from '../../services/academicYear';
 import { classParams, type ClassOption } from '../../services/attendanceEntry';
@@ -19,12 +19,13 @@ import Skeleton from '../ui/Skeleton';
 import ErrorState from '../ui/ErrorState';
 import EmptyState from '../ui/EmptyState';
 import StatusPill from '../ui/StatusPill';
-import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
+import { Colors, FontSize, Spacing, BorderRadius, GlyphSize } from '../../constants/colors';
+import AppList from '../ui/AppList';
 
 const CELL: Record<DayCell, { bg: string; fg: string; text: string }> = {
   PRESENT: { bg: Colors.successLight, fg: Colors.success, text: 'P' },
   ABSENT: { bg: Colors.errorLight, fg: Colors.error, text: 'A' },
-  LEAVE: { bg: '#ede9fe', fg: Colors.leave, text: 'L' },
+  LEAVE: { bg: Colors.leaveLight, fg: Colors.leave, text: 'L' },
   NONE: { bg: Colors.surface, fg: Colors.textTertiary, text: '' },
   OFF: { bg: Colors.surfaceSecondary, fg: Colors.textTertiary, text: '' },
   NOT_ENROLLED: { bg: 'transparent', fg: Colors.textTertiary, text: '–' },
@@ -133,7 +134,7 @@ export default function AttendanceRegisterScreen({ classOptions }: Props) {
 
   return (
     <View style={styles.container}>
-      <FlatList
+      <AppList
         data={loading || failed ? [] : register.rows}
         keyExtractor={(r) => String(r.id)}
         contentContainerStyle={styles.content}
@@ -207,7 +208,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
   content: { padding: Spacing.lg },
   stepper: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing.xl, marginBottom: Spacing.md },
-  step: { fontSize: 28, color: Colors.primary, paddingHorizontal: Spacing.sm },
+  step: { fontSize: GlyphSize.lg, color: Colors.primary, paddingHorizontal: Spacing.sm },
   stepOff: { color: Colors.border },
   month: { fontSize: FontSize.md, fontWeight: '600', color: Colors.text, minWidth: 140, textAlign: 'center' },
   totals: { flexDirection: 'row', backgroundColor: Colors.surface, borderRadius: BorderRadius.md, padding: Spacing.md, marginBottom: Spacing.md },

@@ -29,6 +29,7 @@ import Button from '../../../components/ui/Button';
 import Card from '../../../components/ui/Card';
 import { useToast } from '../../../components/ui/Toast';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../../constants/colors';
+import { SectionError } from '../../../components/ui/SectionState';
 
 const PERIODS: Array<{ value: Period; label: string }> = [
   { value: 'MONTH', label: 'Month' },
@@ -140,7 +141,7 @@ export default function FinanceDashboard() {
           </View>
         ))}
       </View>
-      {range && summary.isError && !summary.data ? <Text style={styles.hint}>Could not load the period totals. Pull down to retry.</Text> : null}
+      {range && summary.isError && !summary.data ? <SectionError message="Could not load the period totals." onRetry={() => summary.refetch()} /> : null}
       <Button title="Export PDF" variant="outline" size="sm" onPress={exportPdf} loading={exporting} disabled={!range || exporting} />
 
       <View style={styles.gap} />
@@ -164,7 +165,7 @@ export default function FinanceDashboard() {
       <TrendCard trend={trend.data} loading={trend.isLoading} />
 
       <View style={styles.gap} />
-      <RecentTransfersCard transfers={transfers.data} loading={transfers.isLoading} onAll={() => go('/(admin)/finance/transfers')} />
+      <RecentTransfersCard transfers={transfers.data} loading={transfers.isLoading} onAll={() => go('/(admin)/finance/transfers?tab=history')} />
       {showEntries ? <RecentEntriesCard entries={entries.data} /> : null}
 
       <Text style={styles.section}>Quick actions</Text>

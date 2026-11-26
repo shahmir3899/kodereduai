@@ -1,6 +1,9 @@
 import React, { useState } from 'react';
-import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Colors, FontSize, Spacing } from '../../constants/colors';
+import { SectionError, SectionLoading } from '../../components/ui/SectionState';
+import AppList from '../ui/AppList';
+import { day } from '../../services/dates';
 
 export function whenLabel(iso: string, now = Date.now()): string {
   const d = new Date(iso);
@@ -9,12 +12,12 @@ export function whenLabel(iso: string, now = Date.now()): string {
   if (days <= 0) return 'Today';
   if (days === 1) return 'Yesterday';
   if (days < 7) return `${days} days ago`;
-  return d.toLocaleDateString();
+  return day(d);
 }
 
 /** Past conversations: pinned first, then newest. Opening one replaces the chat; deleting asks once. */
 export default function HistoryList({ query, currentId, onOpen, onPin, onDelete, onClose }: {
-  query: { data?: any[]; isLoading: boolean; isError: boolean };
+  query: { data?: any[]; isLoading: boolean; isError: boolean; refetch?: () => unknown };
   currentId: number | null; onOpen: (id: number) => void; onPin: (id: number, pinned: boolean) => Promise<void>; onDelete: (id: number) => Promise<void>; onClose: () => void;
 }) {
   const [confirming, setConfirming] = useState<number | null>(null);
@@ -33,10 +36,10 @@ export default function HistoryList({ query, currentId, onOpen, onPin, onDelete,
         <Pressable accessibilityRole="button" accessibilityLabel="Back to chat" onPress={onClose} hitSlop={8}><Text style={styles.link}>Back</Text></Pressable>
       </View>
       {failed ? <Text accessibilityRole="alert" style={styles.err}>{failed}</Text> : null}
-      {query.isLoading ? <Text style={styles.note}>Loading…</Text> : null}
-      {query.isError ? <Text accessibilityRole="alert" style={styles.err}>Could not load your conversations.</Text> : null}
+      {query.isLoading ? <SectionLoading lines={3} /> : null}
+      {query.isError ? <SectionError message="Could not load your conversations." onRetry={query.refetch ? () => query.refetch?.() : undefined} /> : null}
       {!query.isLoading && !query.isError && rows.length === 0 ? <Text style={styles.note}>Nothing here yet. Your conversations appear after you ask Aura something.</Text> : null}
-      <FlatList
+      <AppList
         data={rows}
         keyExtractor={(c) => String(c.id)}
         renderItem={({ item: c }) => (

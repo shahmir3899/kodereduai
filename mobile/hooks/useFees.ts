@@ -4,6 +4,7 @@ import { listOf } from '../services/academicYear';
 import type { FeePayment, FeeTypeTab } from '../services/feeCollect';
 import { useAcademicYear } from './useAcademicYear';
 import { useScopedQuery } from './useScopedQuery';
+import { REFERENCE_STALE_MS } from '../services/queryRules';
 
 // Money never comes from a cache: 'feePayments' and 'accounts' are money roots (always stale,
 // and refreshed after any mutation), see services/queryRules.ts.
@@ -26,9 +27,11 @@ export function useFeePayments(feeType: FeeTypeTab, month: number, year: number)
   }, { enabled: !ay.isLoading });
 }
 
+export const fetchAccountNames = async () =>
+  listOf<{ id: number; name: string; is_active?: boolean }>((await financeApi.getAccounts({ page_size: 9999 })).data);
+
 export function useAccounts() {
-  return useScopedQuery('accounts', [], async () =>
-    listOf<{ id: number; name: string; is_active?: boolean }>((await financeApi.getAccounts({ page_size: 9999 })).data));
+  return useScopedQuery('accounts', [], fetchAccountNames, { staleTime: REFERENCE_STALE_MS });
 }
 
 export function useRecordPayment() {

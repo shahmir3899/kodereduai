@@ -4,6 +4,7 @@ import { categoryShares, type ExpenseCategory } from '../../services/financeMana
 import { formatMoney } from '../../services/feeCollect';
 import Card from '../ui/Card';
 import { Colors, FontSize, Spacing } from '../../constants/colors';
+import { SectionEmpty, SectionLoading } from '../../components/ui/SectionState';
 
 // Each expense category's amount and share of the period's total, with a bar. Shared by the
 // finance reports and the finance dashboard.
@@ -11,7 +12,7 @@ export default function ExpenseBreakdownCard({ categories, total, loading }: { c
   const shares = categoryShares(categories ?? [], total ?? 0);
   return (
     <Card>
-      {loading ? <Text style={styles.muted}>Loading…</Text> : shares.length === 0 ? <Text style={styles.muted}>No expenses in this period.</Text> : (
+      {loading ? <SectionLoading /> : shares.length === 0 ? <SectionEmpty message="No expenses in this period." /> : (
         shares.map((c) => (
           <View key={c.name} style={styles.row}>
             <View style={styles.head}>

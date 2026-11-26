@@ -1,6 +1,7 @@
 import type { DayCode } from './teacher';
 import type { PortalPeriod, AttendanceCode } from './studentPortal';
 import { formatMoney } from './feeCollect';
+import { dayShort } from './dates';
 
 // Pure logic for the Parent screens. DTOs follow backend/parents/views.py and overview.py; the
 // per-child library, transport, exam schedule, results and fees payloads match the student
@@ -262,7 +263,7 @@ export function examDelta(latest: Pick<ExamBlock, 'percentage'> | null | undefin
 export function nextExamWhen(iso: string, now: Date = new Date()): string {
   const days = daysUntil(iso, now);
   const [y, m, d] = iso.split('-').map(Number);
-  const pretty = y && m && d ? new Date(y, m - 1, d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : iso;
+  const pretty = y && m && d ? dayShort(new Date(y, m - 1, d)) : iso;
   if (days === 0) return `Today · ${pretty}`;
   if (days === 1) return `Tomorrow · ${pretty}`;
   return days != null && days > 0 ? `In ${days} days · ${pretty}` : pretty;

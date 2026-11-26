@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo, useState } from 'react';
-import { View, Text, FlatList, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import { useRouter, type Href } from 'expo-router';
 import { useMutation, useQueryClient, type InfiniteData } from '@tanstack/react-query';
 import { notificationsApi } from '../../services/api';
@@ -19,6 +19,7 @@ import {
   type NotificationEntry, type NotificationRecord,
 } from '../../services/notificationMeta';
 import { Colors, FontSize, Spacing } from '../../constants/colors';
+import AppList from '../ui/AppList';
 
 const ROOT = 'myNotifications';
 const PAGE_SIZE = 20;
@@ -104,7 +105,7 @@ export default function NotificationsScreen() {
 
   return (
     <View style={styles.container}>
-      <FlatList
+      <AppList
         data={rows}
         keyExtractor={(r) => r.key}
         renderItem={renderItem}
@@ -149,6 +150,6 @@ const styles = StyleSheet.create({
   toggle: { minHeight: 44, justifyContent: 'center' },
   toggleText: { fontSize: FontSize.sm, color: Colors.textSecondary },
   markAllText: { fontSize: FontSize.sm, color: Colors.primary, fontWeight: '600' },
-  group: { fontSize: 11, fontWeight: '600', letterSpacing: 0.8, textTransform: 'uppercase', color: Colors.textSecondary, marginTop: Spacing.sm, marginBottom: Spacing.sm },
+  group: { fontSize: FontSize.xs, fontWeight: '600', letterSpacing: 0.8, textTransform: 'uppercase', color: Colors.textSecondary, marginTop: Spacing.sm, marginBottom: Spacing.sm },
   more: { paddingVertical: Spacing.lg },
 });

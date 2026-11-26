@@ -22,7 +22,8 @@ import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors'
 
 // Money moved between the school's accounts. Admin and principal only. Recording and deleting both
 // change balances, so each asks first; a closed month refuses the change and the server says why.
-export default function TransfersScreen({ readOnly = false }: { readOnly?: boolean }) {
+// `showAdd={false}` hides the add button when a Record tab sits next to this list (admin screen).
+export default function TransfersScreen({ readOnly = false, showAdd = true }: { readOnly?: boolean; showAdd?: boolean }) {
   const toast = useToast();
   const { isPrincipal } = useAuth();
   const [from, setFrom] = useState('');
@@ -76,7 +77,7 @@ export default function TransfersScreen({ readOnly = false }: { readOnly?: boole
   return (
     <View style={styles.container}>
       <ScrollView contentContainerStyle={styles.content} refreshControl={refreshControl} keyboardShouldPersistTaps="handled">
-        {readOnly ? null : <Button title="+ Record a transfer" size="sm" onPress={() => open('new')} />}
+        {readOnly || !showAdd ? null : <Button title="+ Record a transfer" size="sm" onPress={() => open('new')} />}
         <View style={styles.dates}>
           <View style={styles.half}><DateField label="From date" value={from} onChange={setFrom} /></View>
           <View style={styles.half}><DateField label="To date" value={to} onChange={setTo} /></View>
@@ -97,14 +98,65 @@ export default function TransfersScreen({ readOnly = false }: { readOnly?: boole
 
       {readOnly ? null : <FormSheet visible={editing !== null} title={editing === 'new' ? 'New transfer' : 'Edit transfer'} onClose={() => setEditing(null)} onSubmit={save}
         submitLabel="Save" busy={actions.create.isPending || actions.update.isPending} error={error}>
-        <Select label="From account" value={form.from} onChange={(v) => set('from', Number(v))} placeholder="Choose an account" options={fromOptions.map((a) => ({ value: a.id, label: a.name }))} />
-        <Select label="To account" value={form.to} onChange={(v) => set('to', Number(v))} placeholder="Choose an account" options={toOptions.map((a) => ({ value: a.id, label: a.name }))} />
-        <Input label="Amount (PKR)" value={form.amount} onChangeText={(v) => set('amount', v)} keyboardType="decimal-pad" />
-        <DateField label="Date" value={form.date} onChange={(v) => set('date', v)} />
-        <Input label="Note (optional)" value={form.description} onChangeText={(v) => set('description', v)} />
+        <TransferFields form={form} set={set} fromOptions={fromOptions} toOptions={toOptions} />
         {editing && editing !== 'new' ? <Button title="Delete transfer" variant="danger" size="sm" onPress={() => remove(editing)} /> : null}
       </FormSheet>}
     </View>
+  );
+}
+
+type AccountOption = { id: number; name: string };
+
+// The transfer's fields, shared by the edit sheet and the Record tab.
+function TransferFields({ form, set, fromOptions, toOptions }: {
+  form: TransferForm;
+  set: <K extends keyof TransferForm>(k: K, v: TransferForm[K]) => void;
+  fromOptions: AccountOption[];
+  toOptions: AccountOption[];
+}) {
+  return (
+    <>
+      <Select label="From account" value={form.from} onChange={(v) => set('from', Number(v))} placeholder="Choose an account" options={fromOptions.map((a) => ({ value: a.id, label: a.name }))} />
+      <Select label="To account" value={form.to} onChange={(v) => set('to', Number(v))} placeholder="Choose an account" options={toOptions.map((a) => ({ value: a.id, label: a.name }))} />
+      <Input label="Amount (PKR)" value={form.amount} onChangeText={(v) => set('amount', v)} keyboardType="decimal-pad" />
+      <DateField label="Date" value={form.date} onChange={(v) => set('date', v)} />
+      <Input label="Note (optional)" value={form.description} onChangeText={(v) => set('description', v)} />
+    </>
+  );
+}
+
+// The admin's Record tab: a new transfer on the page itself (like Record Income / Record Expense).
+// After saving, the form clears for the next one; History shows it.
+export function RecordTransferForm() {
+  const toast = useToast();
+  const { isPrincipal } = useAuth();
+  const accountsQ = useAccountOptions();
+  const actions = useTransferActions();
+  const accounts = useMemo(() => accountsQ.data ?? [], [accountsQ.data]);
+  const [form, setForm] = useState<TransferForm>(emptyTransferForm(todayString()));
+  const [error, setError] = useState<string | null>(null);
+  const set = <K extends keyof TransferForm>(k: K, v: TransferForm[K]) => setForm((f) => ({ ...f, [k]: v }));
+
+  const save = async () => {
+    const problem = validateTransfer(form);
+    if (problem) return setError(problem);
+    setError(null);
+    if (!(await confirm({ title: 'Record this transfer?', message: transferConfirmText(form, accounts), confirmLabel: 'Save' }))) return;
+    try {
+      await actions.create.mutateAsync(buildTransferPayload(form));
+      toast.success('Transfer saved.');
+      setForm(emptyTransferForm(todayString()));
+    } catch (e) {
+      setError(inventoryErrorMessage(e));
+    }
+  };
+
+  return (
+    <ScrollView style={styles.container} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+      <TransferFields form={form} set={set} fromOptions={fromAccountOptions(accounts, isPrincipal)} toOptions={toAccountOptions(accounts)} />
+      {error ? <Text style={styles.error} accessibilityRole="alert">{error}</Text> : null}
+      <Button title="Save transfer" onPress={save} loading={actions.create.isPending} disabled={actions.create.isPending} fullWidth />
+    </ScrollView>
   );
 }
 
@@ -118,4 +170,5 @@ const styles = StyleSheet.create({
   name: { fontSize: FontSize.md, fontWeight: '600', color: Colors.text },
   sub: { fontSize: FontSize.sm, color: Colors.textSecondary, marginTop: 2 },
   amount: { fontSize: FontSize.md, fontWeight: '700', color: Colors.text },
+  error: { fontSize: FontSize.sm, color: Colors.error },
 });

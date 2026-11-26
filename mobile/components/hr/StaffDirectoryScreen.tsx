@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { View, Text, FlatList, ActivityIndicator, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, ActivityIndicator, StyleSheet } from 'react-native';
 import { useRouter, type Href } from 'expo-router';
 import { useDepartments, useStaffPaged } from '../../hooks/useHrAdmin';
 import { useDebouncedValue } from '../../hooks/useDebouncedValue';
@@ -10,12 +10,12 @@ import SearchBar from '../ui/SearchBar';
 import Select from '../ui/Select';
 import SegmentedTabs from '../ui/SegmentedTabs';
 import Button from '../ui/Button';
-import Avatar from '../ui/Avatar';
 import Skeleton from '../ui/Skeleton';
 import ErrorState from '../ui/ErrorState';
 import EmptyState from '../ui/EmptyState';
-import StatusPill from '../ui/StatusPill';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
+import AppList from '../ui/AppList';
+import RecordCard from '../ui/RecordCard';
 
 const STATUS_TABS = [{ value: 'ACTIVE', label: 'Working' }, { value: 'LEFT', label: 'Left' }, { value: '', label: 'All' }];
 
@@ -52,7 +52,7 @@ export default function StaffDirectoryScreen() {
 
   return (
     <>
-    <FlatList
+    <AppList
       style={styles.container}
       contentContainerStyle={styles.content}
       data={staff}
@@ -65,15 +65,14 @@ export default function StaffDirectoryScreen() {
       ListEmptyComponent={<EmptyState title="No staff" message={term ? 'No staff match your search.' : 'No staff in this view.'} />}
       ListFooterComponent={query.isFetchingNextPage ? <ActivityIndicator color={Colors.primary} style={{ margin: Spacing.lg }} /> : null}
       renderItem={({ item: s }) => (
-        <TouchableOpacity accessibilityRole="button" accessibilityLabel={`${s.full_name}. Open`} style={[styles.row, staffHasLeft(s) && styles.left]}
-          onPress={() => go(`/(admin)/hr/staff-form?id=${s.id}`)}>
-          <Avatar name={s.full_name} />
-          <View style={styles.who}>
-            <Text style={styles.name} numberOfLines={1}>{s.full_name}</Text>
-            <Text style={styles.sub} numberOfLines={1}>{staffSubtitle(s) || s.employee_id || ''}</Text>
-          </View>
-          {staffHasLeft(s) ? <StatusPill label="Left" tone="neutral" /> : null}
-        </TouchableOpacity>
+        <RecordCard
+          avatarName={s.full_name}
+          title={s.full_name}
+          subtitle={staffSubtitle(s) || s.employee_id || undefined}
+          status={staffHasLeft(s) ? { label: 'Left', tone: 'neutral' } : undefined}
+          accessibilityLabel={`${s.full_name}. Open`}
+          onPress={() => go(`/(admin)/hr/staff-form?id=${s.id}`)}
+        />
       )}
     />
     <BulkLoginsSheet visible={loginsOpen} onClose={() => setLoginsOpen(false)} />
@@ -86,9 +85,4 @@ const styles = StyleSheet.create({
   content: { padding: Spacing.lg, paddingBottom: Spacing.xxxl, gap: Spacing.sm },
   header: { gap: Spacing.md, marginBottom: Spacing.sm },
   count: { fontSize: FontSize.sm, color: Colors.textSecondary },
-  row: { flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.surface, borderRadius: BorderRadius.md, padding: Spacing.md, gap: Spacing.md, minHeight: 60 },
-  left: { opacity: 0.65 },
-  who: { flex: 1 },
-  name: { fontSize: FontSize.md, fontWeight: '600', color: Colors.text },
-  sub: { fontSize: FontSize.sm, color: Colors.textSecondary, marginTop: 2 },
 });

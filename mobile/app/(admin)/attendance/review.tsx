@@ -6,7 +6,6 @@ import {
   ScrollView,
   RefreshControl,
   TouchableOpacity,
-  Alert,
 } from 'react-native';
 import { attendanceApi } from '../../../services/api';
 import Card from '../../../components/ui/Card';
@@ -14,6 +13,7 @@ import Badge from '../../../components/ui/Badge';
 import Button from '../../../components/ui/Button';
 import Spinner from '../../../components/ui/Spinner';
 import EmptyState from '../../../components/ui/EmptyState';
+import { useToast } from '../../../components/ui/Toast';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../../constants/colors';
 
 interface PendingUpload {
@@ -32,6 +32,7 @@ interface PendingUpload {
 }
 
 export default function ReviewAttendance() {
+  const toast = useToast();
   const [uploads, setUploads] = useState<PendingUpload[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -68,11 +69,11 @@ export default function ReviewAttendance() {
           status: s.status,
         })),
       });
-      Alert.alert('Success', 'Attendance confirmed successfully.');
+      toast.success('Attendance confirmed.');
       fetchUploads();
     } catch (error) {
       console.error('Failed to confirm:', error);
-      Alert.alert('Error', 'Failed to confirm attendance.');
+      toast.error('Could not confirm attendance. Please try again.');
     } finally {
       setConfirming(null);
     }

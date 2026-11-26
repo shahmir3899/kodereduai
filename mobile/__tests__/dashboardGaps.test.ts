@@ -38,7 +38,7 @@ describe('teacher dashboard helpers', () => {
   });
 
   it('formats a submission date and survives junk', () => {
-    expect(shortDate('2026-03-05T10:00:00Z')).toMatch(/Mar 5|Mar 4|Mar 6/);
+    expect(shortDate('2026-03-05T10:00:00Z')).toMatch(/^(4|5|6) Mar$/);
     expect(shortDate(null)).toBe('');
     expect(shortDate('not a date')).toBe('');
   });

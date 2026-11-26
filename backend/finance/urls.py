@@ -12,9 +12,9 @@ from .views import (
     ExpenseViewSet, OtherIncomeViewSet,
     FinanceReportsView, FinanceAIChatView,
     FeePredictorView,
-    DiscountViewSet, ScholarshipViewSet, StudentDiscountViewSet,
+    DiscountViewSet, ScholarshipViewSet, StudentDiscountViewSet, StudentFeeEnrollmentViewSet,
     PaymentGatewayConfigViewSet, OnlinePaymentViewSet,
-    FeeBreakdownView,
+    FeeBreakdownView, FeeVoucherSettingsView,
     JazzCashCallbackView, EasypaisaCallbackView, PaymentStatusView,
 )
 
@@ -32,6 +32,7 @@ router.register(r'other-income', OtherIncomeViewSet, basename='other-income')
 router.register(r'discounts', DiscountViewSet, basename='discount')
 router.register(r'scholarships', ScholarshipViewSet, basename='scholarship')
 router.register(r'student-discounts', StudentDiscountViewSet, basename='student-discount')
+router.register(r'fee-enrollments', StudentFeeEnrollmentViewSet, basename='fee-enrollment')
 router.register(r'gateway-config', PaymentGatewayConfigViewSet, basename='gateway-config')
 router.register(r'online-payments', OnlinePaymentViewSet, basename='online-payment')
 
@@ -39,6 +40,7 @@ urlpatterns = [
     path('reports/', FinanceReportsView.as_view(), name='finance-reports'),
     path('ai-chat/', FinanceAIChatView.as_view(), name='finance-ai-chat'),
     path('fee-predictor/', FeePredictorView.as_view(), name='fee-predictor'),
+    path('voucher-settings/', FeeVoucherSettingsView.as_view(), name='voucher-settings'),
     path('fee-breakdown/<int:student_id>/', FeeBreakdownView.as_view(), name='fee-breakdown'),
     # Payment gateway callbacks (public — no auth, verified by signature)
     path('callbacks/jazzcash/', JazzCashCallbackView.as_view(), name='jazzcash-callback'),

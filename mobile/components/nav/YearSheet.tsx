@@ -4,6 +4,7 @@ import BottomSheet from '../ui/BottomSheet';
 import Badge from '../ui/Badge';
 import { useAcademicYear } from '../../hooks/useAcademicYear';
 import { Colors, FontSize, Spacing } from '../../constants/colors';
+import { SectionEmpty } from '../../components/ui/SectionState';
 
 // Pick the academic year to look at (admin, manager and finance manager). The choice is kept per person
 // and school; attendance and fee collection ignore it and always use the current year.
@@ -11,7 +12,7 @@ export default function YearSheet({ visible, onClose }: { visible: boolean; onCl
   const { years, current, actual, isPast, choose } = useAcademicYear();
   const pick = (id: number) => { choose(id === actual?.id ? null : id); onClose(); };
   return (
-    <BottomSheet visible={visible} onClose={onClose} title="Academic year">
+    <BottomSheet visible={visible} onClose={onClose} title="Academic year" placement="center">
       <ScrollView>
         {years.map((y) => {
           const selected = y.id === current?.id;
@@ -24,7 +25,7 @@ export default function YearSheet({ visible, onClose }: { visible: boolean; onCl
             </TouchableOpacity>
           );
         })}
-        {years.length === 0 ? <Text style={styles.note}>No academic years yet.</Text> : null}
+        {years.length === 0 ? <SectionEmpty message="No academic years yet." /> : null}
         {isPast ? (
           <View style={styles.warn}>
             <Text style={styles.warnText}>You are looking at a past year. Attendance and fee collection always use the current year.</Text>

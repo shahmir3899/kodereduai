@@ -9,12 +9,12 @@ import Skeleton from '../ui/Skeleton';
 import ErrorState from '../ui/ErrorState';
 import EmptyState from '../ui/EmptyState';
 import Card from '../ui/Card';
-import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
+import { Colors, FontSize, Spacing, BorderRadius, Palette } from '../../constants/colors';
 
 const SPECIAL: Record<string, { label: string; bg: string }> = {
-  BREAK: { label: 'Break', bg: '#FEF9C3' },
-  LUNCH: { label: 'Lunch', bg: '#FFEDD5' },
-  ASSEMBLY: { label: 'Assembly', bg: '#DBEAFE' },
+  BREAK: { label: 'Break', bg: Palette.slots.BREAK },
+  LUNCH: { label: 'Lunch', bg: Palette.slots.LUNCH },
+  ASSEMBLY: { label: 'Assembly', bg: Palette.slots.ASSEMBLY },
 };
 
 // The student's own weekly timetable, one day at a time (opens on today).

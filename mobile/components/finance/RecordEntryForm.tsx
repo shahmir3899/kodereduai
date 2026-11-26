@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Text, StyleSheet, ScrollView, RefreshControl, KeyboardAvoidingView, Platform } from 'react-native';
+import { RefreshControl } from 'react-native';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { financeApi } from '../../services/api';
 import { schoolToday } from '../../services/schoolTime';
@@ -8,9 +8,8 @@ import { defaultAccount, emptyEntry, entryPayload, validateEntry, type EntryForm
 import { useAccounts } from '../../hooks/useFees';
 import { useToast } from '../ui/Toast';
 import Card from '../ui/Card';
-import Button from '../ui/Button';
+import FormScreen from '../ui/FormScreen';
 import EntryFields, { useEntryCategories } from './EntryFields';
-import { Colors, FontSize, Spacing } from '../../constants/colors';
 
 // One form for "record expense" and "record income", as on the web: the school's own categories and
 // the account the money moves in or out of. Saving refreshes the balances so the account shows it.
@@ -45,24 +44,18 @@ export default function RecordEntryForm({ kind }: { kind: EntryKind }) {
   };
 
   return (
-    <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ScrollView style={styles.container} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled"
-        refreshControl={<RefreshControl refreshing={accounts.isRefetching || cats.isRefetching} onRefresh={() => { accounts.refetch(); cats.refetch(); }} />}>
-        <Text style={styles.title}>{isExpense ? 'Record Expense' : 'Record Income'}</Text>
-        <Card style={styles.card}>
-          <EntryFields kind={kind} form={form} set={set} />
-          <Button title={isExpense ? 'Record Expense' : 'Record Income'} onPress={submit} loading={save.isPending} fullWidth style={styles.submit} />
-        </Card>
-      </ScrollView>
-    </KeyboardAvoidingView>
+    <FormScreen
+      title={isExpense ? 'Record Expense' : 'Record Income'}
+      submitLabel={isExpense ? 'Record Expense' : 'Record Income'}
+      onSubmit={submit}
+      busy={save.isPending}
+      refreshControl={<RefreshControl refreshing={accounts.isRefetching || cats.isRefetching} onRefresh={() => { accounts.refetch(); cats.refetch(); }} />}
+    >
+      <Card>
+        <EntryFields kind={kind} form={form} set={set} />
+      </Card>
+    </FormScreen>
   );
 }
 
-const styles = StyleSheet.create({
-  flex: { flex: 1 },
-  container: { flex: 1, backgroundColor: Colors.background },
-  content: { padding: Spacing.lg },
-  title: { fontSize: FontSize.xl, fontWeight: '700', color: Colors.text, marginBottom: Spacing.lg },
-  card: { marginBottom: Spacing.xxl },
-  submit: { marginTop: Spacing.xl },
-});
+

@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { View, Text, FlatList, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { useRouter, type Href } from 'expo-router';
 import { sectionRows } from '../../services/students';
 import { useAcademicYear, useSessionClasses } from '../../hooks/useAcademicYear';
@@ -10,6 +10,7 @@ import Skeleton from '../ui/Skeleton';
 import ErrorState from '../ui/ErrorState';
 import EmptyState from '../ui/EmptyState';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
+import AppList from '../ui/AppList';
 
 interface Props {
   // Master classes a teacher is assigned to; admins leave it out and see every section.
@@ -34,7 +35,7 @@ export default function ClassesScreen({ allowedMasterIds, linkStudents = true, c
   if (sessions.isError && !sessions.data) return <ErrorState error={sessions.error} onRetry={() => sessions.refetch()} />;
 
   return (
-    <FlatList
+    <AppList
       style={styles.container}
       contentContainerStyle={styles.content}
       data={rows}

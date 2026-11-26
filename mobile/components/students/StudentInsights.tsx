@@ -5,6 +5,7 @@ import { assessmentTitle, hasAssessmentText, ratingLine, riskCards } from '../..
 import Card from '../ui/Card';
 import EmptyState from '../ui/EmptyState';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
+import { SectionError, SectionLoading } from '../../components/ui/SectionState';
 
 const TONE = { success: Colors.success, warning: Colors.warning, error: Colors.error, neutral: Colors.text } as const;
 
@@ -14,8 +15,8 @@ const TONE = { success: Colors.success, warning: Colors.warning, error: Colors.e
 export function RiskProfile({ studentId }: { studentId: number }) {
   const q = useStudentAIProfile(studentId);
   const status = (q.error as { response?: { status?: number } } | null)?.response?.status;
-  if (q.isLoading) return <Text style={styles.muted}>Loading the risk profile…</Text>;
-  if (q.isError) return status === 403 ? null : <Text style={styles.muted}>The risk profile is not available right now.</Text>;
+  if (q.isLoading) return <SectionLoading />;
+  if (q.isError) return status === 403 ? null : <SectionError message="The risk profile is not available right now." onRetry={() => q.refetch()} />;
   const ai = q.data;
   const cards = riskCards(ai);
   if (cards.length === 0 && !hasAssessmentText(ai)) return null;
@@ -45,8 +46,8 @@ export function RiskProfile({ studentId }: { studentId: number }) {
 // Skills and behaviour ratings and remarks recorded at an earlier branch: for the record, never editable.
 export function EarlierAssessments({ studentId }: { studentId: number }) {
   const q = useEarlierAssessments(studentId, true);
-  if (q.isLoading) return <Text style={styles.muted}>Loading…</Text>;
-  if (q.isError) return <Text style={styles.muted}>Could not load the earlier assessments.</Text>;
+  if (q.isLoading) return <SectionLoading />;
+  if (q.isError) return <SectionError message="Could not load the earlier assessments." onRetry={() => q.refetch()} />;
   const rows = q.data ?? [];
   if (rows.length === 0) return <EmptyState title="Nothing from earlier branches" message="No skills or behaviour assessments were recorded at an earlier branch." />;
   return (
@@ -68,7 +69,6 @@ export function EarlierAssessments({ studentId }: { studentId: number }) {
 }
 
 const styles = StyleSheet.create({
-  muted: { fontSize: FontSize.sm, color: Colors.textSecondary, marginVertical: Spacing.sm },
   title: { fontSize: FontSize.lg, fontWeight: '600', color: Colors.text, marginTop: Spacing.lg, marginBottom: Spacing.sm },
   cards: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm },
   card: { width: '48%', backgroundColor: Colors.surface, borderRadius: BorderRadius.md, padding: Spacing.md },

@@ -56,7 +56,7 @@ export default function ScanSchoolQr() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#000' },
+  container: { flex: 1, backgroundColor: Colors.black },
   center: { alignItems: 'center', justifyContent: 'center', padding: Spacing.xxl, gap: Spacing.md },
   camera: { flex: 1 },
   bar: { backgroundColor: Colors.surface, padding: Spacing.lg, gap: Spacing.md, borderTopLeftRadius: BorderRadius.xl, borderTopRightRadius: BorderRadius.xl },

@@ -32,6 +32,7 @@ function formatGenerationResult(payload, options = {}) {
 	const skipped = result.skipped ?? 0
 	const protectedConflict = result.protected_conflict ?? 0
 	const noFeeStructure = result.no_fee_structure ?? 0
+	const notEnrolled = result.not_enrolled ?? 0
 
 	if (created == null) return options.fallbackMessage || 'Fee generation started. Track progress in Tasks.'
 
@@ -42,6 +43,7 @@ function formatGenerationResult(payload, options = {}) {
 		skipped > 0 ? `Skipped ${skipped}.` : null,
 		protectedConflict > 0 ? `${protectedConflict} protected conflict${protectedConflict === 1 ? '' : 's'} left unchanged.` : null,
 		options.includeNoFeeStructure !== false && noFeeStructure > 0 ? `${noFeeStructure} students have no fee structure.` : null,
+		notEnrolled > 0 ? `${notEnrolled} skipped: not enrolled in an optional fee.` : null,
 	].filter(Boolean).join(' ')
 }
 
@@ -449,6 +451,30 @@ export default function FeeGenerationSurface({
 								</p>
 								{preview.already_exist > 0 && <p className="text-xs text-blue-700">{preview.already_exist} already exist and may need conflict handling.</p>}
 								{preview.no_fee_structure > 0 && <p className="text-xs text-amber-700">{preview.no_fee_structure} students have no fee structure and will be skipped.</p>}
+								{preview.not_enrolled > 0 && <p className="text-xs text-gray-600">{preview.not_enrolled} skipped: not enrolled in an optional fee.</p>}
+								{/* One line per fee type: several fees go in one run, and an optional fee shows how
+								    many of the students in scope are enrolled. */}
+								{preview.categories?.length > 1 || preview.categories?.some((c) => c.billing_mode === 'ENROLLED') ? (
+									<table className="mt-2 w-full text-left text-xs" aria-label="Records per fee">
+										<thead className="text-gray-500">
+											<tr><th className="py-1 pr-2">Fee</th><th className="py-1 pr-2">Who pays</th><th className="py-1 pr-2 text-right">New records</th><th className="py-1 text-right">Total</th></tr>
+										</thead>
+										<tbody>
+											{preview.categories.map((c) => (
+												<tr key={c.id} className="border-t border-gray-100">
+													<td className="py-1 pr-2 font-medium text-gray-800">{c.name}</td>
+													<td className="py-1 pr-2 text-gray-600">
+														{c.billing_mode === 'ENROLLED'
+															? `${c.enrolled ?? 0} of ${c.in_scope} students enrolled`
+															: 'All students'}
+													</td>
+													<td className="py-1 pr-2 text-right">{c.will_create}</td>
+													<td className="py-1 text-right">{Number(c.total_amount).toLocaleString()}</td>
+												</tr>
+											))}
+										</tbody>
+									</table>
+								) : null}
 							</div>
 							{!isMonthly && preview.will_create > 0 && (
 								<button

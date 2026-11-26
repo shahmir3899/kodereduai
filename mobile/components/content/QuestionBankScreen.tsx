@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { View, Text, FlatList, ActivityIndicator, TouchableOpacity, StyleSheet, type RefreshControlProps } from 'react-native';
+import { View, Text, ActivityIndicator, TouchableOpacity, StyleSheet, type RefreshControlProps } from 'react-native';
 import { useAuth } from '../../contexts/AuthContext';
 import { useMasterClasses } from '../../hooks/useAcademicYear';
 import { useSubjectTags } from '../../hooks/useCurriculum';
@@ -36,6 +36,7 @@ import { useToast } from '../ui/Toast';
 import { confirm } from '../ui/confirm';
 import FormSheet from '../inventory/FormSheet';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
+import AppList from '../ui/AppList';
 
 const ANY = '';
 
@@ -195,7 +196,7 @@ export default function QuestionBankScreen() {
 
   return (
     <View style={styles.container}>
-      <FlatList
+      <AppList
         contentContainerStyle={styles.content}
         data={useHits ? (hits as unknown as Question[]) : rows}
         keyExtractor={(q) => String(q.id)}

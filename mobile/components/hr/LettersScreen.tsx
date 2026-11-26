@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, FlatList, TouchableOpacity, StyleSheet, type RefreshControlProps } from 'react-native';
+import { View, Text, StyleSheet, type RefreshControlProps } from 'react-native';
 import { lettersApi } from '../../services/api';
 import { useLetterActions, useLetters, useLetterTemplates } from '../../hooks/useLetters';
 import { useStaffOptions } from '../../hooks/usePayroll';
@@ -20,6 +20,9 @@ import { useToast } from '../ui/Toast';
 import { confirm } from '../ui/confirm';
 import FormSheet from '../inventory/FormSheet';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
+import AppList from '../ui/AppList';
+import RecordCard from '../ui/RecordCard';
+import { day } from '../../services/dates';
 
 // Port of the Letter Composer for admin and principal: pick a template, fill it for a staff member,
 // save it, and share the server-made PDF (identical to the web's). "Draft with AI" writes the subject and
@@ -126,7 +129,7 @@ export default function LettersScreen() {
 
   return (
     <View style={styles.container}>
-      <FlatList
+      <AppList
         contentContainerStyle={styles.content}
         data={q.data ?? []}
         keyExtractor={(l) => String(l.id)}
@@ -134,10 +137,12 @@ export default function LettersScreen() {
         ListHeaderComponent={header}
         ListEmptyComponent={<EmptyState title="No letters" message="Write a letter from a template, then share it as a PDF." />}
         renderItem={({ item: l }) => (
-          <TouchableOpacity accessibilityRole="button" style={styles.row} onPress={() => { setForm(letterToForm(l)); setEmployee(null); setError(null); setEditing(l); }}>
-            <Text style={styles.name} numberOfLines={1}>{l.subject}</Text>
-            <Text style={styles.sub} numberOfLines={1}>{[l.recipient, l.template_display, l.created_at?.slice(0, 10)].filter(Boolean).join('  ·  ')}</Text>
-          </TouchableOpacity>
+          <RecordCard
+            icon="mail-outline"
+            title={l.subject}
+            subtitle={[l.recipient, l.template_display, l.created_at ? day(l.created_at.slice(0, 10)) : ''].filter(Boolean).join('  ·  ') || undefined}
+            onPress={() => { setForm(letterToForm(l)); setEmployee(null); setError(null); setEditing(l); }}
+          />
         )}
       />
 
@@ -169,8 +174,6 @@ export default function LettersScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
   content: { padding: Spacing.lg, paddingBottom: Spacing.xxxl },
-  row: { backgroundColor: Colors.surface, borderRadius: BorderRadius.md, padding: Spacing.md, marginTop: Spacing.sm },
-  name: { fontSize: FontSize.md, fontWeight: '600', color: Colors.text },
   sub: { fontSize: FontSize.sm, color: Colors.textSecondary, marginTop: 2 },
   body: { minHeight: 140, textAlignVertical: 'top' },
 });

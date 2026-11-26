@@ -5,6 +5,7 @@ import { formatMoney } from '../../services/feeCollect';
 import Card from '../ui/Card';
 import FeeCollectionBreakdown, { Tile, rateText } from './FeeCollectionBreakdown';
 import { Colors, FontSize, Spacing } from '../../constants/colors';
+import { SectionEmpty, SectionLoading } from '../../components/ui/SectionState';
 
 // This year's annual fees: collected, pending and rate, then each category. A multi-school admin
 // sees every school added together and then each school on its own, as on the web.
@@ -15,8 +16,8 @@ export default function AnnualFeeCard({ summary, loading, onDetails }: { summary
         <Text style={styles.title}>Annual fee overview{summary?.isMulti ? ' · all schools' : ''}</Text>
         {onDetails ? <TouchableOpacity accessibilityRole="button" onPress={onDetails} hitSlop={8}><Text style={styles.link}>Details</Text></TouchableOpacity> : null}
       </View>
-      {loading ? <Text style={styles.muted}>Loading…</Text> : !summary || !hasAnnualFees(summary) ? (
-        <Text style={styles.muted}>No annual fee records for this academic year.</Text>
+      {loading ? <SectionLoading /> : !summary || !hasAnnualFees(summary) ? (
+        <SectionEmpty message="No annual fee records for this academic year." />
       ) : (
         <>
           <View style={styles.tiles}>

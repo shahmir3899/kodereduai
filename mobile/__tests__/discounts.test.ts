@@ -1,4 +1,4 @@
-import {
+import { feeTypesText,
   amountOff, buildAssignPayload, buildBulkPayload, buildDiscountPayload, buildScholarshipPayload, bulkResultText,
   discountScopeText, discountToForm, discountValueText, emptyAssignForm, emptyDiscountForm, emptyScholarshipForm,
   scholarshipToForm, scholarshipValueText, validateAssign, validateDiscount, validateScholarship, type Discount,
@@ -28,7 +28,8 @@ describe('wording and amounts', () => {
 });
 
 describe('discount form', () => {
-  const ok = { ...emptyDiscountForm(), name: 'Early bird', value: '10' };
+  // Per-fee discounts (2026-11-26): a valid one names at least one fee it cuts.
+  const ok = { ...emptyDiscountForm(), name: 'Early bird', value: '10', monthlyFees: [4] };
   it('checks name, value, percentage cap and scope fields', () => {
     expect(validateDiscount({ ...ok, name: '' })).toMatch(/name/);
     expect(validateDiscount({ ...ok, value: '' })).toMatch(/value/);
@@ -39,6 +40,7 @@ describe('discount form', () => {
     expect(validateDiscount({ ...ok, startDate: '2026-05-01', endDate: '2026-04-01' })).toMatch(/end date/);
     expect(validateDiscount({ ...ok, maxUses: '2.5' })).toMatch(/whole number/);
     expect(validateDiscount(ok)).toBeNull();
+    expect(validateDiscount({ ...ok, monthlyFees: [] })).toMatch(/at least one fee/);
   });
   it('sends only the scope field that applies, and the year', () => {
     expect(buildDiscountPayload({ ...ok, appliesTo: 'GRADE_LEVEL', gradeLevel: '6', targetClass: 9 }, 3)).toMatchObject({
@@ -54,13 +56,19 @@ describe('discount form', () => {
 });
 
 describe('scholarship form', () => {
-  const ok = { ...emptyScholarshipForm(), name: 'Merit 2026' };
+  const ok = { ...emptyScholarshipForm(), name: 'Merit 2026', annualFees: [2] };
   it('needs no value for a full waiver, a capped one for a percentage', () => {
     expect(validateScholarship(ok)).toBeNull();
     expect(validateScholarship({ ...ok, coverage: 'PERCENTAGE' })).toMatch(/value/);
     expect(validateScholarship({ ...ok, coverage: 'PERCENTAGE', value: '120' })).toMatch(/0 and 100/);
     expect(validateScholarship({ ...ok, coverage: 'FIXED', value: '3000' })).toBeNull();
     expect(validateScholarship({ ...ok, maxRecipients: 'x' })).toMatch(/whole number/);
+    expect(validateScholarship({ ...ok, annualFees: [] })).toMatch(/at least one fee/);
+  });
+  it('sends the fees it cuts and labels them', () => {
+    expect(buildScholarshipPayload(ok)).toMatchObject({ monthly_categories: [], annual_categories: [2] });
+    expect(feeTypesText([{ id: 1, name: 'Tuition', kind: 'MONTHLY' }, { id: 2, name: 'Lab', kind: 'ANNUAL' }])).toBe('On: Tuition, Lab');
+    expect(feeTypesText([])).toBe('No fees picked: not applied');
   });
   it('sends value 0 for a full waiver', () => {
     expect(buildScholarshipPayload({ ...ok, value: '50' }, 2)).toMatchObject({ coverage: 'FULL', value: 0, academic_year: 2 });

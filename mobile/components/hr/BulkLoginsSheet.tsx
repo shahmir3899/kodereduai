@@ -11,7 +11,7 @@ import Select from '../ui/Select';
 import { useToast } from '../ui/Toast';
 import { confirm } from '../ui/confirm';
 import FormSheet from '../inventory/FormSheet';
-import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
+import { Colors, FontSize, Spacing, BorderRadius, GlyphSize } from '../../constants/colors';
 
 interface Props { visible: boolean; onClose: () => void }
 
@@ -81,6 +81,6 @@ const styles = StyleSheet.create({
   title: { fontSize: FontSize.md, fontWeight: '700', color: Colors.text },
   hint: { fontSize: FontSize.sm, color: Colors.textSecondary },
   row: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, minHeight: 44, borderWidth: 1, borderColor: Colors.border, borderRadius: BorderRadius.md, paddingHorizontal: Spacing.md },
-  tick: { fontSize: 22, color: Colors.primary },
+  tick: { fontSize: GlyphSize.md, color: Colors.primary },
   name: { fontSize: FontSize.md, color: Colors.text, flex: 1 },
 });

@@ -54,6 +54,8 @@ const ITEM_ICONS: Record<string, IconName> = {
   '/hr/leave': 'calendar-outline',
   '/hr/attendance': 'checkbox-outline',
   '/hr/appraisals': 'star-outline',
+  '/hr/teacher-performance': 'bar-chart-outline',
+  '/my-performance': 'bar-chart-outline',
   '/hr/documents': 'document-text-outline',
   '/hr/letters': 'document-text-outline',
   '/hr/risk': 'warning-outline',
@@ -125,6 +127,9 @@ const GROUP_ICONS: Record<string, IconName> = {
   Academics: 'book-outline',
   'Content Creation': 'create-outline',
   'Planning & Delivery': 'calendar-outline',
+  Insights: 'analytics-outline',
+  Setup: 'settings-outline',
+  'Self Service': 'briefcase-outline',
   'HR & Staff': 'briefcase-outline',
   Management: 'folder-outline',
   Admissions: 'person-add-outline',
@@ -136,8 +141,6 @@ const GROUP_ICONS: Record<string, IconName> = {
   'My HR': 'briefcase-outline',
   'My School': 'school-outline',
   Me: 'person-outline',
-  Pinned: 'star-outline',
-  Recent: 'time-outline',
 };
 
 const FALLBACK: IconName = 'ellipse-outline';

@@ -90,7 +90,7 @@ describe('LessonPlanWizard', () => {
       await waitFor(() => {
         expect(screen.getByText('Class & Date')).toBeInTheDocument()
         expect(screen.getByText('Topics')).toBeInTheDocument()
-        expect(screen.getByText('AI Generate')).toBeInTheDocument()
+        expect(screen.getByText('AI assistant')).toBeInTheDocument() // step renamed from "AI Generate"
         expect(screen.getByText('Review & Save')).toBeInTheDocument()
       })
     })

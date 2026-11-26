@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { ScrollView, View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import { examinationsApi } from '../../services/api';
 import { listOf } from '../../services/academicYear';
 import { groupSubjectsByExam, type ScheduleSubject } from '../../services/examViews';
@@ -9,6 +9,8 @@ import Card from '../ui/Card';
 import Skeleton from '../ui/Skeleton';
 import ErrorState from '../ui/ErrorState';
 import EmptyState from '../ui/EmptyState';
+import AppList from '../ui/AppList';
+import { day } from '../../services/dates';
 import { Colors, FontSize, Spacing } from '../../constants/colors';
 
 interface PublishedExam { id: number; name: string; class_name?: string; start_date?: string | null; end_date?: string | null }
@@ -34,27 +36,32 @@ export default function ExamScheduleScreen() {
   }
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content} refreshControl={refreshControl}>
-      {(exams.data ?? []).map((exam) => {
+    <AppList
+      style={styles.container}
+      contentContainerStyle={styles.content}
+      refreshControl={refreshControl}
+      data={exams.data ?? []}
+      keyExtractor={(exam) => String(exam.id)}
+      renderItem={({ item: exam }) => {
         const list = byExam[exam.id] ?? [];
         return (
-          <Card key={exam.id} style={styles.card}>
+          <Card style={styles.card}>
             <Text style={styles.title}>{exam.class_name ? `${exam.class_name} — ` : ''}{exam.name}</Text>
-            {exam.start_date ? <Text style={styles.dates}>{exam.start_date}{exam.end_date ? ` — ${exam.end_date}` : ''}</Text> : null}
+            {exam.start_date ? <Text style={styles.dates}>{day(exam.start_date) || exam.start_date}{exam.end_date ? ` — ${day(exam.end_date) || exam.end_date}` : ''}</Text> : null}
             {list.length === 0 ? (
               <Text style={styles.muted}>Subject dates not set yet.</Text>
             ) : (
               list.map((s) => (
                 <View key={s.id} style={styles.row}>
                   <Text style={styles.subject} numberOfLines={1}>{s.subject_code || s.subject_name}</Text>
-                  <Text style={styles.date}>{s.exam_date || '—'}</Text>
+                  <Text style={styles.date}>{s.exam_date ? day(s.exam_date) || s.exam_date : '—'}</Text>
                 </View>
               ))
             )}
           </Card>
         );
-      })}
-    </ScrollView>
+      }}
+    />
   );
 }
 

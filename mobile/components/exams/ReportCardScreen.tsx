@@ -30,7 +30,9 @@ import SegmentedTabs from '../ui/SegmentedTabs';
 import Button from '../ui/Button';
 import { useToast } from '../ui/Toast';
 import BulkReportCardsSheet from './BulkReportCardsSheet';
+import { CardDetails, ClassDetailsSheet } from './ReportCardMeta';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../constants/colors';
+import { SectionEmpty } from '../../components/ui/SectionState';
 
 interface ReportSubject {
   subject_id: number; subject_name: string; total_marks?: number | string; marks_obtained?: number | null;
@@ -61,9 +63,9 @@ interface Props {
   canBulk?: boolean;
 }
 
-// View-only report card, one student at a time. The numbers all come from the server; the card is
-// keyed to the main (latest) exam. Comments can be edited or regenerated here; the issue date,
-// promotion and the PDF stay on the web for now.
+// Report card, one student at a time. The numbers all come from the server; the card is keyed to
+// the main (latest) exam. Comments, promotion, date of issue and signature captions can be edited
+// here (the server decides who may save them), and the PDF is drawn on the phone.
 export default function ReportCardScreen({ useClassOptions, autoSelectFirst, canBulk }: Props) {
   const year = useAcademicYear();
   const [pickedYear, setPickedYear] = useState<number | null>(null);
@@ -75,6 +77,7 @@ export default function ReportCardScreen({ useClassOptions, autoSelectFirst, can
   const [sharing, setSharing] = useState(false);
   const school = useSchoolProfile();
   const [bulkOpen, setBulkOpen] = useState(false);
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const toast = useToast();
 
   // The layout choice is remembered on this phone, like the web remembers it.
@@ -160,6 +163,9 @@ export default function ReportCardScreen({ useClassOptions, autoSelectFirst, can
       {canBulk && option && students.length > 0 && examIds.length > 0 && yearId ? (
         <Button title={`All report cards (${students.length}) as ZIP`} variant="outline" size="sm" onPress={() => setBulkOpen(true)} style={styles.bulkBtn} />
       ) : null}
+      {option && students.length > 0 && examIds.length > 0 && yearId ? (
+        <Button title="Class print details" variant="outline" size="sm" onPress={() => setDetailsOpen(true)} style={styles.bulkBtn} />
+      ) : null}
 
       {students.length > 0 && enrollmentId ? (
         <View style={styles.nav}>
@@ -185,7 +191,7 @@ export default function ReportCardScreen({ useClassOptions, autoSelectFirst, can
             <SegmentedTabs tabs={REPORT_TEMPLATES} value={template} onChange={chooseTemplate} />
             <Button title="Share report card PDF" onPress={sharePdf} loading={sharing} disabled={sharing} fullWidth />
           </Card>
-        <Card_ report={report} studentId={enrollment.student} onChanged={() => reportQ.refetch()} />
+        <Card_ report={report} studentId={enrollment.student} yearId={yearId!} examIds={examIds} onChanged={() => reportQ.refetch()} />
         </>
       ) : null}
       {canBulk && yearId ? (
@@ -193,11 +199,15 @@ export default function ReportCardScreen({ useClassOptions, autoSelectFirst, can
           className={option?.label ?? 'Class'}
           students={students.map((e) => ({ studentId: e.student, enrollmentId: e.id, name: e.student_name, roll: e.roll_number }))} />
       ) : null}
+      {yearId ? (
+        <ClassDetailsSheet visible={detailsOpen} onClose={() => setDetailsOpen(false)} yearId={yearId} examIds={examIds}
+          students={students.map((e) => ({ studentId: e.student, name: e.student_name, roll: e.roll_number }))} />
+      ) : null}
     </ScrollView>
   );
 }
 
-function Card_({ report, studentId, onChanged }: { report: Report; studentId: number; onChanged: () => void }) {
+function Card_({ report, studentId, yearId, examIds, onChanged }: { report: Report; studentId: number; yearId: number; examIds: number[]; onChanged: () => void }) {
   const subjects = report.subjects ?? [];
   const exams = report.exams ?? [];
   const multi = exams.length > 1;
@@ -256,7 +266,7 @@ function Card_({ report, studentId, onChanged }: { report: Report; studentId: nu
 
       <Text style={styles.section}>Marks</Text>
       {subjects.length === 0 ? (
-        <Text style={styles.muted}>No subject marks available.</Text>
+        <SectionEmpty message="No subject marks available." />
       ) : (
         subjects.map((s) => (
           <Card key={s.subject_id} style={{ ...styles.subject, ...(s.is_pass === false ? styles.subjectFail : null) }}>
@@ -337,7 +347,7 @@ function Card_({ report, studentId, onChanged }: { report: Report; studentId: nu
 
       <Text style={styles.section}>Comments</Text>
       <Card style={styles.block}>
-        {editableComments.length === 0 ? <Text style={styles.muted}>No exam to attach a comment to yet.</Text> : null}
+        {editableComments.length === 0 ? <SectionEmpty message="No exam to attach a comment to yet." /> : null}
         {editableComments.map((c) => (
           <CommentRow key={c.key} row={c.row} showSource={false}
             onSave={async (comment) => { await examinationsApi.editComment(c.examId, { studentId, subjectId: c.row.subjectId, comment }); onChanged(); }}
@@ -349,6 +359,10 @@ function Card_({ report, studentId, onChanged }: { report: Report; studentId: nu
         <Row k="Date of issue" v={formatIssueDate(issue)} />
         <Text style={styles.sig}>{sig.class_teacher}  ·  {sig.principal}  ·  {sig.parent}</Text>
       </Card>
+
+      <CardDetails card={{ studentId, yearId, examIds }} promotionApplicable={report.promotion_applicable}
+        promotionStatus={report.promotion_status} issueDate={report.issue_date} signatureLabels={report.signature_labels}
+        onSaved={onChanged} />
     </View>
   );
 }
@@ -412,7 +426,7 @@ const styles = StyleSheet.create({
   k: { fontSize: FontSize.sm, color: Colors.textSecondary },
   v: { fontSize: FontSize.sm, fontWeight: '600', color: Colors.text, flexShrink: 1, marginLeft: Spacing.md },
   podium: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md, borderRadius: BorderRadius.lg, padding: Spacing.md, marginBottom: Spacing.md },
-  podiumIcon: { fontSize: 34 },
+  podiumIcon: { fontSize: FontSize.display },
   podiumTitle: { fontSize: FontSize.md, fontWeight: '700', textTransform: 'uppercase' },
   podiumSub: { fontSize: FontSize.sm },
   section: { fontSize: FontSize.lg, fontWeight: '600', color: Colors.text, marginVertical: Spacing.md },
@@ -426,21 +440,21 @@ const styles = StyleSheet.create({
   meta: { fontSize: FontSize.xs, color: Colors.textSecondary, marginTop: 2 },
   examRow: { flexDirection: 'row', gap: Spacing.sm, marginTop: Spacing.sm },
   examCell: { flex: 1 },
-  examName: { fontSize: 10, color: Colors.textSecondary },
+  examName: { fontSize: FontSize.xxs, color: Colors.textSecondary },
   examValue: { fontSize: FontSize.sm, marginTop: 2 },
   examMain: { fontWeight: '700', color: Colors.text },
   examEarlier: { color: Colors.textTertiary },
   total: { padding: Spacing.md, marginBottom: Spacing.md, backgroundColor: Colors.surfaceSecondary },
   totalTitle: { fontSize: FontSize.sm, fontWeight: '700', color: Colors.textSecondary, textTransform: 'uppercase' },
   totalRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, marginTop: 2 },
-  eyebrow: { fontSize: 10, fontWeight: '700', color: Colors.textSecondary, textTransform: 'uppercase' },
+  eyebrow: { fontSize: FontSize.xxs, fontWeight: '700', color: Colors.textSecondary, textTransform: 'uppercase' },
   attMain: { fontSize: FontSize.lg, fontWeight: '700', color: Colors.success, marginTop: 2 },
   attPct: { fontSize: FontSize.sm, fontWeight: '500' },
   bar: { flexDirection: 'row', height: 8, borderRadius: 4, overflow: 'hidden', backgroundColor: Colors.border, marginVertical: Spacing.sm },
   attNote: { fontSize: FontSize.xs, color: Colors.textSecondary, marginTop: Spacing.xs },
   starRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 3 },
   starLabel: { fontSize: FontSize.sm, color: Colors.textSecondary },
-  stars: { fontSize: FontSize.md, color: '#f59e0b' },
+  stars: { fontSize: FontSize.md, color: Colors.star },
   remark: { marginTop: Spacing.sm },
   remarkText: { fontSize: FontSize.sm, color: Colors.text, fontStyle: 'italic', marginTop: 2 },
   promotion: { borderRadius: BorderRadius.md, padding: Spacing.md, marginBottom: Spacing.md, alignItems: 'center', borderWidth: 1 },

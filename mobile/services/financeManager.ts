@@ -2,6 +2,7 @@
 // API (FinanceRoleAccessPermission), so nothing here builds a write payload.
 
 import { formatMoney } from './feeCollect';
+import { monthLong } from './dates';
 
 const num = (v: number | string | null | undefined) => Number(v ?? 0) || 0;
 
@@ -23,6 +24,11 @@ export interface RecentEntry {
   account_name?: string | null;
   recorded_by?: string | null;
   fee_type_label?: string | null;
+  // When it was entered (ISO), as opposed to `date`, the day the money moved.
+  timestamp?: string | null;
+  // Income and expense only: the category and the note, also folded into `description`.
+  category?: string | null;
+  note?: string | null;
 }
 
 export interface FeeMonthSummary {
@@ -169,7 +175,7 @@ export const sortPayslips = (list: Payslip[]): Payslip[] =>
   [...list].sort((a, b) => b.year - a.year || b.month - a.month);
 
 export function payslipPeriod(p: Pick<Payslip, 'month' | 'year'>): string {
-  return new Date(p.year, p.month - 1, 1).toLocaleString('en-US', { month: 'long', year: 'numeric' });
+  return monthLong(new Date(p.year, p.month - 1, 1));
 }
 
 export function payslipTone(status: string): 'success' | 'info' | 'neutral' {

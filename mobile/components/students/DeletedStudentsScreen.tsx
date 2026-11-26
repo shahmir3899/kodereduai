@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { studentsApi } from '../../services/api';
 import { buildRestorePayload, deletedLine, deletedMeta, isRollConflict, type DeletedStudent } from '../../services/studentMove';
@@ -10,7 +10,7 @@ import Card from '../ui/Card';
 import Avatar from '../ui/Avatar';
 import Input from '../ui/Input';
 import Button from '../ui/Button';
-import QueryBoundary from '../ui/QueryBoundary';
+import QueryList from '../ui/QueryList';
 import { useToast } from '../ui/Toast';
 import FormSheet from '../inventory/FormSheet';
 import { Colors, FontSize, Spacing } from '../../constants/colors';
@@ -47,11 +47,16 @@ export default function DeletedStudentsScreen() {
 
   return (
     <View style={styles.container}>
-      <ScrollView contentContainerStyle={styles.content} refreshControl={refreshControl}>
-        <Text style={styles.note}>Removed students keep all their records. Restore one to bring everything back.</Text>
-        <QueryBoundary query={list} emptyTitle="Nothing removed" emptyMessage="Students you remove will appear here.">
-          {(rows) => rows.map((s) => (
-            <Card key={s.id} style={styles.card}>
+      <QueryList
+        query={list}
+        contentContainerStyle={styles.content}
+        refreshControl={refreshControl}
+        emptyTitle="Nothing removed"
+        emptyMessage="Students you remove will appear here."
+        keyExtractor={(s) => String(s.id)}
+        header={<Text style={styles.note}>Removed students keep all their records. Restore one to bring everything back.</Text>}
+        renderItem={(s) => (
+            <Card style={styles.card}>
               <View style={styles.top}>
                 <Avatar name={s.name} size={40} />
                 <View style={styles.who}>
@@ -63,9 +68,8 @@ export default function DeletedStudentsScreen() {
               {s.deleted_reason ? <Text style={styles.reason}>Reason: {s.deleted_reason}</Text> : null}
               <Button title="Restore" size="sm" variant="outline" onPress={() => open(s)} style={styles.restore} />
             </Card>
-          ))}
-        </QueryBoundary>
-      </ScrollView>
+        )}
+      />
 
       <FormSheet visible={target !== null} title="Restore student" onClose={() => setTarget(null)} onSubmit={submit} submitLabel="Restore" busy={restore.isPending} error={error}>
         <Text style={styles.note}>{target?.name} will be shown in their class again with everything they owned.</Text>

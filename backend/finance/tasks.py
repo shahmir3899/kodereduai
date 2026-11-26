@@ -144,6 +144,7 @@ def generate_monthly_fees_task(
         deleted_recreated_count = 0
         skipped_count = 0
         no_fee_count = 0
+        not_enrolled_count = 0
         unchanged_existing_count = 0
         protected_conflict_count = 0
         conflicts_detected = 0
@@ -179,8 +180,12 @@ def generate_monthly_fees_task(
                     monthly_category_id=cat_id,
                     class_obj_id_getter=_class_obj_id_getter,
                     class_name_getter=_class_name_getter,
+                    year=year,
+                    month=month,
+                    academic_year_id=academic_year_id,
                 )
                 no_fee_count += plan['no_fee_structure']
+                not_enrolled_count += plan['not_enrolled']
 
                 # Latest earlier row per student, not only last calendar month, so a missing
                 # intervening month cannot drop an unpaid balance. Locked: see above.
@@ -223,6 +228,8 @@ def generate_monthly_fees_task(
                             existing_payment.previous_balance = prev_balance
                             existing_payment.base_monthly_fee = monthly_fee
                             existing_payment.amount_due = amount_due
+                            existing_payment.discount_amount = entry['discount']
+                            existing_payment.discount_detail = entry['discount_detail']
                             existing_payment.updated_at = now_ts
                             existing_payment.compute_status()
                             to_update.append(existing_payment)
@@ -247,6 +254,8 @@ def generate_monthly_fees_task(
                         previous_balance=prev_balance,
                         base_monthly_fee=monthly_fee,
                         amount_due=amount_due,
+                        discount_amount=entry['discount'],
+                        discount_detail=entry['discount_detail'],
                         amount_paid=0,
                         academic_year_id=academic_year_id,
                     ))
@@ -273,7 +282,7 @@ def generate_monthly_fees_task(
                 if to_update:
                     FeePayment.objects.bulk_update(
                         to_update,
-                        ['previous_balance', 'base_monthly_fee', 'amount_due', 'status', 'payment_date', 'account', 'receipt_number', 'updated_at'],
+                        ['previous_balance', 'base_monthly_fee', 'amount_due', 'discount_amount', 'discount_detail', 'status', 'payment_date', 'account', 'receipt_number', 'updated_at'],
                         batch_size=1000,
                     )
 
@@ -283,6 +292,7 @@ def generate_monthly_fees_task(
             'deleted_recreated': deleted_recreated_count,
             'skipped': skipped_count,
             'no_fee_structure': no_fee_count,
+            'not_enrolled': not_enrolled_count,
             'unchanged_existing': unchanged_existing_count,
             'protected_conflict': protected_conflict_count,
             'conflicts_detected': conflicts_detected,
@@ -401,6 +411,7 @@ def generate_annual_fees_task(
         deleted_recreated_count = 0
         skipped_count = 0
         no_fee_count = 0
+        not_enrolled_count = 0
         unchanged_existing_count = 0
         protected_conflict_count = 0
         conflicts_detected = 0
@@ -430,8 +441,11 @@ def generate_annual_fees_task(
                     annual_category_id=category.id,
                     class_obj_id_getter=_class_obj_id_getter,
                     class_name_getter=_class_name_getter,
+                    year=year,
+                    academic_year_id=academic_year_id,
                 )
                 no_fee_count += plan['no_fee_structure']
+                not_enrolled_count += plan['not_enrolled']
 
                 to_create = []
                 to_update = []
@@ -464,6 +478,8 @@ def generate_annual_fees_task(
 
                             # Keep category immutable on update; only refresh computed amounts/status.
                             existing_payment.amount_due = amount
+                            existing_payment.discount_amount = entry['discount']
+                            existing_payment.discount_detail = entry['discount_detail']
                             existing_payment.updated_at = now_ts
                             existing_payment.compute_status()
                             to_update.append(existing_payment)
@@ -486,6 +502,8 @@ def generate_annual_fees_task(
                         month=0,
                         year=year,
                         amount_due=amount,
+                        discount_amount=entry['discount'],
+                        discount_detail=entry['discount_detail'],
                         amount_paid=0,
                         academic_year_id=academic_year_id,
                     ))
@@ -512,7 +530,7 @@ def generate_annual_fees_task(
                 if to_update:
                     FeePayment.objects.bulk_update(
                         to_update,
-                        ['amount_due', 'status', 'payment_date', 'account', 'receipt_number', 'updated_at'],
+                        ['amount_due', 'discount_amount', 'discount_detail', 'status', 'payment_date', 'account', 'receipt_number', 'updated_at'],
                         batch_size=1000,
                     )
 
@@ -522,6 +540,7 @@ def generate_annual_fees_task(
             'deleted_recreated': deleted_recreated_count,
             'skipped': skipped_count,
             'no_fee_structure': no_fee_count,
+            'not_enrolled': not_enrolled_count,
             'unchanged_existing': unchanged_existing_count,
             'protected_conflict': protected_conflict_count,
             'conflicts_detected': conflicts_detected,

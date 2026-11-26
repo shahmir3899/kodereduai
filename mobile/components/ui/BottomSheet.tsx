@@ -7,17 +7,22 @@ interface BottomSheetProps {
   onClose: () => void;
   title?: string;
   children: React.ReactNode;
+  // 'center' opens a box in the middle of the screen instead of a panel from the bottom. Used by
+  // the academic year picker so it opens where the school switcher does.
+  placement?: 'bottom' | 'center';
 }
 
-// Slide-up panel for pickers and short forms. Tapping the dim area closes it.
-export default function BottomSheet({ visible, onClose, title, children }: BottomSheetProps) {
+// Slide-up panel for pickers and short forms (or a centred box with `placement="center"`).
+// Tapping the dim area closes it.
+export default function BottomSheet({ visible, onClose, title, children, placement = 'bottom' }: BottomSheetProps) {
+  const center = placement === 'center';
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose} accessibilityViewIsModal>
+    <Modal visible={visible} transparent animationType={center ? 'fade' : 'slide'} onRequestClose={onClose} accessibilityViewIsModal>
       {/* The close tap-area is a sibling of the sheet: wrapped around it, every button in the sheet sat inside a button on web. */}
-      <View style={styles.backdrop}>
+      <View style={[styles.backdrop, center && styles.backdropCenter]}>
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityRole="button" accessibilityLabel="Close" />
-        <View style={styles.sheet}>
-          <View style={styles.handle} />
+        <View style={[styles.sheet, center && styles.sheetCenter]}>
+          {center ? null : <View style={styles.handle} />}
           {title ? <Text style={styles.title}>{title}</Text> : null}
           {children}
         </View>
@@ -35,6 +40,9 @@ const styles = StyleSheet.create({
     paddingBottom: Spacing.xxl,
     maxHeight: '80%',
   },
+  // Same box as the school switcher (components/nav/SchoolSwitcher.tsx).
+  backdropCenter: { justifyContent: 'center', padding: Spacing.xxl },
+  sheetCenter: { borderRadius: BorderRadius.lg, paddingTop: Spacing.lg, paddingBottom: Spacing.md },
   handle: {
     alignSelf: 'center',
     width: 40,

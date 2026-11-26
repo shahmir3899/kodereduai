@@ -1,17 +1,17 @@
 import React, { useMemo, useState } from 'react';
-import { View, FlatList, StyleSheet } from 'react-native';
+import { View, StyleSheet } from 'react-native';
 import { useContentList } from '../../hooks/useManager';
 import { useDebouncedValue } from '../../hooks/useDebouncedValue';
 import { useRefreshControl } from '../../hooks/useRefreshControl';
 import type { ContentRow } from '../../services/manager';
 import SearchBar from '../ui/SearchBar';
-import ListRow from '../ui/ListRow';
-import StatusPill from '../ui/StatusPill';
 import Skeleton from '../ui/Skeleton';
 import ErrorState from '../ui/ErrorState';
 import EmptyState from '../ui/EmptyState';
 import Spinner from '../ui/Spinner';
 import { Colors, Spacing } from '../../constants/colors';
+import AppList from '../ui/AppList';
+import RecordCard from '../ui/RecordCard';
 
 interface Props<Item> {
   root: string;
@@ -37,7 +37,7 @@ export default function ContentListScreen<Item>({ root, fetcher, toRow, searchPl
 
   return (
     <View style={styles.container}>
-      <FlatList
+      <AppList
         data={rows}
         keyExtractor={(r) => String(r.id)}
         refreshControl={refreshControl}
@@ -48,8 +48,8 @@ export default function ContentListScreen<Item>({ root, fetcher, toRow, searchPl
         ListEmptyComponent={<EmptyState title={emptyTitle} message={term ? 'Nothing matches your search.' : undefined} />}
         ListFooterComponent={query.isFetchingNextPage ? <Spinner /> : null}
         renderItem={({ item }) => (
-          <ListRow title={item.title} subtitle={item.subtitle}
-            right={item.pill ? <StatusPill label={item.pill} tone="neutral" /> : undefined}
+          <RecordCard icon="folder-open-outline" title={item.title} subtitle={item.subtitle}
+            status={item.pill ? { label: item.pill, tone: 'neutral' } : undefined}
             onPress={onPressRow ? () => onPressRow(item) : undefined} />
         )}
       />

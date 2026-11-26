@@ -8,6 +8,7 @@ import {
   type Measure, type TeacherResponse,
 } from '../../../services/teacherPerformance';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../../constants/colors';
+import { day } from '../../../services/dates';
 
 const BAR = { good: Colors.success, mid: Colors.warning, low: Colors.error };
 
@@ -64,7 +65,7 @@ export default function PerformanceDetail({ data }: { data: TeacherResponse }) {
               {data.period.counted_until !== data.period.end ? ` (counted until ${data.period.counted_until})` : ''}
             </Text>
             {data.snapshot && data.frozen_at ? (
-              <Text style={styles.small}>Frozen on {new Date(data.frozen_at).toLocaleDateString()}</Text>
+              <Text style={styles.small}>Frozen on {day(data.frozen_at)}</Text>
             ) : null}
           </View>
           <View style={styles.scoreBox}>

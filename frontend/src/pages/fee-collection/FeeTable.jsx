@@ -36,6 +36,19 @@ const FEE_TYPE_LABEL = {
   FINE: 'Fine',
 }
 
+
+// The fee shown is what is charged after discount; this says what was taken off and why.
+function DiscountNote({ payment }) {
+  const off = Number(payment.discount_amount || 0)
+  if (!off) return null
+  const names = (payment.discount_detail || []).map((d) => d.name).join(', ')
+  return (
+    <span className="block text-[11px] font-normal text-green-700" title={names}>
+      after {off.toLocaleString()} off{names ? ` (${names})` : ''}
+    </span>
+  )
+}
+
 export default function FeeTable({
   paymentList, isLoading, month, year,
   selectedIds, onToggleSelect, onToggleSelectAll,
@@ -46,7 +59,15 @@ export default function FeeTable({
   const isAllTypes = !feeTypeFilter
   const isMonthly = feeTypeFilter === 'MONTHLY'
   const isAnnual = feeTypeFilter === 'ANNUAL'
-  const shouldGroupByStudent = isAllTypes || isAnnual
+  // Monthly view groups a student's rows and names each fee only when the month has several
+  // monthly fees (e.g. Tuition + Koder Kids); a school with just Tuition keeps the plain list.
+  const monthlyFeeCount = useMemo(
+    () => (isMonthly ? new Set(paymentList.map((p) => p.monthly_category ?? p.monthly_category_name ?? '')).size : 0),
+    [isMonthly, paymentList],
+  )
+  const groupMonthly = isMonthly && monthlyFeeCount > 1
+  const shouldGroupByStudent = isAllTypes || isAnnual || groupMonthly
+  const showCategory = isAnnual || isAllTypes || groupMonthly
   const showPrevBal = isMonthly || isAllTypes
   const feeColumnLabel = isAllTypes ? 'Fee Amount' : (FEE_TYPE_LABEL[feeTypeFilter] || 'Fee Amount')
   const headerCheckboxRef = useRef(null)
@@ -108,6 +129,7 @@ export default function FeeTable({
     const map = new Map()
     groupedMobileList.forEach((group) => {
       map.set(group.key, {
+        rows: group.items.length,
         studentName: group.student_name,
         feeAmount: group.feeAmount,
         due: group.due,
@@ -141,7 +163,7 @@ export default function FeeTable({
     (onToggleSelect ? 1 : 0) + // checkbox
     3 + // roll, student, class
     (isAllTypes ? 1 : 0) + // type
-    ((isAnnual || isAllTypes) ? 1 : 0) + // category
+    (showCategory ? 1 : 0) + // category
     (showPrevBal ? 1 : 0) // prev balance
 
   // The column exists only where some row carries a number, so a school without Kuickpay sees no new column.
@@ -239,17 +261,18 @@ export default function FeeTable({
                                   {payment.fee_type_display || payment.fee_type}
                                 </span>
                               )}
-                              {(isAnnual || isAllTypes) && (payment.annual_category_name || payment.monthly_category_name) && (
+                              {showCategory && (payment.annual_category_name || payment.monthly_category_name) && (
                                 <span className="px-1.5 py-0.5 text-xs bg-gray-100 text-gray-600 rounded">{payment.annual_category_name || payment.monthly_category_name}</span>
                               )}
                             </div>
                             {statusBadge(payment.status)}
                           </div>
 
-                          <div className="grid grid-cols-4 gap-1.5 text-xs mt-1.5">
+                          <div className={`grid ${showPrevBal ? 'grid-cols-4' : 'grid-cols-3'} gap-1.5 text-xs mt-1.5`}>
                             <div>
                               <p className="text-gray-500">{feeColumnLabel}</p>
                               <p className="font-medium text-gray-900">{monthlyFee.toLocaleString()}</p>
+                              <DiscountNote payment={payment} />
                             </div>
                             <div
                               className={canWrite ? 'cursor-pointer' : ''}
@@ -296,6 +319,8 @@ export default function FeeTable({
                   </>
                               )}
                             </div>
+                            {/* Only monthly fees carry a balance forward; the table hides this column too. */}
+                            {showPrevBal && (
                             <div
                               className={canWrite ? 'cursor-pointer' : ''}
                               onClick={() => canWrite && handleCellClick(payment.id, 'previous_balance', prevBal)}
@@ -319,6 +344,7 @@ export default function FeeTable({
                                 </p>
                               )}
                             </div>
+                            )}
                             <div>
                               <p className="text-gray-500">Balance</p>
                               <p className={`font-medium ${balance > 0 ? 'text-orange-700' : balance < 0 ? 'text-blue-700' : 'text-green-700'}`}>{balance.toLocaleString()}</p>
@@ -413,10 +439,11 @@ export default function FeeTable({
                   </div>
                 </div>
               </div>
-              <div className="grid grid-cols-5 gap-2 text-sm mb-2">
+              <div className={`grid ${showPrevBal ? 'grid-cols-5' : 'grid-cols-4'} gap-2 text-sm mb-2`}>
                 <div>
                   <p className="text-xs text-gray-500">{feeColumnLabel}</p>
                   <p className="font-medium">{monthlyFee.toLocaleString()}</p>
+                  <DiscountNote payment={payment} />
                 </div>
                 <div
                   className={canWrite ? 'cursor-pointer' : ''}
@@ -463,6 +490,8 @@ export default function FeeTable({
                   </>
                   )}
                 </div>
+                {/* Only monthly fees carry a balance forward; the table hides this column too. */}
+                {showPrevBal && (
                 <div
                   className={canWrite ? 'cursor-pointer' : ''}
                   onClick={() => canWrite && handleCellClick(payment.id, 'previous_balance', prevBal)}
@@ -486,6 +515,7 @@ export default function FeeTable({
                     </p>
                   )}
                 </div>
+                )}
                 <div>
                   <p className="text-xs text-gray-500">Balance</p>
                   <p className={`font-medium ${balance > 0 ? 'text-orange-700' : balance < 0 ? 'text-blue-700' : 'text-green-700'}`}>{balance.toLocaleString()}</p>
@@ -558,7 +588,7 @@ export default function FeeTable({
               <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Student</th>
               <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Class</th>
               {isAllTypes && <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Type</th>}
-              {(isAnnual || isAllTypes) && <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Category</th>}
+              {showCategory && <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Category</th>}
               {showPrevBal && <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">Prev Bal</th>}
               <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">{feeColumnLabel}</th>
               <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">Total Payable</th>
@@ -616,7 +646,7 @@ export default function FeeTable({
                         </span>
                       </td>
                     )}
-                    {(isAnnual || isAllTypes) && (
+                    {showCategory && (
                       <td className="px-3 py-2 text-sm text-gray-600">
                         {payment.annual_category_name || payment.monthly_category_name || '—'}
                       </td>
@@ -646,6 +676,7 @@ export default function FeeTable({
                     )}
                     <td className={`px-3 py-2 text-sm text-gray-900 text-right`}>
                       {monthlyFee.toLocaleString()}
+                      <DiscountNote payment={payment} />
                     </td>
                     <td
                       className={`px-3 py-2 text-sm font-medium text-right ${canWrite ? 'cursor-pointer hover:bg-blue-50' : ''} transition-colors ${Number(payment.amount_due) < 0 ? 'text-blue-700' : 'text-gray-900'}`}
@@ -733,7 +764,7 @@ export default function FeeTable({
                       </td>
                     )}
                   </tr>
-                  {shouldGroupByStudent && group?.isLast && studentTotal && (
+                  {shouldGroupByStudent && group?.isLast && studentTotal && (!groupMonthly || studentTotal.rows > 1) && (
                     <tr className="bg-blue-50/60 border-t border-blue-100">
                       <td colSpan={footerLabelColSpan} className="px-3 py-2 text-xs font-semibold text-blue-900 text-center">
                         Sub Total ({studentTotal.studentName || payment.student_name})

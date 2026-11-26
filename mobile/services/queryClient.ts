@@ -5,6 +5,7 @@ import NetInfo from '@react-native-community/netinfo';
 import { QueryClient, focusManager, onlineManager } from '@tanstack/react-query';
 import { createAsyncStoragePersister } from '@tanstack/query-async-storage-persister';
 import { PERSISTED_QUERY_ROOTS, installMoneyRules, shouldPersistQuery, shouldRetry } from './queryRules';
+import { clearEtagCache } from './etagCache';
 
 export const QUERY_PERSIST_KEY = 'eduai-mobile-query-cache';
 
@@ -47,6 +48,7 @@ export const queryPersistOptions = {
 // Called on logout and school switch so the next person (or school) never sees the last one's data.
 export async function clearQueryCache(): Promise<void> {
   queryClient.clear();
+  clearEtagCache();
   try {
     await AsyncStorage.removeItem(QUERY_PERSIST_KEY);
   } catch {

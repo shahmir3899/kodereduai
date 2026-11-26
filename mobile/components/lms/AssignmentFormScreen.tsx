@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, ScrollView, TextInput, Switch, KeyboardAvoidingView, Platform, StyleSheet } from 'react-native';
+import { View, Text, TextInput, Switch, StyleSheet } from 'react-native';
 import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
 import {
   ASSIGNMENT_TYPES, SINGLE_FORM_TYPES, STATUSES, TYPE_HELP, buildPayload, emptyForm, firstFieldError, formFromAssignment,
@@ -12,7 +12,7 @@ import { useAssignment, useAssignmentActions, useSubjectList, useTeacherStaff } 
 import { useMyTimetable } from '../../hooks/useTeacher';
 import Select from '../ui/Select';
 import DateField from '../ui/DateField';
-import Button from '../ui/Button';
+import FormScreen from '../ui/FormScreen';
 import Skeleton from '../ui/Skeleton';
 import ErrorState from '../ui/ErrorState';
 import { useToast } from '../ui/Toast';
@@ -117,8 +117,12 @@ export default function AssignmentFormScreen({ classOptions }: Props) {
   const types = baseline.assignment_type === 'DIARY' ? ASSIGNMENT_TYPES : SINGLE_FORM_TYPES;
 
   return (
-    <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+    <FormScreen
+      submitLabel={editingId ? 'Save changes' : 'Create assignment'}
+      onSubmit={submit}
+      busy={actions.create.isPending || actions.update.isPending}
+      disabled={!dirty}
+    >
         <Text style={styles.label}>Title *</Text>
         <TextInput style={styles.input} value={form.title} onChangeText={(t) => set('title', t)} placeholder="Chapter 3 exercises"
           placeholderTextColor={Colors.textTertiary} />
@@ -165,19 +169,11 @@ export default function AssignmentFormScreen({ classOptions }: Props) {
           <Select label="Status" value={form.status} options={STATUSES.map((s) => ({ value: s, label: s[0] + s.slice(1).toLowerCase() }))}
             onChange={(v) => set('status', v)} />
         )}
-      </ScrollView>
-
-      <View style={styles.footer}>
-        <Button title={editingId ? 'Save changes' : 'Create assignment'} onPress={submit}
-          loading={actions.create.isPending || actions.update.isPending} disabled={!dirty} fullWidth size="lg" />
-      </View>
-    </KeyboardAvoidingView>
+    </FormScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.background },
-  content: { padding: Spacing.lg, paddingBottom: 110 },
   label: { fontSize: FontSize.sm, fontWeight: '600', color: Colors.text, marginBottom: Spacing.xs },
   input: {
     backgroundColor: Colors.surface, borderWidth: 1, borderColor: Colors.border, borderRadius: BorderRadius.md,
@@ -188,5 +184,4 @@ const styles = StyleSheet.create({
   help: { fontSize: FontSize.xs, color: Colors.textSecondary, marginTop: -Spacing.sm, marginBottom: Spacing.lg },
   switchRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: Spacing.lg },
   switchLabel: { fontSize: FontSize.md, color: Colors.text },
-  footer: { position: 'absolute', left: 0, right: 0, bottom: 0, padding: Spacing.lg, backgroundColor: Colors.surface, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: Colors.border },
 });

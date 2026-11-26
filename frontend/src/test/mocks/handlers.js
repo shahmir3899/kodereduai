@@ -168,7 +168,7 @@ const mockLeaveApplications = [
     id: 1, staff_member: 1, staff_member_name: 'Ali Khan',
     leave_policy: 1, leave_policy_name: 'Annual Leave',
     start_date: '2026-03-01', end_date: '2026-03-05',
-    status: 'PENDING', reason: 'Vacation',
+    status: 'PENDING', status_display: 'Pending', reason: 'Vacation', total_days: 5,
   },
 ]
 
@@ -176,10 +176,10 @@ const mockLeavePolicies = [
   { id: 1, name: 'Annual Leave', leave_type: 'ANNUAL', days_allowed: 20 },
 ]
 
-const mockStaffAttendanceSummary = {
-  total_records: 20, present: 15, absent: 3, late: 2,
-  present_percentage: 75.0,
-}
+// GET /api/hr/attendance/summary/ answers one row per staff member (a list), lowercase keys.
+const mockStaffAttendanceSummary = [
+  { staff_member: 1, staff_member__first_name: 'Ali', staff_member__last_name: 'Khan', present: 15, absent: 3, late: 2, half_day: 0, on_leave: 0, total: 20, attendance_rate: 85.0 },
+]
 
 const mockTransportAssignments = [
   { id: 1, student: 1, student_name: 'Ali Hassan', route: 1, transport_type: 'BOTH' },
@@ -218,21 +218,21 @@ const mockStaffWithAccounts = [
   {
     id: 1, school: 1, first_name: 'Ali', last_name: 'Khan', employee_id: 'T001',
     department: 1, department_name: 'Academic', designation: 1, designation_name: 'Teacher',
-    employment_status: 'ACTIVE', employment_type: 'FULL_TIME', phone: '0300-1111111',
+    employment_status: 'ACTIVE', is_active: true, employment_type: 'FULL_TIME', phone: '0300-1111111',
     user: 10, user_username: 'ali_khan',
     date_of_joining: '2024-01-01',
   },
   {
     id: 2, school: 1, first_name: 'Sara', last_name: 'Ahmed', employee_id: 'T002',
     department: 1, department_name: 'Academic', designation: 1, designation_name: 'Teacher',
-    employment_status: 'ACTIVE', employment_type: 'FULL_TIME', phone: '0300-2222222',
+    employment_status: 'ACTIVE', is_active: true, employment_type: 'FULL_TIME', phone: '0300-2222222',
     user: null, user_username: null,
     date_of_joining: '2024-01-01',
   },
   {
     id: 3, school: 1, first_name: 'Jane', last_name: 'Doe', employee_id: 'EMP001',
     department: 1, department_name: 'Academic', designation: 1, designation_name: 'Teacher',
-    employment_status: 'ACTIVE', employment_type: 'FULL_TIME', phone: '0300-3333333',
+    employment_status: 'ACTIVE', is_active: true, employment_type: 'FULL_TIME', phone: '0300-3333333',
     user: null, user_username: null,
     date_of_joining: '2024-06-01',
   },

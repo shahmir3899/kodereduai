@@ -21,6 +21,7 @@ import {
 import AnnualChargesTab from './AnnualChargesTab'
 import FeeGenerationSurface from './FeeGenerationSurface'
 import MonthlyChargesTab from './MonthlyChargesTab'
+import OptionalFeesTab from './OptionalFeesTab'
 import { CreateSingleFeeModal } from './FeeModals'
 import Spinner from '../../components/ui/Spinner'
 
@@ -333,6 +334,7 @@ export default function FeeSetupPage() {
         {[
           { key: 'monthly', label: 'Monthly Structure' },
           { key: 'annual', label: 'Annual Charges' },
+          { key: 'optional', label: 'Optional Fees' },
           { key: 'generate', label: 'Generate Records' },
           { key: 'discounts', label: 'Student Discounts' },
         ].map(tab => (
@@ -360,7 +362,12 @@ export default function FeeSetupPage() {
         <MonthlyChargesTab />
       )}
 
-      {/* === GENERATE RECORDS TAB === */}
+      {/* === OPTIONAL FEES TAB (enrolled-only fees: Robotics, Karate, bus...) === */}
+      {activeTab === 'optional' && (
+        <OptionalFeesTab />
+      )}
+
+            {/* === GENERATE RECORDS TAB === */}
       {activeTab === 'generate' && (
         <div className="card">
           <p className="mb-4 text-sm text-gray-500">Generate fee payment records for students. <strong>Monthly fees</strong> are recurring; <strong>annual fees</strong> use categories defined in the <strong>Annual Charges</strong> tab.</p>

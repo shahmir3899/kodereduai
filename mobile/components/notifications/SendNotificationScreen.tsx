@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, KeyboardAvoidingView, Platform, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import { useSchoolUsers } from '../../hooks/useSchoolUsers';
 import { useActiveTemplates, useSendNotification } from '../../hooks/useNotificationSend';
 import { useAttendanceClassOptions } from '../../hooks/useAcademicYear';
@@ -11,7 +11,7 @@ import {
 import { roleLabel } from '../../services/schoolUsers';
 import Input from '../ui/Input';
 import Select from '../ui/Select';
-import Button from '../ui/Button';
+import FormScreen from '../ui/FormScreen';
 import SegmentedTabs from '../ui/SegmentedTabs';
 import { useToast } from '../ui/Toast';
 import FormSheet from '../inventory/FormSheet';
@@ -83,8 +83,15 @@ export default function SendNotificationScreen() {
     : AUDIENCES.find((a) => a.value === form.audience)?.label.toLowerCase() ?? 'the group';
 
   return (
-    <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ScrollView style={styles.container} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+    <>
+    <FormScreen
+      submitLabel={mode === 'broadcast' ? 'Review and send' : 'Send'}
+      onSubmit={review}
+      busy={busy && !confirming}
+      disabled={busy}
+      error={error}
+    >
+      <View style={styles.stack}>
         <SegmentedTabs<Mode> value={mode} onChange={(m) => { setMode(m); setPreview(null); setError(null); }}
           tabs={[{ value: 'broadcast', label: 'To a group' }, { value: 'single', label: 'To one person' }]} />
 
@@ -117,10 +124,8 @@ export default function SendNotificationScreen() {
         {placeholders.length > 0 ? (
           <Text style={styles.warn}>This text still has placeholders ({placeholders.map((p) => `{{${p}}}`).join(', ')}). They are not filled in for a manual message; replace them with real text.</Text>
         ) : null}
-        {error ? <Text accessibilityRole="alert" style={styles.error}>{error}</Text> : null}
-
-        <Button title={mode === 'broadcast' ? 'Review and send' : 'Send'} onPress={review} loading={busy && !confirming} disabled={busy} fullWidth size="lg" />
-      </ScrollView>
+      </View>
+    </FormScreen>
 
       <FormSheet visible={confirming} title="Send this notification?" onClose={() => setConfirming(false)} onSubmit={confirmSend} submitLabel="Send now"
         busy={send.broadcast.isPending || send.single.isPending} error={sheetError}>
@@ -132,17 +137,14 @@ export default function SendNotificationScreen() {
         {mode === 'broadcast' && preview ? <Text style={styles.sheetCount}>{previewLine(preview)}</Text> : null}
         {placeholders.length > 0 ? <Text style={styles.warn}>It still contains {placeholders.map((p) => `{{${p}}}`).join(', ')}.</Text> : null}
       </FormSheet>
-    </KeyboardAvoidingView>
+    </>
   );
 }
 
 const styles = StyleSheet.create({
-  flex: { flex: 1 },
-  container: { flex: 1, backgroundColor: Colors.background },
-  content: { padding: Spacing.lg, paddingBottom: Spacing.xxxl, gap: Spacing.xs },
+  stack: { gap: Spacing.xs },
   area: { minHeight: 96, textAlignVertical: 'top' },
   warn: { color: Colors.warning, fontSize: FontSize.sm, backgroundColor: Colors.warningLight, borderRadius: BorderRadius.md, padding: Spacing.md, marginVertical: Spacing.sm },
-  error: { color: Colors.error, fontSize: FontSize.sm, marginVertical: Spacing.sm },
   sheetTitle: { fontSize: FontSize.md, fontWeight: '700', color: Colors.text },
   sheetBody: { fontSize: FontSize.sm, color: Colors.textSecondary, marginBottom: Spacing.sm },
   sheetLine: { fontSize: FontSize.sm, color: Colors.text },
