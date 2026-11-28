@@ -19,11 +19,11 @@ export const fetchMyAttendanceClasses = async () =>
 
 // Sections this teacher may mark attendance for, in the active academic year or another one
 // (report cards can look back at a past year).
-export function useTeacherClassOptions(yearIdOverride?: number | null) {
+export function useTeacherClassOptions(yearIdOverride?: number | null, enabled = true) {
   const year = useAcademicYear();
   const yearId = yearIdOverride ?? year.current?.id ?? null;
   const sessionClasses = useSessionClasses(yearId);
-  const mine = useScopedQuery('myAttendanceClasses', [yearId], fetchMyAttendanceClasses, { enabled: !year.isLoading });
+  const mine = useScopedQuery('myAttendanceClasses', [yearId], fetchMyAttendanceClasses, { enabled: enabled && !year.isLoading });
 
   const options = useMemo(
     () => teacherClassOptions(mine.data ?? [], (sessionClasses.data ?? []) as never[]),

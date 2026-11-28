@@ -36,10 +36,15 @@ def list_discounts(ctx):
     from finance.models import Discount, Scholarship
 
     year = _year_id(ctx)
-    ds = [{'type': 'discount', 'id': d.id, 'name': d.name, 'kind': d.discount_type, 'value': float(d.value)}
-          for d in Discount.objects.filter(school_id=ctx.school_id, is_active=True, academic_year_id=year)]
-    ss = [{'type': 'scholarship', 'id': s.id, 'name': s.name, 'kind': s.scholarship_type, 'value': float(s.value)}
-          for s in Scholarship.objects.filter(school_id=ctx.school_id, is_active=True, academic_year_id=year)]
+    def fees(o):  # which fees it reduces; none means it reduces no bill
+        return [c.name for c in o.monthly_categories.all()] + [c.name for c in o.annual_categories.all()] or 'none (reduces no bill)'
+
+    ds = [{'type': 'discount', 'id': d.id, 'name': d.name, 'kind': d.discount_type, 'value': float(d.value), 'reduces': fees(d)}
+          for d in Discount.objects.filter(school_id=ctx.school_id, is_active=True, academic_year_id=year)
+          .prefetch_related('monthly_categories', 'annual_categories')]
+    ss = [{'type': 'scholarship', 'id': s.id, 'name': s.name, 'kind': s.scholarship_type, 'value': float(s.value), 'reduces': fees(s)}
+          for s in Scholarship.objects.filter(school_id=ctx.school_id, is_active=True, academic_year_id=year)
+          .prefetch_related('monthly_categories', 'annual_categories')]
     return {'discounts': ds, 'scholarships': ss}
 
 
@@ -47,10 +52,28 @@ def get_student_fees(ctx, student_id=None, student_name=None, student_class=None
     from finance.models import FeePayment
 
     st = resolve_student(ctx, student_id, student_name, student_class)
-    rows = FeePayment.objects.filter(school_id=ctx.school_id, student=st).order_by('-year', '-month', 'fee_type')[:24]
-    return {'student': st.name, 'student_id': st.id, 'records': [
-        {'fee': r.fee_type, 'month': MONTHS[r.month] if r.month else None, 'year': r.year, 'due': float(r.amount_due), 'paid': float(r.amount_paid or 0),
-         'status': r.status} for r in rows]}
+    from finance.models import StudentFeeEnrollment
+
+    rows = FeePayment.objects.filter(school_id=ctx.school_id, student=st).select_related(
+        'monthly_category', 'annual_category').order_by('-year', '-month', 'fee_type')[:24]
+    # The fee's own name (Tuition Fee, Koder Kids...) and any discount already taken off it.
+    records = []
+    for r in rows:
+        rec = {'fee': getattr(r.monthly_category or r.annual_category, 'name', None) or r.get_fee_type_display(), 'fee_type': r.fee_type,
+               'month': MONTHS[r.month] if r.month else None, 'year': r.year, 'due': float(r.amount_due), 'paid': float(r.amount_paid or 0),
+               'status': r.status}
+        if r.discount_amount:
+            rec['discount'] = float(r.discount_amount)
+            rec['discount_names'] = [d.get('name') for d in (r.discount_detail or [])]
+        records.append(rec)
+    today = timezone.localdate()
+    optional = [
+        {'fee': (e.monthly_category or e.annual_category).name, 'from': str(e.start_date), 'until': str(e.end_date) if e.end_date else None,
+         'own_price': float(e.amount) if e.amount is not None else None}
+        for e in StudentFeeEnrollment.objects.filter(school_id=ctx.school_id, student=st).select_related('monthly_category', 'annual_category')
+        if e.end_date is None or e.end_date >= today
+    ]
+    return {'student': st.name, 'student_id': st.id, 'records': records, 'optional_fees_enrolled': optional}
 
 
 # ── monthly fee override ─────────────────────────────────────────────────────
@@ -192,7 +215,10 @@ def _build_discount(ctx, payload):
         if have:
             raise ProposalError(f'{st.name} already has {obj.name}.')
         rows = [{'field': obj.name, 'from': 'not assigned', 'to': f'assigned ({value})'}]
-        title, warnings = 'Assign discount', ['The discount applies when fees are generated or recalculated; existing fee records are not rewritten from here.']
+        fees = [c.name for c in obj.monthly_categories.order_by('name')] + [c.name for c in obj.annual_categories.order_by('name')]
+        title, warnings = 'Assign discount', [
+            (f'It reduces {", ".join(fees)} when fees are generated; existing fee records are not rewritten from here.' if fees else
+             f'{obj.name} applies to no fee yet, so it will reduce no bill. Edit it to say which fees it cuts.')]
     else:
         if not have:
             raise ProposalError(f'{st.name} does not have {obj.name}.')

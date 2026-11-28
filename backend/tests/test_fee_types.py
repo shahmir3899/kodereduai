@@ -68,6 +68,26 @@ def fee_structures(seed_data, api):
     return created
 
 
+@pytest.fixture
+def cats(seed_data):
+    """Monthly and annual fee categories: a monthly or annual fee record must name one (the app has
+    required it since categories replaced the bare MONTHLY / ANNUAL types)."""
+    from finance.models import AnnualFeeCategory, MonthlyFeeCategory
+
+    school = seed_data['school_a']
+    return {
+        'monthly': MonthlyFeeCategory.objects.create(school=school, name=f"{seed_data['prefix']}Tuition"),
+        'annual': AnnualFeeCategory.objects.create(school=school, name=f"{seed_data['prefix']}Annual Charges"),
+    }
+
+
+@pytest.fixture
+def cash(seed_data):
+    """An account: a record with money paid on it needs a payment date and an account."""
+    from finance.models import Account
+    return Account.objects.create(school=seed_data['school_a'], name=f"{seed_data['prefix']}Cash", account_type='CASH')
+
+
 # ====================================================================
 # LEVEL A: FEE STRUCTURE CRUD WITH FEE_TYPE
 # ====================================================================
@@ -219,8 +239,8 @@ class TestFeeStructureFeeType:
 class TestFeePaymentFeeType:
     """FeePayment creation and filtering by fee_type."""
 
-    def test_create_monthly_payment(self, seed_data, api):
-        """B1 - Create a MONTHLY fee payment (month=1-12)."""
+    def test_create_monthly_payment(self, seed_data, api, cats):
+        """B1 - Create a MONTHLY fee payment (month=1-12) for a monthly category."""
         token = seed_data['tokens']['admin']
         sid = seed_data['SID_A']
         student = seed_data['students'][0]
@@ -229,6 +249,7 @@ class TestFeePaymentFeeType:
             'school': sid,
             'student': student.id,
             'fee_type': 'MONTHLY',
+            'monthly_category': cats['monthly'].id,
             'month': 2,
             'year': 2026,
             'amount_due': '2500.00',
@@ -240,8 +261,8 @@ class TestFeePaymentFeeType:
         assert data['fee_type'] == 'MONTHLY'
         assert data['month'] == 2
 
-    def test_create_annual_payment_month_zero(self, seed_data, api):
-        """B2 - Create an ANNUAL fee payment (month=0)."""
+    def test_create_annual_payment_month_zero(self, seed_data, api, cats):
+        """B2 - Create an ANNUAL fee payment (month=0) for an annual category."""
         token = seed_data['tokens']['admin']
         sid = seed_data['SID_A']
         student = seed_data['students'][0]
@@ -250,6 +271,7 @@ class TestFeePaymentFeeType:
             'school': sid,
             'student': student.id,
             'fee_type': 'ANNUAL',
+            'annual_category': cats['annual'].id,
             'month': 0,
             'year': 2026,
             'amount_due': '15000.00',
@@ -318,7 +340,7 @@ class TestFeePaymentFeeType:
         assert resp.status_code == 201, f"B5 Create FINE: {resp.status_code} {resp.content[:300]}"
         assert resp.json()['fee_type'] == 'FINE'
 
-    def test_filter_payments_by_fee_type(self, seed_data, api):
+    def test_filter_payments_by_fee_type(self, seed_data, api, cats):
         """B6 - Filter payments by fee_type query param."""
         token = seed_data['tokens']['admin']
         sid = seed_data['SID_A']
@@ -327,12 +349,12 @@ class TestFeePaymentFeeType:
         # Create MONTHLY and ANNUAL for the same student
         api.post('/api/finance/fee-payments/', {
             'school': sid,
-            'student': student.id, 'fee_type': 'MONTHLY',
+            'student': student.id, 'fee_type': 'MONTHLY', 'monthly_category': cats['monthly'].id,
             'month': 1, 'year': 2026, 'amount_due': '2500', 'amount_paid': '0',
         }, token, sid)
         api.post('/api/finance/fee-payments/', {
             'school': sid,
-            'student': student.id, 'fee_type': 'ANNUAL',
+            'student': student.id, 'fee_type': 'ANNUAL', 'annual_category': cats['annual'].id,
             'month': 0, 'year': 2026, 'amount_due': '15000', 'amount_paid': '0',
         }, token, sid)
 
@@ -343,7 +365,7 @@ class TestFeePaymentFeeType:
         assert len(data) >= 1, "B6 Expected at least 1 ANNUAL payment"
         assert all(d['fee_type'] == 'ANNUAL' for d in data), "B6 Non-ANNUAL in results"
 
-    def test_unique_together_allows_different_fee_types(self, seed_data, api):
+    def test_unique_together_allows_different_fee_types(self, seed_data, api, cats):
         """B7 - Same student, same month/year, different fee_types should all succeed."""
         token = seed_data['tokens']['admin']
         sid = seed_data['SID_A']
@@ -353,6 +375,7 @@ class TestFeePaymentFeeType:
             resp = api.post('/api/finance/fee-payments/', {
                 'school': sid,
                 'student': student.id, 'fee_type': ft,
+                **({'annual_category': cats['annual'].id} if ft == 'ANNUAL' else {}),
                 'month': 0, 'year': 2026, 'amount_due': '1000', 'amount_paid': '0',
             }, token, sid)
             assert resp.status_code == 201, f"B7 Create {ft}: {resp.status_code} {resp.content[:300]}"
@@ -375,10 +398,11 @@ class TestFeePaymentFeeType:
             'student': student.id, 'fee_type': 'ADMISSION',
             'month': 0, 'year': 2026, 'amount_due': '10000', 'amount_paid': '0',
         }, token, sid)
-        assert resp2.status_code in (400, 409, 500), f"B8 Duplicate expected 400/409/500: {resp2.status_code}"
+        # A clear refusal, not a server error (uniq_oneoff_fee_per_student_period_type, 2026-11-27).
+        assert resp2.status_code == 400, f"B8 Duplicate expected 400: {resp2.status_code} {resp2.content[:300]}"
 
-    def test_default_fee_type_on_payment(self, seed_data, api):
-        """B9 - If fee_type is omitted, it defaults to MONTHLY."""
+    def test_default_fee_type_on_payment(self, seed_data, api, cats):
+        """B9 - If fee_type is omitted, it defaults to MONTHLY (a monthly category is still named)."""
         token = seed_data['tokens']['admin']
         sid = seed_data['SID_A']
         student = seed_data['students'][6]
@@ -386,6 +410,7 @@ class TestFeePaymentFeeType:
         resp = api.post('/api/finance/fee-payments/', {
             'school': sid,
             'student': student.id,
+            'monthly_category': cats['monthly'].id,
             'month': 3,
             'year': 2026,
             'amount_due': '2500.00',
@@ -395,7 +420,7 @@ class TestFeePaymentFeeType:
         assert resp.status_code == 201, f"B9 Default: {resp.status_code} {resp.content[:300]}"
         assert resp.json()['fee_type'] == 'MONTHLY'
 
-    def test_read_payment_has_display_field(self, seed_data, api):
+    def test_read_payment_has_display_field(self, seed_data, api, cats):
         """B10 - GET response includes fee_type_display."""
         token = seed_data['tokens']['admin']
         sid = seed_data['SID_A']
@@ -403,7 +428,7 @@ class TestFeePaymentFeeType:
 
         api.post('/api/finance/fee-payments/', {
             'school': sid, 'student': student.id,
-            'fee_type': 'ANNUAL', 'month': 0, 'year': 2026,
+            'fee_type': 'ANNUAL', 'annual_category': cats['annual'].id, 'month': 0, 'year': 2026,
             'amount_due': '15000', 'amount_paid': '0',
         }, token, sid)
 
@@ -500,7 +525,8 @@ class TestGenerateOnetimeFees:
     """Test POST /api/finance/fee-payments/generate_onetime_fees/."""
 
     def test_generate_admission_and_annual(self, seed_data, api, fee_structures):
-        """D1 - Generate ADMISSION + ANNUAL fees for students."""
+        """D1 - One-off generation makes ADMISSION records; ANNUAL is refused here because annual fees
+        are generated per category (generate_annual_fees)."""
         token = seed_data['tokens']['admin']
         sid = seed_data['SID_A']
         students = seed_data['students'][:3]  # First 3 (Class 1)
@@ -508,13 +534,18 @@ class TestGenerateOnetimeFees:
 
         resp = api.post('/api/finance/fee-payments/generate_onetime_fees/', {
             'student_ids': student_ids,
-            'fee_types': ['ADMISSION', 'ANNUAL'],
+            'fee_types': ['ADMISSION'],
             'year': 2026,
         }, token, sid)
 
         assert resp.status_code == 200, f"D1 Generate: {resp.status_code} {resp.content[:300]}"
-        data = resp.json()
-        assert data['created'] == 6, f"D1 Expected 6 created (3 students x 2 types), got {data['created']}"
+        data = resp.json()['result']
+        assert data['created'] == 3, f"D1 Expected 3 created (3 students x ADMISSION), got {data['created']}"
+
+        refused = api.post('/api/finance/fee-payments/generate_onetime_fees/', {
+            'student_ids': student_ids, 'fee_types': ['ANNUAL'], 'year': 2026,
+        }, token, sid)
+        assert refused.status_code == 400 and 'category' in refused.content.decode()
 
     def test_generate_skips_duplicates(self, seed_data, api, fee_structures):
         """D2 - Re-generating same fee types should skip existing."""
@@ -536,7 +567,7 @@ class TestGenerateOnetimeFees:
             'year': 2026,
         }, token, sid)
 
-        data = resp.json()
+        data = resp.json()['result']
         assert data['created'] == 0, f"D2 Expected 0 created (duplicate), got {data['created']}"
         assert data['skipped'] == 1, f"D2 Expected 1 skipped, got {data['skipped']}"
 
@@ -554,7 +585,7 @@ class TestGenerateOnetimeFees:
         }, token, sid)
 
         assert resp.status_code == 200
-        data = resp.json()
+        data = resp.json()['result']
         assert data['created'] == 0, f"D3 Expected 0 created"
         assert data['no_fee_structure'] >= 1, f"D3 Expected >=1 no_fee_structure"
 
@@ -571,21 +602,31 @@ class TestGenerateOnetimeFees:
 
         assert resp.status_code == 400, f"D4 Expected 400 for empty student_ids: {resp.status_code}"
 
-    def test_generate_monthly_with_specific_month(self, seed_data, api, fee_structures):
-        """D5 - Generate MONTHLY fees with specific month parameter."""
+    def test_generate_monthly_with_specific_month(self, seed_data, api, fee_structures, cats):
+        """D5 - MONTHLY fees for a specific month go through generate_monthly with a category (the
+        one-off generator refuses MONTHLY)."""
+        from finance.models import FeePayment
+
         token = seed_data['tokens']['admin']
         sid = seed_data['SID_A']
         student = seed_data['students'][0]
 
-        resp = api.post('/api/finance/fee-payments/generate_onetime_fees/', {
-            'student_ids': [student.id],
-            'fee_types': ['MONTHLY'],
-            'year': 2026,
+        refused = api.post('/api/finance/fee-payments/generate_onetime_fees/', {
+            'student_ids': [student.id], 'fee_types': ['MONTHLY'], 'year': 2026, 'month': 6,
+        }, token, sid)
+        assert refused.status_code == 400
+
+        resp = api.post('/api/finance/fee-payments/generate_monthly/', {
+            'class_id': seed_data['classes'][0].id,
             'month': 6,
+            'year': 2026,
+            'monthly_category_ids': [cats['monthly'].id],
         }, token, sid)
 
-        assert resp.status_code == 200, f"D5 Generate MONTHLY: {resp.status_code}"
-        assert resp.json()['created'] == 1
+        assert resp.status_code == 200, f"D5 Generate MONTHLY: {resp.status_code} {resp.content[:300]}"
+        row = FeePayment.objects.get(student=student, fee_type='MONTHLY', monthly_category=cats['monthly'], month=6, year=2026)
+        # The class's monthly price (set before categories, so it has none) still applies to the category.
+        assert row.base_monthly_fee == Decimal('2500.00')
 
 
 # ====================================================================
@@ -989,7 +1030,7 @@ class TestFeeGenerationConflicts:
         assert result['deleted_recreated'] == 0
         assert result['conflicts_detected'] >= 1
 
-    def test_annual_generation_delete_recreate_replaces_record(self, seed_data, api):
+    def test_annual_generation_delete_recreate_replaces_record(self, seed_data, api, cash):
         from finance.models import AnnualFeeCategory, FeePayment, FeeStructure
 
         token = seed_data['tokens']['admin']
@@ -1032,8 +1073,11 @@ class TestFeeGenerationConflicts:
             month=0,
             year=2026,
         )
+        # A record with money on it is protected from delete-and-recreate (it would destroy the payment).
         original_payment.amount_paid = Decimal('3000.00')
-        original_payment.save(update_fields=['amount_paid'])
+        original_payment.payment_date = date.today()
+        original_payment.account = cash
+        original_payment.save(update_fields=['amount_paid', 'payment_date', 'account', 'status'])
         original_id = original_payment.id
 
         original_structure.is_active = False
@@ -1049,14 +1093,24 @@ class TestFeeGenerationConflicts:
             is_active=True,
         )
 
-        replace_resp = api.post('/api/finance/fee-payments/generate_annual_fees/', {
-            'class_id': class_1.id,
-            'annual_category_ids': [category.id],
-            'year': 2026,
-            'academic_year': academic_year.id,
-            'conflict_strategy': 'delete_recreate',
-        }, token, sid)
-        assert replace_resp.status_code == 200, f"Annual replace generation failed: {replace_resp.status_code} {replace_resp.content[:300]}"
+        def replace():
+            resp = api.post('/api/finance/fee-payments/generate_annual_fees/', {
+                'class_id': class_1.id,
+                'annual_category_ids': [category.id],
+                'year': 2026,
+                'academic_year': academic_year.id,
+                'conflict_strategy': 'delete_recreate',
+            }, token, sid)
+            assert resp.status_code == 200, f"Annual replace generation failed: {resp.status_code} {resp.content[:300]}"
+            return resp
+
+        protected = replace().json()['result']
+        kept = FeePayment.objects.get(id=original_id)
+        assert kept.amount_paid == Decimal('3000.00') and protected['protected_conflict'] >= 1
+
+        # Once nothing is paid on it, delete-and-recreate replaces it at the new price.
+        FeePayment.objects.filter(id=original_id).update(amount_paid=Decimal('0'), payment_date=None, account=None, status='UNPAID')
+        replace_resp = replace()
 
         replacement = FeePayment.objects.get(
             school=seed_data['school_a'],
@@ -1073,7 +1127,7 @@ class TestFeeGenerationConflicts:
         assert replacement.amount_paid == Decimal('0.00')
         assert result['deleted_recreated'] >= 1
 
-    def test_monthly_generation_update_conflict_updates_existing_record(self, seed_data, api):
+    def test_monthly_generation_update_conflict_updates_existing_record(self, seed_data, api, cash):
         from finance.models import FeePayment, FeeStructure, MonthlyFeeCategory
 
         token = seed_data['tokens']['admin']
@@ -1111,6 +1165,8 @@ class TestFeeGenerationConflicts:
             base_monthly_fee=Decimal('1000.00'),
             amount_due=Decimal('300.00'),
             amount_paid=Decimal('100.00'),
+            payment_date=date(2026, 2, 10),
+            account=cash,
             academic_year=academic_year,
         )
 
@@ -1165,7 +1221,7 @@ class TestFeeGenerationConflicts:
         assert result['updated'] >= 1
         assert result['deleted_recreated'] == 0
 
-    def test_monthly_generation_delete_recreate_replaces_record(self, seed_data, api):
+    def test_monthly_generation_delete_recreate_replaces_record(self, seed_data, api, cash):
         from finance.models import FeePayment, FeeStructure, MonthlyFeeCategory
 
         token = seed_data['tokens']['admin']
@@ -1203,6 +1259,8 @@ class TestFeeGenerationConflicts:
             base_monthly_fee=Decimal('800.00'),
             amount_due=Decimal('500.00'),
             amount_paid=Decimal('100.00'),
+            payment_date=date(2026, 2, 10),
+            account=cash,
             academic_year=academic_year,
         )
 
@@ -1223,8 +1281,11 @@ class TestFeeGenerationConflicts:
             month=3,
             year=2026,
         )
+        # A record with money on it is protected from delete-and-recreate (it would destroy the payment).
         original_payment.amount_paid = Decimal('200.00')
-        original_payment.save(update_fields=['amount_paid'])
+        original_payment.payment_date = date.today()
+        original_payment.account = cash
+        original_payment.save(update_fields=['amount_paid', 'payment_date', 'account', 'status'])
         original_id = original_payment.id
 
         original_structure.is_active = False
@@ -1240,15 +1301,25 @@ class TestFeeGenerationConflicts:
             is_active=True,
         )
 
-        replace_resp = api.post('/api/finance/fee-payments/generate_monthly/', {
-            'class_id': class_1.id,
-            'month': 3,
-            'year': 2026,
-            'academic_year': academic_year.id,
-            'monthly_category_ids': [category.id],
-            'conflict_strategy': 'delete_recreate',
-        }, token, sid)
-        assert replace_resp.status_code == 200, f"Monthly replace generation failed: {replace_resp.status_code} {replace_resp.content[:300]}"
+        def replace():
+            resp = api.post('/api/finance/fee-payments/generate_monthly/', {
+                'class_id': class_1.id,
+                'month': 3,
+                'year': 2026,
+                'academic_year': academic_year.id,
+                'monthly_category_ids': [category.id],
+                'conflict_strategy': 'delete_recreate',
+            }, token, sid)
+            assert resp.status_code == 200, f"Monthly replace generation failed: {resp.status_code} {resp.content[:300]}"
+            return resp
+
+        protected = replace().json()['result']
+        kept = FeePayment.objects.get(id=original_id)
+        assert kept.amount_paid == Decimal('200.00') and protected['protected_conflict'] >= 1
+
+        # Once nothing is paid on it, delete-and-recreate replaces it at the new price.
+        FeePayment.objects.filter(id=original_id).update(amount_paid=Decimal('0'), payment_date=None, account=None, status='UNPAID')
+        replace_resp = replace()
 
         replacement = FeePayment.objects.get(
             school=seed_data['school_a'],

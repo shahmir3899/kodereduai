@@ -754,6 +754,13 @@ class FeePayment(models.Model):
                 condition=Q(fee_type='ANNUAL'),
                 name='uniq_annual_fee_per_student_year_category',
             ),
+            # The deprecated one-off types have no category, and unique_together never matches NULL
+            # categories, so a second identical Admission/Books/Fine row slipped in (2026-11-27).
+            models.UniqueConstraint(
+                fields=['school', 'student', 'year', 'month', 'fee_type'],
+                condition=Q(fee_type__in=['ADMISSION', 'BOOKS', 'FINE']),
+                name='uniq_oneoff_fee_per_student_period_type',
+            ),
         ]
 
     def __str__(self):

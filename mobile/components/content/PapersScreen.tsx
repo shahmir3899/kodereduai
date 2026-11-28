@@ -9,7 +9,7 @@ import { useDebouncedValue } from '../../hooks/useDebouncedValue';
 import { useRefreshControl } from '../../hooks/useRefreshControl';
 import { PAPER_STATUSES, paperTone, type Paper } from '../../services/paperBuilder';
 import { bulkDeleteMessage, bulkDeleteResult, docxFileName, selectedAll, toggleAll, toggleId } from '../../services/questionExtras';
-import { useMasterClasses } from '../../hooks/useAcademicYear';
+import { useClassSubjectOptions, useSectionPicker } from '../../hooks/useSectionPicker';
 import { useSubjectsList } from '../../hooks/useManager';
 import { inventoryErrorMessage } from '../../services/inventory';
 import { exportErrorMessage } from '../../services/reports';
@@ -45,9 +45,11 @@ export default function PapersScreen() {
   const [mineOnly, setMineOnly] = useState(false);
   const [madeBy, setMadeBy] = useState<number>(-1);
   const makers = usePaperMakers(!isTeacher);
-  const classes = useMasterClasses();
+  const picker = useSectionPicker();
+  const filterMaster = classFilter === -1 ? null : picker.masterOf(classFilter);
+  const filterSubjects = useClassSubjectOptions(filterMaster);
   const subjects = useSubjectsList();
-  const query = usePapersPaged(term, { classId: classFilter === -1 ? null : classFilter, subject: subjectFilter === -1 ? null : subjectFilter, status: statusFilter, mine: mineOnly, madeBy: !isTeacher && madeBy !== -1 ? madeBy : null });
+  const query = usePapersPaged(term, { classId: filterMaster, subject: subjectFilter === -1 ? null : subjectFilter, status: statusFilter, mine: mineOnly, madeBy: !isTeacher && madeBy !== -1 ? madeBy : null });
   const refreshControl = useRefreshControl(query.refetch) as React.ReactElement<RefreshControlProps>;
   const rows = useMemo(() => query.data?.pages.flatMap((p) => p.results) ?? [], [query.data]);
   const [busy, setBusy] = useState<number | null>(null);
@@ -110,8 +112,9 @@ export default function PapersScreen() {
   const header = (
     <View>
       <SearchBar value={search} onChangeText={setSearch} placeholder="Search papers..." />
-      <Select label="Class" searchable value={classFilter} onChange={setClassFilter} options={[{ value: -1, label: 'All classes' }, ...(classes.data ?? []).map((c) => ({ value: Number(c.id), label: String(c.name) }))]} />
-      <Select label="Subject" searchable value={subjectFilter} onChange={setSubjectFilter} options={[{ value: -1, label: 'All subjects' }, ...(subjects.data ?? []).map((s) => ({ value: s.id, label: s.name }))]} />
+      <Select label="Class" searchable value={classFilter} onChange={(v) => { setClassFilter(v); setSubjectFilter(-1); }} options={[{ value: -1, label: 'All classes' }, ...picker.options]} />
+      <Select label="Subject" searchable value={subjectFilter} onChange={setSubjectFilter}
+        options={[{ value: -1, label: 'All subjects' }, ...(filterMaster ? filterSubjects : (subjects.data ?? []).map((s) => ({ value: s.id, label: s.name })))]} />
       <Select label="Status" value={statusFilter} onChange={setStatusFilter} options={[{ value: '', label: 'Any status' }, ...PAPER_STATUSES.map((s) => ({ value: s.value as string, label: s.label }))]} />
       {isTeacher ? (
         <View style={styles.switchRow}>

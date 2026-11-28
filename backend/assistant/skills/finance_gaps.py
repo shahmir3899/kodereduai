@@ -13,6 +13,7 @@ from ..internal_api import call
 from ..registry import ADMINS, FINANCE_ROLES, ProposalError, Tool, register
 from . import lms_common as lc
 from .student_fee_tools import MONTHS
+from .fee_lookup import label as fee_label, resolve_fee_types
 from .student_tools import _WHO, _fail, _items, _year_id, resolve_student
 
 LIMIT = 40
@@ -239,6 +240,12 @@ def _clean(kind, ctx, fields, existing=None):
         out['value'] = str(value)
     if fields.get('is_active') is not None:
         out['is_active'] = bool(fields['is_active'])
+    # Which fees it cuts (2026-11-26): a discount or scholarship with none reduces no bill.
+    if fields.get('fee_names') is not None:
+        fee_types = resolve_fee_types(ctx.school_id, fields['fee_names'])
+        out['monthly_categories'] = [c.id for k, c in fee_types if k == 'MONTHLY']
+        out['annual_categories'] = [c.id for k, c in fee_types if k == 'ANNUAL']
+        out['fee_names_label'] = fee_label(fee_types)
     # Conditional requirements, on what the record WILL look like.
     if kind == 'discount':
         applies = out.get('applies_to', getattr(existing, 'applies_to', 'ALL'))
@@ -249,7 +256,7 @@ def _clean(kind, ctx, fields, existing=None):
     return out
 
 
-LABELS = {'name': 'Name', 'discount_type': 'Type', 'value': 'Value', 'applies_to': 'Applies to', 'target_class_name': 'Class', 'target_grade_level': 'Grade level',
+LABELS = {'fee_names_label': 'Applies to fees', 'name': 'Name', 'discount_type': 'Type', 'value': 'Value', 'applies_to': 'Applies to', 'target_class_name': 'Class', 'target_grade_level': 'Grade level',
           'start_date': 'From', 'end_date': 'Until', 'max_uses': 'Max uses', 'stackable': 'Stackable', 'is_active': 'Active',
           'scholarship_type': 'Kind', 'coverage': 'Coverage', 'description': 'Description', 'max_recipients': 'Max recipients'}
 
@@ -262,6 +269,8 @@ def _current(kind, obj):
     cur = {k: getattr(obj, k) for k in keys}
     if kind == 'discount':
         cur['target_class_name'] = obj.target_class.name if obj.target_class_id else None
+    cur['fee_names_label'] = ', '.join(
+        [c.name for c in obj.monthly_categories.order_by('name')] + [c.name for c in obj.annual_categories.order_by('name')]) or None
     return {k: ('' if v is None else str(v)) for k, v in cur.items()}
 
 
@@ -280,6 +289,9 @@ def _build(ctx, payload):
                 raise ProposalError(f'The {needed.replace("_", " ")} is required. Ask the user.')
         if kind == 'scholarship' and fields.get('coverage') != 'FULL' and 'value' not in fields:
             raise ProposalError('A percentage or fixed scholarship needs a value. Ask the user.')
+        if 'fee_names_label' not in fields:
+            raise ProposalError(f'Which fees does this {kind} apply to (for example Tuition Fee, or all)? Ask the user. '
+                                'Without any it reduces no bill.')
         fields.setdefault('value', '0')
     else:
         if not fields:
@@ -287,7 +299,7 @@ def _build(ctx, payload):
     cur = _current(kind, existing)
     rows = []
     for key, new in fields.items():
-        if key == 'target_class':
+        if key in ('target_class', 'monthly_categories', 'annual_categories'):
             continue
         label_key = key
         shown = '' if new is None else str(new)
@@ -299,7 +311,10 @@ def _build(ctx, payload):
     if mode == 'edit':
         holders = _holders(kind, existing)
         if holders:
-            warnings.append(f'{holders} student{"s" if holders != 1 else ""} already have this {kind}; check fee records already generated.')
+            warnings.append(f'{holders} student{"s" if holders != 1 else ""} already have this {kind}; fee records already generated keep their amounts '
+                            'until that month is generated again with update.')
+        if not cur.get('fee_names_label') and 'fee_names_label' not in fields:
+            warnings.append(f'This {kind} applies to no fee yet, so it reduces no bill. Say which fees it should cut.')
     name = fields.get('name') or (existing.name if existing else '')
     title = f'{"New" if mode == "create" else "Change"} {kind}'
     return {'payload': {**payload, 'fields': payload['fields']}, 'preview': {
@@ -312,29 +327,32 @@ def _fields(**kw):
 
 
 def create_discount(ctx, name=None, discount_type=None, value=None, applies_to=None, class_name=None, grade_level=None, start_date=None, end_date=None,
-                    max_uses=None, stackable=None):
+                    max_uses=None, stackable=None, fee_names=None):
     return _build(ctx, {'kind': 'edit_entry', 'item': 'discount', 'mode': 'create', 'item_id': None, 'fields': _fields(
         name=name, discount_type=discount_type, value=value, applies_to=applies_to or 'ALL', class_name=class_name, target_grade_level=grade_level,
-        start_date=start_date, end_date=end_date, max_uses=max_uses, stackable=stackable)})
+        start_date=start_date, end_date=end_date, max_uses=max_uses, stackable=stackable, fee_names=fee_names)})
 
 
 def edit_discount(ctx, discount_name=None, name=None, discount_type=None, value=None, applies_to=None, class_name=None, grade_level=None, start_date=None,
-                  end_date=None, max_uses=None, stackable=None, is_active=None):
+                  end_date=None, max_uses=None, stackable=None, is_active=None, fee_names=None):
     obj = _pick('discount', ctx, discount_name or '')
     return _build(ctx, {'kind': 'edit_entry', 'item': 'discount', 'mode': 'edit', 'item_id': obj.id, 'fields': _fields(
         name=name, discount_type=discount_type, value=value, applies_to=applies_to, class_name=class_name, target_grade_level=grade_level,
-        start_date=start_date, end_date=end_date, max_uses=max_uses, stackable=stackable, is_active=is_active)})
+        start_date=start_date, end_date=end_date, max_uses=max_uses, stackable=stackable, is_active=is_active, fee_names=fee_names)})
 
 
-def create_scholarship(ctx, name=None, scholarship_type=None, coverage=None, value=None, description=None, max_recipients=None):
+def create_scholarship(ctx, name=None, scholarship_type=None, coverage=None, value=None, description=None, max_recipients=None, fee_names=None):
     return _build(ctx, {'kind': 'edit_entry', 'item': 'scholarship', 'mode': 'create', 'item_id': None, 'fields': _fields(
-        name=name, scholarship_type=scholarship_type, coverage=coverage, value=value, description=description, max_recipients=max_recipients)})
+        name=name, scholarship_type=scholarship_type, coverage=coverage, value=value, description=description, max_recipients=max_recipients,
+        fee_names=fee_names)})
 
 
-def edit_scholarship(ctx, scholarship_name=None, name=None, scholarship_type=None, coverage=None, value=None, description=None, max_recipients=None, is_active=None):
+def edit_scholarship(ctx, scholarship_name=None, name=None, scholarship_type=None, coverage=None, value=None, description=None, max_recipients=None, is_active=None,
+                     fee_names=None):
     obj = _pick('scholarship', ctx, scholarship_name or '')
     return _build(ctx, {'kind': 'edit_entry', 'item': 'scholarship', 'mode': 'edit', 'item_id': obj.id, 'fields': _fields(
-        name=name, scholarship_type=scholarship_type, coverage=coverage, value=value, description=description, max_recipients=max_recipients, is_active=is_active)})
+        name=name, scholarship_type=scholarship_type, coverage=coverage, value=value, description=description, max_recipients=max_recipients, is_active=is_active,
+        fee_names=fee_names)})
 
 
 def revise_definition(ctx, payload, edits):
@@ -351,6 +369,7 @@ def apply_definition(ctx, payload):
         existing = (Discount if kind == 'discount' else Scholarship).objects.filter(school_id=ctx.school_id, pk=payload['item_id']).first()
     data = _clean(kind, ctx, payload['fields'], existing)
     data.pop('target_class_name', None)
+    data.pop('fee_names_label', None)
     base = '/api/finance/discounts/' if kind == 'discount' else '/api/finance/scholarships/'
     view = DiscountViewSet if kind == 'discount' else ScholarshipViewSet
     if mode == 'create':
@@ -387,12 +406,14 @@ _read('get_receipts', 'Payments received in a date range (default: this month so
 _read('get_account_ledger', "The running statement of ONE account (cash, bank...): opening and closing balance and the newest entries in a date range.",
       {'account_id': {'type': 'integer'}, 'account_name': {'type': 'string'}, 'date_from': _DATE, 'date_to': _DATE}, get_account_ledger)
 
+_FEES = {'fee_names': {'type': 'string', 'description': 'Which fees it reduces, comma-separated (e.g. "Tuition Fee, Koder Kids") or "all". '
+                                                       'Required for a new one: with none it reduces no bill.'}}
 _DISCOUNT = {'discount_type': {'type': 'string', 'enum': list(DISCOUNT_TYPES)}, 'value': {'type': 'number', 'description': 'Percent (0-100) or an amount'},
              'applies_to': {'type': 'string', 'enum': list(APPLIES_TO)}, 'class_name': {'type': 'string', 'description': 'When applies_to is CLASS, e.g. "Class 5"'},
-             'grade_level': {'type': 'integer'}, 'start_date': _DATE, 'end_date': _DATE, 'max_uses': {'type': 'integer'}, 'stackable': {'type': 'boolean'}}
+             'grade_level': {'type': 'integer'}, 'start_date': _DATE, 'end_date': _DATE, 'max_uses': {'type': 'integer'}, 'stackable': {'type': 'boolean'}, **_FEES}
 _SCHOLAR = {'scholarship_type': {'type': 'string', 'enum': list(SCHOLARSHIP_TYPES)}, 'coverage': {'type': 'string', 'enum': list(COVERAGES)},
-            'value': {'type': 'number'}, 'description': {'type': 'string'}, 'max_recipients': {'type': 'integer'}}
-_write('create_discount', 'PREPARE a new discount rule for this academic year (for example "10% for siblings" or "500 off Class 5"). '
+            'value': {'type': 'number'}, 'description': {'type': 'string'}, 'max_recipients': {'type': 'integer'}, **_FEES}
+_write('create_discount', 'PREPARE a new discount rule for this academic year (for example "10% for siblings" or "500 off Class 5"), and which fees it reduces. '
        'Giving it to ONE student is assign_student_discount. Nothing is saved until the user approves.', {'name': {'type': 'string'}, **_DISCOUNT}, create_discount)
 _write('edit_discount', 'PREPARE changing an existing discount rule (value, dates, class, active or not). Nothing is saved until the user approves.',
        {'discount_name': {'type': 'string'}, 'name': {'type': 'string', 'description': 'New name'}, **_DISCOUNT, 'is_active': {'type': 'boolean'}}, edit_discount)

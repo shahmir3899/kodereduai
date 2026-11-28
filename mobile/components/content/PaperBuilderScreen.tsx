@@ -2,7 +2,8 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { examinationsApi } from '../../services/api';
-import { useMasterClasses, useAcademicYear } from '../../hooks/useAcademicYear';
+import { useAcademicYear } from '../../hooks/useAcademicYear';
+import { useClassSubjectOptions, useSectionPicker } from '../../hooks/useSectionPicker';
 import { usePaper, usePaperActions, usePaperCoverage, usePaperExams, usePaperLessons } from '../../hooks/usePapers';
 import { useSubjectsList } from '../../hooks/useManager';
 import { emptyPaperForm, isLockedStatus, PAPER_STATUSES, paperToForm, validateSetup, type PaperForm } from '../../services/paperBuilder';
@@ -32,7 +33,9 @@ export default function PaperBuilderScreen() {
   const routeId = id ? Number(id) : null;
   const toast = useToast();
   const actions = usePaperActions();
-  const classes = useMasterClasses();
+  const picker = useSectionPicker();
+  // The section picked here; a saved paper (master class only) shows its class's first section.
+  const [classPick, setClassPick] = useState<number | null>(null);
   const { persona } = useAuth();
   const subjects = useSubjectsList();
   const saved = usePaper(routeId);
@@ -59,7 +62,13 @@ export default function PaperBuilderScreen() {
   }, [coverage.data, cov.linkedIds]);
   const set = <K extends keyof PaperForm>(k: K, v: PaperForm[K]) => setForm((f) => ({ ...f, [k]: v }));
   const examLabel = (() => { const e = (exams.data ?? []).find((x) => x.id === form.exam); return e ? examOptionLabel(e) : ''; })();
-  const className = String((classes.data ?? []).find((c) => Number(c.id) === form.classObj)?.name ?? '');
+  const shownPick = classPick ?? picker.optionFor(form.classObj);
+  const className = picker.options.find((o) => o.value === shownPick)?.label ?? '';
+  const classSubjects = useClassSubjectOptions(form.classObj);
+  // A saved paper's subject stays selectable even if the class no longer teaches it.
+  const subjectOptions = !form.classObj ? (subjects.data ?? []).map((s) => ({ value: s.id, label: s.name }))
+    : classSubjects.some((o) => o.value === form.subject) || !form.subject ? classSubjects
+    : [...classSubjects, ...(subjects.data ?? []).filter((s) => s.id === form.subject).map((s) => ({ value: s.id, label: s.name }))];
   const suggested = autoPaperTitle(examLabel, className, (subjects.data ?? []).find((x) => x.id === form.subject)?.name ?? '');
   useEffect(() => {
     if (titleAuto && suggested && suggested !== form.title) setForm((f) => ({ ...f, title: suggested }));
@@ -177,11 +186,12 @@ export default function PaperBuilderScreen() {
         <View pointerEvents={locked ? 'none' : 'auto'} style={locked ? styles.lockedBody : styles.body}>
           <Input label="Paper title" value={form.title} onChangeText={(v) => { setTitleAuto(v.trim() === ''); set('title', v); }} />
           {titleAuto && suggested ? <Text style={styles.sub}>Made from the exam, class and subject. Type your own any time.</Text> : null}
-          <Select label="Class" searchable value={form.classObj} onChange={(v) => set('classObj', v)} placeholder="Choose a class"
-            options={(classes.data ?? []).map((c) => ({ value: Number(c.id), label: String(c.name) }))} />
-          {classes.isSuccess && (classes.data ?? []).length === 0 ? <Text style={styles.warn}>{emptyClassMessage(persona)}</Text> : null}
+          <Select label="Class" searchable value={shownPick} placeholder={picker.isLoading ? 'Loading classes...' : 'Choose a class'}
+            onChange={(v) => { setClassPick(Number(v)); set('classObj', picker.masterOf(Number(v))); }}
+            options={picker.options} />
+          {!picker.isLoading && picker.options.length === 0 ? <Text style={styles.warn}>{emptyClassMessage(persona)}</Text> : null}
           <Select label="Subject" searchable value={form.subject} onChange={(v) => set('subject', v)} placeholder="Choose a subject"
-            options={(subjects.data ?? []).map((s) => ({ value: s.id, label: s.name }))} />
+            options={subjectOptions} />
           {form.classObj ? (
             <Select label="Exam (optional)" value={form.exam ?? -1} onChange={(v) => set('exam', v === -1 ? null : Number(v))} placeholder="Choose an exam"
               options={[{ value: -1, label: exams.isLoading ? 'Loading exams…' : (exams.data ?? []).length ? 'No exam' : 'No exams for this class this year' }, ...(exams.data ?? []).map((e) => ({ value: e.id, label: examOptionLabel(e) }))]} />

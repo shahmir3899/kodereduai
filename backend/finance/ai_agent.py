@@ -5,6 +5,7 @@ Uses Groq LLM to interpret natural language financial queries and
 translate them into database queries scoped to the user's school.
 """
 
+from django.db import models
 from django.utils import timezone
 import json
 import logging
@@ -649,18 +650,32 @@ class FinanceAIAgent:
         if fee_type:
             qs = qs.filter(fee_type=fee_type.upper())
 
-        qs = qs.select_related('class_obj')
+        # Class prices only (student overrides are per-student questions); the amount field is
+        # monthly_amount for every fee type, so `fs.amount` crashed this answer.
+        qs = qs.filter(student__isnull=True).select_related('class_obj', 'monthly_category', 'annual_category')
         structures = [
             {
                 "class": fs.class_obj.name if fs.class_obj else "All Classes",
                 "fee_type": fs.fee_type,
-                "amount": float(fs.amount),
+                "fee": getattr(fs.monthly_category or fs.annual_category, 'name', None) or fs.get_fee_type_display(),
+                "amount": float(fs.monthly_amount),
                 "effective_from": str(fs.effective_from) if fs.effective_from else None,
                 "effective_to": str(fs.effective_to) if fs.effective_to else None,
             }
-            for fs in qs[:30]
+            for fs in qs.order_by('class_obj__name', 'fee_type')[:40]
         ]
-        return {"structures": structures, "total": len(structures)}
+        # Optional fees (Robotics, Koder Kids...) bill only enrolled students; list them with
+        # their price and how many are enrolled, so "what does Koder Kids cost" has an answer.
+        from .models import AnnualFeeCategory, MonthlyFeeCategory
+        optional = []
+        for kind, model in (('MONTHLY', MonthlyFeeCategory), ('ANNUAL', AnnualFeeCategory)):
+            for c in model.objects.filter(school_id=self.school_id, is_active=True, billing_mode='ENROLLED'):
+                today = timezone.localdate()
+                enrolled = c.enrollments.filter(start_date__lte=today).filter(
+                    models.Q(end_date__isnull=True) | models.Q(end_date__gte=today)).values('student_id').distinct().count()
+                optional.append({"fee": c.name, "fee_type": kind, "default_price": float(c.default_amount) if c.default_amount is not None else None,
+                                 "enrolled_students": enrolled, "who_pays": "enrolled students only"})
+        return {"structures": structures, "total": len(structures), "optional_fees": optional}
 
     def _get_payment_method_analysis(self, month=None, year=None):
         from .models import FeePayment
@@ -725,6 +740,16 @@ class FinanceAIAgent:
             applied_count = StudentDiscount.objects.filter(
                 discount=d, is_active=True,
             ).count()
+            fees = [c.name for c in d.monthly_categories.all()] + [c.name for c in d.annual_categories.all()]
+            # What it actually took off bills: recorded on each fee row since per-fee discounts.
+            from .models import FeePayment
+            taken = sum(
+                float(part.get('amount') or 0)
+                for detail in FeePayment.objects.filter(
+                    school_id=self.school_id, discount_amount__gt=0, student__student_discounts__discount=d,
+                ).distinct().values_list('discount_detail', flat=True)
+                for part in (detail or []) if part.get('kind') == 'discount' and part.get('name') == d.name
+            )
             result.append({
                 "name": d.name,
                 "discount_type": d.discount_type,
@@ -732,6 +757,8 @@ class FinanceAIAgent:
                 "applies_to": d.applies_to,
                 "recipients": applied_count,
                 "stackable": d.stackable,
+                "reduces_fees": fees or "none picked: reduces no bill",
+                "taken_off_bills_so_far": round(taken, 2),
             })
 
         return {"discounts": result, "total_active": len(result)}

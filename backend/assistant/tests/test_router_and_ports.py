@@ -113,7 +113,7 @@ class TestPorts:
         by = {}
         for t in registry.all_tools():
             by[t.sub_agent] = by.get(t.sub_agent, 0) + 1
-        assert by == {'finance': 32, 'academics': 26, 'communication': 17, 'study': 13, 'directory': 4, 'settings': 2, 'attendance': 4, 'exams': 12, 'hr': 19, 'students': 22, 'operations': 26, 'family': 12}
+        assert by == {'finance': 40, 'academics': 26, 'communication': 17, 'study': 13, 'directory': 4, 'settings': 2, 'attendance': 4, 'exams': 12, 'hr': 19, 'students': 22, 'operations': 26, 'family': 12}
 
     def test_every_tool_has_valid_schema(self):
         for t in registry.all_tools():

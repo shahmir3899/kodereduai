@@ -12,14 +12,13 @@ python -m pytest tests academics admissions attendance core examinations finance
 
 Latest run (2026-09-25): 1327 passed, 100 failed, 12 errors, 18 skipped.
 
-## Failing tests (112 = 100 failed + 12 setup errors)
+## Failing tests (98 = 86 failed + 12 setup errors; all 14 fee-type tests fixed 2026-11-27)
 
 | Group | Count | Notes |
 |---|---|---|
 | `tests/test_phase5_hr.py` | 25 | Staff, departments, designations, payslips, leave, appraisals; mostly school-B isolation and manager write access |
 | `tests/test_phase15_admissions.py` | 24 | 12 are setup errors (`TestEnquiries`, `TestConversion`, `TestDocumentsAndNotes`); sessions, analytics, permissions |
 | `tests/test_phase1_sessions.py` | 18 | Session health service, term import, term integrity validation, setup service, class subject/timetable create |
-| `tests/test_fee_types.py` | 14 | `TestFeePaymentFeeType` (7), `TestGenerateOnetimeFees` (4), `TestFeeGenerationConflicts` (3) |
 | `tests/test_transport_route_journey.py` | 7 | Driver journeys, my-vehicle, location update, capacity annotation |
 | `tests/test_phase16_lms_curriculum.py` | 5 | AI retrieval, large-text stream chunking, teacher read-only books |
 | `tests/test_phase6_examinations.py` | 5 | Publish, publish-all and its notifications, teacher-forbidden checks |
@@ -32,7 +31,7 @@ Latest run (2026-09-25): 1327 passed, 100 failed, 12 errors, 18 skipped.
 | `tests/test_face_attendance_api.py` | 1 | Reprocess: the eager task fails inside the face pipeline |
 | `tests/test_attendance_absence_notifications.py` | 1 | OCR confirm path (OCR is parked) |
 
-Already fixed along the way: two annual-fee tests in `tests/test_fee_types.py` (`TestBulkFeeStructure::test_annual_student_override_by_category_used_in_generation`, `TestFeeGenerationConflicts::test_annual_generation_update_conflict_updates_existing_record`).
+Fixed 2026-11-27: all 14 `tests/test_fee_types.py` failures (13 out-of-date tests; B8 fixed by the new `uniq_oneoff_fee_per_student_period_type` constraint, finance migration 0034). Already fixed along the way: two annual-fee tests in `tests/test_fee_types.py` (`TestBulkFeeStructure::test_annual_student_override_by_category_used_in_generation`, `TestFeeGenerationConflicts::test_annual_generation_update_conflict_updates_existing_record`).
 
 ## Test-setup housekeeping
 
@@ -159,26 +158,6 @@ Notes: the `test_*.py` scripts in the backend root (`test_phase1.py`, `test_audi
 
 ### `tests/test_face_attendance_api/TestReprocess.py` (1)
 - `test_reprocess_resets_and_dispatches`: AssertionError: assert 'FAILED' == 'PROCESSING'
-
-### `tests/test_fee_types/TestFeePaymentFeeType.py` (7)
-- `test_create_monthly_payment`: AssertionError: B1 Create MONTHLY payment: 400 b'{"monthly_category":["Monthly category is required for monthly fees."]}'
-- `test_create_annual_payment_month_zero`: AssertionError: B2 Create ANNUAL: 400 b'{"annual_category":["Annual category is required for annual fees."]}'
-- `test_filter_payments_by_fee_type`: AssertionError: B6 Expected at least 1 ANNUAL payment
-- `test_unique_together_allows_different_fee_types`: AssertionError: B7 Create ANNUAL: 400 b'{"annual_category":["Annual category is required for annual fees."]}'
-- `test_duplicate_same_fee_type_rejected`: AssertionError: B8 Duplicate expected 400/409/500: 201
-- `test_default_fee_type_on_payment`: AssertionError: B9 Default: 400 b'{"monthly_category":["Monthly category is required for monthly fees."]}'
-- `test_read_payment_has_display_field`: assert 0 >= 1
-
-### `tests/test_fee_types/TestGenerateOnetimeFees.py` (4)
-- `test_generate_admission_and_annual`: AssertionError: D1 Generate: 400 b'{"fee_types":["MONTHLY and ANNUAL generation require category selection. Use dedicated monthly/annual generation en
-- `test_generate_skips_duplicates`: KeyError: 'created'
-- `test_generate_no_structure_tracked`: KeyError: 'created'
-- `test_generate_monthly_with_specific_month`: AssertionError: D5 Generate MONTHLY: 400
-
-### `tests/test_fee_types/TestFeeGenerationConflicts.py` (3)
-- `test_annual_generation_delete_recreate_replaces_record`: django.core.exceptions.ValidationError: ['Cannot record payment without: payment_date, account. amount_paid=3000.00 requires both payment_date and acc
-- `test_monthly_generation_update_conflict_updates_existing_record`: django.core.exceptions.ValidationError: ['Cannot record payment without: payment_date, account. amount_paid=100.00 requires both payment_date and acco
-- `test_monthly_generation_delete_recreate_replaces_record`: django.core.exceptions.ValidationError: ['Cannot record payment without: payment_date, account. amount_paid=100.00 requires both payment_date and acco
 
 ### `tests/test_phase12_lms/TestLessonPlans.py` (1)
 - `test_teacher_cannot_create_lesson_plan`: AssertionError: Expected 403, got 201

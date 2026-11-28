@@ -27,6 +27,9 @@ def fin(seed_data):
     org.allowed_modules = {**(org.allowed_modules or {}), 'finance': True}
     org.save(update_fields=['allowed_modules'])
     cash = Account.objects.create(school=school, name='Cash', account_type='CASH', opening_balance=Decimal('1000'))
+    # A discount or scholarship must name the fees it reduces (2026-11-26).
+    from finance.models import MonthlyFeeCategory
+    MonthlyFeeCategory.objects.create(school=school, name='Tuition Fee')
     ali, sara = seed_data['students'][0], seed_data['students'][1]
     ay = seed_data['academic_year']
 
@@ -104,7 +107,7 @@ class TestReads:
 class TestDefinitions:
     def test_create_discount_card_then_save_on_approval(self, seed_data, fin):
         from finance.models import Discount
-        out = _run(seed_data, 'create_discount', name='Sibling 10%', discount_type='PERCENTAGE', value=10, applies_to='SIBLING')
+        out = _run(seed_data, 'create_discount', name='Sibling 10%', discount_type='PERCENTAGE', value=10, applies_to='SIBLING', fee_names='Tuition Fee')
         assert out['status'] == 'awaiting_user_approval' and not Discount.objects.exists()
         card = AgentAction.objects.get(pk=out['proposal']['action_id'])
         assert {r['field'] for r in card.preview['rows']} >= {'Name', 'Type', 'Value'}
@@ -122,7 +125,7 @@ class TestDefinitions:
     def test_class_discount_uses_the_master_class(self, seed_data, fin):
         from finance.models import Discount
         master = seed_data['classes'][0]
-        out = _run(seed_data, 'create_discount', name='Class 1A 500', discount_type='FIXED', value=500, applies_to='CLASS', class_name=master.name)
+        out = _run(seed_data, 'create_discount', name='Class 1A 500', discount_type='FIXED', value=500, applies_to='CLASS', class_name=master.name, fee_names='Tuition Fee')
         _approve(seed_data, out)
         assert Discount.objects.get().target_class_id == master.id
 
@@ -146,7 +149,7 @@ class TestDefinitions:
 
     def test_scholarship_create_and_deactivate(self, seed_data, fin):
         from finance.models import Scholarship
-        out = _run(seed_data, 'create_scholarship', name='Top Scorer', scholarship_type='MERIT', coverage='PERCENTAGE', value=50, max_recipients=3)
+        out = _run(seed_data, 'create_scholarship', name='Top Scorer', scholarship_type='MERIT', coverage='PERCENTAGE', value=50, max_recipients=3, fee_names='Tuition Fee')
         _approve(seed_data, out)
         s = Scholarship.objects.get()
         assert (s.coverage, s.value, s.max_recipients, s.is_active) == ('PERCENTAGE', Decimal('50.00'), 3, True)

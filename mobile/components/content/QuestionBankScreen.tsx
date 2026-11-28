@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { View, Text, ActivityIndicator, TouchableOpacity, StyleSheet, type RefreshControlProps } from 'react-native';
 import { useAuth } from '../../contexts/AuthContext';
-import { useMasterClasses } from '../../hooks/useAcademicYear';
+import { useSectionPicker } from '../../hooks/useSectionPicker';
 import { useSubjectTags } from '../../hooks/useCurriculum';
 import { useBooksForClassSubject } from '../../hooks/useLessonPlans';
 import { useQuestionActions, useQuestionsPaged, useSemanticQuestions } from '../../hooks/useQuestionBank';
@@ -55,7 +55,10 @@ export default function QuestionBankScreen() {
   const [bloomFilter, setBloomFilter] = useState(ANY);
   const [tagFilter, setTagFilter] = useState<number>(-1);
   const [mode, setMode] = useState<SearchMode>('keyword');
-  const [classFilter, setClassFilter] = useState<number | null>(null);
+  const picker = useSectionPicker();
+  // Picked sections (option ids); search and book topics use their master class.
+  const [classPickFilter, setClassFilter] = useState<number | null>(null);
+  const classFilter = picker.masterOf(classPickFilter);
   const { user } = useAuth();
   const subjectId = subjectFilter === -1 ? null : subjectFilter;
   const filterTagList = useSubjectTags(subjectId);
@@ -73,8 +76,8 @@ export default function QuestionBankScreen() {
   const [form, setForm] = useState<QuestionForm>(emptyQuestionForm());
   const [error, setError] = useState<string | null>(null);
   const set = <K extends keyof QuestionForm>(k: K, v: QuestionForm[K]) => setForm((f) => ({ ...f, [k]: v }));
-  const masterClasses = useMasterClasses();
-  const [topicClass, setTopicClass] = useState<number | null>(null);
+  const [topicPick, setTopicClass] = useState<number | null>(null);
+  const topicClass = picker.masterOf(topicPick);
   const books = useBooksForClassSubject(topicClass, form.subject);
   const [topicPicker, setTopicPicker] = useState(false);
   const [tagIds, setTagIds] = useState<number[]>([]);
@@ -173,8 +176,8 @@ export default function QuestionBankScreen() {
       <SegmentedTabs tabs={SEARCH_MODES.map((m) => ({ value: m.value, label: m.label }))} value={mode} onChange={setMode} />
       <SearchBar value={search} onChangeText={setSearch} placeholder={mode === 'meaning' ? 'Describe what you are looking for...' : 'Search questions...'} />
       {mode === 'meaning' ? (
-        <Select label="Class (needed to search by meaning)" searchable value={classFilter} onChange={setClassFilter} placeholder="Choose a class"
-          options={(masterClasses.data ?? []).map((c) => ({ value: Number(c.id), label: String(c.name) }))} />
+        <Select label="Class (needed to search by meaning)" searchable value={classPickFilter} onChange={setClassFilter} placeholder="Choose a class"
+          options={picker.options} />
       ) : null}
       <Select label="Subject" value={subjectFilter} onChange={setSubjectFilter}
         options={[{ value: -1, label: 'All subjects' }, ...(subjects.data ?? []).map((s) => ({ value: s.id, label: s.name }))]} />
@@ -254,8 +257,8 @@ export default function QuestionBankScreen() {
         )}
         {['SHORT', 'LONG', 'ESSAY'].includes(form.type) ? <Input label="Model answer (optional)" value={form.answer} onChangeText={(v) => set('answer', v)} multiline /> : null}
         {form.type === 'MATCHING' ? <MatchingFields form={form} set={set} /> : null}
-        <Select label="Class (to find the book topics)" searchable value={topicClass} onChange={setTopicClass} placeholder="Choose a class"
-          options={(masterClasses.data ?? []).map((c) => ({ value: Number(c.id), label: String(c.name) }))} />
+        <Select label="Class (to find the book topics)" searchable value={topicPick} onChange={setTopicClass} placeholder="Choose a class"
+          options={picker.options} />
         <Button title={form.topics.length ? `Topics tagged: ${form.topics.length}` : 'Tag book topics'} variant="outline" size="sm" disabled={!topicClass || !form.subject} onPress={() => setTopicPicker(true)} />
         {form.topics.length ? <Text style={styles.sub}>{topicSummary(books.data ?? [], form.topics) || 'Topics from other books or classes are kept.'}</Text> : null}
         {current ? <QuestionPictures question={current} type={form.type} ensure={async () => current} onChange={(q) => setEditing(q)} /> : <Text style={styles.sub}>Save the question first to add pictures.</Text>}

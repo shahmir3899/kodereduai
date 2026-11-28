@@ -283,7 +283,9 @@ class GuideProgressViewSet(viewsets.GenericViewSet):
                 state = 'not_started'
             elif total and done >= total:
                 state = 'completed'
-            elif last and now - last > INACTIVE_AFTER:
+            # Judged on `seen`, not guide activity alone: otherwise someone who signed in today
+            # showed "Inactive 7+ days" next to "Last seen: Today".
+            elif seen and now - seen > INACTIVE_AFTER:
                 state = 'inactive'
             else:
                 state = 'in_progress'

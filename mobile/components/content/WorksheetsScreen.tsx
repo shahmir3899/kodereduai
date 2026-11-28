@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { View, Text, ActivityIndicator, StyleSheet, Switch, type RefreshControlProps } from 'react-native';
 import { useRouter, type Href } from 'expo-router';
 import { examinationsApi } from '../../services/api';
-import { useMasterClasses } from '../../hooks/useAcademicYear';
+import { useClassSubjectOptions, useSectionPicker } from '../../hooks/useSectionPicker';
 import { useSubjectsList } from '../../hooks/useManager';
 import { useWorksheetActions, useWorksheetMakers, useWorksheetsPaged } from '../../hooks/useWorksheets';
 import { useAuth } from '../../contexts/AuthContext';
@@ -37,11 +37,14 @@ export default function WorksheetsScreen() {
   const base = usePersonaBase();
   const toast = useToast();
   const actions = useWorksheetActions();
-  const classes = useMasterClasses();
+  const picker = useSectionPicker();
   const subjects = useSubjectsList();
   const [search, setSearch] = useState('');
   const term = useDebouncedValue(search.trim(), 400);
+  // The picked section (an option id); requests use its master class.
   const [classFilter, setClassFilter] = useState<number>(-1);
+  const filterMaster = classFilter === -1 ? null : picker.masterOf(classFilter);
+  const filterSubjects = useClassSubjectOptions(filterMaster);
   const [subjectFilter, setSubjectFilter] = useState<number>(-1);
   const [statusFilter, setStatusFilter] = useState('');
   // Same as the papers list: teachers see all their classes' worksheets and may narrow to their own; school-wide roles pick a maker.
@@ -49,12 +52,14 @@ export default function WorksheetsScreen() {
   const [mineOnly, setMineOnly] = useState(false);
   const [madeBy, setMadeBy] = useState<number>(-1);
   const makers = useWorksheetMakers(!isTeacher);
-  const query = useWorksheetsPaged(term, { classId: classFilter === -1 ? null : classFilter, subject: subjectFilter === -1 ? null : subjectFilter, status: statusFilter, mine: mineOnly, madeBy: !isTeacher && madeBy !== -1 ? madeBy : null });
+  const query = useWorksheetsPaged(term, { classId: filterMaster, subject: subjectFilter === -1 ? null : subjectFilter, status: statusFilter, mine: mineOnly, madeBy: !isTeacher && madeBy !== -1 ? madeBy : null });
   const refreshControl = useRefreshControl(query.refetch) as React.ReactElement<RefreshControlProps>;
   const rows = useMemo(() => query.data?.pages.flatMap((p) => p.results) ?? [], [query.data]);
   const [busy, setBusy] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState<NewWorksheetForm>(emptyNewWorksheet());
+  const [formPick, setFormPick] = useState<number | null>(null);
+  const formSubjects = useClassSubjectOptions(form.classObj);
   const [error, setError] = useState<string | null>(null);
 
   const open = (id: number) => router.push({ pathname: `${base}/worksheet-builder`, params: { id } } as Href);
@@ -114,8 +119,9 @@ export default function WorksheetsScreen() {
   const header = (
     <View>
       <SearchBar value={search} onChangeText={setSearch} placeholder="Search worksheets..." />
-      <Select label="Class" searchable value={classFilter} onChange={setClassFilter} options={[{ value: -1, label: 'All classes' }, ...(classes.data ?? []).map((c) => ({ value: Number(c.id), label: String(c.name) }))]} />
-      <Select label="Subject" searchable value={subjectFilter} onChange={setSubjectFilter} options={[{ value: -1, label: 'All subjects' }, ...(subjects.data ?? []).map((s) => ({ value: s.id, label: s.name }))]} />
+      <Select label="Class" searchable value={classFilter} onChange={(v) => { setClassFilter(v); setSubjectFilter(-1); }} options={[{ value: -1, label: 'All classes' }, ...picker.options]} />
+      <Select label="Subject" searchable value={subjectFilter} onChange={setSubjectFilter}
+        options={[{ value: -1, label: 'All subjects' }, ...(filterMaster ? filterSubjects : (subjects.data ?? []).map((s) => ({ value: s.id, label: s.name })))]} />
       <Select label="Status" value={statusFilter} onChange={setStatusFilter} options={[{ value: '', label: 'Any status' }, ...WORKSHEET_STATUSES.map((s) => ({ value: s.value as string, label: s.label }))]} />
       {isTeacher ? (
         <View style={styles.switchRow}>
@@ -125,7 +131,7 @@ export default function WorksheetsScreen() {
       ) : (
         <Select label="Made by" searchable value={madeBy} onChange={setMadeBy} options={[{ value: -1, label: 'Anyone' }, ...(makers.data ?? []).map((m) => ({ value: m.id, label: m.name }))]} />
       )}
-      <Button title="+ New worksheet" size="sm" onPress={() => { setForm(emptyNewWorksheet()); setError(null); setCreating(true); }} />
+      <Button title="+ New worksheet" size="sm" onPress={() => { setForm(emptyNewWorksheet()); setFormPick(null); setError(null); setCreating(true); }} />
     </View>
   );
 
@@ -168,10 +174,11 @@ export default function WorksheetsScreen() {
 
       <FormSheet visible={creating} title="New worksheet" onClose={() => setCreating(false)} onSubmit={create} submitLabel="Create worksheet" busy={actions.ensure.isPending} error={error}>
         <Input label="Title" value={form.title} onChangeText={(v) => setForm((f) => ({ ...f, title: v }))} placeholder="e.g. Fractions Practice Sheet" />
-        <Select label="Class" searchable value={form.classObj} onChange={(v) => setForm((f) => ({ ...f, classObj: Number(v), subject: null }))} placeholder="Choose a class"
-          options={(classes.data ?? []).map((c) => ({ value: Number(c.id), label: String(c.name) }))} />
+        <Select label="Class" searchable value={formPick} placeholder={picker.isLoading ? 'Loading classes...' : 'Choose a class'}
+          onChange={(v) => { setFormPick(Number(v)); setForm((f) => ({ ...f, classObj: picker.masterOf(Number(v)), subject: null })); }}
+          options={picker.options} />
         <Select label="Subject" searchable value={form.subject} onChange={(v) => setForm((f) => ({ ...f, subject: Number(v) }))} placeholder="Choose the subject"
-          options={(subjects.data ?? []).map((s) => ({ value: s.id, label: s.name }))} />
+          options={formSubjects} />
       </FormSheet>
     </View>
   );
